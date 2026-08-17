@@ -77,7 +77,7 @@ class SQLiteStore:
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
                          ('slack', 'Slack'), ('github', 'GitHub'),
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
-                         ('azure_openai', 'Azure OpenAI')):
+                         ('azure_openai', 'Azure OpenAI'), ('mssql', 'Microsoft SQL Server')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name) VALUES (?,?)', (t, n))
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten

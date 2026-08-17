@@ -88,3 +88,13 @@ export const fadeIn = {
   "@keyframes thubFadeIn": { from: { opacity: 0, transform: "translateY(6px)" }, to: { opacity: 1, transform: "none" } },
   animation: "thubFadeIn .35s ease both",
 };
+
+// Muted segmented-pill color pairs - the Timeline filter treatment, shared by every tab.
+export const PILL_COLORS = {
+  amber: { bg: "#fef4e6", fg: "#b45309", bd: "#f3ddb8" },
+  teal: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" },
+  green: { bg: "#e8f6ee", fg: "#15803d", bd: "#cdeeda" },
+  gray: { bg: "#eef0f3", fg: "#8a94a6", bd: "#dde2ea" },
+  red: { bg: "#fdecec", fg: "#b91c1c", bd: "#f3c8c8" },
+  purple: { bg: "#f5f3ff", fg: "#7e22ce", bd: "#ddd6fe" },
+};

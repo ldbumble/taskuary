@@ -19,8 +19,11 @@ def main():
     ap = argparse.ArgumentParser(prog='taskuary', description='Automate Your Work - local task-driven agent hub.')
     ap.add_argument('--port', type=int, help='override [server].port')
     ap.add_argument('--no-browser', action='store_true')
+    ap.add_argument('--debug', action='store_true', help='verbose console logging (requests, report runs, errors)')
     ap.add_argument('--version', action='version', version=f'taskuary {__version__}')
     args = ap.parse_args()
+    from .logs import setup as setup_logs
+    setup_logs(args.debug)
     cfg = config.load()
     host, port = cfg['server']['host'], args.port or cfg['server']['port']
     url = f'http://{host}:{port}'

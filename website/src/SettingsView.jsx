@@ -150,7 +150,7 @@ export default function SettingsView() {
             <Box key={s.Name} sx={{ display: "flex", alignItems: "center", gap: 3, py: 2.5, borderBottom: `1px solid ${BORDER}` }}>
               <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
                 onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 0.75 }}>
+                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
                   {m.label}
                   {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#c2c9d6" }} />}
                 </Typography>
@@ -287,7 +287,7 @@ export default function SettingsView() {
         </Typography>
         <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
         {verify && (
-          <Typography sx={{ mt: 2, fontWeight: 700, fontSize: 15, color: verify.ok ? "#15803d" : "#b91c1c" }}>
+          <Typography sx={{ mt: 2, fontWeight: 700, fontSize: 13.5, color: verify.ok ? "#15803d" : "#b91c1c" }}>
             {verify.ok ? `✓ Intact — ${verify.rows} rows verified` : `✗ BROKEN at ids ${verify.broken_ids.join(", ")}`}
           </Typography>
         )}
@@ -317,11 +317,11 @@ export default function SettingsView() {
         </Box>
       ) : (
         <>
-          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 17, mb: 2 }}>Agent behavior</Typography>
+          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>Agent behavior</Typography>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3, mb: 4 }}>
             {["config", "policies", "memory", "agents"].map((k) => <PageCard key={k} k={k} onOpen={() => setPage(k)} />)}
           </Box>
-          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 17, mb: 2 }}>System</Typography>
+          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>System</Typography>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3 }}>
             <PageCard k="audit" onOpen={() => setPage("audit")} />
           </Box>

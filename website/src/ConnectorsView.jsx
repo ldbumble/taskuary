@@ -81,30 +81,29 @@ const PLANNED_AI = [
 ];
 
 /* ── report connections (scheduled pulls) ── */
+const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
+  "e.g. Summarize the census by facility. Flag anything under 70 and any day-over-day drop."];
 const RPT_FIELDS = {
-  mssql: [["server", "server", "text", "localhost  or  HOST\\INSTANCE"], ["database", "database", "text", "master"],
-    ["auth", "auth", "select-auth", ""], ["username", "username", "text", "(sql auth only)"],
-    ["password", "password", "password", ""], ["driver", "driver", "select-driver", ""],
-    ["query", "query", "multiline", "SELECT TOP 20 * FROM ..."]],
+  mssql: [["query", "query", "multiline", "SELECT TOP 20 * FROM ..."], AI_FIELD],
   mcp: [["command", "cmd", "text", "npx / uvx / path to the MCP server"], ["args (one per line)", "args", "multiline", ""],
-    ["tool", "tool", "text", "query  (Test lists the server's tools)"], ["tool args (JSON)", "tool_args", "multiline", '{"sql": "SELECT ..."}']],
-  sqlite: [["db path", "db", "text", "C:/data/app.db"], ["query", "query", "multiline", "SELECT ..."]],
-  rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"]],
-  rss: [["feed url", "url", "text", "https://example.com/feed.xml"]],
+    ["tool", "tool", "text", "query  (Test lists the server's tools)"], ["tool args (JSON)", "tool_args", "multiline", '{"sql": "SELECT ..."}'], AI_FIELD],
+  sqlite: [["db path", "db", "text", "C:/data/app.db"], ["query", "query", "multiline", "SELECT ..."], AI_FIELD],
+  rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
+  rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],
 };
 const RPT_META = {
-  mssql: { name: "Microsoft SQL Server", desc: "Query a local or remote SQL Server on a schedule - Windows auth works out of the box." },
+  mssql: { name: "Microsoft SQL Server", desc: "Connect once (Windows auth works out of the box), then schedule queries with AI summaries." },
   mcp: { name: "MCP server", desc: "Any MCP server's tool on a schedule - Taskuary speaks stdio JSON-RPC." },
   sqlite: { name: "SQLite", desc: "Query any local .db file on a schedule." },
   rest: { name: "REST / JSON", desc: "GET a JSON endpoint on a schedule, dot-path into the response." },
   rss: { name: "RSS / Atom", desc: "Newest feed titles on a schedule." },
 };
 const RPT_HOWTO = {
-  mssql: ["Local SQL Server works out of the box: keep auth on Windows (trusted) - server + database + query is all the config.",
-    "Driver auto-picks the newest installed 'ODBC Driver NN for SQL Server'.",
-    "For a remote server or SQL logins, switch auth to SQL login and fill username/password.",
-    "Test connection connects for real; Preview runs the query without filing anything.",
-    "Save, then Run now files the first row on the Timeline."],
+  mssql: ["Two parts: the CONNECTION (set up once, under the Connection tab) and SCHEDULED REPORTS (queries that run on it).",
+    "Connection: for a local SQL Server keep auth on Windows (trusted) - server + database is all the config. Named instance? Use HOST\INSTANCE, e.g. localhost\SQLEXPRESS. Driver auto-picks the newest 'ODBC Driver NN for SQL Server'. Test connects for real.",
+    "Reports: write the query, and optionally an AI summary prompt - on every run, an active AI connector (Connectors → AI) reads the rows and writes the summary that lands on the Timeline (raw rows attached underneath).",
+    "Preview runs the whole pipeline - query + AI - without filing anything.",
+    "Save, pick a schedule (every N minutes / daily at HH:MM), and Run now to file the first row."],
   mcp: ["Give the command that starts the MCP server over stdio (npx, uvx, an exe); args one per line.",
     "Test connection starts the server and lists the tools it exposes.",
     "Pick the tool and give its arguments as JSON - the tool's text output lands on the Timeline."],
@@ -141,6 +140,8 @@ export default function ConnectorsView() {
     catch { setSyncing(false); }
   };
 
+  const byType = Object.fromEntries((connectors || []).map((c) => [c.Type, c]));
+
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
   if (open?.kind === "agents") return <AgentsPage section="Connectors" title="AI CLI agents" onBack={() => setOpen(null)} />;
@@ -150,7 +151,7 @@ export default function ConnectorsView() {
   }
   if (open?.kind === "rtype") {
     return <ReportTypeDetail rtype={open.rtype} sourceId={open.SourceId} reports={reports} drivers={drivers}
-      types={types} reload={load} onBack={() => setOpen(null)}
+      types={types} reload={load} onBack={() => setOpen(null)} connector={byType[open.rtype]}
       openConn={(sid) => setOpen({ kind: "rtype", rtype: open.rtype, SourceId: sid })} />;
   }
 
@@ -169,12 +170,16 @@ export default function ConnectorsView() {
   const rtypeCard = (t) => {
     const m = RPT_META[t] || { name: t, desc: "" };
     const mine = reports.filter((s) => (parse(s.ConfigJson).type || "rest") === t);
-    const status = mine.length ? `${mine.filter((s) => s.Active).length}/${mine.length} connections` : m.desc;
+    let status = mine.length ? `${mine.filter((s) => s.Active).length}/${mine.length} reports` : m.desc;
+    if (t === "mssql") {
+      const conn = byType.mssql;
+      const st = conn?.LastError ? "connection failing" : conn?.LastSyncAt ? "connection ✓" : "connection not set up";
+      status = `${st} · ${mine.length ? `${mine.filter((s) => s.Active).length}/${mine.length} reports` : "no reports yet"}`;
+    }
     return { key: `r${t}`, title: m.name, desc: status, channel: "report",
       haystack: `${m.name} ${t} ${m.desc} ${(RPT_HOWTO[t] || []).join(" ")} ${mine.map((s) => parse(s.ConfigJson).title).join(" ")}`,
       go: () => setOpen({ kind: "rtype", rtype: t }) };
   };
-  const byType = Object.fromEntries(connectors.map((c) => [c.Type, c]));
   const groups = [
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "claude / codex / gemini — bring your own coding CLI, resumable sessions",
@@ -220,7 +225,7 @@ export default function ConnectorsView() {
         </Box>
       ) : groups.map((g) => (
         <Box key={g.title} sx={{ mb: 4 }}>
-          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 17, mb: 2 }}>{g.title}</Typography>
+          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>{g.title}</Typography>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3 }}>
             {g.cards.map((c) => (
               <Box key={c.key} sx={{ opacity: c.planned ? 0.45 : 1 }}>
@@ -361,8 +366,11 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
 }
 
 /* ── report-type detail: connections of this type + add/edit wizard ────── */
-function ReportTypeDetail({ rtype, sourceId, reports, drivers, types, reload, onBack, openConn }) {
+function ReportTypeDetail({ rtype, sourceId, reports, drivers, types, reload, onBack, openConn, connector }) {
   const meta = RPT_META[rtype] || { name: rtype };
+  const hasConn = rtype === "mssql" && connector;
+  const connOk = hasConn && connector.LastSyncAt && !connector.LastError;
+  const [tab, setTab] = useState(hasConn && !connOk ? "Connection" : "Scheduled reports");
   const mine = reports.filter((s) => (parse(s.ConfigJson).type || "rest") === rtype);
   const cur = mine.find((s) => s.SourceId === sourceId);
   const [editing, setEditing] = useState(sourceId != null);
@@ -499,19 +507,17 @@ function ReportTypeDetail({ rtype, sourceId, reports, drivers, types, reload, on
     </Stepper>
   );
 
-  return (
-    <Box sx={{ maxWidth: 980 }}>
-      <Crumb section="Connectors" onBack={onBack} title={meta.name} />
-      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{meta.desc}</Typography>
-
+  const reportsBody = (
+    <>
       {!editing && (
         <>
           <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 15, flex: 1 }}>Connections</Typography>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, flex: 1 }}>Scheduled reports</Typography>
             <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-              onClick={() => { setEditing(true); setCfg({ ...BLANK, type: rtype }); setStep(0); }}>Add connection</Button>
+              onClick={() => { setEditing(true); setCfg({ ...BLANK, type: rtype }); setStep(0); }}>Add report</Button>
           </Box>
-          {!mine.length && <Empty>No connections yet — the wizard takes a minute.</Empty>}
+          {hasConn && !connOk && <Alert severity="info" sx={{ mb: 1.5 }}>Set up and test the connection first (Connection tab) — reports inherit it.</Alert>}
+          {!mine.length && <Empty>No scheduled reports yet — the wizard takes a minute.</Empty>}
           {mine.map((s) => {
             const c = parse(s.ConfigJson);
             const sched = c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
@@ -529,19 +535,108 @@ function ReportTypeDetail({ rtype, sourceId, reports, drivers, types, reload, on
             );
           })}
           {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
-          <Box sx={{ mt: 3 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 15, mb: 0.5 }}>Setup guide</Typography>
-            <Steps steps={RPT_HOWTO[rtype] || []} />
-          </Box>
+          {!hasConn && (
+            <Box sx={{ mt: 3 }}>
+              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, mb: 0.5 }}>Setup guide</Typography>
+              <Steps steps={RPT_HOWTO[rtype] || []} />
+            </Box>
+          )}
         </>
       )}
       {editing && (
         <>
-          {mine.length > 0 && <Button size="small" onClick={() => { setEditing(false); openConn(null); }} sx={{ mb: 1 }}>← All {meta.name} connections</Button>}
+          <Button size="small" onClick={() => { setEditing(false); openConn(null); }} sx={{ mb: 1 }}>← All {meta.name} reports</Button>
           {wizard}
         </>
       )}
+    </>
+  );
+
+  return (
+    <Box sx={{ maxWidth: 980 }}>
+      <Crumb section="Connectors" onBack={onBack} title={meta.name} />
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{meta.desc}</Typography>
+      {hasConn ? (
+        <>
+          <UnderTabs tabs={["Connection", "Scheduled reports", "Guide"]} value={tab} onChange={setTab} />
+          {tab === "Connection" && <MssqlConnection conn={connector} drivers={drivers} reload={reload} />}
+          {tab === "Scheduled reports" && reportsBody}
+          {tab === "Guide" && <Steps steps={RPT_HOWTO[rtype] || []} />}
+        </>
+      ) : reportsBody}
     </Box>
+  );
+}
+
+/* ── the SQL Server CONNECTION (set up once; reports inherit it) ────────── */
+function MssqlConnection({ conn, drivers, reload }) {
+  const [cfg, setCfg] = useState(parse(conn.ConfigJson));
+  const [secret, setSecret] = useState("");
+  const [step, setStep] = useState(conn.LastSyncAt && !conn.LastError ? 1 : 0);
+  const [test, setTest] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const sqlAuth = (cfg.auth || "windows") === "sql";
+
+  const save = async () => {
+    setBusy("save"); setMsg("");
+    try {
+      const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true };
+      if (secret) body.Secret = secret;
+      await api.post("/api/connectors", body);
+      setMsg("saved ✓"); setSecret(""); setStep(1); reload();
+    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
+    setBusy("");
+  };
+  const runTest = async () => {
+    setBusy("test");
+    try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
+    catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
+    setBusy(""); reload();
+  };
+
+  return (
+    <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
+      <Step completed={!!(cfg.server || conn.LastSyncAt)}>
+        <StepButton onClick={() => setStep(0)}>Connection</StepButton>
+        <StepContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
+            <TextField label="server" placeholder="localhost  ·  localhost\SQLEXPRESS  ·  HOST\INSTANCE" value={cfg.server || ""}
+              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, server: e.target.value })} />
+            <TextField label="database" placeholder="master" value={cfg.database || ""}
+              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, database: e.target.value })} />
+            <Select value={cfg.auth || "windows"} sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, auth: e.target.value })}>
+              <MenuItem value="windows" sx={{ fontSize: 12.5 }}>Windows auth (local, trusted)</MenuItem>
+              <MenuItem value="sql" sx={{ fontSize: 12.5 }}>SQL login</MenuItem>
+            </Select>
+            {sqlAuth && <TextField label="username" value={cfg.username || ""} sx={{ bgcolor: "#fff" }}
+              onChange={(e) => setCfg({ ...cfg, username: e.target.value })} />}
+            {sqlAuth && <TextField label={conn.HasSecret ? "password (saved — type to replace)" : "password"} type="password"
+              value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }} />}
+            <Select value={cfg.driver || ""} displayEmpty sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, driver: e.target.value })}>
+              <MenuItem value="" sx={{ fontSize: 12.5 }}>(auto — newest installed driver)</MenuItem>
+              {drivers.map((d) => <MenuItem key={d} value={d} sx={{ fontSize: 12.5 }}>{d}</MenuItem>)}
+            </Select>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
+                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
+              {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
+            </Box>
+          </Box>
+        </StepContent>
+      </Step>
+      <Step completed={!!(conn.LastSyncAt && !conn.LastError)}>
+        <StepButton onClick={() => setStep(1)}>Test connection</StepButton>
+        <StepContent>
+          <Typography variant="body2" sx={{ color: DIM, mb: 1, mt: 0.5 }}>Connects for real and reports the server version — every scheduled report inherits this connection.</Typography>
+          <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
+            startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+          {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
+            {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
+        </StepContent>
+      </Step>
+    </Stepper>
   );
 }
 

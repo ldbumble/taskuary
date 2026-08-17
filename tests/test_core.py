@@ -9,6 +9,10 @@ from taskuary.coder import parse_coder_result, RESULT_MARKER
 from taskuary.reports import is_due, run_report_source, REGISTRY
 
 
+TASK_LLM = lambda sys, usr: '{"intent": "task", "why": "t"}'
+REPLY_LLM = lambda sys, usr: '{"intent": "reply_only", "why": "q"}'
+
+
 class CoreTests(unittest.TestCase):
     def msg(self, **kw):
         base = {'external_id': kw.get('external_id', 'x1'), 'channel': 'api', 'subject': 's',
@@ -18,16 +22,24 @@ class CoreTests(unittest.TestCase):
 
     def test_ingest_creates_task_and_feed(self):
         s = MemoryStore()
-        out = ingest_message(s, self.msg())
+        out = ingest_message(s, self.msg(), llm=TASK_LLM)
         self.assertEqual(out['status'], 'created')
         self.assertEqual(task_ref(out['task_id']), 'TQ-0001')
         self.assertEqual(len(s.feed()), 1)
-        self.assertEqual(ingest_message(s, self.msg())['status'], 'duplicate')
+        self.assertEqual(ingest_message(s, self.msg(), llm=TASK_LLM)['status'], 'duplicate')
+
+    def test_no_ai_connector_files_instead_of_task_spam(self):
+        # without an active AI connector, inbound is FILED (visible, no task) - the AI
+        # decides what becomes a task, not the default-to-task heuristic
+        s = MemoryStore()
+        out = ingest_message(s, self.msg(external_id='noai1'))
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        self.assertIn('awaiting AI triage', s.feed()[0]['RouteReason'])
 
     def test_thread_attach(self):
         s = MemoryStore()
-        a = ingest_message(s, self.msg(external_id='m1', conversation_id='c1'))
-        b = ingest_message(s, self.msg(external_id='m2', conversation_id='c1', body='and one more thing'))
+        a = ingest_message(s, self.msg(external_id='m1', conversation_id='c1'), llm=TASK_LLM)
+        b = ingest_message(s, self.msg(external_id='m2', conversation_id='c1', body='and one more thing'), llm=TASK_LLM)
         self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']))
 
     def test_fyi_files_without_task(self):
@@ -37,7 +49,7 @@ class CoreTests(unittest.TestCase):
 
     def test_reply_only_kind(self):
         s = MemoryStore()
-        out = ingest_message(s, self.msg(external_id='q1', subject='Tuesday?', body='are you available tuesday?'))
+        out = ingest_message(s, self.msg(external_id='q1', subject='Tuesday?', body='are you available tuesday?'), llm=REPLY_LLM)
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'reply')
 
     def test_triage_heuristics(self):

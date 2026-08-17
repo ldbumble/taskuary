@@ -64,7 +64,7 @@ export default function DocsView() {
   return (
     <Box sx={{ maxWidth: 1160 }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <Typography sx={{ color: INK, fontWeight: 800, fontSize: 17, mb: 2 }}>Operator documents</Typography>
+      <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>Operator documents</Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3 }}>
         {NAMES.map((n) => (
           <LandingCard key={n} icon={DOCS[n].icon} title={DOCS[n].label} desc={DOCS[n].blurb}

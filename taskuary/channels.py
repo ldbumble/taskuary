@@ -114,6 +114,13 @@ def test_connector(store, cid: int) -> dict:
                 detail += f" · channel read OK for {src['Address']}"
             else:
                 detail += ' - add a channel ID under Sources to probe reads'
+        elif c['Type'] == 'mssql':
+            from .mssql import test as mssql_test
+            conn_cfg = _cfg(c)
+            if c.get('Secret'): conn_cfg.setdefault('password', c['Secret'])
+            r = mssql_test(conn_cfg)
+            if not r['ok']: raise RuntimeError(r['error'])
+            detail = f"connected · {r['version']} · db {r['database']}"
         elif c['Type'] in ('anthropic', 'openai', 'azure_openai'):
             from .llm import test_ai
             detail = test_ai(store, cid)

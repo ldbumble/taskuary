@@ -5,13 +5,14 @@ import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } fro
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, RefChip, timeAgo, Empty, FilterPills } from "./ui.jsx";
 
 const FILTERS = [
-  { key: "pending", label: "pending" }, { key: "auto", label: "auto-handled" },
-  { key: "approved", label: "approved" }, { key: "edited", label: "edited" },
-  { key: "no_reply", label: "no reply" }, { key: "rejected", label: "rejected" }, { key: "", label: "all" },
+  { key: "pending", label: "pending", c: PILL_COLORS.amber }, { key: "auto", label: "auto-handled", c: PILL_COLORS.teal },
+  { key: "approved", label: "approved", c: PILL_COLORS.green }, { key: "edited", label: "edited" },
+  { key: "no_reply", label: "no reply", c: PILL_COLORS.gray }, { key: "rejected", label: "rejected", c: PILL_COLORS.red },
+  { key: "", label: "all" },
 ];
 
 export default function ReviewView({ onOpenTask, onChanged }) {
@@ -45,7 +46,11 @@ export default function ReviewView({ onOpenTask, onChanged }) {
 
   return (
     <Box sx={{ maxWidth: 980 }}>
-      <FilterPills options={FILTERS} value={filter} onChange={setFilter} />
+      <Box sx={{ ...card, px: 1.5, py: 1, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+        <FilterPills options={FILTERS} value={filter} onChange={setFilter} />
+        <Box sx={{ flex: 1 }} />
+        {rows && <Typography variant="caption" sx={{ color: FAINT }}>{rows.length} shown</Typography>}
+      </Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mt: 1.5 }}>{err}</Alert>}
       {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (
         <Empty>{filter === "pending" ? "Queue is clear — nothing needs you." : "Nothing here."}</Empty>

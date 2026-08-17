@@ -44,8 +44,8 @@ pip install -e .[mssql,desktop]   # [desktop] adds pywebview (Edge WebView2 wind
 taskuary-desktop                  # same UI, native window, random free port
 ```
 
-Flags: `--port 7787` to pin the port, `--server-only` to run headless (service / CI
-smoke tests). Without pywebview installed it falls back to opening your browser.
+Flags: `--port 7787` to pin the port, `--server-only` to run headless, `--debug` for
+verbose console logging. Every run also writes a DEBUG log to `~/.taskuary/taskuary.log`. Without pywebview installed it falls back to opening your browser.
 
 ### 3. Or build the single-file executable
 
@@ -77,8 +77,10 @@ artifacts if you don't want to build locally.
   **Messaging** (Outlook mail, Microsoft Teams, Slack — inbound lands on the Timeline
   through triage), **Developer** (GitHub — paste a PAT and repos are auto-discovered,
   feeding the Board's repo picker, the coder's issue loop, and the SOUL.md repo map),
-  and **Local & data connectors** (Microsoft SQL Server — Windows auth out of the box,
-  any MCP server's tool, SQLite, REST, RSS on schedules with Test/Preview/Run now).
+  and **Local & data connectors** — Microsoft SQL Server is connect-once (Windows auth
+  out of the box), then scheduled reports reference it: a query plus an optional **AI
+  summary prompt**, so the model reads the rows and writes what lands on the Timeline.
+  MCP / SQLite / REST / RSS reports take AI prompts too, with Test/Preview/Run now.
   Secrets are write-only; every card shows live health.
 - **Docs** — the operator documents: SOUL.md / CODER.md / DIGEST.md, editable in place.
   They ship as anonymized templates (John Smith) and **maintain themselves**: adding a
@@ -96,7 +98,7 @@ No config files required; the UI persists everything (agents land in
 
 ```bash
 pip install -e .[dev]
-pytest -q                   # 53 tests, ~1s, no network or SQL Server needed
+pytest -q                   # 58 tests, ~1s, no network or SQL Server needed
 ```
 
 CI (`.github/workflows/ci.yml`) runs the suite on Windows + Linux, Python 3.10 and 3.12,
@@ -109,8 +111,12 @@ don't need another place to *put* work; you need one place where work **arrives,
 triaged, gets done by agents, and gets reviewed by you**. Taskuary is that funnel:
 
 ```
-anything in  →  one funnel  →  triage (task / reply-only / FYI)  →  agents + you
+anything in  →  one funnel  →  AI triage (task / reply-only / FYI)  →  agents + you
 ```
+
+Triage is **AI-gated**: with no active AI connector, inbound is filed on the Timeline
+(visible, nothing lost) instead of heuristics spraying tasks for every automated
+notification. Connect an AI (Connectors → AI) and classification turns on.
 
 - **Board** — Queued / Agent working / Waiting on you / Done. Click a card to see the
   thread, the diff, and message the agent.

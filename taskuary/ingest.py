@@ -8,7 +8,7 @@ answering is the responder's job (reply_only), doing is the coder's.
 from loguru import logger
 from .routing import route, draft_task_fields
 from .policy import evaluate
-from .triage import classify_intent
+from .triage import classify_intent, heuristic_intent
 from .store import task_ref
 
 
@@ -29,8 +29,24 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None) -> dict:
         mid = store.add_message(_fields(msg, tid))
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
     else:
-        intent = classify_intent(msg, llm=llm, soul=store.get_doc('soul')) \
-            if cfg.get('intent_classify_enabled', '1') == '1' else {'intent': 'task', 'why': ''}
+        # AI-gated triage: without an active AI connector, nothing becomes a task on its
+        # own - messages FILE onto the timeline (visible, promotable by hand) instead of
+        # heuristics spraying tasks for every automated notification. Heuristics still
+        # short-circuit the obvious fyi noise before spending an AI call.
+        if cfg.get('intent_classify_enabled', '1') == '1':
+            h = heuristic_intent(msg)
+            if h['intent'] == 'fyi':                     # obvious automated noise: no AI call needed
+                intent = h
+            elif llm is None:
+                mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+                store.add_route(mid, None, 'file', None,
+                                'awaiting AI triage - connect an AI connector (Connectors → AI) to classify inbound automatically', [], 'triage')
+                logger.debug(f"ingest: filed (no AI connector) - {msg.get('subject') or ''}")
+                return {'status': 'filed', 'task_id': None, 'message_id': mid}
+            else:
+                intent = classify_intent(msg, llm=llm, soul=store.get_doc('soul'))
+        else:
+            intent = {'intent': 'task', 'why': ''}
         if intent['intent'] == 'fyi':
             mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
             store.add_route(mid, None, 'file', None, f"triage: {intent.get('why') or 'informational'}", [], 'triage')

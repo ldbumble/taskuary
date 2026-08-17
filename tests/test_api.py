@@ -124,14 +124,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post('/api/memory', json={'note': 'x', 'scope': 'weird'}).status_code, 422)
 
     def test_not_a_task_learns_and_deletes(self):
-        out = c.post('/api/ingest/push', json={'subject': 'please fix the export', 'body': 'please fix the export job',
-                                               'from_email': 'noise@vendor.com', 'channel': 'api'}).json()
+        with mock.patch('taskuary.server._llm', return_value=lambda s_, u_: '{"intent": "task", "why": "x"}'):
+            out = c.post('/api/ingest/push', json={'subject': 'please fix the export', 'body': 'please fix the export job',
+                                                   'from_email': 'noise@vendor.com', 'channel': 'api'}).json()
         tid = out['task_id']
         r = c.post(f'/api/tasks/{tid}/not-a-task').json()
         self.assertEqual(r['learned']['policy'], 'noise@vendor.com')
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)
         self.assertTrue(any(p['Pattern'] == 'noise@vendor.com' and p['Action'] == 'ignore'
                             for p in c.get('/api/policies').json()['data']))
+
+    def test_push_without_ai_files(self):
+        out = c.post('/api/ingest/push', json={'subject': 'automated provisioning notice 77', 'body': 'please add the new user',
+                                               'from_email': 'apinotify@vendor.com', 'channel': 'api'}).json()
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))
 
     def test_dispatch_validates(self):
         tid = c.post('/api/tasks', json={'Title': 'd'}).json()['taskId']

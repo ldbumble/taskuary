@@ -35,6 +35,8 @@ def start_server(host='127.0.0.1', port=None):
 def main():
     from taskuary import __version__, config
     argv = sys.argv[1:]
+    from taskuary.logs import setup as setup_logs
+    setup_logs('--debug' in argv)
     port = int(argv[argv.index('--port') + 1]) if '--port' in argv else None
     try:
         server, url = start_server(port=port)

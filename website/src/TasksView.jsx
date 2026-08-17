@@ -9,10 +9,16 @@ import BlockIcon from "@mui/icons-material/Block";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2 } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, TaskStatusChip, ActionChip, PromptBlock, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 
 const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
+const STATUS_FILTERS = [
+  { key: "", label: "all" }, { key: "open", label: "open" },
+  { key: "in_progress", label: "in progress", c: PILL_COLORS.amber },
+  { key: "waiting", label: "waiting", c: PILL_COLORS.purple },
+  { key: "done", label: "done", c: PILL_COLORS.green },
+];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
 
 // Compact modern select styling shared by the detail-header dropdowns.
@@ -102,7 +108,7 @@ export default function TasksView({ selected, onSelect, onChanged }) {
           height: "calc(100vh - 118px)", minHeight: 420 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.75,
             borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
-            <FilterPills options={["", ...STATUSES.slice(0, 4)]} value={filter} onChange={setFilter} />
+            <FilterPills options={STATUS_FILTERS} value={filter} onChange={setFilter} />
             <Box sx={{ flex: 1 }} />
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}>New</Button>
           </Box>

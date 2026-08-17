@@ -145,7 +145,7 @@ export const Crumb = ({ section, onBack, title }) => (
       sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
       {section}
     </Typography>
-    <Typography sx={{ color: "#1c2536", fontWeight: 800, fontSize: 24, lineHeight: 1.2, mt: 0.25 }}>{title}</Typography>
+    <Typography sx={{ color: "#1c2536", fontWeight: 800, fontSize: 20, lineHeight: 1.2, mt: 0.25 }}>{title}</Typography>
   </Box>
 );
 

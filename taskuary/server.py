@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from . import config
 from .store import SQLiteStore, task_ref
 from .ingest import ingest_message
-from .reports import PLANNED, REGISTRY, run_due_reports, run_report_source
+from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
 from . import agents as hub_agents
 from .coder import run_coding_task
 from .converse import message_agent
@@ -23,6 +23,21 @@ for name, prof in cfg.get('agents', {}).items():
 app = FastAPI(title='Taskuary', docs_url='/api/docs')
 ACTOR = 'owner'
 
+
+from loguru import logger
+import time as _time
+
+@app.middleware('http')
+async def request_log(request: Request, call_next):
+    t0 = _time.time()
+    try:
+        resp = await call_next(request)
+    except Exception:
+        logger.exception(f'{request.method} {request.url.path} crashed')
+        raise
+    if request.url.path.startswith('/api'):
+        logger.debug(f'{request.method} {request.url.path} -> {resp.status_code} ({int((_time.time() - t0) * 1000)}ms)')
+    return resp
 
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
@@ -243,7 +258,7 @@ def delete_source(sid: int):
 def run_source_now(sid: int):
     src = store.get_source(sid)
     if not src: raise HTTPException(404, 'source not found')
-    out = run_report_source(store, src)
+    out = run_report_source(store, src, _llm())
     store.touch_source(sid)
     return out
 
@@ -286,9 +301,10 @@ def connector_test(cid: int):
 
 @app.post('/api/reports/preview')
 def report_preview(body: dict):
-    """Dry-run a connector config: returns the headline/summary without filing a row."""
+    """Dry-run a report config - executor plus the AI pass when ai_prompt is set -
+    without filing a row. Exactly what a scheduled run would produce."""
     try:
-        head, summary = REGISTRY[body.get('type', 'rest')](body)
+        head, summary = render_report(store, body, _llm() if body.get('ai_prompt') else None)
         return {'ok': True, 'headline': head, 'summary': summary[:4000]}
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
@@ -312,9 +328,11 @@ def mcp_tools(body: dict):
 
 @app.post('/api/mssql/test')
 def mssql_test(body: dict):
+    """Body fields override the saved SQL Server connection (blank body = test the
+    connector's saved connection)."""
     try:
         from .mssql import test
-        return test(body)
+        return test(resolve_cfg(store, {**body, 'type': 'mssql'}))
     except ImportError:
         return {'ok': False, 'error': 'pyodbc not installed - pip install taskuary[mssql]'}
 

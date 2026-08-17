@@ -65,6 +65,44 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'mcp': run_mcp, 'rest': ru
             **{n: _planned(n) for n in PLANNED}}
 
 
+def mssql_connection(store) -> dict:
+    """The SQL Server CONNECTION lives on the mssql connector card (set up once, tested
+    there); report configs carry only query/ai_prompt/schedule and inherit it here.
+    Per-report overrides still win if present."""
+    c = store.get_connector_by_type('mssql', with_secret=True)
+    if not c: return {}
+    cfg = json.loads(c.get('ConfigJson') or '{}')
+    if c.get('Secret'): cfg.setdefault('password', c['Secret'])
+    return {k: v for k, v in cfg.items() if v}
+
+
+def resolve_cfg(store, cfg: dict) -> dict:
+    if cfg.get('type') == 'mssql':
+        return {**mssql_connection(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
+    return cfg
+
+
+AI_SYSTEM = ('You summarize scheduled report data for a busy operator. Follow the operator '
+             'instruction exactly. Be concise and concrete: numbers, names, deltas. Plain text only.')
+
+
+def render_report(store, cfg: dict, llm=None):
+    """Run the executor, then (optionally) the AI pass: cfg['ai_prompt'] + a configured
+    AI connector turn raw rows into the summary that lands on the timeline."""
+    cfg = resolve_cfg(store, cfg)
+    head, summary = REGISTRY[cfg.get('type', 'rest')](cfg)
+    if cfg.get('ai_prompt') and llm:
+        try:
+            ai = llm(AI_SYSTEM, f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{summary[:6000]}")
+            return head, f"{(ai or '').strip()}\n\n--- raw data ---\n{summary[:1500]}"
+        except Exception as e:
+            logger.warning(f'AI summary failed for report: {e}')
+            return head, f'(AI summary failed: {str(e)[:200]})\n\n{summary}'
+    if cfg.get('ai_prompt') and not llm:
+        return head, f'(AI prompt set, but no active AI connector - raw data below)\n\n{summary}'
+    return head, summary
+
+
 def is_due(cfg: dict, last_polled) -> bool:
     now = datetime.now()
     if not last_polled: return True
@@ -78,12 +116,14 @@ def is_due(cfg: dict, last_polled) -> bool:
     return (now - last).total_seconds() >= 24 * 3600
 
 
-def run_report_source(store, src: dict) -> dict:
-    """Execute one due report and file it on the timeline. Errors file visibly too."""
+def run_report_source(store, src: dict, llm=None) -> dict:
+    """Execute one due report (executor + optional AI pass) and file it on the timeline.
+    Errors file visibly too."""
     cfg = json.loads(src.get('ConfigJson') or '{}')
     title = cfg.get('title') or src['Address']
+    logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
     try:
-        head, summary = REGISTRY[cfg.get('type', 'rest')](cfg)
+        head, summary = render_report(store, cfg, llm)
         subject, body = f'{title} — {head}', summary
     except Exception as e:
         subject, body = f'{title} — FAILED', f'Report error: {str(e)[:500]}'
@@ -99,11 +139,14 @@ def run_report_source(store, src: dict) -> dict:
 
 
 def run_due_reports(store) -> int:
+    from .llm import build_llm
+    try: llm = build_llm(store)
+    except Exception: llm = None
     n = 0
     for src in store.list_sources():
         if src['Channel'] != 'report': continue
         if is_due(json.loads(src.get('ConfigJson') or '{}'), src.get('LastPolledAt')):
-            run_report_source(store, src)
+            run_report_source(store, src, llm)
             store.touch_source(src['SourceId'])
             n += 1
     return n

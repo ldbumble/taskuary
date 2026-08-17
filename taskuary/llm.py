@@ -38,9 +38,15 @@ def make_llm(t, cfg: dict, key: str):
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
     def llm(system, user):
-        body = {'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}], 'max_tokens': 300}
+        # newer OpenAI/Azure models reject max_tokens ("use max_completion_tokens");
+        # older Azure api-versions reject max_completion_tokens - try modern, fall back
+        body = {'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
+                'max_completion_tokens': 300}
         if model: body['model'] = model
         r = requests.post(url, headers=headers, json=body, timeout=60)
+        if r.status_code == 400 and 'max_completion_tokens' in r.text:
+            body.pop('max_completion_tokens'); body['max_tokens'] = 300
+            r = requests.post(url, headers=headers, json=body, timeout=60)
         if r.status_code != 200: raise RuntimeError(f'{t} error {r.status_code}: {r.text[:300]}')
         return r.json()['choices'][0]['message']['content']
     return llm

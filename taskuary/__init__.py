@@ -1,2 +1,2 @@
-"""Taskuary - Automate Your Work: task-driven agent work over your existing systems."""
+"""Taskuary - Automate your job: AI triage in, coding agents out, you in charge."""
 __version__ = '0.1.0'

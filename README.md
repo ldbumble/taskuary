@@ -1,10 +1,8 @@
 # Taskuary
 
-**The operating system for automating your work.**
-
-Everything that lands on you — email, chat, scheduled reports, GitHub — flows into one
-funnel. AI triages it, your coding agents work it, and nothing ships without your
-approval. Fully local: your data, your keys, and your agents stay on your machine.
+**Automate your job.** The local-first operating system that takes in everything —
+email, chat, reports — triages it with AI, hands the real work to your coding agents,
+and keeps you in charge.
 
 ![The Taskuary timeline: every inbound item on a day rail, with the AI-drafted reply ready to approve](docs/screenshot-timeline.png)
 

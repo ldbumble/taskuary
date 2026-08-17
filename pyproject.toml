@@ -32,4 +32,4 @@ taskuary-desktop = "taskuary.desktop:main"
 include = ["taskuary*"]
 
 [tool.setuptools.package-data]
-taskuary = ["web/*"]
+taskuary = ["web/*", "web/assets/*"]

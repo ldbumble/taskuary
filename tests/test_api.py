@@ -14,7 +14,9 @@ c = TestClient(server.app)
 class ApiTests(unittest.TestCase):
     def test_index_serves_ui(self):
         r = c.get('/')
-        self.assertEqual(r.status_code, 200); self.assertIn('Taskuary', r.text); self.assertIn('Settings', r.text)
+        self.assertEqual(r.status_code, 200); self.assertIn('Taskuary', r.text); self.assertIn('assets/index-', r.text)
+        js = r.text.split('assets/')[1].split('"')[0]
+        self.assertEqual(c.get(f'/assets/{js}').status_code, 200)
 
     def test_task_crud_and_board(self):
         tid = c.post('/api/tasks', json={'Title': 'do the thing'}).json()['taskId']
@@ -31,7 +33,8 @@ class ApiTests(unittest.TestCase):
         prof = {'cmd': 'claude', 'args': ['-p'], 'resume_args': ['--resume'], 'timeout': 900,
                 'cwd_map': {'o/r': 'C:/src/r'}}
         self.assertEqual(c.put('/api/agents/uitest', json=prof).json(), {'ok': True})
-        self.assertEqual(c.get('/api/agents').json()['data']['uitest'], prof)
+        self.assertEqual(c.get('/api/agents').json()['config']['uitest'], prof)
+        self.assertTrue(any(a['Name'] == 'uitest' for a in c.get('/api/agents').json()['data']))
         self.assertEqual(config.load()['agents']['uitest'], prof)  # written to config.toml
         self.assertEqual(c.put('/api/agents/bad', json={'args': []}).status_code, 422)
         self.assertEqual(c.delete('/api/agents/uitest').json(), {'ok': True})
@@ -71,6 +74,49 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.get('/api/mssql/drivers').json()['data'], ['ODBC Driver 18 for SQL Server'])
         with mock.patch('taskuary.mssql.test', return_value={'ok': True, 'version': 'v', 'database': 'd'}):
             self.assertTrue(c.post('/api/mssql/test', json={'server': 'localhost'}).json()['ok'])
+
+    def test_policies_crud(self):
+        r = c.post('/api/policies', json={'Name': 'quiet fyi', 'Kind': 'keyword', 'Pattern': 'newsletter',
+                                          'Action': 'ignore', 'Reason': 'noise', 'SortOrder': 10}).json()
+        self.assertTrue(r['ok'])
+        rows = c.get('/api/policies').json()['data']
+        me = next(p for p in rows if p['PolicyId'] == r['policyId'])
+        self.assertEqual((me['Action'], me['Active']), ('ignore', 1))
+        c.post('/api/policies', json={'PolicyId': r['policyId'], 'Active': False})
+        me = next(p for p in c.get('/api/policies').json()['data'] if p['PolicyId'] == r['policyId'])
+        self.assertEqual(me['Active'], 0)
+        self.assertEqual(c.post('/api/policies', json={'Name': 'incomplete'}).status_code, 422)
+
+    def test_memory_add_and_toggle(self):
+        r = c.post('/api/memory', json={'note': 'Never draft replies to cash reports', 'scope': 'global'}).json()
+        self.assertTrue(r['ok'])
+        c.patch(f"/api/memory/{r['memoryId']}", json={'active': False})
+        row = next(m for m in c.get('/api/memory').json()['data'] if m['MemoryId'] == r['memoryId'])
+        self.assertEqual(row['Active'], 0)
+        self.assertEqual(c.post('/api/memory', json={'note': ' ', 'scope': 'global'}).status_code, 422)
+        self.assertEqual(c.post('/api/memory', json={'note': 'x', 'scope': 'weird'}).status_code, 422)
+
+    def test_not_a_task_learns_and_deletes(self):
+        out = c.post('/api/ingest/push', json={'subject': 'please fix the export', 'body': 'please fix the export job',
+                                               'from_email': 'noise@vendor.com', 'channel': 'api'}).json()
+        tid = out['task_id']
+        r = c.post(f'/api/tasks/{tid}/not-a-task').json()
+        self.assertEqual(r['learned']['policy'], 'noise@vendor.com')
+        self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)
+        self.assertTrue(any(p['Pattern'] == 'noise@vendor.com' and p['Action'] == 'ignore'
+                            for p in c.get('/api/policies').json()['data']))
+
+    def test_dispatch_validates(self):
+        tid = c.post('/api/tasks', json={'Title': 'd'}).json()['taskId']
+        self.assertEqual(c.post(f'/api/tasks/{tid}/dispatch', json={'agent': 'ghost'}).status_code, 422)
+        self.assertEqual(c.post('/api/tasks/999999/dispatch', json={'agent': 'coder'}).status_code, 404)
+
+    def test_runs_audit_ingest_status(self):
+        self.assertEqual(c.get('/api/runs/999999').status_code, 404)
+        self.assertIsInstance(c.get('/api/audit/recent').json()['data'], list)
+        self.assertIn(c.get('/api/ingest/status').json()['status']['state'], ('idle', 'running'))
+        self.assertEqual(c.post('/api/ingest/poll').json(), {'report': 'running'})
+        self.assertNotIn('ingest_status', {s['Name'] for s in c.get('/api/settings').json()['data']})
 
     def test_token_gate(self):
         server.cfg['server']['token'] = 'secret'

@@ -46,11 +46,22 @@ class DocBody(BaseModel): content: str
 class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
     SourceId: int = None; Channel: str = None; Address: str = None; ConfigJson: str = None; Active: bool = None
+class DispatchBody(BaseModel): agent: str = 'coder'; instruction: str = None
+class PolicyBody(BaseModel):
+    PolicyId: int = None; Name: str = None; Kind: str = None; Pattern: str = None
+    Action: str = None; Reason: str = None; SortOrder: int = None; Active: bool = None
+class MemoryBody(BaseModel): note: str; scope: str = 'global'; scope_key: str = None
+class MemoryToggle(BaseModel): active: bool
 
 
 @app.get('/', response_class=HTMLResponse)
 def index():
     return (Path(__file__).parent / 'web' / 'index.html').read_text(encoding='utf-8')
+
+_assets = Path(__file__).parent / 'web' / 'assets'
+if _assets.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    app.mount('/assets', StaticFiles(directory=str(_assets)), name='assets')
 
 
 @app.get('/api/feed')
@@ -98,6 +109,44 @@ def comment(task_id: int, body: TextBody):
     store.add_comment(task_id, ACTOR, 'human', body.body)
     return {'ok': True}
 
+@app.post('/api/tasks/{task_id}/dispatch')
+def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
+    background.add_task(hub_agents.dispatch, store, task_id, body.agent, body.instruction or 'Work this task.', ACTOR)
+    return {'dispatch': 'running', 'agent': body.agent}
+
+@app.post('/api/tasks/{task_id}/not-a-task')
+def not_a_task(task_id: int):
+    """Owner verdict: never needed to be a task. Teaches (sender ignore policy + memory
+    note), then deletes the task - its messages stay in the feed as 'filed'."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    msgs, learned = store.list_messages(task_id), None
+    em = (msgs[0].get('FromEmail') or '').lower() if msgs else ''
+    if em:
+        store.save_policy({'Name': f'not-a-task: {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'ignore',
+                           'Reason': 'owner said not a task', 'SortOrder': 50, 'Active': 1}, ACTOR)
+        mid = store.add_memory({'Scope': 'sender', 'ScopeKey': em, 'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                                'Note': f"Messages from {em} like '{(msgs[0].get('Subject') or '')[:80]}' are not tasks - do not open tasks or draft replies."})
+        learned = {'policy': em, 'memory_id': mid}
+    store.audit('task', task_id, 'not_a_task_delete', ACTOR)
+    store.delete_task(task_id)
+    return {'ok': True, 'learned': learned}
+
+@app.post('/api/tasks/purge-dropped')
+def purge_dropped():
+    victims = [t['TaskId'] for t in store.list_tasks('dropped')]
+    for tid in victims:
+        store.audit('task', tid, 'purge_dropped', ACTOR)
+        store.delete_task(tid)
+    return {'ok': True, 'deleted': len(victims)}
+
+@app.get('/api/runs/{run_id}')
+def get_run(run_id: int):
+    r = store.get_run(run_id)
+    if not r: raise HTTPException(404, 'run not found')
+    return r
+
 @app.get('/api/reviews')
 def reviews(status: str = None): return {'data': store.list_reviews(status)}
 
@@ -109,8 +158,29 @@ def decide(rid: int, body: DecideBody):
     if body.verb not in verb2status: raise HTTPException(422, 'bad verb')
     final = body.final_text if body.verb == 'edit' else (rv.get('DraftText') if body.verb == 'approve' else None)
     store.decide_review(rid, verb2status[body.verb], final, ACTOR, body.note)
+    if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f'Reviewed draft ({body.verb}):\n{final}')
     if body.verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
+    # reply-only items are not real tasks: answering them IS the work, so close on decision
+    if body.verb in ('approve', 'edit') and rv.get('TaskId'):
+        t = store.get_task(rv['TaskId'])
+        if (t or {}).get('Kind') == 'reply' and t.get('Status') not in ('done', 'dropped'):
+            store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
+    store.audit('review', rid, body.verb, ACTOR, detail={'kind': rv.get('Kind')})
     return {'ok': True, 'status': verb2status[body.verb]}
+
+@app.post('/api/reviews/{rid}/draft')
+def draft_review(rid: int):
+    """(Re)generate the AI draft for a pending review inline."""
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'review not found')
+    names = [a['Name'] for a in store.list_agents()]
+    name = 'responder' if 'responder' in names else (names[0] if names else None)
+    if not name: raise HTTPException(422, 'no agents configured')
+    out = hub_agents.dispatch(store, rv['TaskId'], name, 'Draft the reply this message needs.', ACTOR)
+    if out['status'] != 'done': raise HTTPException(502, 'draft agent failed - see the run log')
+    store.update_review_draft(rid, out['result'], out['run_id'])
+    store.audit('review', rid, 'redraft', ACTOR, run_id=out['run_id'])
+    return {'ok': True, 'draft': out['result'], 'runId': out['run_id']}
 
 @app.post('/api/ingest/push')
 def push(body: MsgBody):
@@ -186,7 +256,9 @@ def mssql_test(body: dict):
         return {'ok': False, 'error': 'pyodbc not installed - pip install taskuary[mssql]'}
 
 @app.get('/api/agents')
-def agents(): return {'data': cfg.get('agents', {})}
+def agents():
+    """data = store rows (for dispatch pickers); config = the editable profiles."""
+    return {'data': store.list_agents(), 'config': cfg.get('agents', {})}
 
 @app.put('/api/agents/{name}')
 def put_agent(name: str, body: dict):
@@ -214,8 +286,57 @@ def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
+@app.get('/api/policies')
+def policies(): return {'data': store.list_policies(active_only=False)}
+
+@app.post('/api/policies')
+def save_policy(body: PolicyBody):
+    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    if not fields.get('PolicyId') and not all(fields.get(k) for k in ('Name', 'Kind', 'Action', 'Reason')):
+        raise HTTPException(422, 'new policies need Name, Kind, Action, Reason')
+    pid = store.save_policy(fields, ACTOR)
+    store.audit('policy', pid, 'edit' if body.PolicyId else 'create', ACTOR, detail=fields)
+    return {'ok': True, 'policyId': pid}
+
+@app.get('/api/memory')
+def memory(): return {'data': store.list_memories(active_only=False)}
+
+@app.post('/api/memory')
+def add_memory(body: MemoryBody):
+    if body.scope not in ('global', 'sender', 'sender_domain', 'source'): raise HTTPException(422, 'bad scope')
+    if not body.note.strip(): raise HTTPException(422, 'note is required')
+    mid = store.add_memory({'Scope': body.scope, 'ScopeKey': body.scope_key, 'Note': body.note.strip()[:1000],
+                            'Source': 'manual', 'Active': 1, 'CreatedBy': ACTOR})
+    store.audit('memory', mid, 'create', ACTOR)
+    return {'ok': True, 'memoryId': mid}
+
+@app.patch('/api/memory/{mid}')
+def toggle_memory(mid: int, body: MemoryToggle):
+    store.set_memory_active(mid, body.active)
+    store.audit('memory', mid, 'activate' if body.active else 'deactivate', ACTOR)
+    return {'ok': True}
+
+@app.get('/api/audit/recent')
+def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
+
+def _poll_reports():
+    store.set_setting('ingest_status', json.dumps({'state': 'running'}), 'system')
+    try: run_due_reports(store)
+    finally: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+
+@app.post('/api/ingest/poll')
+def ingest_poll(background: BackgroundTasks):
+    background.add_task(_poll_reports)
+    return {'report': 'running'}
+
+@app.get('/api/ingest/status')
+def ingest_status():
+    try: return {'status': json.loads(store.get_settings().get('ingest_status') or '{"state": "idle"}')}
+    except ValueError: return {'status': {'state': 'idle'}}
+
 @app.get('/api/settings')
-def settings(): return {'data': store.list_settings()}
+def settings():
+    return {'data': [s for s in store.list_settings() if s['Name'] != 'ingest_status']}
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):

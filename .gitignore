@@ -8,3 +8,5 @@ venv/
 .taskuary/
 *.db
 .env
+website/node_modules/
+website/ui.png

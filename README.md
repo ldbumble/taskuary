@@ -56,20 +56,27 @@ dist/Taskuary.exe                       # server + UI + pyodbc in one file, no P
 Every push also builds this on CI — grab `Taskuary-windows-exe` from the Actions
 artifacts if you don't want to build locally.
 
-### 4. Configure — all in the UI
+### 4. The workspace — seven tabs, everything in the UI
 
-Open **Settings** (top-right):
-
-- **Agents** — point Taskuary at your AI CLI (`claude`, `codex`, a wrapper script...):
-  cmd, args, resume args, timeout, working dir, and the repo → local checkout map.
-- **Report connections** — add a Microsoft SQL Server query (Windows auth works out of
-  the box for a local instance — just server + database + query), an MCP server tool, or
-  a SQLite/REST/RSS pull. Schedule with *every N minutes* or *daily at HH:MM*.
-  **Test connection** and **Preview** run it live before you save; **Run now** files a
-  row immediately.
-- **App settings** — the engine knobs, saved on change: `default_action`,
-  `auto_draft_enabled`, `attach_threshold`, `feed_days`, `intent_classify_enabled`,
-  `coder_auto_enabled`.
+- **Timeline** — every inbound item on a day-grouped rail: who/where, what the hub did
+  with it, current state. Hover a row for the gist, click for the full review canvas
+  (message, coder report, code diff, history, decide inline).
+- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Drag
+  cards between columns; "New task for the agent" sends work straight to the coder.
+- **Tasks** — dense two-pane list + full story: messages with routing decisions, agent
+  runs with traces and diffs, dispatch any agent, message the working agent (it resumes
+  its session), status/priority, "Not a task" (which teaches the funnel).
+- **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
+  Draft-with-AI redrafting. Escalations carry no draft by design.
+- **Connectors** — report connections: Microsoft SQL Server (Windows auth works out of
+  the box for a local instance — just server + database + query), any MCP server's tool,
+  SQLite, REST, RSS. Schedules (*every N minutes* / *daily at HH:MM*), **Test
+  connection**, **Preview**, **Run now**.
+- **Docs** — the operator documents: SOUL.md / CODER.md / DIGEST.md, editable in place.
+- **Settings** — Stripe-style: Configuration knobs (grouped, with help), Routing
+  policies (deterministic rules the AI can never override), Agent memory (learned
+  standing notes), Agents (bring your own CLI), Audit integrity (verify the hash chain).
+  The search box reaches everything, help text included.
 
 No config files required; the UI persists everything (agents land in
 `~/.taskuary/config.toml`, which you can still hand-edit).
@@ -78,7 +85,7 @@ No config files required; the UI persists everything (agents land in
 
 ```bash
 pip install -e .[dev]
-pytest -q                   # 37 tests, ~1s, no network or SQL Server needed
+pytest -q                   # 42 tests, ~1s, no network or SQL Server needed
 ```
 
 CI (`.github/workflows/ci.yml`) runs the suite on Windows + Linux, Python 3.10 and 3.12,
@@ -170,18 +177,29 @@ either way.
 ## Status / roadmap
 
 Early (v0.1.0). The engine (store, triage, policies, agents, sessions, diffs, reports,
-audit) and the HTTP API are here, with a built-in web UI for the board and settings.
+audit), the HTTP API, and the full React workspace (7 tabs) are here.
 
-- [x] Settings UI (agents · report connections · app settings) — all point-and-click
+- [x] Full React UI — Timeline · Board (drag-and-drop) · Tasks · Review · Connectors · Docs · Settings
+- [x] Settings all point-and-click: config knobs, routing policies, agent memory, agents, audit
 - [x] Desktop app (`taskuary-desktop`, single-exe PyInstaller build)
 - [x] Microsoft SQL Server + MCP report connectors
-- [x] Test suite + CI (Windows/Linux, py3.10/3.12, exe build)
-- [ ] Timeline + review + operator-docs views in the UI (feed/reviews/docs are API-only today)
-- [ ] Full React UI port (drag-and-drop board)
+- [x] Test suite + CI (Windows/Linux/macOS, py3.10/3.12, web + exe builds)
 - [ ] Git worktree isolation per task attempt (vibe-kanban-style)
 - [ ] Tray + notifications for the desktop shell
 - [ ] Email/chat ingest plugins (IMAP, Graph, Slack)
 - [ ] More report executors (table above)
+
+## Developing the UI
+
+The web app is React + MUI in `website/` and builds into the Python package — node is a
+build-time dependency only:
+
+```bash
+cd website
+npm install
+npm run dev      # Vite dev server, proxies /api to a running `taskuary` on :7787
+npm run build    # emits taskuary/web/ (committed, so pip installs need no node)
+```
 
 ## Credits
 

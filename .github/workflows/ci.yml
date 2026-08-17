@@ -20,6 +20,18 @@ jobs:
         if: runner.os == 'Windows'
       - run: pytest -q
 
+  build-web:
+    # the built UI is committed into taskuary/web; this proves the source still builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: "20" }
+      - run: npm ci
+        working-directory: website
+      - run: npm run build
+        working-directory: website
+
   build-exe:
     # proves the one-file desktop build stays green; artifact attached to the run
     runs-on: windows-latest

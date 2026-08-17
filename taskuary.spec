@@ -2,7 +2,7 @@
 # Build: pip install .[desktop,build] && pyinstaller taskuary.spec
 # Output: dist/Taskuary.exe - double-click, native window, data in ~/.taskuary.
 a = Analysis(['taskuary/desktop.py'],
-             datas=[('taskuary/web/index.html', 'taskuary/web')],
+             datas=[('taskuary/web', 'taskuary/web')],
              hiddenimports=['taskuary.server', 'pyodbc', 'webview.platforms.edgechromium', 'webview.platforms.winforms'],
              excludes=['tkinter', 'matplotlib', 'PIL', 'sqlalchemy'])
 pyz = PYZ(a.pure)

@@ -41,11 +41,12 @@ class ConnStrTests(unittest.TestCase):
             self.assertIn('{ODBC Driver 18 for SQL Server}', mssql.conn_str({}))
 
     def test_driver_ordering(self):
+        try: import pyodbc
+        except ImportError: self.skipTest('pyodbc not installed')
         fake = ['SQL Server', 'ODBC Driver 17 for SQL Server', 'ODBC Driver 18 for SQL Server',
                 'SQL Server Native Client 11.0']
-        with mock.patch('pyodbc.drivers', return_value=fake, create=True):
-            try: got = mssql.drivers()
-            except ImportError: self.skipTest('pyodbc not installed')
+        with mock.patch.object(pyodbc, 'drivers', return_value=fake):
+            got = mssql.drivers()
         self.assertEqual(got[0], 'ODBC Driver 18 for SQL Server')
         self.assertEqual(got[1], 'ODBC Driver 17 for SQL Server')
 

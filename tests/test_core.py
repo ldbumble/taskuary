@@ -52,6 +52,37 @@ class CoreTests(unittest.TestCase):
         out = ingest_message(s, self.msg(external_id='q1', subject='Tuesday?', body='are you available tuesday?'), llm=REPLY_LLM)
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'reply')
 
+    def test_reply_only_enters_review_queue(self):
+        s = MemoryStore()
+        out = ingest_message(s, self.msg(external_id='rq1', subject='Tuesday?', body='are you available tuesday?'), llm=REPLY_LLM)
+        pending = s.list_reviews('pending')
+        self.assertEqual(len(pending), 1)
+        self.assertEqual((pending[0]['TaskId'], pending[0]['Kind']), (out['task_id'], 'draft'))
+
+    def test_coder_auto_dispatch_when_enabled(self):
+        from unittest import mock
+        import taskuary.ingest as ing
+
+        class InlineThread:
+            def __init__(self, target=None, args=(), daemon=None): self.t, self.a = target, args
+            def start(self): self.t(*self.a)
+
+        s = MemoryStore()
+        s.set_setting('coder_auto_enabled', '1', 't')
+        with mock.patch.object(ing, 'threading') as th,              mock.patch('taskuary.coder.run_coding_task') as run,              mock.patch('taskuary.coder.github_cfg', return_value={}):
+            th.Thread = InlineThread
+            out = ingest_message(s, self.msg(external_id='ac1'), llm=TASK_LLM)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[1], out['task_id'])
+        self.assertTrue(any('auto-dispatched' in c['Body'] for c in s.list_comments(out['task_id'])))
+
+    def test_no_auto_dispatch_when_disabled(self):
+        from unittest import mock
+        s = MemoryStore()
+        with mock.patch('taskuary.coder.run_coding_task') as run:
+            ingest_message(s, self.msg(external_id='ac2'), llm=TASK_LLM)
+        run.assert_not_called()
+
     def test_triage_heuristics(self):
         self.assertEqual(heuristic_intent({'subject': '', 'body': 'are you available tuesday?'})['intent'], 'reply_only')
         self.assertEqual(heuristic_intent({'subject': 'fyi', 'body': 'this is an automated notice'})['intent'], 'fyi')

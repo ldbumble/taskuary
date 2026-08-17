@@ -5,6 +5,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
 answering is the responder's job (reply_only), doing is the coder's.
 """
+import threading
 from loguru import logger
 from .routing import route, draft_task_fields
 from .policy import evaluate
@@ -72,9 +73,45 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None) -> dict:
                                  'SourceRef': msg.get('source_link')}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         mid = store.add_message(_fields(msg, tid))
+        # the agents actually pick work up here:
+        # - reply tasks ALWAYS enter the review queue ("needs me"); auto_draft_enabled
+        #   additionally has the responder write the draft in the background
+        # - real tasks auto-dispatch to the coder when coder_auto_enabled is on
+        if f['kind'] == 'reply':
+            rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                    'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
+            if cfg.get('auto_draft_enabled') == '1':
+                _spawn(_auto_draft, store, tid, rid)
+        elif cfg.get('coder_auto_enabled') == '1':
+            store.add_comment(tid, 'router', 'agent', 'auto-dispatched to the coder (coder_auto_enabled)')
+            _spawn(_auto_code, store, tid)
     store.add_route(mid, tid, r['decision'], r['score'], r['reason'], r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
+
+
+def _spawn(fn, *args):
+    threading.Thread(target=fn, args=args, daemon=True).start()
+
+
+def _auto_code(store, tid):
+    from .coder import github_cfg, run_coding_task
+    try:
+        run_coding_task(store, tid, 'auto-dispatch', None, github_cfg(store))
+    except Exception as e:
+        logger.warning(f'auto coder dispatch failed for task {tid}: {e}')
+
+
+def _auto_draft(store, tid, rid):
+    from . import agents as hub_agents
+    if not store.get_agent('responder'):
+        logger.debug('auto-draft skipped: no agent named "responder" - the review stays pending for Draft with AI')
+        return
+    try:
+        out = hub_agents.dispatch(store, tid, 'responder', 'Draft the reply this message needs.', 'auto-draft')
+        if out['status'] == 'done': store.update_review_draft(rid, out['result'], out['run_id'])
+    except Exception as e:
+        logger.warning(f'auto-draft failed for task {tid}: {e}')
 
 
 def _fields(msg, task_id):

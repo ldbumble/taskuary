@@ -125,11 +125,8 @@ def msg_agent(task_id: int, body: TextBody, background: BackgroundTasks):
     return {'chat': 'running'}
 
 def _github_cfg():
-    """[github] from config.toml, with the GitHub connector's PAT winning when saved."""
-    g = dict(cfg.get('github') or {})
-    c = store.get_connector_by_type('github', with_secret=True)
-    if c and c.get('Secret'): g['token'] = c['Secret']
-    return g
+    from .coder import github_cfg
+    return github_cfg(store)
 
 @app.post('/api/tasks/{task_id}/code')
 def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):

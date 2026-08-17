@@ -15,6 +15,15 @@ REPORT_CONTRACT = ('\n\nEnd your output with the marker ' + RESULT_MARKER + ' on
                    'Do not ask questions - decide and act within your CODER.md rules.')
 
 
+def github_cfg(store) -> dict:
+    """[github] from config.toml, with the GitHub connector's saved PAT winning."""
+    from . import config
+    g = dict(config.load().get('github') or {})
+    c = store.get_connector_by_type('github', with_secret=True)
+    if c and c.get('Secret'): g['token'] = c['Secret']
+    return g
+
+
 def parse_coder_result(out: str) -> dict:
     try:
         tail = out.split(RESULT_MARKER)[-1]

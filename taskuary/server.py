@@ -47,29 +47,34 @@ async def token_gate(request: Request, call_next):
     return await call_next(request)
 
 
+# pydantic v2: `str = None` is NOT optional - an explicit JSON null then 422s the request
+# (the UI sends e.g. final_text: null on reject). Every nullable field must say `| None`.
 class TaskBody(BaseModel):
-    Title: str = None; Summary: str = None; Kind: str = None; Priority: str = None
-    Status: str = None; Tags: str = None
+    Title: str | None = None; Summary: str | None = None; Kind: str | None = None
+    Priority: str | None = None; Status: str | None = None; Tags: str | None = None
 class MsgBody(BaseModel):
-    external_id: str = None; channel: str = 'api'; subject: str = None; body: str = None
-    from_name: str = None; from_email: str = None; conversation_id: str = None
-    sent_at: str = None; source_link: str = None; source_name: str = None
+    external_id: str | None = None; channel: str = 'api'; subject: str | None = None
+    body: str | None = None; from_name: str | None = None; from_email: str | None = None
+    conversation_id: str | None = None; sent_at: str | None = None
+    source_link: str | None = None; source_name: str | None = None
 class TextBody(BaseModel): body: str
-class DecideBody(BaseModel): verb: str; final_text: str = None; note: str = None
-class CodeBody(BaseModel): repo: str = None
+class DecideBody(BaseModel): verb: str; final_text: str | None = None; note: str | None = None
+class CodeBody(BaseModel): repo: str | None = None
 class DocBody(BaseModel): content: str
 class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
-    SourceId: int = None; Channel: str = None; Address: str = None; ConfigJson: str = None; Active: bool = None
-class DispatchBody(BaseModel): agent: str = 'coder'; instruction: str = None
+    SourceId: int | None = None; ConnectorId: int | None = None; Channel: str | None = None
+    Address: str | None = None; ConfigJson: str | None = None; Active: bool | None = None
+class DispatchBody(BaseModel): agent: str = 'coder'; instruction: str | None = None
 class PolicyBody(BaseModel):
-    PolicyId: int = None; Name: str = None; Kind: str = None; Pattern: str = None
-    Action: str = None; Reason: str = None; SortOrder: int = None; Active: bool = None
-class MemoryBody(BaseModel): note: str; scope: str = 'global'; scope_key: str = None
+    PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
+    Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
+    SortOrder: int | None = None; Active: bool | None = None
+class MemoryBody(BaseModel): note: str; scope: str = 'global'; scope_key: str | None = None
 class MemoryToggle(BaseModel): active: bool
 class ConnectorBody(BaseModel):
-    ConnectorId: int = None; Type: str = None; Name: str = None
-    ConfigJson: str = None; Secret: str = None; Active: bool = None
+    ConnectorId: int | None = None; Type: str | None = None; Name: str | None = None
+    ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
 
 
 @app.get('/', response_class=HTMLResponse)

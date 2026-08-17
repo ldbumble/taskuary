@@ -24,6 +24,19 @@ class ApiTests(unittest.TestCase):
         c.patch(f'/api/tasks/{tid}', json={'Status': 'done'})
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
+    def test_decide_accepts_explicit_null_final_text(self):
+        # the UI sends {"verb": "reject", "final_text": null} - pydantic v2 422'd on the
+        # explicit null (str = None is not Optional), which blanked the Review screen
+        tid = c.post('/api/tasks', json={'Title': 'escalated thing'}).json()['taskId']
+        server.store.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': 'r'})
+        rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+                   if r['TaskId'] == tid)
+        r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'reject', 'final_text': None})
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(any(x['ReviewId'] == rid for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data']))
+        # explicit nulls must be accepted across the board (create-task dialog sends them)
+        self.assertEqual(c.post('/api/tasks', json={'Title': 't2', 'Summary': None, 'Tags': None}).status_code, 200)
+
     def test_settings_roundtrip(self):
         self.assertEqual(c.patch('/api/settings', json={'name': 'feed_days', 'value': '7'}).json(), {'ok': True})
         vals = {s['Name']: s['Value'] for s in c.get('/api/settings').json()['data']}

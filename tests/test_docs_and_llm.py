@@ -52,6 +52,34 @@ class DocSyncTests(unittest.TestCase):
         self.assertIn('**o/two**', soul); self.assertIn('archived - do not touch', soul)
 
 
+class GraphCredsTests(unittest.TestCase):
+    def test_teams_borrows_outlook_creds(self):
+        from taskuary.channels import graph_creds
+        s = MemoryStore()
+        o = next(c for c in s.list_connectors() if c['Type'] == 'outlook')
+        s.save_connector({'ConnectorId': o['ConnectorId'], 'Secret': 'graph-secret',
+                          'ConfigJson': '{"tenant_id": "t1", "client_id": "c1"}'}, 'o')
+        t = s.get_connector_by_type('teams', with_secret=True)
+        cfg, sec, borrowed = graph_creds(s, t)
+        self.assertEqual((cfg['tenant_id'], cfg['client_id'], sec, borrowed), ('t1', 'c1', 'graph-secret', True))
+
+    def test_teams_own_creds_win(self):
+        from taskuary.channels import graph_creds
+        s = MemoryStore()
+        o = next(c for c in s.list_connectors() if c['Type'] == 'outlook')
+        s.save_connector({'ConnectorId': o['ConnectorId'], 'Secret': 'osec', 'ConfigJson': '{"client_id": "oc"}'}, 'o')
+        t = next(c for c in s.list_connectors() if c['Type'] == 'teams')
+        s.save_connector({'ConnectorId': t['ConnectorId'], 'Secret': 'tsec', 'ConfigJson': '{"client_id": "tc", "tenant_id": "tt"}'}, 'o')
+        cfg, sec, borrowed = graph_creds(s, s.get_connector_by_type('teams', with_secret=True))
+        self.assertEqual((cfg['client_id'], sec, borrowed), ('tc', 'tsec', False))
+
+    def test_outlook_never_borrows(self):
+        from taskuary.channels import graph_creds
+        s = MemoryStore()
+        cfg, sec, borrowed = graph_creds(s, s.get_connector_by_type('outlook', with_secret=True))
+        self.assertEqual((sec, borrowed), (None, False))
+
+
 class LlmTests(unittest.TestCase):
     def test_build_llm_none_without_active_key(self):
         self.assertIsNone(llm.build_llm(MemoryStore()))

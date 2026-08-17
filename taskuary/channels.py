@@ -19,6 +19,19 @@ MAIL_SELECT = 'id,subject,from,receivedDateTime,bodyPreview,body,conversationId,
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
 
 
+def graph_creds(store, c):
+    """Effective Graph credentials for a connector: its own, else the Outlook connector's
+    saved app (Teams shares it by design), else the AZURE_* env vars (in graph_token).
+    Returns (cfg, secret, borrowed_from_outlook)."""
+    cfg, sec = _cfg(c), c.get('Secret')
+    if c['Type'] != 'outlook' and not (cfg.get('client_id') and sec):
+        o = store.get_connector_by_type('outlook', with_secret=True)
+        ocfg = _cfg(o) if o else {}
+        if o and (ocfg.get('client_id') or o.get('Secret')):
+            return {**ocfg, **{k: v for k, v in cfg.items() if v}}, sec or o.get('Secret'), True
+    return cfg, sec, False
+
+
 def graph_token(cfg: dict, secret: str = None) -> str:
     tid = cfg.get('tenant_id') or os.getenv('AZURE_TENANT_ID')
     cid = cfg.get('client_id') or os.getenv('AZURE_CLIENT_ID')
@@ -69,9 +82,12 @@ def test_connector(store, cid: int) -> dict:
     cfg, t0 = _cfg(c), time.time()
     try:
         if c['Type'] in ('outlook', 'teams'):
+            gcfg, gsec, borrowed = graph_creds(store, c)
             own = bool(cfg.get('client_id') and c.get('Secret'))
-            tok = graph_token(cfg, c.get('Secret'))
-            detail = 'Graph token OK' + ('' if own else ' (using server env credentials)')
+            tok = graph_token(gcfg, gsec)
+            detail = 'Graph token OK' + ('' if own else
+                                         " (using the Outlook connector's credentials)" if borrowed
+                                         else ' (using server env credentials)')
             if c['Type'] == 'teams':
                 src = next((s for s in store.list_sources(active_only=False)
                             if s['Channel'] == 'teams' and '@' in (s['Address'] or '')), None)
@@ -144,7 +160,11 @@ def poll_channels(store) -> int:
         if not c['Active'] or c['Type'] not in CH2SRC: continue   # github ingests via the coder loop
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:
-            tok = graph_token(_cfg(full), full.get('Secret')) if c['Type'] in ('outlook', 'teams') else full.get('Secret')
+            if c['Type'] in ('outlook', 'teams'):
+                gcfg, gsec, _ = graph_creds(store, full)
+                tok = graph_token(gcfg, gsec)
+            else:
+                tok = full.get('Secret')
             for s in store.list_sources():
                 if s['Channel'] != CH2SRC[c['Type']]: continue
                 since = _since(s)

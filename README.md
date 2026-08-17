@@ -1,8 +1,14 @@
 # Taskuary
 
-**Automate your job.** The local-first operating system that takes in everything —
-email, chat, reports — triages it with AI, hands the real work to your coding agents,
-and keeps you in charge.
+[![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+**Automate your job.** Taskuary is a local-first, open-source AI task hub: email, Teams,
+Slack, and scheduled reports stream into one timeline, AI triage decides what matters,
+and your own coding agents — Claude Code, Codex, Gemini, Cursor, Copilot — do the work
+while you approve the results.
 
 ![The Taskuary timeline: every inbound item on a day rail, with the AI-drafted reply ready to approve](docs/screenshot-timeline.png)
 
@@ -98,7 +104,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 58 tests, ~1s, no network needed
+pytest -q                   # 73 tests, ~2s, no network needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install
@@ -116,7 +122,7 @@ py3.10 / 3.12 plus the web and exe builds on every push.
 
 ## Status / roadmap
 
-Early (v0.1.0) and moving fast.
+Early (v0.2.0) and moving fast.
 
 - [x] AI-gated triage, review queue, resumable agent sessions, hash-chained audit
 - [x] Reports tab: source → query → AI summary → Timeline pipelines
@@ -126,6 +132,15 @@ Early (v0.1.0) and moving fast.
 - [ ] Git worktree isolation per task attempt
 - [ ] More ingest channels and report connectors (table above)
 - [ ] Tray + notifications for the desktop shell
+
+## Contributing
+
+The single best first PR is a **report connector — ~15 lines** turns any system
+(Postgres, Google Sheets, Jira, Prometheus…) into an AI-summarized Timeline report.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the recipe, the repo map, and the dev setup;
+[good first issues](https://github.com/ldbumble/taskuary/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+are seeded and waiting. Tests run offline in ~2 seconds — no credentials needed to hack
+on the funnel.
 
 ## Credits
 

@@ -1,0 +1,26 @@
+name: Connector request
+description: A system you want Taskuary to ingest from or report on
+labels: [connector, good first issue]
+body:
+  - type: input
+    id: system
+    attributes:
+      label: The system
+      placeholder: "Postgres / Jira / Google Sheets / …"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Scheduled report source (data → Timeline, ~15 lines — see CONTRIBUTING.md)
+        - Inbound channel (messages → triage → tasks)
+        - AI provider
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: What a typical pull looks like
+      description: The query/API call you'd run and what the output should say on the Timeline.

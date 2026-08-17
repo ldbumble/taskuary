@@ -1,0 +1,24 @@
+name: Bug report
+description: Something broke
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. Screenshots welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: Run `taskuary --debug` and paste the relevant lines from the console or `~/.taskuary/taskuary.log`.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Windows 11 · Python 3.10 · Taskuary 0.2.0 (version shows in the header)"
+    validations:
+      required: true

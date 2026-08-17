@@ -1,0 +1,15 @@
+name: Feature request
+description: An idea that would make Taskuary automate more of your job
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The job you're trying to automate
+      description: Describe the workflow, not the button — what lands on you today that Taskuary should handle?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd want it to do

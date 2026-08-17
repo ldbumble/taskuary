@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>TaskHub</title><style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: Inter, "Segoe UI", system-ui, sans-serif; background: #f6f7f9; color: #1c2536; font-size: 13px; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: #fff; border-bottom: 1px solid #e5e8ee; position: sticky; top: 0; }
+  header b { font-size: 15px; } header span { color: #697386; font-size: 12px; }
+  main { padding: 20px; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; align-items: start; }
+  .col { background: #f1f3f6; border: 1px solid #e5e8ee; border-radius: 10px; padding: 8px; min-height: 200px; }
+  .col h3 { font-size: 12px; padding: 4px 6px 8px; display: flex; justify-content: space-between; }
+  .cardx { background: #fff; border: 1px solid #e5e8ee; border-radius: 8px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
+  .cardx:hover { border-color: #c9cff0; box-shadow: 0 2px 8px rgba(79,70,229,.1); }
+  .ref { font-family: Consolas, monospace; color: #4f46e5; font-weight: 700; font-size: 11px; }
+  .ttl { font-weight: 600; margin-top: 4px; }
+  .meta { color: #98a1b3; font-size: 11px; margin-top: 4px; }
+  #detail { position: fixed; right: 14px; top: 60px; bottom: 14px; width: min(46vw, 680px); background: #eceef4;
+    border: 1px solid #dde2ea; border-radius: 12px; padding: 6px; display: none; box-shadow: 0 14px 44px rgba(16,24,40,.15); }
+  #detail .inner { background: #fff; border: 1px solid #e5e8ee; border-radius: 9px; height: 100%; overflow: auto; padding: 14px; }
+  #detail pre { white-space: pre-wrap; background: #f4f5f7; border: 1px solid #e5e8ee; border-radius: 6px; padding: 8px; font-size: 11.5px; }
+  .chatrow { display: flex; gap: 8px; margin-top: 10px; }
+  .chatrow input { flex: 1; padding: 8px; border: 1px solid #cbd2dd; border-radius: 6px; }
+  button { background: #4f46e5; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+  button.ghost { background: #fff; color: #4f46e5; border: 1px solid #c9cff0; }
+</style></head><body>
+<header><b>⬢ TaskHub</b><span>everything in → one funnel → agents + you</span>
+  <span style="flex:1"></span>
+  <button class="ghost" onclick="newTask()">New task for the agent</button>
+</header>
+<main id="board"></main>
+<div id="detail"><div class="inner" id="detailInner"></div></div>
+<script>
+const COLS = [["Queued", t => t.Status === "open" && t.ReviewStatus !== "pending"],
+              ["Agent working", t => t.Status === "in_progress" && t.ReviewStatus !== "pending"],
+              ["Waiting on you", t => t.ReviewStatus === "pending" && !["done","dropped"].includes(t.Status)],
+              ["Done", t => t.Status === "done"]];
+const api = (p, opt) => fetch("/api" + p, opt ? { headers: {"Content-Type": "application/json"}, ...opt } : undefined).then(r => r.json());
+
+async function board() {
+  const { data } = await api("/tasks");
+  const el = document.getElementById("board"); el.innerHTML = "";
+  for (const [name, match] of COLS) {
+    const cards = data.filter(t => t.Status !== "dropped").filter(match);
+    const col = document.createElement("div"); col.className = "col";
+    col.innerHTML = `<h3>${name}<span>${cards.length}</span></h3>` + cards.map(t =>
+      `<div class="cardx" onclick="openTask(${t.TaskId})"><span class="ref">${t.ref}</span>
+       <div class="ttl">${esc(t.Title || "")}</div><div class="meta">${t.Kind} · ${t.Status}</div></div>`).join("");
+    el.appendChild(col);
+  }
+}
+async function openTask(id) {
+  const d = await api("/tasks/" + id);
+  const thread = d.comments.map(c => `<p><b style="color:${c.ActorType === "agent" ? "#7e22ce" : "#4f46e5"}">${esc(c.Actor)}</b> — ${esc(c.Body).slice(0, 600)}</p>`).join("");
+  const diff = (d.runs.find(r => r.DiffText) || {}).DiffText;
+  document.getElementById("detailInner").innerHTML =
+    `<button class="ghost" style="float:right" onclick="detail.style.display='none'">✕</button>
+     <span class="ref">${d.ref}</span><h2 style="margin:6px 0">${esc(d.task.Title || "")}</h2>
+     <div class="meta">${d.task.Kind} · ${d.task.Status}</div>
+     <p style="margin:10px 0; white-space:pre-wrap">${esc(d.task.Summary || "")}</p>
+     ${diff ? `<h4>Code changes</h4><pre>${esc(diff.slice(0, 6000))}</pre>` : ""}
+     <h4 style="margin-top:10px">Thread</h4>${thread || "<p class=meta>nothing yet</p>"}
+     <div class="chatrow"><input id="chat" placeholder="Message the agent — it resumes its session">
+       <button onclick="send(${id})">Send</button>
+       <button class="ghost" onclick="api('/tasks/${id}/code', {method:'POST', body:'{}'}) && setTimeout(()=>openTask(${id}), 1000)">Send to coder</button></div>`;
+  detail.style.display = "block";
+}
+async function send(id) {
+  const v = document.getElementById("chat").value; if (!v.trim()) return;
+  await api(`/tasks/${id}/message`, { method: "POST", body: JSON.stringify({ body: v }) });
+  setTimeout(() => openTask(id), 1200);
+}
+async function newTask() {
+  const t = prompt("What needs to happen?"); if (!t) return;
+  const { taskId } = await api("/tasks", { method: "POST", body: JSON.stringify({ Title: t, Kind: "coding" }) });
+  await api(`/tasks/${taskId}/code`, { method: "POST", body: "{}" });
+  board();
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const detail = document.getElementById("detail");
+board(); setInterval(board, 10000);
+</script>
+</body></html>

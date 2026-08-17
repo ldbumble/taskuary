@@ -336,11 +336,14 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     </Box>
                   ))}
                 </DrawerBlock>
-                <DrawerBlock title="Message">
-                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, maxHeight: 220, overflow: "auto" }}>
-                    {cleanText((detail.messages.find((m) => m.MessageId === open.MessageId) || {}).BodyText) || "…"}
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10 }}>
+                    {detail.messages.length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}
                   </Typography>
-                </DrawerBlock>
+                  <Box sx={{ mt: 0.5 }}>
+                    <MessageBlock key={open.MessageId} messages={detail.messages} focusId={open.MessageId} maxH={220} />
+                  </Box>
+                </Box>
                 {(() => {
                   // The coder's report - did it change code, what it did, where it stands.
                   const rep = [...(detail.comments || [])].reverse().find((c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
@@ -431,7 +434,6 @@ const PanelLabel = ({ children }) => (
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
 const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, onOpenTask, onClose }) => {
-  const msg = (detail?.messages || []).find((m) => m.MessageId === sel.MessageId);
   const rep = [...(detail?.comments || [])].reverse().find((c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const pending = sel.ReviewId && sel.ReviewStatus === "pending";
@@ -464,12 +466,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
         <Box sx={{ px: 2, py: 1.5, overflowY: "auto", textAlign: "left", flex: 1 }}>
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
-              <PanelLabel>Message</PanelLabel>
-              <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
-                <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, maxHeight: 240, overflow: "auto", textAlign: "left" }}>
-                  {cleanText(msg?.BodyText) || sel.Preview || "…"}
-                </Typography>
-              </Box>
+              <PanelLabel>{(detail?.messages || []).length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}</PanelLabel>
+              <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
 
               {rep && (
                 <>
@@ -550,6 +548,49 @@ const DayHeader = ({ label }) => {
             {label}
           </Typography>
         </Box>
+      </Box>
+    </>
+  );
+};
+
+// A chain can hold several emails (the inbound thread + your replies). One clean strip
+// of pills above the body flips between them - the clicked timeline row is preselected,
+// "↩ you" marks your own replies. Keyed by focusId so a new selection resets the pick.
+const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
+  const msgs = messages || [];
+  const [mid, setMid] = useState(null);
+  const cur = msgs.find((m) => m.MessageId === mid) || msgs.find((m) => m.MessageId === focusId) || msgs[msgs.length - 1];
+  const today = new Date().toLocaleDateString("sv-SE");
+  const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
+  return (
+    <>
+      {msgs.length > 1 && (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 0.75 }}>
+          {msgs.map((m) => {
+            const on = cur && m.MessageId === cur.MessageId;
+            const you = m.Status === "context";
+            return (
+              <Box key={m.MessageId} onClick={() => setMid(m.MessageId)}
+                sx={{ px: 1.1, py: 0.35, borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  border: `1px solid ${on ? "#c9cff0" : BORDER}`, color: on ? "#4f46e5" : you ? FAINT : DIM,
+                  bgcolor: on ? "#eef0ff" : "#fff", whiteSpace: "nowrap", transition: "all .15s",
+                  "&:hover": { borderColor: "#c9cff0", color: "#4f46e5" } }}>
+                {you ? "↩ you" : (m.FromName || m.FromEmail || "?").split(" ")[0]} · {pt(m.SentAt)}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+      <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
+        {msgs.length > 1 && cur && (
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5, textAlign: "left" }}>
+            {cur.Status === "context" ? "You replied" : cur.FromName || cur.FromEmail} · {fmtDateTime(cur.SentAt)}
+            {cur.Subject ? ` — ${cur.Subject}` : ""}
+          </Typography>
+        )}
+        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, maxHeight: maxH, overflow: "auto", textAlign: "left" }}>
+          {cleanText(cur?.BodyText) || fallback || "…"}
+        </Typography>
       </Box>
     </>
   );

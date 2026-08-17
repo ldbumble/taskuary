@@ -43,7 +43,8 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 - **Timeline** — every inbound item on a day-grouped rail: who/where, what Taskuary did
   with it, current state. Filter by state (everything / needs me) and channel
   independently. Click a row for the full review canvas — message, agent report, code
-  diff, history — and decide inline.
+  diff, history — and decide inline. Chains holding several emails get a pill strip to
+  flip between them (your own replies marked "↩ you").
 - **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done, each card
   showing the live agent-run status. Drag between columns; click a card for the full
   story; "New task for the agent" sends work straight to your coder.

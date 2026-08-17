@@ -87,6 +87,35 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(heuristic_intent({'subject': '', 'body': 'are you available tuesday?'})['intent'], 'reply_only')
         self.assertEqual(heuristic_intent({'subject': 'fyi', 'body': 'this is an automated notice'})['intent'], 'fyi')
 
+    def test_resolve_cmd_wraps_npm_shims(self):
+        from unittest import mock
+        from taskuary.agents import _resolve_cmd
+        shim = 'C:/Users/u/AppData/Roaming/npm/claude.CMD'
+        with mock.patch('shutil.which', return_value=shim), mock.patch('taskuary.agents.os') as fake_os:
+            fake_os.name = 'nt'
+            self.assertEqual(_resolve_cmd('claude'), ['cmd', '/c', shim])
+        with mock.patch('shutil.which', return_value='/usr/local/bin/claude'):
+            self.assertEqual(len(_resolve_cmd('claude')), 1)
+        with mock.patch('shutil.which', return_value=None):
+            with self.assertRaises(FileNotFoundError): _resolve_cmd('claude')
+
+    def test_failed_coder_run_escalates_not_empty_report(self):
+        from unittest import mock
+        from taskuary.coder import run_coding_task
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'fix it', 'Kind': 'coding'}, 'o')
+        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        rid = s.start_run(tid, 'coder', 'i', 'o')
+        s.update_run(rid, {'Status': 'error', 'LastError': 'claude not found'}, finished=True)
+        with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'error', 'result': None}):
+            out = run_coding_task(s, tid, 'o', None, {})
+        self.assertIn('error', out)
+        bodies = [c['Body'] for c in s.list_comments(tid)]
+        self.assertTrue(any('Coder run FAILED' in b for b in bodies))
+        self.assertFalse(any(b.startswith('CODER REPORT') for b in bodies))
+        pend = s.list_reviews('pending')
+        self.assertEqual((len(pend), pend[0]['Kind']), (1, 'escalation'))
+
     def test_cli_json_parse(self):
         self.assertEqual(parse_cli_json('{"result": "OK", "session_id": "abc"}'), ('OK', 'abc'))
         self.assertEqual(parse_cli_json('plain'), ('plain', None))

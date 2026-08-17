@@ -61,9 +61,16 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
             except Exception: pass
         return {'closed': False, 'aborted': 'task deleted mid-run'}
     rep = parse_coder_result(out.get('result') or '')
-    store.add_comment(task_id, 'coder', 'agent',
-                      f"CODER REPORT\nTriage: {rep['triage']}\nDetermination: {rep['determination']}\n"
-                      f"Actions: {rep['actions']}\nSummary: {rep['summary']}")
+    err = None
+    if out['status'] != 'done':
+        run = store.get_run(out['run_id']) or {}
+        err = (run.get('LastError') or 'see the run log')[:300]
+        rep['determination'] = f'run failed: {err}'
+        store.add_comment(task_id, 'coder', 'agent', f'Coder run FAILED: {err}')
+    else:
+        store.add_comment(task_id, 'coder', 'agent',
+                          f"CODER REPORT\nTriage: {rep['triage']}\nDetermination: {rep['determination']}\n"
+                          f"Actions: {rep['actions']}\nSummary: {rep['summary']}")
     msgs = store.list_messages(task_id)
     mid = msgs[-1].get('MessageId') if msgs else None
     if rep['close'] and out['status'] == 'done':
@@ -78,4 +85,5 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
     else:
         store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': out.get('run_id'), 'Kind': 'escalation',
                           'Status': 'pending', 'Reason': f"coder needs you: {(rep['determination'] or rep['summary'])[:300]}"})
-    return {'closed': rep['close'] and out['status'] == 'done', 'repo': repo, 'issue': issue, 'report': rep}
+    return {'closed': rep['close'] and out['status'] == 'done', 'repo': repo, 'issue': issue, 'report': rep,
+            **({'error': err} if err else {})}

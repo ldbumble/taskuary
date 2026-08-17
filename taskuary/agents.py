@@ -29,17 +29,31 @@ def parse_cli_json(stdout: str):
         return (stdout or '').strip(), None
 
 
+def _resolve_cmd(name: str) -> list:
+    """Windows can't CreateProcess a bare 'claude': npm installs it as claude.cmd, which
+    only PATH-resolves via which() and only executes through cmd /c."""
+    import shutil
+    path = shutil.which(name)
+    if not path:
+        raise FileNotFoundError(
+            f"'{name}' not found on PATH - is the CLI installed? After installing, restart Taskuary so it sees the new PATH.")
+    if os.name == 'nt' and path.lower().endswith(('.cmd', '.bat')):
+        return ['cmd', '/c', path]
+    return [path]
+
+
 def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     """One headless invocation of the configured CLI. Returns (result, session_id, diff)."""
-    cmd = [profile.get('cmd', 'claude')] + list(profile.get('args') or ['-p'])
+    name = profile.get('cmd', 'claude')
+    cmd = _resolve_cmd(name) + list(profile.get('args') or ['-p'])
     if resume and profile.get('resume_args'): cmd += list(profile['resume_args']) + [resume]
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)
-    trace('tool', 'cli', f'{cmd[0]} cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
+    trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
     p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding='utf-8', errors='replace',
                        timeout=profile.get('timeout', 1200), cwd=cwd, shell=False)
-    if p.returncode != 0: raise RuntimeError(f'{cmd[0]} exit {p.returncode}: {(p.stderr or p.stdout or "")[:500]}')
+    if p.returncode != 0: raise RuntimeError(f'{name} exit {p.returncode}: {(p.stderr or p.stdout or "")[:500]}')
     out, sid = parse_cli_json(p.stdout)
     trace('output', 'cli', out[-1000:])
     diff = ''

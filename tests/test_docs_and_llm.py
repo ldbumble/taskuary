@@ -138,6 +138,34 @@ class LlmTests(unittest.TestCase):
             post.return_value.json.return_value = {'choices': [{'message': {'content': '{"intent": "fyi"}'}}]}
             self.assertEqual(fn('sys', 'usr'), '{"intent": "fyi"}')
 
+    def test_azure_tries_v1_then_legacy(self):
+        fn = llm.make_llm('azure_openai', {'endpoint': 'https://r.openai.azure.com', 'deployment': 'gpt-5'}, 'k')
+        calls = []
+        def fake_post(url, headers=None, json=None, timeout=None):
+            calls.append((url, [k for k in json if 'tokens' in k][0]))
+            r = mock.Mock()
+            if '/openai/v1/' in url: r.status_code, r.text = 404, 'not found'
+            else: r.status_code = 200; r.json.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+            return r
+        with mock.patch('taskuary.llm.requests.post', side_effect=fake_post):
+            self.assertEqual(fn('s', 'u'), 'ok')
+        self.assertIn('/openai/v1/chat/completions', calls[0][0])
+        self.assertIn('/openai/deployments/gpt-5/', calls[1][0])
+        self.assertIn('api-version=2024-12-01-preview', calls[1][0])
+        self.assertEqual(calls[1][1], 'max_completion_tokens')
+
+    def test_azure_token_param_fallback(self):
+        fn = llm.make_llm('azure_openai', {'endpoint': 'https://r.openai.azure.com', 'deployment': 'd', 'api_version': '2024-06-01'}, 'k')
+        def fake_post(url, headers=None, json=None, timeout=None):
+            r = mock.Mock()
+            if 'max_completion_tokens' in json:
+                r.status_code, r.text = 400, "Unrecognized request argument supplied: max_completion_tokens"
+            else:
+                r.status_code = 200; r.json.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+            return r
+        with mock.patch('taskuary.llm.requests.post', side_effect=fake_post):
+            self.assertEqual(fn('s', 'u'), 'ok')
+
     def test_make_llm_validates(self):
         with self.assertRaises(RuntimeError): llm.make_llm('openai', {}, None)
         with self.assertRaises(RuntimeError): llm.make_llm('azure_openai', {}, 'k')

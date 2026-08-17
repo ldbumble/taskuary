@@ -29,26 +29,38 @@ def make_llm(t, cfg: dict, key: str):
             return next((b.text for b in r.content if b.type == 'text'), '')
         return llm
     if t == 'openai':
-        url, headers, model = 'https://api.openai.com/v1/chat/completions', {'Authorization': f'Bearer {key}'}, cfg.get('model') or 'gpt-4o-mini'
+        urls = ['https://api.openai.com/v1/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or 'gpt-4o-mini'
     elif t == 'azure_openai':
         ep = (cfg.get('endpoint') or '').rstrip('/')
         if not (ep and cfg.get('deployment')): raise RuntimeError('azure_openai needs endpoint + deployment')
-        url = f"{ep}/openai/deployments/{cfg['deployment']}/chat/completions?api-version={cfg.get('api_version') or '2024-06-01'}"
-        headers, model = {'api-key': key}, None
+        # Azure's v1 surface first (no api-version, OpenAI-compatible, all params work);
+        # legacy deployments URL as fallback for resources without it. An explicit
+        # api_version in the config skips straight to legacy with that version.
+        legacy = f"{ep}/openai/deployments/{cfg['deployment']}/chat/completions?api-version={cfg.get('api_version') or '2024-12-01-preview'}"
+        urls = [legacy] if cfg.get('api_version') else [f'{ep}/openai/v1/chat/completions', legacy]
+        headers, model = {'api-key': key}, cfg['deployment']
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
+
     def llm(system, user):
-        # newer OpenAI/Azure models reject max_tokens ("use max_completion_tokens");
-        # older Azure api-versions reject max_completion_tokens - try modern, fall back
-        body = {'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
-                'max_completion_tokens': 300}
-        if model: body['model'] = model
-        r = requests.post(url, headers=headers, json=body, timeout=60)
-        if r.status_code == 400 and 'max_completion_tokens' in r.text:
-            body.pop('max_completion_tokens'); body['max_tokens'] = 300
-            r = requests.post(url, headers=headers, json=body, timeout=60)
-        if r.status_code != 200: raise RuntimeError(f'{t} error {r.status_code}: {r.text[:300]}')
-        return r.json()['choices'][0]['message']['content']
+        # two independent compat axes: newer models reject max_tokens ("use
+        # max_completion_tokens"), older Azure api-versions reject max_completion_tokens,
+        # and older Azure resources 404 the v1 url - walk the grid until one works
+        msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}]
+        last = None
+        for url in urls:
+            for tok_param in ('max_completion_tokens', 'max_tokens'):
+                body = {'messages': msgs, tok_param: 300}
+                if model: body['model'] = model
+                r = requests.post(url, headers=headers, json=body, timeout=60)
+                if r.status_code == 200:
+                    return r.json()['choices'][0]['message']['content']
+                last = r
+                if r.status_code == 404: break                     # wrong surface -> next url
+                if not (r.status_code == 400 and 'max_completion_tokens' in r.text):
+                    raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}: {r.text[:300]}')
+        raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}: {last.text[:300]}')
     return llm
 
 

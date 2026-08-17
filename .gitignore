@@ -10,3 +10,6 @@ venv/
 .env
 website/node_modules/
 website/ui.png
+
+# scratch screenshots dropped in the repo root
+/*.png

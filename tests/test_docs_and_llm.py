@@ -85,17 +85,11 @@ class OutboundMailTests(unittest.TestCase):
         return {'id': i, 'subject': 'RE: Financial Request', 'conversationId': conv,
                 'bodyPreview': 'March thru June attached.', 'sentDateTime': '2026-08-17T15:00:00Z'}
 
-    def test_sent_mail_files_never_tasks(self):
+    def test_sent_mail_without_chain_is_skipped(self):
         from taskuary.channels import ingest_outbound_mail
         s = MemoryStore()
-        n = ingest_outbound_mail(s, 'me@x.com', self._sent())
-        self.assertEqual(n, 1)
-        row = s.feed()[0]
-        self.assertEqual((row['TaskId'], row['MsgStatus'], row['FromName']), (None, 'filed', 'You'))
-        self.assertIn('your sent reply', row['RouteReason'])
-        self.assertEqual(s.list_tasks(), [])
-        # dedup on second poll
         self.assertEqual(ingest_outbound_mail(s, 'me@x.com', self._sent()), 0)
+        self.assertEqual(s.feed(), []); self.assertEqual(s.list_tasks(), [])
 
     def test_sent_mail_attaches_to_conversation_task(self):
         from taskuary.channels import ingest_outbound_mail
@@ -110,6 +104,11 @@ class OutboundMailTests(unittest.TestCase):
         self.assertEqual(len(msgs), 2)                       # both sides on the thread
         self.assertEqual({m['FromName'] for m in msgs}, {'Client', 'You'})
         self.assertEqual(len(s.list_tasks()), 1)             # no new task from the reply
+        # the reply is IN the chain, not a separate timeline row
+        self.assertEqual(len(s.feed()), 1)
+        self.assertTrue(any('You replied' in c['Body'] for c in s.list_comments(out['task_id'])))
+        # dedup on the next poll
+        self.assertEqual(ingest_outbound_mail(s, 'me@x.com', self._sent(conv='c9', i='sm2')), 0)
 
     def test_ai_failure_files_instead_of_task(self):
         from taskuary.ingest import ingest_message

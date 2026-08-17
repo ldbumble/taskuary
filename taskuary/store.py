@@ -268,7 +268,7 @@ class SQLiteStore:
                        (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
                        (SELECT Kind FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewKind
                 FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
-                WHERE m.CreatedAt >= datetime('now', 'localtime', ?)'''
+                WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status != 'context' '''
         p = [f'-{int(days)} days']
         if pending_only:
             q += " AND (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1)='pending'"

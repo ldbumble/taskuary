@@ -152,23 +152,22 @@ def _mail_msgs(tok, upn, since, folder='inbox'):
 
 
 def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
-    """The owner's SENT mail is context, never work: attach it to the conversation's task
-    when one exists (so the thread shows both sides), otherwise file it - a task or a
-    draft is never created from your own replies."""
+    """The owner's SENT mail never gets its own timeline row and never becomes work: when
+    the conversation has a task, it rides along INSIDE the chain (a 'context' message on
+    the task + a 'You replied' history entry, so the side panel shows it was answered).
+    No matching chain -> nothing stored at all."""
     ext = f"graph:{m['id']}"
     if store.message_exists(ext): return 0
     conv = m.get('conversationId')
     tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
+    if not tid: return 0
     mid = store.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'email',
                              'SourceName': mailbox, 'Subject': m.get('subject'), 'FromName': 'You',
                              'FromEmail': mailbox, 'SentAt': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
                              'BodyText': m.get('bodyPreview') or _clean((m.get('body') or {}).get('content')),
-                             'SourceLink': m.get('webLink'), 'Status': 'routed' if tid else 'filed'})
-    if tid:
-        store.add_route(mid, tid, 'attach', None, 'your reply on this thread - kept for context', [], 'router')
-        store.add_comment(tid, 'you', 'human', f"You replied: {(m.get('bodyPreview') or '')[:300]}")
-    else:
-        store.add_route(mid, None, 'file', None, 'your sent reply - kept for context', [], 'router')
+                             'SourceLink': m.get('webLink'), 'Status': 'context'})
+    store.add_route(mid, tid, 'attach', None, 'your reply on this thread - kept for context', [], 'router')
+    store.add_comment(tid, 'you', 'human', f"You replied: {(m.get('bodyPreview') or '')[:300]}")
     return 1
 
 

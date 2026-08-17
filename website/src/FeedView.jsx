@@ -121,6 +121,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
   useEffect(() => {
     setRows(null); rowsLen.current = 0; setNoMore(false);
+    setSel(null); setEditText("");   // filter switch: never leave a stale review panel up
     load();
     const t = setInterval(() => load(rowsLen.current), 30000);       // cheap row refresh
     const s = setInterval(() => syncNow(true), 600000);              // real ingest poll every 10 min

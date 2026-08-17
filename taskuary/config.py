@@ -1,14 +1,17 @@
-"""Config: ~/.taskhub/config.toml (or TASKHUB_HOME) - zero assumptions, all defaults sane.
+"""Config: ~/.taskuary/config.toml (or TASKUARY_HOME) - zero assumptions, all defaults sane.
 
 [server] port/host/token; [agents.<name>] cmd/args/resume_args/timeout/cwd/cwd_map;
-[github] token/default_repo. Everything is optional: `taskhub` runs with no config at all
+[github] token/default_repo. Everything is optional: `taskuary` runs with no config at all
 (SQLite store, stub agent, localhost server).
 """
 import os, sys, tomllib
 from pathlib import Path
 
 def home() -> Path:
-    p = Path(os.getenv('TASKHUB_HOME') or Path.home() / '.taskhub')
+    p = Path(os.getenv('TASKUARY_HOME') or Path.home() / '.taskuary')
+    old = Path.home() / '.taskhub'
+    # one-time migration from the pre-rename data dir
+    if not os.getenv('TASKUARY_HOME') and not p.exists() and old.exists(): old.rename(p)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -24,4 +27,4 @@ def load() -> dict:
     return cfg
 
 def db_path() -> str:
-    return str(home() / 'taskhub.db')
+    return str(home() / 'taskuary.db')

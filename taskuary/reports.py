@@ -25,11 +25,10 @@ def run_sqlite(cfg):
 
 
 def run_mssql(cfg):
-    """{"dsn": "mssql+pyodbc://...", "query": ...} - needs `pip install taskhub[mssql]`."""
-    import sqlalchemy
-    with sqlalchemy.create_engine(cfg['dsn']).connect() as cx:
-        rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(cfg['query'])).fetchall()[:20]]
-    return f'{len(rows)} rows', '\n'.join(json.dumps(r, default=str) for r in rows)[:4000]
+    """{"server", "database", "auth", "username", "password", "driver", "query"} - see mssql.py.
+    Configure it entirely from Settings -> Report connections in the UI."""
+    from .mssql import run_report
+    return run_report(cfg)
 
 
 def run_rest(cfg):

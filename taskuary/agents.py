@@ -1,5 +1,5 @@
 """Agent execution: any CLI is an agent. A profile ({cmd, args, resume_args, timeout, cwd,
-cwd_map}) turns Claude Code, Codex, or your own wrapper into a TaskHub teammate: prompt
+cwd_map}) turns Claude Code, Codex, or your own wrapper into a Taskuary teammate: prompt
 over STDIN (argv length limits are real on Windows), JSON output parsed when available
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
@@ -105,7 +105,7 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
         store.audit('run', run_id, 'finish', agent_name, 'agent', {'trace_events': len(trace)}, run_id)
         return {'run_id': run_id, 'status': 'done', 'result': result}
     except Exception as e:
-        logger.exception(f'taskhub dispatch failed (run {run_id})')
+        logger.exception(f'taskuary dispatch failed (run {run_id})')
         store.update_run(run_id, {'Status': 'error', 'LastError': str(e)[:2000], 'TraceJson': json.dumps(trace)}, finished=True)
         store.audit('run', run_id, 'error', agent_name, 'agent', str(e)[:2000], run_id)
         return {'run_id': run_id, 'status': 'error', 'result': None}

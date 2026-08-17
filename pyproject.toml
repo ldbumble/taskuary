@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "taskhub"
+name = "taskuary"
 version = "0.1.0"
 description = "Automate Your Work - task-driven agent work over your existing systems, fully local."
 readme = "README.md"
@@ -22,10 +22,10 @@ mssql = ["sqlalchemy>=1.4", "pyodbc>=4"]
 dev = ["pytest>=7", "httpx>=0.24"]
 
 [project.scripts]
-taskhub = "taskhub.cli:main"
+taskuary = "taskuary.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["taskhub*"]
+include = ["taskuary*"]
 
 [tool.setuptools.package-data]
-taskhub = ["web/*"]
+taskuary = ["web/*"]

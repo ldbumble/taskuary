@@ -59,7 +59,7 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
     mid = msgs[-1].get('MessageId') if msgs else None
     if rep['close'] and out['status'] == 'done':
         if tok and issue:
-            try: gh.close_issue(tok, repo, issue['number'], f'Closed by the TaskHub coder.\n\n{rep["summary"]}')
+            try: gh.close_issue(tok, repo, issue['number'], f'Closed by the Taskuary coder.\n\n{rep["summary"]}')
             except Exception as e: logger.warning(f'issue close failed: {e}')
         if rep['email_reply'] and mid:
             store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': out['run_id'], 'Kind': 'draft_reply',

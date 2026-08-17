@@ -79,7 +79,7 @@ def route(msg, tasks, threshold=ATTACH_THRESHOLD):
                'subject/body similarity' + (' + known sender' if best['signals']['sender'] else ''))
         return {'decision':'attach', 'task_id':best['task_id'], 'score':best['score'],
                 'reason': f"attached: {why} (score {best['score']:.2f} >= {threshold})", 'candidates':cands[:5]}
-    top = f"; best candidate TH-{best['task_id']:04d} scored {best['score']:.2f}" if best else ''
+    top = f"; best candidate TQ-{best['task_id']:04d} scored {best['score']:.2f}" if best else ''
     return {'decision':'create', 'task_id':None, 'score':best['score'] if best else 0.0,
             'reason': f"no open task above {threshold}{top} - creating a new task", 'candidates':cands[:5]}
 

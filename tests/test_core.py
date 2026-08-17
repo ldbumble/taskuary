@@ -1,12 +1,12 @@
 """Core engine tests - everything runs on the in-memory SQLite store, no network."""
 import unittest
-from taskhub.store import MemoryStore, task_ref
-from taskhub.ingest import ingest_message
-from taskhub.routing import route
-from taskhub.triage import heuristic_intent
-from taskhub.agents import parse_cli_json
-from taskhub.coder import parse_coder_result, RESULT_MARKER
-from taskhub.reports import is_due, run_report_source, REGISTRY
+from taskuary.store import MemoryStore, task_ref
+from taskuary.ingest import ingest_message
+from taskuary.routing import route
+from taskuary.triage import heuristic_intent
+from taskuary.agents import parse_cli_json
+from taskuary.coder import parse_coder_result, RESULT_MARKER
+from taskuary.reports import is_due, run_report_source, REGISTRY
 
 
 class CoreTests(unittest.TestCase):
@@ -20,7 +20,7 @@ class CoreTests(unittest.TestCase):
         s = MemoryStore()
         out = ingest_message(s, self.msg())
         self.assertEqual(out['status'], 'created')
-        self.assertEqual(task_ref(out['task_id']), 'TH-0001')
+        self.assertEqual(task_ref(out['task_id']), 'TQ-0001')
         self.assertEqual(len(s.feed()), 1)
         self.assertEqual(ingest_message(s, self.msg())['status'], 'duplicate')
 

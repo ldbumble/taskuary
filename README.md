@@ -1,4 +1,4 @@
-# TaskHub
+# Taskuary
 
 **Automate Your Work.**
 
@@ -12,15 +12,15 @@ and stay **resumable** — message an agent mid-task and it continues the same s
 You review; nothing sends or ships without you.
 
 ```
-pip install git+https://github.com/ldbumble/taskhub
-taskhub          # starts locally on 127.0.0.1:7787 and opens the app
+pip install git+https://github.com/ldbumble/taskuary
+taskuary          # starts locally on 127.0.0.1:7787 and opens the app
 ```
 
 ## Why
 
 Your work already lives in systems — email, chat, databases, GitHub, dashboards. You don't
 need another place to *put* work; you need one place where work **arrives, gets triaged,
-gets done by agents, and gets reviewed by you**. TaskHub is that funnel:
+gets done by agents, and gets reviewed by you**. Taskuary is that funnel:
 
 ```
 anything in  →  one timeline  →  triage (task / reply-only / FYI)  →  agents + you
@@ -37,7 +37,7 @@ anything in  →  one timeline  →  triage (task / reply-only / FYI)  →  agen
 - **Deterministic guardrails** — policy rules (ignore / escalate / auto-answer) that no
   model confidence can override, a learned-memory layer fed by your verdicts, and a
   hash-chained audit log of everything.
-- **Local first** — SQLite in `~/.taskhub`, server bound to 127.0.0.1. Your data and your
+- **Local first** — SQLite in `~/.taskuary`, server bound to 127.0.0.1. Your data and your
   agent sessions never leave the machine unless you point them somewhere.
 
 ## Bring your own agent
@@ -45,7 +45,7 @@ anything in  →  one timeline  →  triage (task / reply-only / FYI)  →  agen
 Agents are rows in config — any CLI that reads a prompt on stdin works:
 
 ```toml
-# ~/.taskhub/config.toml
+# ~/.taskuary/config.toml
 [agents.coder]
 cmd  = "claude"                 # or "codex", "gemini", your own wrapper...
 args = ["-p", "--dangerously-skip-permissions", "--output-format", "json"]
@@ -69,7 +69,7 @@ informational rows (never tasks) — headline visible, hover for the summary.
 | `sqlite`        | ✅ built-in | `db`, `query`                        |
 | `rest`          | ✅ built-in | `url`, `headers`, `path`             |
 | `rss`           | ✅ built-in | `url`                                |
-| `mssql`         | ✅ extra    | `pip install taskhub[mssql]` · `dsn`, `query` |
+| `mssql`         | ✅ extra    | `pip install taskuary[mssql]` · `dsn`, `query` |
 | `postgres`      | 🗺 planned  |                                      |
 | `mysql`         | 🗺 planned  |                                      |
 | `snowflake`     | 🗺 planned  |                                      |
@@ -81,7 +81,7 @@ informational rows (never tasks) — headline visible, hover for the summary.
 | `prometheus`    | 🗺 planned  |                                      |
 | `jira`          | 🗺 planned  |                                      |
 
-Executors are ~15-line functions in `taskhub/reports.py` — `(config) -> (headline,
+Executors are ~15-line functions in `taskuary/reports.py` — `(config) -> (headline,
 summary)`. PRs welcome; a planned type is one function away from ✅.
 
 Anything can also **push** items in: `POST /api/ingest/push` with

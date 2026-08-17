@@ -1,5 +1,5 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
-[server].token in config to require an X-TaskHub-Token header (for LAN/self-hosting).
+[server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
 import json
 from datetime import datetime
@@ -20,14 +20,14 @@ cfg = config.load()
 store = SQLiteStore(config.db_path())
 for name, prof in cfg.get('agents', {}).items():
     store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
-app = FastAPI(title='TaskHub', docs_url='/api/docs')
+app = FastAPI(title='Taskuary', docs_url='/api/docs')
 ACTOR = 'owner'
 
 
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
     tok = cfg['server'].get('token')
-    if tok and request.url.path.startswith('/api') and request.headers.get('X-TaskHub-Token') != tok:
+    if tok and request.url.path.startswith('/api') and request.headers.get('X-Taskuary-Token') != tok:
         return HTMLResponse('unauthorized', status_code=401)
     return await call_next(request)
 

@@ -113,20 +113,16 @@ anything in  →  one funnel  →  triage (task / reply-only / FYI)  →  agents
 
 ## Bring your own agent
 
-Configure agents entirely in the UI — **Settings → Agents**. Any CLI that reads a prompt
-on stdin works. The UI writes the same config file, so hand-editing still works too:
+Any CLI that reads a prompt on stdin works — `claude`, `codex`, `gemini`, your own
+wrapper. Add it in **Settings → Agents**, no config files:
 
-```toml
-# ~/.taskuary/config.toml
-[agents.coder]
-cmd  = "claude"                 # or "codex", "gemini", your own wrapper...
-args = ["-p", "--dangerously-skip-permissions", "--output-format", "json"]
-resume_args = ["--resume"]      # enables message-the-agent session continuity
-timeout = 1500
-
-[agents.coder.cwd_map]          # repo -> local checkout the agent works in
-"you/your-repo" = "C:/src/your-repo"
-```
+| field | what it does |
+|-------|--------------|
+| cmd | the CLI to run, e.g. `claude` |
+| args | flags for a headless run, e.g. `-p --output-format json` |
+| resume args | e.g. `--resume` — enables message-the-agent session continuity |
+| timeout | max seconds per run |
+| repo → dir map | which local checkout the agent works in per repo |
 
 Claude Code's JSON output (`result`, `session_id`) is parsed natively; plain-text CLIs
 work too (you lose resumability, keep everything else).

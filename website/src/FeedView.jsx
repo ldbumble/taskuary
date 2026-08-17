@@ -534,9 +534,12 @@ const DayHeader = ({ label }) => {
   );
 };
 
-// The pending draft text for this message's review, pulled from the latest responder run.
+// The pending draft text for this message's review - stored on the review row in the
+// standalone (FanApp pulled it from a responder run; keep that as the fallback).
 const pendingDraft = (detail, open) => {
-  const run = detail.runs.find((r) => r.AgentName === "responder" && r.Status === "done");
+  const rv = (detail.reviews || []).find((r) => r.ReviewId === open.ReviewId);
+  if (rv?.DraftText) return rv.DraftText;
+  const run = (detail.runs || []).find((r) => r.AgentName === "responder" && r.Status === "done");
   return run?.Result || "";
 };
 

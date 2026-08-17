@@ -1,7 +1,18 @@
 """`taskuary` - start the local server and open the app. Everything lives in ~/.taskuary."""
-import argparse, threading, time, webbrowser
+import argparse, socket, threading, time, webbrowser
 import uvicorn
 from . import __version__, config
+
+
+def _busy(host, port):
+    with socket.socket() as s: return s.connect_ex((host, port)) == 0
+
+def _is_taskuary(url):
+    try:
+        import requests
+        return requests.get(f'{url}/api/settings', timeout=2).status_code in (200, 401)
+    except Exception:
+        return False
 
 
 def main():
@@ -13,6 +24,16 @@ def main():
     cfg = config.load()
     host, port = cfg['server']['host'], args.port or cfg['server']['port']
     url = f'http://{host}:{port}'
+    if _busy(host, port):
+        if _is_taskuary(url):
+            # don't crash into 'address already in use' - reuse the running instance
+            print(f'Taskuary is already running at {url} - opening it.')
+            if not args.no_browser: webbrowser.open(url)
+            return
+        from .desktop import free_port
+        old, port = port, free_port(host)
+        url = f'http://{host}:{port}'
+        print(f'port {old} is in use by something else - using {port} instead')
     print(f'Taskuary {__version__} - {url}  (data: {config.db_path()})')
     if not args.no_browser:
         threading.Thread(target=lambda: (time.sleep(1.2), webbrowser.open(url)), daemon=True).start()

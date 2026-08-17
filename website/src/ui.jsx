@@ -6,14 +6,17 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import TagIcon from "@mui/icons-material/Tag";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { ACTION_COLORS, TASK_STATUS_COLORS, mono, DIM, FAINT, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
-const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#0e7490" };
+const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#0e7490", slack: "#611f69", ai: "#b45309" };
 export const ChannelIcon = ({ channel, sx }) => {
   const Icon = channel === "teams" ? GroupsIcon : channel === "github" ? GitHubIcon
-    : channel === "report" ? AssessmentIcon : channel === "email" ? MailOutlineIcon : TerminalIcon;
+    : channel === "report" ? AssessmentIcon : channel === "email" ? MailOutlineIcon
+    : channel === "slack" ? TagIcon : channel === "ai" ? AutoAwesomeIcon : TerminalIcon;
   return <Icon sx={{ fontSize: 15, color: CHANNEL_COLORS[channel] || "#98a1b3", ...sx }} />;
 };
 

@@ -19,4 +19,5 @@ def close_issue(tok, repo, number, comment=None):
 def list_accessible_repos(tok):
     r = requests.get(f'{GH}/user/repos', headers=_h(tok), params={'per_page': 100, 'sort': 'pushed'}, timeout=20)
     r.raise_for_status()
-    return [x['full_name'] for x in r.json()]
+    return [{'full_name': x['full_name'], 'description': x.get('description'), 'archived': x.get('archived')}
+            for x in r.json()]

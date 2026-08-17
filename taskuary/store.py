@@ -74,8 +74,19 @@ class SQLiteStore:
             self.cx.executescript(SCHEMA)
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
-            for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'), ('github', 'GitHub')):
+            for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
+                         ('slack', 'Slack'), ('github', 'GitHub'),
+                         ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
+                         ('azure_openai', 'Azure OpenAI')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name) VALUES (?,?)', (t, n))
+            # operator documents start from shipped templates (John Smith placeholder) -
+            # first run only; the owner's edits are never overwritten
+            from pathlib import Path
+            for name in ('soul', 'coder', 'digest'):
+                f = Path(__file__).parent / 'templates' / f'{name}.md'
+                if f.exists():
+                    self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',
+                                    (name, f.read_text(encoding='utf-8'), 'template', _now()))
             self.cx.commit()
 
     def _rows(self, q, p=()):
@@ -268,7 +279,8 @@ class SQLiteStore:
         if not t: return None
         return {'task': t, 'ref': task_ref(task_id), 'messages': self.list_messages(task_id),
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
-                'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id)}
+                'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
+                'reviews': self._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC', (task_id,))}
 
 
 class MemoryStore(SQLiteStore):

@@ -66,6 +66,14 @@ if _assets.is_dir():
     from fastapi.staticfiles import StaticFiles
     app.mount('/assets', StaticFiles(directory=str(_assets)), name='assets')
 
+from fastapi.responses import FileResponse
+
+@app.get('/favicon.ico', include_in_schema=False)
+def favicon(): return FileResponse(Path(__file__).parent / 'web' / 'favicon.ico')
+
+@app.get('/favicon.png', include_in_schema=False)
+def favicon_png(): return FileResponse(Path(__file__).parent / 'web' / 'favicon.png')
+
 
 @app.get('/api/feed')
 def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None):
@@ -192,12 +200,19 @@ def draft_review(rid: int):
     store.audit('review', rid, 'redraft', ACTOR, run_id=out['run_id'])
     return {'ok': True, 'draft': out['result'], 'runId': out['run_id']}
 
+def _llm():
+    try:
+        from .llm import build_llm
+        return build_llm(store)
+    except Exception:
+        return None
+
 @app.post('/api/ingest/push')
 def push(body: MsgBody):
     m = body.dict()
     m['external_id'] = m.get('external_id') or f'api:{datetime.now().isoformat()}'
     m['sent_at'] = m.get('sent_at') or datetime.now().isoformat(sep=' ', timespec='seconds')
-    out = ingest_message(store, m)
+    out = ingest_message(store, m, llm=_llm())
     return {**out, 'ref': task_ref(out['task_id']) if out.get('task_id') else None}
 
 @app.post('/api/reports/run')
@@ -210,13 +225,18 @@ def sources(): return {'data': store.list_sources(active_only=False)}
 def save_source(body: SourceBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
     fields.setdefault('Owner', ACTOR)
-    return {'sourceId': store.save_source(fields, ACTOR)}
+    sid = store.save_source(fields, ACTOR)
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
+    return {'sourceId': sid}
 
 @app.delete('/api/sources/{sid}')
 def delete_source(sid: int):
     if not store.get_source(sid): raise HTTPException(404, 'source not found')
     store.delete_source(sid)
     store.audit('source', sid, 'delete', ACTOR)
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
     return {'ok': True}
 
 @app.post('/api/sources/{sid}/run')
@@ -252,6 +272,8 @@ def save_connector(body: ConnectorBody):
             discovery = github_discover(store, store.get_connector(cid, with_secret=True), ACTOR)
         except Exception as e:
             discovery = {'error': str(e)[:300]}
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
     return {'ok': True, 'connectorId': cid, 'discovery': discovery}
 
 @app.post('/api/connectors/{cid}/test')

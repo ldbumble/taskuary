@@ -5,6 +5,8 @@
 Task-driven agent work over your **existing systems** — fully local, nothing assumed,
 bring your own AI CLI.
 
+![The Taskuary timeline: every inbound item on a day rail, with the AI-drafted reply ready to approve](docs/screenshot-timeline.png)
+
 Everything inbound lands in one funnel. Real work becomes tasks on a kanban board.
 Coding agents (Claude Code, Codex, or any CLI you configure) pick tasks up, work them in
 your repos, show you the **diff**, and stay **resumable** — message an agent mid-task and
@@ -68,14 +70,20 @@ artifacts if you don't want to build locally.
   its session), status/priority, "Not a task" (which teaches the funnel).
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI redrafting. Escalations carry no draft by design.
-- **Connectors** — two kinds, all point-and-click with per-card setup guides:
-  **Channels** (Outlook mail and Microsoft Teams via a Graph app, GitHub via a
-  fine-grained PAT — paste the token and repos are auto-discovered, becoming the Board's
-  repo choices and the coder's issue loop) and **Report connections** (Microsoft SQL
-  Server — Windows auth works out of the box for a local instance, any MCP server's
-  tool, SQLite, REST, RSS) on schedules with **Test connection**, **Preview**, **Run
-  now**. Secrets are write-only; every card shows live health.
+- **Connectors** — a searchable, grouped catalog (like Settings), every connector with
+  a step-by-step **setup wizard** (Credentials → Test → Sources → Enable):
+  **AI — agents & models** (your AI CLIs — claude/codex/gemini — plus Anthropic API,
+  OpenAI API, and Azure OpenAI keys that wire straight into intent triage),
+  **Messaging** (Outlook mail, Microsoft Teams, Slack — inbound lands on the Timeline
+  through triage), **Developer** (GitHub — paste a PAT and repos are auto-discovered,
+  feeding the Board's repo picker, the coder's issue loop, and the SOUL.md repo map),
+  and **Local & data connectors** (Microsoft SQL Server — Windows auth out of the box,
+  any MCP server's tool, SQLite, REST, RSS on schedules with Test/Preview/Run now).
+  Secrets are write-only; every card shows live health.
 - **Docs** — the operator documents: SOUL.md / CODER.md / DIGEST.md, editable in place.
+  They ship as anonymized templates (John Smith) and **maintain themselves**: adding a
+  connector updates SOUL.md's "Connected systems" block, and GitHub discovery writes the
+  repository map (your hand-written notes are preserved).
 - **Settings** — Stripe-style: Configuration knobs (grouped, with help), Routing
   policies (deterministic rules the AI can never override), Agent memory (learned
   standing notes), Agents (bring your own CLI), Audit integrity (verify the hash chain).
@@ -88,7 +96,7 @@ No config files required; the UI persists everything (agents land in
 
 ```bash
 pip install -e .[dev]
-pytest -q                   # 45 tests, ~1s, no network or SQL Server needed
+pytest -q                   # 53 tests, ~1s, no network or SQL Server needed
 ```
 
 CI (`.github/workflows/ci.yml`) runs the suite on Windows + Linux, Python 3.10 and 3.12,
@@ -191,7 +199,10 @@ audit), the HTTP API, and the full React workspace (7 tabs) are here.
 - [x] Full React UI — Timeline · Board (drag-and-drop) · Tasks · Review · Connectors · Docs · Settings
 - [x] Settings all point-and-click: config knobs, routing policies, agent memory, agents, audit
 - [x] Desktop app (`taskuary-desktop`, single-exe PyInstaller build)
-- [x] Channel connectors: Outlook mail · Microsoft Teams · GitHub (PAT → auto repo discovery)
+- [x] Connectors catalog with per-connector setup wizards + search
+- [x] Channel connectors: Outlook mail · Microsoft Teams · Slack · GitHub (PAT → auto repo discovery)
+- [x] Cloud AI connectors (Anthropic / OpenAI / Azure OpenAI) wired into intent triage
+- [x] Self-maintaining operator docs (templates + connector sync + repo map)
 - [x] Microsoft SQL Server + MCP report connectors
 - [x] Test suite + CI (Windows/Linux/macOS, py3.10/3.12, web + exe builds)
 - [ ] Git worktree isolation per task attempt (vibe-kanban-style)

@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2",
     "requests>=2.28",
     "loguru>=0.7",
+    "anthropic>=0.69",
     "tomli>=2; python_version<'3.11'",
 ]
 

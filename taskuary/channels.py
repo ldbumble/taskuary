@@ -34,7 +34,7 @@ def graph_token(cfg: dict, secret: str = None) -> str:
 
 def github_discover(store, c: dict, actor='owner') -> dict:
     """A PAT is ALL the config: authenticate, list reachable repos, add each as a source
-    (they become the Board's repo choices)."""
+    (they become the Board's repo choices) and write the repo map into SOUL.md."""
     tok = c.get('Secret')
     if not tok: raise RuntimeError('no PAT saved yet - paste one under Credentials')
     u = requests.get('https://api.github.com/user', headers=gh_headers(tok), timeout=20)
@@ -43,11 +43,23 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     have = {s['Address'] for s in store.list_sources(active_only=False) if s['Channel'] == 'github'}
     added = 0
     for rp in repos:
-        if rp not in have:
-            store.save_source({'Channel': 'github', 'Address': rp, 'ConnectorId': c['ConnectorId'],
+        if rp['full_name'] not in have:
+            store.save_source({'Channel': 'github', 'Address': rp['full_name'], 'ConnectorId': c['ConnectorId'],
                                'Active': 1, 'Owner': actor}, actor)
             added += 1
+    from .docsync import sync_connections, update_repo_map
+    update_repo_map(store, repos, actor)
+    sync_connections(store, actor)
     return {'login': u.json().get('login'), 'repos': len(repos), 'added': added}
+
+
+def _slack(tok, method, **params):
+    r = requests.get(f'https://slack.com/api/{method}', params=params, timeout=20,
+                     headers={'Authorization': f'Bearer {tok}'})
+    r.raise_for_status()
+    j = r.json()
+    if not j.get('ok'): raise RuntimeError(f"slack {method}: {j.get('error')}")
+    return j
 
 
 def test_connector(store, cid: int) -> dict:
@@ -75,7 +87,20 @@ def test_connector(store, cid: int) -> dict:
                     detail += ' - add a Teams source (user UPN) to probe chat access'
         elif c['Type'] == 'github':
             d = github_discover(store, c)
-            detail = f"authenticated as {d['login']} · {d['repos']} repos discovered · {d['added']} new sources"
+            detail = f"authenticated as {d['login']} · {d['repos']} repos discovered · {d['added']} new sources · repo map written to SOUL.md"
+        elif c['Type'] == 'slack':
+            if not c.get('Secret'): raise RuntimeError('no bot token saved - paste an xoxb- token under Credentials')
+            a = _slack(c['Secret'], 'auth.test')
+            detail = f"authenticated as {a.get('user')} in {a.get('team')}"
+            src = next((s for s in store.list_sources(active_only=False) if s['Channel'] == 'slack'), None)
+            if src:
+                _slack(c['Secret'], 'conversations.history', channel=src['Address'], limit=1)
+                detail += f" · channel read OK for {src['Address']}"
+            else:
+                detail += ' - add a channel ID under Sources to probe reads'
+        elif c['Type'] in ('anthropic', 'openai', 'azure_openai'):
+            from .llm import test_ai
+            detail = test_ai(store, cid)
         else:
             raise RuntimeError(f"no test for connector type '{c['Type']}'")
         store.touch_connector(cid)
@@ -100,29 +125,50 @@ def _mail_msgs(tok, upn, since):
     return r.json().get('value', [])
 
 
+CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack'}
+
+
+def _since(s):
+    if not s.get('LastPolledAt'): return datetime.now() - timedelta(days=1)
+    return datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T'))
+
+
 def poll_channels(store) -> int:
-    """Ingest new mail (and chats where the tenant allows) for every active connector's
-    active sources. Failures are visible on the connector card, never silent."""
+    """Ingest new mail and chats for every active connector's active sources, through the
+    same triage funnel (incl. the configured AI, if any). Failures land on the card."""
+    from .llm import build_llm
+    try: llm = build_llm(store)
+    except Exception: llm = None
     n = 0
     for c in store.list_connectors():
-        if not c['Active'] or c['Type'] == 'github': continue   # github ingests via the coder loop
+        if not c['Active'] or c['Type'] not in CH2SRC: continue   # github ingests via the coder loop
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:
-            tok = graph_token(_cfg(full), full.get('Secret'))
+            tok = graph_token(_cfg(full), full.get('Secret')) if c['Type'] in ('outlook', 'teams') else full.get('Secret')
             for s in store.list_sources():
-                if s['Channel'] != {'outlook': 'email', 'teams': 'teams'}[c['Type']]: continue
-                since = ((datetime.now() - timedelta(days=1)).astimezone().isoformat()
-                         if not s.get('LastPolledAt')
-                         else datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T')).astimezone().isoformat())
+                if s['Channel'] != CH2SRC[c['Type']]: continue
+                since = _since(s)
                 if c['Type'] == 'outlook':
-                    for m in reversed(_mail_msgs(tok, s['Address'], since)):
+                    for m in reversed(_mail_msgs(tok, s['Address'], since.astimezone().isoformat())):
                         frm = (m.get('from') or {}).get('emailAddress') or {}
                         out = ingest_message(store, {
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
                             'subject': m.get('subject'), 'body': m.get('bodyPreview') or _clean((m.get('body') or {}).get('content')),
                             'from_name': frm.get('name'), 'from_email': frm.get('address'),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
-                            'source_link': m.get('webLink'), 'source_name': s['Address']})
+                            'source_link': m.get('webLink'), 'source_name': s['Address']}, llm=llm)
+                        n += out['status'] != 'duplicate'
+                elif c['Type'] == 'slack':
+                    hist = _slack(tok, 'conversations.history', channel=s['Address'],
+                                  oldest=since.timestamp(), limit=25)
+                    for m in reversed(hist.get('messages', [])):
+                        if m.get('subtype'): continue   # joins/leaves/bots noise
+                        out = ingest_message(store, {
+                            'external_id': f"slack:{s['Address']}:{m.get('ts')}", 'channel': 'slack',
+                            'subject': None, 'body': m.get('text'), 'from_name': m.get('user'),
+                            'conversation_id': f"slack:{s['Address']}",
+                            'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'),
+                            'source_name': s['Address']}, llm=llm)
                         n += out['status'] != 'duplicate'
                 store.touch_source(s['SourceId'])
             store.touch_connector(c['ConnectorId'])

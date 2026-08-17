@@ -6,4 +6,5 @@ a = Analysis(['taskuary/desktop.py'],
              hiddenimports=['taskuary.server', 'pyodbc', 'webview.platforms.edgechromium', 'webview.platforms.winforms'],
              excludes=['tkinter', 'matplotlib', 'PIL', 'sqlalchemy'])
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, a.binaries, a.datas, name='Taskuary', console=False, upx=False)
+exe = EXE(pyz, a.scripts, a.binaries, a.datas, name='Taskuary', console=False, upx=False,
+          icon='assets/taskuary.ico')

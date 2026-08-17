@@ -13,7 +13,7 @@ from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
-MAIL_SELECT = 'id,subject,from,receivedDateTime,bodyPreview,body,conversationId,webLink'
+MAIL_SELECT = 'id,subject,from,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink'
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -140,12 +140,36 @@ def _local(iso):
     except ValueError: return iso
 
 
-def _mail_msgs(tok, upn, since):
-    r = requests.get(f'{GRAPH}/users/{upn}/messages', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
+def _mail_msgs(tok, upn, since, folder='inbox'):
+    # folder-scoped - a bare /messages spans every folder including Sent Items, which made
+    # the owner's own replies come back through the funnel as inbound work
+    r = requests.get(f'{GRAPH}/users/{upn}/mailFolders/{folder}/messages',
+                     headers={'Authorization': f'Bearer {tok}'}, timeout=30,
                      params={'$top': 25, '$orderby': 'receivedDateTime desc', '$select': MAIL_SELECT,
                              '$filter': f'receivedDateTime gt {since}'})
     r.raise_for_status()
     return r.json().get('value', [])
+
+
+def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
+    """The owner's SENT mail is context, never work: attach it to the conversation's task
+    when one exists (so the thread shows both sides), otherwise file it - a task or a
+    draft is never created from your own replies."""
+    ext = f"graph:{m['id']}"
+    if store.message_exists(ext): return 0
+    conv = m.get('conversationId')
+    tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
+    mid = store.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'email',
+                             'SourceName': mailbox, 'Subject': m.get('subject'), 'FromName': 'You',
+                             'FromEmail': mailbox, 'SentAt': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
+                             'BodyText': m.get('bodyPreview') or _clean((m.get('body') or {}).get('content')),
+                             'SourceLink': m.get('webLink'), 'Status': 'routed' if tid else 'filed'})
+    if tid:
+        store.add_route(mid, tid, 'attach', None, 'your reply on this thread - kept for context', [], 'router')
+        store.add_comment(tid, 'you', 'human', f"You replied: {(m.get('bodyPreview') or '')[:300]}")
+    else:
+        store.add_route(mid, None, 'file', None, 'your sent reply - kept for context', [], 'router')
+    return 1
 
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack'}
@@ -176,8 +200,15 @@ def poll_channels(store) -> int:
                 if s['Channel'] != CH2SRC[c['Type']]: continue
                 since = _since(s)
                 if c['Type'] == 'outlook':
-                    for m in reversed(_mail_msgs(tok, s['Address'], since.astimezone().isoformat())):
+                    since_iso = since.astimezone().isoformat()
+                    # your replies ride along as CONTEXT: attached to the thread's task,
+                    # visible on the timeline, never triaged into work
+                    for m in reversed(_mail_msgs(tok, s['Address'], since_iso, folder='sentitems')):
+                        n += ingest_outbound_mail(store, s['Address'], m)
+                    for m in reversed(_mail_msgs(tok, s['Address'], since_iso)):
                         frm = (m.get('from') or {}).get('emailAddress') or {}
+                        if (frm.get('address') or '').lower() == s['Address'].lower():
+                            continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
                         out = ingest_message(store, {
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
                             'subject': m.get('subject'), 'body': m.get('bodyPreview') or _clean((m.get('body') or {}).get('content')),

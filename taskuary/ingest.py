@@ -44,7 +44,21 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None) -> dict:
                 logger.debug(f"ingest: filed (no AI connector) - {msg.get('subject') or ''}")
                 return {'status': 'filed', 'task_id': None, 'message_id': mid}
             else:
-                intent = classify_intent(msg, llm=llm, soul=store.get_doc('soul'))
+                fail = {}
+                def _guarded(sys_, usr_):
+                    try:
+                        return llm(sys_, usr_)
+                    except Exception as e:
+                        fail['err'] = str(e)[:200]
+                        raise
+                intent = classify_intent(msg, llm=_guarded, soul=store.get_doc('soul'))
+                if fail:
+                    # the AI errored - filing beats the old default-to-task heuristic
+                    mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+                    store.add_route(mid, None, 'file', None,
+                                    f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail", [], 'triage')
+                    logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
+                    return {'status': 'filed', 'task_id': None, 'message_id': mid}
         else:
             intent = {'intent': 'task', 'why': ''}
         if intent['intent'] == 'fyi':

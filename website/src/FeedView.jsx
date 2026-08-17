@@ -41,6 +41,8 @@ const subjectOf = (r) => {
 
 // One plain-English sentence: what the hub did + where it stands.
 const blurb = (r) => {
+  if ((r.RouteReason || "").includes("your reply") || (r.RouteReason || "").includes("your sent reply"))
+    return r.TaskId ? `Your reply — kept on ${ref(r.TaskId)} so the thread shows both sides` : "Your reply — kept for context, never a task";
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
   if (r.MsgStatus === "ignored") return `Ignored by policy — ${r.RouteReason || "no task created"}`;
   if (r.MsgStatus === "filed") return `Filed, nothing to do — ${r.RouteReason || "informational"}`;

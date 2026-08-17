@@ -80,6 +80,48 @@ class GraphCredsTests(unittest.TestCase):
         self.assertEqual((sec, borrowed), (None, False))
 
 
+class OutboundMailTests(unittest.TestCase):
+    def _sent(self, conv=None, i='sm1'):
+        return {'id': i, 'subject': 'RE: Financial Request', 'conversationId': conv,
+                'bodyPreview': 'March thru June attached.', 'sentDateTime': '2026-08-17T15:00:00Z'}
+
+    def test_sent_mail_files_never_tasks(self):
+        from taskuary.channels import ingest_outbound_mail
+        s = MemoryStore()
+        n = ingest_outbound_mail(s, 'me@x.com', self._sent())
+        self.assertEqual(n, 1)
+        row = s.feed()[0]
+        self.assertEqual((row['TaskId'], row['MsgStatus'], row['FromName']), (None, 'filed', 'You'))
+        self.assertIn('your sent reply', row['RouteReason'])
+        self.assertEqual(s.list_tasks(), [])
+        # dedup on second poll
+        self.assertEqual(ingest_outbound_mail(s, 'me@x.com', self._sent()), 0)
+
+    def test_sent_mail_attaches_to_conversation_task(self):
+        from taskuary.channels import ingest_outbound_mail
+        from taskuary.ingest import ingest_message
+        s = MemoryStore()
+        out = ingest_message(s, {'external_id': 'in1', 'channel': 'email', 'subject': 'Financial Request',
+                                 'body': 'please send March thru June', 'from_email': 'client@y.com',
+                                 'conversation_id': 'c9', 'sent_at': '2026-08-17 14:00', 'from_name': 'Client'},
+                             llm=lambda a, b: '{"intent": "task", "why": "t"}')
+        ingest_outbound_mail(s, 'me@x.com', self._sent(conv='c9', i='sm2'))
+        msgs = s.list_messages(out['task_id'])
+        self.assertEqual(len(msgs), 2)                       # both sides on the thread
+        self.assertEqual({m['FromName'] for m in msgs}, {'Client', 'You'})
+        self.assertEqual(len(s.list_tasks()), 1)             # no new task from the reply
+
+    def test_ai_failure_files_instead_of_task(self):
+        from taskuary.ingest import ingest_message
+        def boom(a, b): raise RuntimeError('azure 400: max_tokens')
+        s = MemoryStore()
+        out = ingest_message(s, {'external_id': 'e1', 'channel': 'email', 'subject': 'please fix the report',
+                                 'body': 'please fix the report', 'from_email': 'a@b.com', 'sent_at': '2026-08-17 14:00'},
+                             llm=boom)
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        self.assertIn('AI triage failed', s.feed()[0]['RouteReason'])
+
+
 class LlmTests(unittest.TestCase):
     def test_build_llm_none_without_active_key(self):
         self.assertIsNone(llm.build_llm(MemoryStore()))

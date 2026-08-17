@@ -14,8 +14,8 @@ import BoltIcon from "@mui/icons-material/Bolt";
 // because a headless run has nobody to click "approve".
 const PRESETS = [
   { name: "coder", label: "Claude Code", cmd: "claude",
-    args: ["-p", "--dangerously-skip-permissions", "--output-format", "json"], resume: "--resume", timeout: 1500,
-    desc: "Recommended - JSON output gives resumable sessions (message the agent mid-task)." },
+    args: ["-p", "--dangerously-skip-permissions", "--output-format", "stream-json", "--verbose"], resume: "--resume", timeout: 1500,
+    desc: "Recommended - stream-json shows the run LIVE on the Board and gives resumable sessions." },
   { name: "codex", label: "Codex CLI", cmd: "codex", args: ["exec", "--full-auto"], resume: "", timeout: 1500,
     desc: "OpenAI Codex CLI, non-interactive full-auto mode." },
   { name: "gemini", label: "Gemini CLI", cmd: "gemini", args: ["--yolo"], resume: "", timeout: 1500,
@@ -27,7 +27,7 @@ const PRESETS = [
 ];
 
 const NEWLINE = String.fromCharCode(10);
-const ARGS_PH = ['-p', '--dangerously-skip-permissions', '--output-format', 'json'].join(NEWLINE);
+const ARGS_PH = ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'].join(NEWLINE);
 const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "" };
 const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(Boolean);
 

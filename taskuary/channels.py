@@ -61,7 +61,10 @@ def github_discover(store, c: dict, actor='owner') -> dict:
                                'Active': 1, 'Owner': actor}, actor)
             added += 1
     from .docsync import sync_connections, update_repo_map
-    update_repo_map(store, repos, actor)
+    from .llm import build_llm
+    try: llm = build_llm(store)
+    except Exception: llm = None
+    update_repo_map(store, repos, actor, tok=tok, llm=llm)
     sync_connections(store, actor)
     return {'login': u.json().get('login'), 'repos': len(repos), 'added': added}
 
@@ -121,6 +124,19 @@ def test_connector(store, cid: int) -> dict:
             r = mssql_test(conn_cfg)
             if not r['ok']: raise RuntimeError(r['error'])
             detail = f"connected · {r['version']} · db {r['database']}"
+        elif c['Type'] == 'winrm':
+            import subprocess
+            host = cfg.get('host')
+            if not host: raise RuntimeError('no host set - enter the machine name (e.g. AZWEB01)')
+            p = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                                f'Test-WSMan -ComputerName {host} -ErrorAction Stop | Out-Null; '
+                                f'Invoke-Command -ComputerName {host} -ScriptBlock {{ $env:COMPUTERNAME }}'],
+                               capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
+            if p.returncode != 0:
+                raise RuntimeError((p.stderr or p.stdout or 'WinRM unreachable')[:400]
+                                   + ' - if this is a box you RDP into, PS remoting may need enabling: '
+                                     'run Enable-PSRemoting -Force on it once (elevated)')
+            detail = f"remote run OK on {(p.stdout or '').strip() or host} (your Windows credentials)"
         elif c['Type'] in ('anthropic', 'openai', 'azure_openai'):
             from .llm import test_ai
             detail = test_ai(store, cid)

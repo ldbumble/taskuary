@@ -21,6 +21,8 @@ const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize the census by facility. Flag anything under 70 and any day-over-day drop."];
 const FIELDS = {
   mssql: [["query", "query", "multiline", "SELECT TOP 20 * FROM ..."], AI_FIELD],
+  winrm: [["PowerShell to run on the remote box", "script", "multiline",
+    "Get-Content C:/logs/latest.csv -Tail 20"], AI_FIELD],
   mcp: [["command", "cmd", "text", "npx / uvx / path to the MCP server"], ["args (one per line)", "args", "multiline", ""],
     ["tool", "tool", "text", "query"], ["tool args (JSON)", "tool_args", "multiline", '{"sql": "SELECT ..."}'], AI_FIELD],
   sqlite: [["db path", "db", "text", "C:/data/app.db"], ["query", "query", "multiline", "SELECT ..."], AI_FIELD],
@@ -28,7 +30,7 @@ const FIELDS = {
   rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],
 };
 const TYPE_LABELS = {
-  mssql: "SQL Server", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
+  mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
 };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -126,6 +128,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const [busy, setBusy] = useState("");
   const mssqlConn = connectors.find((c) => c.Type === "mssql");
   const mssqlOk = mssqlConn?.LastSyncAt && !mssqlConn?.LastError;
+  const winrmConn = connectors.find((c) => c.Type === "winrm");
+  const winrmOk = winrmConn?.LastSyncAt && !winrmConn?.LastError;
   const aiActive = connectors.some((c) => ["anthropic", "openai", "azure_openai"].includes(c.Type) && c.Active && c.HasSecret);
 
   const bodyCfg = () => {
@@ -185,6 +189,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: mssqlOk ? "#15803d" : "#b45309" }}>
                 {mssqlOk ? "✓ uses the SQL Server connection from the Connectors tab"
                   : "⚠ no tested SQL Server connection yet — set it up under Connectors → Microsoft SQL Server first"}
+              </Typography>
+            )}
+            {cfg.type === "winrm" && (
+              <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: winrmOk ? "#15803d" : "#b45309" }}>
+                {winrmOk ? `✓ runs on ${parse(winrmConn?.ConfigJson).host || "the remote host"} via the Connectors-tab connection`
+                  : "⚠ no tested remote machine yet — set the host under Connectors → Remote Windows (WinRM) first"}
               </Typography>
             )}
             <Box sx={{ mt: 1.5 }}><Button variant="contained" disableElevation onClick={() => setStep(1)}>Continue</Button></Box>

@@ -18,6 +18,7 @@ export const ACTION_COLORS = {
   draft: { bg: "#fef4e6", fg: "#b45309", label: "needs review" },
   escalate: { bg: "#fdecec", fg: "#b91c1c", label: "escalated" },
   ignore: { bg: "#eef0f3", fg: "#8a94a6", label: "ignored" },
+  skip: { bg: "#f4f0f6", fg: "#7e5f8f", label: "skipped" },
   task_only: { bg: "#eef0ff", fg: "#4f46e5", label: "task created" },
 };
 

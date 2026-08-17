@@ -3,13 +3,15 @@
 Pure - policies and the message come in as dicts, a decision comes out - so every rule is
 unit-testable offline and the engine is reusable outside this repo. Fixed precedence
 (no confidence score can override it, Basware autonomy-gate pattern):
-    ignore > escalate > auto_answer > task_only > default_action
+    skip > ignore > escalate > auto_answer > task_only > default_action
+'skip' is for senders that flood you (hundreds of automated notifications): the message
+is deduped and stored but never appears on the timeline at all - 'ignore' still shows.
 Within one action tier, lowest SortOrder wins. 'draft' policies act like targeted
 default overrides and are considered in the task_only tier's place when matched.
 """
 import re
 
-PRECEDENCE = ('ignore', 'escalate', 'auto_answer', 'draft', 'task_only')
+PRECEDENCE = ('skip', 'ignore', 'escalate', 'auto_answer', 'draft', 'task_only')
 _NOREPLY = re.compile(r'(no-?reply|do-?not-?reply|donotreply|notifications?@|automated|mailer-daemon|postmaster)', re.I)
 
 

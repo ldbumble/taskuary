@@ -83,6 +83,39 @@ class CoreTests(unittest.TestCase):
             ingest_message(s, self.msg(external_id='ac2'), llm=TASK_LLM)
         run.assert_not_called()
 
+    def test_skip_policy_hides_flood_senders(self):
+        s = MemoryStore()
+        s.save_policy({'Name': 'skip:api', 'Kind': 'sender', 'Pattern': 'apinotification@pointclickcare.com',
+                       'Action': 'skip', 'Reason': 'flood', 'SortOrder': 10, 'Active': 1}, 't')
+        out = ingest_message(s, self.msg(external_id='sk1', from_email='APINotification@pointclickcare.com'), llm=TASK_LLM)
+        self.assertEqual((out['status'], out['task_id']), ('skipped', None))
+        self.assertEqual(s.feed(), [])   # never on the timeline, unlike 'ignored'
+        self.assertEqual(ingest_message(s, self.msg(external_id='sk1'))['status'], 'duplicate')
+
+    def test_run_cli_streams_stream_json(self):
+        from unittest import mock
+        from taskuary.agents import run_cli
+        import sys
+        script = ("import sys,json;sys.stdin.read();"
+                  "print(json.dumps({'type':'assistant','message':{'content':"
+                  "[{'type':'tool_use','name':'Bash','input':{'command':'ls -la'}}]}}));"
+                  "print(json.dumps({'type':'result','result':'all done','session_id':'s1'}))")
+        ev = []
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
+            out, sid, _ = run_cli({'cmd': 'python', 'args': ['-c', script], 'timeout': 60},
+                                  'hi', lambda k, n, d: ev.append((k, d)))
+        self.assertEqual((out, sid), ('all done', 's1'))
+        self.assertTrue(any(k == 'live' and 'Bash' in d for k, d in ev))
+
+    def test_winrm_report_inherits_connector_host(self):
+        from taskuary.reports import resolve_cfg
+        self.assertIn('winrm', REGISTRY)
+        s = MemoryStore()
+        c = s.get_connector_by_type('winrm')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': '{"host": "AZWEB01"}'}, 't')
+        cfg = resolve_cfg(s, {'type': 'winrm', 'script': 'hostname'})
+        self.assertEqual((cfg['host'], cfg['script']), ('AZWEB01', 'hostname'))
+
     def test_triage_heuristics(self):
         self.assertEqual(heuristic_intent({'subject': '', 'body': 'are you available tuesday?'})['intent'], 'reply_only')
         self.assertEqual(heuristic_intent({'subject': 'fyi', 'body': 'this is an automated notice'})['intent'], 'fyi')

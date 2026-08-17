@@ -24,9 +24,11 @@ def load() -> dict:
     cfg['server'].setdefault('host', '127.0.0.1')
     cfg['server'].setdefault('port', 7787)
     # --dangerously-skip-permissions matters: without it a headless claude waits forever
-    # for permission approvals nobody can click
+    # for permission approvals nobody can click. stream-json (+ required --verbose) makes
+    # claude emit events AS IT WORKS so the Board can stream the run live.
     cfg.setdefault('agents', {'coder': {'cmd': 'claude',
-                                        'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'json'],
+                                        'args': ['-p', '--dangerously-skip-permissions',
+                                                 '--output-format', 'stream-json', '--verbose'],
                                         'resume_args': ['--resume'], 'timeout': 1500}})
     cfg.setdefault('github', {})
     return cfg

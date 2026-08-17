@@ -42,7 +42,8 @@ export default function BoardView({ onOpenTask }) {
     api.get("/api/sources").then(({ data }) => {
       const gh = (data.data || []).filter((s) => s.Channel === "github" && s.Active).map((s) => s.Address);
       setRepos(gh);
-      if (gh.length) setNt((cur) => ({ ...cur, repo: gh[0] }));
+      const def = data.default_repo && gh.includes(data.default_repo) ? data.default_repo : gh[0];
+      if (def) setNt((cur) => ({ ...cur, repo: def }));
     }).catch(() => {});
   }, []);
 

@@ -19,10 +19,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None) -> dict:
     cfg = store.get_settings()
     pol = evaluate(msg, store.list_policies(), store.known_sender(msg.get('from_email')),
                    cfg.get('default_action', 'draft'))
-    if pol['action'] == 'ignore':
-        mid = store.add_message({**_fields(msg, None), 'Status': 'ignored'})
-        store.add_route(mid, None, 'ignore', None, f"policy '{pol['rule']}': {pol['reason']}", [], 'policy')
-        return {'status': 'ignored', 'task_id': None, 'message_id': mid}
+    if pol['action'] in ('skip', 'ignore'):
+        # skip = stored for dedupe but NEVER shown (flood senders); ignore = shown, no task
+        mid = store.add_message({**_fields(msg, None), 'Status': 'skipped' if pol['action'] == 'skip' else 'ignored'})
+        store.add_route(mid, None, pol['action'], None, f"policy '{pol['rule']}': {pol['reason']}", [], 'policy')
+        return {'status': pol['action'] + ('ped' if pol['action'] == 'skip' else 'd'), 'task_id': None, 'message_id': mid}
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     if r['decision'] == 'attach':

@@ -10,7 +10,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
-import { ChannelIcon, TaskStatusChip, ActionChip, PromptBlock, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, TaskStatusChip, ActionChip, RunTrace, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 
 const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
 const STATUS_FILTERS = [
@@ -202,13 +202,7 @@ export default function TasksView({ selected, onSelect, onChanged }) {
                         {r.Status === "running" && <CircularProgress size={11} />}
                         <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
                       </Box>
-                      {(JSON.parse(r.TraceJson || "[]")).map((ev, i) => ev.kind === "prompt"
-                        ? <PromptBlock key={i} text={ev.detail} />
-                        : (
-                          <Typography key={i} variant="caption" sx={{ ...mono, display: "block", color: FAINT, fontSize: 10.5 }}>
-                            {ev.at.slice(11)} [{ev.kind}] {ev.name}: {ev.detail.slice(0, 120)}
-                          </Typography>
-                        ))}
+                      <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
                       {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#15803d", display: "block" }}>{r.Result}</Typography>}
                       {r.DiffText && <Box sx={{ mt: 0.75 }}><DiffBlock text={r.DiffText} /></Box>}
                       {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}

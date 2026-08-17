@@ -51,6 +51,21 @@ class DocSyncTests(unittest.TestCase):
         self.assertEqual(soul.count('o/one'), 1)             # no duplicate line
         self.assertIn('**o/two**', soul); self.assertIn('archived - do not touch', soul)
 
+    def test_repo_map_summarizes_readme_and_heals_placeholders(self):
+        from unittest import mock
+        s = MemoryStore()
+        # first discovery with no token: placeholder line
+        docsync.update_repo_map(s, [{'full_name': 'o/app', 'description': None, 'archived': False}])
+        self.assertIn('fill me in', s.get_doc('soul'))
+        # re-discovery with a token + AI: README summarized, placeholder healed in place
+        with mock.patch('taskuary.github.readme_text', return_value='# App\n\nPayroll importer for Intacct.'):
+            docsync.update_repo_map(s, [{'full_name': 'o/app', 'description': None, 'archived': False}],
+                                    tok='t', llm=lambda sys_, usr: 'Payroll importer for Intacct.')
+        soul = s.get_doc('soul')
+        self.assertNotIn('fill me in', soul)
+        self.assertIn('**o/app**: Payroll importer for Intacct.', soul)
+        self.assertEqual(soul.count('o/app'), 1)
+
 
 class GraphCredsTests(unittest.TestCase):
     def test_teams_borrows_outlook_creds(self):

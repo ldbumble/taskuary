@@ -21,3 +21,12 @@ def list_accessible_repos(tok):
     r.raise_for_status()
     return [{'full_name': x['full_name'], 'description': x.get('description'), 'archived': x.get('archived')}
             for x in r.json()]
+
+
+def readme_text(tok, repo) -> str:
+    """The repo's README (decoded), '' when there isn't one."""
+    import base64
+    r = requests.get(f'{GH}/repos/{repo}/readme', headers=_h(tok), timeout=20)
+    if r.status_code == 404: return ''
+    r.raise_for_status()
+    return base64.b64decode(r.json().get('content') or '').decode('utf-8', 'replace')

@@ -34,15 +34,51 @@ def sync_connections(store, actor='system'):
     if new != doc: store.save_doc('soul', new, actor)
 
 
-def update_repo_map(store, repos: list, actor='github'):
+def _readme_blurb(tok, repo, llm) -> str:
+    """No GitHub description? Read the repo's README instead - AI one-liner when an AI
+    connector is up, else the first real prose line."""
+    try:
+        from .github import readme_text
+        txt = readme_text(tok, repo)
+    except Exception:
+        txt = ''
+    if not txt.strip(): return ''
+    if llm:
+        try:
+            return (llm('You describe codebases for a routing table. ONE plain sentence, <25 words, '
+                        'no markdown: what the repository is and does.',
+                        f'Repository {repo} README:\n\n{txt[:5000]}') or '').strip().splitlines()[0][:200]
+        except Exception:
+            pass
+    lines = [l.strip() for l in txt.splitlines()
+             if l.strip() and not l.startswith(('#', '!', '[', '<', '|', '-', '='))]
+    return lines[0][:160] if lines else ''
+
+
+def update_repo_map(store, repos: list, actor='github', tok=None, llm=None):
     """repos: [{full_name, description, archived}] - append unknown repos under the map
-    header in SOUL.md so EVERY agent knows which repo owns what."""
+    header in SOUL.md so EVERY agent knows which repo owns what. Repos without a GitHub
+    description get summarized from their README (AI one-liner when available)."""
     doc = store.get_doc('soul') or ''
     have = doc.lower()
-    adds = [f"- **{r['full_name']}**: {(r.get('description') or '').strip() or 'no description on GitHub - fill me in'}"
+    PLACEHOLDER = 'no description on GitHub - fill me in'
+    def _desc(r):
+        return ((r.get('description') or '').strip()
+                or (tok and _readme_blurb(tok, r['full_name'], llm))
+                or PLACEHOLDER)
+    # re-discovery heals earlier placeholder lines once a README summary is available
+    healed = False
+    for r in repos:
+        old = f"- **{r['full_name']}**: {PLACEHOLDER}"
+        if old in doc:
+            d = _desc(r)
+            if d != PLACEHOLDER: doc, healed = doc.replace(old, f"- **{r['full_name']}**: {d}"), True
+    adds = [f"- **{r['full_name']}**: {_desc(r)}"
             + (' (archived - do not touch)' if r.get('archived') else '')
             for r in repos if r['full_name'].lower() not in have]
-    if not adds: return
+    if not adds:
+        if healed: store.save_doc('soul', doc, actor)
+        return
     if REPO_MAP_HEADER in doc:
         head, rest = doc.split(REPO_MAP_HEADER, 1)
         doc = head + REPO_MAP_HEADER + rest.rstrip() + '\n' + '\n'.join(adds) + '\n'

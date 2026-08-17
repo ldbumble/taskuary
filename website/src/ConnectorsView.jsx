@@ -87,6 +87,13 @@ const MSSQL_HOWTO = [
   "Build the actual reports (query + AI summary + schedule) on the REPORTS tab.",
 ];
 
+const WINRM_HOWTO = [
+  "This card is the CONNECTION only - the machine name. Build the actual reports (script + AI summary + schedule) on the REPORTS tab.",
+  "A box you can RDP into (like AZWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
+  "If Test fails with 'WinRM unreachable', enable PS remoting on the remote box once: open an elevated PowerShell THERE and run Enable-PSRemoting -Force.",
+  "Reports then run any PowerShell you write ON that machine (read a log, query a service, export a CSV) and the output - optionally AI-summarized - lands on the Timeline.",
+];
+
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const NL = String.fromCharCode(10);
 
@@ -127,6 +134,9 @@ export default function ConnectorsView() {
   if (open?.kind === "mssql") {
     return <MssqlDetail conn={byType.mssql} drivers={drivers} reload={load} onBack={() => setOpen(null)} />;
   }
+  if (open?.kind === "winrm") {
+    return <WinrmDetail conn={byType.winrm} reload={load} onBack={() => setOpen(null)} />;
+  }
 
   /* ── landing: searchable grouped catalog ── */
   const chanCard = (c) => {
@@ -157,6 +167,13 @@ export default function ConnectorsView() {
         haystack: "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" "),
         go: () => setOpen({ kind: "mssql" }),
       },
+      ...(byType.winrm ? [{
+        key: "winrm", title: "Remote Windows (WinRM)", channel: "winrm",
+        desc: (byType.winrm.LastError ? "connection failing" : byType.winrm.LastSyncAt ? "connection ✓" : "not set up")
+          + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === "winrm").length} reports (built on the Reports tab)`,
+        haystack: "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" "),
+        go: () => setOpen({ kind: "winrm" }),
+      }] : []),
       ...types.filter((t) => t.status === "planned").map((t) => ({
         key: `p${t.type}`, title: t.type, desc: "planned", channel: "report", haystack: `${t.type} planned`, planned: true })),
     ]},
@@ -417,6 +434,59 @@ function MssqlConnection({ conn, drivers, reload }) {
         </StepContent>
       </Step>
     </Stepper>
+  );
+}
+
+/* ── Remote Windows (WinRM) detail: machine name + live probe; reports live on Reports ── */
+function WinrmDetail({ conn, reload, onBack }) {
+  const [tab, setTab] = useState("Connection");
+  const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
+  const [test, setTest] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  if (!conn) return null;
+
+  const save = async () => {
+    setBusy("save"); setMsg("");
+    try {
+      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true });
+      setMsg("saved ✓"); reload();
+    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
+    setBusy("");
+  };
+  const runTest = async () => {
+    setBusy("test");
+    try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
+    catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
+    setBusy(""); reload();
+  };
+
+  return (
+    <Box sx={{ maxWidth: 980 }}>
+      <Crumb section="Connectors" onBack={onBack} title="Remote Windows (WinRM)" />
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
+        Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
+        build the scheduled reports on the Reports tab.
+      </Typography>
+      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      {tab === "Guide" && <Steps steps={WINRM_HOWTO} />}
+      {tab === "Connection" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
+          <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
+            onChange={(e) => setCfg({ ...cfg, host: e.target.value })} />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
+              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
+            <Button variant="outlined" disabled={busy === "test" || !cfg.host} onClick={runTest}
+              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+            {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
+          </Box>
+          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
+            {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
+        </Box>
+      )}
+    </Box>
   );
 }
 

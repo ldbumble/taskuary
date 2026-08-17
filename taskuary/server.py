@@ -237,7 +237,10 @@ def push(body: MsgBody):
 def reports_run(): return {'ran': run_due_reports(store)}
 
 @app.get('/api/sources')
-def sources(): return {'data': store.list_sources(active_only=False)}
+def sources():
+    # default_repo rides along so the Board's repo picker preselects it
+    return {'data': store.list_sources(active_only=False),
+            'default_repo': (cfg.get('github') or {}).get('default_repo')}
 
 @app.post('/api/sources')
 def save_source(body: SourceBody):

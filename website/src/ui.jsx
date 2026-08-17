@@ -60,6 +60,50 @@ export const PromptBlock = ({ text }) => (
   </Box>
 );
 
+// The live agent console: a run's trace rendered like a terminal. Contiguous 'live'
+// events (streamed CLI output - tool calls, text) group into one dark scroll box that
+// follows the tail while the run is going; prompts stay collapsible; everything else
+// stays a one-line caption.
+export const RunTrace = ({ traceJson, running }) => {
+  let evs = [];
+  try { evs = JSON.parse(traceJson || "[]"); } catch { /* mid-write JSON: next poll fixes it */ }
+  const boxRef = React.useRef(null);
+  React.useEffect(() => { if (running && boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight; });
+  const groups = [];
+  evs.forEach((ev) => {
+    const last = groups[groups.length - 1];
+    if (ev.kind === "live" && last?.kind === "live") last.items.push(ev);
+    else groups.push(ev.kind === "live" ? { kind: "live", items: [ev] } : { kind: ev.kind, ev });
+  });
+  return groups.map((g, i) => {
+    const tail = i === groups.length - 1;
+    if (g.kind === "live") return (
+      <Box key={i} ref={tail ? boxRef : null} sx={{ bgcolor: "#0f172a", borderRadius: 1.5, px: 1.25, py: 0.75,
+        my: 0.5, maxHeight: 280, overflowY: "auto", border: "1px solid #1e293b" }}>
+        {g.items.map((ev, k) => (
+          <Typography key={k} variant="caption" sx={{ ...mono, display: "block", fontSize: 10.5, lineHeight: 1.6,
+            whiteSpace: "pre-wrap", wordBreak: "break-word",
+            color: ev.detail.startsWith("→") ? "#a5b4fc" : ev.detail.startsWith("✗") ? "#fca5a5" : "#94a3b8" }}>
+            <span style={{ color: "#475569" }}>{(ev.at || "").slice(11)}</span> {ev.detail}
+          </Typography>
+        ))}
+        {running && tail && (
+          <Typography variant="caption" sx={{ ...mono, color: "#22d3ee", fontSize: 10.5,
+            "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
+            ▮ agent working…
+          </Typography>
+        )}
+      </Box>
+    );
+    if (g.kind === "prompt") return <PromptBlock key={i} text={g.ev.detail} />;
+    return (
+      <Typography key={i} variant="caption" sx={{ ...mono, display: "block", color: FAINT, fontSize: 10.5 }}>
+        {(g.ev.at || "").slice(11)} [{g.ev.kind}] {g.ev.name}: {(g.ev.detail || "").slice(0, 120)}
+      </Typography>
+    );
+  });
+};
+
 // Unified-diff viewer: green adds, red removes, purple hunks, bold file headers.
 export const DiffBlock = ({ text }) => {
   if (!text) return null;

@@ -23,7 +23,8 @@ import { Empty, Crumb as CrumbBase, UnderTabs, LandingCard } from "./ui.jsx";
 const Crumb = (props) => <CrumbBase section="Settings" {...props} />;
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
-const ACTIONS = ["ignore", "escalate", "auto_answer", "draft", "task_only"];
+// skip = never shows on the timeline at all (flood senders); ignore = shows, no task
+const ACTIONS = ["skip", "ignore", "escalate", "auto_answer", "draft", "task_only"];
 const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "draft", Reason: "", SortOrder: 100, Active: true };
 const SCOPES = ["global", "sender", "sender_domain", "source"];
 

@@ -50,6 +50,21 @@ def run_rss(cfg):
     return f'{len(titles)} new items', '\n'.join(f'- {t}' for t in titles)[:4000]
 
 
+def run_winrm(cfg):
+    """{"host", "script"} - run PowerShell ON a remote Windows box (WinRM / PS remoting,
+    your current Windows credentials) and report its output. A box you can RDP into is
+    usually domain-joined and WinRM-reachable already; if not, run Enable-PSRemoting on
+    it once (elevated)."""
+    import subprocess
+    host, script = cfg['host'], cfg['script']
+    p = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                        f'Invoke-Command -ComputerName {host} -ScriptBlock {{ {script} }}'],
+                       capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
+    if p.returncode != 0: raise RuntimeError((p.stderr or p.stdout or 'remote run failed')[:500])
+    out = (p.stdout or '').strip()
+    return f'{len(out.splitlines())} lines from {host}', out[:4000]
+
+
 def run_mcp(cfg):
     """{"cmd", "args", "tool", "tool_args"} - call any MCP server's tool. See mcp.py."""
     from .mcp import run_report
@@ -61,8 +76,8 @@ def _planned(name):
     return _fail
 
 
-REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'mcp': run_mcp, 'rest': run_rest, 'rss': run_rss,
-            **{n: _planned(n) for n in PLANNED}}
+REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
+            'rss': run_rss, **{n: _planned(n) for n in PLANNED}}
 
 
 def mssql_connection(store) -> dict:
@@ -76,9 +91,16 @@ def mssql_connection(store) -> dict:
     return {k: v for k, v in cfg.items() if v}
 
 
+def winrm_connection(store) -> dict:
+    """Same connection-card pattern as mssql: the host lives on the winrm connector."""
+    c = store.get_connector_by_type('winrm')
+    cfg = json.loads((c or {}).get('ConfigJson') or '{}')
+    return {k: v for k, v in cfg.items() if v}
+
+
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') == 'mssql':
-        return {**mssql_connection(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
+    conn = {'mssql': mssql_connection, 'winrm': winrm_connection}.get(cfg.get('type'))
+    if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg
 
 

@@ -4,7 +4,7 @@ over STDIN (argv length limits are real on Windows), JSON output parsed when ava
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
 """
-import json, os, subprocess
+import json, os, subprocess, threading, time
 from datetime import datetime
 from loguru import logger
 
@@ -42,8 +42,36 @@ def _resolve_cmd(name: str) -> list:
     return [path]
 
 
+def _fmt_input(inp) -> str:
+    """The one field a human wants to see per tool call - command, path, pattern…"""
+    if not isinstance(inp, dict): return str(inp)[:140]
+    for k in ('command', 'file_path', 'path', 'pattern', 'url', 'query', 'description', 'prompt'):
+        if inp.get(k): return str(inp[k])[:140]
+    return json.dumps(inp)[:140]
+
+
+def _live_line(j):
+    """One readable console line per claude stream-json event; None = not worth showing."""
+    t = j.get('type')
+    if t == 'system': return f"session started · model {j.get('model') or '?'}"
+    if t == 'assistant':
+        out = []
+        for c in (j.get('message') or {}).get('content') or []:
+            if c.get('type') == 'tool_use': out.append(f"→ {c.get('name')}: {_fmt_input(c.get('input'))}")
+            elif c.get('type') == 'text' and (c.get('text') or '').strip(): out.append(c['text'].strip()[:300])
+        return '\n'.join(out) or None
+    if t == 'user':
+        errs = [c for c in (j.get('message') or {}).get('content') or []
+                if isinstance(c, dict) and c.get('type') == 'tool_result' and c.get('is_error')]
+        return f"✗ tool error: {str(errs[0].get('content'))[:200]}" if errs else None
+    return None
+
+
 def run_cli(profile: dict, prompt: str, trace, resume: str = None):
-    """One headless invocation of the configured CLI. Returns (result, session_id, diff)."""
+    """One headless invocation of the configured CLI, output STREAMED line by line into
+    the run trace so the Board shows the agent working live. claude's stream-json events
+    render as readable tool/text lines; any other CLI's plain stdout streams as-is.
+    Returns (result, session_id, diff)."""
     name = profile.get('cmd', 'claude')
     cmd = _resolve_cmd(name) + list(profile.get('args') or ['-p'])
     if resume and profile.get('resume_args'): cmd += list(profile['resume_args']) + [resume]
@@ -51,11 +79,41 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
-    p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                       timeout=profile.get('timeout', 1200), cwd=cwd, shell=False)
-    if p.returncode != 0: raise RuntimeError(f'{name} exit {p.returncode}: {(p.stderr or p.stdout or "")[:500]}')
-    out, sid = parse_cli_json(p.stdout)
-    trace('output', 'cli', out[-1000:])
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False)
+    timed = threading.Event()
+    killer = threading.Timer(profile.get('timeout', 1200), lambda: (timed.set(), p.kill()))
+    killer.start()
+    err_buf = []
+    threading.Thread(target=lambda: err_buf.append(p.stderr.read()), daemon=True).start()
+    # stdin feed on its own thread: writing a big prompt while the child is already
+    # emitting output can deadlock both pipes otherwise
+    def _feed():
+        try: p.stdin.write(prompt); p.stdin.close()
+        except Exception: pass
+    threading.Thread(target=_feed, daemon=True).start()
+    raw, final = [], None
+    try:
+        for line in p.stdout:
+            line = line.rstrip('\n')
+            if not line.strip(): continue
+            raw.append(line)
+            try: j = json.loads(line)
+            except ValueError: trace('live', name, line[:400]); continue
+            if isinstance(j, dict) and (j.get('type') == 'result' or ('result' in j and 'type' not in j)):
+                final = j; continue
+            shown = _live_line(j) if isinstance(j, dict) else None
+            if shown: trace('live', name, shown)
+        p.wait()
+    finally:
+        killer.cancel()
+    if p.returncode != 0:
+        why = f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else \
+            ((err_buf[0] if err_buf else '') or '\n'.join(raw[-5:]) or 'no output')[:500]
+        raise RuntimeError(f'{name} exit {p.returncode}: {why}')
+    if final is not None: out, sid = str(final.get('result') or '').strip(), final.get('session_id')
+    else: out, sid = parse_cli_json('\n'.join(raw))
+    trace('output', name, out[-1000:])
     diff = ''
     if head0:
         head1 = _git(cwd, 'rev-parse', 'HEAD')
@@ -97,11 +155,19 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
     store.audit('run', run_id, 'dispatch', actor, 'human', {'agent': agent_name, 'task': task_ref(task_id)}, run_id)
     store.update_task(task_id, {'Status': 'in_progress', 'Assignee': f'agent:{agent_name}'}, actor)
     trace = []
+    wrote = {'at': 0.0}
     def _t(kind, name, detail):
         cap = 12000 if kind == 'prompt' else 2000
         trace.append({'at': datetime.now().isoformat(sep=' ', timespec='seconds'), 'kind': kind,
                       'name': name, 'detail': str(detail)[:cap]})
-        store.update_run(run_id, {'TraceJson': json.dumps(trace)})
+        # long streams: drop the oldest live line past 260 events, and flush live lines to
+        # the DB at most ~1/s (everything else lands immediately; final flush is guaranteed)
+        if len(trace) > 260:
+            i = next((k for k, e in enumerate(trace) if e['kind'] == 'live'), None)
+            if i is not None: trace.pop(i)
+        if kind != 'live' or time.time() - wrote['at'] > 1.0:
+            wrote['at'] = time.time()
+            store.update_run(run_id, {'TraceJson': json.dumps(trace)})
     try:
         ctx = task_context(store, task_id)
         mem = memory_block(store, store.list_messages(task_id))

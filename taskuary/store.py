@@ -77,7 +77,8 @@ class SQLiteStore:
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
                          ('slack', 'Slack'), ('github', 'GitHub'),
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
-                         ('azure_openai', 'Azure OpenAI'), ('mssql', 'Microsoft SQL Server')):
+                         ('azure_openai', 'Azure OpenAI'), ('mssql', 'Microsoft SQL Server'),
+                         ('winrm', 'Remote Windows (WinRM)')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name) VALUES (?,?)', (t, n))
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
@@ -279,7 +280,7 @@ class SQLiteStore:
                        (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
                        (SELECT Kind FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewKind
                 FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
-                WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status != 'context' '''
+                WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped') '''
         p = [f'-{int(days)} days']
         if pending_only:
             q += " AND (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1)='pending'"

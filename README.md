@@ -46,8 +46,9 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   diff, history — and decide inline. Chains holding several emails get a pill strip to
   flip between them (your own replies marked "↩ you").
 - **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done, each card
-  showing the live agent-run status. Drag between columns; click a card for the full
-  story; "New task for the agent" sends work straight to your coder.
+  showing the live agent-run status. Drag between columns; click a card to **watch the
+  agent work live** — its tool calls and thinking stream into a console as they happen;
+  "New task for the agent" sends work straight to your coder.
 - **Tasks** — the dense two-pane view: messages with routing decisions, agent runs with
   prompts, traces and diffs, dispatch any agent, message the working agent, "Not a task"
   (which teaches the funnel).
@@ -60,8 +61,9 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 - **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
   rules injected into every agent run. They ship as templates and maintain themselves —
   connectors and discovered repos write themselves in.
-- **Settings** — triage knobs with plain-English help, deterministic routing policies,
-  the agent's learned memory, and one-click audit-chain verification.
+- **Settings** — triage knobs with plain-English help, deterministic routing policies
+  (including **skip** rules for flood senders — one click on the Timeline mutes a sender
+  forever), the agent's learned memory, and one-click audit-chain verification.
 
 ## Bring your own agent
 
@@ -80,6 +82,7 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md |
 | `anthropic` / `openai` / `azure_openai` | ✅ | AI for triage + report summaries |
 | `mssql` | ✅ | connect once; build AI-summarized reports on the Reports tab |
+| `winrm` | ✅ | run PowerShell on any machine you can RDP into; output → Timeline |
 | `mcp` | ✅ | any MCP server's tool as a scheduled report |
 | `sqlite` / `rest` / `rss` | ✅ | scheduled reports, AI summaries optional |
 | `postgres` `mysql` `snowflake` `sharepoint_list` `google_sheets` `s3_object` `graphql` `smb_file` `prometheus` `jira` | 🗺 planned | one ~15-line executor away — PRs welcome |

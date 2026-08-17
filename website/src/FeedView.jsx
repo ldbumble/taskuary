@@ -12,7 +12,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, PromptBlock, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, fmtTime12, fmtDateTime, localDay, cleanText } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, fmtTime12, fmtDateTime, localDay, cleanText } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -364,13 +364,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     : detail.runs.map((r) => (
                       <Box key={r.RunId} sx={{ mb: 1 }}>
                         <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
-                        {(JSON.parse(r.TraceJson || "[]")).map((ev, i) => ev.kind === "prompt"
-                          ? <PromptBlock key={i} text={ev.detail} />
-                          : (
-                            <Typography key={i} variant="caption" sx={{ ...mono, display: "block", color: DIM, fontSize: 10.5 }}>
-                              {ev.at.slice(11)} [{ev.kind}] {ev.name}: {ev.detail.slice(0, 110)}
-                            </Typography>
-                          ))}
+                        <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
                         {r.Result && <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: "#15803d", display: "block", mt: 0.5 }}>{r.Result.slice(0, 700)}</Typography>}
                       </Box>
                     ))}
@@ -434,6 +428,14 @@ const PanelLabel = ({ children }) => (
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
 const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, onOpenTask, onClose }) => {
+  // one click turns a flood sender (100s of automated mails) into a skip policy -
+  // future mail from them is deduped but never shows on the timeline again
+  const [skipped, setSkipped] = useState(false);
+  const skipSender = async () => {
+    await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
+      Action: "skip", Reason: "flood sender — skipped from the timeline", SortOrder: 10, Active: true });
+    setSkipped(true);
+  };
   const rep = [...(detail?.comments || [])].reverse().find((c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const pending = sel.ReviewId && sel.ReviewStatus === "pending";
@@ -512,9 +514,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
                 </>
               )}
 
-              <Box sx={{ display: "flex", gap: 1, mt: 1.5, borderTop: `1px solid ${BORDER}`, pt: 1.25 }}>
+              <Box sx={{ display: "flex", gap: 1, mt: 1.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center" }}>
                 <Button size="small" onClick={onDetails}>See details →</Button>
                 {sel.TaskId && <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task</Button>}
+                <Box sx={{ flex: 1 }} />
+                {sel.Channel === "email" && sel.FromEmail && (skipped
+                  ? <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>✓ sender skipped from now on</Typography>
+                  : <Button size="small" sx={{ color: "#8a94a6", fontSize: 11 }} onClick={skipSender}
+                      title={`Never show ${sel.FromEmail} on the timeline again`}>Skip this sender</Button>)}
               </Box>
             </>
           )}

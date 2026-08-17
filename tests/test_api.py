@@ -64,10 +64,37 @@ class ApiTests(unittest.TestCase):
         r = c.post('/api/reports/preview', json={'type': 'postgres'}).json()
         self.assertFalse(r['ok']); self.assertIn('roadmap', r['error'])
 
-    def test_connectors_lists_types(self):
-        d = {x['type']: x['status'] for x in c.get('/api/connectors').json()['data']}
+    def test_report_types(self):
+        d = {x['type']: x['status'] for x in c.get('/api/report-types').json()['data']}
         self.assertEqual(d['mssql'], 'builtin'); self.assertEqual(d['mcp'], 'builtin')
         self.assertEqual(d['postgres'], 'planned')
+
+    def test_channel_connectors_seeded_and_secret_writeonly(self):
+        rows = {x['Type']: x for x in c.get('/api/connectors').json()['data']}
+        self.assertEqual(set(rows) >= {'outlook', 'teams', 'github'}, True)
+        self.assertNotIn('Secret', rows['github'])
+        cid = rows['outlook']['ConnectorId']
+        c.post('/api/connectors', json={'ConnectorId': cid, 'ConfigJson': '{"tenant_id": "t1"}', 'Active': True})
+        row = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == cid)
+        self.assertEqual((row['Active'], row['ConfigJson']), (1, '{"tenant_id": "t1"}'))
+        self.assertEqual(row['HasSecret'], 0)
+        c.post('/api/connectors', json={'ConnectorId': cid, 'Secret': 's3cret'})
+        row = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == cid)
+        self.assertEqual(row['HasSecret'], 1); self.assertNotIn('s3cret', json.dumps(row))
+        c.post('/api/connectors', json={'ConnectorId': cid, 'Active': False})
+
+    def test_connector_test_fails_cleanly_without_creds(self):
+        cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'teams')
+        r = c.post(f'/api/connectors/{cid}/test').json()
+        self.assertFalse(r['ok']); self.assertIn('tenant_id', r['detail'])
+        self.assertEqual(c.post('/api/connectors/999999/test').status_code, 404)
+
+    def test_github_discovery_on_pat_save(self):
+        from unittest import mock
+        cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'github')
+        with mock.patch('taskuary.channels.github_discover', return_value={'login': 'u', 'repos': 2, 'added': 2}):
+            r = c.post('/api/connectors', json={'ConnectorId': cid, 'Secret': 'ghp_x'}).json()
+        self.assertEqual(r['discovery'], {'login': 'u', 'repos': 2, 'added': 2})
 
     def test_mssql_endpoints(self):
         with mock.patch('taskuary.mssql.drivers', return_value=['ODBC Driver 18 for SQL Server']):

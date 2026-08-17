@@ -52,6 +52,9 @@ class PolicyBody(BaseModel):
     Action: str = None; Reason: str = None; SortOrder: int = None; Active: bool = None
 class MemoryBody(BaseModel): note: str; scope: str = 'global'; scope_key: str = None
 class MemoryToggle(BaseModel): active: bool
+class ConnectorBody(BaseModel):
+    ConnectorId: int = None; Type: str = None; Name: str = None
+    ConfigJson: str = None; Secret: str = None; Active: bool = None
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -98,10 +101,17 @@ def msg_agent(task_id: int, body: TextBody, background: BackgroundTasks):
     background.add_task(message_agent, store, task_id, body.body, ACTOR)
     return {'chat': 'running'}
 
+def _github_cfg():
+    """[github] from config.toml, with the GitHub connector's PAT winning when saved."""
+    g = dict(cfg.get('github') or {})
+    c = store.get_connector_by_type('github', with_secret=True)
+    if c and c.get('Secret'): g['token'] = c['Secret']
+    return g
+
 @app.post('/api/tasks/{task_id}/code')
 def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    background.add_task(run_coding_task, store, task_id, ACTOR, (body.repo if body else None), cfg.get('github'))
+    background.add_task(run_coding_task, store, task_id, ACTOR, (body.repo if body else None), _github_cfg())
     return {'coder': 'running'}
 
 @app.post('/api/tasks/{task_id}/comments')
@@ -217,9 +227,40 @@ def run_source_now(sid: int):
     store.touch_source(sid)
     return out
 
+@app.get('/api/report-types')
+def report_types():
+    return {'data': [{'type': t, 'status': 'planned' if t in PLANNED else 'builtin'} for t in REGISTRY]}
+
 @app.get('/api/connectors')
 def connectors():
-    return {'data': [{'type': t, 'status': 'planned' if t in PLANNED else 'builtin'} for t in REGISTRY]}
+    """Channel connector cards (outlook / teams / github). Secrets are write-only."""
+    return {'data': store.list_connectors()}
+
+@app.post('/api/connectors')
+def save_connector(body: ConnectorBody):
+    fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    if not fields.get('ConnectorId') and not (fields.get('Type') and fields.get('Name')):
+        raise HTTPException(422, 'new connectors need Type and Name')
+    cid = store.save_connector(fields, ACTOR)
+    safe = {k: v for k, v in fields.items() if k != 'Secret'} | ({'secret': 'updated'} if 'Secret' in fields else {})
+    store.audit('connector', cid, 'edit' if body.ConnectorId else 'create', ACTOR, detail=safe)
+    discovery = None
+    # a new GitHub PAT is all the config there is: saving the token IS connecting
+    if 'Secret' in fields and (store.get_connector(cid) or {}).get('Type') == 'github':
+        try:
+            from .channels import github_discover
+            discovery = github_discover(store, store.get_connector(cid, with_secret=True), ACTOR)
+        except Exception as e:
+            discovery = {'error': str(e)[:300]}
+    return {'ok': True, 'connectorId': cid, 'discovery': discovery}
+
+@app.post('/api/connectors/{cid}/test')
+def connector_test(cid: int):
+    from .channels import test_connector
+    if not store.get_connector(cid): raise HTTPException(404, 'connector not found')
+    out = test_connector(store, cid)
+    store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
+    return out
 
 @app.post('/api/reports/preview')
 def report_preview(body: dict):
@@ -321,8 +362,12 @@ def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(l
 
 def _poll_reports():
     store.set_setting('ingest_status', json.dumps({'state': 'running'}), 'system')
-    try: run_due_reports(store)
-    finally: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+    try:
+        run_due_reports(store)
+        from .channels import poll_channels
+        poll_channels(store)
+    finally:
+        store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
 
 @app.post('/api/ingest/poll')
 def ingest_poll(background: BackgroundTasks):

@@ -14,8 +14,10 @@ class DesktopTests(unittest.TestCase):
             self.assertTrue(server.started)
             html = urllib.request.urlopen(f'{url}/', timeout=10).read().decode()
             self.assertIn('Taskuary', html)
-            api = urllib.request.urlopen(f'{url}/api/connectors', timeout=10).read().decode()
+            api = urllib.request.urlopen(f'{url}/api/report-types', timeout=10).read().decode()
             self.assertIn('mssql', api)
+            conns = urllib.request.urlopen(f'{url}/api/connectors', timeout=10).read().decode()
+            self.assertIn('github', conns)
         finally:
             server.should_exit = True
 

@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind
   Action TEXT, Reason TEXT, SortOrder INTEGER DEFAULT 100, Active INTEGER DEFAULT 1, CreatedBy TEXT);
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
   Owner TEXT, ConnectorId INTEGER, Active INTEGER DEFAULT 1, ConfigJson TEXT, LastPolledAt TEXT);
+CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT UNIQUE, Name TEXT,
+  ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
   Source TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT);
@@ -72,6 +74,8 @@ class SQLiteStore:
             self.cx.executescript(SCHEMA)
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
+            for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'), ('github', 'GitHub')):
+                self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name) VALUES (?,?)', (t, n))
             self.cx.commit()
 
     def _rows(self, q, p=()):
@@ -205,6 +209,24 @@ class SQLiteStore:
     def get_source(self, sid): return self._one('SELECT * FROM source WHERE SourceId=?', (sid,))
     def delete_source(self, sid): self._exec('DELETE FROM source WHERE SourceId=?', (sid,))
     def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))
+
+    # channel connectors (secrets are write-only: list/get never return them)
+    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, LastSyncAt, LastError, (Secret IS NOT NULL AND Secret != '') HasSecret"
+    def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
+    def get_connector(self, cid, with_secret=False):
+        return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
+    def get_connector_by_type(self, ctype, with_secret=False):
+        return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE Type=?", (ctype,))
+    def save_connector(self, fields, actor):
+        cid = fields.get('ConnectorId')
+        cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active') if c in fields and fields[c] is not None]
+        if cid:
+            self._exec(f"UPDATE connector SET {','.join(f'{c}=?' for c in cols)} WHERE ConnectorId=?", [fields[c] for c in cols] + [cid])
+            return cid
+        return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active'))
+    def touch_connector(self, cid, error=None):
+        if error: self._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', (error[:500], cid))
+        else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))
     def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
     def set_setting(self, name, value, actor):

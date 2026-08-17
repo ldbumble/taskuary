@@ -5,7 +5,13 @@ WebView2 on Windows) hosts the UI. No pywebview -> graceful fallback to the defa
 browser, so `taskuary-desktop` is useful even from a bare pip install. Build the single
 exe with `pyinstaller taskuary.spec` (see the spec at the repo root).
 """
-import socket, sys, threading, time, webbrowser
+import io, socket, sys, threading, time, webbrowser
+
+# Windowed (console=False) exe: std streams are None, but uvicorn's logging setup calls
+# sys.stdout.isatty() and loguru writes to stderr - shim BEFORE importing uvicorn.
+for _s in ('stdout', 'stderr'):
+    if getattr(sys, _s) is None: setattr(sys, _s, io.StringIO())
+
 import uvicorn
 
 
@@ -30,7 +36,13 @@ def main():
     from taskuary import __version__, config
     argv = sys.argv[1:]
     port = int(argv[argv.index('--port') + 1]) if '--port' in argv else None
-    server, url = start_server(port=port)
+    try:
+        server, url = start_server(port=port)
+    except Exception:
+        import traceback
+        try: (config.home() / 'desktop-error.log').write_text(traceback.format_exc(), encoding='utf-8')
+        except OSError: pass
+        raise
     print(f'Taskuary {__version__} desktop - {url}  (data: {config.db_path()})')
     if '--server-only' in argv:  # headless mode: CI smoke tests, or run as a service
         try:
@@ -41,7 +53,12 @@ def main():
         import webview
         webview.create_window('Taskuary', url, width=1280, height=840, min_size=(900, 600))
         webview.start()
-    except ImportError:
+    except Exception:
+        # no native window (pywebview missing or its runtime broke) -> browser fallback,
+        # never an error dialog; the traceback lands next to the data for diagnosis
+        import traceback
+        try: (config.home() / 'desktop-error.log').write_text(traceback.format_exc(), encoding='utf-8')
+        except OSError: pass
         webbrowser.open(url)
         try:
             while True: time.sleep(3600)

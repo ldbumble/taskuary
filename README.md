@@ -68,10 +68,13 @@ artifacts if you don't want to build locally.
   its session), status/priority, "Not a task" (which teaches the funnel).
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI redrafting. Escalations carry no draft by design.
-- **Connectors** — report connections: Microsoft SQL Server (Windows auth works out of
-  the box for a local instance — just server + database + query), any MCP server's tool,
-  SQLite, REST, RSS. Schedules (*every N minutes* / *daily at HH:MM*), **Test
-  connection**, **Preview**, **Run now**.
+- **Connectors** — two kinds, all point-and-click with per-card setup guides:
+  **Channels** (Outlook mail and Microsoft Teams via a Graph app, GitHub via a
+  fine-grained PAT — paste the token and repos are auto-discovered, becoming the Board's
+  repo choices and the coder's issue loop) and **Report connections** (Microsoft SQL
+  Server — Windows auth works out of the box for a local instance, any MCP server's
+  tool, SQLite, REST, RSS) on schedules with **Test connection**, **Preview**, **Run
+  now**. Secrets are write-only; every card shows live health.
 - **Docs** — the operator documents: SOUL.md / CODER.md / DIGEST.md, editable in place.
 - **Settings** — Stripe-style: Configuration knobs (grouped, with help), Routing
   policies (deterministic rules the AI can never override), Agent memory (learned
@@ -85,7 +88,7 @@ No config files required; the UI persists everything (agents land in
 
 ```bash
 pip install -e .[dev]
-pytest -q                   # 42 tests, ~1s, no network or SQL Server needed
+pytest -q                   # 45 tests, ~1s, no network or SQL Server needed
 ```
 
 CI (`.github/workflows/ci.yml`) runs the suite on Windows + Linux, Python 3.10 and 3.12,
@@ -134,12 +137,18 @@ wrapper. Add it in **Settings → Agents**, no config files:
 Claude Code's JSON output (`result`, `session_id`) is parsed natively; plain-text CLIs
 work too (you lose resumability, keep everything else).
 
-## Integrations (report connections)
+## Integrations
 
-Scheduled pulls from the systems you already have; results land on the timeline feed as
-informational rows (never tasks). All point-and-click in **Settings → Report
-connections** — pick a type, fill the form, **Test connection**, **Preview**, save.
-Every connection also takes `title` plus a schedule (`every_minutes` or `daily_at`).
+**Channels** (Connectors tab) ingest work INTO the funnel: Outlook mailboxes and Teams
+chats through an Azure app (blank credentials fall back to `AZURE_TENANT_ID` /
+`AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` env vars), GitHub through a fine-grained PAT
+with automatic repo discovery. Each card has a live **Test** and a step-by-step setup
+guide.
+
+**Report connections** pull FROM systems on a schedule; results land on the timeline
+feed as informational rows (never tasks). Pick a type, fill the form, **Test
+connection**, **Preview**, save. Every connection takes `title` plus a schedule
+(`every_minutes` or `daily_at`).
 
 | type            | status      | config keys                          |
 |-----------------|-------------|--------------------------------------|
@@ -182,11 +191,12 @@ audit), the HTTP API, and the full React workspace (7 tabs) are here.
 - [x] Full React UI — Timeline · Board (drag-and-drop) · Tasks · Review · Connectors · Docs · Settings
 - [x] Settings all point-and-click: config knobs, routing policies, agent memory, agents, audit
 - [x] Desktop app (`taskuary-desktop`, single-exe PyInstaller build)
+- [x] Channel connectors: Outlook mail · Microsoft Teams · GitHub (PAT → auto repo discovery)
 - [x] Microsoft SQL Server + MCP report connectors
 - [x] Test suite + CI (Windows/Linux/macOS, py3.10/3.12, web + exe builds)
 - [ ] Git worktree isolation per task attempt (vibe-kanban-style)
 - [ ] Tray + notifications for the desktop shell
-- [ ] Email/chat ingest plugins (IMAP, Graph, Slack)
+- [ ] More ingest channels (IMAP, Slack)
 - [ ] More report executors (table above)
 
 ## Developing the UI

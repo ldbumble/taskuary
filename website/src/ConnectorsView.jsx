@@ -224,6 +224,31 @@ export default function ConnectorsView() {
   );
 }
 
+/* ── "Remove connection" on every detail page: wipes creds/config, turns sources off ── */
+function RemoveConnection({ conn, reload, onBack }) {
+  const [confirm, setConfirm] = useState(false);
+  const remove = async () => {
+    await api.post(`/api/connectors/${conn.ConnectorId}/reset`);
+    reload(); onBack();
+  };
+  return (
+    <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", maxWidth: 720 }}>
+      {confirm ? (
+        <>
+          <Typography variant="body2" sx={{ color: "#b91c1c", flex: 1 }}>
+            Wipes the saved credentials & settings and turns its sources off. The card stays in the catalog. Sure?
+          </Typography>
+          <Button size="small" color="error" variant="contained" disableElevation onClick={remove}>Remove</Button>
+          <Button size="small" onClick={() => setConfirm(false)}>Cancel</Button>
+        </>
+      ) : (
+        <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#8a94a6" }}
+          onClick={() => setConfirm(true)}>Remove connection</Button>
+      )}
+    </Box>
+  );
+}
+
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
 function ChannelDetail({ conn, sources, reload, onBack }) {
   const m = META[conn.Type] || { fields: [], howto: [] };
@@ -344,6 +369,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         </Stepper>
       )}
       {tab === "Guide" && <Steps steps={m.howto || []} />}
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
 }
@@ -361,6 +387,7 @@ function MssqlDetail({ conn, drivers, reload, onBack }) {
       <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
       {tab === "Connection" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
 }
@@ -486,6 +513,7 @@ function WinrmDetail({ conn, reload, onBack }) {
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
 }

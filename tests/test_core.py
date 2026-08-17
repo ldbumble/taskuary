@@ -116,6 +116,17 @@ class CoreTests(unittest.TestCase):
         cfg = resolve_cfg(s, {'type': 'winrm', 'script': 'hostname'})
         self.assertEqual((cfg['host'], cfg['script']), ('AZWEB01', 'hostname'))
 
+    def test_reset_connector_wipes_connection(self):
+        s = MemoryStore()
+        c = s.get_connector_by_type('slack')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Secret': 'xoxb-1', 'ConfigJson': '{"a":1}', 'Active': 1}, 't')
+        s.save_source({'Channel': 'slack', 'Address': 'C1', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 't')
+        s.reset_connector(c['ConnectorId'])
+        c2 = s.get_connector(c['ConnectorId'], with_secret=True)
+        self.assertFalse(c2['Secret'] or c2['Active'] or c2['ConfigJson'])
+        self.assertFalse(any(x['Active'] for x in s.list_sources(active_only=False)
+                             if x['ConnectorId'] == c['ConnectorId']))
+
     def test_triage_heuristics(self):
         self.assertEqual(heuristic_intent({'subject': '', 'body': 'are you available tuesday?'})['intent'], 'reply_only')
         self.assertEqual(heuristic_intent({'subject': 'fyi', 'body': 'this is an automated notice'})['intent'], 'fyi')

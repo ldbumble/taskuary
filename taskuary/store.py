@@ -249,6 +249,10 @@ class SQLiteStore:
             self._exec(f"UPDATE connector SET {','.join(f'{c}=?' for c in cols)} WHERE ConnectorId=?", [fields[c] for c in cols] + [cid])
             return cid
         return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active'))
+    def reset_connector(self, cid):
+        """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
+        self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL WHERE ConnectorId=?', (cid,))
+        self._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))
     def touch_connector(self, cid, error=None):
         if error: self._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', (error[:500], cid))
         else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))

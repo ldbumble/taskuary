@@ -286,16 +286,29 @@ def save_connector(body: ConnectorBody):
     safe = {k: v for k, v in fields.items() if k != 'Secret'} | ({'secret': 'updated'} if 'Secret' in fields else {})
     store.audit('connector', cid, 'edit' if body.ConnectorId else 'create', ACTOR, detail=safe)
     discovery = None
-    # a new GitHub PAT is all the config there is: saving the token IS connecting
-    if 'Secret' in fields and (store.get_connector(cid) or {}).get('Type') == 'github':
+    # a new GitHub PAT is all the config there is: saving the token IS connecting - and
+    # re-ENABLING the connector re-runs discovery too (refreshes the SOUL.md repo map,
+    # incl. README summaries for repos with no description)
+    c = store.get_connector(cid, with_secret=True) or {}
+    if c.get('Type') == 'github' and c.get('Secret') and ('Secret' in fields or fields.get('Active')):
         try:
             from .channels import github_discover
-            discovery = github_discover(store, store.get_connector(cid, with_secret=True), ACTOR)
+            discovery = github_discover(store, c, ACTOR)
         except Exception as e:
             discovery = {'error': str(e)[:300]}
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
     return {'ok': True, 'connectorId': cid, 'discovery': discovery}
+
+@app.post('/api/connectors/{cid}/reset')
+def connector_reset(cid: int):
+    c = store.get_connector(cid)
+    if not c: raise HTTPException(404, 'connector not found')
+    store.reset_connector(cid)
+    store.audit('connector', cid, 'reset', ACTOR, detail={'type': c['Type']})
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
+    return {'ok': True}
 
 @app.post('/api/connectors/{cid}/test')
 def connector_test(cid: int):

@@ -104,7 +104,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 73 tests, ~2s, no network needed
+pytest -q                   # 74 tests, ~2s, no network needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

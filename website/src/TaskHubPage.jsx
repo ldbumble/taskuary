@@ -18,6 +18,19 @@ import SettingsView from "./SettingsView.jsx";
 
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
 
+function ServerVersion() {
+  const [v, setV] = useState(null);
+  useEffect(() => { api.get("/api/version").then(({ data }) => setV(data)).catch(() => {}); }, []);
+  if (!v) return null;
+  return (
+    <Tooltip title={`server started ${v.started} — if this version looks old, restart taskuary`}>
+      <Typography variant="caption" sx={{ color: "#98a1b3", fontFamily: "Consolas, monospace", fontSize: 10.5 }}>
+        v{v.version}
+      </Typography>
+    </Tooltip>
+  );
+}
+
 export default function TaskHubPage() {
   const [tab, setTab] = useState("Timeline");
   const [selectedTask, setSelectedTask] = useState(null);
@@ -48,6 +61,7 @@ export default function TaskHubPage() {
           <Typography variant="caption" sx={{ color: DIM, display: { xs: "none", md: "block" } }}>
             everything in → one funnel → agents + you
           </Typography>
+          <ServerVersion />
 
           <Box sx={{ display: "flex", gap: 0.5, ml: 3 }}>
             {TABS.map((t) => (

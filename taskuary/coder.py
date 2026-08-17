@@ -83,7 +83,10 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
                               'Reason': 'coder resolved the task - reply awaiting approval'})
         store.update_task(task_id, {'Status': 'done'}, 'coder')
     else:
-        store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': out.get('run_id'), 'Kind': 'escalation',
-                          'Status': 'pending', 'Reason': f"coder needs you: {(rep['determination'] or rep['summary'])[:300]}"})
+        reason = f"coder needs you: {(rep['determination'] or rep['summary'] or 'see the run log')[:300]}"
+        existing = store.pending_review(task_id, 'escalation')
+        if existing: store.update_review_reason(existing['ReviewId'], reason, out.get('run_id'))
+        else: store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': out.get('run_id'), 'Kind': 'escalation',
+                                'Status': 'pending', 'Reason': reason})
     return {'closed': rep['close'] and out['status'] == 'done', 'repo': repo, 'issue': issue, 'report': rep,
             **({'error': err} if err else {})}

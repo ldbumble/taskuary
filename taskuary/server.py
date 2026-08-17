@@ -90,6 +90,12 @@ def favicon(): return FileResponse(Path(__file__).parent / 'web' / 'favicon.ico'
 def favicon_png(): return FileResponse(Path(__file__).parent / 'web' / 'favicon.png')
 
 
+from . import __version__ as _ver
+_started = datetime.now().isoformat(sep=' ', timespec='seconds')
+
+@app.get('/api/version')
+def version(): return {'version': _ver, 'started': _started}
+
 @app.get('/api/feed')
 def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None):
     days = int(store.get_settings().get('feed_days', 14))

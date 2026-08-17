@@ -196,6 +196,11 @@ class SQLiteStore:
     def decide_review(self, rid, status, final, by, note=None):
         self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',
                    (status, final, by, _now(), note, rid))
+    def pending_review(self, task_id, kind=None):
+        q = "SELECT * FROM review WHERE TaskId=? AND Status='pending'" + (" AND Kind=?" if kind else "") + " ORDER BY ReviewId DESC LIMIT 1"
+        return self._one(q, (task_id, kind) if kind else (task_id,))
+    def update_review_reason(self, rid, reason, run_id=None):
+        self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
     def update_review_draft(self, rid, draft, run_id):
         self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
 

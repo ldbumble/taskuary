@@ -115,6 +115,11 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(any(b.startswith('CODER REPORT') for b in bodies))
         pend = s.list_reviews('pending')
         self.assertEqual((len(pend), pend[0]['Kind']), (1, 'escalation'))
+        self.assertIn('run failed: claude not found', pend[0]['Reason'])
+        # a second failed run UPDATES the escalation instead of stacking a new one
+        with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'error', 'result': None}):
+            run_coding_task(s, tid, 'o', None, {})
+        self.assertEqual(len(s.list_reviews('pending')), 1)
 
     def test_cli_json_parse(self):
         self.assertEqual(parse_cli_json('{"result": "OK", "session_id": "abc"}'), ('OK', 'abc'))

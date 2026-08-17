@@ -97,9 +97,9 @@ _started = datetime.now().isoformat(sep=' ', timespec='seconds')
 def version(): return {'version': _ver, 'started': _started}
 
 @app.get('/api/feed')
-def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None):
+def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None):
     days = int(store.get_settings().get('feed_days', 14))
-    return {'data': store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0))}
+    return {'data': store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)}
 
 
 @app.get('/api/tasks')

@@ -4,7 +4,7 @@
 // itself every 30s so new mail animates in while the tab is open.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, Link, TextField, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, Link, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -61,6 +61,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
   const [channel, setChannel] = useState("");        // "" all | email | teams | slack | report
+  const [mailbox, setMailbox] = useState("");        // "" all | one mailbox (shows when several are connected)
+  const [mailboxes, setMailboxes] = useState([]);
   const [noMore, setNoMore] = useState(false);
   const [open, setOpen] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -72,7 +74,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const endRef = useRef(null);
 
   const fparams = useCallback(() => ({ ...(view === "pending" ? { pending_only: true } : {}),
-    ...(channel ? { channel } : {}) }), [view, channel]);
+    ...(channel ? { channel } : {}),
+    ...(channel === "email" && mailbox ? { source: mailbox } : {}) }), [view, channel, mailbox]);
+
+  // which mailboxes exist (the picker only appears when there is more than one)
+  useEffect(() => {
+    api.get("/api/sources").then(({ data }) =>
+      setMailboxes((data.data || []).filter((s) => s.Channel === "email" && s.Active).map((s) => s.Address)))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { if (channel !== "email") setMailbox(""); }, [channel]);
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
   // refresh never shrinks the list under the user.
@@ -186,6 +197,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
         <Box sx={{ ...card, px: 1.5, py: 1, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
           <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
           <FilterPills options={CHANNEL_FILTERS} value={channel} onChange={setChannel} />
+          {channel === "email" && mailboxes.length > 1 && (
+            <Select size="small" value={mailbox} displayEmpty onChange={(e) => setMailbox(e.target.value)}
+              sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: mailbox ? "#e8f1fa" : "#fff", height: 26,
+                color: mailbox ? "#0F6CBD" : DIM,
+                "& .MuiSelect-select": { py: 0.3, px: 1.25 },
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: mailbox ? "#c4dcf2" : BORDER } }}>
+              <MenuItem value="" sx={{ fontSize: 12 }}>all mailboxes</MenuItem>
+              {mailboxes.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>{m}</MenuItem>)}
+            </Select>
+          )}
           <Box sx={{ width: "1px", alignSelf: "stretch", bgcolor: BORDER, my: 0.25 }} />
           <Button size="small" variant="contained" disableElevation disabled={syncing} onClick={() => syncNow(false)}
             startIcon={syncing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}

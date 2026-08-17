@@ -274,7 +274,7 @@ class SQLiteStore:
                    (name, content, actor, _now(), content, actor, _now()))
 
     # feed
-    def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0):
+    def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId,
                        t.Title, t.Status TaskStatus, t.Priority,
@@ -289,6 +289,7 @@ class SQLiteStore:
         if pending_only:
             q += " AND (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1)='pending'"
         if channel: q += ' AND m.Channel=?'; p.append(channel)
+        if source: q += ' AND m.SourceName=?'; p.append(source)   # e.g. one mailbox of several
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
         return self._rows(q, p)
 

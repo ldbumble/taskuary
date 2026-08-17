@@ -38,6 +38,38 @@ m3 = s.add_message({'TaskId': None, 'ExternalId': 'demo3', 'ConversationId': 're
     'SentAt': t(7, 45), 'BodyText': '{"facility": "Lakeview", "census": 112}\n{"facility": "Riverside", "census": 98}\n{"facility": "Oak Grove", "census": 87}\n{"facility": "Summit", "census": 64}', 'Status': 'filed'})
 s.add_route(m3, None, 'file', None, 'scheduled report', [], 'report')
 
+# 3b. Teams chat auto-answered - teal "auto" chip + purple channel bar
+tid4 = s.create_task({'Title': 'Standup moved to 10:30?', 'Kind': 'reply', 'Status': 'done', 'Source': 'teams'}, 'router')
+m6 = s.add_message({'TaskId': tid4, 'ExternalId': 'demo6', 'Channel': 'teams', 'SourceName': 'Ops chat',
+    'Subject': 'Priya Nair in Ops chat', 'FromName': 'Priya Nair', 'FromEmail': 'priya.nair@example.com',
+    'SentAt': t(1, 5), 'BodyText': 'Is standup moving to 10:30 today because of the vendor call?', 'Status': 'routed'})
+s.add_route(m6, tid4, 'create', None, 'reply-only question', [], 'router')
+s.add_review({'TaskId': tid4, 'MessageId': m6, 'Kind': 'auto', 'Status': 'auto',
+    'DraftText': 'Yes - 10:30 today only, back to 9:45 tomorrow.', 'FinalText': 'Yes - 10:30 today only, back to 9:45 tomorrow.'})
+
+# 3c. Slack deploy notification, filed
+m7 = s.add_message({'TaskId': None, 'ExternalId': 'demo7', 'Channel': 'slack', 'SourceName': '#deploys',
+    'Subject': 'deploy 2026.8.17-2 finished', 'FromName': 'deploybot',
+    'SentAt': t(2, 40), 'BodyText': 'api v2026.8.17-2 deployed to prod - 0 errors, p95 142ms.', 'Status': 'filed'})
+s.add_route(m7, None, 'file', None, 'automated notification', [], 'router')
+
+# 3d. coding task escalated - the amber waiting-on-you dot
+tid5 = s.create_task({'Title': 'PTO import for the 7/26-8/8 payroll period', 'Kind': 'coding',
+    'Status': 'in_progress', 'Source': 'email', 'Assignee': 'agent:coder'}, 'router')
+m8 = s.add_message({'TaskId': tid5, 'ExternalId': 'demo8', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
+    'Subject': 'PTO import - check date 8/17', 'FromName': 'Chana Levine', 'FromEmail': 'chana.levine@example.com',
+    'SentAt': t(4, 55), 'BodyText': 'Please run the PTO import for the 7/26-8/8 pay period, check date 8/17.', 'Status': 'routed'})
+s.add_route(m8, tid5, 'create', None, 'asks the owner to do something', [], 'router')
+s.add_review({'TaskId': tid5, 'MessageId': m8, 'Kind': 'escalation', 'Status': 'pending',
+    'Reason': 'coder needs you: confirm reconciliation=True before the import writes payroll data'})
+
+# 3e. routed, queued for the coder - indigo
+tid6 = s.create_task({'Title': 'Update the on-call rotation page', 'Kind': 'coding', 'Status': 'open', 'Source': 'email'}, 'router')
+m9 = s.add_message({'TaskId': tid6, 'ExternalId': 'demo9', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
+    'Subject': 'On-call rotation page is stale', 'FromName': 'IT Helpdesk', 'FromEmail': 'helpdesk@example.com',
+    'SentAt': t(5, 30), 'BodyText': 'The on-call page still shows July - can it pull from the schedule automatically?', 'Status': 'routed'})
+s.add_route(m9, tid6, 'create', None, 'asks the owner to do something', [], 'router')
+
 # 4. fyi newsletter, filed
 m4 = s.add_message({'TaskId': None, 'ExternalId': 'demo4', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
     'Subject': 'Weekly platform digest', 'FromName': 'Platform Updates', 'FromEmail': 'no-reply@vendor.example.com',

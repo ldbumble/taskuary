@@ -199,8 +199,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <FilterPills options={CHANNEL_FILTERS} value={channel} onChange={setChannel} />
           {channel === "email" && mailboxes.length > 1 && (
             <Select size="small" value={mailbox} displayEmpty onChange={(e) => setMailbox(e.target.value)}
+              renderValue={(v) => (v ? v.split("@")[0] : "all mailboxes")}
               sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: mailbox ? "#e8f1fa" : "#fff", height: 26,
-                color: mailbox ? "#0F6CBD" : DIM,
+                color: mailbox ? "#0F6CBD" : DIM, maxWidth: 150,
                 "& .MuiSelect-select": { py: 0.3, px: 1.25 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: mailbox ? "#c4dcf2" : BORDER } }}>
               <MenuItem value="" sx={{ fontSize: 12 }}>all mailboxes</MenuItem>
@@ -211,11 +212,14 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <Button size="small" variant="contained" disableElevation disabled={syncing} onClick={() => syncNow(false)}
             startIcon={syncing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
             sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing ? "Updating…" : "Sync now"}</Button>
-          <Typography variant="caption" sx={{ color: FAINT }}>
-            {lastSync
-              ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-              : "auto-syncs every 10 min"}
-          </Typography>
+          {/* the sync caption yields its space to the mailbox picker so the row never wraps */}
+          {!(channel === "email" && mailboxes.length > 1) && (
+            <Typography variant="caption" sx={{ color: FAINT }}>
+              {lastSync
+                ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+                : "auto-syncs every 10 min"}
+            </Typography>
+          )}
           <Box sx={{ flex: 1 }} />
           {rows && stats.map((s, i) => (
             <Box key={s.label} onClick={() => s.f && setView(s.f)}

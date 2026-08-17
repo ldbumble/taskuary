@@ -1,6 +1,6 @@
 # Taskuary
 
-**Automate Your Work.** *(formerly TaskHub — everything streams into one estuary.)*
+**Automate Your Work.**
 
 Task-driven agent work over your **existing systems** — fully local, nothing assumed,
 bring your own AI CLI.

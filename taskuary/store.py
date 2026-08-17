@@ -87,6 +87,12 @@ class SQLiteStore:
                 if f.exists():
                     self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',
                                     (name, f.read_text(encoding='utf-8'), 'template', _now()))
+            # data heal: dbs written before review dedupe can hold stacked pending reviews
+            # of the same kind on one task - keep the newest, supersede the rest
+            self.cx.execute("""UPDATE review SET Status='superseded'
+                               WHERE Status='pending' AND ReviewId NOT IN (
+                                   SELECT MAX(ReviewId) FROM review WHERE Status='pending'
+                                   GROUP BY TaskId, Kind)""")
             self.cx.commit()
 
     def _rows(self, q, p=()):

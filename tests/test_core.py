@@ -139,6 +139,21 @@ class CoreTests(unittest.TestCase):
         s.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': 'late'})
         self.assertEqual(s.list_reviews('pending'), [])
 
+    def test_startup_heals_stacked_pending_reviews(self):
+        import tempfile, os
+        from taskuary.store import SQLiteStore
+        path = os.path.join(tempfile.mkdtemp(), 'heal.db')
+        s = SQLiteStore(path)
+        tid = s.create_task({'Title': 't'}, 'o')
+        for i in range(3):
+            s.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': f'r{i}'})
+        s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'd'})
+        s2 = SQLiteStore(path)   # reopen = restart
+        pend = s2.list_reviews('pending')
+        self.assertEqual(len(pend), 2)   # newest escalation + the draft survive
+        self.assertEqual({p['Kind'] for p in pend}, {'escalation', 'draft'})
+        self.assertEqual(next(p['Reason'] for p in pend if p['Kind'] == 'escalation'), 'r2')
+
     def test_audit_chain_verifies(self):
         s = MemoryStore()
         s.audit('task', 1, 'create', 'u'); s.audit('task', 1, 'edit', 'u')

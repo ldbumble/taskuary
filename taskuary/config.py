@@ -23,8 +23,11 @@ def load() -> dict:
     cfg.setdefault('server', {})
     cfg['server'].setdefault('host', '127.0.0.1')
     cfg['server'].setdefault('port', 7787)
-    cfg.setdefault('agents', {'coder': {'cmd': 'claude', 'args': ['-p', '--output-format', 'json'],
-                                        'resume_args': ['--resume'], 'timeout': 1200}})
+    # --dangerously-skip-permissions matters: without it a headless claude waits forever
+    # for permission approvals nobody can click
+    cfg.setdefault('agents', {'coder': {'cmd': 'claude',
+                                        'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'json'],
+                                        'resume_args': ['--resume'], 'timeout': 1500}})
     cfg.setdefault('github', {})
     return cfg
 

@@ -114,7 +114,9 @@ class SQLiteStore:
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
     def list_tasks(self, status=None):
         q = '''SELECT t.*, (SELECT Status FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
-                      (SELECT Kind FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewKind FROM task t'''
+                      (SELECT Kind FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewKind,
+                      (SELECT Status FROM run r2 WHERE r2.TaskId=t.TaskId ORDER BY RunId DESC LIMIT 1) RunStatus,
+                      (SELECT AgentName FROM run r2 WHERE r2.TaskId=t.TaskId ORDER BY RunId DESC LIMIT 1) RunAgent FROM task t'''
         return self._rows(q + (' WHERE Status=?' if status else '') + ' ORDER BY TaskId DESC', (status,) if status else ())
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',

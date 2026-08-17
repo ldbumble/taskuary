@@ -12,7 +12,7 @@ import { ACTION_COLORS, TASK_STATUS_COLORS, mono, DIM, FAINT, ACCENT2, PANEL2 } 
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
-const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#0e7490", slack: "#611f69", ai: "#b45309" };
+export const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#0e7490", slack: "#611f69", ai: "#b45309" };
 export const ChannelIcon = ({ channel, sx }) => {
   const Icon = channel === "teams" ? GroupsIcon : channel === "github" ? GitHubIcon
     : channel === "report" ? AssessmentIcon : channel === "email" ? MailOutlineIcon

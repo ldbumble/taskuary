@@ -1,235 +1,131 @@
 # Taskuary
 
-**Automate Your Work.**
+**The operating system for automating your work.**
 
-Task-driven agent work over your **existing systems** — fully local, nothing assumed,
-bring your own AI CLI.
+Everything that lands on you — email, chat, scheduled reports, GitHub — flows into one
+funnel. AI triages it, your coding agents work it, and nothing ships without your
+approval. Fully local: your data, your keys, and your agents stay on your machine.
 
 ![The Taskuary timeline: every inbound item on a day rail, with the AI-drafted reply ready to approve](docs/screenshot-timeline.png)
 
-Everything inbound lands in one funnel. Real work becomes tasks on a kanban board.
-Coding agents (Claude Code, Codex, or any CLI you configure) pick tasks up, work them in
-your repos, show you the **diff**, and stay **resumable** — message an agent mid-task and
-it continues the same session. You review; nothing sends or ships without you.
+- **Everything in, one timeline.** Mail, Teams, Slack, and scheduled reports land on one
+  day-rail feed. AI triage decides what is a real task, what just needs a reply, and
+  what is noise. No AI connected yet? Nothing is lost — items file quietly until you add one.
+- **Agents do the work.** Point Taskuary at the coding CLI you already use — Claude
+  Code, Codex, Gemini, Cursor, Copilot — and tasks flow to it: it works in your repos,
+  reports back with the diff, and you can message it mid-task (it resumes its session).
+- **You stay in charge.** AI-drafted replies wait for your approve / edit / reject. A
+  kanban board shows every agent's live status. Deterministic policy rules the AI can
+  never override, and a tamper-evident audit log of everything.
 
-```
+## Get started
+
+```bash
 pip install git+https://github.com/ldbumble/taskuary
-taskuary            # web app on http://127.0.0.1:7787, opens in your browser
+taskuary        # opens http://127.0.0.1:7787
 ```
 
-## Getting started
+Python 3.10+ is the only requirement. Then open **Connectors** and click through the
+wizards — each one takes a minute or two:
 
-**Prerequisites:** Python 3.10+ and `git`. That's it — the store is SQLite, no services
-to stand up. Optional: a local [AI CLI](#bring-your-own-agent) like Claude Code for agent
-runs; Microsoft's ODBC driver (preinstalled on most Windows machines) for SQL Server
-reports.
+1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI key. This turns on triage.
+2. **A channel** — Outlook, Teams, or Slack, so inbound lands on your Timeline.
+3. **A coding agent** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot),
+   Save, Test. Add GitHub (paste a PAT — repos auto-discovered) for the full
+   issue → work → report → close loop.
+4. Then build **Reports**: connect SQL Server once (or use MCP / SQLite / REST / RSS)
+   and schedule queries with an AI prompt that summarizes the results onto your Timeline.
 
-### 1. Install & run (web app)
+Prefer a desktop app? `pip install "taskuary[desktop] @ git+https://github.com/ldbumble/taskuary"`
+then `taskuary-desktop` — the same UI in a native window. A prebuilt single-file
+`Taskuary.exe` is attached to every CI run.
 
-```bash
-git clone https://github.com/ldbumble/taskuary
-cd taskuary
-pip install -e .[mssql]     # [mssql] adds pyodbc for SQL Server connections
-taskuary                    # http://127.0.0.1:7787 opens in your browser
-```
+## The workspace
 
-All data lives in `~/.taskuary/` (override with the `TASKUARY_HOME` env var): `taskuary.db`
-is the SQLite store, `config.toml` holds server/agent config. An existing `~/.taskhub`
-dir from the old name is migrated automatically. CLI flags: `--port`, `--no-browser`.
-
-### 2. Or run it as a desktop app
-
-```bash
-pip install -e .[mssql,desktop]   # [desktop] adds pywebview (Edge WebView2 window)
-taskuary-desktop                  # same UI, native window, random free port
-```
-
-Flags: `--port 7787` to pin the port, `--server-only` to run headless, `--debug` for
-verbose console logging. Every run also writes a DEBUG log to `~/.taskuary/taskuary.log`. Without pywebview installed it falls back to opening your browser.
-
-### 3. Or build the single-file executable
-
-```bash
-pip install -e .[mssql,desktop,build]   # [build] adds PyInstaller
-pyinstaller taskuary.spec
-dist/Taskuary.exe                       # server + UI + pyodbc in one file, no Python needed
-```
-
-Every push also builds this on CI — grab `Taskuary-windows-exe` from the Actions
-artifacts if you don't want to build locally.
-
-### 4. The workspace — seven tabs, everything in the UI
-
-- **Timeline** — every inbound item on a day-grouped rail: who/where, what the hub did
-  with it, current state. Hover a row for the gist, click for the full review canvas
-  (message, coder report, code diff, history, decide inline).
-- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Drag
-  cards between columns; "New task for the agent" sends work straight to the coder.
-- **Tasks** — dense two-pane list + full story: messages with routing decisions, agent
-  runs with traces and diffs, dispatch any agent, message the working agent (it resumes
-  its session), status/priority, "Not a task" (which teaches the funnel).
+- **Timeline** — every inbound item on a day-grouped rail: who/where, what Taskuary did
+  with it, current state. Filter by state (everything / needs me) and channel
+  independently. Click a row for the full review canvas — message, agent report, code
+  diff, history — and decide inline.
+- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done, each card
+  showing the live agent-run status. Drag between columns; click a card for the full
+  story; "New task for the agent" sends work straight to your coder.
+- **Tasks** — the dense two-pane view: messages with routing decisions, agent runs with
+  prompts, traces and diffs, dispatch any agent, message the working agent, "Not a task"
+  (which teaches the funnel).
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
-  Draft-with-AI redrafting. Escalations carry no draft by design.
-- **Connectors** — a searchable, grouped catalog (like Settings), every connector with
-  a step-by-step **setup wizard** (Credentials → Test → Sources → Enable):
-  **AI — agents & models** (your AI CLIs — claude/codex/gemini — plus Anthropic API,
-  OpenAI API, and Azure OpenAI keys that wire straight into intent triage),
-  **Messaging** (Outlook mail, Microsoft Teams, Slack — inbound lands on the Timeline
-  through triage), **Developer** (GitHub — paste a PAT and repos are auto-discovered,
-  feeding the Board's repo picker, the coder's issue loop, and the SOUL.md repo map),
-  and **Local & data connectors** — Microsoft SQL Server is connect-once (Windows auth
-  out of the box), then scheduled reports reference it: a query plus an optional **AI
-  summary prompt**, so the model reads the rows and writes what lands on the Timeline.
-  MCP / SQLite / REST / RSS reports take AI prompts too, with Test/Preview/Run now.
-  Secrets are write-only; every card shows live health.
-- **Docs** — the operator documents: SOUL.md / CODER.md / DIGEST.md, editable in place.
-  They ship as anonymized templates (John Smith) and **maintain themselves**: adding a
-  connector updates SOUL.md's "Connected systems" block, and GitHub discovery writes the
-  repository map (your hand-written notes are preserved).
-- **Settings** — Stripe-style: Configuration knobs (grouped, with help), Routing
-  policies (deterministic rules the AI can never override), Agent memory (learned
-  standing notes), Agents (bring your own CLI), Audit integrity (verify the hash chain).
-  The search box reaches everything, help text included.
-
-No config files required; the UI persists everything (agents land in
-`~/.taskuary/config.toml`, which you can still hand-edit).
-
-### 5. Run the tests
-
-```bash
-pip install -e .[dev]
-pytest -q                   # 58 tests, ~1s, no network or SQL Server needed
-```
-
-CI (`.github/workflows/ci.yml`) runs the suite on Windows + Linux, Python 3.10 and 3.12,
-plus the exe build, on every push and PR.
-
-## Why
-
-Your work already lives in systems — email, chat, databases, GitHub, dashboards. You
-don't need another place to *put* work; you need one place where work **arrives, gets
-triaged, gets done by agents, and gets reviewed by you**. Taskuary is that funnel:
-
-```
-anything in  →  one funnel  →  AI triage (task / reply-only / FYI)  →  agents + you
-```
-
-Triage is **AI-gated**: with no active AI connector, inbound is filed on the Timeline
-(visible, nothing lost) instead of heuristics spraying tasks for every automated
-notification. Connect an AI (Connectors → AI) and classification turns on.
-
-- **Board** — Queued / Agent working / Waiting on you / Done. Click a card to see the
-  thread, the diff, and message the agent.
-- **Agents are teammates** — resumable CLI sessions: reply to an agent on its task and it
-  picks up exactly where it left off. Every run records the exact prompt, a trace, and
-  the git diff of what it changed.
-- **Timeline feed** — every inbound item, one clean row, with its routing decision
-  (`GET /api/feed`; a dedicated UI view is on the roadmap).
-- **Operator documents** — `soul` (what is a task, how to respond) and `coder` (what an
-  agent may do alone vs. must escalate): plain markdown injected into every run, editable
-  via `GET/PUT /api/doc/{name}`. The agent's constitution is yours to edit.
-- **Deterministic guardrails** — policy rules (ignore / escalate / auto-answer) that no
-  model confidence can override, a learned-memory layer fed by your verdicts, and a
-  hash-chained audit log (`GET /api/audit/verify` proves it's untampered).
-- **Local first** — SQLite in `~/.taskuary`, server bound to 127.0.0.1. For LAN use, set
-  `[server].token` in config and send it as the `X-Taskuary-Token` header. Your data and
-  your agent sessions never leave the machine unless you point them somewhere.
+  Draft-with-AI. Nothing sends without you.
+- **Reports** — the pipeline builder: source → query → optional AI summary → Timeline,
+  on a schedule, with a full-pipeline Preview before you save.
+- **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
+  models and CLI agents, messaging channels, GitHub, SQL Server.
+- **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
+  rules injected into every agent run. They ship as templates and maintain themselves —
+  connectors and discovered repos write themselves in.
+- **Settings** — triage knobs with plain-English help, deterministic routing policies,
+  the agent's learned memory, and one-click audit-chain verification.
 
 ## Bring your own agent
 
-Any CLI that reads a prompt on stdin works — `claude`, `codex`, `gemini`, your own
-wrapper. Add it in **Settings → Agents**, no config files:
-
-| field | what it does |
-|-------|--------------|
-| cmd | the CLI to run, e.g. `claude` |
-| args | flags for a headless run, e.g. `-p --output-format json` |
-| resume args | e.g. `--resume` — enables message-the-agent session continuity |
-| timeout | max seconds per run |
-| repo → dir map | which local checkout the agent works in per repo |
-
-Claude Code's JSON output (`result`, `session_id`) is parsed natively; plain-text CLIs
-work too (you lose resumability, keep everything else).
+Any CLI that reads a prompt on stdin works. The presets ship the right headless flags —
+the important one being the auto-approve flag (`--dangerously-skip-permissions`,
+`--full-auto`, `--yolo`, …): without it a headless agent hangs waiting for an approval
+click that never comes. The built-in **Test** runs one tiny prompt through your CLI to
+prove the wiring before it goes live. Claude Code's JSON output is parsed natively,
+which enables resumable message-the-agent sessions; plain-text CLIs work too.
 
 ## Integrations
 
-**Channels** (Connectors tab) ingest work INTO the funnel: Outlook mailboxes and Teams
-chats through an Azure app (blank credentials fall back to `AZURE_TENANT_ID` /
-`AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` env vars), GitHub through a fine-grained PAT
-with automatic repo discovery. Each card has a live **Test** and a step-by-step setup
-guide.
-
-**Report connections** pull FROM systems on a schedule; results land on the timeline
-feed as informational rows (never tasks). Pick a type, fill the form, **Test
-connection**, **Preview**, save. Every connection takes `title` plus a schedule
-(`every_minutes` or `daily_at`).
-
-| type            | status      | config keys                          |
-|-----------------|-------------|--------------------------------------|
-| `mssql`         | ✅ built-in | `server`, `database`, `auth` (windows/sql), `username`, `password`, `driver` (auto-picks newest installed), `query` — local SQL Server via Windows auth works out of the box; needs `pip install taskuary[mssql]` for pyodbc |
-| `mcp`           | ✅ built-in | `cmd`, `args`, `tool`, `tool_args`, `env` — **any MCP server is a connector**: Taskuary speaks stdio JSON-RPC, lists the server's tools (Test connection), calls one on schedule |
-| `sqlite`        | ✅ built-in | `db`, `query`                        |
-| `rest`          | ✅ built-in | `url`, `headers`, `path`             |
-| `rss`           | ✅ built-in | `url`                                |
-| `postgres`      | 🗺 planned  |                                      |
-| `mysql`         | 🗺 planned  |                                      |
-| `snowflake`     | 🗺 planned  |                                      |
-| `sharepoint_list` | 🗺 planned |                                     |
-| `google_sheets` | 🗺 planned  |                                      |
-| `s3_object`     | 🗺 planned  |                                      |
-| `graphql`       | 🗺 planned  |                                      |
-| `smb_file`      | 🗺 planned  |                                      |
-| `prometheus`    | 🗺 planned  |                                      |
-| `jira`          | 🗺 planned  |                                      |
-
-Executors are ~15-line functions in `taskuary/reports.py` — `(config) -> (headline,
-summary)`. PRs welcome; a planned type is one function away from ✅. (Planned types fail
-loudly on the feed instead of silently doing nothing — a misconfig is always visible.)
+| type | status | notes |
+|------|--------|-------|
+| `outlook` / `teams` / `slack` | ✅ | inbound channels → Timeline through AI triage |
+| `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md |
+| `anthropic` / `openai` / `azure_openai` | ✅ | AI for triage + report summaries |
+| `mssql` | ✅ | connect once; build AI-summarized reports on the Reports tab |
+| `mcp` | ✅ | any MCP server's tool as a scheduled report |
+| `sqlite` / `rest` / `rss` | ✅ | scheduled reports, AI summaries optional |
+| `postgres` `mysql` `snowflake` `sharepoint_list` `google_sheets` `s3_object` `graphql` `smb_file` `prometheus` `jira` | 🗺 planned | one ~15-line executor away — PRs welcome |
 
 Anything can also **push** items in: `POST /api/ingest/push` with
-`{subject, body, from_email, channel}` — cron jobs, webhooks, other apps. The full HTTP
-API is browsable at `/api/docs` (OpenAPI) while the server runs.
+`{subject, body, from_email, channel}` — cron jobs, webhooks, other apps. The full API is
+browsable at `/api/docs` while the server runs.
 
-## GitHub loop (optional)
+## Development
 
-Set `[github].token` (a fine-grained PAT) and `default_repo` in config, and coding tasks
-open an issue first (the issue body is the working prompt), the agent works it, and
-closing the task closes the issue with the report. Diffs from the run are attached
-either way.
+```bash
+git clone https://github.com/ldbumble/taskuary && cd taskuary
+pip install -e .[dev,mssql,desktop]
+taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
+
+pytest -q                   # 58 tests, ~1s, no network needed
+
+cd website                  # the React UI (React 18 + MUI, Vite)
+npm install
+npm run dev                 # dev server, proxies /api to a running taskuary on :7787
+npm run build               # emits taskuary/web/ (committed - pip installs need no node)
+
+pip install -e .[build]
+pyinstaller taskuary.spec   # dist/Taskuary.exe - single-file desktop build
+```
+
+Data lives in `~/.taskuary/` (override with `TASKUARY_HOME`): `taskuary.db` (SQLite),
+`config.toml`, `taskuary.log`. For LAN use set `[server].token` in config and send it as
+the `X-Taskuary-Token` header. CI runs the test matrix on Windows / Linux / macOS ×
+py3.10 / 3.12 plus the web and exe builds on every push.
 
 ## Status / roadmap
 
-Early (v0.1.0). The engine (store, triage, policies, agents, sessions, diffs, reports,
-audit), the HTTP API, and the full React workspace (7 tabs) are here.
+Early (v0.1.0) and moving fast.
 
-- [x] Full React UI — Timeline · Board (drag-and-drop) · Tasks · Review · Connectors · Docs · Settings
-- [x] Settings all point-and-click: config knobs, routing policies, agent memory, agents, audit
-- [x] Desktop app (`taskuary-desktop`, single-exe PyInstaller build)
-- [x] Connectors catalog with per-connector setup wizards + search
-- [x] Channel connectors: Outlook mail · Microsoft Teams · Slack · GitHub (PAT → auto repo discovery)
-- [x] Cloud AI connectors (Anthropic / OpenAI / Azure OpenAI) wired into intent triage
-- [x] Self-maintaining operator docs (templates + connector sync + repo map)
-- [x] Microsoft SQL Server + MCP report connectors
-- [x] Test suite + CI (Windows/Linux/macOS, py3.10/3.12, web + exe builds)
-- [ ] Git worktree isolation per task attempt (vibe-kanban-style)
+- [x] AI-gated triage, review queue, resumable agent sessions, hash-chained audit
+- [x] Reports tab: source → query → AI summary → Timeline pipelines
+- [x] Connectors catalog with setup wizards: channels, AI, GitHub, SQL Server
+- [x] Agent presets (Claude Code, Codex, Gemini, Cursor, Copilot) with one-click Test
+- [x] Desktop app + single-file Windows exe
+- [ ] Git worktree isolation per task attempt
+- [ ] More ingest channels and report connectors (table above)
 - [ ] Tray + notifications for the desktop shell
-- [ ] More ingest channels (IMAP, Slack)
-- [ ] More report executors (table above)
-
-## Developing the UI
-
-The web app is React + MUI in `website/` and builds into the Python package — node is a
-build-time dependency only:
-
-```bash
-cd website
-npm install
-npm run dev      # Vite dev server, proxies /api to a running `taskuary` on :7787
-npm run build    # emits taskuary/web/ (committed, so pip installs need no node)
-```
 
 ## Credits
 
 Patterns borrowed with gratitude from **Buzz** (hash-chained audit), **Macro** (unified
-memory / augment-don't-replace), and **vibe-kanban** (local-server app model, agents in
-worktrees). MIT licensed.
+memory), and **vibe-kanban** (local-server app model, agents in worktrees). MIT licensed.

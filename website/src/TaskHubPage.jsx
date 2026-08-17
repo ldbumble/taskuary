@@ -12,10 +12,11 @@ import BoardView from "./BoardView.jsx";
 import TasksView from "./TasksView.jsx";
 import ReviewView from "./ReviewView.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
+import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 
-const TABS = ["Timeline", "Board", "Tasks", "Review", "Connectors", "Docs", "Settings"];
+const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
 
 export default function TaskHubPage() {
   const [tab, setTab] = useState("Timeline");
@@ -73,6 +74,7 @@ export default function TaskHubPage() {
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
           {tab === "Tasks" && <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask} onChanged={refreshPending} />}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
+          {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
           {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}
           {tab === "Docs" && <DocsView key={`d${tick}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}`} />}

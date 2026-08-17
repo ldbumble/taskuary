@@ -5,7 +5,26 @@ import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } fro
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
-import { Crumb, Empty } from "./ui.jsx";
+import { Crumb, Empty, LandingCard } from "./ui.jsx";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import BoltIcon from "@mui/icons-material/Bolt";
+
+// One-click presets: pick your CLI, Save, Test - done. Taskuary pipes the prompt on
+// STDIN; --yolo / --full-auto / --dangerously-skip-permissions style flags matter,
+// because a headless run has nobody to click "approve".
+const PRESETS = [
+  { name: "coder", label: "Claude Code", cmd: "claude",
+    args: ["-p", "--dangerously-skip-permissions", "--output-format", "json"], resume: "--resume", timeout: 1500,
+    desc: "Recommended - JSON output gives resumable sessions (message the agent mid-task)." },
+  { name: "codex", label: "Codex CLI", cmd: "codex", args: ["exec", "--full-auto"], resume: "", timeout: 1500,
+    desc: "OpenAI Codex CLI, non-interactive full-auto mode." },
+  { name: "gemini", label: "Gemini CLI", cmd: "gemini", args: ["--yolo"], resume: "", timeout: 1500,
+    desc: "Google Gemini CLI - --yolo auto-approves tool use." },
+  { name: "cursor", label: "Cursor CLI", cmd: "cursor-agent", args: ["-p", "--force", "--output-format", "text"], resume: "", timeout: 1500,
+    desc: "Cursor's cursor-agent in headless print mode." },
+  { name: "copilot", label: "Copilot CLI", cmd: "copilot", args: ["-p", "--allow-all-tools"], resume: "", timeout: 1500,
+    desc: "GitHub Copilot CLI - some versions want the prompt as an argument; run Test to verify." },
+];
 
 const NEWLINE = String.fromCharCode(10);
 const ARGS_PH = ['-p', '--dangerously-skip-permissions', '--output-format', 'json'].join(NEWLINE);
@@ -41,6 +60,16 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     catch (e) { setErr(e?.response?.data?.detail || "save failed"); }
   };
   const del = async (name) => { await api.delete(`/api/agents/${encodeURIComponent(name)}`); load(); };
+  const [tests, setTests] = useState({});
+  const runTest = async (name) => {
+    setTests((t) => ({ ...t, [name]: { busy: true } }));
+    try {
+      const { data } = await api.post(`/api/agents/${encodeURIComponent(name)}/test`);
+      setTests((t) => ({ ...t, [name]: data }));
+    } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: e?.response?.data?.detail || "test failed" } })); }
+  };
+  const usePreset = (pr) => setDraft({ name: pr.name, cmd: pr.cmd, args: pr.args.join(NEWLINE),
+    resume: pr.resume, timeout: pr.timeout, cwd: "", cwdMap: "" });
 
   if (!agents) return <CircularProgress size={22} sx={{ m: 4 }} />;
   return (
@@ -55,20 +84,39 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
         <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
           onClick={() => setDraft({ ...BLANK_AGENT })}>Add agent</Button>
       </Box>
-      {!Object.keys(agents).length && <Empty>No agents yet — add your CLI below.</Empty>}
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2.5, mb: 3 }}>
+        {PRESETS.map((pr) => (
+          <LandingCard key={pr.name} title={pr.label} desc={pr.desc}
+            icon={<SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />} onOpen={() => usePreset(pr)} />
+        ))}
+      </Box>
+      {!Object.keys(agents).length && <Empty>No agents yet — click a preset above, Save, then Test.</Empty>}
       {Object.entries(agents).map(([name, a]) => (
         <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}` }}>
           <Chip size="small" label={name} sx={{ bgcolor: "#eef0ff", color: "#4f46e5", height: 21, fontSize: 10.5, fontWeight: 700 }} />
           <Typography sx={{ ...mono, color: INK, fontSize: 12.5, flex: 1, minWidth: 0 }} noWrap>
             {a.cmd} {(a.args || []).join(" ")}
           </Typography>
+          {a.cmd === "claude" && !(a.args || []).includes("--dangerously-skip-permissions") && (
+            <Chip size="small" label="will hang headless — add --dangerously-skip-permissions"
+              sx={{ bgcolor: "#fef4e6", color: "#b45309", height: 20, fontSize: 10 }} />
+          )}
           <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
             timeout {a.timeout || 1200}s{a.resume_args ? " · resumable" : ""}
           </Typography>
+          <Button size="small" startIcon={<BoltIcon sx={{ fontSize: 13 }} />} disabled={tests[name]?.busy}
+            onClick={() => runTest(name)}>{tests[name]?.busy ? "Testing…" : "Test"}</Button>
           <Button size="small" onClick={() => edit(name)}>Edit</Button>
           <Button size="small" color="error" onClick={() => del(name)}>Delete</Button>
         </Box>
-      ))}
+      )).flatMap((row, i) => {
+        const name = Object.keys(agents)[i];
+        const t = tests[name];
+        return t && !t.busy ? [row,
+          <Typography key={name + "t"} variant="body2" sx={{ ml: 1, mb: 1, fontWeight: 600, color: t.ok ? "#15803d" : "#b91c1c" }}>
+            {t.ok ? `✓ ${t.result || "responded"}${t.resumable ? " · resumable session detected" : ""}` : `✗ ${t.error}`}
+          </Typography>] : [row];
+      })}
       {draft && (
         <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
           <Typography variant="body2" sx={{ color: "#4f46e5", fontWeight: 700 }}>{agents[draft.name] ? `Edit agent · ${draft.name}` : "New agent"}</Typography>

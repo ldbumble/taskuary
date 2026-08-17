@@ -91,6 +91,12 @@ export default function BoardView({ onOpenTask }) {
                     <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 13 }} />
                     {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />}
+                    {t.RunStatus && (
+                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.RunStatus}`}
+                        sx={{ height: 17, fontSize: 9.5, fontWeight: 700,
+                          bgcolor: t.RunStatus === "running" ? "#fef4e6" : t.RunStatus === "error" ? "#fdecec" : "#e8f6ee",
+                          color: t.RunStatus === "running" ? "#b45309" : t.RunStatus === "error" ? "#b91c1c" : "#15803d" }} />
+                    )}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(t.CreatedAt)}</Typography>
                   </Box>

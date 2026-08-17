@@ -12,15 +12,21 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
-import { ChannelIcon, RefChip, ActionChip, PromptBlock, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, fmtTime12, fmtDateTime, localDay, cleanText } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, PromptBlock, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, fmtTime12, fmtDateTime, localDay, cleanText } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
-const FILTERS = [
+// Two different dimensions, two controls: WHAT STATE it's in (everything vs needs me)
+// and WHICH CHANNEL it came from - they combine (e.g. "needs me" + "email").
+const VIEW_FILTERS = [
   { key: "", label: "everything", c: { bg: "#eef0ff", fg: "#4f46e5", bd: "#c9cff0" } },
   { key: "pending", label: "needs me", c: { bg: "#fef4e6", fg: "#b45309", bd: "#f3ddb8" } },
+];
+const CHANNEL_FILTERS = [
+  { key: "", label: "all channels" },
   { key: "email", label: "email", c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
   { key: "teams", label: "teams", c: { bg: "#efeffa", fg: "#6264A7", bd: "#d4d5ec" } },
+  { key: "slack", label: "slack", c: { bg: "#f3ecf5", fg: "#611f69", bd: "#e0cbe4" } },
   { key: "report", label: "reports", c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
 ];
 
@@ -51,7 +57,8 @@ const PAGE = 100;
 
 export default function FeedView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
-  const [filter, setFilter] = useState("pending");   // default: what needs me, not everything
+  const [view, setView] = useState("");              // "" everything | "pending" needs me
+  const [channel, setChannel] = useState("");        // "" all | email | teams | slack | report
   const [noMore, setNoMore] = useState(false);
   const [open, setOpen] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -62,7 +69,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const busyMore = useRef(false);
   const endRef = useRef(null);
 
-  const fparams = useCallback(() => (filter === "pending" ? { pending_only: true } : filter ? { channel: filter } : {}), [filter]);
+  const fparams = useCallback(() => ({ ...(view === "pending" ? { pending_only: true } : {}),
+    ...(channel ? { channel } : {}) }), [view, channel]);
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
   // refresh never shrinks the list under the user.
@@ -173,11 +181,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
       <Box sx={{ minWidth: 0, maxWidth: 860 }}>
         {/* contained toolbar: segmented filters + sync control + today's stats */}
         <Box sx={{ ...card, px: 1.5, py: 1, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
-          <FilterPills options={FILTERS} value={filter} onChange={setFilter} />
+          <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
+          <FilterPills options={CHANNEL_FILTERS} value={channel} onChange={setChannel} />
           <Box sx={{ width: "1px", alignSelf: "stretch", bgcolor: BORDER, my: 0.25 }} />
           <Button size="small" variant="contained" disableElevation disabled={syncing} onClick={() => syncNow(false)}
             startIcon={syncing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-            sx={{ py: 0.4, fontSize: 11.5 }}>{syncing ? "Updating…" : "Sync now"}</Button>
+            sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing ? "Updating…" : "Sync now"}</Button>
           <Typography variant="caption" sx={{ color: FAINT }}>
             {lastSync
               ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
@@ -185,13 +194,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
           </Typography>
           <Box sx={{ flex: 1 }} />
           {rows && stats.map((s, i) => (
-            <Box key={s.label} onClick={() => s.f && setFilter(s.f)}
+            <Box key={s.label} onClick={() => s.f && setView(s.f)}
               sx={{ display: "flex", alignItems: "baseline", gap: 0.5, px: 1.25,
                 borderLeft: i ? `1px solid ${BORDER}` : "none",
                 cursor: s.f ? "pointer" : "default",
                 "&:hover .thubStatLbl": s.f ? { color: "#4f46e5" } : {} }}>
               <Typography sx={{ ...mono, fontWeight: 700, fontSize: 15,
-                color: s.hot && s.n ? "#b45309" : INK }}>{s.n}</Typography>
+                color: s.hot && s.n ? "#b45309" : s.n ? "#4f46e5" : INK }}>{s.n}</Typography>
               <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
             </Box>
           ))}
@@ -216,13 +225,18 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     <Box sx={{ width: 16, flexShrink: 0, position: "relative" }}>
                       <Box sx={{ position: "absolute", left: 7, top: 0, bottom: 0, width: "2px", bgcolor: BORDER }} />
                       <Box sx={{ position: "absolute", left: 4, top: 20, width: 8, height: 8, borderRadius: "50%",
-                        bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#cbd2dd" : r.ReviewStatus === "pending" ? "#f59e0b" : "#4f46e5",
+                        bgcolor: r.ReviewStatus === "pending" ? "#f59e0b"
+                          : ["ignored", "filed"].includes(r.MsgStatus) ? "#cbd2dd"
+                            : CHANNEL_COLORS[r.Channel] || "#4f46e5",
                         border: `2px solid ${PANEL}` }} />
                     </Box>
                     {/* blurb: uniform one-line card; hover grows it (message gist) and shows the
                       go-arrow; click sends it to the review canvas on the right */}
                     <Box onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
                       sx={{ ...card, ...hoverable, flex: 1, minWidth: 0, py: 0, px: 1.25, my: 0.5, ml: 1, overflow: "hidden",
+                        position: "relative", pl: 1.75,
+                        "&::before": { content: '""', position: "absolute", left: 6, top: 9, bottom: 9, width: "3px",
+                          borderRadius: 99, bgcolor: CHANNEL_COLORS[r.Channel] || "#c9cff0" },
                         transition: "box-shadow .18s, border-color .18s, transform .18s",
                         ...(sel?.MessageId === r.MessageId ? { borderColor: "#4f46e5", boxShadow: "0 3px 12px rgba(79,70,229,.16)", bgcolor: "#fbfbff" } : {}),
                         "&:hover": { borderColor: "#c9cff0", boxShadow: "0 3px 12px rgba(79,70,229,.12)", cursor: "pointer", transform: "translateY(-1px)" },
@@ -230,7 +244,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
                         "&:hover .thubDetailText": { opacity: 1, transform: "none" },
                         "&:hover .thubGo": { opacity: 1, transform: "translateX(0)" } }}>
                       <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", minWidth: 0, height: 40 }}>
-                        <ChannelIcon channel={r.Channel} sx={{ flexShrink: 0 }} />
+                        <Box sx={{ width: 24, height: 24, borderRadius: 1.25, flexShrink: 0, display: "flex",
+                          alignItems: "center", justifyContent: "center",
+                          bgcolor: `${CHANNEL_COLORS[r.Channel] || "#98a1b3"}18` }}>
+                          <ChannelIcon channel={r.Channel} />
+                        </Box>
                         <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, maxWidth: 190, flexShrink: 0 }}>
                           {r.FromName || r.FromEmail || "unknown"}
                         </Typography>

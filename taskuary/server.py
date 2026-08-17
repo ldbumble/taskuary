@@ -341,6 +341,24 @@ def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles."""
     return {'data': store.list_agents(), 'config': cfg.get('agents', {})}
 
+@app.post('/api/agents/{name}/test')
+def agent_test(name: str):
+    """One tiny real run through the configured CLI ('Reply with exactly: ok') - proves
+    the command exists, flags are right, and headless mode doesn't hang on approvals."""
+    prof = cfg.get('agents', {}).get(name)
+    if not prof:
+        a = store.get_agent(name)
+        prof = json.loads(a['Config']) if a and a.get('Config') else None
+    if not prof: raise HTTPException(404, 'agent not found')
+    profile = {**prof, 'timeout': min(int(prof.get('timeout', 120) or 120), 180)}
+    try:
+        out, sid, _ = hub_agents.run_cli(profile, 'Reply with exactly: ok', lambda *a: None)
+        return {'ok': True, 'result': (out or '')[:300], 'resumable': bool(sid)}
+    except FileNotFoundError:
+        return {'ok': False, 'error': f"command not found: {profile.get('cmd')} - is the CLI installed and on PATH?"}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)[:400]}
+
 @app.put('/api/agents/{name}')
 def put_agent(name: str, body: dict):
     if not body.get('cmd'): raise HTTPException(422, 'cmd is required')

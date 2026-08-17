@@ -47,8 +47,13 @@ export default function TasksView({ selected, onSelect, onChanged }) {
 
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
-    try { setDetail((await api.get(`/api/tasks/${id}`)).data); }
-    catch (e) { setErr(e?.response?.data?.detail || "Failed to load task"); }
+    try {
+      const { data } = await api.get(`/api/tasks/${id}`);
+      setDetail(data);
+      // opened a task the current list filter hides (e.g. from the Board)? widen to
+      // "all" so the list and the detail never contradict each other
+      setFilter((f) => (f && data.task.Status !== f ? "" : f));
+    } catch (e) { setErr(e?.response?.data?.detail || "Failed to load task"); }
   }, []);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
@@ -155,6 +160,10 @@ export default function TasksView({ selected, onSelect, onChanged }) {
                   <Select value={t.Priority} onChange={(e) => patch({ Priority: e.target.value })} sx={selSx}>
                     {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
                   </Select>
+                  {t.Status !== "done" && (
+                    <Button size="small" variant="contained" disableElevation sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                      onClick={() => patch({ Status: "done" })}>Mark done — I took care of it</Button>
+                  )}
                   <Button size="small" variant="outlined" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
                     sx={{ color: "#7e22ce", borderColor: "#7e22ce55", bgcolor: PANEL }} onClick={sendToCoder}>Send to coder</Button>
                   <Button size="small" color="error" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 14 }} />}

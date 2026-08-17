@@ -175,6 +175,14 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(rep['close']); self.assertEqual(rep['email_reply'], 'r')
         self.assertFalse(parse_coder_result('no marker')['close'])
 
+    def test_closing_a_task_resolves_its_pending_reviews(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 't'}, 'o')
+        s.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': 'r'})
+        s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'd'})
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        self.assertEqual(s.list_reviews('pending'), [])   # done IS the decision
+
     def test_orphaned_reviews_never_queue(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 't'}, 'u')

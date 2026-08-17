@@ -118,6 +118,11 @@ class SQLiteStore:
         closed = ", ClosedAt='" + _now() + "'" if fields.get('Status') in ('done', 'dropped') else ''
         self._exec(f"UPDATE task SET {','.join(f'{c}=?' for c in cols)}, UpdatedBy=?, UpdatedAt=?{closed} WHERE TaskId=?",
                    [fields[c] for c in cols] + [actor, _now(), task_id])
+        # closing a task IS the decision: its pending reviews (escalations, drafts) resolve
+        # with it instead of haunting the Review queue for a task that's already handled
+        if fields.get('Status') in ('done', 'dropped'):
+            self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
+                       "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
     def list_tasks(self, status=None):
         q = '''SELECT t.*, (SELECT Status FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,

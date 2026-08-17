@@ -50,12 +50,18 @@ def run_rss(cfg):
     return f'{len(titles)} new items', '\n'.join(f'- {t}' for t in titles)[:4000]
 
 
+def run_mcp(cfg):
+    """{"cmd", "args", "tool", "tool_args"} - call any MCP server's tool. See mcp.py."""
+    from .mcp import run_report
+    return run_report(cfg)
+
+
 def _planned(name):
     def _fail(cfg): raise NotImplementedError(f"connector type '{name}' is on the roadmap - not implemented yet")
     return _fail
 
 
-REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'rest': run_rest, 'rss': run_rss,
+REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'mcp': run_mcp, 'rest': run_rest, 'rss': run_rss,
             **{n: _planned(n) for n in PLANNED}}
 
 

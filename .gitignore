@@ -5,6 +5,6 @@ build/
 dist/
 .venv/
 venv/
-.taskhub/
+.taskuary/
 *.db
 .env

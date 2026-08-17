@@ -202,6 +202,9 @@ class SQLiteStore:
             return sid
         return self._insert('source', fields, SOURCE_COLS)
     def touch_source(self, sid): self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+    def get_source(self, sid): return self._one('SELECT * FROM source WHERE SourceId=?', (sid,))
+    def delete_source(self, sid): self._exec('DELETE FROM source WHERE SourceId=?', (sid,))
+    def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))
     def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
     def set_setting(self, name, value, actor):

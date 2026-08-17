@@ -1,6 +1,6 @@
 # Taskuary
 
-**Automate Your Work.**
+**Automate Your Work.** *(formerly TaskHub — renamed; everything streams into one estuary.)*
 
 Buzz/Macro-style, task-driven agent work over your **existing systems** — fully local,
 nothing assumed, bring your own AI CLI.
@@ -13,8 +13,72 @@ You review; nothing sends or ships without you.
 
 ```
 pip install git+https://github.com/ldbumble/taskuary
-taskuary          # starts locally on 127.0.0.1:7787 and opens the app
+taskuary            # web app on 127.0.0.1:7787, opens in your browser
 ```
+
+## Getting started
+
+**Prerequisites:** Python 3.10+ and `git`. That's it — the store is SQLite, no services
+to stand up. (Optional: a local [AI CLI](#bring-your-own-agent) like Claude Code for
+agent runs; Microsoft's ODBC driver — preinstalled on most Windows machines — for SQL
+Server reports.)
+
+### 1. Install & run (web app)
+
+```bash
+git clone https://github.com/ldbumble/taskuary
+cd taskuary
+pip install -e .[mssql]     # [mssql] adds pyodbc for SQL Server connections
+taskuary                    # http://127.0.0.1:7787 opens in your browser
+```
+
+All data lives in `~/.taskuary/` (override with the `TASKUARY_HOME` env var). An existing
+`~/.taskhub` dir from the old name is migrated automatically.
+
+### 2. Or run it as a desktop app
+
+```bash
+pip install -e .[mssql,desktop]   # [desktop] adds pywebview (Edge WebView2 window)
+taskuary-desktop                  # same UI, native window, random free port
+```
+
+Useful flags: `--port 7787` to pin the port, `--server-only` to run headless (service /
+CI smoke tests).
+
+### 3. Or build the single-file executable
+
+```bash
+pip install -e .[mssql,desktop,build]   # [build] adds PyInstaller
+pyinstaller taskuary.spec
+dist/Taskuary.exe                       # server + UI + pyodbc in one file, no Python needed
+```
+
+Every push also builds this on CI — grab `Taskuary-windows-exe` from the Actions
+artifacts if you don't want to build locally.
+
+### 4. Configure — all in the UI
+
+Open **Settings** (top-right):
+
+- **Agents** — point Taskuary at your AI CLI (`claude`, `codex`, a wrapper script...),
+  set args / resume args / timeout and the repo → local checkout map.
+- **Report connections** — add a Microsoft SQL Server query (Windows auth works
+  out of the box for a local instance — just server + database + query), an MCP server
+  tool, a SQLite/REST/RSS pull. **Test connection** and **Preview** before saving.
+- **App settings** — triage thresholds, feed window, auto-draft toggles.
+
+No config files required; the UI persists everything (agents land in
+`~/.taskuary/config.toml`, which you can still hand-edit).
+
+### 5. Run the tests
+
+```bash
+pip install -e .[dev]
+pytest -q                   # 37 tests, ~1s, no network or SQL Server needed
+```
+
+CI (`.github/workflows/ci.yml`) runs the suite on Windows + Linux, Python 3.10 and 3.12,
+plus the exe build, on every push and PR.
 
 ## Why
 
@@ -42,7 +106,9 @@ anything in  →  one timeline  →  triage (task / reply-only / FYI)  →  agen
 
 ## Bring your own agent
 
-Agents are rows in config — any CLI that reads a prompt on stdin works:
+Configure agents entirely in the UI — **Settings → Agents** (cmd, args, resume args,
+timeout, repo → checkout map). Any CLI that reads a prompt on stdin works. The UI writes
+the same config file, so hand-editing still works too:
 
 ```toml
 # ~/.taskuary/config.toml
@@ -64,12 +130,16 @@ work too (you lose resumability, keep everything else).
 Schedule pulls from the systems you already have; results land on the timeline as
 informational rows (never tasks) — headline visible, hover for the summary.
 
+All of it is point-and-click: **Settings → Report connections** — pick a type, fill the
+form, **Test connection**, **Preview**, save. No config files.
+
 | type            | status      | config keys                          |
 |-----------------|-------------|--------------------------------------|
+| `mssql`         | ✅ built-in | `server`, `database`, `auth` (windows/sql), `username`, `password`, `driver`, `query` — local SQL Server via Windows auth works out of the box (`pip install taskuary[mssql]` for pyodbc) |
+| `mcp`           | ✅ built-in | `cmd`, `args`, `tool`, `tool_args` — **any MCP server is a connector**: Taskuary speaks stdio JSON-RPC, lists the server's tools, calls one on schedule |
 | `sqlite`        | ✅ built-in | `db`, `query`                        |
 | `rest`          | ✅ built-in | `url`, `headers`, `path`             |
 | `rss`           | ✅ built-in | `url`                                |
-| `mssql`         | ✅ extra    | `pip install taskuary[mssql]` · `dsn`, `query` |
 | `postgres`      | 🗺 planned  |                                      |
 | `mysql`         | 🗺 planned  |                                      |
 | `snowflake`     | 🗺 planned  |                                      |
@@ -98,9 +168,13 @@ report. Diffs from the run are attached either way.
 Early. The engine (store, triage, policies, agents, sessions, diffs, reports, audit) and
 the HTTP API are here with a minimal built-in web UI. Coming next:
 
-- [ ] Full React UI port (timeline · board · review · docs · settings)
+- [x] Settings UI (agents · report connections · app settings) — all point-and-click
+- [x] Desktop app (`taskuary-desktop`, single-exe PyInstaller build)
+- [x] Microsoft SQL Server + MCP report connectors
+- [x] Test suite + CI (Windows/Linux, py3.10/3.12, exe build)
+- [ ] Full React UI port (timeline · board · review · docs)
 - [ ] Git worktree isolation per task attempt (vibe-kanban-style)
-- [ ] Tauri desktop shell (tray, notifications)
+- [ ] Tray + notifications for the desktop shell
 - [ ] Email/chat ingest plugins (IMAP, Graph, Slack)
 - [ ] More report executors (table above)
 

@@ -2,9 +2,12 @@
 <html><head><meta charset="utf-8"><title>Taskuary</title><style>
   * { box-sizing: border-box; margin: 0; }
   body { font-family: Inter, "Segoe UI", system-ui, sans-serif; background: #f6f7f9; color: #1c2536; font-size: 13px; }
-  header { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: #fff; border-bottom: 1px solid #e5e8ee; position: sticky; top: 0; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: #fff; border-bottom: 1px solid #e5e8ee; position: sticky; top: 0; z-index: 5; }
   header b { font-size: 15px; } header span { color: #697386; font-size: 12px; }
-  main { padding: 20px; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; align-items: start; }
+  nav button { background: #fff; color: #4f46e5; border: 1px solid #c9cff0; margin-right: 6px; }
+  nav button.on { background: #4f46e5; color: #fff; }
+  main { padding: 20px; }
+  #board { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; align-items: start; }
   .col { background: #f1f3f6; border: 1px solid #e5e8ee; border-radius: 10px; padding: 8px; min-height: 200px; }
   .col h3 { font-size: 12px; padding: 4px 6px 8px; display: flex; justify-content: space-between; }
   .cardx { background: #fff; border: 1px solid #e5e8ee; border-radius: 8px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
@@ -15,17 +18,76 @@
   #detail { position: fixed; right: 14px; top: 60px; bottom: 14px; width: min(46vw, 680px); background: #eceef4;
     border: 1px solid #dde2ea; border-radius: 12px; padding: 6px; display: none; box-shadow: 0 14px 44px rgba(16,24,40,.15); }
   #detail .inner { background: #fff; border: 1px solid #e5e8ee; border-radius: 9px; height: 100%; overflow: auto; padding: 14px; }
-  #detail pre { white-space: pre-wrap; background: #f4f5f7; border: 1px solid #e5e8ee; border-radius: 6px; padding: 8px; font-size: 11.5px; }
+  #detail pre, .sec pre { white-space: pre-wrap; background: #f4f5f7; border: 1px solid #e5e8ee; border-radius: 6px; padding: 8px; font-size: 11.5px; }
   .chatrow { display: flex; gap: 8px; margin-top: 10px; }
   .chatrow input { flex: 1; padding: 8px; border: 1px solid #cbd2dd; border-radius: 6px; }
   button { background: #4f46e5; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
   button.ghost { background: #fff; color: #4f46e5; border: 1px solid #c9cff0; }
+  button.danger { background: #fff; color: #c2410c; border: 1px solid #f3c8b0; }
+  /* settings */
+  #settings { display: none; max-width: 960px; margin: 0 auto; }
+  .sec { background: #fff; border: 1px solid #e5e8ee; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .sec h2 { font-size: 14px; margin-bottom: 4px; } .sec .sub { color: #697386; font-size: 12px; margin-bottom: 12px; }
+  .rowx { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid #e5e8ee; border-radius: 8px; margin-bottom: 6px; background: #fbfcfe; }
+  .rowx .grow { flex: 1; min-width: 0; }
+  .frm { display: grid; grid-template-columns: 140px 1fr; gap: 8px 10px; align-items: center; margin-top: 10px; }
+  .frm label { color: #697386; font-size: 12px; text-align: right; }
+  .frm input, .frm select, .frm textarea { padding: 7px; border: 1px solid #cbd2dd; border-radius: 6px; font: inherit; width: 100%; }
+  .frm textarea { font-family: Consolas, monospace; font-size: 12px; min-height: 56px; }
+  .frm .full { grid-column: 2; }
+  .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .ok { color: #067647; } .err { color: #c2410c; }
+  .pill { font-size: 10.5px; padding: 2px 8px; border-radius: 99px; background: #eef0fe; color: #4f46e5; font-weight: 600; }
+  .pill.off { background: #f4f5f7; color: #98a1b3; }
 </style></head><body>
 <header><b>⬢ Taskuary</b><span>everything in → one funnel → agents + you</span>
   <span style="flex:1"></span>
+  <nav><button id="navBoard" class="on" onclick="show('board')">Board</button>
+       <button id="navSettings" class="ghost" onclick="show('settings')">Settings</button></nav>
   <button class="ghost" onclick="newTask()">New task for the agent</button>
 </header>
 <main id="board"></main>
+<main id="settings">
+  <div class="sec"><h2>Agents</h2>
+    <div class="sub">Bring your own agent — any CLI that reads a prompt on stdin. Saved to config, no file editing.</div>
+    <div id="agentList"></div>
+    <div class="frm" id="agentForm">
+      <label>name</label><input id="a_name" placeholder="coder">
+      <label>cmd</label><input id="a_cmd" placeholder='claude — or "codex", "gemini", your own wrapper...'>
+      <label>args</label><textarea id="a_args" placeholder="-p&#10;--dangerously-skip-permissions&#10;--output-format&#10;json"></textarea>
+      <label>resume args</label><input id="a_resume" placeholder="--resume   (enables message-the-agent session continuity)">
+      <label>timeout (s)</label><input id="a_timeout" type="number" placeholder="1500">
+      <label>working dir</label><input id="a_cwd" placeholder="C:/src/default-checkout (optional)">
+      <label>repo → dir map</label><textarea id="a_cwdmap" placeholder="you/your-repo = C:/src/your-repo&#10;one per line"></textarea>
+      <div class="full btns"><button onclick="saveAgent()">Save agent</button>
+        <button class="ghost" onclick="clearAgent()">Clear</button><span id="a_msg"></span></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Report connections</h2>
+    <div class="sub">Scheduled pulls from your systems — results land on the timeline as informational rows. Microsoft SQL Server works locally out of the box (Windows or SQL auth), and any MCP server is a connector too.</div>
+    <div id="srcList"></div>
+    <div class="frm">
+      <label>title</label><input id="s_title" placeholder="Nightly census">
+      <label>type</label><select id="s_type" onchange="typeFields()"></select>
+      <label>schedule</label><div style="display:flex;gap:8px">
+        <input id="s_every" type="number" placeholder="every N minutes" style="width:150px">
+        <input id="s_daily" placeholder="or daily at HH:MM" style="width:150px"></div>
+      <div class="full" id="typeFrm" style="display:grid;grid-template-columns:140px 1fr;gap:8px 10px;grid-column:1/3;align-items:center"></div>
+      <div class="full btns">
+        <button class="ghost" onclick="testConn()">Test connection</button>
+        <button class="ghost" onclick="previewSrc()">Preview</button>
+        <button onclick="saveSrc()">Save connection</button>
+        <button class="ghost" onclick="clearSrc()">Clear</button><span id="s_msg"></span></div>
+      <div class="full"><pre id="s_prev" style="display:none"></pre></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>App settings</h2>
+    <div class="sub">Engine knobs — saved instantly on change.</div>
+    <div id="setList"></div>
+  </div>
+</main>
 <div id="detail"><div class="inner" id="detailInner"></div></div>
 <script>
 const COLS = [["Queued", t => t.Status === "open" && t.ReviewStatus !== "pending"],
@@ -33,10 +95,21 @@ const COLS = [["Queued", t => t.Status === "open" && t.ReviewStatus !== "pending
               ["Waiting on you", t => t.ReviewStatus === "pending" && !["done","dropped"].includes(t.Status)],
               ["Done", t => t.Status === "done"]];
 const api = (p, opt) => fetch("/api" + p, opt ? { headers: {"Content-Type": "application/json"}, ...opt } : undefined).then(r => r.json());
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const $ = (id) => document.getElementById(id);
 
+function show(view) {
+  $("board").style.display = view === "board" ? "grid" : "none";
+  $("settings").style.display = view === "settings" ? "block" : "none";
+  $("navBoard").className = view === "board" ? "on" : "ghost";
+  $("navSettings").className = view === "settings" ? "on" : "ghost";
+  if (view === "settings") loadSettings();
+}
+
+/* ---------- board ---------- */
 async function board() {
   const { data } = await api("/tasks");
-  const el = document.getElementById("board"); el.innerHTML = "";
+  const el = $("board"); el.innerHTML = "";
   for (const [name, match] of COLS) {
     const cards = data.filter(t => t.Status !== "dropped").filter(match);
     const col = document.createElement("div"); col.className = "col";
@@ -50,7 +123,7 @@ async function openTask(id) {
   const d = await api("/tasks/" + id);
   const thread = d.comments.map(c => `<p><b style="color:${c.ActorType === "agent" ? "#7e22ce" : "#4f46e5"}">${esc(c.Actor)}</b> — ${esc(c.Body).slice(0, 600)}</p>`).join("");
   const diff = (d.runs.find(r => r.DiffText) || {}).DiffText;
-  document.getElementById("detailInner").innerHTML =
+  $("detailInner").innerHTML =
     `<button class="ghost" style="float:right" onclick="detail.style.display='none'">✕</button>
      <span class="ref">${d.ref}</span><h2 style="margin:6px 0">${esc(d.task.Title || "")}</h2>
      <div class="meta">${d.task.Kind} · ${d.task.Status}</div>
@@ -63,7 +136,7 @@ async function openTask(id) {
   detail.style.display = "block";
 }
 async function send(id) {
-  const v = document.getElementById("chat").value; if (!v.trim()) return;
+  const v = $("chat").value; if (!v.trim()) return;
   await api(`/tasks/${id}/message`, { method: "POST", body: JSON.stringify({ body: v }) });
   setTimeout(() => openTask(id), 1200);
 }
@@ -73,8 +146,173 @@ async function newTask() {
   await api(`/tasks/${taskId}/code`, { method: "POST", body: "{}" });
   board();
 }
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const detail = document.getElementById("detail");
+
+/* ---------- settings: agents ---------- */
+const lines = (v) => v.split("\n").map(s => s.trim()).filter(Boolean);
+async function loadAgents() {
+  const { data } = await api("/agents");
+  $("agentList").innerHTML = Object.entries(data).map(([n, p]) =>
+    `<div class="rowx"><span class="pill">${esc(n)}</span>
+      <span class="grow" style="font-family:Consolas,monospace;font-size:12px">${esc(p.cmd || "")} ${esc((p.args || []).join(" "))}</span>
+      <span class="meta">timeout ${p.timeout || 1200}s${p.resume_args ? " · resumable" : ""}</span>
+      <button class="ghost" onclick='editAgent(${JSON.stringify(n)})'>Edit</button>
+      <button class="danger" onclick='delAgent(${JSON.stringify(n)})'>Delete</button></div>`).join("")
+    || `<div class="meta">no agents yet — add one below</div>`;
+  window._agents = data;
+}
+function editAgent(n) {
+  const p = window._agents[n] || {};
+  $("a_name").value = n; $("a_cmd").value = p.cmd || ""; $("a_args").value = (p.args || []).join("\n");
+  $("a_resume").value = (p.resume_args || []).join(" "); $("a_timeout").value = p.timeout || "";
+  $("a_cwd").value = p.cwd || "";
+  $("a_cwdmap").value = Object.entries(p.cwd_map || {}).map(([k, v]) => `${k} = ${v}`).join("\n");
+}
+function clearAgent() { for (const id of ["a_name","a_cmd","a_args","a_resume","a_timeout","a_cwd","a_cwdmap"]) $(id).value = ""; $("a_msg").textContent = ""; }
+async function saveAgent() {
+  const name = $("a_name").value.trim();
+  if (!name || !$("a_cmd").value.trim()) { $("a_msg").innerHTML = '<span class="err">name and cmd are required</span>'; return; }
+  const p = { cmd: $("a_cmd").value.trim(), args: lines($("a_args").value) };
+  const resume = $("a_resume").value.trim(); if (resume) p.resume_args = resume.split(/\s+/);
+  if ($("a_timeout").value) p.timeout = +$("a_timeout").value;
+  if ($("a_cwd").value.trim()) p.cwd = $("a_cwd").value.trim();
+  const map = {}; for (const l of lines($("a_cwdmap").value)) { const i = l.indexOf("="); if (i > 0) map[l.slice(0, i).trim()] = l.slice(i + 1).trim(); }
+  if (Object.keys(map).length) p.cwd_map = map;
+  const r = await api("/agents/" + encodeURIComponent(name), { method: "PUT", body: JSON.stringify(p) });
+  $("a_msg").innerHTML = r.ok ? '<span class="ok">saved ✓</span>' : `<span class="err">${esc(r.detail || "error")}</span>`;
+  loadAgents();
+}
+async function delAgent(n) {
+  if (!confirm(`Delete agent "${n}"?`)) return;
+  await api("/agents/" + encodeURIComponent(n), { method: "DELETE" });
+  loadAgents();
+}
+
+/* ---------- settings: report connections ---------- */
+/* [label, key, kind, placeholder] — kind: input | textarea | password | auth | driver | args | json */
+const TYPE_FIELDS = {
+  mssql: [["server", "server", "input", "localhost  or  HOST\\INSTANCE"], ["database", "database", "input", "master"],
+          ["auth", "auth", "auth", ""], ["username", "username", "input", "(sql auth only)"],
+          ["password", "password", "password", ""], ["driver", "driver", "driver", ""],
+          ["query", "query", "textarea", "SELECT TOP 20 * FROM ..."]],
+  mcp: [["command", "cmd", "input", "npx  /  uvx  /  path to server exe"],
+        ["args", "args", "args", "-y&#10;@modelcontextprotocol/server-postgres&#10;postgresql://localhost/db"],
+        ["tool", "tool", "input", "query   (use Test connection to list tools)"],
+        ["tool args (JSON)", "tool_args", "json", '{"sql": "SELECT ..."}']],
+  sqlite: [["db path", "db", "input", "C:/data/app.db"], ["query", "query", "textarea", "SELECT ..."]],
+  rest: [["url", "url", "input", "https://api.example.com/items"], ["headers (JSON)", "headers", "json", '{"Authorization": "Bearer ..."}'],
+         ["json path", "path", "input", "data.items"]],
+  rss: [["feed url", "url", "input", "https://example.com/feed.xml"]],
+};
+let editingSrc = null, mssqlDrivers = [];
+async function loadSources() {
+  const { data } = await api("/sources");
+  const reps = data.filter(s => s.Channel === "report");
+  $("srcList").innerHTML = reps.map(s => {
+    const c = JSON.parse(s.ConfigJson || "{}");
+    const sched = c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
+    return `<div class="rowx"><span class="pill${s.Active ? "" : " off"}">${esc(c.type || "rest")}</span>
+      <b class="grow">${esc(c.title || s.Address || "")}</b>
+      <span class="meta">${sched} · last: ${esc(s.LastPolledAt || "never")}</span>
+      <button class="ghost" onclick="runSrc(${s.SourceId})">Run now</button>
+      <button class="ghost" onclick="editSrc(${s.SourceId})">Edit</button>
+      <button class="danger" onclick="delSrc(${s.SourceId})">Delete</button></div>`;
+  }).join("") || `<div class="meta">no report connections yet — add one below</div>`;
+  window._sources = reps;
+}
+async function loadTypes() {
+  const { data } = await api("/connectors");
+  $("s_type").innerHTML = data.map(c =>
+    `<option value="${c.type}" ${c.status === "planned" ? "disabled" : ""}>${c.type}${c.status === "planned" ? " (planned)" : ""}</option>`).join("");
+  $("s_type").value = "mssql";
+  mssqlDrivers = (await api("/mssql/drivers")).data || [];
+  typeFields();
+}
+function typeFields(vals) {
+  const t = $("s_type").value, v = (k) => esc((vals || {})[k] ?? "");
+  $("typeFrm").innerHTML = (TYPE_FIELDS[t] || []).map(([lbl, key, kind, ph]) => {
+    if (kind === "driver") return `<label>${lbl}</label><select id="f_driver"><option value="">(auto — newest installed)</option>
+      ${mssqlDrivers.map(d => `<option ${v(key) === esc(d) ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`;
+    if (kind === "auth") return `<label>${lbl}</label><select id="f_auth">
+      <option value="windows">Windows (local, trusted)</option><option value="sql">SQL login</option></select>`;
+    if (kind === "args") return `<label>${lbl}</label><textarea id="f_${key}" placeholder="${ph}">${esc(((vals || {})[key] || []).join ? ((vals || {})[key] || []).join("\n") : v(key))}</textarea>`;
+    if (kind === "json") return `<label>${lbl}</label><textarea id="f_${key}" placeholder="${esc(ph)}">${esc(typeof (vals || {})[key] === "object" ? JSON.stringify((vals || {})[key]) : (vals || {})[key] ?? "")}</textarea>`;
+    if (kind === "textarea") return `<label>${lbl}</label><textarea id="f_${key}" placeholder="${esc(ph)}">${v(key)}</textarea>`;
+    if (kind === "password") return `<label>${lbl}</label><input type="password" id="f_${key}" value="${v(key)}" placeholder="${esc(ph)}">`;
+    return `<label>${lbl}</label><input id="f_${key}" value="${v(key)}" placeholder="${esc(ph)}">`;
+  }).join("");
+  if (t === "mssql") {
+    $("f_auth").value = (vals || {}).auth || "windows";
+    $("f_auth").onchange = () => { const sql = $("f_auth").value === "sql";
+      $("f_username").disabled = $("f_password").disabled = !sql; };
+    $("f_auth").onchange();
+  }
+}
+function srcConfig() {
+  const t = $("s_type").value, cfg = { type: t, title: $("s_title").value.trim() };
+  for (const [, key, kind] of TYPE_FIELDS[t] || []) {
+    const el = $("f_" + key); if (!el || el.disabled || !el.value.trim()) continue;
+    cfg[key] = kind === "json" ? JSON.parse(el.value) : kind === "args" ? lines(el.value) : el.value.trim();
+  }
+  if ($("s_every").value) cfg.every_minutes = +$("s_every").value;
+  if ($("s_daily").value.trim()) cfg.daily_at = $("s_daily").value.trim();
+  return cfg;
+}
+function tryCfg() {
+  try { return srcConfig(); }
+  catch (e) { $("s_msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; return null; }
+}
+async function testConn() {
+  const cfg = tryCfg(); if (!cfg) return;
+  $("s_msg").textContent = "testing…";
+  if (cfg.type === "mssql") {
+    const r = await api("/mssql/test", { method: "POST", body: JSON.stringify(cfg) });
+    $("s_msg").innerHTML = r.ok ? `<span class="ok">connected ✓ ${esc(r.version || "")}</span>` : `<span class="err">${esc(r.error)}</span>`;
+  } else if (cfg.type === "mcp") {
+    const r = await api("/mcp/tools", { method: "POST", body: JSON.stringify(cfg) });
+    $("s_msg").innerHTML = r.ok ? `<span class="ok">server ok — ${r.data.length} tools</span>` : `<span class="err">${esc(r.error)}</span>`;
+    const pre = $("s_prev"); pre.style.display = r.ok ? "block" : "none";
+    pre.textContent = (r.data || []).map(t => `${t.name} — ${t.description}`).join("\n");
+  } else return previewSrc();
+}
+async function previewSrc() {
+  const cfg = tryCfg(); if (!cfg) return;
+  $("s_msg").textContent = "running…";
+  const r = await api("/reports/preview", { method: "POST", body: JSON.stringify(cfg) });
+  $("s_msg").innerHTML = r.ok ? `<span class="ok">${esc(r.headline)}</span>` : `<span class="err">${esc(r.error)}</span>`;
+  const pre = $("s_prev"); pre.style.display = r.ok ? "block" : "none"; pre.textContent = r.summary || "";
+}
+async function saveSrc() {
+  const cfg = tryCfg(); if (!cfg) return;
+  if (!cfg.title) { $("s_msg").innerHTML = '<span class="err">title is required</span>'; return; }
+  const body = { Channel: "report", Address: cfg.title, ConfigJson: JSON.stringify(cfg), Active: true };
+  if (editingSrc) body.SourceId = editingSrc;
+  const r = await api("/sources", { method: "POST", body: JSON.stringify(body) });
+  $("s_msg").innerHTML = r.sourceId ? '<span class="ok">saved ✓</span>' : '<span class="err">error</span>';
+  editingSrc = null; loadSources();
+}
+function editSrc(id) {
+  const s = window._sources.find(x => x.SourceId === id); if (!s) return;
+  const c = JSON.parse(s.ConfigJson || "{}");
+  editingSrc = id;
+  $("s_title").value = c.title || s.Address || ""; $("s_type").value = c.type || "rest";
+  $("s_every").value = c.every_minutes || ""; $("s_daily").value = c.daily_at || "";
+  typeFields(c);
+}
+function clearSrc() { editingSrc = null; $("s_title").value = $("s_every").value = $("s_daily").value = ""; $("s_msg").textContent = ""; $("s_prev").style.display = "none"; typeFields(); }
+async function runSrc(id) { const r = await api(`/sources/${id}/run`, { method: "POST", body: "{}" }); alert("Ran: " + (r.subject || JSON.stringify(r))); loadSources(); }
+async function delSrc(id) { if (!confirm("Delete this connection?")) return; await api("/sources/" + id, { method: "DELETE" }); loadSources(); }
+
+/* ---------- settings: app settings ---------- */
+async function loadAppSettings() {
+  const { data } = await api("/settings");
+  $("setList").innerHTML = data.map(s =>
+    `<div class="rowx"><span class="grow" style="font-family:Consolas,monospace">${esc(s.Name)}</span>
+      <input value="${esc(s.Value ?? "")}" style="width:220px;padding:6px;border:1px solid #cbd2dd;border-radius:6px"
+        onchange='api("/settings", {method:"PATCH", body: JSON.stringify({name: ${JSON.stringify(s.Name)}, value: this.value})})'></div>`).join("");
+}
+function loadSettings() { loadAgents(); loadSources(); loadTypes(); loadAppSettings(); }
+
+const detail = $("detail");
 board(); setInterval(board, 10000);
 </script>
 </body></html>

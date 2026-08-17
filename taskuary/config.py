@@ -4,7 +4,9 @@
 [github] token/default_repo. Everything is optional: `taskuary` runs with no config at all
 (SQLite store, stub agent, localhost server).
 """
-import os, sys, tomllib
+import json, os
+try: import tomllib
+except ImportError: import tomli as tomllib  # py3.10
 from pathlib import Path
 
 def home() -> Path:
@@ -28,3 +30,28 @@ def load() -> dict:
 
 def db_path() -> str:
     return str(home() / 'taskuary.db')
+
+
+def _tval(v):
+    if isinstance(v, bool): return 'true' if v else 'false'
+    if isinstance(v, (int, float)): return str(v)
+    if isinstance(v, list): return '[' + ', '.join(_tval(o) for o in v) + ']'
+    return json.dumps(str(v))  # json string escaping == toml basic string escaping
+
+def dumps_toml(d: dict, prefix='') -> str:
+    """Minimal TOML writer for our config shapes (scalars, string lists, nested tables).
+    tomllib is stdlib-read-only; this keeps the UI able to persist config with no new deps."""
+    lines, tables = [], []
+    for k, v in d.items():
+        key = k if k.replace('_', '').replace('-', '').isalnum() else json.dumps(k)
+        if isinstance(v, dict): tables.append((key, v))
+        else: lines.append(f'{key} = {_tval(v)}')
+    out = (f'[{prefix}]\n' if prefix and lines else '') + '\n'.join(lines)
+    for key, v in tables:
+        sub = dumps_toml(v, f'{prefix}.{key}' if prefix else key)
+        if sub: out += ('\n\n' if out else '') + sub
+    return out
+
+def save(cfg: dict):
+    """Persist config to ~/.taskuary/config.toml (round-trips through tomllib in tests)."""
+    (home() / 'config.toml').write_text(dumps_toml(cfg) + '\n', encoding='utf-8')

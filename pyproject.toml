@@ -15,14 +15,18 @@ dependencies = [
     "pydantic>=2",
     "requests>=2.28",
     "loguru>=0.7",
+    "tomli>=2; python_version<'3.11'",
 ]
 
 [project.optional-dependencies]
-mssql = ["sqlalchemy>=1.4", "pyodbc>=4"]
+mssql = ["pyodbc>=4"]
+desktop = ["pywebview>=4"]
+build = ["pyinstaller>=6"]
 dev = ["pytest>=7", "httpx>=0.24"]
 
 [project.scripts]
 taskuary = "taskuary.cli:main"
+taskuary-desktop = "taskuary.desktop:main"
 
 [tool.setuptools.packages.find]
 include = ["taskuary*"]

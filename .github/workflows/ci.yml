@@ -1,0 +1,33 @@
+name: ci
+on:
+  push: { branches: [master, main] }
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}" }
+      - run: pip install -e .[dev]
+      - run: pip install pyodbc
+        if: runner.os == 'Windows'
+      - run: pytest -q
+
+  build-exe:
+    # proves the one-file desktop build stays green; artifact attached to the run
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e .[mssql,desktop,build]
+      - run: pyinstaller taskuary.spec
+      - uses: actions/upload-artifact@v4
+        with: { name: Taskuary-windows-exe, path: dist/Taskuary.exe }

@@ -129,6 +129,38 @@ class CoreTests(unittest.TestCase):
         self.assertEqual([m['Channel'] for m in feed], ['github'])
         self.assertIn('o/repo#7', feed[0]['Subject'])               # our own [TQ-] issues never come back
 
+    def test_teams_chats_reach_the_timeline(self):
+        """The whole channel was silently missing from poll_channels: the connector card was
+        green, the source stamped LastPolledAt, and not one chat message ever landed."""
+        from unittest import mock
+        from taskuary import channels
+        s = MemoryStore()
+        tm = next(c for c in s.list_connectors() if c['Type'] == 'teams')
+        s.save_connector({'ConnectorId': tm['ConnectorId'], 'Active': 1, 'Roles': 'trigger,tool',
+                          'ConfigJson': '{"client_id": "c", "tenant_id": "t"}', 'Secret': 'x'}, 'o')
+        s.save_source({'Channel': 'teams', 'Address': 'me@corp.com', 'Active': 1, 'Owner': 'o'}, 'o')
+        chats = [{'id': '19:aa', 'chatType': 'oneOnOne'}, {'id': '19:locked', 'chatType': 'group', 'topic': 'Vendor'}]
+        msgs = {'19:aa': [
+            {'id': 'm1', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:00:00Z',
+             'from': {'user': {'id': 'u2', 'displayName': 'Mindy'}}, 'body': {'content': '<p>can you look at the export?</p>'}},
+            {'id': 'm2', 'messageType': 'systemEventMessage', 'createdDateTime': '2026-08-18T10:01:00Z',
+             'from': None, 'body': {'content': '<systemEventMessage/>'}},           # call started
+            {'id': 'm3', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:02:00Z',
+             'from': {'application': {'id': 'bot'}, 'user': None}, 'body': {'content': '<attachment id="x"></attachment>'}},
+        ], '19:locked': None}                                                        # 403 -> invisible, not fatal
+        with mock.patch.object(channels, 'graph_token', return_value='tok'), \
+             mock.patch.object(channels, '_teams_chats', return_value=chats), \
+             mock.patch.object(channels, '_chat_msgs', side_effect=lambda t, cid, *a, **k: msgs[cid] or []), \
+             mock.patch.object(channels, '_graph_user', return_value=('Mindy', 'mindy@corp.com')), \
+             mock.patch.object(channels.requests, 'get', return_value=mock.Mock(status_code=200,
+                                                                               json=lambda: {'id': 'me'})):
+            self.assertEqual(channels.poll_channels(s), 1)
+        feed = [m for m in s.feed() if m['Channel'] == 'teams']
+        self.assertEqual(len(feed), 1)                                 # only the human line, bot + system dropped
+        self.assertEqual((feed[0]['FromName'], feed[0]['FromEmail']), ('Mindy', 'mindy@corp.com'))
+        row = s._one('SELECT ConversationId FROM message WHERE MessageId=?', (feed[0]['MessageId'],))
+        self.assertEqual(row['ConversationId'], 'teams:19:aa')          # a chat is one thread, like a mail chain
+
     def test_one_report_can_pull_from_several_sources(self):
         from taskuary.reports import REGISTRY, render_report
         s = MemoryStore()

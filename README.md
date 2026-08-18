@@ -107,7 +107,10 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   **role** you choose: *inbound trigger* (items go through triage and can become tasks),
   *timeline feed* (items are shown and stop there — no triage, no AI call, no task),
   *report source* (query it on a schedule), *agent tool* (the agents may read from it and
-  create things in it). Mail and chat trigger by default; GitHub starts as a tool — make it
+  create things in it). Teams brings each chat in as a thread — one task per conversation,
+  bots and call-started events left out, and the card says plainly how many chats it can
+  actually read (chats hosted in another organization's tenant refuse app-only access).
+  Mail and chat trigger by default; GitHub starts as a tool — make it
   a feed to watch new issues, or a trigger to have them worked. Nothing polls a connection
   you gave neither role.
 - **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
@@ -200,7 +203,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 106 tests, ~20s, no network or credentials needed
+pytest -q                   # 107 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

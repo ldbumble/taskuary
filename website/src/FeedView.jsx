@@ -688,10 +688,6 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
   const text = latest || quoted;
   const long = text.length > 700;                    // long bodies scroll in place; "expand" gives them the panel
   const you = cur?.Status === "context";
-  // only offer channels that actually have a connection behind them
-  const pickerChannels = ((CATEGORIES.find((x) => x.key === cat) || {}).channels
-    || ["email", "teams", "slack", "github", "report"]).filter((ch) => (srcByChannel[ch] || []).length);
-
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
   return (

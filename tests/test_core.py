@@ -142,7 +142,7 @@ class CoreTests(unittest.TestCase):
                 'sources': [{'type': '_a', 'label': 'cash', 'q': '3'},
                             {'type': '_a', 'label': 'ledger', 'q': '7'},
                             {'type': '_boom', 'label': 'the box'}],
-            }, llm=lambda sys_, usr_: seen.update(usr=usr_) or 'all good')
+            }, llm=lambda sys_, usr_, **kw: seen.update(usr=usr_) or 'all good')
             self.assertEqual(head, 'cash: 3 rows · ledger: 7 rows · the box: FAILED')
             for want in ('=== cash (3 rows) ===', 'body for 7', 'server unreachable'):
                 self.assertIn(want, seen['usr'])            # every source reaches the one AI pass
@@ -164,7 +164,7 @@ class CoreTests(unittest.TestCase):
         REGISTRY['_cap'] = lambda cfg: ('20 rows (capped at 20 — the query returned more)', 'x' * 50)
         try:
             render_report(s, {'type': '_cap', 'ai_prompt': 'summarize'},
-                          llm=lambda sys_, usr_: seen.update(sys=sys_, usr=usr_) or 'ok')
+                          llm=lambda sys_, usr_, **kw: seen.update(sys=sys_, usr=usr_) or 'ok')
         finally:
             REGISTRY.pop('_cap')
         self.assertIn('never describe a capped or truncated slice as complete', seen['sys'])
@@ -178,6 +178,42 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(txt.splitlines()[0], 'The form was rejected.')
         self.assertIn('\nFrom: devteam-logs@x.net\nSent: Tuesday', txt)
         self.assertEqual(_clean('<p>a&nbsp;b</p><style>x{}</style>'), 'a b')
+
+    def test_feed_role_shows_on_the_timeline_without_making_work(self):
+        from unittest import mock
+        from taskuary import channels
+        s = MemoryStore()
+        gh = next(c for c in s.list_connectors() if c['Type'] == 'github')
+        s.save_connector({'ConnectorId': gh['ConnectorId'], 'Active': 1, 'Secret': 'ghp_x', 'Roles': 'feed,tool'}, 'o')
+        s.save_source({'Channel': 'github', 'Address': 'o/repo', 'ConnectorId': gh['ConnectorId'], 'Active': 1}, 'o')
+        issues = [{'number': 9, 'title': 'Docs typo', 'body': 'small fix', 'user': {'login': 'jsmith'},
+                   'updated_at': '2026-08-18T09:00:00Z', 'html_url': 'https://gh/9'}]
+        boom = lambda *a, **k: (_ for _ in ()).throw(AssertionError('a feed must never call the AI'))
+        with mock.patch('taskuary.github.list_issues', return_value=issues), \
+             mock.patch('taskuary.llm.build_llm', return_value=boom):
+            self.assertEqual(channels.poll_channels(s), 1)
+        row = s.feed()[0]
+        self.assertEqual((row['Channel'], row['MsgStatus'], row['TaskId']), ('github', 'feed', None))
+        self.assertEqual(s.list_tasks(), [])                     # shown, never assigned
+        self.assertIn('not a task trigger', row['RouteReason'])
+
+    def test_empty_ai_summary_says_so_instead_of_filing_a_bare_wall(self):
+        from taskuary.reports import REGISTRY, render_report
+        s = MemoryStore()
+        REGISTRY['_e'] = lambda cfg: ('2 rows', 'a\nb')
+        try:
+            # a reasoning model that spends its budget thinking returns '' - the report used
+            # to file starting with '--- raw data ---', which reads like the prompt never ran
+            _, body = render_report(s, {'type': '_e', 'ai_prompt': 'summarize'}, llm=lambda *a, **k: '   ')
+            self.assertTrue(body.startswith('(the model returned an empty summary'))
+            self.assertIn('--- raw data ---', body)
+            # and the summary gets a real token budget, not triage's
+            seen = {}
+            render_report(s, {'type': '_e', 'ai_prompt': 'summarize'},
+                          llm=lambda sys_, usr_, max_tokens=None: seen.update(mt=max_tokens) or 'fine')
+            self.assertGreaterEqual(seen['mt'], 1000)
+        finally:
+            REGISTRY.pop('_e')
 
     def test_triage_brain_is_configurable(self):
         from unittest import mock
@@ -388,7 +424,7 @@ class CoreTests(unittest.TestCase):
         try:
             out = run_report_source(s, {'SourceId': 1, 'Address': 'Census', 'ConfigJson': '{"type": "_t"}'})
             m = s.get_message(out['message_id'])
-            self.assertEqual((m['Channel'], m['Status'], m['TaskId']), ('report', 'filed', None))
+            self.assertEqual((m['Channel'], m['Status'], m['TaskId']), ('report', 'feed', None))
         finally:
             REGISTRY.pop('_t')
 

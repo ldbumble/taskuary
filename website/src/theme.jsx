@@ -18,8 +18,29 @@ export const ACTION_COLORS = {
   draft: { bg: "#fef4e6", fg: "#b45309", label: "needs review" },
   escalate: { bg: "#fdecec", fg: "#b91c1c", label: "escalated" },
   ignore: { bg: "#eef0f3", fg: "#8a94a6", label: "ignored" },
+  report: { bg: "#e6f7fb", fg: "#0e7490", label: "report" },
+  feed: { bg: "#eef7f0", fg: "#15803d", label: "info" },
+  filed: { bg: "#eef0f3", fg: "#8a94a6", label: "filed" },
   skip: { bg: "#f4f0f6", fg: "#7e5f8f", label: "skipped" },
   task_only: { bg: "#eef0ff", fg: "#4f46e5", label: "task created" },
+};
+
+// Catppuccin Mocha — the palette the Claude Code / Codex theme plugins use, so a session
+// looks the same in Taskuary as it does in your own terminal. Full 16-colour ANSI set:
+// agent TUIs paint spinners, diffs and boxes with these, and a partial palette washes out.
+export const CATPPUCCIN = {
+  bg: "#1e1e2e", bgAlt: "#181825", fg: "#cdd6f4", dim: "#a6adc8", faint: "#6c7086",
+  surface: "#313244", overlay: "#585b70", cursor: "#f5e0dc",
+  red: "#f38ba8", green: "#a6e3a1", yellow: "#f9e2af", blue: "#89b4fa",
+  magenta: "#f5c2e7", cyan: "#94e2d5", mauve: "#cba6f7", peach: "#fab387",
+};
+export const XTERM_THEME = {
+  background: CATPPUCCIN.bg, foreground: CATPPUCCIN.fg, cursor: CATPPUCCIN.cursor,
+  cursorAccent: CATPPUCCIN.bg, selectionBackground: CATPPUCCIN.overlay, selectionForeground: "#ffffff",
+  black: "#45475a", red: CATPPUCCIN.red, green: CATPPUCCIN.green, yellow: CATPPUCCIN.yellow,
+  blue: CATPPUCCIN.blue, magenta: CATPPUCCIN.magenta, cyan: CATPPUCCIN.cyan, white: "#bac2de",
+  brightBlack: CATPPUCCIN.overlay, brightRed: "#f38ba8", brightGreen: "#a6e3a1", brightYellow: "#f9e2af",
+  brightBlue: "#89b4fa", brightMagenta: "#f5c2e7", brightCyan: "#94e2d5", brightWhite: "#f5f5f7",
 };
 
 export const TASK_STATUS_COLORS = {

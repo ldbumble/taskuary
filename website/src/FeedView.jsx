@@ -33,6 +33,16 @@ const CHANNEL_FILTERS = [
 
 const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 
+// What the row is, for the chip. A scheduled report or a feed-only connection's item was
+// never judged - it is information. Only a policy 'ignore' is a verdict.
+const actionOf = (r) => (r.Channel === "report" ? "report"
+  : r.MsgStatus === "feed" ? "feed"
+    : r.MsgStatus === "ignored" ? "ignore"
+      : r.MsgStatus === "filed" ? "filed"
+        : r.ReviewKind === "escalation" ? "escalate"
+          : r.ReviewKind === "auto" ? "auto"
+            : r.ReviewId ? "draft" : "task_only");
+
 // Teams chats get a synthesized "<sender> in <source>" subject - redundant next to the
 // sender + source we already show, so drop it.
 const subjectOf = (r) => {
@@ -45,6 +55,7 @@ const blurb = (r) => {
   if ((r.RouteReason || "").includes("your reply") || (r.RouteReason || "").includes("your sent reply"))
     return r.TaskId ? `Your reply — kept on ${ref(r.TaskId)} so the thread shows both sides` : "Your reply — kept for context, never a task";
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
+  if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
   if (r.MsgStatus === "ignored") return `Ignored by policy — ${r.RouteReason || "no task created"}`;
   if (r.MsgStatus === "filed") return `Filed, nothing to do — ${r.RouteReason || "informational"}`;
   const routed = r.Decision === "attach" ? `Added to ${ref(r.TaskId)} (existing thread)` : `New task ${ref(r.TaskId)} created`;
@@ -56,14 +67,17 @@ const blurb = (r) => {
   return `${routed} · ${state}`;
 };
 
+// what one connection is called inside each category, for the picker's "all …" label
+const CHANNEL_UNITS = { email: "mailboxes", teams: "chats", slack: "channels", github: "repos", report: "reports" };
+
 const PAGE = 100;
 
 export default function FeedView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
   const [channel, setChannel] = useState("");        // "" all | email | teams | slack | report
-  const [mailbox, setMailbox] = useState("");        // "" all | one mailbox (shows when several are connected)
-  const [mailboxes, setMailboxes] = useState([]);
+  const [source, setSource] = useState("");          // "" all | one connection within the channel
+  const [srcByChannel, setSrcByChannel] = useState({});   // channel -> [names shown in the picker]
   const [noMore, setNoMore] = useState(false);
   const [open, setOpen] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -76,15 +90,23 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
   const fparams = useCallback(() => ({ ...(view === "pending" ? { pending_only: true } : {}),
     ...(channel ? { channel } : {}),
-    ...(channel === "email" && mailbox ? { source: mailbox } : {}) }), [view, channel, mailbox]);
+    ...(source ? { source } : {}) }), [view, channel, source]);
 
-  // which mailboxes exist (the picker only appears when there is more than one)
+  // Every channel is a CATEGORY; the picker next to it narrows to one actual connection —
+  // this mailbox, this repo, this Slack channel, this report.
   useEffect(() => {
-    api.get("/api/sources").then(({ data }) =>
-      setMailboxes((data.data || []).filter((s) => s.Channel === "email" && s.Active).map((s) => s.Address)))
-      .catch(() => {});
+    api.get("/api/sources").then(({ data }) => {
+      const by = {};
+      for (const s of data.data || []) {
+        if (!s.Active) continue;
+        const ch = s.Channel === "report" ? "report" : s.Channel;
+        const name = s.Channel === "report" ? (JSON.parse(s.ConfigJson || "{}").title || s.Address) : s.Address;
+        (by[ch] = by[ch] || []).push(name);
+      }
+      setSrcByChannel(by);
+    }).catch(() => {});
   }, []);
-  useEffect(() => { if (channel !== "email") setMailbox(""); }, [channel]);
+  useEffect(() => { setSource(""); }, [channel]);   // switching category clears the narrower pick
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
   // refresh never shrinks the list under the user.
@@ -209,15 +231,15 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.5, py: 1, flexWrap: "wrap" }}>
             <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
             <FilterPills options={CHANNEL_FILTERS} value={channel} onChange={setChannel} />
-            {channel === "email" && mailboxes.length > 1 && (
-              <Select size="small" value={mailbox} displayEmpty onChange={(e) => setMailbox(e.target.value)}
-                renderValue={(v) => (v ? v.split("@")[0] : "all mailboxes")}
-                sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: mailbox ? "#e8f1fa" : "#fff", height: 26,
-                  color: mailbox ? "#0F6CBD" : DIM, maxWidth: 150,
+            {channel && (srcByChannel[channel] || []).length > 1 && (
+              <Select size="small" value={source} displayEmpty onChange={(e) => setSource(e.target.value)}
+                renderValue={(v) => (v ? String(v).split("@")[0] : `all ${CHANNEL_UNITS[channel] || "connections"}`)}
+                sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: source ? "#e8f1fa" : "#fff", height: 26,
+                  color: source ? "#0F6CBD" : DIM, maxWidth: 190,
                   "& .MuiSelect-select": { py: 0.3, px: 1.25 },
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: mailbox ? "#c4dcf2" : BORDER } }}>
-                <MenuItem value="" sx={{ fontSize: 12 }}>all mailboxes</MenuItem>
-                {mailboxes.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>{m}</MenuItem>)}
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: source ? "#c4dcf2" : BORDER } }}>
+                <MenuItem value="" sx={{ fontSize: 12 }}>all {CHANNEL_UNITS[channel] || "connections"}</MenuItem>
+                {(srcByChannel[channel] || []).map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>{m}</MenuItem>)}
               </Select>
             )}
             <Box sx={{ flex: 1, minWidth: 8 }} />
@@ -300,7 +322,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                         <Typography variant="body2" noWrap sx={{ color: DIM, flex: 1, minWidth: 0 }}>{subjectOf(r) ? `— ${subjectOf(r)}` : ""}</Typography>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexShrink: 0 }}>
                           <RefChip taskId={r.TaskId} onClick={(e) => { e.stopPropagation(); onOpenTask(r.TaskId); }} />
-                          <ActionChip action={["ignored", "filed"].includes(r.MsgStatus) ? "ignore" : r.ReviewKind === "escalation" ? "escalate" : r.ReviewKind === "auto" ? "auto" : r.ReviewId ? "draft" : "task_only"} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} />
+                          <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} />
                           <ChevronRightIcon className="thubGo" sx={{ fontSize: 18, color: "#4f46e5",
                             opacity: sel?.MessageId === r.MessageId ? 1 : 0,
                             transform: sel?.MessageId === r.MessageId ? "translateX(0)" : "translateX(-6px)",
@@ -512,7 +534,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
             </Typography>
           </Box>
           <RefChip taskId={sel.TaskId} onClick={() => onOpenTask(sel.TaskId)} />
-          <ActionChip action={["ignored", "filed"].includes(sel.MsgStatus) ? "ignore" : sel.ReviewKind === "escalation" ? "escalate" : sel.ReviewKind === "auto" ? "auto" : sel.ReviewId ? "draft" : "task_only"} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} />
+          <ActionChip action={actionOf(sel)} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} />
           <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
 

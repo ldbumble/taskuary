@@ -206,7 +206,7 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
-def ingest_github_issues(store, repo: str, tok: str, since, llm=None) -> int:
+def ingest_github_issues(store, repo: str, tok: str, since, llm=None, file_only=False) -> int:
     """GitHub as an INBOUND channel: new issues land on the Timeline and go through the
     same triage as mail. Issues Taskuary opened for its own tasks are skipped, otherwise
     the coder would file work against itself forever."""
@@ -221,7 +221,7 @@ def ingest_github_issues(store, repo: str, tok: str, since, llm=None) -> int:
             'body': (i.get('body') or '(no description)')[:20000],
             'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
             'conversation_id': f"gh:{repo}#{i['number']}", 'sent_at': _local(i.get('updated_at') or ''),
-            'source_link': i.get('html_url'), 'source_name': repo}, llm=llm)
+            'source_link': i.get('html_url'), 'source_name': repo}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'
     return n
 
@@ -243,7 +243,10 @@ def poll_channels(store) -> int:
     n = 0
     for c in store.list_connectors():
         if not c['Active'] or c['Type'] not in CH2SRC: continue
-        if 'trigger' not in roles_of(c): continue                 # tool-only / report-only connection
+        roles = roles_of(c)
+        # trigger = becomes work; feed = shows on the timeline and stops there; neither = never polled
+        if not roles & {'trigger', 'feed'}: continue
+        file_only = 'trigger' not in roles
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:
             if c['Type'] in ('outlook', 'teams'):
@@ -264,7 +267,7 @@ def poll_channels(store) -> int:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
                         if (frm.get('address') or '').lower() == s['Address'].lower():
                             continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
-                        out = ingest_message(store, {
+                        out = ingest_message(store, file_only=file_only, msg={
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
                             'subject': m.get('subject'), 'body': _body(m),
                             'from_name': frm.get('name'), 'from_email': frm.get('address'),
@@ -272,13 +275,13 @@ def poll_channels(store) -> int:
                             'source_link': m.get('webLink'), 'source_name': s['Address']}, llm=llm)
                         n += out['status'] != 'duplicate'
                 elif c['Type'] == 'github':
-                    n += ingest_github_issues(store, s['Address'], tok, since, llm)
+                    n += ingest_github_issues(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)
                     for m in reversed(hist.get('messages', [])):
                         if m.get('subtype'): continue   # joins/leaves/bots noise
-                        out = ingest_message(store, {
+                        out = ingest_message(store, file_only=file_only, msg={
                             'external_id': f"slack:{s['Address']}:{m.get('ts')}", 'channel': 'slack',
                             'subject': None, 'body': m.get('text'), 'from_name': m.get('user'),
                             'conversation_id': f"slack:{s['Address']}",

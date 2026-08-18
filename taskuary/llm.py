@@ -12,6 +12,10 @@ everything on one model (and one bill). Configure it in Settings -> Triage & rou
 import json, requests
 
 AI_TYPES = ('anthropic', 'openai', 'azure_openai')
+# Triage answers with a one-line JSON object, so it needs almost nothing. A report SUMMARY
+# needs room - and on a reasoning model a small budget is spent thinking and the visible
+# answer comes back EMPTY, which is how reports ended up filing raw data with no summary.
+MAX_TOKENS = 400
 
 
 def make_cli_llm(store, agent_name: str):
@@ -21,10 +25,11 @@ def make_cli_llm(store, agent_name: str):
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
-    def llm(system, user):
+    def llm(system, user, max_tokens=MAX_TOKENS):
+        """max_tokens is advisory here - a CLI has no such flag; the system prompt already
+        says how long the answer should be."""
         from .agents import run_cli
-        out, _sid, _diff = run_cli(prof, f'{system}\n\n{user}\n\nAnswer with the JSON object only.',
-                                   lambda *a: None)
+        out, _sid, _diff = run_cli(prof, f'{system}\n\n{user}', lambda *a: None)
         return out
     return llm
 
@@ -46,8 +51,8 @@ def make_llm(t, cfg: dict, key: str):
         import anthropic
         cli = anthropic.Anthropic(api_key=key)
         model = cfg.get('model') or 'claude-opus-5'
-        def llm(system, user):
-            r = cli.messages.create(model=model, max_tokens=300, system=system,
+        def llm(system, user, max_tokens=MAX_TOKENS):
+            r = cli.messages.create(model=model, max_tokens=max_tokens, system=system,
                                     messages=[{'role': 'user', 'content': user}])
             if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
             return next((b.text for b in r.content if b.type == 'text'), '')
@@ -67,7 +72,7 @@ def make_llm(t, cfg: dict, key: str):
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
 
-    def llm(system, user):
+    def llm(system, user, max_tokens=MAX_TOKENS):
         # two independent compat axes: newer models reject max_tokens ("use
         # max_completion_tokens"), older Azure api-versions reject max_completion_tokens,
         # and older Azure resources 404 the v1 url - walk the grid until one works
@@ -75,7 +80,7 @@ def make_llm(t, cfg: dict, key: str):
         last = None
         for url in urls:
             for tok_param in ('max_completion_tokens', 'max_tokens'):
-                body = {'messages': msgs, tok_param: 300}
+                body = {'messages': msgs, tok_param: max_tokens}
                 if model: body['model'] = model
                 r = requests.post(url, headers=headers, json=body, timeout=60)
                 if r.status_code == 200:

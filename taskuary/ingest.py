@@ -13,9 +13,17 @@ from .triage import classify_intent, heuristic_intent
 from .store import task_ref
 
 
-def ingest_message(store, msg: dict, actor: str = 'router', llm=None) -> dict:
+def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only: bool = False) -> dict:
+    """file_only = this connection is a FEED, not a trigger: the item is shown on the
+    timeline and nothing else happens to it - no triage, no AI call, no task. It is a
+    cheaper and quieter path than 'ignore', which is a verdict about the message."""
     if store.message_exists(msg.get('external_id') or ''):
         return {'status': 'duplicate', 'task_id': None, 'message_id': None}
+    if file_only:
+        mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
+        store.add_route(mid, None, 'feed', None,
+                        'shown for information - this connection is a feed, not a task trigger', [], 'feed')
+        return {'status': 'feed', 'task_id': None, 'message_id': mid}
     cfg = store.get_settings()
     pol = evaluate(msg, store.list_policies(), store.known_sender(msg.get('from_email')),
                    cfg.get('default_action', 'draft'))

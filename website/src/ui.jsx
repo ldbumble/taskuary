@@ -10,7 +10,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import TagIcon from "@mui/icons-material/Tag";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import { ACTION_COLORS, TASK_STATUS_COLORS, mono, DIM, FAINT, ACCENT2, PANEL2 } from "./theme.jsx";
+import { ACTION_COLORS, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
@@ -33,9 +33,12 @@ export const ActionChip = ({ action, reviewStatus, taskStatus }) => {
     return <Chip size="small" label="completed" sx={{ bgcolor: "#e8f6ee", color: "#15803d", height: 19, fontSize: 10.5, fontWeight: 700 }} />;
   }
   // What actually matters to the reader: current state, not just the original verdict.
-  const key = reviewStatus === "auto" ? "auto"
-    : reviewStatus === "pending" ? (action === "escalate" ? "escalate" : "draft")
-      : action || "task_only";
+  // 'report' and 'feed' are NOT verdicts - nothing judged those items; they are here to be
+  // read. Only 'ignored' means a policy actually rejected something.
+  const key = ["report", "feed", "filed"].includes(action) ? action
+    : reviewStatus === "auto" ? "auto"
+      : reviewStatus === "pending" ? (action === "escalate" ? "escalate" : "draft")
+        : action || "task_only";
   const c = ACTION_COLORS[key] || ACTION_COLORS.task_only;
   const decided = reviewStatus && !["pending", "auto"].includes(reviewStatus);
   const label = !decided ? c.label : reviewStatus === "no_reply" ? "no reply needed" : `reviewed · ${reviewStatus}`;
@@ -80,17 +83,17 @@ export const RunTrace = ({ traceJson, running }) => {
   return groups.map((g, i) => {
     const tail = i === groups.length - 1;
     if (g.kind === "live") return (
-      <Box key={i} ref={tail ? boxRef : null} sx={{ bgcolor: "#0f172a", borderRadius: 1.5, px: 1.25, py: 0.75,
-        my: 0.5, maxHeight: 280, overflowY: "auto", border: "1px solid #1e293b" }}>
+      <Box key={i} ref={tail ? boxRef : null} sx={{ bgcolor: CATPPUCCIN.bg, borderRadius: 1.5, px: 1.25, py: 0.75,
+        my: 0.5, maxHeight: 280, overflowY: "auto", border: `1px solid ${CATPPUCCIN.surface}` }}>
         {g.items.map((ev, k) => (
           <Typography key={k} variant="caption" sx={{ ...mono, display: "block", fontSize: 10.5, lineHeight: 1.6,
             whiteSpace: "pre-wrap", wordBreak: "break-word",
-            color: ev.detail.startsWith("→") ? "#a5b4fc" : ev.detail.startsWith("✗") ? "#fca5a5" : "#94a3b8" }}>
-            <span style={{ color: "#475569" }}>{(ev.at || "").slice(11)}</span> {ev.detail}
+            color: ev.detail.startsWith("→") ? CATPPUCCIN.blue : ev.detail.startsWith("✗") ? CATPPUCCIN.red : CATPPUCCIN.dim }}>
+            <span style={{ color: CATPPUCCIN.faint }}>{(ev.at || "").slice(11)}</span> {ev.detail}
           </Typography>
         ))}
         {running && tail && (
-          <Typography variant="caption" sx={{ ...mono, color: "#22d3ee", fontSize: 10.5,
+          <Typography variant="caption" sx={{ ...mono, color: CATPPUCCIN.cyan, fontSize: 10.5,
             "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
             ▮ agent working…
           </Typography>

@@ -15,6 +15,7 @@ PLANNED = ['postgres', 'mysql', 'snowflake', 'sharepoint_list', 'google_sheets',
            'graphql', 'smb_file', 'prometheus', 'jira']
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
+SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
 
 
 def row_limit(cfg) -> int: return max(1, int(cfg.get('max_rows') or MAX_ROWS))
@@ -26,7 +27,7 @@ def rows_out(rows, limit, unit='rows'):
     and the headline can tell the truth instead."""
     more = len(rows) > limit
     rows = rows[:limit]
-    head = f'{len(rows)} rows' + (f' (capped at {limit} — the query returned more)' if more else '')
+    head = f'{len(rows)} rows' + (f' (capped at {limit} — raise "max rows" on this report to see more)' if more else '')
     return head.replace('rows', unit, 1), '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]
 
 
@@ -158,8 +159,14 @@ def render_report(store, cfg: dict, llm=None):
         try:
             data = summary[:AI_CHARS]
             if len(summary) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
-            ai = llm(AI_SYSTEM, f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{data}")
-            return head, f"{(ai or '').strip()}\n\n--- raw data ---\n{summary[:4000]}"
+            ai = (llm(AI_SYSTEM, f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{data}",
+                      max_tokens=SUMMARY_TOKENS) or '').strip()
+            # an empty answer used to file as a bare '--- raw data ---' wall, which reads
+            # like the prompt was never run. Say what happened instead.
+            if not ai:
+                ai = ('(the model returned an empty summary - it may have spent its budget thinking. '
+                      'Try a shorter prompt, or a non-reasoning model for report summaries.)')
+            return head, f"{ai}\n\n--- raw data ---\n{summary[:4000]}"
         except Exception as e:
             logger.warning(f'AI summary failed for report: {e}')
             return head, f'(AI summary failed: {str(e)[:200]})\n\n{summary}'
@@ -197,8 +204,8 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}',
                              'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
                              'SourceName': title, 'Subject': subject, 'FromName': title,
-                             'SentAt': stamp, 'BodyText': body, 'SourceLink': cfg.get('link'), 'Status': 'filed'})
-    store.add_route(mid, None, 'file', None, 'scheduled report', [], 'report')
+                             'SentAt': stamp, 'BodyText': body, 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+    store.add_route(mid, None, 'feed', None, 'scheduled report - informational, never a task', [], 'report')
     store.audit('message', mid, 'report', 'report', 'agent', title)
     return {'message_id': mid, 'subject': subject}
 

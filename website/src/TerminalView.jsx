@@ -12,20 +12,9 @@ import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
-import { BORDER, DIM, FAINT, INK, PANEL, card, mono } from "./theme.jsx";
+import { BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, XTERM_THEME, card, mono } from "./theme.jsx";
 import { Empty, useAgents } from "./ui.jsx";
 
-// A full 16-colour ANSI palette, not a partial one: agent CLIs paint their whole TUI with
-// these (spinners, diffs, boxes, syntax), so leaving the brights undefined makes their
-// output look flat and washed out.
-const XTERM_THEME = {
-  background: "#0b1020", foreground: "#d7dcea", cursor: "#22d3ee", cursorAccent: "#0b1020",
-  selectionBackground: "#3b4a7a", selectionForeground: "#ffffff",
-  black: "#0b1020", red: "#f87171", green: "#4ade80", yellow: "#fbbf24", blue: "#60a5fa",
-  magenta: "#c084fc", cyan: "#22d3ee", white: "#cbd5e1",
-  brightBlack: "#64748b", brightRed: "#fca5a5", brightGreen: "#86efac", brightYellow: "#fde68a",
-  brightBlue: "#93c5fd", brightMagenta: "#e9d5ff", brightCyan: "#a5f3fc", brightWhite: "#f8fafc",
-};
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
 const TERM_FONT = "'Cascadia Mono', 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace";
@@ -72,11 +61,11 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     return () => { window.removeEventListener("resize", onResize); ro.disconnect(); ws.close(); term.dispose(); };
   }, [sid, onExit]);
   return (
-    <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden", bgcolor: "#0f172a" }}>
+    <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden", bgcolor: CATPPUCCIN.bg }}>
       <Box ref={host} sx={{ height, p: 1, "& .xterm": { height: "100%" } }} />
       {state !== "live" && (
         <Typography variant="caption" sx={{ ...mono, position: "absolute", top: 6, right: 10, fontSize: 10,
-          color: state === "exited" ? "#86efac" : "#fcd34d" }}>
+          color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>
           {state}
         </Typography>
       )}
@@ -172,7 +161,10 @@ export default function TerminalView({ startWith, onStarted }) {
       )}
 
       {!cur ? (
-        <Empty>No terminal open — pick an agent and a folder above, then Open terminal. It runs the CLI for real: its prompts, its questions, your keystrokes.</Empty>
+        <>
+          <Empty>No terminal open — pick an agent and a folder above, then Open terminal. It runs the CLI for real: its prompts, its questions, your keystrokes.</Empty>
+          <ThemeHint />
+        </>
       ) : (
         <>
           <Typography variant="caption" sx={{ ...mono, color: DIM, display: "block", mb: 0.5 }}>
@@ -225,40 +217,40 @@ export const TerminalDock = ({ open, onClose, request, onRequestDone, height: h,
   const kill = async (s) => { await api.delete(`/api/terminals/${s}`).catch(() => {}); load(); };
   return (
     <Box sx={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 1200, height: h,
-      bgcolor: "#0b1020", borderTop: `1px solid ${BORDER}`, boxShadow: "0 -8px 30px rgba(16,24,40,.25)",
+      bgcolor: CATPPUCCIN.bg, borderTop: `1px solid ${BORDER}`, boxShadow: "0 -8px 30px rgba(16,24,40,.25)",
       display: "flex", flexDirection: "column" }}>
       <Box onMouseDown={(e) => { drag.current = h + e.clientY; }}
-        sx={{ height: 6, cursor: "ns-resize", bgcolor: "#111a33", "&:hover": { bgcolor: "#1e293b" } }} />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1, py: 0.5, bgcolor: "#111a33", flexWrap: "wrap" }}>
+        sx={{ height: 6, cursor: "ns-resize", bgcolor: CATPPUCCIN.bgAlt, "&:hover": { bgcolor: CATPPUCCIN.surface } }} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1, py: 0.5, bgcolor: CATPPUCCIN.bgAlt, flexWrap: "wrap" }}>
         {sessions.map((s) => (
           <Box key={s.sid} onClick={() => setSid(s.sid)}
             sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 1, py: 0.3, borderRadius: 1,
-              cursor: "pointer", bgcolor: s.sid === sid ? "#0b1020" : "transparent",
-              border: `1px solid ${s.sid === sid ? "#334155" : "transparent"}` }}>
-            <TerminalIcon sx={{ fontSize: 13, color: s.alive ? "#22d3ee" : "#64748b" }} />
-            <Typography variant="caption" sx={{ ...mono, color: s.sid === sid ? "#e2e8f0" : "#94a3b8", fontSize: 11 }} noWrap>
+              cursor: "pointer", bgcolor: s.sid === sid ? CATPPUCCIN.bg : "transparent",
+              border: `1px solid ${s.sid === sid ? CATPPUCCIN.surface : "transparent"}` }}>
+            <TerminalIcon sx={{ fontSize: 13, color: s.alive ? CATPPUCCIN.cyan : CATPPUCCIN.faint }} />
+            <Typography variant="caption" sx={{ ...mono, color: s.sid === sid ? CATPPUCCIN.fg : CATPPUCCIN.dim, fontSize: 11 }} noWrap>
               {s.label}{s.taskId ? ` · TQ-${String(s.taskId).padStart(4, "0")}` : ""}
             </Typography>
             <CloseIcon onClick={(e) => { e.stopPropagation(); kill(s.sid); }}
-              sx={{ fontSize: 12, color: "#64748b", "&:hover": { color: "#fca5a5" } }} />
+              sx={{ fontSize: 12, color: CATPPUCCIN.faint, "&:hover": { color: CATPPUCCIN.red } }} />
           </Box>
         ))}
         <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => start({ agent: null })}
-          sx={{ fontSize: 11, color: "#94a3b8" }}>shell</Button>
+          sx={{ fontSize: 11, color: CATPPUCCIN.dim }}>shell</Button>
         {agents.map((a) => (
           <Button key={a} size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => start({ agent: a })}
-            sx={{ fontSize: 11, color: "#a5b4fc" }}>{a}</Button>
+            sx={{ fontSize: 11, color: CATPPUCCIN.mauve }}>{a}</Button>
         ))}
         <Box sx={{ flex: 1 }} />
-        {err && <Typography variant="caption" sx={{ color: "#fca5a5" }}>{err}</Typography>}
-        <Typography variant="caption" sx={{ ...mono, color: "#475569", fontSize: 10.5 }} noWrap>{cur?.cwd || ""}</Typography>
+        {err && <Typography variant="caption" sx={{ color: CATPPUCCIN.red }}>{err}</Typography>}
+        <Typography variant="caption" sx={{ ...mono, color: CATPPUCCIN.faint, fontSize: 10.5 }} noWrap>{cur?.cwd || ""}</Typography>
         <IconButton size="small" onClick={onClose} title="Hide the terminal (sessions keep running)">
-          <CloseIcon sx={{ fontSize: 15, color: "#94a3b8" }} />
+          <CloseIcon sx={{ fontSize: 15, color: CATPPUCCIN.dim }} />
         </IconButton>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0 }}>
         {!cur
-          ? <Typography variant="caption" sx={{ color: "#64748b", display: "block", p: 2 }}>
+          ? <Typography variant="caption" sx={{ color: CATPPUCCIN.faint, display: "block", p: 2 }}>
               No session — start a shell, or one of your agents, above.
             </Typography>
           : <TerminalPane key={cur.sid} sid={cur.sid} height="100%" onExit={load} />}
@@ -266,6 +258,23 @@ export const TerminalDock = ({ open, onClose, request, onRequestDone, height: h,
     </Box>
   );
 };
+
+// Taskuary paints its terminals in Catppuccin Mocha. Claude Code's own theme is set
+// inside Claude Code, so this is a command to run there - not something to write into
+// somebody's global CLI config behind their back.
+export const ThemeHint = () => (
+  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
+    Terminals here use the Catppuccin Mocha palette. To match it inside Claude Code itself,
+    run{" "}
+    <Box component="code" sx={{ ...mono, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 1,
+      px: 0.75, py: 0.25, fontSize: 11, cursor: "pointer" }}
+      title="click to copy"
+      onClick={() => navigator.clipboard?.writeText("/plugin install catppuccin@matcra587/claude-themes")}>
+      /plugin install catppuccin@matcra587/claude-themes
+    </Box>{" "}
+    in a Claude Code session, then pick a flavor with /theme.
+  </Typography>
+);
 
 // Small control other views drop in: "open a real terminal on this task".
 export const OpenTerminalButton = ({ taskId, repo, agent, onOpen, label = "Open a terminal here" }) => {

@@ -9,7 +9,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty } from "./ui.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
@@ -17,16 +17,16 @@ const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] |
 // A card's peephole into the running agent: the last couple of console lines, live.
 // Click the card for the whole terminal (task page).
 const LiveTail = ({ run }) => (
-  <Box sx={{ mt: 0.75, bgcolor: "#0f172a", border: "1px solid #1e293b", borderRadius: 1.25, px: 1, py: 0.6 }}>
+  <Box sx={{ mt: 0.75, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 1, py: 0.6 }}>
     {(run.tail || []).slice(-2).map((l, i, all) => (
       <Typography key={i} noWrap variant="caption"
         sx={{ ...mono, display: "block", fontSize: 9.5, lineHeight: 1.55,
-          color: l.startsWith("→") ? "#a5b4fc" : l.startsWith("✗") ? "#fca5a5" : "#94a3b8",
+          color: l.startsWith("→") ? CATPPUCCIN.blue : l.startsWith("✗") ? CATPPUCCIN.red : CATPPUCCIN.dim,
           opacity: i === all.length - 1 ? 1 : 0.55 }}>
         {l.replace(/\n/g, " ")}
       </Typography>
     ))}
-    <Typography variant="caption" sx={{ ...mono, color: "#22d3ee", fontSize: 9.5,
+    <Typography variant="caption" sx={{ ...mono, color: CATPPUCCIN.cyan, fontSize: 9.5,
       "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
       ▮ {run.AgentName} working — click to open the full terminal
     </Typography>

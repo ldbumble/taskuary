@@ -50,8 +50,10 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 ## The workspace
 
 - **Timeline** — every inbound item on a day-grouped rail: who/where, what Taskuary did
-  with it, current state. Filter by state (everything / needs me) and channel
-  independently. Click a row for the full review canvas — message, agent report, code
+  with it, current state. Filter by state (everything / needs me) and by channel — each
+  channel is a category with a picker for the actual connection (this mailbox, this repo,
+  this report). Chips say what a row IS: *report* and *info* are things to read, *filed*
+  means triage saw nothing to do, and *ignored* means a policy rule rejected it. Click a row for the full review canvas — message, agent report, code
   diff, history — and decide inline. Mail is stored whole (not Graph's 255-char preview)
   and shown the way you'd read it: an *inbound* / *↩ your reply* marker, the new text
   first, and the thread quoted underneath folded behind one click. Chains holding several
@@ -83,15 +85,18 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   the bottom of every tab** (Ctrl+\` to toggle, drag its top edge to resize, tabs for
   parallel sessions) as well as its own full-screen tab; hiding it never kills a session,
   because the pty lives server-side. Sessions start clean — no inherited agent session
-  state. Every **task page embeds its own session** — the agent's TUI right under the run
+  state, and everything is painted in Catppuccin Mocha (run
+  `/plugin install catppuccin@matcra587/claude-themes` inside Claude Code to match it
+  there). Every **task page embeds its own session** — the agent's TUI right under the run
   history — or open a bare shell in any repo.
 - **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
   models and CLI agents, messaging channels, GitHub, SQL Server. Every connection has a
-  **role** you choose: *inbound trigger* (its items land on the Timeline and go through
-  triage), *report source* (query it on a schedule), *agent tool* (the agents may read
-  from it and create things in it). Mail and chat trigger by default; GitHub starts as a
-  tool — flip its trigger on and new issues become timeline items and tasks like anything
-  else. Nothing polls a connection you didn't make a trigger.
+  **role** you choose: *inbound trigger* (items go through triage and can become tasks),
+  *timeline feed* (items are shown and stop there — no triage, no AI call, no task),
+  *report source* (query it on a schedule), *agent tool* (the agents may read from it and
+  create things in it). Mail and chat trigger by default; GitHub starts as a tool — make it
+  a feed to watch new issues, or a trigger to have them worked. Nothing polls a connection
+  you gave neither role.
 - **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
   rules injected into every agent run. They ship as templates and maintain themselves —
   connectors and discovered repos write themselves in.
@@ -163,7 +168,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 97 tests, ~20s, no network or credentials needed
+pytest -q                   # 99 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

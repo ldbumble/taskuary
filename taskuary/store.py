@@ -64,13 +64,16 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '0', 'attac
                     'triage_ai': ''}      # '' = first active AI connector | connector:<type> | cli:<agent>
 
 # What a connection IS to the hub, independent of what it can technically do:
-#   trigger - polled for inbound items; they land on the Timeline and go through triage
+#   trigger - polled for inbound items; they land on the Timeline and go through triage,
+#             which can open tasks and draft replies
+#   feed    - polled and SHOWN on the Timeline, but never becomes work: no triage, no task,
+#             no AI call. "I want to see new GitHub issues, not be assigned them."
 #   report  - selectable as a scheduled report source (Reports tab)
 #   tool    - the agents may read from / write to it (listed for them in SOUL.md)
 # Defaults match how each system is usually used; every one is owner-configurable.
 DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool'}
-ROLES = ('trigger', 'report', 'tool')
+ROLES = ('trigger', 'feed', 'report', 'tool')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
 

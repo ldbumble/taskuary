@@ -524,7 +524,8 @@ function WinrmDetail({ conn, reload, onBack }) {
 /* What a connection IS to the hub. Three independent jobs - a system can do all three,
    or just be something the agents are allowed to touch. */
 const ROLE_META = {
-  trigger: ["Inbound trigger", "Poll it for new items — they land on the Timeline and go through triage. This is what turns a connection into work (mail, chats, GitHub issues…)."],
+  trigger: ["Inbound trigger — creates work", "Poll it for new items, run them through triage, open tasks and draft replies. This is what turns a connection into work (mail, chats, GitHub issues…)."],
+  feed: ["Timeline feed — shows, never assigns", "Poll it and show every new item on the Timeline, but stop there: no triage, no AI call, no task. Good for GitHub issues or a chatty channel you want to SEE without being handed."],
   report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result on the Timeline."],
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
 };
@@ -534,6 +535,10 @@ const RoleStep = ({ conn, reload }) => {
   const toggle = async (r) => {
     const next = new Set(roles);
     if (next.has(r)) next.delete(r); else next.add(r);
+    // a trigger already puts its items on the timeline; holding both would just be a
+    // contradiction the poller has to resolve
+    if (r === "trigger" && next.has("trigger")) next.delete("feed");
+    if (r === "feed" && next.has("feed")) next.delete("trigger");
     await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Roles: [...next].join(",") });
     reload();
   };
@@ -549,9 +554,9 @@ const RoleStep = ({ conn, reload }) => {
         </Box>
       ))}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-        {roles.has("trigger")
-          ? "Trigger is on: this connection creates timeline items on every sync."
-          : "Trigger is off: nothing here becomes work by itself — it stays available to the agents and to reports."}
+        {roles.has("trigger") ? "Trigger is on: new items become tasks, replies and reviews."
+          : roles.has("feed") ? "Feed only: new items appear on the Timeline as information — nothing becomes work."
+            : "Neither: nothing here is polled at all — it stays available to the agents and to reports."}
       </Typography>
     </Box>
   );

@@ -31,7 +31,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
   const decide = async (r, verb) => {
     setBusy(r.ReviewId);
     try {
-      await api.post(`/api/reviews/${r.ReviewId}/decide`, { verb, final_text: verb === "edit" ? edits[r.ReviewId] : null });
+      await api.post(`/api/reviews/${r.ReviewId}/decide`, { verb, final_text: verb === "edit" ? edits[r.ReviewId] : null,
+        note: verb === "go_ahead" ? (edits[r.ReviewId] || "").trim() || null : null });
       load(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
     setBusy(null);
@@ -104,10 +105,22 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                 </Box>
               </Box>
             )}
+            {/* An escalation is one question: may the agent go on? Answer it here - either
+                approve (and the same agent picks the task straight back up with your words)
+                or take it yourself. */}
             {r.Status === "pending" && r.Kind === "escalation" && (
-              <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
-                <Button size="small" variant="contained" onClick={() => onOpenTask(r.TaskId)}>Open the task</Button>
-                <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Dismiss — handled</Button>
+              <Box sx={{ mt: 0.75 }}>
+                <TextField fullWidth size="small" placeholder="Anything to tell the agent with your approval (optional)"
+                  value={edits[r.ReviewId] ?? ""} onChange={(e) => setEdits({ ...edits, [r.ReviewId]: e.target.value })}
+                  inputProps={{ style: { fontSize: 12.5 } }} />
+                <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
+                  <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
+                    sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                    onClick={() => decide(r, "go_ahead")}>Go ahead — approved</Button>
+                  <Button size="small" variant="outlined" onClick={() => onOpenTask(r.TaskId)}>Open the task</Button>
+                  <Box sx={{ flex: 1 }} />
+                  <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Dismiss — I handled it</Button>
+                </Box>
               </Box>
             )}
             {r.Status !== "pending" && (r.FinalText || r.DraftText) && (

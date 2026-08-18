@@ -1,5 +1,5 @@
 """Core engine tests - everything runs on the in-memory SQLite store, no network."""
-import unittest
+import json, unittest
 from taskuary.store import MemoryStore, task_ref
 from taskuary.ingest import ingest_message
 from taskuary.routing import route
@@ -373,10 +373,27 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(parse_cli_json('plain'), ('plain', None))
 
     def test_coder_report_contract(self):
-        out = 'work\n' + RESULT_MARKER + '\n{"summary": "s", "close": true, "email_reply": "r"}'
+        out = 'work\n' + RESULT_MARKER + '\n{"summary": "s", "needs_you": "", "email_reply": "r"}'
         rep = parse_coder_result(out)
-        self.assertTrue(rep['close']); self.assertEqual(rep['email_reply'], 'r')
-        self.assertFalse(parse_coder_result('no marker')['close'])
+        self.assertEqual((rep['parsed'], rep['needs_you'], rep['email_reply']), (True, '', 'r'))
+        self.assertFalse(parse_coder_result('no marker')['parsed'])
+
+    def test_answered_question_closes_and_only_approval_escalates(self):
+        """Finishing the work - including just answering - closes the task. Escalation means
+        one thing: a person has to approve or decide before the agent can go on."""
+        from unittest import mock
+        from taskuary.coder import run_coding_task
+        for needs, status, pending in [('', 'done', 0), ('may I drop the column?', 'waiting', 1)]:
+            s = MemoryStore()
+            tid = s.create_task({'Title': 'question', 'Kind': 'coding'}, 'o')
+            s.upsert_agent('coder', 'coding', 'cli', '{}')
+            rid = s.start_run(tid, 'coder', 'i', 'o')
+            res = RESULT_MARKER + '\n' + json.dumps({'summary': 'answered it', 'needs_you': needs})
+            with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'done', 'result': res}):
+                out = run_coding_task(s, tid, 'o', None, {})
+            self.assertEqual((out['closed'], s.get_task(tid)['Status'], len(s.list_reviews('pending'))),
+                             (not needs, status, pending))
+            self.assertTrue(any(c['Body'].startswith('CODER REPORT') for c in s.list_comments(tid)))
 
     def test_closing_a_task_resolves_its_pending_reviews(self):
         s = MemoryStore()

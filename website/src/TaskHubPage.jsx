@@ -5,7 +5,6 @@ import { Badge, Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
 import { theme, BG, BORDER, DIM, INK, PANEL, GRADIENT } from "./theme.jsx";
 import FeedView from "./FeedView.jsx";
@@ -15,7 +14,6 @@ import ReviewView from "./ReviewView.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
 import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
-import { TerminalDock } from "./TerminalView.jsx";
 import SettingsView from "./SettingsView.jsx";
 
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
@@ -45,21 +43,13 @@ export default function TaskHubPage() {
   }, []);
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
 
-  const openTask = (taskId) => { setSelectedTask(taskId); setTab("Tasks"); };
-  // Terminals belong to the WORK, not to a tab of their own: a board card or a task opens
-  // its session, and the dock at the bottom is where it appears (VS Code / Cloud Shell
-  // shape) - Ctrl+` toggles it, and any view can ask it to start a session.
-  const [termReq, setTermReq] = useState(null);
-  const [dock, setDock] = useState(false);
-  const [dockH, setDockH] = useState(360);
-  const openTerminal = (body) => { setTermReq(body); setDock(true); };
-  useEffect(() => {
-    const key = (e) => {
-      if (e.ctrlKey && (e.key === "`" || e.code === "Backquote")) { e.preventDefault(); setDock((d) => !d); }
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, []);
+  // A terminal belongs to the task it is working - there is no dock and no terminal tab.
+  // Opening a task with start=true means "and put your CLI on it now".
+  const [autostart, setAutostart] = useState(null);
+  const openTask = (taskId, opts) => {
+    setSelectedTask(taskId); setTab("Tasks");
+    setAutostart(opts?.start ? { taskId, agent: opts.agent } : null);
+  };
 
   return (
     <ThemeProvider theme={theme}>
@@ -94,31 +84,22 @@ export default function TaskHubPage() {
             ))}
           </Box>
           <Box sx={{ flex: 1 }} />
-          <Tooltip title="Terminal — Ctrl+` (sessions keep running when you hide it)">
-            <IconButton size="small" onClick={() => setDock((d) => !d)}>
-              <TerminalIcon sx={{ fontSize: 17, color: dock ? "#4f46e5" : DIM }} />
-            </IconButton>
-          </Tooltip>
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
         </Box>
 
-        <Box sx={{ p: { xs: 1.5, md: 2.5 }, pb: dock ? `${dockH + 24}px` : undefined }}>
+        <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
           {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
-          {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} onOpenTerminal={openTerminal} />}
+          {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
           {tab === "Tasks" && <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask}
-            onChanged={refreshPending} onOpenTerminal={openTerminal} />}
+            onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)} />}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
           {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}
           {tab === "Docs" && <DocsView key={`d${tick}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}`} />}
         </Box>
-
-        {/* the dock rides above every tab; hiding it never kills a session */}
-        <TerminalDock open={dock} height={dockH} onHeight={setDockH} onClose={() => setDock(false)}
-          request={termReq} onRequestDone={() => setTermReq(null)} />
       </Box>
     </ThemeProvider>
   );

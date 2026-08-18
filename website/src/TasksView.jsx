@@ -34,7 +34,7 @@ const selSx = { fontSize: 12.5, bgcolor: "#fff", borderRadius: 2,
   "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#c9cff0" },
   "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#4f46e5" } };
 
-export default function TasksView({ selected, onSelect, onChanged, onOpenTerminal }) {
+export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted }) {
   const [tasks, setTasks] = useState(null);
   const [filter, setFilter] = useState("");            // "" = all; the rest are derived states
   const [detail, setDetail] = useState(null);
@@ -96,12 +96,21 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
     setComment(""); loadDetail(selected);
   };
+  // The agent stopped because it needs a person. Answering IS the work: "go ahead" hands
+  // the same task back to the same agent with your words attached.
+  const [approve, setApprove] = useState("");
+  const goAhead = async (rid) => {
+    await api.post(`/api/reviews/${rid}/decide`, { verb: "go_ahead", note: approve.trim() || null });
+    setApprove(""); setTimeout(() => { loadDetail(selected); loadTasks(); onChanged?.(); }, 800);
+  };
   const notATask = async () => {
     await api.post(`/api/tasks/${selected}/not-a-task`);
     onSelect(null); loadTasks(); onChanged?.();
   };
-  // the task's own terminal: a real pty session, embedded here rather than linked to
-  const [term, setTerm] = useState(null);
+  // The task's own session - the only terminal in the app. undefined means "not looked
+  // yet", null means "looked, none running": the difference decides whether we may
+  // auto-start one, so they must not collapse into each other.
+  const [term, setTerm] = useState(undefined);
   const findTerm = useCallback(async (tid) => {
     if (!tid) { setTerm(null); return; }
     try {
@@ -109,11 +118,18 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
       setTerm(rows.find((x) => x.taskId === tid && x.alive) || null);
     } catch { setTerm(null); }
   }, []);
-  useEffect(() => { findTerm(selected); }, [selected, findTerm]);
-  const openTerm = async (body) => {
+  useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
+  const openTerm = useCallback(async (body) => {
     try { const { data } = await api.post("/api/terminals", body); setTerm(data); }
     catch (e) { setErr(e?.response?.data?.detail || "Could not start a terminal"); }
-  };
+  }, []);
+  // "New task -> live session" lands here: put the CLI on it once we know this task has no
+  // session already, so a reload never spawns a second one
+  useEffect(() => {
+    if (!autostart || autostart.taskId !== selected || term !== null || !detail) return;
+    onAutostarted?.();
+    openTerm({ agent: autostart.agent || run.agent, task_id: selected, repo: repoOf(detail.task), seed: true });
+  }, [autostart, selected, term, detail, openTerm, onAutostarted, run.agent]);
 
 
   const t = detail?.task;
@@ -121,6 +137,8 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
   const report = [...(detail?.comments || [])].reverse().find(
     (c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
+  const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
+  const esc = (detail?.reviews || []).find((r) => r.Kind === "escalation" && r.Status === "pending");
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
       {/* ── list: one anchored panel - filter header on top, rows scroll inside ── */}
@@ -189,16 +207,23 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                   <Typography variant="caption" sx={{ color: FAINT }}>
                     {t.Kind} · from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
                   </Typography>
-                  <Box sx={{ flex: 1 }} />
-                  {onOpenTerminal && term && (
-                    <Button size="small" sx={{ fontSize: 11, color: "#0e7490" }}
-                      onClick={() => onOpenTerminal({ agent: run.agent, task_id: selected, repo: repoOf(t), seed: false })}>
-                      also open a session in the bottom dock
-                    </Button>
-                  )}
                 </Box>
               </Box>
               <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
+                {esc && (
+                  <Box sx={{ bgcolor: "#fff8e6", border: "1px solid #f3ddb8", borderRadius: 2, px: 1.5, py: 1.25, mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: "#b45309", fontWeight: 700 }}>The agent needs you before it goes on</Typography>
+                    <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{esc.Reason}</Typography>
+                    <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
+                      <TextField size="small" sx={{ flex: 1, minWidth: 240, bgcolor: "#fff" }} value={approve}
+                        placeholder="Anything to tell it with your approval (optional)"
+                        onChange={(e) => setApprove(e.target.value)} onKeyDown={(e) => e.key === "Enter" && goAhead(esc.ReviewId)} />
+                      <Button size="small" variant="contained" disableElevation
+                        sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                        onClick={() => goAhead(esc.ReviewId)}>Go ahead — approved</Button>
+                    </Box>
+                  </Box>
+                )}
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -221,6 +246,12 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                       Start your CLI on this task — a real session in {repoOf(t) || "the agent's folder"}: its own
                       prompts, its questions, your keystrokes.
                     </Typography>
+                    {liveRun && (
+                      <Typography variant="caption" sx={{ color: "#b45309", display: "block", mb: 1.25 }}>
+                        {liveRun.AgentName} is already working this task headlessly (run {liveRun.RunId}) — watch it under
+                        Earlier runs below. Starting a session here puts a second agent on the same task.
+                      </Typography>
+                    )}
                     <Box sx={{ display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap" }}>
                       <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
                         onAgent={(a) => setRun({ ...run, agent: a, model: "" })} onModel={(m) => setRun({ ...run, model: m })} />
@@ -235,7 +266,8 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                         sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
                         run it headless
                       </Box>{" "}
-                      — nothing to watch, but it opens the GitHub issue, writes the report, and closes or escalates on its own.
+                      — nothing to watch: it opens the GitHub issue, works, writes its report here and closes the task.
+                      It only stops and waits if it needs your approval for something.
                     </Typography>
                   </Box>
                 )}

@@ -284,6 +284,19 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(rct.call_args[0][-3:], ('codex', 'gpt-5-codex', 'just the importer'))
         self.assertEqual(c.post(f'/api/tasks/{tid}/code', json={'agent': 'ghost'}).status_code, 422)
 
+    def test_go_ahead_hands_the_task_back_to_the_same_agent(self):
+        tid = c.post('/api/tasks', json={'Title': 'needs approval'}).json()['taskId']
+        server.store.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex"}')
+        server.store.start_run(tid, 'codex', 'work it', 'owner')
+        rid = server.store.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending',
+                                       'Reason': 'coder needs you: may I drop the column?'})
+        with mock.patch.object(server, 'run_coding_task') as rct:
+            out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'go_ahead', 'note': 'yes, drop it'}).json()
+        self.assertEqual((out['status'], out['agent']), ('approved', 'codex'))
+        self.assertEqual(server.store.get_review(rid)['Status'], 'approved')
+        self.assertIn('yes, drop it', rct.call_args[0][-1])                     # instruction carries your words
+        self.assertTrue(any('Approved' in cm['Body'] for cm in server.store.list_comments(tid)))
+
     def test_runs_audit_ingest_status(self):
         self.assertEqual(c.get('/api/runs/999999').status_code, 404)
         self.assertIsInstance(c.get('/api/audit/recent').json()['data'], list)

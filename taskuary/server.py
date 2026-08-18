@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, threading
+import asyncio, json
 from datetime import datetime
 from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -274,11 +274,28 @@ def get_run(run_id: int):
 def reviews(status: str = None): return {'data': store.list_reviews(status)}
 
 @app.post('/api/reviews/{rid}/decide')
-def decide(rid: int, body: DecideBody):
+def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
-    verb2status = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
+    verb2status = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
+                   'go_ahead': 'approved'}
     if body.verb not in verb2status: raise HTTPException(422, 'bad verb')
+    # go_ahead is the answer to an escalation: you approved it in the UI, so the same agent
+    # picks the task back up with your approval as its instruction
+    if body.verb == 'go_ahead':
+        tid = rv.get('TaskId')
+        if not tid or not store.get_task(tid): raise HTTPException(422, 'the escalated task is gone')
+        store.decide_review(rid, 'approved', None, ACTOR, body.note)
+        note = (body.note or '').strip()
+        store.add_comment(tid, ACTOR, 'human', f'Approved — go ahead.{f" {note}" if note else ""}')
+        run = (store.list_runs(tid) or [{}])[0]
+        agent = run.get('AgentName') or 'coder'
+        if background: background.add_task(run_coding_task, store, tid, ACTOR, None, _github_cfg(), agent, None,
+                                           f'The owner reviewed your escalation ("{(rv.get("Reason") or "")[:300]}") '
+                                           f'and approved it in the UI. Their words: {note or "go ahead"}. '
+                                           'Finish the task now.')
+        store.audit('review', rid, 'go_ahead', ACTOR, detail={'task': tid, 'agent': agent})
+        return {'ok': True, 'status': 'approved', 'coder': 'running', 'agent': agent}
     final = body.final_text if body.verb == 'edit' else (rv.get('DraftText') if body.verb == 'approve' else None)
     store.decide_review(rid, verb2status[body.verb], final, ACTOR, body.note)
     if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f'Reviewed draft ({body.verb}):\n{final}')
@@ -616,12 +633,12 @@ def open_terminal(body: TermBody):
     except (ValueError, RuntimeError) as e:
         raise HTTPException(422, str(e))
     # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text
-    if body.seed and body.agent and body.task_id and store.get_task(body.task_id):
-        tk = store.get_task(body.task_id)
-        seed = (f"Work Taskuary task {task_ref(body.task_id)}: {tk.get('Title')}. "
-                f"{(tk.get('Summary') or '')[:600]}").replace('\n', ' ')
-        threading.Timer(1.5, lambda: t.write(seed + '\r')).start()      # let the TUI paint first
-        store.add_comment(body.task_id, ACTOR, 'human', f'Opened an interactive {t.label} terminal in {t.cwd}')
+    tk = store.get_task(body.task_id) if body.task_id else None
+    if body.seed and body.agent and tk:
+        ask = (tk.get('Summary') or '').strip()          # the task's details field IS the prompt
+        seed = f"Work Taskuary task {task_ref(body.task_id)} - {tk.get('Title')}." + (f' {ask}' if ask else '')
+        t.seed(seed[:4000])
+        store.add_comment(body.task_id, ACTOR, 'human', f'Opened an interactive {t.label} session in {t.cwd}')
     return t.info()
 
 @app.delete('/api/terminals/{sid}')

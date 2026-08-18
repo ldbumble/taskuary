@@ -336,7 +336,7 @@ export const TASK_STATES = [
 export const stateOf = (t) => {
   if (!t) return TASK_STATES[2];
   if (t.Status === "dropped") return TASK_STATES[4];
-  if (t.ReviewStatus === "pending") return TASK_STATES[0];      // a decision is waiting on you
+  if (t.ReviewStatus === "pending" || t.Status === "waiting") return TASK_STATES[0];   // a decision is on you
   if (t.Status === "done") return TASK_STATES[3];
   if (t.RunStatus === "running" || t.Status === "in_progress") return TASK_STATES[1];
   return TASK_STATES[2];

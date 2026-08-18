@@ -785,6 +785,10 @@ const ReviewActions = ({ reviewId, kind, draft, editText, setEditText, decide })
         value={editText || draft} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
     )}
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+      {/* an escalation asks one thing: may it go on? approving hands the task straight back */}
+      {kind === "escalation" && <Button size="small" variant="contained" disableElevation
+        sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+        onClick={() => decide(reviewId, "go_ahead")}>Go ahead — approved</Button>}
       {kind !== "escalation" && <Button size="small" variant="contained" onClick={() => decide(reviewId, "approve")}>Approve</Button>}
       {kind !== "escalation" && <Button size="small" variant="outlined" disabled={!editText.trim() || editText === draft}
         onClick={() => decide(reviewId, "edit", editText)}>Approve my edit</Button>}

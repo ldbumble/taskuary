@@ -65,19 +65,24 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   hands that item — a failed report, an email, a chat — to a CLI agent with your own
   prompt; it becomes a task carrying the full message as context.
 - **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Cards
-  working right now show a **live peephole** — the last lines of the agent's console —
-  and open into the full trace. Drag between columns; "New task for the agent" takes a
-  task name, the **prompt** that becomes the agent's instruction, and which **CLI and
-  model** run it.
+  working right now show a **live peephole** — the last lines of the agent's console — and
+  open into the full session. *Waiting on you* means exactly one thing: the agent stopped
+  because a person has to approve or decide. Drag between columns; "New task for the agent"
+  takes a task name, the **prompt**, which **CLI and model**, and **one** way it gets
+  worked — a live session, a headless run, or just filed — so two agents never end up on
+  the same task.
 - **Tasks** — **the page is a terminal.** Open a task, pick the CLI and model, and you get a
-  real session in that task's repo with the task already in its lap — you type into it like
+  real session in that task's repo with the prompt already typed in — you talk to it like
   any other terminal, because it *is* one. When the agent finishes, its report sits above
   the session; the messages, earlier runs and notes are folded underneath. One quiet link
-  runs it headless instead (issue → work → report → close or escalate) when you'd rather not
-  watch. Every task shows **one** state — *needs you*, *agent working*, *queued*, *done* —
-  instead of three columns you had to combine in your head.
+  runs it headless instead when you'd rather not watch. Every task shows **one** state —
+  *needs you*, *agent working*, *queued*, *done* — instead of three columns you had to
+  combine in your head.
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
-  Draft-with-AI. Nothing sends without you.
+  Draft-with-AI. Nothing sends without you. An **escalation** is one question — *may it go
+  on?* — so it gets one answer: **Go ahead** hands the task straight back to the same agent
+  with your words attached, or you take it yourself and mark it done. An agent that merely
+  answered a question does not escalate; it reports and closes.
 - **Reports** — a funnel you lay out: **any number of sources at the top** (the same
   connection twice with different SQL is fine — drag to reorder, one click to duplicate)
   feeding **one prompt at the bottom**, then the schedule. Every source's rows reach the
@@ -86,14 +91,13 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   rows** (default 200, per source) decides how much reaches the summary, and the headline
   says *capped* when rows were left behind — so the AI never calls a truncated slice "all
   of them".
-- **Terminals** — your coding CLI for real, inside the app: a pseudo-terminal (ConPTY on
-  Windows) streamed to xterm.js over a websocket. Its own TUI, its approval prompts, your
-  keystrokes — the session, not a transcript of one. There is no "terminal tab" on purpose:
-  a terminal belongs to the work. A **task page** is one; a **board card** opens one for its
-  repo; both appear in a **dock at the bottom** of whatever you were looking at (Ctrl+\` to
-  toggle, drag to resize, a tab per session). The pty lives server-side, so navigating away
-  or hiding the dock never kills a session, and sessions start clean — no inherited agent
-  session state. Everything is painted in Catppuccin Mocha; run
+- **Terminals** — your coding CLI for real: a pseudo-terminal (ConPTY on Windows) streamed
+  to xterm.js over a websocket. Its own TUI, its approval prompts, your keystrokes — the
+  session, not a transcript of one. It lives in exactly one place, **the task page**: no
+  terminal tab, no dock at the bottom of the screen, because a session belongs to the task
+  it is working. The pty lives server-side, so leaving the task or reloading the page never
+  kills it — reopening the task re-attaches. Sessions start clean (no inherited agent
+  session state) and are painted in Catppuccin Mocha; run
   `/plugin install catppuccin@matcra587/claude-themes` inside Claude Code to match it
   there.
 - **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
@@ -194,7 +198,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 100 tests, ~20s, no network or credentials needed
+pytest -q                   # 102 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

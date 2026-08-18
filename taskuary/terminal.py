@@ -12,6 +12,7 @@ from loguru import logger
 
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
 SESSIONS = {}               # sid -> Term
+SEED_WAIT, SEED_QUIET = 25, 1.4     # seconds: how long to wait for a TUI, and what 'settled' means
 
 
 # A terminal must start a FRESH session. Taskuary can itself be launched from inside an
@@ -92,6 +93,21 @@ class Term:
             self._append(data); self._emit(data)
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self._emit(None)
+
+    def seed(self, text: str):
+        """Type the first prompt in for the user - but only once the CLI is actually ready
+        for it. Agent TUIs take a few seconds to boot and redraw, and anything typed while
+        they are still painting is swallowed, so wait for output to start and then go quiet
+        (that gap IS 'ready'), rather than guessing a delay."""
+        def go():
+            start = time.time()
+            while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
+            quiet, last = 0, self.n
+            while self.alive and quiet < SEED_QUIET and time.time() - start < SEED_WAIT:
+                time.sleep(.2)
+                quiet, last = (quiet + .2, last) if self.n == last else (0, self.n)
+            if self.alive: self.write(text.replace('\n', ' ') + '\r')
+        threading.Thread(target=go, daemon=True).start()
 
     def subscribe(self, loop, q): self.subs.append((loop, q))
     def unsubscribe(self, q): self.subs = [(l, x) for l, x in self.subs if x is not q]

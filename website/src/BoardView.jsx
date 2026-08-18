@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
-  DialogTitle, FormControlLabel, Checkbox, MenuItem, Select, TextField, Typography,
+  DialogTitle, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -28,7 +28,7 @@ const LiveTail = ({ run }) => (
     ))}
     <Typography variant="caption" sx={{ ...mono, color: CATPPUCCIN.cyan, fontSize: 9.5,
       "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
-      ▮ {run.AgentName} working — click to open the full terminal
+      ▮ {run.AgentName} working — click the card for the full session
     </Typography>
   </Box>
 );
@@ -39,13 +39,14 @@ const COLS = [
     match: (t) => t.Status === "open" && t.ReviewStatus !== "pending" },
   { key: "working", title: "Agent working", dot: "#0e7490", status: "in_progress",
     match: (t) => t.Status === "in_progress" && t.ReviewStatus !== "pending" },
+  // waiting means one thing: a person has to approve or decide before the agent goes on
   { key: "waiting", title: "Waiting on you", dot: "#b45309", status: "waiting",
-    match: (t) => t.ReviewStatus === "pending" && !["done", "dropped"].includes(t.Status) },
+    match: (t) => (t.ReviewStatus === "pending" || t.Status === "waiting") && !["done", "dropped"].includes(t.Status) },
   { key: "done", title: "Done", dot: "#15803d", status: "done",
     match: (t) => t.Status === "done" },
 ];
 
-export default function BoardView({ onOpenTask, onOpenTerminal }) {
+export default function BoardView({ onOpenTask }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
   const [dragId, setDragId] = useState(null);
@@ -53,7 +54,9 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
   const [repos, setRepos] = useState([]);
   const { agents, models } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
-  const [nt, setNt] = useState({ Title: "", Summary: "", toCoder: true, repo: "", agent: "coder", model: "" });
+  // how = the ONE way this task gets worked. Two agents on one task (a live session plus a
+  // headless run) was the confusing part, so it is a choice, not two buttons.
+  const [nt, setNt] = useState({ Title: "", Summary: "", how: "live", repo: "", agent: "coder", model: "" });
 
   const load = useCallback(async () => {
     try { setTasks(((await api.get("/api/tasks")).data.data || []).filter((t) => t.Status !== "dropped")); }
@@ -90,11 +93,12 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
   const create = async () => {
     const { data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: "coding",
       Tags: nt.repo ? `repo:${nt.repo}` : null });
-    // the details field IS the prompt: it rides down as the run's instruction, on top of
-    // the task context the agent already gets
-    if (nt.toCoder) await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null, agent: nt.agent || null,
-      model: nt.model || null, instruction: nt.Summary || null });
-    setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "", toCoder: true }));
+    setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "" }));
+    // the details field IS the prompt - it is typed into the live session, or sent down as
+    // the headless run's instruction, depending on how you chose to work it
+    if (nt.how === "live") return onOpenTask(data.taskId, { start: true, agent: nt.agent });
+    if (nt.how === "headless") await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null,
+      agent: nt.agent || null, model: nt.model || null, instruction: nt.Summary || null });
     load();
   };
 
@@ -148,12 +152,6 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "escalation" ? "escalate" : t.ReviewKind === "auto" ? "auto" : "draft"} />}
                     <Box sx={{ flex: 1 }} />
-                    {onOpenTerminal && (
-                      <Typography variant="caption" title="Open a real terminal on this task"
-                        onClick={(e) => { e.stopPropagation(); onOpenTerminal({ agent: "coder", task_id: t.TaskId, repo: repoOf(t), seed: false }); }}
-                        sx={{ color: "#0e7490", fontWeight: 600, fontSize: 10.5, cursor: "pointer",
-                          "&:hover": { textDecoration: "underline" } }}>terminal</Typography>
-                    )}
                     <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 10.5 }}>open →</Typography>
                   </Box>
                 </Box>
@@ -196,8 +194,16 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
               </Typography>
             )}
           </Box>
-          <FormControlLabel control={<Checkbox checked={nt.toCoder} onChange={(e) => setNt({ ...nt, toCoder: e.target.checked })} />}
-            label={<Typography variant="body2">Send to {nt.agent} immediately (issue → work → report)</Typography>} />
+          <Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+              How it gets worked — one agent, one way
+            </Typography>
+            <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}>
+              <MenuItem value="live" sx={{ fontSize: 12.5 }}>Live {nt.agent} session — opens the task, prompt typed in, you can talk to it</MenuItem>
+              <MenuItem value="headless" sx={{ fontSize: 12.5 }}>Headless run — issue → work → report, nothing to watch</MenuItem>
+              <MenuItem value="file" sx={{ fontSize: 12.5 }}>Just file it — nobody starts working yet</MenuItem>
+            </Select>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setNewOpen(false)}>Cancel</Button>

@@ -95,13 +95,17 @@ def test_connector(store, cid: int) -> dict:
                 src = next((s for s in store.list_sources(active_only=False)
                             if s['Channel'] == 'teams' and '@' in (s['Address'] or '')), None)
                 if src:
-                    r = requests.get(f"{GRAPH}/users/{src['Address']}/chats/getAllMessages",
-                                     headers={'Authorization': f'Bearer {tok}'}, params={'$top': 1}, timeout=20)
-                    if r.status_code == 403:
-                        raise RuntimeError('token OK but chat read DENIED (403): app-only Chat.Read.All is a '
-                                           'Microsoft protected API - submit the approval form, or use delegated auth')
-                    r.raise_for_status()
-                    detail = f"chat read OK for {src['Address']}"
+                    # probe the road the POLLER takes, or a green card means nothing. Chats
+                    # HOSTED IN ANOTHER ORG'S TENANT (an external party started them) refuse
+                    # app-only reads - nothing to configure, so SAY which are invisible.
+                    since = _utc(datetime.now() - timedelta(days=7))
+                    chats = _teams_chats(tok, src['Address'], since)
+                    blocked = [ch for ch in chats if _chat_msgs(tok, ch['id'], since, probe=True) is None]
+                    detail = f"chat read OK for {src['Address']} - {len(chats) - len(blocked)} of {len(chats)} chats readable (7 days)"
+                    if blocked:
+                        names = ', '.join((ch.get('topic') or ch.get('chatType') or 'chat') for ch in blocked[:4])
+                        detail += (f"; {len(blocked)} unreadable (403), incl. {names} - those chats live in another "
+                                   "organization's tenant, where an app registration of yours cannot read messages")
                 else:
                     detail += ' - add a Teams source (user UPN) to probe chat access'
         elif c['Type'] == 'github':
@@ -182,24 +186,121 @@ def _mail_msgs(tok, upn, since, folder='inbox'):
     return r.json().get('value', [])
 
 
-def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
-    """The owner's SENT mail never gets its own timeline row and never becomes work: when
-    the conversation has a task, it rides along INSIDE the chain (a 'context' message on
-    the task + a 'You replied' history entry, so the side panel shows it was answered).
+def ingest_own_message(store, msg: dict, why: str) -> int:
+    """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row
+    and never becomes work: when the conversation already has a task it rides along INSIDE
+    the chain (a 'context' message + a history entry, so the panel shows it was answered).
     No matching chain -> nothing stored at all."""
-    ext = f"graph:{m['id']}"
-    if store.message_exists(ext): return 0
-    conv = m.get('conversationId')
+    if store.message_exists(msg['external_id']): return 0
+    conv = msg.get('conversation_id')
     tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
     if not tid: return 0
-    mid = store.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'email',
-                             'SourceName': mailbox, 'Subject': m.get('subject'), 'FromName': 'You',
-                             'FromEmail': mailbox, 'SentAt': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
-                             'BodyText': _body(m),
-                             'SourceLink': m.get('webLink'), 'Status': 'context'})
-    store.add_route(mid, tid, 'attach', None, 'your reply on this thread - kept for context', [], 'router')
-    store.add_comment(tid, 'you', 'human', f"You replied: {(m.get('bodyPreview') or '')[:300]}")
+    mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
+                             'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
+                             'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
+                             'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
+                             'SourceLink': msg.get('source_link'), 'Status': 'context'})
+    store.add_route(mid, tid, 'attach', None, why, [], 'router')
+    store.add_comment(tid, 'you', 'human', f"You replied: {(msg.get('body') or '')[:300]}")
     return 1
+
+
+def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
+    return ingest_own_message(store, {
+        'external_id': f"graph:{m['id']}", 'channel': 'email', 'source_name': mailbox,
+        'subject': m.get('subject'), 'from_email': mailbox, 'body': _body(m),
+        'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
+        'sent_at': _local(m.get('receivedDateTime') or m.get('sentDateTime') or '')},
+        'your reply on this thread - kept for context')
+
+
+# ── Teams chats ─────────────────────────────────────────────────────────────────────
+# /chats/getAllMessages looks like the obvious road and is a trap: it rejects every
+# lastModifiedDateTime filter we can form ("Missing 'lastModifiedDateTime' value"), so
+# unfiltered it hands back the OLDEST page - years of bot attachment posts - and never the
+# messages a person actually sent today. Listing recently-updated chats and reading each
+# one filters correctly and is what the connector card probes.
+def _utc(dt) -> str:
+    from datetime import timezone
+    return dt.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
+
+def _teams_chats(tok, upn, since_iso, top=25):
+    r = requests.get(f'{GRAPH}/users/{upn}/chats', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
+                     params={'$top': top, '$filter': f'lastUpdatedDateTime gt {since_iso}'})
+    if r.status_code == 403:
+        raise RuntimeError('token OK but chat read DENIED (403) - app-only Chat.Read.All is a Microsoft '
+                           'protected API: submit the approval form for this app registration')
+    r.raise_for_status()
+    return r.json().get('value', [])
+
+
+def _chat_msgs(tok, chat_id, since_iso, top=30, probe=False):
+    """Messages in one chat. Tenants refuse app-only reads on some chats (403) - one of those
+    must never sink the whole poll, so it reads as empty; `probe` returns None instead, which
+    is how the connector card counts what it cannot see."""
+    r = requests.get(f'{GRAPH}/chats/{chat_id}/messages', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
+                     params={'$top': top, '$filter': f'lastModifiedDateTime gt {since_iso}'})
+    if r.status_code in (403, 404):
+        logger.debug(f'teams chat {chat_id[:24]} not readable app-only ({r.status_code})')
+        return None if probe else []
+    r.raise_for_status()
+    return r.json().get('value', [])
+
+
+def _graph_user(tok, oid, cache):
+    """AAD object id -> (name, address). Cached per poll: the sender's address is what memory
+    notes, skip-sender rules and the whole triage funnel key on."""
+    if oid in cache: return cache[oid]
+    who = ('Teams user', '')
+    try:
+        r = requests.get(f'{GRAPH}/users/{oid}', headers={'Authorization': f'Bearer {tok}'}, timeout=20,
+                         params={'$select': 'displayName,mail,userPrincipalName'})
+        if r.status_code == 200:
+            j = r.json()
+            who = (j.get('displayName') or 'Teams user', j.get('mail') or j.get('userPrincipalName') or '')
+    except requests.RequestException as e:
+        logger.debug(f'teams user lookup failed for {oid}: {e}')
+    cache[oid] = who
+    return who
+
+
+def _chat_title(ch, fallback):
+    kind = ch.get('chatType')
+    return ch.get('topic') or (f'Teams chat with {fallback}' if kind == 'oneOnOne' else f'Teams {kind or "chat"}')
+
+
+def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False) -> int:
+    """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
+    ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
+    call-started events and empty bodies are not messages anybody has to act on."""
+    since_iso, users, n = _utc(since), {}, 0
+    me = ''
+    try:
+        r = requests.get(f'{GRAPH}/users/{upn}', headers={'Authorization': f'Bearer {tok}'},
+                         params={'$select': 'id'}, timeout=20)
+        me = r.json().get('id', '') if r.status_code == 200 else ''
+    except requests.RequestException:
+        pass
+    for ch in _teams_chats(tok, upn, since_iso):
+        for m in reversed(_chat_msgs(tok, ch['id'], since_iso)):
+            user = (m.get('from') or {}).get('user') or {}
+            body = _clean((m.get('body') or {}).get('content'))
+            if m.get('messageType') != 'message' or not user.get('id') or not body: continue
+            name, addr = _graph_user(tok, user['id'], users)
+            name = user.get('displayName') or name
+            conv = f"teams:{ch['id']}"
+            common = {'external_id': f"teams:{ch['id']}:{m['id']}", 'channel': 'teams',
+                      'subject': _chat_title(ch, name), 'body': body[:20000], 'conversation_id': conv,
+                      'sent_at': _local(m.get('createdDateTime') or ''), 'source_link': m.get('webUrl'),
+                      'source_name': upn}
+            if user['id'] == me:                       # your own chat lines are context, never work
+                n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
+                                        'your message in this chat - kept for context')
+                continue
+            out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
+            n += out['status'] != 'duplicate'
+    return n
 
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github'}
@@ -274,6 +375,8 @@ def poll_channels(store) -> int:
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address']}, llm=llm)
                         n += out['status'] != 'duplicate'
+                elif c['Type'] == 'teams':
+                    n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'github':
                     n += ingest_github_issues(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'slack':

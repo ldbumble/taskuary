@@ -127,6 +127,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(me['Active'], 0)
         self.assertEqual(c.post('/api/policies', json={'Name': 'incomplete'}).status_code, 422)
 
+    def test_skip_policy_applies_to_history_through_the_api(self):
+        for i in range(2):
+            c.post('/api/ingest/push', json={'external_id': f'flood{i}', 'subject': 'Provisioning notice',
+                                             'body': 'automated, no action required', 'from_email': 'flood@vendor.com',
+                                             'channel': 'email'})
+        seen = lambda: [m for m in c.get('/api/feed').json()['data'] if m['FromEmail'] == 'flood@vendor.com']
+        self.assertEqual(len(seen()), 2)
+        r = c.post('/api/policies', json={'Name': 'skip:flood@vendor.com', 'Kind': 'sender', 'Pattern': 'flood@vendor.com',
+                                          'Action': 'skip', 'Reason': 'flood sender', 'SortOrder': 10, 'Active': True}).json()
+        self.assertEqual(r['affected'], 2)                       # the back catalogue leaves the timeline too
+        self.assertEqual(seen(), [])
+        back = c.post('/api/policies', json={'PolicyId': r['policyId'], 'Active': False}).json()
+        self.assertEqual((back['affected'], len(seen())), (2, 2))   # switching it off restores them
+
     def test_memory_add_and_toggle(self):
         r = c.post('/api/memory', json={'note': 'Never draft replies to cash reports', 'scope': 'global'}).json()
         self.assertTrue(r['ok'])

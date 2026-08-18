@@ -336,7 +336,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
         <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch" }}>
           <Box sx={{ position: "sticky", top: 60 }}>
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
-              decide={decide} onDetails={() => setOpen(sel)} onOpenTask={onOpenTask} onClose={() => setSel(null)} />
+              decide={decide} onDetails={() => setOpen(sel)} onOpenTask={onOpenTask} onClose={() => setSel(null)}
+              onSkipped={() => { setSel(null); load(); }} />
           </Box>
         </Box>
       )}
@@ -475,14 +476,15 @@ const PanelLabel = ({ children }) => (
 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
-const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, onOpenTask, onClose }) => {
-  // one click turns a flood sender (100s of automated mails) into a skip policy -
-  // future mail from them is deduped but never shows on the timeline again
-  const [skipped, setSkipped] = useState(false);
+const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, onOpenTask, onClose, onSkipped }) => {
+  // one click turns a flood sender (100s of automated mails) into a skip policy - their
+  // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
+  const [skipped, setSkipped] = useState(null);
   const skipSender = async () => {
-    await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
+    const { data } = await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
       Action: "skip", Reason: "flood sender — skipped from the timeline", SortOrder: 10, Active: true });
-    setSkipped(true);
+    setSkipped(data.affected || 0);
+    setTimeout(() => onSkipped?.(), 1400);          // let the count land, then drop the rows
   };
   const rep = [...(detail?.comments || [])].reverse().find((c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
@@ -571,10 +573,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
                 <Button size="small" onClick={onDetails}>See details →</Button>
                 {sel.TaskId && <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task</Button>}
                 <Box sx={{ flex: 1 }} />
-                {sel.Channel === "email" && sel.FromEmail && (skipped
-                  ? <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>✓ sender skipped from now on</Typography>
+                {sel.Channel === "email" && sel.FromEmail && (skipped !== null
+                  ? <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
+                      ✓ sender skipped{skipped ? ` — ${skipped} past message${skipped === 1 ? "" : "s"} hidden too` : ""}
+                    </Typography>
                   : <Button size="small" sx={{ color: "#8a94a6", fontSize: 11 }} onClick={skipSender}
-                      title={`Never show ${sel.FromEmail} on the timeline again`}>Skip this sender</Button>)}
+                      title={`Hide ${sel.FromEmail} from the timeline — past messages included (undo in Settings → Routing policies)`}>
+                      Skip this sender
+                    </Button>)}
               </Box>
             </>
           )}

@@ -107,6 +107,28 @@ class CoreTests(unittest.TestCase):
         self.assertEqual((out, sid), ('all done', 's1'))
         self.assertTrue(any(k == 'live' and 'Bash' in d for k, d in ev))
 
+    def test_skip_policy_hides_the_senders_history_and_gives_it_back(self):
+        from taskuary.ingest import ingest_message
+        from taskuary.policy import apply_retroactively
+        s = MemoryStore()
+        for i in range(3):
+            ingest_message(s, {'external_id': f'old{i}', 'channel': 'email', 'subject': 'Provisioning notice',
+                               'body': 'automated, no action required', 'from_email': 'flood@vendor.com',
+                               'sent_at': '2026-08-17 10:00'})
+        ingest_message(s, {'external_id': 'keep', 'channel': 'email', 'subject': 'real mail', 'body': 'hi',
+                           'from_email': 'human@client.com', 'sent_at': '2026-08-17 10:00'})
+        self.assertEqual(len(s.feed()), 4)
+        pol = {'Name': 'skip:flood@vendor.com', 'Kind': 'sender', 'Pattern': 'flood@vendor.com',
+               'Action': 'skip', 'Reason': 'flood', 'SortOrder': 10, 'Active': 1}
+        s.save_policy(pol, 'owner')
+        self.assertEqual(apply_retroactively(s, pol), 3)          # the back catalogue goes too
+        self.assertEqual([m['FromEmail'] for m in s.feed()], ['human@client.com'])
+        # switching the rule off puts the history back on the timeline
+        self.assertEqual(apply_retroactively(s, {**pol, 'Active': 0}), 3)
+        self.assertEqual(len(s.feed()), 4)
+        # only 'skip' rewrites history - an ignore rule leaves it alone
+        self.assertEqual(apply_retroactively(s, {**pol, 'Action': 'ignore'}), 0)
+
     def test_console_lines_show_output_not_session_spam(self):
         from taskuary.agents import _live_line
         self.assertEqual(_live_line({'type': 'system', 'subtype': 'init', 'model': 'opus'}), 'session started · model opus')

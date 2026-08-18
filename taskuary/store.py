@@ -152,6 +152,11 @@ class SQLiteStore:
     def add_message(self, fields): return self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
+    def scan_messages(self, limit=20000):
+        """Just enough of every message to re-run a policy over the history (bodies capped)."""
+        return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, substr(BodyText, 1, 2000) BodyText '
+                          'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
+    def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
     def attach_message(self, mid, task_id):
         self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
     def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router'):

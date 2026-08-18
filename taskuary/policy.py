@@ -30,6 +30,25 @@ def matches(policy: dict, msg: dict, known_sender: bool = True) -> bool:
     return False
 
 
+def apply_retroactively(store, policy: dict) -> int:
+    """A skip rule works BACKWARDS too: muting a flood sender shouldn't leave 200 of their
+    old rows sitting on the timeline. Turning the rule off puts that history back (as
+    'ignored', or 'routed' where the message is on a task - the pre-skip state isn't
+    recorded, and both mean "visible, no work"). Only 'skip' changes visibility, so it is
+    the only action applied backwards; 'context' messages (your own replies) never move."""
+    if policy.get('Action') != 'skip': return 0
+    on = bool(policy.get('Active', 1))
+    froms = ('routed', 'ignored', 'filed') if on else ('skipped',)
+    n = 0
+    for m in store.scan_messages():
+        if m['Status'] not in froms: continue
+        if not matches(policy, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'), 'body': m.get('BodyText')}):
+            continue
+        store.set_message_status(m['MessageId'], 'skipped' if on else ('routed' if m.get('TaskId') else 'ignored'))
+        n += 1
+    return n
+
+
 def evaluate(msg: dict, policies: list, known_sender: bool = True, default_action: str = 'draft') -> dict:
     """Decide the action for a message. Returns {action, rule, reason} - rule/reason name
     the winning policy, or 'default' when nothing matched."""

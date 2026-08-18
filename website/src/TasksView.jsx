@@ -2,9 +2,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  Link, MenuItem, Select, TextField, Typography,
+  IconButton, Link, MenuItem, Select, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
 import BlockIcon from "@mui/icons-material/Block";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
@@ -171,6 +172,9 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                     sx={{ color: "#7e22ce", borderColor: "#7e22ce55", bgcolor: PANEL }} onClick={sendToCoder}>Send to coder</Button>
                   <Button size="small" color="error" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 14 }} />}
                     sx={{ bgcolor: PANEL }} onClick={notATask}>Not a task</Button>
+                  <Tooltip title="Close — back to the list (the task stays)">
+                    <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+                  </Tooltip>
                 </Box>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
                   <Typography variant="caption" sx={{ color: FAINT }}>
@@ -239,12 +243,7 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                 </Block>
 
                 <Block title="Activity">
-                  {detail.comments.map((c) => (
-                    <Typography key={c.CommentId} variant="body2" sx={{ mb: 0.4, color: DIM }}>
-                      <b style={{ color: c.ActorType === "agent" ? "#7e22ce" : "#4f46e5" }}>{c.Actor}</b>
-                      <span style={{ color: "#98a1b3", fontSize: 11 }}> {timeAgo(c.CreatedAt)}</span> — {c.Body}
-                    </Typography>
-                  ))}
+                  {detail.comments.map((c) => <CommentLine key={c.CommentId} c={c} />)}
                   <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
                     <TextField fullWidth placeholder="Add a note (humans only)" value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
                     <Button size="small" onClick={post}>Post</Button>
@@ -288,6 +287,28 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
     </Box>
   );
 }
+
+// An agent's answer can be thousands of characters - show the first screenful, keep the
+// rest one click away, so the thread stays readable.
+const CommentLine = ({ c }) => {
+  const [open, setOpen] = useState(false);
+  const body = String(c.Body || "");
+  const long = body.length > 420;
+  return (
+    <Box sx={{ mb: 0.6 }}>
+      <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap" }}>
+        <b style={{ color: c.ActorType === "agent" ? "#7e22ce" : "#4f46e5" }}>{c.Actor}</b>
+        <span style={{ color: "#98a1b3", fontSize: 11 }}> {timeAgo(c.CreatedAt)}</span> — {long && !open ? `${body.slice(0, 420)}…` : body}
+      </Typography>
+      {long && (
+        <Typography variant="caption" onClick={() => setOpen(!open)}
+          sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+          {open ? "show less ↑" : `show all ${body.length.toLocaleString()} chars ↓`}
+        </Typography>
+      )}
+    </Box>
+  );
+};
 
 const Block = ({ title, children }) => (
   <Box sx={{ mt: 2 }}>

@@ -13,6 +13,7 @@ from .store import SQLiteStore, task_ref
 from .ingest import ingest_message, task_from_message
 from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
 from . import agents as hub_agents
+from . import policy as policy_engine
 from . import terminal as hub_term
 from .coder import run_coding_task
 from .converse import message_agent
@@ -454,7 +455,12 @@ def save_policy(body: PolicyBody):
         raise HTTPException(422, 'new policies need Name, Kind, Action, Reason')
     pid = store.save_policy(fields, ACTOR)
     store.audit('policy', pid, 'edit' if body.PolicyId else 'create', ACTOR, detail=fields)
-    return {'ok': True, 'policyId': pid}
+    # a skip rule also reaches BACKWARDS: the sender's existing rows leave the timeline
+    # (and come back if you switch the rule off) - see policy.apply_retroactively
+    saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
+    hidden = policy_engine.apply_retroactively(store, saved or {})
+    if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden, 'active': bool(saved.get('Active'))})
+    return {'ok': True, 'policyId': pid, 'affected': hidden}
 
 @app.get('/api/memory')
 def memory(): return {'data': store.list_memories(active_only=False)}

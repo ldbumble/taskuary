@@ -5,7 +5,7 @@ the agent's own TUI, its approval prompts, and your typing all go through it.
 
 Windows uses ConPTY via pywinpty; POSIX uses the stdlib pty module.
 """
-import os, subprocess, threading, time, uuid
+import os, re, subprocess, threading, time, uuid
 from collections import deque
 from datetime import datetime
 from loguru import logger
@@ -73,6 +73,7 @@ class Term:
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.buf, self.n, self.ended = deque(), 0, None
         self.subs = []                                    # (loop, asyncio.Queue)
+        self.taps = []                                    # plain callables, for server-side readers
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols)
         self.alive = True
         threading.Thread(target=self._pump, daemon=True).start()
@@ -91,6 +92,9 @@ class Term:
             except Exception as e: logger.debug(f'terminal {self.sid} read ended: {e}'); break
             if not data: break
             self._append(data); self._emit(data)
+            for f in list(self.taps):
+                try: f(data)
+                except Exception as e: logger.debug(f'terminal tap failed: {e}')
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self._emit(None)
 
@@ -108,6 +112,9 @@ class Term:
                 quiet, last = (quiet + .2, last) if self.n == last else (0, self.n)
             if self.alive: self.write(text.replace('\n', ' ') + '\r')
         threading.Thread(target=go, daemon=True).start()
+
+    def tap(self, fn): self.taps.append(fn)
+    def untap(self, fn): self.taps = [f for f in self.taps if f is not fn]
 
     def subscribe(self, loop, q): self.subs.append((loop, q))
     def unsubscribe(self, q): self.subs = [(l, x) for l, x in self.subs if x is not q]
@@ -163,6 +170,48 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     SESSIONS[t.sid] = t
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})
     return t
+
+
+# ── wrapping up: "we're done" -> the agent's own closing summary ────────────────────
+WRAP_MARKER = '===TASKUARY WRAP==='
+WRAP_PROMPT = ("The owner is closing this Taskuary task. Stop working and write your wrap-up now, nothing "
+               "else: first a line containing only " + WRAP_MARKER + " then 5-15 plain-text lines - what you "
+               "determined, what you actually changed, and anything left for next time. No questions, no code "
+               "blocks, no further tool calls.")
+WRAP_WAIT, WRAP_QUIET = 420, 5      # seconds: give a thinking agent room, then take the answer
+
+_ANSI = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]|\x1b[=>]'
+                   r'|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+def plain(s: str) -> str:
+    """A TUI's bytes as readable text: escape sequences gone, box gutters trimmed."""
+    s = _ANSI.sub('', s or '').replace('\r\n', '\n').replace('\r', '\n')
+    return '\n'.join(l.strip(' │┃┊▎|').rstrip() for l in s.split('\n'))
+
+
+def wrap_up(t: Term, on_done, prompt: str = WRAP_PROMPT, timeout: int = WRAP_WAIT):
+    """Ask a LIVE session for its closing summary and hand the text back. A pty is all we
+    have here - no session id to resume, and no JSON contract that survives a TUI wrapping
+    long lines - so we ask for a marker line and take the plain text after the last one.
+    The marker also appears in the echo of our own prompt, which is exactly the fallback we
+    want: a CLI that ignores the instruction still gives us everything it said afterwards."""
+    got = []
+    sink = got.append                     # one identity, so untap can find it again
+    t.tap(sink)
+    def go():
+        try:
+            t.write(prompt.replace('\n', ' ') + '\r')
+            t0, last, quiet = time.time(), 0, 0
+            while t.alive and time.time() - t0 < timeout:
+                time.sleep(.5)
+                n = sum(len(x) for x in got)
+                quiet, last = (quiet + .5, last) if n == last else (0, n)
+                if quiet >= WRAP_QUIET and WRAP_MARKER in plain(''.join(got)): break
+            txt = plain(''.join(got))
+            on_done(txt.rsplit(WRAP_MARKER, 1)[-1].strip()[:8000])
+        finally:
+            t.untap(sink)
+    threading.Thread(target=go, daemon=True).start()
 
 
 def get(sid): return SESSIONS.get(sid)

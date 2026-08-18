@@ -15,10 +15,10 @@ import ReviewView from "./ReviewView.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
 import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
-import TerminalView, { TerminalDock } from "./TerminalView.jsx";
+import { TerminalDock } from "./TerminalView.jsx";
 import SettingsView from "./SettingsView.jsx";
 
-const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Terminal", "Connectors", "Docs", "Settings"];
+const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
 
 function ServerVersion() {
   const [v, setV] = useState(null);
@@ -46,7 +46,8 @@ export default function TaskHubPage() {
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
 
   const openTask = (taskId) => { setSelectedTask(taskId); setTab("Tasks"); };
-  // Terminals live in a dock at the bottom, open on every tab (VS Code / Cloud Shell
+  // Terminals belong to the WORK, not to a tab of their own: a board card or a task opens
+  // its session, and the dock at the bottom is where it appears (VS Code / Cloud Shell
   // shape) - Ctrl+` toggles it, and any view can ask it to start a session.
   const [termReq, setTermReq] = useState(null);
   const [dock, setDock] = useState(false);
@@ -110,7 +111,6 @@ export default function TaskHubPage() {
             onChanged={refreshPending} onOpenTerminal={openTerminal} />}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
-          {tab === "Terminal" && <TerminalView startWith={dock ? null : termReq} onStarted={() => setTermReq(null)} />}
           {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}
           {tab === "Docs" && <DocsView key={`d${tick}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}`} />}

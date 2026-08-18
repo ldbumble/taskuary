@@ -5,6 +5,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+## Automate your job.
+
 **Your inbox and your coding agents in one place.** Email, Teams, Slack, GitHub issues and
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
@@ -65,10 +67,13 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   and open into the full trace. Drag between columns; "New task for the agent" takes a
   task name, the **prompt** that becomes the agent's instruction, and which **CLI and
   model** run it.
-- **Tasks** — the dense two-pane view: messages with routing decisions, agent runs with
-  prompts, traces and diffs, message the working agent, "Not a task" (which teaches the
-  funnel). One **Run agent** control — agent, model, an optional prompt — starts work;
-  behind it runs the whole lifecycle (issue → work → report → close or escalate).
+- **Tasks** — **the page is a terminal.** Open a task, pick the CLI and model, and you get a
+  real session in that task's repo with the task already in its lap — you type into it like
+  any other terminal, because it *is* one. When the agent finishes, its report sits above
+  the session; the messages, earlier runs and notes are folded underneath. One quiet link
+  runs it headless instead (issue → work → report → close or escalate) when you'd rather not
+  watch. Every task shows **one** state — *needs you*, *agent working*, *queued*, *done* —
+  instead of three columns you had to combine in your head.
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI. Nothing sends without you.
 - **Reports** — a funnel you lay out: **any number of sources at the top** (the same
@@ -79,16 +84,16 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   rows** (default 200, per source) decides how much reaches the summary, and the headline
   says *capped* when rows were left behind — so the AI never calls a truncated slice "all
   of them".
-- **Terminal** — your coding CLI, for real, inside the app: a pseudo-terminal (ConPTY on
-  Windows) streamed to xterm.js over a websocket. The agent's own TUI, its approval
-  prompts, your keystrokes — the session, not a transcript of one. It lives in a **dock at
-  the bottom of every tab** (Ctrl+\` to toggle, drag its top edge to resize, tabs for
-  parallel sessions) as well as its own full-screen tab; hiding it never kills a session,
-  because the pty lives server-side. Sessions start clean — no inherited agent session
-  state, and everything is painted in Catppuccin Mocha (run
+- **Terminals** — your coding CLI for real, inside the app: a pseudo-terminal (ConPTY on
+  Windows) streamed to xterm.js over a websocket. Its own TUI, its approval prompts, your
+  keystrokes — the session, not a transcript of one. There is no "terminal tab" on purpose:
+  a terminal belongs to the work. A **task page** is one; a **board card** opens one for its
+  repo; both appear in a **dock at the bottom** of whatever you were looking at (Ctrl+\` to
+  toggle, drag to resize, a tab per session). The pty lives server-side, so navigating away
+  or hiding the dock never kills a session, and sessions start clean — no inherited agent
+  session state. Everything is painted in Catppuccin Mocha; run
   `/plugin install catppuccin@matcra587/claude-themes` inside Claude Code to match it
-  there). Every **task page embeds its own session** — the agent's TUI right under the run
-  history — or open a bare shell in any repo.
+  there.
 - **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
   models and CLI agents, messaging channels, GitHub, SQL Server. Every connection has a
   **role** you choose: *inbound trigger* (items go through triage and can become tasks),
@@ -126,6 +131,25 @@ The other direction works too: a connection marked *agent tool* is named for the
 SOUL.md along with `POST /api/tools/run` — one call runs a query, script, or MCP tool
 through the saved credentials and hands the raw output back, so an agent working a task
 can look something up in SQL Server or act in another system without leaving the run.
+
+## Memory: it learns from your verdicts
+
+Taskuary ships with the batteries: the triage brain doesn't just classify, it **remembers
+what you decided last time**.
+
+- **"Not our task"** on any timeline item writes a note — editable before it's saved, scoped
+  to that sender, their whole domain, or everyone — and every later message is classified
+  with that note in hand. The classic case: colleagues cc'ing you on a thread that is
+  theirs to handle. Say it once; triage stops opening tasks for it. Their mail keeps
+  arriving (that's what *Skip this sender* is for) — only the judgement is learned.
+- **Other verdicts teach too**: *No reply needed*, *Reject*, and your edits to a draft all
+  leave notes behind, and closing a task resolves its pending reviews.
+- **Notes are yours to read and revoke** — Settings → Agent memory lists every one with its
+  scope and source; toggle one off and it stops being injected, while staying on the record.
+- **Three layers, on purpose**: `SOUL.md` / `CODER.md` are the standing rules you write,
+  memory notes are the lessons learned from your decisions, and the nightly `DIGEST.md` is
+  the short-term working memory. All three are injected into agent runs; memory and SOUL
+  also go into every triage call.
 
 ## Bring your own agent — and pick its model
 
@@ -168,7 +192,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 99 tests, ~20s, no network or credentials needed
+pytest -q                   # 100 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

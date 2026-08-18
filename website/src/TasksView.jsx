@@ -11,16 +11,19 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
-import { ChannelIcon, TaskStatusChip, ActionChip, AgentPicker, useAgents, RunTrace, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
-import { OpenTerminalButton, TerminalPane } from "./TerminalView.jsx";
+import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
+import TerminalIcon from "@mui/icons-material/Terminal";
+import { TerminalPane } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
 const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
-const STATUS_FILTERS = [
-  { key: "", label: "all" }, { key: "open", label: "open" },
-  { key: "in_progress", label: "in progress", c: PILL_COLORS.amber },
-  { key: "waiting", label: "waiting", c: PILL_COLORS.purple },
+// the filters ARE the states now - no more guessing how Status and ReviewStatus combine
+const STATE_FILTERS = [
+  { key: "", label: "all" },
+  { key: "needs_you", label: "needs you", c: PILL_COLORS.amber },
+  { key: "working", label: "working", c: PILL_COLORS.purple },
+  { key: "queued", label: "queued" },
   { key: "done", label: "done", c: PILL_COLORS.green },
 ];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -33,7 +36,7 @@ const selSx = { fontSize: 12.5, bgcolor: "#fff", borderRadius: 2,
 
 export default function TasksView({ selected, onSelect, onChanged, onOpenTerminal }) {
   const [tasks, setTasks] = useState(null);
-  const [filter, setFilter] = useState("open");        // default: real work, not history
+  const [filter, setFilter] = useState("");            // "" = all; the rest are derived states
   const [detail, setDetail] = useState(null);
   const { agents, models } = useAgents();
   const [err, setErr] = useState("");
@@ -43,19 +46,21 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
   const [comment, setComment] = useState("");
   const pollRef = useRef(null);
 
+  // fetch everything once and filter on the derived state - the server only knows raw
+  // Status, and the state a person cares about is a combination of three columns
   const loadTasks = useCallback(async () => {
-    try { setTasks((await api.get("/api/tasks", { params: filter ? { status: filter } : {} })).data.data || []); }
+    try { setTasks((await api.get("/api/tasks")).data.data || []); }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load tasks"); }
-  }, [filter]);
+  }, []);
 
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
     try {
       const { data } = await api.get(`/api/tasks/${id}`);
       setDetail(data);
-      // opened a task the current list filter hides (e.g. from the Board)? widen to
-      // "all" so the list and the detail never contradict each other
-      setFilter((f) => (f && data.task.Status !== f ? "" : f));
+      // opened a task the current filter hides (e.g. from the Board)? widen to "all" so
+      // the list and the detail never contradict each other
+      setFilter((f) => (f && stateOf({ ...data.task, ReviewStatus: (data.reviews || [])[0]?.Status }).key !== f ? "" : f));
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load task"); }
   }, []);
 
@@ -110,14 +115,12 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
     catch (e) { setErr(e?.response?.data?.detail || "Could not start a terminal"); }
   };
 
-  const [chat, setChat] = useState("");
-  const messageAgent = async () => {
-    if (!chat.trim()) return;
-    await api.post(`/api/tasks/${selected}/message`, { body: chat });
-    setChat(""); setTimeout(() => loadDetail(selected), 900);        // chat run appears; polling refreshes the reply
-  };
 
   const t = detail?.task;
+  const shown = (tasks || []).filter((x) => !filter || stateOf(x).key === filter);
+  const report = [...(detail?.comments || [])].reverse().find(
+    (c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
+  const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
       {/* ── list: one anchored panel - filter header on top, rows scroll inside ── */}
@@ -127,12 +130,12 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
           height: "calc(100vh - 118px)", minHeight: 420 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.75,
             borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
-            <FilterPills options={STATUS_FILTERS} value={filter} onChange={setFilter} />
+            <FilterPills options={STATE_FILTERS} value={filter} onChange={setFilter} />
             <Box sx={{ flex: 1 }} />
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}>New</Button>
           </Box>
           <Box sx={{ overflowY: "auto", flex: 1 }}>
-            {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !tasks.length ? <Empty>No tasks here.</Empty> : tasks.map((task) => (
+            {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length ? <Empty>No tasks here.</Empty> : shown.map((task) => (
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
                 sx={{ px: 1.25, py: 0.75, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
                   bgcolor: selected === task.TaskId ? "#eef0ff" : "transparent",
@@ -140,18 +143,13 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                   "&:hover": { bgcolor: selected === task.TaskId ? "#eef0ff" : "#f7f8fa" } }}>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{task.ref}</Typography>
-                  <TaskStatusChip status={task.Status} />
+                  <StateChip task={task} />
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: "#fdecec", color: "#b91c1c", height: 17, fontSize: 10 }} />}
                   {String(task.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />}
                   <Box sx={{ flex: 1 }} />
                   <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(task.CreatedAt)}</Typography>
                 </Box>
-                <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 0.1 }}>
-                  <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, flex: 1, minWidth: 0 }}>{task.Title}</Typography>
-                  {/* the answer at a glance: needs review / reviewed·approved / no reply needed */}
-                  {task.ReviewStatus && <ActionChip reviewStatus={task.ReviewStatus}
-                    action={task.ReviewKind === "escalation" ? "escalate" : task.ReviewKind === "auto" ? "auto" : "draft"} />}
-                </Box>
+                <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.1 }}>{task.Title}</Typography>
               </Box>
             ))}
           </Box>
@@ -168,7 +166,10 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Typography sx={{ ...mono, color: "#4f46e5", fontWeight: 700, fontSize: 12.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 700, fontSize: 14.5, minWidth: 200 }}>{t.Title}</Typography>
-                  <Select value={t.Status} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}>
+                  <StateChip task={{ ...t, ReviewStatus: (detail.reviews || [])[0]?.Status,
+                    RunStatus: (detail.runs || [])[0]?.Status }} />
+                  <Select value={t.Status} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
+                    title="the raw status, if you need to move it by hand">
                     {STATUSES.map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{s}</MenuItem>)}
                   </Select>
                   <Select value={t.Priority} onChange={(e) => patch({ Priority: e.target.value })} sx={selSx}>
@@ -189,14 +190,73 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                     {t.Kind} · from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
                   </Typography>
                   <Box sx={{ flex: 1 }} />
-                  {onOpenTerminal && <OpenTerminalButton taskId={selected} repo={repoOf(t)} onOpen={onOpenTerminal}
-                    label="Open it in the bottom dock" />}
+                  {onOpenTerminal && term && (
+                    <Button size="small" sx={{ fontSize: 11, color: "#0e7490" }}
+                      onClick={() => onOpenTerminal({ agent: run.agent, task_id: selected, repo: repoOf(t), seed: false })}>
+                      also open a session in the bottom dock
+                    </Button>
+                  )}
                 </Box>
               </Box>
               <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
-                {t.Summary && <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: DIM }}>{cleanText(t.Summary).slice(0, 600)}</Typography>}
+                {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
+                    its lap - you type into it like any other terminal. Everything below is
+                    reference material about the same task, folded away. */}
+                {term ? (
+                  <>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+                      <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
+                        {term.cmd} · {term.cwd}
+                      </Typography>
+                      <Button size="small" sx={{ fontSize: 11 }}
+                        onClick={async () => { await api.delete("/api/terminals/" + term.sid).catch(() => {}); setTerm(null); }}>
+                        end session
+                      </Button>
+                    </Box>
+                    <TerminalPane sid={term.sid} height="55vh" onExit={() => findTerm(selected)} />
+                  </>
+                ) : (
+                  <Box sx={{ ...card, p: 2, textAlign: "center", bgcolor: PANEL2 }}>
+                    <Typography variant="body2" sx={{ color: DIM, mb: 1.25 }}>
+                      Start your CLI on this task — a real session in {repoOf(t) || "the agent's folder"}: its own
+                      prompts, its questions, your keystrokes.
+                    </Typography>
+                    <Box sx={{ display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap" }}>
+                      <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
+                        onAgent={(a) => setRun({ ...run, agent: a, model: "" })} onModel={(m) => setRun({ ...run, model: m })} />
+                      <Button variant="contained" size="small" disableElevation startIcon={<TerminalIcon sx={{ fontSize: 15 }} />}
+                        onClick={() => openTerm({ agent: run.agent, task_id: selected, repo: repoOf(t), seed: true })}>
+                        Start session
+                      </Button>
+                    </Box>
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
+                      Or{" "}
+                      <Box component="span" onClick={runAgent}
+                        sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                        run it headless
+                      </Box>{" "}
+                      — nothing to watch, but it opens the GitHub issue, writes the report, and closes or escalates on its own.
+                    </Typography>
+                  </Box>
+                )}
 
-                <Block title={`Messages · ${detail.messages.length}`}>
+                {/* the summary the agent left behind, once it has finished */}
+                {report && (
+                  <Block title="What the agent did">
+                    <Box sx={{ bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
+                      <CoderReport body={report.Body} />
+                    </Box>
+                    {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
+                  </Block>
+                )}
+
+                {t.Summary && (
+                  <Fold title="The ask">
+                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: DIM }}>{cleanText(t.Summary)}</Typography>
+                  </Fold>
+                )}
+
+                <Fold title={`Messages · ${detail.messages.length}`}>
                   {detail.messages.map((m) => {
                     const route = detail.routes.find((r) => r.MessageId === m.MessageId);
                     return (
@@ -215,7 +275,6 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                           )}
                         </Box>
                         <Typography variant="body2" sx={{ color: INK }}>{m.Subject}</Typography>
-                        {/* full body, scrolled in place - mail is stored whole now, not a 255-char preview */}
                         <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block",
                           maxHeight: 220, overflowY: "auto", "&::-webkit-scrollbar": { width: 8 },
                           "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
@@ -225,80 +284,35 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                     );
                   })}
                   {!detail.messages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
-                </Block>
+                </Fold>
 
-                <Block title={`Agent runs · ${detail.runs.length}`}>
-                  {detail.runs.map((r) => (
-                    <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#fff8e6" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
-                      <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
-                        <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />
-                        <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
-                        {r.Status === "running" && <CircularProgress size={11} />}
-                        <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
+                {/* a headless run has no session to attach to - its trace is the record */}
+                {detail.runs.length > 0 && (
+                  <Fold title={`Earlier runs · ${detail.runs.length}`}>
+                    {detail.runs.map((r) => (
+                      <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#fff8e6" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
+                        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
+                          <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />
+                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
+                          {r.Status === "running" && <CircularProgress size={11} />}
+                          <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
+                        </Box>
+                        <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
+                        {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#15803d", display: "block" }}>{r.Result}</Typography>}
+                        {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
                       </Box>
-                      <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
-                      {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#15803d", display: "block" }}>{r.Result}</Typography>}
-                      {r.DiffText && <Box sx={{ mt: 0.75 }}><DiffBlock text={r.DiffText} /></Box>}
-                      {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
-                    </Box>
-                  ))}
-                  {/* the one place work starts: who, on which model, with what prompt */}
-                  <Box sx={{ display: "flex", gap: 1, mt: 0.75, alignItems: "center", flexWrap: "wrap" }}>
-                    <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
-                      onAgent={(a) => setRun({ ...run, agent: a, model: "" })} onModel={(m) => setRun({ ...run, model: m })} />
-                    <TextField sx={{ flex: 1, minWidth: 220 }} placeholder="Prompt for this run (optional — it already has the task)"
-                      value={run.instruction} onChange={(e) => setRun({ ...run, instruction: e.target.value })} />
-                    <Button variant="contained" size="small" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
-                      onClick={runAgent}>Run agent</Button>
-                  </Box>
-                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                    Runs the full lifecycle: GitHub issue → the agent works it → report → close or escalate to you.
-                  </Typography>
-                </Block>
+                    ))}
+                  </Fold>
+                )}
 
-                <Block title="Terminal">
-                  {term ? (
-                    <>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
-                        <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
-                          {term.cmd} · {term.cwd}
-                        </Typography>
-                        <Button size="small" sx={{ fontSize: 11 }}
-                          onClick={async () => { await api.delete(`/api/terminals/${term.sid}`).catch(() => {}); setTerm(null); }}>
-                          close session
-                        </Button>
-                      </Box>
-                      <TerminalPane sid={term.sid} height={340} onExit={() => findTerm(selected)} />
-                    </>
-                  ) : (
-                    <Box>
-                      <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75 }}>
-                        A real interactive session in this task's repo — the agent's own TUI, its questions,
-                        your keystrokes. This is a FRESH session; to continue the exact session a run used,
-                        message the agent below instead.
-                      </Typography>
-                      <OpenTerminalButton taskId={selected} repo={repoOf(t)} onOpen={openTerm}
-                        label="Open a terminal on this task" />
-                    </Box>
-                  )}
-                </Block>
-
-                <Block title="Activity">
+                <Fold title={`Notes & history · ${detail.comments.length}`}>
                   {detail.comments.map((c) => <CommentLine key={c.CommentId} c={c} />)}
                   <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
-                    <TextField fullWidth placeholder="Add a note (humans only)" value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
+                    <TextField fullWidth placeholder="Add a note (humans only)" value={comment}
+                      onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
                     <Button size="small" onClick={post}>Post</Button>
                   </Box>
-                  {/* talk to the agent: resumes its claude session; the reply lands above */}
-                  <Box sx={{ display: "flex", gap: 1, mt: 1, p: 1, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5 }}>
-                    <SmartToyIcon sx={{ fontSize: 17, color: "#7e22ce", alignSelf: "center" }} />
-                    <TextField fullWidth placeholder="Message the agent — resumes the session its last run used; the reply lands above"
-                      value={chat} onChange={(e) => setChat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && messageAgent()}
-                      sx={{ bgcolor: "#fff" }} />
-                    <Button size="small" variant="contained" disableElevation sx={{ bgcolor: "#7e22ce", "&:hover": { bgcolor: "#6b21a8" } }}
-                      onClick={messageAgent}>Send</Button>
-                  </Box>
-                </Block>
+                </Fold>
               </Box>
             </>
           )}
@@ -350,6 +364,15 @@ const CommentLine = ({ c }) => {
     </Box>
   );
 };
+
+// Reference material about the task: present, but never competing with the session.
+const Fold = ({ title, children }) => (
+  <Box component="details" sx={{ mt: 1.5 }}>
+    <Box component="summary" sx={{ cursor: "pointer", color: ACCENT2, fontSize: 10.5, letterSpacing: 1.5,
+      textTransform: "uppercase", fontWeight: 700 }}>{title}</Box>
+    <Box sx={{ mt: 0.5 }}>{children}</Box>
+  </Box>
+);
 
 const Block = ({ title, children }) => (
   <Box sx={{ mt: 2 }}>

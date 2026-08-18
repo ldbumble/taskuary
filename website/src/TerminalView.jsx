@@ -1,8 +1,9 @@
-// Real terminals in the app: xterm.js over a websocket over a pty. Open your coding CLI
-// (or a plain shell) in a repo, watch it work, type back at it - the same session the
-// agent is in, not a transcript of one.
+// Real terminals in the app: xterm.js over a websocket over a pty. There is no Terminal
+// "tab" on purpose - a terminal belongs to the work. A board card or a task page opens the
+// session for its own repo, and it appears in the dock at the bottom of whatever you were
+// looking at (Ctrl+`). The pty lives server-side, so nothing dies when you navigate.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Checkbox, FormControlLabel, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Box, Button, Checkbox, FormControlLabel, IconButton, Typography } from "@mui/material";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -12,8 +13,8 @@ import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
-import { BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, XTERM_THEME, card, mono } from "./theme.jsx";
-import { Empty, useAgents } from "./ui.jsx";
+import { BORDER, CATPPUCCIN, DIM, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
+import { useAgents } from "./ui.jsx";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -72,110 +73,6 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     </Box>
   );
 };
-
-export default function TerminalView({ startWith, onStarted }) {
-  const [sessions, setSessions] = useState([]);
-  const [sid, setSid] = useState(null);
-  const [agents, setAgents] = useState([]);
-  const [repos, setRepos] = useState([]);
-  const [err, setErr] = useState("");
-  const [draft, setDraft] = useState({ agent: "coder", repo: "", cwd: "", seed: false, task_id: null });
-
-  const load = useCallback(async () => {
-    try { setSessions((await api.get("/api/terminals")).data.data || []); }
-    catch (e) { setErr(e?.response?.data?.detail || "Failed to list terminals"); }
-  }, []);
-  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, [load]);
-  useEffect(() => {
-    api.get("/api/agents").then(({ data }) => {
-      const ns = (data.data || []).map((a) => a.Name);
-      setAgents(ns);
-      if (ns.length && !ns.includes("coder")) setDraft((d) => ({ ...d, agent: ns[0] }));
-    }).catch(() => {});
-    api.get("/api/sources").then(({ data }) => {
-      const gh = (data.data || []).filter((s) => s.Channel === "github" && s.Active).map((s) => s.Address);
-      setRepos(gh);
-      const def = data.default_repo && gh.includes(data.default_repo) ? data.default_repo : gh[0];
-      if (def) setDraft((d) => ({ ...d, repo: def }));
-    }).catch(() => {});
-  }, []);
-
-  const open = useCallback(async (body) => {
-    setErr("");
-    try {
-      const { data } = await api.post("/api/terminals", body);
-      setSid(data.sid); load();
-      return data;
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not start a terminal"); }
-  }, [load]);
-  // opened from a task ("open a terminal here") - fire once, then clear the request
-  useEffect(() => { if (startWith) { open(startWith); onStarted?.(); } }, [startWith, open, onStarted]);
-
-  const kill = async (s) => { await api.delete(`/api/terminals/${s}`).catch(() => {}); if (sid === s) setSid(null); load(); };
-  const cur = sessions.find((s) => s.sid === sid);
-
-  return (
-    <Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2, flexWrap: "wrap" }}>
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 17, mr: 1 }}>Terminal</Typography>
-        {agents.length > 0 && (
-          <Select size="small" value={draft.agent} onChange={(e) => setDraft({ ...draft, agent: e.target.value })}
-            sx={{ fontSize: 12, height: 30, bgcolor: PANEL }}>
-            {agents.map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>{a}</MenuItem>)}
-            <MenuItem value="" sx={{ fontSize: 12.5 }}>plain shell</MenuItem>
-          </Select>
-        )}
-        {repos.length > 0 && (
-          <Select size="small" value={draft.repo} displayEmpty onChange={(e) => setDraft({ ...draft, repo: e.target.value })}
-            sx={{ fontSize: 12, height: 30, bgcolor: PANEL, maxWidth: 240 }}>
-            <MenuItem value="" sx={{ fontSize: 12.5 }}>agent's default folder</MenuItem>
-            {repos.map((r) => <MenuItem key={r} value={r} sx={{ fontSize: 12.5 }}>{r}</MenuItem>)}
-          </Select>
-        )}
-        <TextField size="small" placeholder="…or a folder path" value={draft.cwd}
-          onChange={(e) => setDraft({ ...draft, cwd: e.target.value })} sx={{ width: 240, bgcolor: PANEL }} />
-        <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => open({ agent: draft.agent || null, repo: draft.repo || null, cwd: draft.cwd || null })}>
-          Open terminal
-        </Button>
-      </Box>
-      {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-
-      {/* session tabs */}
-      {sessions.length > 0 && (
-        <Box sx={{ display: "flex", gap: 0.75, mb: 1.25, flexWrap: "wrap" }}>
-          {sessions.map((s) => (
-            <Box key={s.sid} onClick={() => setSid(s.sid)}
-              sx={{ ...card, display: "flex", alignItems: "center", gap: 0.75, px: 1.25, py: 0.5, cursor: "pointer",
-                borderColor: s.sid === sid ? "#c9cff0" : BORDER, bgcolor: s.sid === sid ? "#eef0ff" : PANEL }}>
-              <TerminalIcon sx={{ fontSize: 14, color: s.alive ? "#0e7490" : FAINT }} />
-              <Typography variant="caption" sx={{ fontWeight: 700, color: s.sid === sid ? "#4f46e5" : INK }}>{s.label}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }} noWrap>
-                {s.taskId ? `TQ-${String(s.taskId).padStart(4, "0")} · ` : ""}{(s.cwd || "").split(/[\\/]/).slice(-1)[0]}
-              </Typography>
-              <CloseIcon onClick={(e) => { e.stopPropagation(); kill(s.sid); }}
-                sx={{ fontSize: 13, color: FAINT, "&:hover": { color: "#b91c1c" } }} />
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {!cur ? (
-        <>
-          <Empty>No terminal open — pick an agent and a folder above, then Open terminal. It runs the CLI for real: its prompts, its questions, your keystrokes.</Empty>
-          <ThemeHint />
-        </>
-      ) : (
-        <>
-          <Typography variant="caption" sx={{ ...mono, color: DIM, display: "block", mb: 0.5 }}>
-            {cur.cmd} · {cur.cwd}
-          </Typography>
-          <TerminalPane key={cur.sid} sid={cur.sid} onExit={load} />
-        </>
-      )}
-    </Box>
-  );
-}
 
 /* ── the dock: a terminal panel at the bottom of the app, on every tab ──────────
    VS Code / Cloud Shell shape - drag its top edge to resize, tabs for parallel

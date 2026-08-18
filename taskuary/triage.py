@@ -24,10 +24,17 @@ def heuristic_intent(msg: dict) -> dict:
     return {'intent': 'task', 'why': 'default'}
 
 
-def classify_intent(msg: dict, llm=None, soul: str = None) -> dict:
+def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None) -> dict:
+    """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
+    they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
+    'Not our task' stick: the next message like it is classified with that lesson in hand."""
     if llm:
         try:
             system = INTENT_SYSTEM + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
+            if notes:
+                system += ('\n\nStanding notes from the owner - these are VERDICTS they already gave on '
+                           'mail like this, and they outrank your own reading:\n'
+                           + '\n'.join(f'- {n}' for n in notes[:20])[:2000])
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
                                'body': str(msg.get('body') or '')[:1500]})
             j = json.loads(re.sub(r'^```(json)?|```$', '', llm(system, user).strip(), flags=re.M))

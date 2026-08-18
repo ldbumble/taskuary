@@ -12,7 +12,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -592,10 +592,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
                 <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
               </Box>
 
-              <Box sx={{ display: "flex", gap: 1, mt: 0.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center" }}>
+              <Box sx={{ display: "flex", gap: 1, mt: 0.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center", flexWrap: "wrap" }}>
                 <Button size="small" onClick={onDetails}>See details →</Button>
                 {sel.TaskId && <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task</Button>}
                 <Box sx={{ flex: 1 }} />
+                {/* not ours -> the reason goes to memory, and triage reads it next time */}
+                <NotMine messageId={sel.MessageId} onDone={onSkipped} />
                 {sel.Channel === "email" && sel.FromEmail && (skipped !== null
                   ? <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
                       ✓ sender skipped{skipped ? ` — ${skipped} past message${skipped === 1 ? "" : "s"} hidden too` : ""}

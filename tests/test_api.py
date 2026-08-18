@@ -232,6 +232,37 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post('/api/messages/999999/dispatch', json={'agent': 'coder'}).status_code, 404)
         self.assertEqual(c.get('/api/messages/999999').status_code, 404)
 
+    def test_not_mine_writes_memory_and_triage_reads_it(self):
+        """'Not our task' has to TEACH, not just hide: the note lands in memory and the next
+        message from that sender is classified with it in hand."""
+        push = lambda i: c.post('/api/ingest/push', json={
+            'external_id': f'notmine{i}', 'subject': 'Resident refund request - Register, Glenda S',
+            'body': 'Attached is the check. Cash correction needs to be done.',
+            'from_email': 'michelle.soto@example.org', 'channel': 'email'}).json()
+        first = push(1)
+        mid = first['message_id']
+        suggested = c.get(f'/api/messages/{mid}/not-mine/suggest').json()['note']
+        self.assertIn('michelle.soto@example.org', suggested)
+        out = c.post(f'/api/messages/{mid}/not-mine', json={'note': None, 'scope': 'sender'}).json()
+        self.assertEqual((out['ok'], out['scope'], out['scopeKey']), (True, 'sender', 'michelle.soto@example.org'))
+        self.assertEqual(suggested, out['note'])                     # the suggestion is what gets saved
+        row = next(m for m in c.get('/api/feed').json()['data'] if m['MessageId'] == mid)
+        self.assertEqual(row['MsgStatus'], 'ignored')
+        self.assertIn('not ours', row['RouteReason'])
+        # the note now rides into every later triage call for that sender
+        from taskuary.ingest import notes_for
+        notes = notes_for(server.store, {'from_email': 'MICHELLE.SOTO@example.org'})
+        self.assertTrue(any('other people' in n for n in notes))
+        seen = {}
+        with mock.patch('taskuary.server._llm',
+                        return_value=lambda sys_, usr_, **kw: seen.update(sys=sys_) or '{"intent": "fyi", "why": "not ours"}'):
+            second = push(2)
+        self.assertEqual((second['status'], second['task_id']), ('filed', None))
+        self.assertIn('VERDICTS they already gave', seen['sys'])
+        self.assertIn('other people', seen['sys'])
+        self.assertEqual(c.post('/api/messages/999999/not-mine', json={}).status_code, 404)
+        self.assertEqual(c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'weird'}).status_code, 422)
+
     def test_live_runs_tail(self):
         tid = c.post('/api/tasks', json={'Title': 'live'}).json()['taskId']
         rid = server.store.start_run(tid, 'coder', 'work it', 'owner')

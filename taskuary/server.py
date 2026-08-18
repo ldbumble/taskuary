@@ -199,6 +199,45 @@ def get_message(mid: int):
     if not m: raise HTTPException(404, 'message not found')
     return m
 
+class NotMineBody(BaseModel): note: str | None = None; scope: str = 'sender'
+
+def _not_mine_note(m: dict) -> str:
+    who = m.get('FromEmail') or m.get('FromName') or 'this sender'
+    return (f"Mail like \"{(m.get('Subject') or '')[:90]}\" from {who} is other people's work - "
+            'file it, do not open a task or draft a reply.')
+
+@app.post('/api/messages/{mid}/not-mine')
+def not_mine(mid: int, body: NotMineBody):
+    """"Not our task." Two things happen: this item stops being work, and the reason is
+    written to MEMORY - which triage reads on every future message from that sender (see
+    ingest.notes_for), so the same verdict doesn't have to be given twice. Unlike "Skip this
+    sender", their mail keeps arriving; only the judgement is learned."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    em = (m.get('FromEmail') or '').lower()
+    if body.scope not in ('sender', 'sender_domain', 'global'): raise HTTPException(422, 'bad scope')
+    scope = body.scope if (em or body.scope == 'global') else 'global'
+    key = None if scope == 'global' else (em.rsplit('@', 1)[-1] if scope == 'sender_domain' else em)
+    note = (body.note or '').strip() or _not_mine_note(m)
+    memid = store.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note[:1000],
+                              'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR})
+    tid = m.get('TaskId')
+    if tid and store.get_task(tid):
+        store.audit('task', tid, 'not_mine_delete', ACTOR, detail={'message_id': mid, 'memory_id': memid})
+        store.delete_task(tid)                       # its messages revert to 'filed'
+    store.set_message_status(mid, 'ignored')
+    store.add_route(mid, None, 'ignore', None, f'not ours - {note[:200]}', [], ACTOR)
+    store.audit('memory', memid, 'create', ACTOR, detail={'scope': scope, 'key': key, 'from': em})
+    return {'ok': True, 'memoryId': memid, 'note': note, 'scope': scope, 'scopeKey': key,
+            'taskDeleted': bool(tid)}
+
+@app.get('/api/messages/{mid}/not-mine/suggest')
+def not_mine_suggest(mid: int):
+    """The note we'd save, so the panel can show it for editing before it's committed."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    return {'note': _not_mine_note(m), 'from': m.get('FromEmail')}
+
 @app.post('/api/messages/{mid}/dispatch')
 def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     """Hand ANY timeline item (failed report, email, chat) to an agent with your own

@@ -10,7 +10,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import TagIcon from "@mui/icons-material/Tag";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import { ACTION_COLORS, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, ACCENT2, PANEL2 } from "./theme.jsx";
+import { ACTION_COLORS, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
@@ -202,6 +202,62 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
   );
 };
 
+// "This isn't ours." Says so about THIS item and teaches the classifier at the same time:
+// the note is saved to memory, and triage reads it on every later message from that sender.
+// Editable before saving, because the reason is the part that has to be right.
+export const NotMine = ({ messageId, onDone }) => {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [scope, setScope] = useState("sender");
+  const [saved, setSaved] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open || note) return;
+    api.get(`/api/messages/${messageId}/not-mine/suggest`).then(({ data }) => setNote(data.note)).catch(() => {});
+  }, [open, messageId, note]);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/api/messages/${messageId}/not-mine`, { note: note.trim() || null, scope });
+      setSaved(data);
+      setTimeout(() => onDone?.(), 1400);
+    } catch { /* leave the panel up so the note isn't lost */ }
+    setBusy(false);
+  };
+  if (saved) return (
+    <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
+      ✓ noted — triage will apply this to {saved.scope === "global" ? "every sender" : saved.scopeKey} from now on
+    </Typography>
+  );
+  if (!open) return (
+    <Button size="small" sx={{ color: "#8a94a6", fontSize: 11 }} onClick={() => setOpen(true)}
+      title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
+  );
+  return (
+    <Box sx={{ width: "100%", mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>
+        Not our task — what should triage remember?
+      </Typography>
+      <TextField fullWidth multiline minRows={2} size="small" value={note} sx={{ bgcolor: "#fff" }}
+        onChange={(e) => setNote(e.target.value)} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
+        <Select size="small" value={scope} onChange={(e) => setScope(e.target.value)}
+          sx={{ fontSize: 11.5, height: 26, bgcolor: "#fff" }}>
+          <MenuItem value="sender" sx={{ fontSize: 12 }}>this sender</MenuItem>
+          <MenuItem value="sender_domain" sx={{ fontSize: 12 }}>everyone at their domain</MenuItem>
+          <MenuItem value="global" sx={{ fontSize: 12 }}>every sender</MenuItem>
+        </Select>
+        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 120 }}>
+          Their mail keeps arriving — only the verdict is learned.
+        </Typography>
+        <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>cancel</Button>
+        <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={save}
+          sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not ours — remember this"}</Button>
+      </Box>
+    </Box>
+  );
+};
+
 // Hand ANY timeline item to a coding agent: your prompt + the item's context (subject,
 // sender, full body, thread, the operator docs) go down together. Items that aren't a
 // task yet become one server-side, so the run has somewhere to live and stream into.
@@ -265,6 +321,30 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
       {err && <Typography variant="caption" sx={{ color: "#b91c1c", display: "block", mt: 0.5 }}>{err}</Typography>}
     </Box>
   );
+};
+
+/* Task status, review status and run status were three ladders the reader had to combine
+   in their head ("in_progress + reviewed·rejected" — so is it mine or not?). This is the
+   one answer: what does this task need from ME, right now. Everything shows this. */
+export const TASK_STATES = [
+  { key: "needs_you", label: "needs you", c: { bg: "#fef4e6", fg: "#b45309", bd: "#f3ddb8" } },
+  { key: "working", label: "agent working", c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
+  { key: "queued", label: "queued", c: { bg: "#eef0ff", fg: "#4f46e5", bd: "#c9cff0" } },
+  { key: "done", label: "done", c: { bg: "#e8f6ee", fg: "#15803d", bd: "#cbe8d6" } },
+  { key: "dropped", label: "dropped", c: { bg: "#eef0f3", fg: "#8a94a6", bd: "#e5e8ee" } },
+];
+export const stateOf = (t) => {
+  if (!t) return TASK_STATES[2];
+  if (t.Status === "dropped") return TASK_STATES[4];
+  if (t.ReviewStatus === "pending") return TASK_STATES[0];      // a decision is waiting on you
+  if (t.Status === "done") return TASK_STATES[3];
+  if (t.RunStatus === "running" || t.Status === "in_progress") return TASK_STATES[1];
+  return TASK_STATES[2];
+};
+export const StateChip = ({ task }) => {
+  const st = stateOf(task);
+  return <Chip size="small" label={st.label}
+    sx={{ bgcolor: st.c.bg, color: st.c.fg, border: `1px solid ${st.c.bd}`, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
 };
 
 export const TaskStatusChip = ({ status }) => (

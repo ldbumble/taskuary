@@ -61,7 +61,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     except Exception as e:
                         fail['err'] = str(e)[:200]
                         raise
-                intent = classify_intent(msg, llm=_guarded, soul=store.get_doc('soul'))
+                intent = classify_intent(msg, llm=_guarded, soul=store.get_doc('soul'),
+                                         notes=notes_for(store, msg))
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic
                     mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
@@ -97,6 +98,18 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     store.add_route(mid, tid, r['decision'], r['score'], r['reason'], r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
+
+
+def notes_for(store, msg: dict) -> list:
+    """The owner's standing notes that apply to this message - global ones plus anything
+    learned about this sender or their domain. Triage reads them, so a verdict given once
+    ("this kind of mail is not ours") applies to every message like it afterwards."""
+    em = (msg.get('from_email') or '').lower()
+    dom = em.rsplit('@', 1)[-1] if '@' in em else ''
+    return [n['Note'] for n in store.list_memories()
+            if n['Scope'] == 'global'
+            or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() == em)
+            or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() == dom)]
 
 
 def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding') -> int:

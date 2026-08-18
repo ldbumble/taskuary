@@ -52,10 +52,12 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 ## The workspace
 
 - **Timeline** — every inbound item on a day-grouped rail: who/where, what Taskuary did
-  with it, current state. Filter by state (everything / needs me) and by channel — each
-  channel is a category with a picker for the actual connection (this mailbox, this repo,
-  this report). Chips say what a row IS: *report* and *info* are things to read, *filed*
-  means triage saw nothing to do, and *ignored* means a policy rule rejected it. Click a row for the full review canvas — message, agent report, code
+  with it, current state. Two controls, and neither grows as your connections do: pills for
+  state (everything / needs me) and **category** (messages / code / reports), then one
+  grouped picker to drill through — *all mailboxes*, or one mailbox; *all repositories*, or
+  one repo; *all reports*, or one report. Chips say what a row IS: *report* and *info* are
+  things to read, *filed* means triage saw nothing to do, and *ignored* means a policy rule
+  rejected it. Click a row for the full review canvas — message, agent report, code
   diff, history — and decide inline. Mail is stored whole (not Graph's 255-char preview)
   and shown the way you'd read it: an *inbound* / *↩ your reply* marker, the new text
   first, and the thread quoted underneath folded behind one click. Chains holding several

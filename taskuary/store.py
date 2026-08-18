@@ -324,7 +324,12 @@ class SQLiteStore:
         p = [f'-{int(days)} days']
         if pending_only:
             q += " AND (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1)='pending'"
-        if channel: q += ' AND m.Channel=?'; p.append(channel)
+        # channel accepts a csv so the UI can filter by a CATEGORY (messages = email,
+        # teams, slack) without needing one request per channel
+        if channel:
+            chans = [c.strip() for c in str(channel).split(',') if c.strip()]
+            q += f" AND m.Channel IN ({','.join('?' * len(chans))})"
+            p += chans
         if source: q += ' AND m.SourceName=?'; p.append(source)   # e.g. one mailbox of several
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
         return self._rows(q, p)

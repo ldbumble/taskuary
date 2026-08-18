@@ -4,7 +4,7 @@
 // itself every 30s so new mail animates in while the tab is open.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, Link, MenuItem, Select, TextField, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, Link, ListSubheader, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -22,14 +22,18 @@ const VIEW_FILTERS = [
   { key: "", label: "everything", c: { bg: "#eef0ff", fg: "#4f46e5", bd: "#c9cff0" } },
   { key: "pending", label: "needs me", c: { bg: "#fef4e6", fg: "#b45309", bd: "#f3ddb8" } },
 ];
-const CHANNEL_FILTERS = [
-  { key: "", label: "all channels" },
-  { key: "email", label: "email", c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
-  { key: "teams", label: "teams", c: { bg: "#efeffa", fg: "#6264A7", bd: "#d4d5ec" } },
-  { key: "slack", label: "slack", c: { bg: "#f3ecf5", fg: "#611f69", bd: "#e0cbe4" } },
-  { key: "github", label: "github", c: { bg: "#eceef1", fg: "#1c2536", bd: "#d3d8e0" } },
-  { key: "report", label: "reports", c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
+// The pill row is a fixed set of CATEGORIES - it must not grow as connections do (a
+// pill per mailbox, repo, channel and report would be unreadable by connection five).
+// Everything narrower lives in one grouped picker: category -> channel -> connection.
+const CATEGORIES = [
+  { key: "", label: "everything", channels: null },
+  { key: "messages", label: "messages", channels: ["email", "teams", "slack"],
+    c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
+  { key: "code", label: "code", channels: ["github"], c: { bg: "#eceef1", fg: "#1c2536", bd: "#d3d8e0" } },
+  { key: "reports", label: "reports", channels: ["report"], c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
 ];
+const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
+  github: "Repositories", report: "Reports" };
 
 const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 
@@ -67,17 +71,14 @@ const blurb = (r) => {
   return `${routed} · ${state}`;
 };
 
-// what one connection is called inside each category, for the picker's "all …" label
-const CHANNEL_UNITS = { email: "mailboxes", teams: "chats", slack: "channels", github: "repos", report: "reports" };
-
 const PAGE = 100;
 
 export default function FeedView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
-  const [channel, setChannel] = useState("");        // "" all | email | teams | slack | report
-  const [source, setSource] = useState("");          // "" all | one connection within the channel
-  const [srcByChannel, setSrcByChannel] = useState({});   // channel -> [names shown in the picker]
+  const [cat, setCat] = useState("");                // "" everything | messages | code | reports
+  const [pick, setPick] = useState("");              // "" all in category | "channel:x" | "src:channel:name"
+  const [srcByChannel, setSrcByChannel] = useState({});   // channel -> connection names
   const [noMore, setNoMore] = useState(false);
   const [open, setOpen] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -88,9 +89,21 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const busyMore = useRef(false);
   const endRef = useRef(null);
 
-  const fparams = useCallback(() => ({ ...(view === "pending" ? { pending_only: true } : {}),
-    ...(channel ? { channel } : {}),
-    ...(source ? { source } : {}) }), [view, channel, source]);
+  // one place turns (category, pick) into query params: a category is a channel csv, a
+  // pick narrows to one channel or one named connection inside it
+  const fparams = useCallback(() => {
+    const chans = (CATEGORIES.find((x) => x.key === cat) || {}).channels;
+    const p = { ...(view === "pending" ? { pending_only: true } : {}) };
+    if (pick.startsWith("src:")) {
+      const [, ch, ...rest] = pick.split(":");
+      p.channel = ch; p.source = rest.join(":");
+    } else if (pick.startsWith("channel:")) {
+      p.channel = pick.slice(8);
+    } else if (chans) {
+      p.channel = chans.join(",");
+    }
+    return p;
+  }, [view, cat, pick]);
 
   // Every channel is a CATEGORY; the picker next to it narrows to one actual connection —
   // this mailbox, this repo, this Slack channel, this report.
@@ -106,7 +119,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       setSrcByChannel(by);
     }).catch(() => {});
   }, []);
-  useEffect(() => { setSource(""); }, [channel]);   // switching category clears the narrower pick
+  useEffect(() => { setPick(""); }, [cat]);          // switching category clears the narrower pick
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
   // refresh never shrinks the list under the user.
@@ -207,6 +220,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
     return acc;
   }, {});
 
+  // only offer channels that actually have a connection behind them
+  const pickerChannels = ((CATEGORIES.find((x) => x.key === cat) || {}).channels
+    || ["email", "teams", "slack", "github", "report"]).filter((ch) => (srcByChannel[ch] || []).length);
+
   const today = new Date().toLocaleDateString("sv-SE");
   const todays = (rows || []).filter((r) => localDay(r.SentAt) === today);
   const stats = [
@@ -230,16 +247,29 @@ export default function FeedView({ onOpenTask, onChanged }) {
         <Box sx={{ ...card, p: 0, overflow: "hidden" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.5, py: 1, flexWrap: "wrap" }}>
             <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
-            <FilterPills options={CHANNEL_FILTERS} value={channel} onChange={setChannel} />
-            {channel && (srcByChannel[channel] || []).length > 1 && (
-              <Select size="small" value={source} displayEmpty onChange={(e) => setSource(e.target.value)}
-                renderValue={(v) => (v ? String(v).split("@")[0] : `all ${CHANNEL_UNITS[channel] || "connections"}`)}
-                sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: source ? "#e8f1fa" : "#fff", height: 26,
-                  color: source ? "#0F6CBD" : DIM, maxWidth: 190,
+            <FilterPills options={CATEGORIES} value={cat} onChange={setCat} />
+            {pickerChannels.length > 0 && (
+              <Select size="small" value={pick} displayEmpty onChange={(e) => setPick(e.target.value)}
+                renderValue={(v) => (!v ? "any connection"
+                  : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
+                    : String(v.split(":").slice(2).join(":")).split("@")[0])}
+                sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: pick ? "#e8f1fa" : "#fff", height: 26,
+                  color: pick ? "#0F6CBD" : DIM, maxWidth: 210,
                   "& .MuiSelect-select": { py: 0.3, px: 1.25 },
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: source ? "#c4dcf2" : BORDER } }}>
-                <MenuItem value="" sx={{ fontSize: 12 }}>all {CHANNEL_UNITS[channel] || "connections"}</MenuItem>
-                {(srcByChannel[channel] || []).map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>{m}</MenuItem>)}
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#c4dcf2" : BORDER } }}>
+                <MenuItem value="" sx={{ fontSize: 12 }}>any connection</MenuItem>
+                {pickerChannels.flatMap((ch) => [
+                  <ListSubheader key={`h${ch}`} sx={{ fontSize: 10, lineHeight: 2, color: FAINT, letterSpacing: 1,
+                    textTransform: "uppercase", bgcolor: "transparent" }}>
+                    {CHANNEL_LABELS[ch] || ch}
+                  </ListSubheader>,
+                  <MenuItem key={`c${ch}`} value={`channel:${ch}`} sx={{ fontSize: 12 }}>
+                    all {(CHANNEL_LABELS[ch] || ch).toLowerCase()}
+                  </MenuItem>,
+                  ...(srcByChannel[ch] || []).map((n) => (
+                    <MenuItem key={`${ch}:${n}`} value={`src:${ch}:${n}`} sx={{ fontSize: 12, pl: 3 }}>{n}</MenuItem>
+                  )),
+                ])}
               </Select>
             )}
             <Box sx={{ flex: 1, minWidth: 8 }} />
@@ -658,6 +688,10 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
   const text = latest || quoted;
   const long = text.length > 700;                    // long bodies scroll in place; "expand" gives them the panel
   const you = cur?.Status === "context";
+  // only offer channels that actually have a connection behind them
+  const pickerChannels = ((CATEGORIES.find((x) => x.key === cat) || {}).channels
+    || ["email", "teams", "slack", "github", "report"]).filter((ch) => (srcByChannel[ch] || []).length);
+
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
   return (

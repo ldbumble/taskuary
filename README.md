@@ -73,8 +73,10 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   the same task.
 - **Tasks** — **the page is a terminal.** Open a task, pick the CLI and model, and you get a
   real session in that task's repo with the prompt already typed in — you talk to it like
-  any other terminal, because it *is* one. When the agent finishes, its report sits above
-  the session; the messages, earlier runs and notes are folded underneath. One quiet link
+  any other terminal, because it *is* one. When you're finished, **Done — wrap it up** tells
+  the agent so: it writes its own closing summary, the summary files onto the task under
+  *What the agent did*, and the task closes. No stopping it, copying out of the terminal and
+  marking done by hand. The messages, earlier runs and notes are folded underneath. One quiet link
   runs it headless instead when you'd rather not watch. Every task shows **one** state —
   *needs you*, *agent working*, *queued*, *done* — instead of three columns you had to
   combine in your head.
@@ -198,7 +200,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 104 tests, ~20s, no network or credentials needed
+pytest -q                   # 106 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

@@ -13,6 +13,7 @@ import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import DoneAllIcon from "@mui/icons-material/DoneAll";
 import { TerminalPane } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
@@ -44,6 +45,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
   const [run, setRun] = useState({ agent: "coder", model: "", instruction: "" });
   const [comment, setComment] = useState("");
+  const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const pollRef = useRef(null);
 
   // fetch everything once and filter on the derived state - the server only knows raw
@@ -73,9 +75,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => {
     const running = (detail?.runs || []).some((r) => r.Status === "running");
     clearInterval(pollRef.current);
-    if (running && selected) pollRef.current = setInterval(() => loadDetail(selected), 3000);
+    if ((running || wrapping) && selected) pollRef.current = setInterval(() => loadDetail(selected), 3000);
     return () => clearInterval(pollRef.current);
-  }, [detail, selected, loadDetail]);
+  }, [detail, selected, loadDetail, wrapping]);
 
   const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };
   const create = async () => {
@@ -96,6 +98,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
     setComment(""); loadDetail(selected);
   };
+  // "We're done": the agent writes its own closing summary, it files under What the agent
+  // did, and the task closes. No copy-pasting out of the terminal.
+  const wrapUp = async () => {
+    if (!term) return;
+    setWrapping(true);
+    try { await api.post(`/api/terminals/${term.sid}/wrap`, { task_id: selected, close: true }); }
+    catch (e) { setErr(e?.response?.data?.detail || "Could not ask the agent to wrap up"); setWrapping(false); }
+  };
+  useEffect(() => { setWrapping(false); }, [selected]);
+  useEffect(() => {
+    if (!wrapping || detail?.task?.Status !== "done") return;
+    setWrapping(false); loadTasks(); onChanged?.();     // the list still said "agent working"
+  }, [wrapping, detail, loadTasks, onChanged]);
+
   // The agent stopped because it needs a person. Answering IS the work: "go ahead" hands
   // the same task back to the same agent with your words attached.
   const [approve, setApprove] = useState("");
@@ -136,7 +152,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const t = detail?.task;
   const shown = (tasks || []).filter((x) => !filter || stateOf(x).key === filter);
   const report = [...(detail?.comments || [])].reverse().find(
-    (c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
+    (c) => c.ActorType === "agent" && String(c.Body || "").replace("CODER REPORT", "").trim()
+      && String(c.Body || "").startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
   const esc = (detail?.reviews || []).find((r) => r.Kind === "escalation" && r.Status === "pending");
@@ -234,12 +251,24 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
                       </Typography>
+                      <Button size="small" variant="contained" disableElevation disabled={wrapping}
+                        startIcon={wrapping ? <CircularProgress size={11} sx={{ color: "#fff" }} />
+                          : <DoneAllIcon sx={{ fontSize: 15 }} />}
+                        sx={{ fontSize: 11.5, bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                        onClick={wrapUp}>
+                        {wrapping ? "wrapping up…" : "Done — wrap it up"}
+                      </Button>
                       <Button size="small" sx={{ fontSize: 11 }}
                         onClick={async () => { await api.delete("/api/terminals/" + term.sid).catch(() => {}); setTerm(null); }}>
                         end session
                       </Button>
                     </Box>
                     <TerminalPane sid={term.sid} height="55vh" onExit={() => findTerm(selected)} />
+                    {wrapping && (
+                      <Typography variant="caption" sx={{ color: "#0e7490", display: "block", mt: 0.5 }}>
+                        Asked it to wrap up — its summary lands under <b>What the agent did</b> and the task closes itself.
+                      </Typography>
+                    )}
                   </>
                 ) : (
                   <Box sx={{ ...card, p: 2, textAlign: "center", bgcolor: PANEL2 }}>

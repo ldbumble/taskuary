@@ -644,6 +644,27 @@ def open_terminal(body: TermBody):
         store.add_comment(body.task_id, ACTOR, 'human', f'Opened an interactive {t.label} session in {t.cwd}')
     return t.info()
 
+class WrapBody(BaseModel): task_id: int | None = None; close: bool = True
+
+@app.post('/api/terminals/{sid}/wrap')
+def wrap_terminal(sid: str, body: WrapBody):
+    """"We're done" for a live session: the agent writes its closing summary, the summary
+    files onto the task like any coder report, and the task closes. One button instead of
+    'stop it, copy what it said, mark done'."""
+    t = hub_term.get(sid)
+    if not t or not t.alive: raise HTTPException(404, 'no live terminal here')
+    tid = body.task_id or t.task_id
+    if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
+    store.add_comment(tid, ACTOR, 'human', 'Told the agent we are done - asked it to wrap up.')
+    def filed(text):
+        store.add_comment(tid, t.agent or 'agent', 'agent',
+                          'CODER REPORT\n' + (text or '(the agent ended the session without a wrap-up)'))
+        if body.close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+            store.update_task(tid, {'Status': 'done'}, ACTOR)
+    hub_term.wrap_up(t, filed)
+    store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid, 'close': body.close})
+    return {'wrap': 'running', 'taskId': tid}
+
 @app.delete('/api/terminals/{sid}')
 def close_terminal(sid: str):
     if not hub_term.close(sid): raise HTTPException(404, 'terminal not found')

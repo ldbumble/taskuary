@@ -134,14 +134,18 @@ export const DiffBlock = ({ text }) => {
 // The coder's report, parsed into labeled sections instead of a wall of text.
 const REPORT_COLORS = { Triage: "#0e7490", Determination: "#7e22ce", Actions: "#b45309", Summary: "#15803d" };
 export const CoderReport = ({ body }) => {
-  const parts = String(body || "").replace(/^CODER REPORT\n?/, "").split(/(?:^|\n)(Triage|Determination|Actions|Summary):\s*/);
+  const text = String(body || "").replace(/^CODER REPORT\n?/, "").trim();
+  // ^ anchored per line, and the label eats spaces but NOT the newline - letting \s* run on
+  // swallowed the separator, so an all-empty report rendered "TRIAGE -> Determination:"
+  const parts = text.split(/^(Triage|Determination|Actions|Summary):[ \t]*/m);
   const sections = [];
   for (let i = 1; i < parts.length; i += 2) {
-    const text = (parts[i + 1] || "").trim();
-    if (text) sections.push({ label: parts[i], text });
+    const t = (parts[i + 1] || "").trim();
+    if (t) sections.push({ label: parts[i], text: t });
   }
+  // a wrap-up is free prose, not the headless contract - show it as written
   if (!sections.length) {
-    return <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: "#1c2536" }}>{body}</Typography>;
+    return text ? <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: "#1c2536" }}>{text}</Typography> : null;
   }
   return (
     <Box>

@@ -1,5 +1,5 @@
 """Core engine tests - everything runs on the in-memory SQLite store, no network."""
-import json, unittest
+import json, time, unittest
 from taskuary.store import MemoryStore, task_ref
 from taskuary.ingest import ingest_message
 from taskuary.routing import route
@@ -384,6 +384,38 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(agent_argv({'cmd': 'codex', 'model_arg': '-m', 'model': 'gpt-5-codex'}),
                              ['codex', '-m', 'gpt-5-codex'])
             self.assertEqual(agent_argv({'cmd': 'gemini', 'interactive_args': ['chat']}), ['gemini', 'chat'])
+
+    def test_wrap_up_takes_the_agents_summary_not_our_own_prompt(self):
+        """The wrap prompt necessarily contains the marker, so its echo must not win: the
+        summary is whatever follows the LAST marker in the session."""
+        from unittest import mock
+        from taskuary import terminal as term
+
+        class FakeTerm:
+            alive = True
+            def __init__(self): self.taps, self.typed = [], []
+            def tap(self, f): self.taps.append(f)
+            def untap(self, f): self.taps = [x for x in self.taps if x is not f]
+            def feed(self, s):
+                for f in list(self.taps): f(s)
+            def write(self, s):
+                self.typed.append(s)
+                self.feed('\x1b[2m> ' + s + '\r\n')                  # the TUI echoes what we typed
+                self.feed('\x1b[35m\u2502 \x1b[0m===TASKUARY WRAP===\r\n\u2502 Fixed the importer.\r\n')
+
+        t, got = FakeTerm(), []
+        with mock.patch.object(term, 'WRAP_QUIET', .1):
+            term.wrap_up(t, got.append, timeout=5)
+            for _ in range(60):
+                if got: break
+                time.sleep(.1)
+        self.assertEqual(got, ['Fixed the importer.'])
+        self.assertIn('wrap-up', t.typed[0])
+        self.assertEqual(t.taps, [])                                 # and it stops listening
+
+    def test_terminal_plain_text(self):
+        from taskuary.terminal import plain
+        self.assertEqual(plain('\x1b[35m\u2502 hi \x1b[0m\r\n\u2502 there\r\n'), 'hi\nthere\n')
 
     def test_cli_json_parse(self):
         self.assertEqual(parse_cli_json('{"result": "OK", "session_id": "abc"}'), ('OK', 'abc'))

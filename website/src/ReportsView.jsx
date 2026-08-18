@@ -138,6 +138,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     if (typeof c.headers === "string" && c.headers.trim()) { try { c.headers = JSON.parse(c.headers); } catch { /* preview will complain */ } }
     for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
     if (c.every_minutes) c.every_minutes = Number(c.every_minutes);
+    if (c.max_rows) c.max_rows = Number(c.max_rows);
     return c;
   };
   const runTest = async () => {
@@ -213,6 +214,14 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   inputProps={kind === "multiline" && key !== "ai_prompt" ? { style: { fontFamily: "Consolas, monospace", fontSize: 12 } } : undefined}
                   onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />;
               })}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <TextField label="max rows" type="number" value={cfg.max_rows ?? ""} sx={{ bgcolor: "#fff", width: 130 }}
+                  onChange={(e) => setCfg({ ...cfg, max_rows: e.target.value })} />
+                <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
+                  How many rows reach the summary (default 200). Your query's own TOP/LIMIT still applies — whichever is
+                  smaller wins, and the headline says "capped" when rows were left behind.
+                </Typography>
+              </Box>
               {cfg.ai_prompt && !aiActive && (
                 <Typography variant="body2" sx={{ fontWeight: 600, color: "#b45309" }}>
                   ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connectors → AI).

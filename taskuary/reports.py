@@ -14,19 +14,34 @@ from loguru import logger
 PLANNED = ['postgres', 'mysql', 'snowflake', 'sharepoint_list', 'google_sheets', 's3_object',
            'graphql', 'smb_file', 'prometheus', 'jira']
 
+MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
+
+
+def row_limit(cfg) -> int: return max(1, int(cfg.get('max_rows') or MAX_ROWS))
+
+
+def rows_out(rows, limit, unit='rows'):
+    """(headline, body) from executor rows, SAYING SO when the result was cut. A silent cap
+    made the AI describe 20 rows of a TOP 500 query as 'all of them' - fetch one extra row
+    and the headline can tell the truth instead."""
+    more = len(rows) > limit
+    rows = rows[:limit]
+    head = f'{len(rows)} rows' + (f' (capped at {limit} — the query returned more)' if more else '')
+    return head.replace('rows', unit, 1), '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]
+
 
 def run_sqlite(cfg):
-    """{"db": "path.db", "query": "SELECT ..."} - the local-first database report."""
+    """{"db": "path.db", "query": "SELECT ...", "max_rows": 200} - the local-first database report."""
     cx = sqlite3.connect(cfg['db']); cx.row_factory = sqlite3.Row
-    rows = [dict(r) for r in cx.execute(cfg['query']).fetchall()[:20]]
+    lim = row_limit(cfg)
+    rows = [dict(r) for r in cx.execute(cfg['query']).fetchmany(lim + 1)]
     cx.close()
-    body = '\n'.join(json.dumps(r, default=str) for r in rows)
-    return f'{len(rows)} rows', body[:4000]
+    return rows_out(rows, lim)
 
 
 def run_mssql(cfg):
-    """{"server", "database", "auth", "username", "password", "driver", "query"} - see mssql.py.
-    Configure it entirely from Settings -> Report connections in the UI."""
+    """{"server", "database", "auth", "username", "password", "driver", "query", "max_rows"} -
+    see mssql.py. Configure the connection entirely from the Connectors tab."""
     from .mssql import run_report
     return run_report(cfg)
 
@@ -39,7 +54,7 @@ def run_rest(cfg):
     data = r.json()
     for k in (cfg.get('path') or '').split('.'):
         if k: data = data[int(k)] if isinstance(data, list) else data.get(k)
-    return (f'{len(data)} items' if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:4000]
+    return (f'{len(data)} items' if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:BODY_CHARS]
 
 
 def run_rss(cfg):
@@ -62,7 +77,7 @@ def run_winrm(cfg):
                        capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
     if p.returncode != 0: raise RuntimeError((p.stderr or p.stdout or 'remote run failed')[:500])
     out = (p.stdout or '').strip()
-    return f'{len(out.splitlines())} lines from {host}', out[:4000]
+    return f'{len(out.splitlines())} lines from {host}', out[:BODY_CHARS]
 
 
 def run_mcp(cfg):
@@ -105,7 +120,10 @@ def resolve_cfg(store, cfg: dict) -> dict:
 
 
 AI_SYSTEM = ('You summarize scheduled report data for a busy operator. Follow the operator '
-             'instruction exactly. Be concise and concrete: numbers, names, deltas. Plain text only.')
+             'instruction exactly. Be concise and concrete: numbers, names, deltas. Plain text only. '
+             'The data may be a CAPPED slice of a larger result (the headline says so, and the rows '
+             'may be cut mid-way) - never describe a capped or truncated slice as complete, and say '
+             'plainly when something the instruction asks about is not present in the rows you got.')
 
 
 def render_report(store, cfg: dict, llm=None):
@@ -115,8 +133,10 @@ def render_report(store, cfg: dict, llm=None):
     head, summary = REGISTRY[cfg.get('type', 'rest')](cfg)
     if cfg.get('ai_prompt') and llm:
         try:
-            ai = llm(AI_SYSTEM, f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{summary[:6000]}")
-            return head, f"{(ai or '').strip()}\n\n--- raw data ---\n{summary[:1500]}"
+            data = summary[:AI_CHARS]
+            if len(summary) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
+            ai = llm(AI_SYSTEM, f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{data}")
+            return head, f"{(ai or '').strip()}\n\n--- raw data ---\n{summary[:4000]}"
         except Exception as e:
             logger.warning(f'AI summary failed for report: {e}')
             return head, f'(AI summary failed: {str(e)[:200]})\n\n{summary}'

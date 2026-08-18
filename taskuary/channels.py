@@ -149,7 +149,18 @@ def test_connector(store, cid: int) -> dict:
         return {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': str(e)[:500]}
 
 
-def _clean(html): return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html or '')).strip()
+_DROP = re.compile(r'(?is)<(script|style|head)[^>]*>.*?</\1>')
+_BLOCK = re.compile(r'(?i)<br\s*/?>|</(p|div|tr|li|h[1-6]|blockquote|table)>')
+
+def _clean(html):
+    """HTML mail -> readable text. Block ends become NEWLINES: collapsing every whitespace
+    run (the old behaviour) mashed the reply and the quoted 'From:/Sent:/To:' history into
+    one wall of text, which no reader - human or model - could take apart."""
+    from html import unescape
+    txt = _BLOCK.sub('\n', _DROP.sub(' ', html or ''))
+    txt = unescape(re.sub(r'<[^>]+>', ' ', txt))
+    txt = re.sub(r'[^\S\n]+', ' ', txt.replace('\xa0', ' '))
+    return re.sub(r'\n{3,}', '\n\n', re.sub(r' ?\n ?', '\n', txt)).strip()
 
 # Graph's bodyPreview is capped at 255 chars - reading it FIRST truncated every stored mail,
 # so the panel (and the agents) only ever saw the opening sentence. Full body wins.

@@ -129,6 +129,33 @@ class CoreTests(unittest.TestCase):
         self.assertEqual([m['Channel'] for m in feed], ['github'])
         self.assertIn('o/repo#7', feed[0]['Subject'])               # our own [TQ-] issues never come back
 
+    def test_report_rows_admit_when_they_were_capped(self):
+        from taskuary.reports import REGISTRY, render_report, rows_out
+        s = MemoryStore()
+        self.assertEqual(rows_out([{'a': 1}, {'a': 2}], 5)[0], '2 rows')
+        head, body = rows_out([{'a': i} for i in range(6)], 5)      # one row past the limit = there IS more
+        self.assertIn('capped at 5', head)
+        self.assertEqual(len(body.splitlines()), 5)
+        # the AI is told the slice may be partial, so it can't call 20 of 500 rows "all"
+        seen = {}
+        REGISTRY['_cap'] = lambda cfg: ('20 rows (capped at 20 — the query returned more)', 'x' * 50)
+        try:
+            render_report(s, {'type': '_cap', 'ai_prompt': 'summarize'},
+                          llm=lambda sys_, usr_: seen.update(sys=sys_, usr=usr_) or 'ok')
+        finally:
+            REGISTRY.pop('_cap')
+        self.assertIn('never describe a capped or truncated slice as complete', seen['sys'])
+        self.assertIn('capped at 20', seen['usr'])
+
+    def test_html_mail_keeps_its_paragraphs(self):
+        from taskuary.channels import _clean
+        txt = _clean('<p>The form was rejected.</p><p>Thanks,<br>Roseanna</p>'
+                     '<div>From: devteam-logs@x.net<br>Sent: Tuesday<br>To: Roseanna</div>')
+        # block ends are newlines now: the reply and the quoted header are separable
+        self.assertEqual(txt.splitlines()[0], 'The form was rejected.')
+        self.assertIn('\nFrom: devteam-logs@x.net\nSent: Tuesday', txt)
+        self.assertEqual(_clean('<p>a&nbsp;b</p><style>x{}</style>'), 'a b')
+
     def test_triage_brain_is_configurable(self):
         from unittest import mock
         from taskuary import llm

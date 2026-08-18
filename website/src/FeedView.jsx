@@ -12,7 +12,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, fmtTime12, fmtDateTime, localDay, cleanText } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -627,9 +627,13 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
   const msgs = messages || [];
   const [mid, setMid] = useState(null);
   const [full, setFull] = useState(false);
+  const [showQuoted, setShowQuoted] = useState(false);
   const cur = msgs.find((m) => m.MessageId === mid) || msgs.find((m) => m.MessageId === focusId) || msgs[msgs.length - 1];
-  const text = cleanText(cur?.BodyText) || fallback || "…";
+  // what just arrived, separated from the thread quoted underneath it
+  const { latest, quoted } = splitQuoted(cleanText(cur?.BodyText) || fallback || "…");
+  const text = latest || quoted;
   const long = text.length > 700;                    // long bodies scroll in place; "expand" gives them the panel
+  const you = cur?.Status === "context";
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
   return (
@@ -651,12 +655,20 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
           })}
         </Box>
       )}
-      <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
-        {msgs.length > 1 && cur && (
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5, textAlign: "left" }}>
-            {cur.Status === "context" ? "You replied" : cur.FromName || cur.FromEmail} · {fmtDateTime(cur.SentAt)}
-            {cur.Subject ? ` — ${cur.Subject}` : ""}
-          </Typography>
+      <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25,
+        borderLeft: `3px solid ${you ? "#c9cff0" : "#0F6CBD"}` }}>
+        {/* who / which way / when - so "new inbound" is never confused with "your reply" */}
+        {cur && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6, flexWrap: "wrap" }}>
+            <Chip size="small" label={you ? "↩ your reply" : "inbound"}
+              sx={{ height: 17, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3,
+                bgcolor: you ? "#eef0ff" : "#e8f1fa", color: you ? "#4f46e5" : "#0F6CBD" }} />
+            <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
+              {you ? "you" : cur.FromName || cur.FromEmail || "unknown"}
+            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT }}>· {fmtDateTime(cur.SentAt)}</Typography>
+            {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
+          </Box>
         )}
         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left",
           maxHeight: full ? "60vh" : maxH, overflowY: "auto", overscrollBehavior: "contain",
@@ -671,6 +683,21 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
               "&:hover": { textDecoration: "underline" } }}>
             {full ? "collapse ↑" : `expand — ${text.length.toLocaleString()} chars ↓`}
           </Typography>
+        )}
+        {/* the thread quoted underneath: folded away by default, one click to read */}
+        {latest && quoted && (
+          <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
+            <Typography variant="caption" onClick={() => setShowQuoted(!showQuoted)}
+              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#4f46e5" } }}>
+              {showQuoted ? "hide" : "show"} quoted thread below it — {quoted.length.toLocaleString()} chars {showQuoted ? "↑" : "↓"}
+            </Typography>
+            {showQuoted && (
+              <Typography variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap", color: FAINT, mt: 0.5,
+                borderLeft: `2px solid ${BORDER}`, pl: 1, maxHeight: 300, overflowY: "auto" }}>
+                {quoted}
+              </Typography>
+            )}
+          </Box>
         )}
       </Box>
     </>

@@ -249,6 +249,24 @@ export const cleanText = (s) => (s || "").replace(/<(style|script|head)[^>]*>[\s
   .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ")
   .replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 
+// Mail carries the whole thread quoted underneath the new text. Find where the new part
+// ends so the panel can lead with what actually just arrived and fold the history away.
+const QUOTE_MARKS = [
+  /^\s*-{2,}\s*(original message|forwarded message)\s*-{2,}/im,
+  /^\s*from:\s*\S.*$/im,
+  /^\s*on .{5,140}\bwrote:\s*$/im,
+  /^\s*_{5,}\s*$/m,
+  /^\s*>{1,}\s?\S.*$/m,
+];
+export const splitQuoted = (text) => {
+  const t = String(text || "");
+  const at = QUOTE_MARKS.map((re) => t.search(re)).filter((i) => i > 0).sort((a, b) => a - b)[0];
+  // a body that IS a forward (marker at the very top) stays whole - there's no "new" half
+  // to lead with - and a stub of a quote (a truncated tail) isn't worth its own fold
+  if (at == null || t.length - at < 40) return { latest: t, quoted: "" };
+  return { latest: t.slice(0, at).trim(), quoted: t.slice(at).trim() };
+};
+
 // Standalone Taskuary stamps times in LOCAL time (FanApp's were UTC Graph stamps) -
 // parse as-is; a trailing Z still wins if a source provides real UTC.
 const asUtc = (s) => new Date(s.replace(" ", "T"));

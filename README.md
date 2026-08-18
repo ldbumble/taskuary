@@ -32,13 +32,18 @@ taskuary        # opens http://127.0.0.1:7787
 Python 3.10+ is the only requirement. Then open **Connectors** and click through the
 wizards — each one takes a minute or two:
 
-1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI key. This turns on triage.
+1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI key. This turns on triage. (A small
+   cheap model is the right choice here; the expensive brain goes in step 3.)
 2. **A channel** — Outlook, Teams, or Slack, so inbound lands on your Timeline.
 3. **A coding agent** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot),
    Save, Test. Add GitHub (paste a PAT — repos auto-discovered) for the full
    issue → work → report → close loop.
 4. Then build **Reports**: connect SQL Server once (or use MCP / SQLite / REST / RSS)
    and schedule queries with an AI prompt that summarizes the results onto your Timeline.
+
+No cloud key at all? Set **Settings → Triage & routing → Triage brain** to your CLI agent
+and skip step 1 — one brain does everything, slower and pricier per message. See
+[One brain or two](#one-brain-or-two).
 
 Prefer a desktop app? `pip install "taskuary[desktop] @ git+https://github.com/ldbumble/taskuary"`
 then `taskuary-desktop` — the same UI in a native window. A prebuilt single-file
@@ -49,8 +54,10 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 - **Timeline** — every inbound item on a day-grouped rail: who/where, what Taskuary did
   with it, current state. Filter by state (everything / needs me) and channel
   independently. Click a row for the full review canvas — message, agent report, code
-  diff, history — and decide inline. Chains holding several emails get a pill strip to
-  flip between them (your own replies marked "↩ you"). **Send to coding agent** on any row
+  diff, history — and decide inline. Mail is stored whole (not Graph's 255-char preview)
+  and shown the way you'd read it: an *inbound* / *↩ your reply* marker, the new text
+  first, and the thread quoted underneath folded behind one click. Chains holding several
+  emails get a pill strip to flip between them. **Send to coding agent** on any row
   hands that item — a failed report, an email, a chat — to a CLI agent with your own
   prompt; it becomes a task carrying the full message as context.
 - **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Cards
@@ -63,7 +70,9 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI. Nothing sends without you.
 - **Reports** — the pipeline builder: source → query → optional AI summary → Timeline,
-  on a schedule, with a full-pipeline Preview before you save.
+  on a schedule, with a full-pipeline Preview before you save. **max rows** (default 200)
+  decides how much of the result reaches the summary, and the headline says *capped* when
+  rows were left behind — so the AI never calls a truncated slice "all of them".
 - **Terminal** — your coding CLI, for real, inside the app: a pseudo-terminal (ConPTY on
   Windows) streamed to xterm.js over a websocket. The agent's own TUI, its approval
   prompts, your keystrokes — the session, not a transcript of one. Open one on a task
@@ -78,18 +87,27 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 - **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
   rules injected into every agent run. They ship as templates and maintain themselves —
   connectors and discovered repos write themselves in.
-- **Settings** — triage knobs with plain-English help, deterministic routing policies
-  (including **skip** rules for flood senders — one click on the Timeline mutes a sender
-  forever), the agent's learned memory, and one-click audit-chain verification.
+- **Settings** — triage knobs with plain-English help (including which brain does the
+  triage), deterministic routing policies, the agent's learned memory, and one-click
+  audit-chain verification. **Skip** rules mute flood senders in both directions: one
+  click on the Timeline hides that sender's future mail *and* their back catalogue, and
+  switching the rule off puts the history back.
 
 ## One brain or two
 
-Intent triage (task / reply-only / FYI) runs on whichever brain you pick in Settings →
-Triage & routing: a cloud key (Anthropic, OpenAI, Azure OpenAI), or **your coding CLI
-itself** — the same agent that works the tasks also classifies the inbox, so there is no
-second API key and no second bill. Cloud keys answer in milliseconds; a CLI run takes
-seconds and spends agent tokens. Obvious automated noise is filtered by heuristics before
-either is called.
+**Two is the recommended setup**, and they do different jobs:
+
+| | Triage brain | Working brain |
+|---|---|---|
+| what it does | classifies every inbound message: task / reply-only / FYI | writes the code, drafts the replies, works the task |
+| what it is | a small cloud model (Anthropic / OpenAI / Azure OpenAI key) | your CLI agent (Claude Code, Codex, Gemini…) |
+| per message | well under a second, a fraction of a cent | seconds to minutes, real agent tokens |
+
+**One brain works too.** Set Settings → Triage & routing → **Triage brain** to a CLI agent
+and the same brain that writes your code also triages your inbox — no second API key, no
+second bill. The cost is speed and tokens: every message that reaches the AI spawns a CLI
+run, which adds up fast on a busy mailbox. Obvious automated noise is filtered by
+heuristics before either brain is called.
 
 The other direction works too: a connection marked *agent tool* is named for the agents in
 SOUL.md along with `POST /api/tools/run` — one call runs a query, script, or MCP tool
@@ -155,6 +173,8 @@ Early (v0.2.0) and moving fast.
 - [x] Agent presets (Claude Code, Codex, Gemini, Cursor, Copilot) with one-click Test
 - [x] Desktop app + single-file Windows exe
 - [x] Interactive agent terminal (pty + websocket + xterm.js) and hand-anything-to-an-agent
+- [x] Per-connection roles (trigger / report / tool), GitHub issues as an inbound trigger
+- [x] Configurable triage brain — a cloud key or your CLI agent — and `/api/tools/run`
 - [ ] Git worktree isolation per task attempt
 - [ ] More ingest channels and report connectors (table above)
 - [ ] Tray + notifications for the desktop shell

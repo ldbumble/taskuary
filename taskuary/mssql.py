@@ -31,8 +31,10 @@ def _connect(cs: str):
     return pyodbc.connect(cs, timeout=int(10))
 
 
-def run_query(cfg: dict, limit: int = 20) -> list:
-    """Execute cfg['query'], return up to `limit` rows as dicts."""
+def run_query(cfg: dict, limit: int = None) -> list:
+    """Execute cfg['query'], return up to `limit` rows as dicts (cfg['max_rows'] wins)."""
+    from .reports import row_limit
+    limit = limit or row_limit(cfg)
     with _connect(conn_str(cfg)) as cx:
         cur = cx.cursor().execute(cfg['query'])
         cols = [c[0] for c in cur.description or []]
@@ -50,11 +52,14 @@ def test(cfg: dict) -> dict:
 
 
 def run_report(cfg: dict):
-    """Report executor: (headline, summary) for the timeline."""
+    """Report executor: (headline, summary) for the timeline. One row past the limit is
+    fetched so the headline can admit when the result was cut (see reports.rows_out)."""
+    from .reports import row_limit, rows_out
+    lim = row_limit(cfg)
     if cfg.get('dsn'):  # back-compat: sqlalchemy-style dsn from old configs
         import sqlalchemy
         with sqlalchemy.create_engine(cfg['dsn']).connect() as cx:
-            rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(cfg['query'])).fetchall()[:20]]
+            rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(cfg['query'])).fetchmany(lim + 1)]
     else:
-        rows = run_query(cfg)
-    return f'{len(rows)} rows', '\n'.join(json.dumps(r, default=str) for r in rows)[:4000]
+        rows = run_query(cfg, lim + 1)
+    return rows_out(rows, lim)

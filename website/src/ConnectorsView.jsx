@@ -143,7 +143,9 @@ export default function ConnectorsView() {
     const m = META[c.Type] || {};
     const srcs = m.channel && m.channel !== "ai"
       ? sources.filter((s) => s.ConnectorId === c.ConnectorId || (!s.ConnectorId && m.channel === s.Channel)) : null;
+    const roles = String(c.Roles || "").split(",").filter(Boolean);
     const status = `${c.Active ? "on" : "off"}`
+      + (roles.length ? ` · ${roles.join(" + ")}` : "")
       + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}` : c.HasSecret ? " · key saved" : " · no key yet")
       + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
     return { key: `c${c.ConnectorId}`, title: c.Name, desc: status, channel: m.channel || c.Type,
@@ -341,6 +343,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         </Box>
       </Box>
     )}] : []),
+    ...(isAI ? [] : [{ label: "Role", done: !!(conn.Roles || "").length, body: <RoleStep conn={conn} reload={reload} /> }]),
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1 }}>
         <Switch checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
@@ -517,6 +520,42 @@ function WinrmDetail({ conn, reload, onBack }) {
     </Box>
   );
 }
+
+/* What a connection IS to the hub. Three independent jobs - a system can do all three,
+   or just be something the agents are allowed to touch. */
+const ROLE_META = {
+  trigger: ["Inbound trigger", "Poll it for new items — they land on the Timeline and go through triage. This is what turns a connection into work (mail, chats, GitHub issues…)."],
+  report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result on the Timeline."],
+  tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
+};
+
+const RoleStep = ({ conn, reload }) => {
+  const roles = new Set(String(conn.Roles || "").split(",").filter(Boolean));
+  const toggle = async (r) => {
+    const next = new Set(roles);
+    if (next.has(r)) next.delete(r); else next.add(r);
+    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Roles: [...next].join(",") });
+    reload();
+  };
+  return (
+    <Box sx={{ mt: 1, maxWidth: 620 }}>
+      {Object.entries(ROLE_META).map(([key, [label, desc]]) => (
+        <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
+          <Switch checked={roles.has(key)} onChange={() => toggle(key)} sx={{ mt: -0.5 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+            <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
+          </Box>
+        </Box>
+      ))}
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
+        {roles.has("trigger")
+          ? "Trigger is on: this connection creates timeline items on every sync."
+          : "Trigger is off: nothing here becomes work by itself — it stays available to the agents and to reports."}
+      </Typography>
+    </Box>
+  );
+};
 
 const Steps = ({ steps }) => (
   <Box sx={{ maxWidth: 720 }}>

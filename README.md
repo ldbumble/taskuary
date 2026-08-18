@@ -69,13 +69,32 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   prompts, your keystrokes — the session, not a transcript of one. Open one on a task
   ("start it on this task" types the context in for you) or a bare shell in any repo.
 - **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
-  models and CLI agents, messaging channels, GitHub, SQL Server.
+  models and CLI agents, messaging channels, GitHub, SQL Server. Every connection has a
+  **role** you choose: *inbound trigger* (its items land on the Timeline and go through
+  triage), *report source* (query it on a schedule), *agent tool* (the agents may read
+  from it and create things in it). Mail and chat trigger by default; GitHub starts as a
+  tool — flip its trigger on and new issues become timeline items and tasks like anything
+  else. Nothing polls a connection you didn't make a trigger.
 - **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
   rules injected into every agent run. They ship as templates and maintain themselves —
   connectors and discovered repos write themselves in.
 - **Settings** — triage knobs with plain-English help, deterministic routing policies
   (including **skip** rules for flood senders — one click on the Timeline mutes a sender
   forever), the agent's learned memory, and one-click audit-chain verification.
+
+## One brain or two
+
+Intent triage (task / reply-only / FYI) runs on whichever brain you pick in Settings →
+Triage & routing: a cloud key (Anthropic, OpenAI, Azure OpenAI), or **your coding CLI
+itself** — the same agent that works the tasks also classifies the inbox, so there is no
+second API key and no second bill. Cloud keys answer in milliseconds; a CLI run takes
+seconds and spends agent tokens. Obvious automated noise is filtered by heuristics before
+either is called.
+
+The other direction works too: a connection marked *agent tool* is named for the agents in
+SOUL.md along with `POST /api/tools/run` — one call runs a query, script, or MCP tool
+through the saved credentials and hands the raw output back, so an agent working a task
+can look something up in SQL Server or act in another system without leaving the run.
 
 ## Bring your own agent
 
@@ -91,7 +110,7 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | type | status | notes |
 |------|--------|-------|
 | `outlook` / `teams` / `slack` | ✅ | inbound channels → Timeline through AI triage |
-| `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md |
+| `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md; optional inbound trigger (new issues → Timeline → triage) |
 | `anthropic` / `openai` / `azure_openai` | ✅ | AI for triage + report summaries |
 | `mssql` | ✅ | connect once; build AI-summarized reports on the Reports tab |
 | `winrm` | ✅ | run PowerShell on any machine you can RDP into; output → Timeline |

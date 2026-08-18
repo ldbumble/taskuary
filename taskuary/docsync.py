@@ -12,21 +12,39 @@ REPO_MAP_HEADER = '## Repository map'
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github'}
 
 
+ROLE_TEXT = {'trigger': 'inbound trigger — new items land on the timeline and go through triage',
+             'tool': 'YOURS TO USE — read from it and create/update things in it as the work needs',
+             'report': 'scheduled report source'}
+
+
 def sync_connections(store, actor='system'):
+    from .store import roles_of
     doc = store.get_doc('soul') or ''
     if CONN_START not in doc or CONN_END not in doc: return
     srcs = store.list_sources()
     lines = []
     for c in store.list_connectors():
+        if not c['Active']: continue
         mine = [s['Address'] for s in srcs
                 if s['Channel'] == CH2SRC.get(c['Type']) and s['Active']
                 and (s.get('ConnectorId') in (None, c['ConnectorId']))]
-        if c['Active'] and mine: lines.append(f"- {c['Name']}: {', '.join(sorted(mine)[:12])}")
+        # what each connection IS to the agents, not just that it exists
+        what = '; '.join(ROLE_TEXT[r] for r in ('trigger', 'tool', 'report') if r in roles_of(c))
+        if mine: lines.append(f"- {c['Name']}: {', '.join(sorted(mine)[:12])}" + (f" — {what}" if what else ''))
+        elif what: lines.append(f"- {c['Name']} — {what}")
     for s in srcs:
         if s['Channel'] != 'report' or not s['Active']: continue
         cfg = json.loads(s.get('ConfigJson') or '{}')
         sched = f"every {cfg['every_minutes']}m" if cfg.get('every_minutes') else f"daily {cfg.get('daily_at', '')}".strip()
         lines.append(f"- Report \"{cfg.get('title') or s['Address']}\" ({cfg.get('type', 'rest')}, {sched})")
+    # the tool role is only real if the agents know how to reach it - spell out the call
+    if any('tool' in roles_of(c) for c in store.list_connectors() if c['Active']):
+        from . import config
+        srv = config.load().get('server') or {}
+        auth = ' (header X-Taskuary-Token)' if srv.get('token') else ''
+        lines.append(f"- To USE one of the systems above, POST http://{srv.get('host', '127.0.0.1')}:{srv.get('port', 7787)}"
+                     '/api/tools/run{auth} with {"type": "mssql|winrm|mcp|rest|sqlite|rss", ...} — '
+                     'saved credentials are filled in for you; the raw output comes back.'.replace('{auth}', auth))
     block = '\n'.join(lines) or '_(no connections yet — add them in the Connectors tab)_'
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)

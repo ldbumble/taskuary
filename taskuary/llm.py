@@ -1,16 +1,40 @@
-"""Cloud AI connectors -> one provider-agnostic llm(system, user) -> str callable, the
-shape triage.classify_intent expects. The first ACTIVE AI connector with a saved key wins
-(anthropic / openai / azure_openai). Configure them on the Connectors tab; used for
-intent triage today - drafting/coding agents are CLIs and bring their own models.
+"""The triage brain -> one provider-agnostic llm(system, user) -> str callable, the shape
+triage.classify_intent expects. Which brain is the owner's choice (setting `triage_ai`):
+
+    ''                  first ACTIVE AI connector with a key (anthropic/openai/azure_openai)
+    connector:<type>    that specific AI connector
+    cli:<agent>         your CODING CLI does the triage too - one headless run per message,
+                        same brain that works the tasks, no second API key to buy
+
+Cloud keys are cheap and instant per message; a CLI run is slower and heavier but keeps
+everything on one model (and one bill). Configure it in Settings -> Triage & routing.
 """
 import json, requests
 
 AI_TYPES = ('anthropic', 'openai', 'azure_openai')
 
 
+def make_cli_llm(store, agent_name: str):
+    """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
+    is dropped - triage is about the message, not about any checkout."""
+    row = store.get_agent(agent_name)
+    if not row: return None
+    prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
+    prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
+    def llm(system, user):
+        from .agents import run_cli
+        out, _sid, _diff = run_cli(prof, f'{system}\n\n{user}\n\nAnswer with the JSON object only.',
+                                   lambda *a: None)
+        return out
+    return llm
+
+
 def build_llm(store):
+    pick = (store.get_settings().get('triage_ai') or '').strip()
+    if pick.startswith('cli:'): return make_cli_llm(store, pick[4:])
+    want = pick[10:] if pick.startswith('connector:') else None
     for c in store.list_connectors():
-        if c['Type'] in AI_TYPES and c['Active'] and c['HasSecret']:
+        if c['Type'] in AI_TYPES and c['Active'] and c['HasSecret'] and (not want or c['Type'] == want):
             full = store.get_connector(c['ConnectorId'], with_secret=True)
             return make_llm(full['Type'], json.loads(full.get('ConfigJson') or '{}'), full.get('Secret'))
     return None

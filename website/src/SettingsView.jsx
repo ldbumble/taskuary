@@ -32,6 +32,9 @@ const KNOB_META = {
   intent_classify_enabled: { group: "Triage & routing", label: "Intent triage", type: "switch",
     desc: "Classify every new message: task / reply-only question / FYI (filed, no draft).",
     help: "The heart of the funnel: every new message is classified task (a requirement to DO something), reply_only (just needs an answer), or fyi (informational - filed with no task and no draft), guided by SOUL.md. Off = every message becomes a task, like v1 did." },
+  triage_ai: { group: "Triage & routing", label: "Triage brain", type: "brain",
+    desc: "Which AI classifies inbound messages — a cloud model, or your coding CLI itself.",
+    help: "auto = the first active AI connector with a key wins. Pick a specific connector to pin it. Pick a CLI agent (claude, codex…) and the SAME brain that writes your code also triages your inbox — one model, one bill, no second API key. The trade-off is speed and cost per message: a CLI run takes seconds to a minute and spends agent tokens, while an API key answers in well under a second. Obvious automated noise is filtered by heuristics before any AI is called either way." },
   default_action: { group: "Triage & routing", label: "Default action", type: "select", options: ["draft", "task_only", "escalate"],
     desc: "What happens when no policy rule matches a message.",
     help: "draft = the AI drafts a reply for your review (reply-only questions); task_only = just file a task, no draft; escalate = always send it to you. Note: messages triaged as REAL tasks skip the responder regardless - they queue for the coder." },
@@ -87,10 +90,13 @@ export default function SettingsView() {
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
 
+  const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
+
   const load = useCallback(async () => {
     try {
       const [p, s, m] = await Promise.all([api.get("/api/policies"), api.get("/api/settings"), api.get("/api/memory")]);
       setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []);
+      api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load settings"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -116,6 +122,18 @@ export default function SettingsView() {
 
   const control = (s) => {
     const m = meta(s.Name);
+    // the brains list is dynamic: AI connectors that actually hold a key + your CLI agents
+    if (m.type === "brain") return (
+      <Select size="small" displayEmpty value={brains.some((b) => b.value === s.Value) ? s.Value : ""}
+        sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "#fff" }}
+        onChange={(e) => saveSetting(s.Name, e.target.value)}>
+        {brains.map((b) => (
+          <MenuItem key={b.value} value={b.value} disabled={!b.ready} sx={{ fontSize: 12.5 }}>
+            {b.label}{b.ready ? "" : " — no key saved"}
+          </MenuItem>
+        ))}
+      </Select>
+    );
     if (m.type === "select") return (
       <Select size="small" value={s.Value} onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
         {m.options.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>{o.replace("_", " ")}</MenuItem>)}

@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from . import config
+from . import store as store_mod
 from .store import SQLiteStore, task_ref
 from .ingest import ingest_message, task_from_message
 from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
@@ -77,6 +78,7 @@ class MemoryToggle(BaseModel): active: bool
 class ConnectorBody(BaseModel):
     ConnectorId: int | None = None; Type: str | None = None; Name: str | None = None
     ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
+    Roles: str | None = None                       # csv of trigger,report,tool - see store.ROLES
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -318,9 +320,25 @@ def connectors():
     """Channel connector cards (outlook / teams / github). Secrets are write-only."""
     return {'data': store.list_connectors()}
 
+@app.get('/api/brains')
+def brains():
+    """Everything that could do intent triage: cloud AI connectors with a key, plus your
+    CLI agents (same brain that codes). Value goes into the `triage_ai` setting."""
+    from .llm import AI_TYPES
+    out = [{'value': '', 'label': 'auto — first active AI connector', 'kind': 'auto', 'ready': True}]
+    out += [{'value': f"connector:{c['Type']}", 'label': c['Name'], 'kind': 'api',
+             'ready': bool(c['Active'] and c['HasSecret'])}
+            for c in store.list_connectors() if c['Type'] in AI_TYPES]
+    out += [{'value': f"cli:{a['Name']}", 'label': f"{a['Name']} (CLI agent)", 'kind': 'cli', 'ready': True}
+            for a in store.list_agents()]
+    return {'data': out, 'current': store.get_settings().get('triage_ai') or ''}
+
 @app.post('/api/connectors')
 def save_connector(body: ConnectorBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    if fields.get('Roles') is not None:
+        bad = {r for r in fields['Roles'].split(',') if r} - set(store_mod.ROLES)
+        if bad: raise HTTPException(422, f"unknown role(s): {', '.join(sorted(bad))}")
     if not fields.get('ConnectorId') and not (fields.get('Type') and fields.get('Name')):
         raise HTTPException(422, 'new connectors need Type and Name')
     cid = store.save_connector(fields, ACTOR)
@@ -358,6 +376,26 @@ def connector_test(cid: int):
     out = test_connector(store, cid)
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
+
+@app.post('/api/tools/run')
+def tool_run(body: dict):
+    """The agents' hands on your other systems: run ONE query/script through a connection
+    the owner marked as a tool, and get the raw output back (no AI pass, no timeline row).
+    Same executors the Reports tab uses, same saved credentials - so an agent working a
+    task can look something up in SQL Server, run a script on a box, or call an MCP tool.
+    A connection without the 'tool' role refuses."""
+    t = (body or {}).get('type')
+    if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
+    conn = store.get_connector_by_type(t)
+    if conn and 'tool' not in store_mod.roles_of(conn):
+        raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connectors → {t} → Role)')
+    try:
+        head, out = REGISTRY[t](resolve_cfg(store, {**body, 'type': t}))
+    except Exception as e:
+        store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run_failed', ACTOR, detail={'type': t, 'error': str(e)[:300]})
+        return {'ok': False, 'error': str(e)[:1000]}
+    store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', ACTOR, detail={'type': t, 'headline': str(head)[:200]})
+    return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
 
 @app.post('/api/reports/preview')
 def report_preview(body: dict):

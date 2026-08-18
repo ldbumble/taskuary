@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
   Owner TEXT, ConnectorId INTEGER, Active INTEGER DEFAULT 1, ConfigJson TEXT, LastPolledAt TEXT);
 CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT UNIQUE, Name TEXT,
-  ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT);
+  ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, Roles TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
   Source TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT);
@@ -60,7 +60,19 @@ CREATE TABLE IF NOT EXISTS doc (Name TEXT PRIMARY KEY, Content TEXT, UpdatedBy T
 """
 
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '0', 'attach_threshold': '0.42',
-                    'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '0'}
+                    'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '0',
+                    'triage_ai': ''}      # '' = first active AI connector | connector:<type> | cli:<agent>
+
+# What a connection IS to the hub, independent of what it can technically do:
+#   trigger - polled for inbound items; they land on the Timeline and go through triage
+#   report  - selectable as a scheduled report source (Reports tab)
+#   tool    - the agents may read from / write to it (listed for them in SOUL.md)
+# Defaults match how each system is usually used; every one is owner-configurable.
+DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
+                 'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool'}
+ROLES = ('trigger', 'report', 'tool')
+
+def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
 
 
 class SQLiteStore:
@@ -72,6 +84,10 @@ class SQLiteStore:
         self.lock = threading.Lock()
         with self.lock:
             self.cx.executescript(SCHEMA)
+            # columns added after a release: CREATE TABLE IF NOT EXISTS never reaches an
+            # existing db, so widen it here (cheap, idempotent)
+            have = {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}
+            if 'Roles' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Roles TEXT')
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
@@ -79,7 +95,10 @@ class SQLiteStore:
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
                          ('azure_openai', 'Azure OpenAI'), ('mssql', 'Microsoft SQL Server'),
                          ('winrm', 'Remote Windows (WinRM)')):
-                self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name) VALUES (?,?)', (t, n))
+                self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
+                                (t, n, DEFAULT_ROLES.get(t, '')))
+            for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
+                self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
             from pathlib import Path
@@ -250,7 +269,7 @@ class SQLiteStore:
     def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))
 
     # channel connectors (secrets are write-only: list/get never return them)
-    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, LastSyncAt, LastError, (Secret IS NOT NULL AND Secret != '') HasSecret"
+    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, LastSyncAt, LastError, (Secret IS NOT NULL AND Secret != '') HasSecret"
     def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
     def get_connector(self, cid, with_secret=False):
         return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
@@ -258,11 +277,11 @@ class SQLiteStore:
         return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE Type=?", (ctype,))
     def save_connector(self, fields, actor):
         cid = fields.get('ConnectorId')
-        cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active') if c in fields and fields[c] is not None]
+        cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles') if c in fields and fields[c] is not None]
         if cid:
             self._exec(f"UPDATE connector SET {','.join(f'{c}=?' for c in cols)} WHERE ConnectorId=?", [fields[c] for c in cols] + [cid])
             return cid
-        return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active'))
+        return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles'))
     def reset_connector(self, cid):
         """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
         self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL WHERE ConnectorId=?', (cid,))

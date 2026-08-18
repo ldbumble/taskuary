@@ -107,6 +107,45 @@ class CoreTests(unittest.TestCase):
         self.assertEqual((out, sid), ('all done', 's1'))
         self.assertTrue(any(k == 'live' and 'Bash' in d for k, d in ev))
 
+    def test_roles_gate_what_polls_and_github_can_trigger(self):
+        from unittest import mock
+        from taskuary import channels
+        from taskuary.store import roles_of
+        s = MemoryStore()
+        gh = next(c for c in s.list_connectors() if c['Type'] == 'github')
+        self.assertEqual(roles_of(gh), {'tool'})                    # github is a tool by default...
+        s.save_connector({'ConnectorId': gh['ConnectorId'], 'Active': 1, 'Secret': 'ghp_x'}, 'o')
+        s.save_source({'Channel': 'github', 'Address': 'o/repo', 'ConnectorId': gh['ConnectorId'], 'Active': 1}, 'o')
+        issues = [{'number': 7, 'title': 'Export dies on empty ledger', 'body': 'stack trace here',
+                   'user': {'login': 'jsmith'}, 'updated_at': '2026-08-18T09:00:00Z', 'html_url': 'https://gh/7'},
+                  {'number': 8, 'title': '[TQ-0004] coder task', 'body': 'opened by taskuary itself',
+                   'user': {'login': 'bot'}, 'updated_at': '2026-08-18T09:01:00Z', 'html_url': 'https://gh/8'}]
+        with mock.patch('taskuary.github.list_issues', return_value=issues) as li:
+            self.assertEqual(channels.poll_channels(s), 0)          # ...so nothing polls it
+            li.assert_not_called()
+            s.save_connector({'ConnectorId': gh['ConnectorId'], 'Roles': 'trigger,tool'}, 'o')
+            self.assertEqual(channels.poll_channels(s), 1)          # the owner made it a trigger
+        feed = s.feed()
+        self.assertEqual([m['Channel'] for m in feed], ['github'])
+        self.assertIn('o/repo#7', feed[0]['Subject'])               # our own [TQ-] issues never come back
+
+    def test_triage_brain_is_configurable(self):
+        from unittest import mock
+        from taskuary import llm
+        s = MemoryStore()
+        oa = next(c for c in s.list_connectors() if c['Type'] == 'openai')
+        s.save_connector({'ConnectorId': oa['ConnectorId'], 'Active': 1, 'Secret': 'sk-x'}, 'o')
+        self.assertTrue(callable(llm.build_llm(s)))                 # auto: the cloud key
+        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude", "cwd": "C:/repo", "timeout": 9000}')
+        s.set_setting('triage_ai', 'cli:coder', 'o')
+        with mock.patch('taskuary.agents.run_cli', return_value=('{"intent": "task", "why": "x"}', None, None)) as rc:
+            self.assertEqual(llm.build_llm(s)('sys', 'usr'), '{"intent": "task", "why": "x"}')
+        prof = rc.call_args[0][0]
+        self.assertNotIn('cwd', prof)                               # triage is not about any checkout
+        self.assertEqual(prof['timeout'], 300)                      # and never waits a coding-run timeout
+        s.set_setting('triage_ai', 'cli:ghost', 'o')
+        self.assertIsNone(llm.build_llm(s))                         # missing agent files instead of guessing
+
     def test_skip_policy_hides_the_senders_history_and_gives_it_back(self):
         from taskuary.ingest import ingest_message
         from taskuary.policy import apply_retroactively

@@ -27,6 +27,7 @@ const CHANNEL_FILTERS = [
   { key: "email", label: "email", c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
   { key: "teams", label: "teams", c: { bg: "#efeffa", fg: "#6264A7", bd: "#d4d5ec" } },
   { key: "slack", label: "slack", c: { bg: "#f3ecf5", fg: "#611f69", bd: "#e0cbe4" } },
+  { key: "github", label: "github", c: { bg: "#eceef1", fg: "#1c2536", bd: "#d3d8e0" } },
   { key: "report", label: "reports", c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
 ];
 

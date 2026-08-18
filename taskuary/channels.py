@@ -191,7 +191,28 @@ def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
     return 1
 
 
-CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack'}
+CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github'}
+TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
+
+
+def ingest_github_issues(store, repo: str, tok: str, since, llm=None) -> int:
+    """GitHub as an INBOUND channel: new issues land on the Timeline and go through the
+    same triage as mail. Issues Taskuary opened for its own tasks are skipped, otherwise
+    the coder would file work against itself forever."""
+    n = 0
+    from .github import list_issues
+    for i in reversed(list_issues(tok, repo, since=since.astimezone().isoformat())):
+        if TQ_ISSUE.match(i.get('title') or ''): continue
+        who = (i.get('user') or {}).get('login') or 'github'
+        out = ingest_message(store, {
+            'external_id': f"gh:{repo}#{i['number']}", 'channel': 'github',
+            'subject': f"{repo}#{i['number']} {i.get('title') or ''}".strip(),
+            'body': (i.get('body') or '(no description)')[:20000],
+            'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
+            'conversation_id': f"gh:{repo}#{i['number']}", 'sent_at': _local(i.get('updated_at') or ''),
+            'source_link': i.get('html_url'), 'source_name': repo}, llm=llm)
+        n += out['status'] != 'duplicate'
+    return n
 
 
 def _since(s):
@@ -200,14 +221,18 @@ def _since(s):
 
 
 def poll_channels(store) -> int:
-    """Ingest new mail and chats for every active connector's active sources, through the
-    same triage funnel (incl. the configured AI, if any). Failures land on the card."""
+    """Ingest new items for every connection the owner marked as a TRIGGER, through the
+    same triage funnel (incl. the configured AI, if any). A connection without the trigger
+    role is still usable by agents and reports - it just never creates work on its own.
+    Failures land on the card."""
     from .llm import build_llm
+    from .store import roles_of
     try: llm = build_llm(store)
     except Exception: llm = None
     n = 0
     for c in store.list_connectors():
-        if not c['Active'] or c['Type'] not in CH2SRC: continue   # github ingests via the coder loop
+        if not c['Active'] or c['Type'] not in CH2SRC: continue
+        if 'trigger' not in roles_of(c): continue                 # tool-only / report-only connection
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:
             if c['Type'] in ('outlook', 'teams'):
@@ -235,6 +260,8 @@ def poll_channels(store) -> int:
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address']}, llm=llm)
                         n += out['status'] != 'duplicate'
+                elif c['Type'] == 'github':
+                    n += ingest_github_issues(store, s['Address'], tok, since, llm)
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)

@@ -67,6 +67,27 @@ class ApiTests(unittest.TestCase):
         finally:
             REGISTRY.pop('_t')
 
+    def test_tool_run_needs_the_tool_role(self):
+        """An agent using a connected system: allowed for tool-role connections, refused
+        otherwise, and errors come back as data instead of a 500."""
+        REGISTRY['_tool'] = lambda cfg: (f"ran {cfg.get('q')}", 'rows here')
+        try:
+            r = c.post('/api/tools/run', json={'type': '_tool', 'q': 'select 1'}).json()
+            self.assertEqual((r['ok'], r['headline'], r['output']), (True, 'ran select 1', 'rows here'))
+            self.assertEqual(c.post('/api/tools/run', json={'type': 'nope'}).status_code, 422)
+            cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'winrm')
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report'})
+            self.assertEqual(c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'}).status_code, 403)
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report,tool'})
+            REGISTRY['winrm'], real = lambda cfg: (_ for _ in ()).throw(RuntimeError('box unreachable')), REGISTRY['winrm']
+            try:
+                out = c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'}).json()
+                self.assertEqual((out['ok'], 'box unreachable' in out['error']), (False, True))
+            finally:
+                REGISTRY['winrm'] = real
+        finally:
+            REGISTRY.pop('_tool')
+
     def test_preview_ok_and_error(self):
         REGISTRY['_p'] = lambda cfg: ('head', 'sum')
         try:
@@ -95,6 +116,24 @@ class ApiTests(unittest.TestCase):
         row = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == cid)
         self.assertEqual(row['HasSecret'], 1); self.assertNotIn('s3cret', json.dumps(row))
         c.post('/api/connectors', json={'ConnectorId': cid, 'Active': False})
+
+    def test_connector_roles_and_brain_choices(self):
+        rows = {x['Type']: x for x in c.get('/api/connectors').json()['data']}
+        self.assertEqual(rows['github']['Roles'], 'tool')            # github is a tool, not a trigger, by default
+        self.assertEqual(rows['outlook']['Roles'], 'trigger,tool')
+        cid = rows['github']['ConnectorId']
+        try:
+            self.assertTrue(c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'trigger,tool'}).json()['ok'])
+            row = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == cid)
+            self.assertEqual(row['Roles'], 'trigger,tool')
+            self.assertEqual(c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'trigger,wat'}).status_code, 422)
+        finally:
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'tool'})
+        b = c.get('/api/brains').json()
+        self.assertEqual(b['data'][0]['value'], '')                  # auto first
+        self.assertIn('connector:anthropic', [x['value'] for x in b['data']])
+        self.assertIn('cli:coder', [x['value'] for x in b['data']])  # your coding CLI can be the brain
+        self.assertFalse(next(x for x in b['data'] if x['value'] == 'connector:anthropic')['ready'])   # no key saved
 
     def test_connector_test_fails_cleanly_without_creds(self):
         cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'teams')

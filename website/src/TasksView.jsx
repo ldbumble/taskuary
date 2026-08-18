@@ -128,7 +128,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => {
     if (!autostart || autostart.taskId !== selected || term !== null || !detail) return;
     onAutostarted?.();
-    openTerm({ agent: autostart.agent || run.agent, task_id: selected, repo: repoOf(detail.task), seed: true });
+    openTerm({ agent: autostart.agent || run.agent, model: autostart.model || run.model || null,
+      task_id: selected, repo: repoOf(detail.task), seed: true });
   }, [autostart, selected, term, detail, openTerm, onAutostarted, run.agent]);
 
 
@@ -256,7 +257,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
                         onAgent={(a) => setRun({ ...run, agent: a, model: "" })} onModel={(m) => setRun({ ...run, model: m })} />
                       <Button variant="contained" size="small" disableElevation startIcon={<TerminalIcon sx={{ fontSize: 15 }} />}
-                        onClick={() => openTerm({ agent: run.agent, task_id: selected, repo: repoOf(t), seed: true })}>
+                        onClick={() => openTerm({ agent: run.agent, model: run.model || null, task_id: selected,
+                          repo: repoOf(t), seed: true })}>
                         Start session
                       </Button>
                     </Box>

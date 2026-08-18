@@ -88,9 +88,9 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   feeding **one prompt at the bottom**, then the schedule. Every source's rows reach the
   summary together, each under its own label, and a source that fails is reported in place
   instead of killing the report. Preview runs the whole pipeline before you save. **max
-  rows** (default 200, per source) decides how much reaches the summary, and the headline
-  says *capped* when rows were left behind — so the AI never calls a truncated slice "all
-  of them".
+  rows** (per source; blank means the 200-row default) decides how much reaches the summary,
+  and the headline says *capped* when rows were left behind — naming whether that was your
+  number or the default — so the AI never calls a truncated slice "all of them".
 - **Terminals** — your coding CLI for real: a pseudo-terminal (ConPTY on Windows) streamed
   to xterm.js over a websocket. Its own TUI, its approval prompts, your keystrokes — the
   session, not a transcript of one. It lives in exactly one place, **the task page**: no
@@ -198,7 +198,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 102 tests, ~20s, no network or credentials needed
+pytest -q                   # 104 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

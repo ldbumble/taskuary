@@ -96,7 +96,7 @@ export default function BoardView({ onOpenTask }) {
     setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "" }));
     // the details field IS the prompt - it is typed into the live session, or sent down as
     // the headless run's instruction, depending on how you chose to work it
-    if (nt.how === "live") return onOpenTask(data.taskId, { start: true, agent: nt.agent });
+    if (nt.how === "live") return onOpenTask(data.taskId, { start: true, agent: nt.agent, model: nt.model });
     if (nt.how === "headless") await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null,
       agent: nt.agent || null, model: nt.model || null, instruction: nt.Summary || null });
     load();

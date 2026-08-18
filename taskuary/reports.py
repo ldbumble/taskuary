@@ -18,26 +18,32 @@ MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override wi
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
 
 
-def row_limit(cfg) -> int: return max(1, int(cfg.get('max_rows') or MAX_ROWS))
+def row_limit(cfg):
+    """(limit, is it YOURS). The default is a safety net, not a number anybody chose - and
+    the headline has to say which one it was, or "capped at 200" points the owner at a
+    setting they never made and cannot find."""
+    n = cfg.get('max_rows')
+    return (max(1, int(n)), True) if n else (MAX_ROWS, False)
 
 
-def rows_out(rows, limit, unit='rows'):
+def rows_out(rows, limit, unit='rows', mine=True):
     """(headline, body) from executor rows, SAYING SO when the result was cut. A silent cap
     made the AI describe 20 rows of a TOP 500 query as 'all of them' - fetch one extra row
     and the headline can tell the truth instead."""
     more = len(rows) > limit
     rows = rows[:limit]
-    head = f'{len(rows)} rows' + (f' (capped at {limit} — raise "max rows" on this report to see more)' if more else '')
+    why = (f'capped at {limit}' if mine else f'capped at the default {limit}') + ' — set "max rows" on this source to see more'
+    head = f'{len(rows)} rows' + (f' ({why})' if more else '')
     return head.replace('rows', unit, 1), '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]
 
 
 def run_sqlite(cfg):
     """{"db": "path.db", "query": "SELECT ...", "max_rows": 200} - the local-first database report."""
     cx = sqlite3.connect(cfg['db']); cx.row_factory = sqlite3.Row
-    lim = row_limit(cfg)
+    lim, mine = row_limit(cfg)
     rows = [dict(r) for r in cx.execute(cfg['query']).fetchmany(lim + 1)]
     cx.close()
-    return rows_out(rows, lim)
+    return rows_out(rows, lim, mine=mine)
 
 
 def run_mssql(cfg):

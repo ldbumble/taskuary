@@ -368,8 +368,11 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           inputProps={kind === "multiline" ? { style: { fontFamily: "Consolas, monospace", fontSize: 11.5 } } : undefined}
           onChange={(e) => onChange({ [key]: e.target.value })} />;
       })}
-      <TextField size="small" label="max rows" type="number" value={src.max_rows ?? ""} sx={{ bgcolor: "#fff", width: 120 }}
-        onChange={(e) => onChange({ max_rows: e.target.value })} />
+      {/* blank is not "no cap" - it is the 200-row default, and the field has to say so or
+          the timeline's "capped at 200" points at a setting you never made */}
+      <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
+        helperText="blank = 200 (the default). Raise it to send more rows to the prompt."
+        sx={{ bgcolor: "#fff", width: 300 }} onChange={(e) => onChange({ max_rows: e.target.value })} />
     </Box>
   );
 }

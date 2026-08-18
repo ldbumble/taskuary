@@ -12,7 +12,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, fmtTime12, fmtDateTime, localDay, cleanText } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, fmtTime12, fmtDateTime, localDay, cleanText } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -149,9 +149,18 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // doesn't thrash); click selects instantly. A draft mid-edit locks the panel in place.
   const [sel, setSel] = useState(null);
   const hoverTimer = useRef(null);
+  const want = useRef(null);                    // newest selection wins if fetches land out of order
   const drill = async (row) => {
-    setSel(row); setDetail(null); setEditText("");
-    if (row.TaskId) setDetail((await api.get(`/api/tasks/${row.TaskId}`)).data);
+    setSel(row); setDetail(null); setEditText(""); want.current = row.MessageId;
+    // no task = report / filed / ignored: fetch the message itself so the panel shows the
+    // WHOLE body (the feed row only carries a truncated preview)
+    try {
+      const d = row.TaskId ? (await api.get(`/api/tasks/${row.TaskId}`)).data
+        : { messages: [(await api.get(`/api/messages/${row.MessageId}`)).data] };
+      if (want.current === row.MessageId) setDetail(d);
+    } catch {
+      if (want.current === row.MessageId) setDetail({ messages: [] });   // panel falls back to the preview
+    }
   };
   const hoverSelect = (row) => {
     clearTimeout(hoverTimer.current);
@@ -193,45 +202,51 @@ export default function FeedView({ onOpenTask, onChanged }) {
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
       <Box sx={{ minWidth: 0, maxWidth: 860 }}>
-        {/* contained toolbar: segmented filters + sync control + today's stats */}
-        <Box sx={{ ...card, px: 1.5, py: 1, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
-          <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
-          <FilterPills options={CHANNEL_FILTERS} value={channel} onChange={setChannel} />
-          {channel === "email" && mailboxes.length > 1 && (
-            <Select size="small" value={mailbox} displayEmpty onChange={(e) => setMailbox(e.target.value)}
-              renderValue={(v) => (v ? v.split("@")[0] : "all mailboxes")}
-              sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: mailbox ? "#e8f1fa" : "#fff", height: 26,
-                color: mailbox ? "#0F6CBD" : DIM, maxWidth: 150,
-                "& .MuiSelect-select": { py: 0.3, px: 1.25 },
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: mailbox ? "#c4dcf2" : BORDER } }}>
-              <MenuItem value="" sx={{ fontSize: 12 }}>all mailboxes</MenuItem>
-              {mailboxes.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>{m}</MenuItem>)}
-            </Select>
-          )}
-          <Box sx={{ width: "1px", alignSelf: "stretch", bgcolor: BORDER, my: 0.25 }} />
-          <Button size="small" variant="contained" disableElevation disabled={syncing} onClick={() => syncNow(false)}
-            startIcon={syncing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-            sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing ? "Updating…" : "Sync now"}</Button>
-          {/* the sync caption yields its space to the mailbox picker so the row never wraps */}
-          {!(channel === "email" && mailboxes.length > 1) && (
-            <Typography variant="caption" sx={{ color: FAINT }}>
-              {lastSync
-                ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-                : "auto-syncs every 10 min"}
-            </Typography>
-          )}
-          <Box sx={{ flex: 1 }} />
-          {rows && stats.map((s, i) => (
-            <Box key={s.label} onClick={() => s.f && setView(s.f)}
-              sx={{ display: "flex", alignItems: "baseline", gap: 0.5, px: 1.25,
-                borderLeft: i ? `1px solid ${BORDER}` : "none",
-                cursor: s.f ? "pointer" : "default",
-                "&:hover .thubStatLbl": s.f ? { color: "#4f46e5" } : {} }}>
-              <Typography sx={{ ...mono, fontWeight: 700, fontSize: 15,
-                color: s.hot && s.n ? "#b45309" : s.n ? "#4f46e5" : INK }}>{s.n}</Typography>
-              <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
+        {/* contained toolbar, two deliberate rows: controls (filters left, sync anchored
+            right) over a full-width stats strip - nothing floats in dead space */}
+        <Box sx={{ ...card, p: 0, overflow: "hidden" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.5, py: 1, flexWrap: "wrap" }}>
+            <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
+            <FilterPills options={CHANNEL_FILTERS} value={channel} onChange={setChannel} />
+            {channel === "email" && mailboxes.length > 1 && (
+              <Select size="small" value={mailbox} displayEmpty onChange={(e) => setMailbox(e.target.value)}
+                renderValue={(v) => (v ? v.split("@")[0] : "all mailboxes")}
+                sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: mailbox ? "#e8f1fa" : "#fff", height: 26,
+                  color: mailbox ? "#0F6CBD" : DIM, maxWidth: 150,
+                  "& .MuiSelect-select": { py: 0.3, px: 1.25 },
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: mailbox ? "#c4dcf2" : BORDER } }}>
+                <MenuItem value="" sx={{ fontSize: 12 }}>all mailboxes</MenuItem>
+                {mailboxes.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>{m}</MenuItem>)}
+              </Select>
+            )}
+            <Box sx={{ flex: 1, minWidth: 8 }} />
+            <Button size="small" variant="contained" disableElevation disabled={syncing} onClick={() => syncNow(false)}
+              startIcon={syncing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
+              sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing ? "Updating…" : "Sync now"}</Button>
+          </Box>
+          {/* stats strip - and the sync caption lives here, so the controls row above keeps
+              its budget whether or not the mailbox picker is showing */}
+          {rows && (
+            <Box sx={{ display: "flex", alignItems: "center", borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
+              {stats.map((s, i) => (
+                <Box key={s.label} onClick={() => s.f && setView(s.f)}
+                  sx={{ flex: 1, display: "flex", alignItems: "baseline", gap: 0.6, px: 1.5, py: 0.7,
+                    borderLeft: i ? `1px solid ${BORDER}` : "none", transition: "background .15s",
+                    cursor: s.f ? "pointer" : "default",
+                    ...(s.f ? { "&:hover": { bgcolor: "#eef0ff" }, "&:hover .thubStatLbl": { color: "#4f46e5" } } : {}) }}>
+                  <Typography sx={{ ...mono, fontWeight: 700, fontSize: 15,
+                    color: s.hot && s.n ? "#b45309" : s.n ? "#4f46e5" : INK }}>{s.n}</Typography>
+                  <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
+                </Box>
+              ))}
+              <Typography variant="caption" noWrap sx={{ color: FAINT, px: 1.5, py: 0.7, flexShrink: 0,
+                borderLeft: `1px solid ${BORDER}` }}>
+                {lastSync
+                  ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+                  : "auto-syncs every 10 min"}
+              </Typography>
             </Box>
-          ))}
+          )}
         </Box>
         {syncing && <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />}
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mt: 1.5 }}>{err}</Alert>}
@@ -399,10 +414,18 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 </Button>
               </>
             ) : (
-              <DrawerBlock title={open.MsgStatus === "filed" ? "Filed — nothing to do" : "Ignored"}>
-                <Typography variant="body2" sx={{ color: DIM }}>{open.RouteReason || "Policy ignored this message — no task was created."}</Typography>
-              </DrawerBlock>
+              <>
+                <DrawerBlock title={open.MsgStatus === "filed" ? "Filed — nothing to do" : "Ignored"}>
+                  <Typography variant="body2" sx={{ color: DIM }}>{open.RouteReason || "Policy ignored this message — no task was created."}</Typography>
+                </DrawerBlock>
+                <DrawerBlock title="Message">
+                  <MessageBlock messages={detail?.messages} focusId={open.MessageId} fallback={open.Preview} maxH={320} />
+                </DrawerBlock>
+              </>
             )}
+            <Box sx={{ mt: 2 }}>
+              <SendToAgent messageId={open.MessageId} subject={open.Subject} onOpenTask={(tid) => { onOpenTask(tid); setOpen(null); }} />
+            </Box>
           </>
         )}
       </Drawer>
@@ -539,7 +562,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
                 </>
               )}
 
-              <Box sx={{ display: "flex", gap: 1, mt: 1.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center" }}>
+              {/* hand THIS item (failed report, email, chat) to an agent with your own prompt */}
+              <Box sx={{ mt: 1.5, borderTop: `1px solid ${BORDER}`, pt: 1 }}>
+                <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+              </Box>
+
+              <Box sx={{ display: "flex", gap: 1, mt: 0.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center" }}>
                 <Button size="small" onClick={onDetails}>See details →</Button>
                 {sel.TaskId && <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task</Button>}
                 <Box sx={{ flex: 1 }} />
@@ -591,7 +619,10 @@ const DayHeader = ({ label }) => {
 const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
   const msgs = messages || [];
   const [mid, setMid] = useState(null);
+  const [full, setFull] = useState(false);
   const cur = msgs.find((m) => m.MessageId === mid) || msgs.find((m) => m.MessageId === focusId) || msgs[msgs.length - 1];
+  const text = cleanText(cur?.BodyText) || fallback || "…";
+  const long = text.length > 700;                    // long bodies scroll in place; "expand" gives them the panel
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
   return (
@@ -620,9 +651,20 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
             {cur.Subject ? ` — ${cur.Subject}` : ""}
           </Typography>
         )}
-        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, maxHeight: maxH, overflow: "auto", textAlign: "left" }}>
-          {cleanText(cur?.BodyText) || fallback || "…"}
+        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left",
+          maxHeight: full ? "60vh" : maxH, overflowY: "auto", overscrollBehavior: "contain",
+          // a hairline scrollbar that's always visible, so a clipped body never looks finished
+          "&::-webkit-scrollbar": { width: 8 },
+          "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
+          {text}
         </Typography>
+        {long && (
+          <Typography variant="caption" onClick={() => setFull(!full)}
+            sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", display: "inline-block", mt: 0.5,
+              "&:hover": { textDecoration: "underline" } }}>
+            {full ? "collapse ↑" : `expand — ${text.length.toLocaleString()} chars ↓`}
+          </Typography>
+        )}
       </Box>
     </>
   );

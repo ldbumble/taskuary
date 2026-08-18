@@ -1,18 +1,19 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import json
+import asyncio, json, threading
 from datetime import datetime
 from pathlib import Path
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from . import config
 from .store import SQLiteStore, task_ref
-from .ingest import ingest_message
+from .ingest import ingest_message, task_from_message
 from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
 from . import agents as hub_agents
+from . import terminal as hub_term
 from .coder import run_coding_task
 from .converse import message_agent
 
@@ -59,7 +60,7 @@ class MsgBody(BaseModel):
     source_link: str | None = None; source_name: str | None = None
 class TextBody(BaseModel): body: str
 class DecideBody(BaseModel): verb: str; final_text: str | None = None; note: str | None = None
-class CodeBody(BaseModel): repo: str | None = None
+class CodeBody(BaseModel): repo: str | None = None; agent: str | None = None
 class DocBody(BaseModel): content: str
 class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
@@ -142,8 +143,10 @@ def _github_cfg():
 @app.post('/api/tasks/{task_id}/code')
 def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    background.add_task(run_coding_task, store, task_id, ACTOR, (body.repo if body else None), _github_cfg())
-    return {'coder': 'running'}
+    agent = (body.agent if body else None) or 'coder'
+    if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
+    background.add_task(run_coding_task, store, task_id, ACTOR, (body.repo if body else None), _github_cfg(), agent)
+    return {'coder': 'running', 'agent': agent}
 
 @app.post('/api/tasks/{task_id}/comments')
 def comment(task_id: int, body: TextBody):
@@ -181,6 +184,38 @@ def purge_dropped():
         store.audit('task', tid, 'purge_dropped', ACTOR)
         store.delete_task(tid)
     return {'ok': True, 'deleted': len(victims)}
+
+@app.get('/api/messages/{mid}')
+def get_message(mid: int):
+    """One message, whole body - the timeline row only carries a 4000-char preview."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    return m
+
+@app.post('/api/messages/{mid}/dispatch')
+def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
+    """Hand ANY timeline item (failed report, email, chat) to an agent with your own
+    prompt. Messages that are not on a task yet become one first, so the run carries the
+    full context (subject, sender, body, thread) the agent needs."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR)
+    background.add_task(hub_agents.dispatch, store, tid, body.agent,
+                        body.instruction or 'Investigate this and fix it end to end.', ACTOR)
+    return {'dispatch': 'running', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid)}
+
+@app.get('/api/runs/live')
+def live_runs(lines: int = 3):
+    """The tail of every run that is working right now - the Board renders it as a tiny
+    console on each card (the full trace is on the task)."""
+    out = []
+    for r in store.running_runs():
+        try: evs = [e for e in json.loads(r.get('TraceJson') or '[]') if e.get('kind') == 'live']
+        except ValueError: evs = []                    # mid-write JSON: next poll fixes it
+        out.append({'RunId': r['RunId'], 'TaskId': r['TaskId'], 'AgentName': r['AgentName'],
+                    'StartedAt': r['StartedAt'], 'tail': [e['detail'] for e in evs[-max(1, min(lines, 10)):]]})
+    return {'data': out}
 
 @app.get('/api/runs/{run_id}')
 def get_run(run_id: int):
@@ -460,6 +495,64 @@ def ingest_poll(background: BackgroundTasks):
 def ingest_status():
     try: return {'status': json.loads(store.get_settings().get('ingest_status') or '{"state": "idle"}')}
     except ValueError: return {'status': {'state': 'idle'}}
+
+# ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
+class TermBody(BaseModel):
+    agent: str | None = None; task_id: int | None = None; repo: str | None = None
+    cwd: str | None = None; rows: int = 32; cols: int = 110; seed: bool = False
+
+@app.get('/api/terminals')
+def terminals(): return {'data': hub_term.listing()}
+
+@app.post('/api/terminals')
+def open_terminal(body: TermBody):
+    """Spawn an agent CLI (or a plain shell) under a real pty. seed=true types the task's
+    context in as the first line, so the agent starts on it and you keep talking."""
+    try:
+        t = hub_term.open_session(store, body.agent, body.task_id, body.repo, body.cwd, body.rows, body.cols, ACTOR)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(422, str(e))
+    # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text
+    if body.seed and body.agent and body.task_id and store.get_task(body.task_id):
+        tk = store.get_task(body.task_id)
+        seed = (f"Work Taskuary task {task_ref(body.task_id)}: {tk.get('Title')}. "
+                f"{(tk.get('Summary') or '')[:600]}").replace('\n', ' ')
+        threading.Timer(1.5, lambda: t.write(seed + '\r')).start()      # let the TUI paint first
+        store.add_comment(body.task_id, ACTOR, 'human', f'Opened an interactive {t.label} terminal in {t.cwd}')
+    return t.info()
+
+@app.delete('/api/terminals/{sid}')
+def close_terminal(sid: str):
+    if not hub_term.close(sid): raise HTTPException(404, 'terminal not found')
+    return {'ok': True}
+
+@app.websocket('/api/terminals/{sid}/ws')
+async def terminal_ws(ws: WebSocket, sid: str):
+    """Bytes out, keystrokes in. The HTTP token gate can't see websockets, so a configured
+    token rides on the query string."""
+    tok = cfg['server'].get('token')
+    t = hub_term.get(sid)
+    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    if not t: return await ws.close(code=4404)
+    await ws.accept()
+    q = asyncio.Queue()
+    t.subscribe(asyncio.get_running_loop(), q)
+    async def to_browser():
+        while True:
+            data = await q.get()
+            if data is None: return await ws.send_json({'type': 'exit'})
+            await ws.send_json({'type': 'out', 'data': data})
+    pump = asyncio.create_task(to_browser())
+    try:
+        if t.scrollback(): await ws.send_json({'type': 'out', 'data': t.scrollback()})
+        while True:
+            m = await ws.receive_json()
+            if m.get('type') == 'in': t.write(m.get('data') or '')
+            elif m.get('type') == 'resize': t.resize(m.get('rows') or 32, m.get('cols') or 110)
+    except (WebSocketDisconnect, RuntimeError, ValueError):
+        pass
+    finally:
+        t.unsubscribe(q); pump.cancel()
 
 @app.get('/api/settings')
 def settings():

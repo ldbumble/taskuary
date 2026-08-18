@@ -157,6 +157,46 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/tasks/{tid}/dispatch', json={'agent': 'ghost'}).status_code, 422)
         self.assertEqual(c.post('/api/tasks/999999/dispatch', json={'agent': 'coder'}).status_code, 404)
 
+    def test_message_dispatch_promotes_and_runs(self):
+        """'Send to coding agent' from the timeline: a filed message (report/ignored mail)
+        becomes a task carrying the message, then the agent runs on it."""
+        out = c.post('/api/ingest/push', json={'subject': 'Process Check - FAILED', 'body': 'Pex export failed: LedgerBalance',
+                                               'from_email': 'reports@vendor.com', 'channel': 'report'}).json()
+        mid = out['message_id']
+        self.assertIsNone(out['task_id'])
+        self.assertEqual(c.get(f'/api/messages/{mid}').json()['Subject'], 'Process Check - FAILED')
+        server.store.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
+        with mock.patch.object(server.hub_agents, 'dispatch', return_value={'run_id': 1, 'status': 'done', 'result': 'ok'}) as d:
+            r = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder', 'instruction': 'find why it failed'}).json()
+        tid = r['taskId']
+        self.assertEqual(r['ref'], f'TQ-{tid:04d}')
+        self.assertEqual(d.call_args[0][3], 'find why it failed')
+        self.assertEqual([m['MessageId'] for m in server.store.list_messages(tid)], [mid])
+        # a second send reuses the task it already made instead of forking a new one
+        with mock.patch.object(server.hub_agents, 'dispatch', return_value={'run_id': 2, 'status': 'done', 'result': 'ok'}):
+            self.assertEqual(c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder'}).json()['taskId'], tid)
+        self.assertEqual(c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'ghost'}).status_code, 422)
+        self.assertEqual(c.post('/api/messages/999999/dispatch', json={'agent': 'coder'}).status_code, 404)
+        self.assertEqual(c.get('/api/messages/999999').status_code, 404)
+
+    def test_live_runs_tail(self):
+        tid = c.post('/api/tasks', json={'Title': 'live'}).json()['taskId']
+        rid = server.store.start_run(tid, 'coder', 'work it', 'owner')
+        server.store.update_run(rid, {'TraceJson': json.dumps(
+            [{'kind': 'prompt', 'detail': 'ignored'}] + [{'kind': 'live', 'detail': f'line {i}'} for i in range(5)])})
+        row = next(r for r in c.get('/api/runs/live').json()['data'] if r['RunId'] == rid)
+        self.assertEqual(row['tail'], ['line 2', 'line 3', 'line 4'])      # newest 3, prompts excluded
+        server.store.update_run(rid, {'Status': 'done'}, finished=True)
+        self.assertFalse(any(r['RunId'] == rid for r in c.get('/api/runs/live').json()['data']))
+
+    def test_code_endpoint_takes_an_agent(self):
+        tid = c.post('/api/tasks', json={'Title': 'pick my CLI'}).json()['taskId']
+        server.store.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex"}')
+        with mock.patch.object(server, 'run_coding_task') as rct:
+            self.assertEqual(c.post(f'/api/tasks/{tid}/code', json={'agent': 'codex'}).json()['agent'], 'codex')
+        self.assertEqual(rct.call_args[0][-1], 'codex')
+        self.assertEqual(c.post(f'/api/tasks/{tid}/code', json={'agent': 'ghost'}).status_code, 422)
+
     def test_runs_audit_ingest_status(self):
         self.assertEqual(c.get('/api/runs/999999').status_code, 404)
         self.assertIsInstance(c.get('/api/audit/recent').json()['data'], list)

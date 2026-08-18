@@ -107,6 +107,15 @@ class CoreTests(unittest.TestCase):
         self.assertEqual((out, sid), ('all done', 's1'))
         self.assertTrue(any(k == 'live' and 'Bash' in d for k, d in ev))
 
+    def test_console_lines_show_output_not_session_spam(self):
+        from taskuary.agents import _live_line
+        self.assertEqual(_live_line({'type': 'system', 'subtype': 'init', 'model': 'opus'}), 'session started · model opus')
+        self.assertIsNone(_live_line({'type': 'system', 'subtype': 'hook_started'}))   # was 'session started · model ?' x20
+        self.assertIn('2 files changed', _live_line({'type': 'user', 'message': {'content': [
+            {'type': 'tool_result', 'content': [{'type': 'text', 'text': '2 files changed\n+18 -4'}]}]}}))
+        self.assertTrue(_live_line({'type': 'user', 'message': {'content': [
+            {'type': 'tool_result', 'is_error': True, 'content': 'no such file'}]}}).startswith('✗'))
+
     def test_winrm_report_inherits_connector_host(self):
         from taskuary.reports import resolve_cfg
         self.assertIn('winrm', REGISTRY)

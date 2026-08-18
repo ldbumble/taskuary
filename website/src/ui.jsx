@@ -1,6 +1,8 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
-import React from "react";
-import { Box, Chip, Tooltip, Typography } from "@mui/material";
+import React, { useEffect, useState } from "react";
+import { Box, Button, Chip, CircularProgress, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import api from "./api";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
 import GitHubIcon from "@mui/icons-material/GitHub";
@@ -152,6 +154,78 @@ export const CoderReport = ({ body }) => {
           </Typography>
         </Box>
       ))}
+    </Box>
+  );
+};
+
+// Hand ANY timeline item to a coding agent: your prompt + the item's context (subject,
+// sender, full body, thread, the operator docs) go down together. Items that aren't a
+// task yet become one server-side, so the run has somewhere to live and stream into.
+export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
+  const [open, setOpen] = useState(false);
+  const [agents, setAgents] = useState([]);
+  const [agent, setAgent] = useState("coder");
+  const [prompt, setPrompt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!open || agents.length) return;
+    api.get("/api/agents").then(({ data }) => {
+      const ns = (data.data || []).map((a) => a.Name);
+      setAgents(ns);
+      if (ns.length && !ns.includes("coder")) setAgent(ns[0]);
+    }).catch(() => {});
+  }, [open, agents.length]);
+  const send = async () => {
+    setBusy(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/messages/${messageId}/dispatch`, { agent, instruction: prompt.trim() || null });
+      setSent(data); setPrompt("");
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not reach the agent"); }
+    setBusy(false);
+  };
+  if (sent) return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: dense ? 0.5 : 1 }}>
+      <SmartToyIcon sx={{ fontSize: 15, color: "#15803d" }} />
+      <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
+        {sent.agent} is on it — {sent.ref}
+      </Typography>
+      <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
+      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>send another</Button>
+    </Box>
+  );
+  if (!open) return (
+    <Button size="small" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />} onClick={() => setOpen(true)}
+      sx={{ fontSize: 11.5, color: "#7e22ce" }}>Send to coding agent</Button>
+  );
+  return (
+    <Box sx={{ mt: 1, p: 1.25, bgcolor: "#faf8ff", border: "1px solid #e9ddfb", borderRadius: 1.5 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+        <SmartToyIcon sx={{ fontSize: 15, color: "#7e22ce" }} />
+        <Typography variant="caption" sx={{ color: "#7e22ce", fontWeight: 700 }}>Send to an agent</Typography>
+        <Box sx={{ flex: 1 }} />
+        <Select size="small" value={agent} onChange={(e) => setAgent(e.target.value)}
+          sx={{ fontSize: 11.5, height: 26, bgcolor: "#fff", "& .MuiSelect-select": { py: 0.3, px: 1 } }}>
+          {(agents.length ? agents : [agent]).map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12 }}>{n}</MenuItem>)}
+        </Select>
+      </Box>
+      <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder={`What should it do? e.g. "Find why this failed and fix it, then tell me what changed."`}
+        sx={{ bgcolor: "#fff" }} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}>
+        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap>
+          it gets the full message{subject ? ` “${subject}”` : ""} + your operator docs as context
+        </Typography>
+        <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>cancel</Button>
+        <Button size="small" variant="contained" disableElevation disabled={busy} onClick={send}
+          startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
+          sx={{ fontSize: 11.5, bgcolor: "#7e22ce", "&:hover": { bgcolor: "#6b1fb0" } }}>
+          {busy ? "sending…" : "Send"}
+        </Button>
+      </Box>
+      {err && <Typography variant="caption" sx={{ color: "#b91c1c", display: "block", mt: 0.5 }}>{err}</Typography>}
     </Box>
   );
 };

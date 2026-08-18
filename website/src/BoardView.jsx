@@ -12,6 +12,27 @@ import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, timeAgo, Empty } from "./ui.jsx";
 
+const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
+
+// A card's peephole into the running agent: the last couple of console lines, live.
+// Click the card for the whole terminal (task page).
+const LiveTail = ({ run }) => (
+  <Box sx={{ mt: 0.75, bgcolor: "#0f172a", border: "1px solid #1e293b", borderRadius: 1.25, px: 1, py: 0.6 }}>
+    {(run.tail || []).slice(-2).map((l, i, all) => (
+      <Typography key={i} noWrap variant="caption"
+        sx={{ ...mono, display: "block", fontSize: 9.5, lineHeight: 1.55,
+          color: l.startsWith("→") ? "#a5b4fc" : l.startsWith("✗") ? "#fca5a5" : "#94a3b8",
+          opacity: i === all.length - 1 ? 1 : 0.55 }}>
+        {l.replace(/\n/g, " ")}
+      </Typography>
+    ))}
+    <Typography variant="caption" sx={{ ...mono, color: "#22d3ee", fontSize: 9.5,
+      "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
+      ▮ {run.AgentName} working — click to open the full terminal
+    </Typography>
+  </Box>
+);
+
 // Column model: where a card sits is derived from task status + its latest review.
 const COLS = [
   { key: "queued", title: "Queued", dot: "#8a94a6", status: "open",
@@ -24,19 +45,36 @@ const COLS = [
     match: (t) => t.Status === "done" },
 ];
 
-export default function BoardView({ onOpenTask }) {
+export default function BoardView({ onOpenTask, onOpenTerminal }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
   const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [repos, setRepos] = useState([]);
-  const [nt, setNt] = useState({ Title: "", Summary: "", toCoder: true, repo: "" });
+  const [agents, setAgents] = useState([]);
+  const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
+  const [nt, setNt] = useState({ Title: "", Summary: "", toCoder: true, repo: "", agent: "coder" });
 
   const load = useCallback(async () => {
     try { setTasks(((await api.get("/api/tasks")).data.data || []).filter((t) => t.Status !== "dropped")); }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load the board"); }
   }, []);
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
+  // live tails poll fast (the cards are a status wall you watch); the task page has the full trace
+  useEffect(() => {
+    const tick = () => api.get("/api/runs/live").then(({ data }) =>
+      setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    api.get("/api/agents").then(({ data }) => {
+      const ns = (data.data || []).map((a) => a.Name);
+      setAgents(ns);
+      if (ns.length && !ns.includes("coder")) setNt((cur) => ({ ...cur, agent: ns[0] }));
+    }).catch(() => {});
+  }, []);
   useEffect(() => {
     // repo choices = the GitHub sources the connector discovered (FanApp, TopE, ...)
     api.get("/api/sources").then(({ data }) => {
@@ -56,7 +94,7 @@ export default function BoardView({ onOpenTask }) {
   const create = async () => {
     const { data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: "coding",
       Tags: nt.repo ? `repo:${nt.repo}` : null });
-    if (nt.toCoder) await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null });
+    if (nt.toCoder) await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null, agent: nt.agent || null });
     setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "", toCoder: true }));
     load();
   };
@@ -105,11 +143,18 @@ export default function BoardView({ onOpenTask }) {
                     display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {t.Title}
                   </Typography>
+                  {live[t.TaskId] && <LiveTail run={live[t.TaskId]} />}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75 }}>
                     <Chip size="small" label={t.Kind} sx={{ height: 17, fontSize: 9.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "escalation" ? "escalate" : t.ReviewKind === "auto" ? "auto" : "draft"} />}
                     <Box sx={{ flex: 1 }} />
+                    {onOpenTerminal && (
+                      <Typography variant="caption" title="Open a real terminal on this task"
+                        onClick={(e) => { e.stopPropagation(); onOpenTerminal({ agent: "coder", task_id: t.TaskId, repo: repoOf(t), seed: false }); }}
+                        sx={{ color: "#0e7490", fontWeight: 600, fontSize: 10.5, cursor: "pointer",
+                          "&:hover": { textDecoration: "underline" } }}>terminal</Typography>
+                    )}
                     <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 10.5 }}>open →</Typography>
                   </Box>
                 </Box>
@@ -136,8 +181,18 @@ export default function BoardView({ onOpenTask }) {
               </Select>
             </Box>
           )}
+          {agents.length > 1 && (
+            <Box>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+                Agent — which CLI works it (Claude Code, Codex, Gemini… whatever you configured)
+              </Typography>
+              <Select fullWidth size="small" value={nt.agent} onChange={(e) => setNt({ ...nt, agent: e.target.value })}>
+                {agents.map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>{a}</MenuItem>)}
+              </Select>
+            </Box>
+          )}
           <FormControlLabel control={<Checkbox checked={nt.toCoder} onChange={(e) => setNt({ ...nt, toCoder: e.target.checked })} />}
-            label={<Typography variant="body2">Send to the coder immediately (issue → work → report)</Typography>} />
+            label={<Typography variant="body2">Send to {agents.length > 1 ? nt.agent : "the coder"} immediately (issue → work → report)</Typography>} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setNewOpen(false)}>Cancel</Button>

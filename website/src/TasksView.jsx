@@ -11,6 +11,9 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, TaskStatusChip, ActionChip, RunTrace, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
+import { OpenTerminalButton } from "./TerminalView.jsx";
+
+const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
 const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
 const STATUS_FILTERS = [
@@ -27,7 +30,7 @@ const selSx = { fontSize: 12.5, bgcolor: "#fff", borderRadius: 2,
   "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#c9cff0" },
   "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#4f46e5" } };
 
-export default function TasksView({ selected, onSelect, onChanged }) {
+export default function TasksView({ selected, onSelect, onChanged, onOpenTerminal }) {
   const [tasks, setTasks] = useState(null);
   const [filter, setFilter] = useState("open");        // default: real work, not history
   const [detail, setDetail] = useState(null);
@@ -169,9 +172,13 @@ export default function TasksView({ selected, onSelect, onChanged }) {
                   <Button size="small" color="error" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 14 }} />}
                     sx={{ bgcolor: PANEL }} onClick={notATask}>Not a task</Button>
                 </Box>
-                <Typography variant="caption" sx={{ color: FAINT }}>
-                  {t.Kind} · from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
-                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+                  <Typography variant="caption" sx={{ color: FAINT }}>
+                    {t.Kind} · from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
+                  </Typography>
+                  <Box sx={{ flex: 1 }} />
+                  {onOpenTerminal && <OpenTerminalButton taskId={selected} repo={repoOf(t)} onOpen={onOpenTerminal} />}
+                </Box>
               </Box>
               <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
                 {t.Summary && <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: DIM }}>{cleanText(t.Summary).slice(0, 600)}</Typography>}
@@ -195,7 +202,12 @@ export default function TasksView({ selected, onSelect, onChanged }) {
                           )}
                         </Box>
                         <Typography variant="body2" sx={{ color: INK }}>{m.Subject}</Typography>
-                        <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{cleanText(m.BodyText).slice(0, 400)}</Typography>
+                        {/* full body, scrolled in place - mail is stored whole now, not a 255-char preview */}
+                        <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block",
+                          maxHeight: 220, overflowY: "auto", "&::-webkit-scrollbar": { width: 8 },
+                          "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
+                          {cleanText(m.BodyText)}
+                        </Typography>
                       </Box>
                     );
                   })}

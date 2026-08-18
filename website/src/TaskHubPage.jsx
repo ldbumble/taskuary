@@ -14,9 +14,10 @@ import ReviewView from "./ReviewView.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
 import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
+import TerminalView from "./TerminalView.jsx";
 import SettingsView from "./SettingsView.jsx";
 
-const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
+const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Terminal", "Connectors", "Docs", "Settings"];
 
 function ServerVersion() {
   const [v, setV] = useState(null);
@@ -44,6 +45,9 @@ export default function TaskHubPage() {
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
 
   const openTask = (taskId) => { setSelectedTask(taskId); setTab("Tasks"); };
+  // any view can ask for a real terminal; the Terminal tab spawns it and takes over
+  const [termReq, setTermReq] = useState(null);
+  const openTerminal = (body) => { setTermReq(body); setTab("Terminal"); };
 
   return (
     <ThemeProvider theme={theme}>
@@ -85,10 +89,12 @@ export default function TaskHubPage() {
 
         <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
           {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
-          {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
-          {tab === "Tasks" && <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask} onChanged={refreshPending} />}
+          {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} onOpenTerminal={openTerminal} />}
+          {tab === "Tasks" && <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask}
+            onChanged={refreshPending} onOpenTerminal={openTerminal} />}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
+          {tab === "Terminal" && <TerminalView startWith={termReq} onStarted={() => setTermReq(null)} />}
           {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}
           {tab === "Docs" && <DocsView key={`d${tick}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}`} />}

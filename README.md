@@ -50,11 +50,13 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   with it, current state. Filter by state (everything / needs me) and channel
   independently. Click a row for the full review canvas — message, agent report, code
   diff, history — and decide inline. Chains holding several emails get a pill strip to
-  flip between them (your own replies marked "↩ you").
-- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done, each card
-  showing the live agent-run status. Drag between columns; click a card to **watch the
-  agent work live** — its tool calls and thinking stream into a console as they happen;
-  "New task for the agent" sends work straight to your coder.
+  flip between them (your own replies marked "↩ you"). **Send to coding agent** on any row
+  hands that item — a failed report, an email, a chat — to a CLI agent with your own
+  prompt; it becomes a task carrying the full message as context.
+- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Cards
+  working right now show a **live peephole** — the last lines of the agent's console —
+  and open into the full trace. Drag between columns; "New task for the agent" sends work
+  straight to the CLI you pick.
 - **Tasks** — the dense two-pane view: messages with routing decisions, agent runs with
   prompts, traces and diffs, dispatch any agent, message the working agent, "Not a task"
   (which teaches the funnel).
@@ -62,6 +64,10 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   Draft-with-AI. Nothing sends without you.
 - **Reports** — the pipeline builder: source → query → optional AI summary → Timeline,
   on a schedule, with a full-pipeline Preview before you save.
+- **Terminal** — your coding CLI, for real, inside the app: a pseudo-terminal (ConPTY on
+  Windows) streamed to xterm.js over a websocket. The agent's own TUI, its approval
+  prompts, your keystrokes — the session, not a transcript of one. Open one on a task
+  ("start it on this task" types the context in for you) or a bare shell in any repo.
 - **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
   models and CLI agents, messaging channels, GitHub, SQL Server.
 - **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
@@ -129,6 +135,7 @@ Early (v0.2.0) and moving fast.
 - [x] Connectors catalog with setup wizards: channels, AI, GitHub, SQL Server
 - [x] Agent presets (Claude Code, Codex, Gemini, Cursor, Copilot) with one-click Test
 - [x] Desktop app + single-file Windows exe
+- [x] Interactive agent terminal (pty + websocket + xterm.js) and hand-anything-to-an-agent
 - [ ] Git worktree isolation per task attempt
 - [ ] More ingest channels and report connectors (table above)
 - [ ] Tray + notifications for the desktop shell

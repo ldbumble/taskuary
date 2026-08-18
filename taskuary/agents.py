@@ -4,7 +4,7 @@ over STDIN (argv length limits are real on Windows), JSON output parsed when ava
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
 """
-import json, os, subprocess, threading, time
+import json, os, re, subprocess, threading, time
 from datetime import datetime
 from loguru import logger
 
@@ -50,10 +50,24 @@ def _fmt_input(inp) -> str:
     return json.dumps(inp)[:140]
 
 
+def _result_text(c) -> str:
+    """A tool_result's content is a string or a list of {type: text} blocks."""
+    v = c.get('content')
+    if isinstance(v, list): v = ' '.join(str(b.get('text') or '') for b in v if isinstance(b, dict))
+    return re.sub(r'\s*\n\s*', ' ⏎ ', str(v or '').strip())
+
+
 def _live_line(j):
-    """One readable console line per claude stream-json event; None = not worth showing."""
+    """One readable console line per claude stream-json event; None = not worth showing.
+    Tool RESULTS stream too (trimmed), so the console reads like the terminal you'd see
+    if you ran the CLI yourself - not just the commands it fired."""
     t = j.get('type')
-    if t == 'system': return f"session started · model {j.get('model') or '?'}"
+    if t == 'system':
+        # only the real session init is news; the other system events (hooks, compaction,
+        # subagent starts) repeated 'session started' forever and said nothing
+        if j.get('subtype') not in (None, 'init'): return None
+        m = j.get('model') or (j.get('modelInfo') or {}).get('name') or ''
+        return 'session started' + (f' · model {m}' if m else '')
     if t == 'assistant':
         out = []
         for c in (j.get('message') or {}).get('content') or []:
@@ -61,9 +75,12 @@ def _live_line(j):
             elif c.get('type') == 'text' and (c.get('text') or '').strip(): out.append(c['text'].strip()[:300])
         return '\n'.join(out) or None
     if t == 'user':
-        errs = [c for c in (j.get('message') or {}).get('content') or []
-                if isinstance(c, dict) and c.get('type') == 'tool_result' and c.get('is_error')]
-        return f"✗ tool error: {str(errs[0].get('content'))[:200]}" if errs else None
+        res = [c for c in (j.get('message') or {}).get('content') or []
+               if isinstance(c, dict) and c.get('type') == 'tool_result']
+        if not res: return None
+        if any(c.get('is_error') for c in res): return f"✗ {_result_text(next(c for c in res if c.get('is_error')))[:300]}"
+        txt = _result_text(res[0])
+        return f'· {txt[:240]}' if txt else None
     return None
 
 
@@ -158,8 +175,10 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
     wrote = {'at': 0.0}
     def _t(kind, name, detail):
         cap = 12000 if kind == 'prompt' else 2000
+        detail = str(detail)[:cap]
+        if kind == 'live' and trace and trace[-1]['kind'] == 'live' and trace[-1]['detail'] == detail: return
         trace.append({'at': datetime.now().isoformat(sep=' ', timespec='seconds'), 'kind': kind,
-                      'name': name, 'detail': str(detail)[:cap]})
+                      'name': name, 'detail': detail})
         # long streams: drop the oldest live line past 260 events, and flush live lines to
         # the DB at most ~1/s (everything else lands immediately; final flush is guaranteed)
         if len(trace) > 260:

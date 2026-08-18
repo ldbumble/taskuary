@@ -152,6 +152,8 @@ class SQLiteStore:
     def add_message(self, fields): return self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
+    def attach_message(self, mid, task_id):
+        self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
     def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router'):
         return self._exec('INSERT INTO route (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt) VALUES (?,?,?,?,?,?,?,?)',
                           (mid, tid, decision, score, reason, json.dumps(candidates), routed_by, _now()))
@@ -196,6 +198,8 @@ class SQLiteStore:
         self._exec(f"UPDATE run SET {','.join(f'{c}=?' for c in cols)}, UpdatedAt=?{fin} WHERE RunId=?",
                    [fields[c] for c in cols] + [_now(), run_id])
     def get_run(self, run_id): return self._one('SELECT * FROM run WHERE RunId=?', (run_id,))
+    def running_runs(self):
+        return self._rows("SELECT * FROM run WHERE Status='running' ORDER BY RunId DESC")
     def list_runs(self, task_id): return self._rows('SELECT * FROM run WHERE TaskId=? ORDER BY RunId DESC', (task_id,))
 
     # reviews (orphans - reviews whose task is gone - never surface)

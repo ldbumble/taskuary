@@ -33,7 +33,10 @@ def parse_coder_result(out: str) -> dict:
         return {'summary': (out or '')[-800:], 'triage': '', 'determination': '', 'actions': '', 'email_reply': '', 'close': False}
 
 
-def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None, github_cfg: dict = None) -> dict:
+def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None, github_cfg: dict = None,
+                    agent: str = 'coder') -> dict:
+    """`agent` picks WHICH CLI works it (claude, codex, gemini… whatever is configured);
+    the lifecycle around it - issue, report contract, close or escalate - is the same."""
     t = store.get_task(task_id)
     if not t: raise ValueError(f'no task {task_id}')
     ctx = hub_agents.task_context(store, task_id)
@@ -48,10 +51,10 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
         except Exception as e:
             logger.warning(f'issue creation failed, continuing without: {e}')
 
-    profile = json.loads((store.get_agent('coder') or {}).get('Config') or '{}')
+    profile = json.loads((store.get_agent(agent) or {}).get('Config') or '{}')
     cwd = (profile.get('cwd_map') or {}).get(repo)
     where = f'{repo}#{issue["number"]}' if issue else '(no GitHub issue configured)'
-    out = hub_agents.dispatch(store, task_id, 'coder',
+    out = hub_agents.dispatch(store, task_id, agent,
                               f'Work this coding task end to end. GitHub issue: {where}.'
                               + (f' Repository: {repo}.' if repo else '') + REPORT_CONTRACT,
                               actor, profile_override={'cwd': cwd} if cwd else None)

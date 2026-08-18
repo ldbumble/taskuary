@@ -151,6 +151,10 @@ def test_connector(store, cid: int) -> dict:
 
 def _clean(html): return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html or '')).strip()
 
+# Graph's bodyPreview is capped at 255 chars - reading it FIRST truncated every stored mail,
+# so the panel (and the agents) only ever saw the opening sentence. Full body wins.
+def _body(m): return (_clean((m.get('body') or {}).get('content')) or m.get('bodyPreview') or '')[:20000]
+
 def _local(iso):
     try: return datetime.fromisoformat(iso.replace('Z', '+00:00')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
     except ValueError: return iso
@@ -180,7 +184,7 @@ def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
     mid = store.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'email',
                              'SourceName': mailbox, 'Subject': m.get('subject'), 'FromName': 'You',
                              'FromEmail': mailbox, 'SentAt': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
-                             'BodyText': m.get('bodyPreview') or _clean((m.get('body') or {}).get('content')),
+                             'BodyText': _body(m),
                              'SourceLink': m.get('webLink'), 'Status': 'context'})
     store.add_route(mid, tid, 'attach', None, 'your reply on this thread - kept for context', [], 'router')
     store.add_comment(tid, 'you', 'human', f"You replied: {(m.get('bodyPreview') or '')[:300]}")
@@ -226,7 +230,7 @@ def poll_channels(store) -> int:
                             continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
                         out = ingest_message(store, {
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
-                            'subject': m.get('subject'), 'body': m.get('bodyPreview') or _clean((m.get('body') or {}).get('content')),
+                            'subject': m.get('subject'), 'body': _body(m),
                             'from_name': frm.get('name'), 'from_email': frm.get('address'),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address']}, llm=llm)

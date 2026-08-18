@@ -125,6 +125,15 @@ class OutboundMailTests(unittest.TestCase):
         # dedup on the next poll
         self.assertEqual(ingest_outbound_mail(s, 'me@x.com', self._sent(conv='c9', i='sm2')), 0)
 
+    def test_full_body_beats_the_255_char_preview(self):
+        from taskuary.channels import _body
+        long_html = '<html><body>' + ('the actual mail body. ' * 60) + '</body></html>'
+        m = {'bodyPreview': 'the actual mail body. ' * 11, 'body': {'contentType': 'html', 'content': long_html}}
+        self.assertGreater(len(_body(m)), 1000)                       # not truncated to the preview
+        self.assertNotIn('<', _body(m))                               # html stripped
+        self.assertEqual(_body({'bodyPreview': 'only a preview'}), 'only a preview')
+        self.assertEqual(_body({}), '')
+
     def test_ai_failure_files_instead_of_task(self):
         from taskuary.ingest import ingest_message
         def boom(a, b): raise RuntimeError('azure 400: max_tokens')

@@ -17,6 +17,8 @@ dependencies = [
     "loguru>=0.7",
     "anthropic>=0.69",
     "tomli>=2; python_version<'3.11'",
+    "websockets>=12",                            # uvicorn's ws transport - the terminal streams over it
+    "pywinpty>=2; sys_platform=='win32'",        # ConPTY: the interactive agent terminal
 ]
 
 [project.optional-dependencies]

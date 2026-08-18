@@ -91,6 +91,22 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None) -> dict:
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
 
 
+def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding') -> int:
+    """Promote a filed/ignored/report message into a real task so it can be handed to an
+    agent (the timeline's 'send this to the coder' path). Already-routed messages keep
+    the task they are on."""
+    m = store.get_message(mid)
+    if not m: raise ValueError(f'no message {mid}')
+    if m.get('TaskId'): return m['TaskId']
+    title = (m.get('Subject') or f"{m.get('FromName') or m.get('FromEmail') or m.get('Channel')} message")[:200]
+    tid = store.create_task({'Title': title, 'Summary': str(m.get('BodyText') or '')[:1000], 'Kind': kind,
+                             'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
+    store.attach_message(mid, tid)
+    store.add_route(mid, tid, 'create', None, 'promoted by the owner to hand it to an agent', [], actor)
+    store.audit('task', tid, 'create_from_message', actor, detail={'message_id': mid, 'subject': title})
+    return tid
+
+
 def _spawn(fn, *args):
     threading.Thread(target=fn, args=args, daemon=True).start()
 

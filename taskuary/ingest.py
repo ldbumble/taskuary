@@ -93,7 +93,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if cfg.get('auto_draft_enabled') == '1':
                 _spawn(_auto_draft, store, tid, rid)
         elif cfg.get('coder_auto_enabled') == '1':
-            store.add_comment(tid, 'router', 'agent', 'auto-dispatched to the coder (coder_auto_enabled)')
             _spawn(_auto_code, store, tid)
     store.add_route(mid, tid, r['decision'], r['score'], r['reason'], r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
@@ -134,6 +133,9 @@ def _spawn(fn, *args):
 
 def _auto_code(store, tid):
     from .coder import github_cfg, run_coding_task
+    # the note belongs INSIDE the worker: written before the thread started, a task could
+    # claim "auto-dispatched" with no run behind it whenever the process died first
+    store.add_comment(tid, 'router', 'agent', 'auto-dispatched to the coder (coder_auto_enabled)')
     try:
         run_coding_task(store, tid, 'auto-dispatch', None, github_cfg(store))
     except Exception as e:

@@ -195,6 +195,53 @@ class CoreTests(unittest.TestCase):
         # only 'skip' rewrites history - an ignore rule leaves it alone
         self.assertEqual(apply_retroactively(s, {**pol, 'Action': 'ignore'}), 0)
 
+    def test_model_and_prompt_reach_the_cli(self):
+        from unittest import mock
+        from taskuary import coder
+        s = MemoryStore()
+        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude", "args": ["-p"], "cwd_map": {"o/r": "C:/src"}}')
+        tid = s.create_task({'Title': 'fix the export', 'Kind': 'coding'}, 'owner')
+        with mock.patch('taskuary.agents.run_cli', return_value=('done', None, None)) as rc:
+            coder.run_coding_task(s, tid, 'owner', repo='o/r', github_cfg={},
+                                  model='opus', instruction='Only touch the exporter.')
+        prof, prompt = rc.call_args[0][0], rc.call_args[0][1]
+        self.assertEqual((prof['model'], prof['cwd']), ('opus', 'C:/src'))   # per-run model, repo's checkout
+        self.assertIn('Only touch the exporter.', prompt)                    # the owner's prompt leads
+        self.assertIn('RESULT JSON', prompt)                                 # report contract still rides along
+
+    def test_run_cli_appends_the_model_flag(self):
+        from unittest import mock
+        import sys
+        from taskuary.agents import run_cli
+        script = "import sys;sys.stdin.read();print('ok')"
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
+            seen = []
+            with mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+                try:
+                    run_cli({'cmd': 'claude', 'args': ['-c', script], 'model': 'sonnet'}, 'hi', lambda *a: None)
+                except RuntimeError:
+                    pass
+            self.assertEqual(pop.call_args[0][0][-2:], ['--model', 'sonnet'])
+            with mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop2:
+                try:
+                    run_cli({'cmd': 'codex', 'args': ['exec'], 'model': 'gpt-5-codex', 'model_arg': '-m'}, 'hi', lambda *a: None)
+                except RuntimeError:
+                    pass
+            self.assertEqual(pop2.call_args[0][0][-2:], ['-m', 'gpt-5-codex'])   # flag name is per-CLI
+
+    def test_terminal_env_never_inherits_a_session(self):
+        from taskuary.terminal import clean_env
+        import os
+        os.environ['CLAUDE_CODE_CHILD_SESSION'] = 'x'
+        os.environ['CLAUDECODE'] = '1'
+        try:
+            env = clean_env()
+            self.assertNotIn('CLAUDE_CODE_CHILD_SESSION', env)   # a terminal starts FRESH,
+            self.assertNotIn('CLAUDECODE', env)                  # never resuming its parent
+            self.assertIn('PATH', {k.upper(): v for k, v in env.items()})
+        finally:
+            os.environ.pop('CLAUDE_CODE_CHILD_SESSION', None); os.environ.pop('CLAUDECODE', None)
+
     def test_console_lines_show_output_not_session_spam(self):
         from taskuary.agents import _live_line
         self.assertEqual(_live_line({'type': 'system', 'subtype': 'init', 'model': 'opus'}), 'session started · model opus')

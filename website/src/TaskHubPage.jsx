@@ -5,6 +5,7 @@ import { Badge, Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
 import { theme, BG, BORDER, DIM, INK, PANEL, GRADIENT } from "./theme.jsx";
 import FeedView from "./FeedView.jsx";
@@ -14,7 +15,7 @@ import ReviewView from "./ReviewView.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
 import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
-import TerminalView from "./TerminalView.jsx";
+import TerminalView, { TerminalDock } from "./TerminalView.jsx";
 import SettingsView from "./SettingsView.jsx";
 
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Terminal", "Connectors", "Docs", "Settings"];
@@ -45,9 +46,19 @@ export default function TaskHubPage() {
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
 
   const openTask = (taskId) => { setSelectedTask(taskId); setTab("Tasks"); };
-  // any view can ask for a real terminal; the Terminal tab spawns it and takes over
+  // Terminals live in a dock at the bottom, open on every tab (VS Code / Cloud Shell
+  // shape) - Ctrl+` toggles it, and any view can ask it to start a session.
   const [termReq, setTermReq] = useState(null);
-  const openTerminal = (body) => { setTermReq(body); setTab("Terminal"); };
+  const [dock, setDock] = useState(false);
+  const [dockH, setDockH] = useState(360);
+  const openTerminal = (body) => { setTermReq(body); setDock(true); };
+  useEffect(() => {
+    const key = (e) => {
+      if (e.ctrlKey && (e.key === "`" || e.code === "Backquote")) { e.preventDefault(); setDock((d) => !d); }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
 
   return (
     <ThemeProvider theme={theme}>
@@ -82,23 +93,32 @@ export default function TaskHubPage() {
             ))}
           </Box>
           <Box sx={{ flex: 1 }} />
+          <Tooltip title="Terminal — Ctrl+` (sessions keep running when you hide it)">
+            <IconButton size="small" onClick={() => setDock((d) => !d)}>
+              <TerminalIcon sx={{ fontSize: 17, color: dock ? "#4f46e5" : DIM }} />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
         </Box>
 
-        <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
+        <Box sx={{ p: { xs: 1.5, md: 2.5 }, pb: dock ? `${dockH + 24}px` : undefined }}>
           {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} onOpenTerminal={openTerminal} />}
           {tab === "Tasks" && <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask}
             onChanged={refreshPending} onOpenTerminal={openTerminal} />}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
-          {tab === "Terminal" && <TerminalView startWith={termReq} onStarted={() => setTermReq(null)} />}
+          {tab === "Terminal" && <TerminalView startWith={dock ? null : termReq} onStarted={() => setTermReq(null)} />}
           {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}
           {tab === "Docs" && <DocsView key={`d${tick}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}`} />}
         </Box>
+
+        {/* the dock rides above every tab; hiding it never kills a session */}
+        <TerminalDock open={dock} height={dockH} onHeight={setDockH} onClose={() => setDock(false)}
+          request={termReq} onRequestDone={() => setTermReq(null)} />
       </Box>
     </ThemeProvider>
   );

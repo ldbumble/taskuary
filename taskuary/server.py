@@ -62,13 +62,15 @@ class MsgBody(BaseModel):
     source_link: str | None = None; source_name: str | None = None
 class TextBody(BaseModel): body: str
 class DecideBody(BaseModel): verb: str; final_text: str | None = None; note: str | None = None
-class CodeBody(BaseModel): repo: str | None = None; agent: str | None = None
+class CodeBody(BaseModel):
+    repo: str | None = None; agent: str | None = None
+    model: str | None = None; instruction: str | None = None
 class DocBody(BaseModel): content: str
 class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
     SourceId: int | None = None; ConnectorId: int | None = None; Channel: str | None = None
     Address: str | None = None; ConfigJson: str | None = None; Active: bool | None = None
-class DispatchBody(BaseModel): agent: str = 'coder'; instruction: str | None = None
+class DispatchBody(BaseModel): agent: str = 'coder'; instruction: str | None = None; model: str | None = None
 class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
@@ -148,8 +150,9 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     agent = (body.agent if body else None) or 'coder'
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
-    background.add_task(run_coding_task, store, task_id, ACTOR, (body.repo if body else None), _github_cfg(), agent)
-    return {'coder': 'running', 'agent': agent}
+    background.add_task(run_coding_task, store, task_id, ACTOR, (body.repo if body else None), _github_cfg(),
+                        agent, (body.model if body else None), (body.instruction if body else None))
+    return {'coder': 'running', 'agent': agent, 'model': (body.model if body else None)}
 
 @app.post('/api/tasks/{task_id}/comments')
 def comment(task_id: int, body: TextBody):
@@ -160,8 +163,9 @@ def comment(task_id: int, body: TextBody):
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
-    background.add_task(hub_agents.dispatch, store, task_id, body.agent, body.instruction or 'Work this task.', ACTOR)
-    return {'dispatch': 'running', 'agent': body.agent}
+    background.add_task(hub_agents.dispatch, store, task_id, body.agent, body.instruction or 'Work this task.', ACTOR,
+                        {'model': body.model} if body.model else None)
+    return {'dispatch': 'running', 'agent': body.agent, 'model': body.model}
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int):
@@ -205,7 +209,8 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR)
     background.add_task(hub_agents.dispatch, store, tid, body.agent,
-                        body.instruction or 'Investigate this and fix it end to end.', ACTOR)
+                        body.instruction or 'Investigate this and fix it end to end.', ACTOR,
+                        {'model': body.model} if body.model else None)
     return {'dispatch': 'running', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid)}
 
 @app.get('/api/runs/live')
@@ -435,10 +440,24 @@ def mssql_test(body: dict):
     except ImportError:
         return {'ok': False, 'error': 'pyodbc not installed - pip install taskuary[mssql]'}
 
+# Models each CLI can be pointed at. The agent profile's own `model` (Connectors → AI CLI
+# agents) always wins as the default; these are the quick picks the run dialogs offer.
+CLI_MODELS = {
+    'claude': ['opus', 'sonnet', 'haiku', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
+    'codex': ['gpt-5-codex', 'gpt-5'],
+    'gemini': ['gemini-2.5-pro', 'gemini-2.5-flash'],
+}
+
 @app.get('/api/agents')
 def agents():
-    """data = store rows (for dispatch pickers); config = the editable profiles."""
-    return {'data': store.list_agents(), 'config': cfg.get('agents', {})}
+    """data = store rows (for dispatch pickers); config = the editable profiles;
+    models = the quick-pick model list per agent, keyed by agent name."""
+    def _models(a):
+        prof = json.loads(a.get('Config') or '{}')
+        picks = CLI_MODELS.get((prof.get('cmd') or '').lower(), [])
+        return {'cmd': prof.get('cmd'), 'default': prof.get('model'), 'choices': picks}
+    return {'data': store.list_agents(), 'config': cfg.get('agents', {}),
+            'models': {a['Name']: _models(a) for a in store.list_agents()}}
 
 @app.post('/api/agents/{name}/test')
 def agent_test(name: str):

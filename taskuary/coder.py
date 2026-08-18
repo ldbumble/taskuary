@@ -34,9 +34,10 @@ def parse_coder_result(out: str) -> dict:
 
 
 def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None, github_cfg: dict = None,
-                    agent: str = 'coder') -> dict:
-    """`agent` picks WHICH CLI works it (claude, codex, gemini… whatever is configured);
-    the lifecycle around it - issue, report contract, close or escalate - is the same."""
+                    agent: str = 'coder', model: str = None, instruction: str = None) -> dict:
+    """`agent` picks WHICH CLI works it (claude, codex, gemini… whatever is configured) and
+    `model` which model that CLI runs; `instruction` is the owner's own prompt for this run.
+    The lifecycle around them - issue, report contract, close or escalate - is the same."""
     t = store.get_task(task_id)
     if not t: raise ValueError(f'no task {task_id}')
     ctx = hub_agents.task_context(store, task_id)
@@ -54,10 +55,13 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
     profile = json.loads((store.get_agent(agent) or {}).get('Config') or '{}')
     cwd = (profile.get('cwd_map') or {}).get(repo)
     where = f'{repo}#{issue["number"]}' if issue else '(no GitHub issue configured)'
+    override = {**({'cwd': cwd} if cwd else {}), **({'model': model} if model else {})}
     out = hub_agents.dispatch(store, task_id, agent,
-                              f'Work this coding task end to end. GitHub issue: {where}.'
+                              (instruction.strip() if instruction and instruction.strip()
+                               else 'Work this coding task end to end.')
+                              + f' GitHub issue: {where}.'
                               + (f' Repository: {repo}.' if repo else '') + REPORT_CONTRACT,
-                              actor, profile_override={'cwd': cwd} if cwd else None)
+                              actor, profile_override=override or None)
     if not store.get_task(task_id):                                   # deleted mid-run
         if tok and issue:
             try: gh.close_issue(tok, repo, issue['number'], 'Task deleted while the agent worked - closing.')

@@ -10,7 +10,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, timeAgo, Empty } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty } from "./ui.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
@@ -51,9 +51,9 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
   const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [repos, setRepos] = useState([]);
-  const [agents, setAgents] = useState([]);
+  const { agents, models } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
-  const [nt, setNt] = useState({ Title: "", Summary: "", toCoder: true, repo: "", agent: "coder" });
+  const [nt, setNt] = useState({ Title: "", Summary: "", toCoder: true, repo: "", agent: "coder", model: "" });
 
   const load = useCallback(async () => {
     try { setTasks(((await api.get("/api/tasks")).data.data || []).filter((t) => t.Status !== "dropped")); }
@@ -69,12 +69,8 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
-    api.get("/api/agents").then(({ data }) => {
-      const ns = (data.data || []).map((a) => a.Name);
-      setAgents(ns);
-      if (ns.length && !ns.includes("coder")) setNt((cur) => ({ ...cur, agent: ns[0] }));
-    }).catch(() => {});
-  }, []);
+    if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0] }));
+  }, [agents, nt.agent]);
   useEffect(() => {
     // repo choices = the GitHub sources the connector discovered (FanApp, TopE, ...)
     api.get("/api/sources").then(({ data }) => {
@@ -94,7 +90,10 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
   const create = async () => {
     const { data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: "coding",
       Tags: nt.repo ? `repo:${nt.repo}` : null });
-    if (nt.toCoder) await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null, agent: nt.agent || null });
+    // the details field IS the prompt: it rides down as the run's instruction, on top of
+    // the task context the agent already gets
+    if (nt.toCoder) await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null, agent: nt.agent || null,
+      model: nt.model || null, instruction: nt.Summary || null });
     setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "", toCoder: true }));
     load();
   };
@@ -168,8 +167,10 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>New task for the agent</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>
-          <TextField label="What needs to happen" value={nt.Title} onChange={(e) => setNt({ ...nt, Title: e.target.value })} />
-          <TextField label="Details (optional)" multiline minRows={3} value={nt.Summary}
+          <TextField label="Task name — how it reads on the board" value={nt.Title}
+            onChange={(e) => setNt({ ...nt, Title: e.target.value })} />
+          <TextField label="Prompt — what you want the agent to do" multiline minRows={4} value={nt.Summary}
+            placeholder="Exactly what to do, where to look, what done means. This text is sent to the agent as its instruction."
             onChange={(e) => setNt({ ...nt, Summary: e.target.value })} />
           {repos.length > 0 && (
             <Box>
@@ -181,18 +182,22 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
               </Select>
             </Box>
           )}
-          {agents.length > 1 && (
-            <Box>
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-                Agent — which CLI works it (Claude Code, Codex, Gemini… whatever you configured)
-              </Typography>
-              <Select fullWidth size="small" value={nt.agent} onChange={(e) => setNt({ ...nt, agent: e.target.value })}>
-                {agents.map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>{a}</MenuItem>)}
-              </Select>
+          <Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+              Agent and model — which CLI works it, and which model that CLI runs
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <AgentPicker agents={agents} models={models} agent={nt.agent} model={nt.model}
+                onAgent={(a) => setNt({ ...nt, agent: a, model: "" })} onModel={(m) => setNt({ ...nt, model: m })} />
             </Box>
-          )}
+            {agents.length < 2 && (
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                Add more CLIs under Connectors → AI CLI agents to choose between them here.
+              </Typography>
+            )}
+          </Box>
           <FormControlLabel control={<Checkbox checked={nt.toCoder} onChange={(e) => setNt({ ...nt, toCoder: e.target.checked })} />}
-            label={<Typography variant="body2">Send to {agents.length > 1 ? nt.agent : "the coder"} immediately (issue → work → report)</Typography>} />
+            label={<Typography variant="body2">Send to {nt.agent} immediately (issue → work → report)</Typography>} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setNewOpen(false)}>Cancel</Button>

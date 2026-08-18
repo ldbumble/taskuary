@@ -62,11 +62,13 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   prompt; it becomes a task carrying the full message as context.
 - **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Cards
   working right now show a **live peephole** — the last lines of the agent's console —
-  and open into the full trace. Drag between columns; "New task for the agent" sends work
-  straight to the CLI you pick.
+  and open into the full trace. Drag between columns; "New task for the agent" takes a
+  task name, the **prompt** that becomes the agent's instruction, and which **CLI and
+  model** run it.
 - **Tasks** — the dense two-pane view: messages with routing decisions, agent runs with
-  prompts, traces and diffs, dispatch any agent, message the working agent, "Not a task"
-  (which teaches the funnel).
+  prompts, traces and diffs, message the working agent, "Not a task" (which teaches the
+  funnel). One **Run agent** control — agent, model, an optional prompt — starts work;
+  behind it runs the whole lifecycle (issue → work → report → close or escalate).
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI. Nothing sends without you.
 - **Reports** — the pipeline builder: source → query → optional AI summary → Timeline,
@@ -75,8 +77,12 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   rows were left behind — so the AI never calls a truncated slice "all of them".
 - **Terminal** — your coding CLI, for real, inside the app: a pseudo-terminal (ConPTY on
   Windows) streamed to xterm.js over a websocket. The agent's own TUI, its approval
-  prompts, your keystrokes — the session, not a transcript of one. Open one on a task
-  ("start it on this task" types the context in for you) or a bare shell in any repo.
+  prompts, your keystrokes — the session, not a transcript of one. It lives in a **dock at
+  the bottom of every tab** (Ctrl+\` to toggle, drag its top edge to resize, tabs for
+  parallel sessions) as well as its own full-screen tab; hiding it never kills a session,
+  because the pty lives server-side. Sessions start clean — no inherited agent session
+  state. Open one on a task ("start it on this task" types the context in) or a bare shell
+  in any repo.
 - **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
   models and CLI agents, messaging channels, GitHub, SQL Server. Every connection has a
   **role** you choose: *inbound trigger* (its items land on the Timeline and go through
@@ -114,7 +120,15 @@ SOUL.md along with `POST /api/tools/run` — one call runs a query, script, or M
 through the saved credentials and hands the raw output back, so an agent working a task
 can look something up in SQL Server or act in another system without leaving the run.
 
-## Bring your own agent
+## Bring your own agent — and pick its model
+
+Every run surface (Board dialog, task page, "send to coding agent") asks two questions:
+**which CLI** works it, and **which model** that CLI runs. The model list comes from the
+CLI — `opus` / `sonnet` / `haiku` and the full `claude-*` ids for Claude Code, the
+`gpt-5-codex` family for Codex, and so on — and "the agent's default model" leaves it to
+the profile. Under the hood it is one flag appended to the command (`--model` by default,
+`model_arg` if your CLI spells it differently), so a per-run choice never edits your saved
+profile.
 
 Any CLI that reads a prompt on stdin works. The presets ship the right headless flags —
 the important one being the auto-approve flag (`--dangerously-skip-permissions`,

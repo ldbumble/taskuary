@@ -91,6 +91,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     Returns (result, session_id, diff)."""
     name = profile.get('cmd', 'claude')
     cmd = _resolve_cmd(name) + list(profile.get('args') or ['-p'])
+    # which model works it: profile default, or a per-run override from the UI. The flag
+    # name is configurable because every CLI spells it differently (claude/codex: --model).
+    if profile.get('model'): cmd += [profile.get('model_arg') or '--model', str(profile['model'])]
     if resume and profile.get('resume_args'): cmd += list(profile['resume_args']) + [resume]
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')

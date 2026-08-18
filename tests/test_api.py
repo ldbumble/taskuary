@@ -246,8 +246,11 @@ class ApiTests(unittest.TestCase):
         tid = c.post('/api/tasks', json={'Title': 'pick my CLI'}).json()['taskId']
         server.store.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex"}')
         with mock.patch.object(server, 'run_coding_task') as rct:
-            self.assertEqual(c.post(f'/api/tasks/{tid}/code', json={'agent': 'codex'}).json()['agent'], 'codex')
-        self.assertEqual(rct.call_args[0][-1], 'codex')
+            out = c.post(f'/api/tasks/{tid}/code', json={'agent': 'codex', 'model': 'gpt-5-codex',
+                                                         'instruction': 'just the importer'}).json()
+        self.assertEqual((out['agent'], out['model']), ('codex', 'gpt-5-codex'))
+        # (store, task, actor, repo, github_cfg, agent, model, instruction)
+        self.assertEqual(rct.call_args[0][-3:], ('codex', 'gpt-5-codex', 'just the importer'))
         self.assertEqual(c.post(f'/api/tasks/{tid}/code', json={'agent': 'ghost'}).status_code, 422)
 
     def test_runs_audit_ingest_status(self):

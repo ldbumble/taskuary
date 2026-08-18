@@ -11,7 +11,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
-import { ChannelIcon, TaskStatusChip, ActionChip, RunTrace, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, TaskStatusChip, ActionChip, AgentPicker, useAgents, RunTrace, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 import { OpenTerminalButton } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
@@ -35,12 +35,11 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
   const [tasks, setTasks] = useState(null);
   const [filter, setFilter] = useState("open");        // default: real work, not history
   const [detail, setDetail] = useState(null);
-  const [agents, setAgents] = useState([]);
+  const { agents, models } = useAgents();
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
-  const [dispatchAgent, setDispatchAgent] = useState("responder");
-  const [instruction, setInstruction] = useState("");
+  const [run, setRun] = useState({ agent: "coder", model: "", instruction: "" });
   const [comment, setComment] = useState("");
   const pollRef = useRef(null);
 
@@ -61,14 +60,10 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
   }, []);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
+  // the roster is user-config - default to whatever actually exists
   useEffect(() => {
-    api.get("/api/agents").then(({ data }) => {
-      const rows = data.data || [];
-      setAgents(rows);
-      // FanApp had a fixed 'responder'; here the roster is user-config - default to what exists
-      if (rows.length) setDispatchAgent((cur) => (rows.some((a) => a.Name === cur) ? cur : rows[0].Name));
-    }).catch(() => {});
-  }, []);
+    if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0] }));
+  }, [agents, run.agent]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
   useEffect(() => {
     const running = (detail?.runs || []).some((r) => r.Status === "running");
@@ -83,9 +78,13 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
     setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
     setFilter(""); loadTasks(); onSelect(data.taskId);
   };
-  const dispatch = async () => {
-    await api.post(`/api/tasks/${selected}/dispatch`, { agent: dispatchAgent, instruction: instruction || null });
-    setInstruction(""); setTimeout(() => loadDetail(selected), 800);
+  // ONE way to start work on a task: pick the agent + model, optionally say what to do,
+  // Run. The full coder lifecycle (issue -> work -> report -> close) runs behind it.
+  const runAgent = async () => {
+    await api.post(`/api/tasks/${selected}/code`, { agent: run.agent, model: run.model || null,
+      instruction: run.instruction || null, repo: repoOf(detail?.task) });
+    setRun((r) => ({ ...r, instruction: "" }));
+    setTimeout(() => { loadDetail(selected); loadTasks(); }, 800);   // run row appears; polling takes over
   };
   const post = async () => {
     if (!comment.trim()) return;
@@ -95,10 +94,6 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
   const notATask = async () => {
     await api.post(`/api/tasks/${selected}/not-a-task`);
     onSelect(null); loadTasks(); onChanged?.();
-  };
-  const sendToCoder = async () => {
-    await api.post(`/api/tasks/${selected}/code`);
-    setTimeout(() => { loadDetail(selected); loadTasks(); }, 800);   // run row appears; polling takes over
   };
   const [chat, setChat] = useState("");
   const messageAgent = async () => {
@@ -168,8 +163,6 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                     <Button size="small" variant="contained" disableElevation sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
                       onClick={() => patch({ Status: "done" })}>Mark done — I took care of it</Button>
                   )}
-                  <Button size="small" variant="outlined" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
-                    sx={{ color: "#7e22ce", borderColor: "#7e22ce55", bgcolor: PANEL }} onClick={sendToCoder}>Send to coder</Button>
                   <Button size="small" color="error" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 14 }} />}
                     sx={{ bgcolor: PANEL }} onClick={notATask}>Not a task</Button>
                   <Tooltip title="Close — back to the list (the task stays)">
@@ -233,13 +226,18 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                       {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
                     </Box>
                   ))}
-                  <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
-                    <Select value={dispatchAgent} onChange={(e) => setDispatchAgent(e.target.value)} sx={selSx}>
-                      {agents.map((a) => <MenuItem key={a.Name} value={a.Name} sx={{ fontSize: 12 }}>{a.Name} ({a.Runner})</MenuItem>)}
-                    </Select>
-                    <TextField fullWidth placeholder="Instruction (optional)" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
-                    <Button variant="contained" size="small" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />} onClick={dispatch}>Dispatch</Button>
+                  {/* the one place work starts: who, on which model, with what prompt */}
+                  <Box sx={{ display: "flex", gap: 1, mt: 0.75, alignItems: "center", flexWrap: "wrap" }}>
+                    <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
+                      onAgent={(a) => setRun({ ...run, agent: a, model: "" })} onModel={(m) => setRun({ ...run, model: m })} />
+                    <TextField sx={{ flex: 1, minWidth: 220 }} placeholder="Prompt for this run (optional — it already has the task)"
+                      value={run.instruction} onChange={(e) => setRun({ ...run, instruction: e.target.value })} />
+                    <Button variant="contained" size="small" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
+                      onClick={runAgent}>Run agent</Button>
                   </Box>
+                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                    Runs the full lifecycle: GitHub issue → the agent works it → report → close or escalate to you.
+                  </Typography>
                 </Block>
 
                 <Block title="Activity">

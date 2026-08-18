@@ -14,13 +14,22 @@ SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
 SESSIONS = {}               # sid -> Term
 
 
+# A terminal must start a FRESH session. Taskuary can itself be launched from inside an
+# agent CLI, and those processes export session markers that make the child resume /
+# inherit the parent's conversation - strip anything that would carry that in.
+_DIRTY = ('CLAUDE_CODE', 'CLAUDECODE', 'CLAUDE_SESSION', 'ANTHROPIC_SESSION', 'CODEX_SESSION', 'GEMINI_SESSION')
+
+def clean_env() -> dict:
+    return {k: v for k, v in os.environ.items() if not k.upper().startswith(_DIRTY)}
+
+
 class _WinPty:
     def __init__(self, argv, cwd, rows, cols):
         try:
             from winpty import PtyProcess
         except ImportError:
             raise RuntimeError('the interactive terminal needs pywinpty on Windows - pip install pywinpty')
-        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols))
+        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env())
     def read(self):
         try: return self.p.read(65536)
         except EOFError: return ''
@@ -38,7 +47,7 @@ class _UnixPty:
         self.fd, slave = pty.openpty()
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
         self.p = subprocess.Popen(argv, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
-                                  close_fds=True, start_new_session=True)
+                                  close_fds=True, start_new_session=True, env=clean_env())
         os.close(slave)
     def read(self):
         try: return os.read(self.fd, 65536).decode('utf-8', 'replace')

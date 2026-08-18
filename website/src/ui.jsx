@@ -158,29 +158,65 @@ export const CoderReport = ({ body }) => {
   );
 };
 
+// WHO does the work and on WHICH model. One control, used by every run surface (Board
+// dialog, task header, send-to-agent) so the choice reads the same everywhere. The agent
+// list comes from your configured CLIs; the model list from that CLI's known models plus
+// whatever the profile sets as its default.
+export const useAgents = () => {
+  const [agents, setAgents] = useState([]);
+  const [models, setModels] = useState({});
+  useEffect(() => {
+    api.get("/api/agents").then(({ data }) => {
+      setAgents((data.data || []).map((a) => a.Name));
+      setModels(data.models || {});
+    }).catch(() => {});
+  }, []);
+  return { agents, models };
+};
+
+export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30 }) => {
+  const info = models[agent] || {};
+  const choices = info.choices || [];
+  return (
+    <>
+      <Select size="small" value={agents.includes(agent) ? agent : (agents[0] || agent)}
+        onChange={(e) => onAgent(e.target.value)}
+        sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
+        {(agents.length ? agents : [agent]).map((a) => (
+          <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
+            {a}{models[a]?.cmd ? ` · ${models[a].cmd}` : ""}
+          </MenuItem>
+        ))}
+      </Select>
+      <Select size="small" displayEmpty value={model || ""} onChange={(e) => onModel(e.target.value)}
+        sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>
+        <MenuItem value="" sx={{ fontSize: 12.5 }}>
+          {info.default ? `default · ${info.default}` : "the agent's default model"}
+        </MenuItem>
+        {choices.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12.5 }}>{m}</MenuItem>)}
+      </Select>
+    </>
+  );
+};
+
 // Hand ANY timeline item to a coding agent: your prompt + the item's context (subject,
 // sender, full body, thread, the operator docs) go down together. Items that aren't a
 // task yet become one server-side, so the run has somewhere to live and stream into.
 export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
   const [open, setOpen] = useState(false);
-  const [agents, setAgents] = useState([]);
+  const { agents, models } = useAgents();
   const [agent, setAgent] = useState("coder");
+  const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
   const [err, setErr] = useState("");
-  useEffect(() => {
-    if (!open || agents.length) return;
-    api.get("/api/agents").then(({ data }) => {
-      const ns = (data.data || []).map((a) => a.Name);
-      setAgents(ns);
-      if (ns.length && !ns.includes("coder")) setAgent(ns[0]);
-    }).catch(() => {});
-  }, [open, agents.length]);
+  useEffect(() => { if (agents.length && !agents.includes(agent)) setAgent(agents[0]); }, [agents, agent]);
   const send = async () => {
     setBusy(true); setErr("");
     try {
-      const { data } = await api.post(`/api/messages/${messageId}/dispatch`, { agent, instruction: prompt.trim() || null });
+      const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
+        { agent, model: model || null, instruction: prompt.trim() || null });
       setSent(data); setPrompt("");
     } catch (e) { setErr(e?.response?.data?.detail || "Could not reach the agent"); }
     setBusy(false);
@@ -201,14 +237,12 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
   );
   return (
     <Box sx={{ mt: 1, p: 1.25, bgcolor: "#faf8ff", border: "1px solid #e9ddfb", borderRadius: 1.5 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
         <SmartToyIcon sx={{ fontSize: 15, color: "#7e22ce" }} />
         <Typography variant="caption" sx={{ color: "#7e22ce", fontWeight: 700 }}>Send to an agent</Typography>
-        <Box sx={{ flex: 1 }} />
-        <Select size="small" value={agent} onChange={(e) => setAgent(e.target.value)}
-          sx={{ fontSize: 11.5, height: 26, bgcolor: "#fff", "& .MuiSelect-select": { py: 0.3, px: 1 } }}>
-          {(agents.length ? agents : [agent]).map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12 }}>{n}</MenuItem>)}
-        </Select>
+        <Box sx={{ flex: 1, minWidth: 8 }} />
+        <AgentPicker agents={agents} models={models} agent={agent} model={model}
+          onAgent={setAgent} onModel={setModel} size={26} />
       </Box>
       <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
         onChange={(e) => setPrompt(e.target.value)}

@@ -129,6 +129,29 @@ class CoreTests(unittest.TestCase):
         self.assertEqual([m['Channel'] for m in feed], ['github'])
         self.assertIn('o/repo#7', feed[0]['Subject'])               # our own [TQ-] issues never come back
 
+    def test_one_report_can_pull_from_several_sources(self):
+        from taskuary.reports import REGISTRY, render_report
+        s = MemoryStore()
+        REGISTRY['_a'] = lambda cfg: (f"{cfg['q']} rows", f"body for {cfg['q']}")
+        REGISTRY['_boom'] = lambda cfg: (_ for _ in ()).throw(RuntimeError('server unreachable'))
+        try:
+            seen = {}
+            head, body = render_report(s, {
+                'title': 'Morning check', 'ai_prompt': 'summarize',
+                # the SAME connector twice with different queries, plus one that dies
+                'sources': [{'type': '_a', 'label': 'cash', 'q': '3'},
+                            {'type': '_a', 'label': 'ledger', 'q': '7'},
+                            {'type': '_boom', 'label': 'the box'}],
+            }, llm=lambda sys_, usr_: seen.update(usr=usr_) or 'all good')
+            self.assertEqual(head, 'cash: 3 rows · ledger: 7 rows · the box: FAILED')
+            for want in ('=== cash (3 rows) ===', 'body for 7', 'server unreachable'):
+                self.assertIn(want, seen['usr'])            # every source reaches the one AI pass
+            self.assertIn('all good', body)
+            # a config without `sources` is still the plain single-source report
+            self.assertEqual(render_report(s, {'type': '_a', 'q': '1'})[0], '1 rows')
+        finally:
+            REGISTRY.pop('_a'); REGISTRY.pop('_boom')
+
     def test_report_rows_admit_when_they_were_capped(self):
         from taskuary.reports import REGISTRY, render_report, rows_out
         s = MemoryStore()

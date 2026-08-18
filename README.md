@@ -69,18 +69,22 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   behind it runs the whole lifecycle (issue → work → report → close or escalate).
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI. Nothing sends without you.
-- **Reports** — the pipeline builder: source → query → optional AI summary → Timeline,
-  on a schedule, with a full-pipeline Preview before you save. **max rows** (default 200)
-  decides how much of the result reaches the summary, and the headline says *capped* when
-  rows were left behind — so the AI never calls a truncated slice "all of them".
+- **Reports** — a funnel you lay out: **any number of sources at the top** (the same
+  connection twice with different SQL is fine — drag to reorder, one click to duplicate)
+  feeding **one prompt at the bottom**, then the schedule. Every source's rows reach the
+  summary together, each under its own label, and a source that fails is reported in place
+  instead of killing the report. Preview runs the whole pipeline before you save. **max
+  rows** (default 200, per source) decides how much reaches the summary, and the headline
+  says *capped* when rows were left behind — so the AI never calls a truncated slice "all
+  of them".
 - **Terminal** — your coding CLI, for real, inside the app: a pseudo-terminal (ConPTY on
   Windows) streamed to xterm.js over a websocket. The agent's own TUI, its approval
   prompts, your keystrokes — the session, not a transcript of one. It lives in a **dock at
   the bottom of every tab** (Ctrl+\` to toggle, drag its top edge to resize, tabs for
   parallel sessions) as well as its own full-screen tab; hiding it never kills a session,
   because the pty lives server-side. Sessions start clean — no inherited agent session
-  state. Open one on a task ("start it on this task" types the context in) or a bare shell
-  in any repo.
+  state. Every **task page embeds its own session** — the agent's TUI right under the run
+  history — or open a bare shell in any repo.
 - **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
   models and CLI agents, messaging channels, GitHub, SQL Server. Every connection has a
   **role** you choose: *inbound trigger* (its items land on the Timeline and go through
@@ -159,7 +163,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 96 tests, ~20s, no network or credentials needed
+pytest -q                   # 97 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

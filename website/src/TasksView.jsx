@@ -12,7 +12,7 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, TaskStatusChip, ActionChip, AgentPicker, useAgents, RunTrace, DiffBlock, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
-import { OpenTerminalButton } from "./TerminalView.jsx";
+import { OpenTerminalButton, TerminalPane } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
@@ -95,6 +95,21 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
     await api.post(`/api/tasks/${selected}/not-a-task`);
     onSelect(null); loadTasks(); onChanged?.();
   };
+  // the task's own terminal: a real pty session, embedded here rather than linked to
+  const [term, setTerm] = useState(null);
+  const findTerm = useCallback(async (tid) => {
+    if (!tid) { setTerm(null); return; }
+    try {
+      const rows = (await api.get("/api/terminals")).data.data || [];
+      setTerm(rows.find((x) => x.taskId === tid && x.alive) || null);
+    } catch { setTerm(null); }
+  }, []);
+  useEffect(() => { findTerm(selected); }, [selected, findTerm]);
+  const openTerm = async (body) => {
+    try { const { data } = await api.post("/api/terminals", body); setTerm(data); }
+    catch (e) { setErr(e?.response?.data?.detail || "Could not start a terminal"); }
+  };
+
   const [chat, setChat] = useState("");
   const messageAgent = async () => {
     if (!chat.trim()) return;
@@ -174,7 +189,8 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                     {t.Kind} · from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
                   </Typography>
                   <Box sx={{ flex: 1 }} />
-                  {onOpenTerminal && <OpenTerminalButton taskId={selected} repo={repoOf(t)} onOpen={onOpenTerminal} />}
+                  {onOpenTerminal && <OpenTerminalButton taskId={selected} repo={repoOf(t)} onOpen={onOpenTerminal}
+                    label="Open it in the bottom dock" />}
                 </Box>
               </Box>
               <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
@@ -240,6 +256,33 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                   </Typography>
                 </Block>
 
+                <Block title="Terminal">
+                  {term ? (
+                    <>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+                        <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
+                          {term.cmd} · {term.cwd}
+                        </Typography>
+                        <Button size="small" sx={{ fontSize: 11 }}
+                          onClick={async () => { await api.delete(`/api/terminals/${term.sid}`).catch(() => {}); setTerm(null); }}>
+                          close session
+                        </Button>
+                      </Box>
+                      <TerminalPane sid={term.sid} height={340} onExit={() => findTerm(selected)} />
+                    </>
+                  ) : (
+                    <Box>
+                      <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75 }}>
+                        A real interactive session in this task's repo — the agent's own TUI, its questions,
+                        your keystrokes. This is a FRESH session; to continue the exact session a run used,
+                        message the agent below instead.
+                      </Typography>
+                      <OpenTerminalButton taskId={selected} repo={repoOf(t)} onOpen={openTerm}
+                        label="Open a terminal on this task" />
+                    </Box>
+                  )}
+                </Block>
+
                 <Block title="Activity">
                   {detail.comments.map((c) => <CommentLine key={c.CommentId} c={c} />)}
                   <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
@@ -249,7 +292,7 @@ export default function TasksView({ selected, onSelect, onChanged, onOpenTermina
                   {/* talk to the agent: resumes its claude session; the reply lands above */}
                   <Box sx={{ display: "flex", gap: 1, mt: 1, p: 1, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5 }}>
                     <SmartToyIcon sx={{ fontSize: 17, color: "#7e22ce", alignSelf: "center" }} />
-                    <TextField fullWidth placeholder="Message the agent — it resumes its session and replies here"
+                    <TextField fullWidth placeholder="Message the agent — resumes the session its last run used; the reply lands above"
                       value={chat} onChange={(e) => setChat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && messageAgent()}
                       sx={{ bgcolor: "#fff" }} />
                     <Button size="small" variant="contained" disableElevation sx={{ bgcolor: "#7e22ce", "&:hover": { bgcolor: "#6b21a8" } }}

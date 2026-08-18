@@ -126,11 +126,34 @@ AI_SYSTEM = ('You summarize scheduled report data for a busy operator. Follow th
              'plainly when something the instruction asks about is not present in the rows you got.')
 
 
+def run_sources(store, subs: list):
+    """Several sources feeding ONE report: each runs on its own connection and query, the
+    bodies are stacked under labeled headers, and the AI pass downstream sees all of them
+    at once. The same connection can appear twice with different queries. One source
+    failing is reported in place - it never takes the whole report down."""
+    heads, bodies = [], []
+    for i, sub in enumerate(subs, 1):
+        t = sub.get('type', 'rest')
+        label = (sub.get('label') or '').strip() or f'{t} #{i}'
+        try:
+            head, body = REGISTRY[t](resolve_cfg(store, dict(sub)))
+        except Exception as e:
+            head, body = 'FAILED', f'error: {str(e)[:400]}'
+            logger.warning(f'report source "{label}" failed: {e}')
+        heads.append(f'{label}: {head}')
+        bodies.append(f'=== {label} ({head}) ===\n{body}')
+    return ' · '.join(heads)[:400], '\n\n'.join(bodies)[:BODY_CHARS]
+
+
 def render_report(store, cfg: dict, llm=None):
-    """Run the executor, then (optionally) the AI pass: cfg['ai_prompt'] + a configured
+    """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
     AI connector turn raw rows into the summary that lands on the timeline."""
-    cfg = resolve_cfg(store, cfg)
-    head, summary = REGISTRY[cfg.get('type', 'rest')](cfg)
+    subs = [s for s in (cfg.get('sources') or []) if s.get('type')]
+    if subs:
+        head, summary = run_sources(store, subs)
+    else:
+        cfg = resolve_cfg(store, cfg)
+        head, summary = REGISTRY[cfg.get('type', 'rest')](cfg)
     if cfg.get('ai_prompt') and llm:
         try:
             data = summary[:AI_CHARS]

@@ -8,6 +8,9 @@ import {
   Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import BoltIcon from "@mui/icons-material/Bolt";
 import SyncIcon from "@mui/icons-material/Sync";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
@@ -35,6 +38,17 @@ const TYPE_LABELS = {
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const NL = String.fromCharCode(10);
+// Everything that belongs to ONE source card; the rest (title, prompt, schedule) is the
+// report itself. Splitting here is what lets old single-source configs load unchanged.
+const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args",
+  "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver"];
+
+const toSources = (cfg) => {
+  if (Array.isArray(cfg.sources) && cfg.sources.length) return cfg.sources;
+  const one = {};
+  for (const k of SOURCE_KEYS) if (cfg[k] !== undefined && cfg[k] !== "") one[k] = cfg[k];
+  return [{ type: cfg.type || "mssql", ...one }];
+};
 
 export default function ReportsView() {
   const [sources, setSources] = useState(null);
@@ -54,10 +68,16 @@ export default function ReportsView() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // a report run is synchronous and can take a while (a slow query, an AI pass) - say so
+  // on the row that's working instead of leaving a dead button
+  const [running, setRunning] = useState(null);
   const runNow = async (sid) => {
-    try { const { data } = await api.post(`/api/sources/${sid}/run`); setNote({ ok: !String(data.subject).includes("FAILED"), detail: `filed on the Timeline: ${data.subject}` }); }
-    catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "run failed" }); }
-    load();
+    setRunning(sid); setNote(null);
+    try {
+      const { data } = await api.post(`/api/sources/${sid}/run`);
+      setNote({ ok: !String(data.subject).includes("FAILED"), detail: `filed on the Timeline: ${data.subject}` });
+    } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "run failed" }); }
+    setRunning(null); load();
   };
   const syncNow = async () => {
     setSyncing(true);
@@ -100,7 +120,7 @@ export default function ReportsView() {
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
-                {TYPE_LABELS[c.type] || c.type || "rest"} · {sched}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
+                {(c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
               </Typography>
             </Box>
             {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
@@ -108,7 +128,9 @@ export default function ReportsView() {
               <AutoAwesomeIcon sx={{ fontSize: 12, color: "#b45309" }} />
               <Typography variant="caption" sx={{ color: "#b45309", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
             </Box>}
-            <Button size="small" startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />} onClick={() => runNow(s.SourceId)}>Run now</Button>
+            <Button size="small" disabled={running === s.SourceId}
+              startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
+              onClick={() => runNow(s.SourceId)}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
             <Button size="small" onClick={() => setEditing({ SourceId: s.SourceId })}>Edit</Button>
             <Switch checked={!!s.Active} onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
           </Box>
@@ -121,8 +143,11 @@ export default function ReportsView() {
 /* ── the pipeline wizard: source → configure → test & preview → schedule ── */
 function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved }) {
   const cur = sources.find((s) => s.SourceId === sourceId);
-  const [cfg, setCfg] = useState(cur ? { ...BLANK, ...parse(cur.ConfigJson) } : { ...BLANK });
-  const [step, setStep] = useState(cur ? 1 : 0);
+  const saved = cur ? { ...BLANK, ...parse(cur.ConfigJson) } : { ...BLANK };
+  const [cfg, setCfg] = useState(saved);
+  const [srcs, setSrcs] = useState(toSources(saved));   // the funnel's inputs, in order
+  const [drag, setDrag] = useState(null);
+  const [step, setStep] = useState(0);
   const [test, setTest] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState("");
@@ -132,14 +157,24 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const winrmOk = winrmConn?.LastSyncAt && !winrmConn?.LastError;
   const aiActive = connectors.some((c) => ["anthropic", "openai", "azure_openai"].includes(c.Type) && c.Active && c.HasSecret);
 
-  const bodyCfg = () => {
-    const c = { ...cfg };
+  // one source card -> the shape an executor expects
+  const cleanSource = (src) => {
+    const c = { ...src };
     if (typeof c.args === "string") c.args = c.args.split(NL).map((x) => x.trim()).filter(Boolean);
     if (typeof c.headers === "string" && c.headers.trim()) { try { c.headers = JSON.parse(c.headers); } catch { /* preview will complain */ } }
+    if (c.max_rows) c.max_rows = Number(c.max_rows);
+    for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
+    return c;
+  };
+  const bodyCfg = () => {
+    const c = { ...cfg };
+    for (const k of SOURCE_KEYS) delete c[k];            // sources live in sources[] now
     for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
     if (c.every_minutes) c.every_minutes = Number(c.every_minutes);
-    if (c.max_rows) c.max_rows = Number(c.max_rows);
-    return c;
+    const list = srcs.map(cleanSource).filter((x) => x.type);
+    // a single source still writes the flat shape too, so a config saved here stays
+    // readable by anything (and by an older Taskuary) that expects one source
+    return list.length === 1 ? { ...c, ...list[0] } : { ...c, sources: list };
   };
   const runTest = async () => {
     setBusy("test"); setTest(null);
@@ -174,65 +209,75 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     setTest({ ok: true, detail: "saved ✓ — enabled and scheduled" });
   };
 
-  const fields = FIELDS[cfg.type] || [];
   const typeOptions = types.filter((t) => t.status === "builtin");
   return (
     <Box sx={{ maxWidth: 980 }}>
       <Crumb section="Reports" onBack={onBack} title={cur ? (parse(cur.ConfigJson).title || "Edit report") : "New report"} />
       <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
-        <Step completed={!!cfg.type}>
-          <StepButton onClick={() => setStep(0)}>Source</StepButton>
+        <Step completed={srcs.some((x) => x.type)}>
+          <StepButton onClick={() => setStep(0)}>Pipeline</StepButton>
           <StepContent>
-            <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1 }}>Where the data comes from.</Typography>
-            <FilterPills options={typeOptions.map((t) => ({ key: t.type, label: TYPE_LABELS[t.type] || t.type }))}
-              value={cfg.type} onChange={(t) => { setCfg({ ...BLANK, title: cfg.title, type: t }); setTest(null); setPreview(null); }} />
-            {cfg.type === "mssql" && (
-              <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: mssqlOk ? "#15803d" : "#b45309" }}>
-                {mssqlOk ? "✓ uses the SQL Server connection from the Connectors tab"
-                  : "⚠ no tested SQL Server connection yet — set it up under Connectors → Microsoft SQL Server first"}
-              </Typography>
-            )}
-            {cfg.type === "winrm" && (
-              <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: winrmOk ? "#15803d" : "#b45309" }}>
-                {winrmOk ? `✓ runs on ${parse(winrmConn?.ConfigJson).host || "the remote host"} via the Connectors-tab connection`
-                  : "⚠ no tested remote machine yet — set the host under Connectors → Remote Windows (WinRM) first"}
-              </Typography>
-            )}
-            <Box sx={{ mt: 1.5 }}><Button variant="contained" disableElevation onClick={() => setStep(1)}>Continue</Button></Box>
-          </StepContent>
-        </Step>
-        <Step completed={!!cfg.title}>
-          <StepButton onClick={() => setStep(1)}>Configure</StepButton>
-          <StepContent>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 560, mt: 1 }}>
-              <TextField label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff" }}
-                onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
-              {fields.map(([label, key, kind, ph]) => {
-                const v = cfg[key]; const shown = Array.isArray(v) ? v.join(NL) : typeof v === "object" && v ? JSON.stringify(v) : (v ?? "");
-                return <TextField key={key} label={label} placeholder={ph} value={shown} sx={{ bgcolor: "#fff" }}
-                  multiline={kind === "multiline"} minRows={kind === "multiline" ? 2 : undefined}
-                  inputProps={kind === "multiline" && key !== "ai_prompt" ? { style: { fontFamily: "Consolas, monospace", fontSize: 12 } } : undefined}
-                  onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />;
-              })}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <TextField label="max rows" type="number" value={cfg.max_rows ?? ""} sx={{ bgcolor: "#fff", width: 130 }}
-                  onChange={(e) => setCfg({ ...cfg, max_rows: e.target.value })} />
-                <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
-                  How many rows reach the summary (default 200). Your query's own TOP/LIMIT still applies — whichever is
-                  smaller wins, and the headline says "capped" when rows were left behind.
+            <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5 }}>
+              Sources at the top feed one prompt at the bottom. Add as many as you want — the same
+              connection twice with different queries is fine, and every source's rows reach the
+              summary together.
+            </Typography>
+            <TextField label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 560, mb: 2 }}
+              fullWidth onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
+
+            {/* ── the funnel: source cards, draggable, converging on the prompt ── */}
+            <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch" }}>
+              {srcs.map((src, i) => (
+                <SourceCard key={i} src={src} index={i} count={srcs.length}
+                  typeOptions={typeOptions} connectors={connectors}
+                  dragging={drag === i}
+                  onDragStart={() => setDrag(i)} onDragEnd={() => setDrag(null)}
+                  onDropHere={() => { if (drag === null || drag === i) return;
+                    setSrcs((cur) => { const n = [...cur]; const [m] = n.splice(drag, 1); n.splice(i, 0, m); return n; }); setDrag(null); }}
+                  onChange={(patch) => setSrcs((cur) => cur.map((x, k) => (k === i ? { ...x, ...patch } : x)))}
+                  onRetype={(t) => setSrcs((cur) => cur.map((x, k) => (k === i ? { type: t, label: x.label } : x)))}
+                  onCopy={() => setSrcs((cur) => [...cur.slice(0, i + 1), { ...src, label: `${src.label || src.type} copy` }, ...cur.slice(i + 1)])}
+                  onRemove={() => setSrcs((cur) => cur.filter((_, k) => k !== i))} />
+              ))}
+              <Box onClick={() => setSrcs((cur) => [...cur, { type: "mssql" }])}
+                sx={{ ...card, width: 300, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
+                  justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed",
+                  color: DIM, "&:hover": { borderColor: "#c9cff0", color: "#4f46e5" } }}>
+                <AddIcon sx={{ fontSize: 20 }} />
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>add a source</Typography>
+              </Box>
+            </Box>
+
+            {/* everything above narrows into one prompt */}
+            <Box sx={{ display: "flex", justifyContent: "center", py: 0.5 }}>
+              <Box sx={{ width: 0, height: 0, borderLeft: "12px solid transparent", borderRight: "12px solid transparent",
+                borderTop: `14px solid ${BORDER}` }} />
+            </Box>
+            <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#f3ddb8" }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
+                <AutoAwesomeIcon sx={{ fontSize: 15, color: "#b45309" }} />
+                <Typography variant="caption" sx={{ color: "#b45309", fontWeight: 700 }}>
+                  ONE PROMPT OVER ALL {srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}
                 </Typography>
               </Box>
+              <TextField fullWidth multiline minRows={3} value={cfg.ai_prompt || ""} sx={{ bgcolor: "#fff" }}
+                placeholder={AI_FIELD[3]} onChange={(e) => setCfg({ ...cfg, ai_prompt: e.target.value })} />
               {cfg.ai_prompt && !aiActive && (
-                <Typography variant="body2" sx={{ fontWeight: 600, color: "#b45309" }}>
+                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#b45309" }}>
                   ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connectors → AI).
                 </Typography>
               )}
-              <Box><Button variant="contained" disableElevation onClick={() => setStep(2)}>Continue</Button></Box>
+              {!cfg.ai_prompt && (
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                  Leave it empty to file the raw rows with no AI pass.
+                </Typography>
+              )}
             </Box>
+            <Box sx={{ mt: 1.5 }}><Button variant="contained" disableElevation onClick={() => setStep(1)}>Continue</Button></Box>
           </StepContent>
         </Step>
         <Step completed={!!test?.ok || !!preview?.ok}>
-          <StepButton onClick={() => setStep(2)}>Test & preview</StepButton>
+          <StepButton onClick={() => setStep(1)}>Test & preview</StepButton>
           <StepContent>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1 }}>
               Test checks the source; Preview runs the whole pipeline — query + AI — exactly like a scheduled run, without filing anything.
@@ -242,7 +287,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test source</Button>
               <Button variant="outlined" disabled={busy === "preview"} onClick={runPreview}
                 startIcon={busy === "preview" ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>Preview pipeline</Button>
-              <Button onClick={() => setStep(3)}>Continue</Button>
+              <Button onClick={() => setStep(2)}>Continue</Button>
             </Box>
             {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
             {preview && (preview.ok ? (
@@ -255,7 +300,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           </StepContent>
         </Step>
         <Step completed={!!cur}>
-          <StepButton onClick={() => setStep(3)}>Schedule & save</StepButton>
+          <StepButton onClick={() => setStep(2)}>Schedule & save</StepButton>
           <StepContent>
             <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
               <TextField label="every N minutes" type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 160 }}
@@ -274,6 +319,57 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           </StepContent>
         </Step>
       </Stepper>
+    </Box>
+  );
+}
+
+/* One input to the funnel: what it is, what to ask it, and (optionally) a label so the
+   AI can tell two queries against the same database apart. Drag to reorder. */
+function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
+                      onDropHere, onChange, onRetype, onCopy, onRemove }) {
+  const fields = (FIELDS[src.type] || []).filter(([, key]) => key !== "ai_prompt");
+  const conn = connectors.find((c) => c.Type === src.type);
+  const needsConn = ["mssql", "winrm"].includes(src.type);
+  const connOk = conn?.LastSyncAt && !conn?.LastError;
+  return (
+    <Box draggable onDragStart={onDragStart} onDragEnd={onDragEnd}
+      onDragOver={(e) => e.preventDefault()} onDrop={onDropHere}
+      sx={{ ...card, width: 300, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
+        opacity: dragging ? 0.45 : 1, cursor: "grab", "&:active": { cursor: "grabbing" } }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <DragIndicatorIcon sx={{ fontSize: 16, color: "#c2c9d6" }} />
+        <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1 }}>source {index + 1} of {count}</Typography>
+        <ContentCopyIcon onClick={onCopy} titleAccess="Duplicate — same connection, different query"
+          sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#4f46e5" } }} />
+        {count > 1 && <CloseIcon onClick={onRemove} titleAccess="Remove this source"
+          sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#b91c1c" } }} />}
+      </Box>
+      <Select size="small" value={src.type || "mssql"} onChange={(e) => onRetype(e.target.value)}
+        sx={{ fontSize: 12.5, bgcolor: "#fff" }}>
+        {typeOptions.map((t) => (
+          <MenuItem key={t.type} value={t.type} sx={{ fontSize: 12.5 }}>{TYPE_LABELS[t.type] || t.type}</MenuItem>
+        ))}
+      </Select>
+      {needsConn && (
+        <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#15803d" : "#b45309" }}>
+          {connOk ? `✓ uses the ${TYPE_LABELS[src.type]} connection from Connectors`
+            : `⚠ set up Connectors → ${TYPE_LABELS[src.type]} first`}
+        </Typography>
+      )}
+      {count > 1 && (
+        <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "#fff" }}
+          placeholder="cash balances" onChange={(e) => onChange({ label: e.target.value })} />
+      )}
+      {fields.map(([label, key, kind, ph]) => {
+        const v = src[key];
+        const shown = Array.isArray(v) ? v.join(NL) : typeof v === "object" && v ? JSON.stringify(v) : (v ?? "");
+        return <TextField key={key} size="small" label={label} placeholder={ph} value={shown} sx={{ bgcolor: "#fff" }}
+          multiline={kind === "multiline"} minRows={kind === "multiline" ? 3 : undefined}
+          inputProps={kind === "multiline" ? { style: { fontFamily: "Consolas, monospace", fontSize: 11.5 } } : undefined}
+          onChange={(e) => onChange({ [key]: e.target.value })} />;
+      })}
+      <TextField size="small" label="max rows" type="number" value={src.max_rows ?? ""} sx={{ bgcolor: "#fff", width: 120 }}
+        onChange={(e) => onChange({ max_rows: e.target.value })} />
     </Box>
   );
 }

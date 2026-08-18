@@ -95,17 +95,12 @@ def test_connector(store, cid: int) -> dict:
                 src = next((s for s in store.list_sources(active_only=False)
                             if s['Channel'] == 'teams' and '@' in (s['Address'] or '')), None)
                 if src:
-                    # probe the road the POLLER takes, or a green card means nothing. Chats
-                    # HOSTED IN ANOTHER ORG'S TENANT (an external party started them) refuse
-                    # app-only reads - nothing to configure, so SAY which are invisible.
-                    since = _utc(datetime.now() - timedelta(days=7))
-                    chats = _teams_chats(tok, src['Address'], since)
-                    blocked = [ch for ch in chats if _chat_msgs(tok, ch['id'], since, probe=True) is None]
-                    detail = f"chat read OK for {src['Address']} - {len(chats) - len(blocked)} of {len(chats)} chats readable (7 days)"
-                    if blocked:
-                        names = ', '.join((ch.get('topic') or ch.get('chatType') or 'chat') for ch in blocked[:4])
-                        detail += (f"; {len(blocked)} unreadable (403), incl. {names} - those chats live in another "
-                                   "organization's tenant, where an app registration of yours cannot read messages")
+                    # probe the road the POLLER takes, or a green card means nothing
+                    msgs = _teams_delta(tok, src['Address'], _utc(datetime.now() - timedelta(days=7)), cap=100)
+                    people = {(((m.get('from') or {}).get('user') or {}).get('displayName'))
+                              for m in msgs if ((m.get('from') or {}).get('user'))}
+                    detail = (f"chat read OK for {src['Address']} - {len(msgs)} messages in the last 7 days across "
+                              f"{len({m.get('chatId') for m in msgs})} chats, {len(people - {None})} people")
                 else:
                     detail += ' - add a Teams source (user UPN) to probe chat access'
         elif c['Type'] == 'github':
@@ -215,37 +210,48 @@ def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
 
 
 # ── Teams chats ─────────────────────────────────────────────────────────────────────
-# /chats/getAllMessages looks like the obvious road and is a trap: it rejects every
-# lastModifiedDateTime filter we can form ("Missing 'lastModifiedDateTime' value"), so
-# unfiltered it hands back the OLDEST page - years of bot attachment posts - and never the
-# messages a person actually sent today. Listing recently-updated chats and reading each
-# one filters correctly and is what the connector card probes.
+# Three roads out of Graph, and only one works:
+#   /chats/{id}/messages   - refuses (403) every chat HOSTED IN ANOTHER ORG'S TENANT, which
+#                            is exactly where the external-vendor threads live;
+#   /chats/getAllMessages  - rejects every lastModifiedDateTime filter we can form and pages
+#                            OLDEST first, so it hands back years of bot attachment posts;
+#   .../getAllMessages/delta - takes the filter, pages NEWEST first, and includes those
+#                            externally-hosted chats. That is the one.
 def _utc(dt) -> str:
     from datetime import timezone
     return dt.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
 
-def _teams_chats(tok, upn, since_iso, top=25):
-    r = requests.get(f'{GRAPH}/users/{upn}/chats', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
-                     params={'$top': top, '$filter': f'lastUpdatedDateTime gt {since_iso}'})
-    if r.status_code == 403:
-        raise RuntimeError('token OK but chat read DENIED (403) - app-only Chat.Read.All is a Microsoft '
-                           'protected API: submit the approval form for this app registration')
-    r.raise_for_status()
-    return r.json().get('value', [])
+def _teams_delta(tok, upn, since_iso, cap=200):
+    """Every chat message this user can see since a timestamp, newest first."""
+    url = f'{GRAPH}/users/{upn}/chats/getAllMessages/delta'
+    params, out = {'$top': 50, '$filter': f'lastModifiedDateTime gt {since_iso}'}, []
+    while url and len(out) < cap:
+        r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, params=params, timeout=45)
+        if r.status_code == 403:
+            raise RuntimeError('token OK but chat read DENIED (403) - app-only Chat.Read.All is a Microsoft '
+                               'protected API: submit the approval form for this app registration')
+        r.raise_for_status()
+        j = r.json()
+        out += j.get('value', [])
+        url, params = j.get('@odata.nextLink'), None       # the nextLink carries the filter itself
+    return out[:cap]
 
 
-def _chat_msgs(tok, chat_id, since_iso, top=30, probe=False):
-    """Messages in one chat. Tenants refuse app-only reads on some chats (403) - one of those
-    must never sink the whole poll, so it reads as empty; `probe` returns None instead, which
-    is how the connector card counts what it cannot see."""
-    r = requests.get(f'{GRAPH}/chats/{chat_id}/messages', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
-                     params={'$top': top, '$filter': f'lastModifiedDateTime gt {since_iso}'})
-    if r.status_code in (403, 404):
-        logger.debug(f'teams chat {chat_id[:24]} not readable app-only ({r.status_code})')
-        return None if probe else []
-    r.raise_for_status()
-    return r.json().get('value', [])
+def _chat_meta(tok, chat_id, cache):
+    """(topic, kind) for a chat. Readable even for chats whose MESSAGES are refused, so a
+    group thread keeps its real name on the timeline."""
+    if chat_id in cache: return cache[chat_id]
+    meta = ('', 'chat')
+    try:
+        r = requests.get(f'{GRAPH}/chats/{chat_id}', headers={'Authorization': f'Bearer {tok}'}, timeout=20)
+        if r.status_code == 200:
+            j = r.json()
+            meta = (j.get('topic') or '', j.get('chatType') or 'chat')
+    except requests.RequestException as e:
+        logger.debug(f'teams chat lookup failed for {chat_id[:24]}: {e}')
+    cache[chat_id] = meta
+    return meta
 
 
 def _graph_user(tok, oid, cache):
@@ -265,16 +271,11 @@ def _graph_user(tok, oid, cache):
     return who
 
 
-def _chat_title(ch, fallback):
-    kind = ch.get('chatType')
-    return ch.get('topic') or (f'Teams chat with {fallback}' if kind == 'oneOnOne' else f'Teams {kind or "chat"}')
-
-
 def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
-    call-started events and empty bodies are not messages anybody has to act on."""
-    since_iso, users, n = _utc(since), {}, 0
+    call-started events, deletions and empty bodies are not messages anybody has to act on."""
+    since_iso, users, chats, n = _utc(since), {}, {}, 0
     me = ''
     try:
         r = requests.get(f'{GRAPH}/users/{upn}', headers={'Authorization': f'Bearer {tok}'},
@@ -282,24 +283,25 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         me = r.json().get('id', '') if r.status_code == 200 else ''
     except requests.RequestException:
         pass
-    for ch in _teams_chats(tok, upn, since_iso):
-        for m in reversed(_chat_msgs(tok, ch['id'], since_iso)):
-            user = (m.get('from') or {}).get('user') or {}
-            body = _clean((m.get('body') or {}).get('content'))
-            if m.get('messageType') != 'message' or not user.get('id') or not body: continue
-            name, addr = _graph_user(tok, user['id'], users)
-            name = user.get('displayName') or name
-            conv = f"teams:{ch['id']}"
-            common = {'external_id': f"teams:{ch['id']}:{m['id']}", 'channel': 'teams',
-                      'subject': _chat_title(ch, name), 'body': body[:20000], 'conversation_id': conv,
-                      'sent_at': _local(m.get('createdDateTime') or ''), 'source_link': m.get('webUrl'),
-                      'source_name': upn}
-            if user['id'] == me:                       # your own chat lines are context, never work
-                n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
-                                        'your message in this chat - kept for context')
-                continue
-            out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
-            n += out['status'] != 'duplicate'
+    for m in reversed(_teams_delta(tok, upn, since_iso)):          # oldest first, so threads read in order
+        user = (m.get('from') or {}).get('user') or {}
+        body = _clean((m.get('body') or {}).get('content'))
+        if m.get('messageType') != 'message' or m.get('deletedDateTime') or not user.get('id') or not body: continue
+        cid = m.get('chatId') or ''
+        topic, kind = _chat_meta(tok, cid, chats) if cid else ('', 'chat')
+        name, addr = _graph_user(tok, user['id'], users)
+        name = user.get('displayName') or name
+        common = {'external_id': f'teams:{cid}:{m["id"]}', 'channel': 'teams',
+                  'subject': topic or (f'Teams chat with {name}' if kind == 'oneOnOne' else f'Teams {kind}'),
+                  'body': body[:20000], 'conversation_id': f'teams:{cid}',
+                  'sent_at': _local(m.get('createdDateTime') or ''), 'source_link': m.get('webUrl'),
+                  'source_name': upn}
+        if user['id'] == me:                       # your own chat lines are context, never work
+            n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
+                                    'your message in this chat - kept for context')
+            continue
+        out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
+        n += out['status'] != 'duplicate'
     return n
 
 

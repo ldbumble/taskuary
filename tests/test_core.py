@@ -139,18 +139,18 @@ class CoreTests(unittest.TestCase):
         s.save_connector({'ConnectorId': tm['ConnectorId'], 'Active': 1, 'Roles': 'trigger,tool',
                           'ConfigJson': '{"client_id": "c", "tenant_id": "t"}', 'Secret': 'x'}, 'o')
         s.save_source({'Channel': 'teams', 'Address': 'me@corp.com', 'Active': 1, 'Owner': 'o'}, 'o')
-        chats = [{'id': '19:aa', 'chatType': 'oneOnOne'}, {'id': '19:locked', 'chatType': 'group', 'topic': 'Vendor'}]
-        msgs = {'19:aa': [
-            {'id': 'm1', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:00:00Z',
-             'from': {'user': {'id': 'u2', 'displayName': 'Mindy'}}, 'body': {'content': '<p>can you look at the export?</p>'}},
-            {'id': 'm2', 'messageType': 'systemEventMessage', 'createdDateTime': '2026-08-18T10:01:00Z',
-             'from': None, 'body': {'content': '<systemEventMessage/>'}},           # call started
-            {'id': 'm3', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:02:00Z',
+        # the delta feed hands them back NEWEST first, mixed across chats
+        msgs = [
+            {'id': 'm3', 'chatId': '19:aa', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:02:00Z',
              'from': {'application': {'id': 'bot'}, 'user': None}, 'body': {'content': '<attachment id="x"></attachment>'}},
-        ], '19:locked': None}                                                        # 403 -> invisible, not fatal
+            {'id': 'm2', 'chatId': '19:aa', 'messageType': 'systemEventMessage', 'createdDateTime': '2026-08-18T10:01:00Z',
+             'from': None, 'body': {'content': '<systemEventMessage/>'}},           # call started
+            {'id': 'm1', 'chatId': '19:aa', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:00:00Z',
+             'from': {'user': {'id': 'u2', 'displayName': 'Mindy'}}, 'body': {'content': '<p>can you look at the export?</p>'}},
+        ]
         with mock.patch.object(channels, 'graph_token', return_value='tok'), \
-             mock.patch.object(channels, '_teams_chats', return_value=chats), \
-             mock.patch.object(channels, '_chat_msgs', side_effect=lambda t, cid, *a, **k: msgs[cid] or []), \
+             mock.patch.object(channels, '_teams_delta', return_value=msgs), \
+             mock.patch.object(channels, '_chat_meta', return_value=('', 'oneOnOne')), \
              mock.patch.object(channels, '_graph_user', return_value=('Mindy', 'mindy@corp.com')), \
              mock.patch.object(channels.requests, 'get', return_value=mock.Mock(status_code=200,
                                                                                json=lambda: {'id': 'me'})):

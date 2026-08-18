@@ -133,16 +133,19 @@ def default_shell():
     return [os.environ.get('SHELL') or '/bin/bash', '-i']
 
 
-def agent_argv(profile: dict) -> list:
+def agent_argv(profile: dict, model: str = None) -> list:
     """Interactive invocation of a configured CLI: its command WITHOUT the headless flags
     (-p / --output-format json turn it into a one-shot pipe). `interactive_args` in the
-    profile overrides, for CLIs that need a subcommand to open their TUI."""
+    profile overrides, for CLIs that need a subcommand to open their TUI, and the model flag
+    is the same one the headless runner uses (`model_arg`, e.g. codex wants -m)."""
     from .agents import _resolve_cmd
-    return _resolve_cmd(profile.get('cmd') or 'claude') + list(profile.get('interactive_args') or [])
+    argv = _resolve_cmd(profile.get('cmd') or 'claude') + list(profile.get('interactive_args') or [])
+    model = model or profile.get('model')
+    return argv + ([profile.get('model_arg') or '--model', str(model)] if model else [])
 
 
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
-                 rows: int = 32, cols: int = 110, actor: str = 'owner') -> Term:
+                 rows: int = 32, cols: int = 110, actor: str = 'owner', model: str = None) -> Term:
     """Start a terminal: a configured agent CLI, or a plain shell when agent is None."""
     import json
     profile = {}
@@ -150,7 +153,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         row = store.get_agent(agent)
         if not row: raise ValueError(f'unknown agent: {agent}')
         profile = json.loads(row.get('Config') or '{}')
-        argv, label = agent_argv(profile), agent
+        argv, label = agent_argv(profile, model), agent
     else:
         argv, label = default_shell(), 'shell'
     if not cwd and repo: cwd = (profile.get('cwd_map') or {}).get(repo)

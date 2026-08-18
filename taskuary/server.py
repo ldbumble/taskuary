@@ -620,6 +620,7 @@ def ingest_status():
 class TermBody(BaseModel):
     agent: str | None = None; task_id: int | None = None; repo: str | None = None
     cwd: str | None = None; rows: int = 32; cols: int = 110; seed: bool = False
+    model: str | None = None
 
 @app.get('/api/terminals')
 def terminals(): return {'data': hub_term.listing()}
@@ -629,8 +630,10 @@ def open_terminal(body: TermBody):
     """Spawn an agent CLI (or a plain shell) under a real pty. seed=true types the task's
     context in as the first line, so the agent starts on it and you keep talking."""
     try:
-        t = hub_term.open_session(store, body.agent, body.task_id, body.repo, body.cwd, body.rows, body.cols, ACTOR)
-    except (ValueError, RuntimeError) as e:
+        t = hub_term.open_session(store, body.agent, body.task_id, body.repo, body.cwd, body.rows, body.cols,
+                                  ACTOR, body.model)
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        # a CLI you configured but never installed is the common one - say which, don't 500
         raise HTTPException(422, str(e))
     # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text
     tk = store.get_task(body.task_id) if body.task_id else None

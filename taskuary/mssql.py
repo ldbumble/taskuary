@@ -34,7 +34,7 @@ def _connect(cs: str):
 def run_query(cfg: dict, limit: int = None) -> list:
     """Execute cfg['query'], return up to `limit` rows as dicts (cfg['max_rows'] wins)."""
     from .reports import row_limit
-    limit = limit or row_limit(cfg)
+    limit = limit or row_limit(cfg)[0]
     with _connect(conn_str(cfg)) as cx:
         cur = cx.cursor().execute(cfg['query'])
         cols = [c[0] for c in cur.description or []]
@@ -55,11 +55,11 @@ def run_report(cfg: dict):
     """Report executor: (headline, summary) for the timeline. One row past the limit is
     fetched so the headline can admit when the result was cut (see reports.rows_out)."""
     from .reports import row_limit, rows_out
-    lim = row_limit(cfg)
+    lim, mine = row_limit(cfg)
     if cfg.get('dsn'):  # back-compat: sqlalchemy-style dsn from old configs
         import sqlalchemy
         with sqlalchemy.create_engine(cfg['dsn']).connect() as cx:
             rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(cfg['query'])).fetchmany(lim + 1)]
     else:
         rows = run_query(cfg, lim + 1)
-    return rows_out(rows, lim)
+    return rows_out(rows, lim, mine=mine)

@@ -48,7 +48,7 @@ export default function TaskHubPage() {
   const [autostart, setAutostart] = useState(null);
   const openTask = (taskId, opts) => {
     setSelectedTask(taskId); setTab("Tasks");
-    setAutostart(opts?.start ? { taskId, agent: opts.agent } : null);
+    setAutostart(opts?.start ? { taskId, agent: opts.agent, model: opts.model } : null);
   };
 
   return (

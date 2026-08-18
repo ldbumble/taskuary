@@ -368,6 +368,23 @@ class CoreTests(unittest.TestCase):
             run_coding_task(s, tid, 'o', None, {})
         self.assertEqual(len(s.list_reviews('pending')), 1)
 
+    def test_row_cap_admits_when_the_number_is_just_the_default(self):
+        from taskuary.reports import row_limit, rows_out
+        self.assertEqual((row_limit({}), row_limit({'max_rows': 50})), ((200, False), (50, True)))
+        rows = [{'a': i} for i in range(7)]
+        self.assertIn('capped at the default 5', rows_out(rows, 5, mine=False)[0])   # nobody set this
+        self.assertIn('capped at 5 ', rows_out(rows, 5, mine=True)[0])               # you did
+
+    def test_interactive_argv_carries_the_model_but_not_the_headless_flags(self):
+        from unittest import mock
+        from taskuary.terminal import agent_argv
+        with mock.patch('taskuary.agents._resolve_cmd', side_effect=lambda n: [n]):
+            self.assertEqual(agent_argv({'cmd': 'claude', 'args': ['-p', '--output-format', 'json']}, 'opus'),
+                             ['claude', '--model', 'opus'])
+            self.assertEqual(agent_argv({'cmd': 'codex', 'model_arg': '-m', 'model': 'gpt-5-codex'}),
+                             ['codex', '-m', 'gpt-5-codex'])
+            self.assertEqual(agent_argv({'cmd': 'gemini', 'interactive_args': ['chat']}), ['gemini', 'chat'])
+
     def test_cli_json_parse(self):
         self.assertEqual(parse_cli_json('{"result": "OK", "session_id": "abc"}'), ('OK', 'abc'))
         self.assertEqual(parse_cli_json('plain'), ('plain', None))

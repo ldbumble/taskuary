@@ -5,22 +5,22 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Automate your job.** Taskuary is a local-first, open-source AI task hub: email, Teams,
-Slack, and scheduled reports stream into one timeline, AI triage decides what matters,
-and your own coding agents — Claude Code, Codex, Gemini, Cursor, Copilot — do the work
-while you approve the results.
+**Your inbox and your coding agents in one place.** Email, Teams, Slack, GitHub issues and
+scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
+you already use does it; you approve the result. Runs entirely on your machine.
 
 ![The Taskuary timeline: every inbound item on a day rail, with the AI-drafted reply ready to approve](docs/screenshot-timeline.png)
 
-- **Everything in, one timeline.** Mail, Teams, Slack, and scheduled reports land on one
-  day-rail feed. AI triage decides what is a real task, what just needs a reply, and
-  what is noise. No AI connected yet? Nothing is lost — items file quietly until you add one.
-- **Agents do the work.** Point Taskuary at the coding CLI you already use — Claude
-  Code, Codex, Gemini, Cursor, Copilot — and tasks flow to it: it works in your repos,
-  reports back with the diff, and you can message it mid-task (it resumes its session).
-- **You stay in charge.** AI-drafted replies wait for your approve / edit / reject. A
-  kanban board shows every agent's live status. Deterministic policy rules the AI can
-  never override, and a tamper-evident audit log of everything.
+## Why
+
+Work arrives as messages, but work *is* tasks — and you are the translation layer. You
+read the mail, decide what it means, open the ticket, do the thing, and write back. The
+first and last steps are where the day goes.
+
+Taskuary automates the ends and leaves you the middle. Triage reads everything and files
+the noise. Real work becomes a task and goes to your agent, which works in your repos and
+reports back with the diff. Replies come back as drafts. Nothing sends, closes, or ships
+without you — and nothing leaves your machine except the calls you configured.
 
 ## Get started
 
@@ -29,17 +29,15 @@ pip install git+https://github.com/ldbumble/taskuary
 taskuary        # opens http://127.0.0.1:7787
 ```
 
-Python 3.10+ is the only requirement. Then open **Connectors** and click through the
-wizards — each one takes a minute or two:
+Python 3.10+ is all you need. Then, in **Connectors** — a minute or two each:
 
-1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI key. This turns on triage. (A small
-   cheap model is the right choice here; the expensive brain goes in step 3.)
-2. **A channel** — Outlook, Teams, or Slack, so inbound lands on your Timeline.
-3. **A coding agent** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot),
-   Save, Test. Add GitHub (paste a PAT — repos auto-discovered) for the full
-   issue → work → report → close loop.
-4. Then build **Reports**: connect SQL Server once (or use MCP / SQLite / REST / RSS)
-   and schedule queries with an AI prompt that summarizes the results onto your Timeline.
+1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI key. Triage is now on. (A small,
+   cheap model is the right pick here; the expensive one goes in step 3.)
+2. **A channel** — Outlook, Teams, or Slack. Mail starts landing on the Timeline.
+3. **Your coding CLI** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot), Save,
+   Test. Add a GitHub PAT and repos are discovered for you.
+4. **Reports** (optional) — point at SQL Server / MCP / SQLite / REST / RSS and schedule a
+   query with an AI prompt; the summary lands on your Timeline.
 
 No cloud key at all? Set **Settings → Triage & routing → Triage brain** to your CLI agent
 and skip step 1 — one brain does everything, slower and pricier per message. See
@@ -161,7 +159,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 74 tests, ~2s, no network needed
+pytest -q                   # 96 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install
@@ -200,7 +198,31 @@ The single best first PR is a **report connector — ~15 lines** turns any syste
 [CONTRIBUTING.md](CONTRIBUTING.md) has the recipe, the repo map, and the dev setup;
 [good first issues](https://github.com/ldbumble/taskuary/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 are seeded and waiting. Tests run offline in ~2 seconds — no credentials needed to hack
-on the funnel.
+on the funnel. Please read the [Code of Conduct](CODE_OF_CONDUCT.md); security issues go
+through [SECURITY.md](SECURITY.md), not a public issue.
+
+## Looking for collaborators
+
+Taskuary is early and I'd rather build it with people than alone. I'm looking for a few
+regulars, not one-off drive-bys — though a single good PR is very welcome too.
+
+**Where help goes furthest right now:**
+
+- **Connectors** — every row marked 🗺 in the table above, plus whatever system runs *your*
+  day. One executor function and you own that integration.
+- **Non-Windows polish** — the terminal, desktop shell, and agent presets get the most
+  testing on Windows. macOS and Linux users who hit rough edges (and fix them) are gold.
+- **Agent CLIs beyond the presets** — if your CLI needs different flags to run headless,
+  that's a preset PR and a paragraph in the README.
+- **Design and UX** — this was built by one person with strong opinions and no designer.
+  Argue with them.
+- **Real-world war stories** — run it on your own inbox for a week and open an issue about
+  what broke, what felt wrong, or what you kept doing by hand anyway. That feedback shapes
+  the roadmap more than feature requests do.
+
+Want a bigger piece? Say so in an issue — worktree isolation, a notifications/tray shell,
+and a plugin API for connectors are all on the roadmap and all up for grabs. Interested in
+maintaining an area long-term? Open an issue titled `maintainer: <area>` and let's talk.
 
 ## Credits
 

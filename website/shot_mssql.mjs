@@ -7,6 +7,6 @@ await p.evaluate(() => [...document.querySelectorAll("div")].find((d) => d.child
 await new Promise((r) => setTimeout(r, 1200));
 await p.evaluate(() => [...document.querySelectorAll("p,div")].find((d) => d.textContent === "Microsoft SQL Server" && d.childElementCount === 0)?.click());
 await new Promise((r) => setTimeout(r, 1200));
-await p.screenshot({ path: "website/mssql.png" });
+await p.screenshot({ path: new URL("./mssql.png", import.meta.url) });
 await b.close();
 console.log("ok");

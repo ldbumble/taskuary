@@ -301,8 +301,8 @@ export const splitQuoted = (text) => {
   return { latest: t.slice(0, at).trim(), quoted: t.slice(at).trim() };
 };
 
-// Standalone Taskuary stamps times in LOCAL time (FanApp's were UTC Graph stamps) -
-// parse as-is; a trailing Z still wins if a source provides real UTC.
+// Times are stamped in LOCAL time - parse as-is; a trailing Z still wins when a
+// source provides real UTC (Graph does).
 const asUtc = (s) => new Date(s.replace(" ", "T"));
 export const fmtTime12 = (s) => s ? asUtc(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
 export const fmtDateTime = (s) => s ? asUtc(s).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";

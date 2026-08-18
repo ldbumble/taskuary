@@ -2,7 +2,7 @@
 write themselves in. Two mechanisms, both non-destructive to hand-written prose:
 - a marker-fenced 'Connected systems' block in SOUL.md, rebuilt on every connector/source
   change (only the fenced block is touched);
-- the GitHub repository map (FanApp's update_repo_map): discovery only ADDS lines for
+- the GitHub repository map: discovery only ADDS lines for
   repos missing from the doc, so per-repo notes the owner wrote are preserved.
 """
 import json

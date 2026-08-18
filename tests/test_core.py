@@ -85,9 +85,9 @@ class CoreTests(unittest.TestCase):
 
     def test_skip_policy_hides_flood_senders(self):
         s = MemoryStore()
-        s.save_policy({'Name': 'skip:api', 'Kind': 'sender', 'Pattern': 'apinotification@pointclickcare.com',
+        s.save_policy({'Name': 'skip:api', 'Kind': 'sender', 'Pattern': 'noreply@vendor.example',
                        'Action': 'skip', 'Reason': 'flood', 'SortOrder': 10, 'Active': 1}, 't')
-        out = ingest_message(s, self.msg(external_id='sk1', from_email='APINotification@pointclickcare.com'), llm=TASK_LLM)
+        out = ingest_message(s, self.msg(external_id='sk1', from_email='NoReply@vendor.example'), llm=TASK_LLM)
         self.assertEqual((out['status'], out['task_id']), ('skipped', None))
         self.assertEqual(s.feed(), [])   # never on the timeline, unlike 'ignored'
         self.assertEqual(ingest_message(s, self.msg(external_id='sk1'))['status'], 'duplicate')

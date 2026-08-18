@@ -58,12 +58,12 @@ class DocSyncTests(unittest.TestCase):
         docsync.update_repo_map(s, [{'full_name': 'o/app', 'description': None, 'archived': False}])
         self.assertIn('fill me in', s.get_doc('soul'))
         # re-discovery with a token + AI: README summarized, placeholder healed in place
-        with mock.patch('taskuary.github.readme_text', return_value='# App\n\nPayroll importer for Intacct.'):
+        with mock.patch('taskuary.github.readme_text', return_value='# App\n\nPayroll importer for the ledger.'):
             docsync.update_repo_map(s, [{'full_name': 'o/app', 'description': None, 'archived': False}],
-                                    tok='t', llm=lambda sys_, usr: 'Payroll importer for Intacct.')
+                                    tok='t', llm=lambda sys_, usr: 'Payroll importer for the ledger.')
         soul = s.get_doc('soul')
         self.assertNotIn('fill me in', soul)
-        self.assertIn('**o/app**: Payroll importer for Intacct.', soul)
+        self.assertIn('**o/app**: Payroll importer for the ledger.', soul)
         self.assertEqual(soul.count('o/app'), 1)
 
 

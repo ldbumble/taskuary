@@ -5,5 +5,5 @@ await p.setViewport({ width: 1440, height: 1000 });
 await p.goto(process.argv[2], { waitUntil: "networkidle0" });
 await p.evaluate(() => [...document.querySelectorAll("div")].find((d) => d.childElementCount === 0 && d.textContent === "Connectors")?.click());
 await new Promise((r) => setTimeout(r, 1200));
-await p.screenshot({ path: "website/connectors.png" });
+await p.screenshot({ path: new URL("./connectors.png", import.meta.url) });
 await b.close();

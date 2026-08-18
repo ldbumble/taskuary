@@ -13,6 +13,6 @@ await p.evaluate(() => {
   rows[rows.length - 1]?.click();
 });
 await new Promise((r) => setTimeout(r, 1500));
-await p.screenshot({ path: "docs/screenshot-timeline.png", clip: { x: 0, y: 0, width: 1600, height: 860 } });
+await p.screenshot({ path: new URL("../docs/screenshot-timeline.png", import.meta.url), clip: { x: 0, y: 0, width: 1600, height: 860 } });
 await b.close();
 console.log("timeline shot ok");

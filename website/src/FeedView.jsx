@@ -704,8 +704,8 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
   );
 };
 
-// The pending draft text for this message's review - stored on the review row in the
-// standalone (FanApp pulled it from a responder run; keep that as the fallback).
+// The pending draft text for this message's review - stored on the review row; a
+// responder run's result is the fallback for drafts written before that column existed.
 const pendingDraft = (detail, open) => {
   const rv = (detail.reviews || []).find((r) => r.ReviewId === open.ReviewId);
   if (rv?.DraftText) return rv.DraftText;

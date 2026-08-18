@@ -72,7 +72,7 @@ export default function BoardView({ onOpenTask, onOpenTerminal }) {
     if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0] }));
   }, [agents, nt.agent]);
   useEffect(() => {
-    // repo choices = the GitHub sources the connector discovered (FanApp, TopE, ...)
+    // repo choices = the GitHub sources the connector discovered
     api.get("/api/sources").then(({ data }) => {
       const gh = (data.data || []).filter((s) => s.Channel === "github" && s.Active).map((s) => s.Address);
       setRepos(gh);

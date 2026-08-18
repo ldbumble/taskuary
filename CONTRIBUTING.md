@@ -21,6 +21,12 @@ npm run build        # builds into taskuary/web/ (COMMIT the built assets)
 node render_check.mjs http://127.0.0.1:7787   # headless smoke: every tab, zero console errors
 ```
 
+The headless checks drive Microsoft Edge through `puppeteer-core` (a devDependency — no
+browser is downloaded). `website/shot_*.mjs` regenerate the README screenshots against a
+demo dataset: `TASKUARY_HOME=/tmp/demo python website/seed_demo.py`, start the server on
+that home, then `node website/shot_timeline.mjs http://127.0.0.1:7787`. If Edge lives
+somewhere else on your machine, edit the `executablePath` at the top of the script.
+
 ## Repo map
 
 | path | what lives there |

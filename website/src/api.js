@@ -1,4 +1,4 @@
-// Same axios surface the FanApp components were written against; the local server
+// One axios instance for the whole UI; the local server
 // needs no auth (localhost) - if [server].token is set, put it in localStorage.
 import axios from "axios";
 const api = axios.create({ baseURL: "" });

@@ -230,6 +230,12 @@ def seed_text(store, tid: int, instruction: str = None) -> str:
     if m: parts.append(f"It came in on {m.get('Channel')} from {m.get('FromName') or m.get('FromEmail')}: "
                        f"{(m.get('BodyText') or '')[:3000]}")
     elif t.get('Summary'): parts.append(str(t['Summary'])[:3000])
+    # a paused session left a handover note: carry it in, or the next agent redoes the digging
+    from .coder import PAUSE_MARKER
+    note = next((c['Body'] for c in reversed(store.list_comments(tid))
+                 if str(c.get('Body') or '').startswith(PAUSE_MARKER)), None)
+    if note: parts.append(f"An earlier session on this task was paused and left this handover - "
+                          f"continue from it, do not start over: {note[:3000]}")
     return ' '.join(' '.join(parts).split())
 
 

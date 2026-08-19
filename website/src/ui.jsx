@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Button, Chip, CircularProgress, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import BlockIcon from "@mui/icons-material/Block";
 import api from "./api";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -10,7 +11,8 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import TagIcon from "@mui/icons-material/Tag";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import { ACTION_COLORS, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, ACCENT2, PANEL2 } from "./theme.jsx";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { ACTION_COLORS, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
@@ -138,43 +140,67 @@ export const DiffBlock = ({ text }) => {
 };
 
 // The coder's report, parsed into labeled sections instead of a wall of text.
-const REPORT_COLORS = { Triage: "#0e7490", Determination: "#7e22ce", Actions: "#b45309", Summary: "#15803d" };
+const REPORT_COLORS = { Triage: "#0e7490", Determination: "#7e22ce", Actions: "#b45309", Summary: "#15803d",
+  Found: "#0e7490", Did: "#b45309", Next: "#7e22ce" };
+/* The four things you can do with a timeline item were four buttons of four different sizes
+   and colours, two rows apart, half of them right-aligned - so the reader had to hunt for
+   the set. One list, one shape per row: what it is, and what it does. */
+export const ChoiceRow = ({ icon, label, hint, tint = "#eef0ff", onClick, first, busy }) => (
+  <Box onClick={busy ? undefined : onClick}
+    sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.25, py: 0.95, cursor: busy ? "default" : "pointer",
+      borderTop: first ? "none" : `1px solid ${BORDER}`, transition: "background .12s",
+      "&:hover": { bgcolor: busy ? "transparent" : "#f7f8fa" }, "&:hover .thubChoiceGo": { opacity: 1, transform: "none" } }}>
+    <Box sx={{ width: 26, height: 26, borderRadius: 1.5, bgcolor: tint, flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</Box>
+    <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.3 }}>{label}</Typography>
+      {hint && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{hint}</Typography>}
+    </Box>
+    {busy ? <CircularProgress size={13} />
+      : <ChevronRightIcon className="thubChoiceGo" sx={{ fontSize: 16, color: FAINT, opacity: 0,
+          transform: "translateX(-3px)", transition: "opacity .12s, transform .12s" }} />}
+  </Box>
+);
+
+export const ChoiceList = ({ children }) => (
+  <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden" }}>{children}</Box>
+);
+
 export const CoderReport = ({ body }) => {
-  const text = String(body || "").replace(/^CODER REPORT\n?/, "").trim();
+  const text = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim();
   // ^ anchored per line, and the label eats spaces but NOT the newline - letting \s* run on
   // swallowed the separator, so an all-empty report rendered "TRIAGE -> Determination:"
-  const parts = text.split(/^(Triage|Determination|Actions|Summary):[ \t]*/m);
-  const sections = [];
+  const parts = text.split(/^(Triage|Determination|Actions|Summary|Found|Did|Next):[ \t]*/m);
+  const rows = [];
   for (let i = 1; i < parts.length; i += 2) {
     const t = (parts[i + 1] || "").trim();
-    if (t) sections.push({ label: parts[i], text: t });
+    if (t) rows.push({ label: parts[i], text: t });
   }
-  // a wrap-up is free prose, not the headless contract - show it as written
-  if (!sections.length) {
-    return text ? <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: "#1c2536" }}>{text}</Typography> : null;
+  // free prose (a shell session, a note written by hand) - show it as written
+  if (!rows.length) {
+    return text ? <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK }}>{text}</Typography> : null;
   }
   return (
-    <Box>
-      {sections.map((s, i) => (
-        <Box key={s.label} sx={{ display: "flex", gap: 1.25, py: 0.9,
-          borderTop: i ? "1px solid #e9ddfb" : "none" }}>
-          <Typography variant="caption" sx={{ ...mono, color: REPORT_COLORS[s.label], fontWeight: 700,
-            fontSize: 9.5, letterSpacing: 1, textTransform: "uppercase", width: 96, flexShrink: 0, pt: 0.25 }}>
-            {s.label}
-          </Typography>
-          <Typography variant="body2" sx={{ color: "#1c2536", lineHeight: 1.55, whiteSpace: "pre-wrap", minWidth: 0 }}>
-            {s.text}
-          </Typography>
-        </Box>
-      ))}
+    <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+      <Box component="tbody">
+        {rows.map((r, i) => (
+          <Box component="tr" key={r.label} sx={{ verticalAlign: "top" }}>
+            <Box component="td" sx={{ width: 104, px: 1, py: 0.85, bgcolor: PANEL2, whiteSpace: "nowrap",
+              borderTop: i ? `1px solid ${BORDER}` : "none", borderRight: `1px solid ${BORDER}` }}>
+              <Typography variant="caption" sx={{ ...mono, color: REPORT_COLORS[r.label] || DIM, fontWeight: 700,
+                fontSize: 9.5, letterSpacing: 1, textTransform: "uppercase" }}>{r.label}</Typography>
+            </Box>
+            <Box component="td" sx={{ px: 1.25, py: 0.85, borderTop: i ? `1px solid ${BORDER}` : "none" }}>
+              <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere" }}>{r.text}</Typography>
+            </Box>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 };
 
-// WHO does the work and on WHICH model. One control, used by every run surface (Board
-// dialog, task header, send-to-agent) so the choice reads the same everywhere. The agent
-// list comes from your configured CLIs; the model list from that CLI's known models plus
-// whatever the profile sets as its default.
 export const useAgents = () => {
   const [agents, setAgents] = useState([]);
   const [models, setModels] = useState({});
@@ -215,7 +241,7 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
 // "This isn't ours." Says so about THIS item and teaches the classifier at the same time:
 // the note is saved to memory, and triage reads it on every later message from that sender.
 // Editable before saving, because the reason is the part that has to be right.
-export const NotMine = ({ messageId, onDone }) => {
+export const NotMine = ({ messageId, onDone, row, first }) => {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [scope, setScope] = useState("sender");
@@ -239,7 +265,11 @@ export const NotMine = ({ messageId, onDone }) => {
       ✓ noted — triage will apply this to {saved.scope === "global" ? "every sender" : saved.scopeKey} from now on
     </Typography>
   );
-  if (!open) return (
+  if (!open) return row ? (
+    <ChoiceRow first={first} tint="#eef0f3" onClick={() => setOpen(true)}
+      icon={<BlockIcon sx={{ fontSize: 15, color: "#8a94a6" }} />}
+      label="Not our task" hint="say why once and triage remembers it for this sender" />
+  ) : (
     <Button size="small" sx={{ color: "#8a94a6", fontSize: 11 }} onClick={() => setOpen(true)}
       title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
   );
@@ -271,7 +301,7 @@ export const NotMine = ({ messageId, onDone }) => {
 // Hand ANY timeline item to a coding agent: your prompt + the item's context (subject,
 // sender, full body, thread, the operator docs) go down together. Items that aren't a
 // task yet become one server-side, so the run has somewhere to live and stream into.
-export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
+export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first }) => {
   const [open, setOpen] = useState(false);
   const { agents, models } = useAgents();
   const [agent, setAgent] = useState("coder");
@@ -301,7 +331,11 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
       <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>send another</Button>
     </Box>
   );
-  if (!open) return (
+  if (!open) return row ? (
+    <ChoiceRow first={first} tint="#f5f3ff" onClick={() => setOpen(true)}
+      icon={<SmartToyIcon sx={{ fontSize: 15, color: "#7e22ce" }} />}
+      label="Send it to a coding agent" hint="opens a live session on a new task — you watch it work" />
+  ) : (
     <Button size="small" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />} onClick={() => setOpen(true)}
       sx={{ fontSize: 11.5, color: "#7e22ce" }}>Send to coding agent</Button>
   );

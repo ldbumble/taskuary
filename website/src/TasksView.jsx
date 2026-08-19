@@ -15,6 +15,7 @@ import { Handoff } from "./Handoff.jsx";
 import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
+import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import { TerminalPane } from "./TerminalView.jsx";
 
@@ -91,12 +92,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // result lands right here under where the terminal was.
   const wrapUp = async () => {
     if (!term) return;
-    setWrapping(true); setErr("");
+    setWrapping("wrap"); setErr("");
     try {
       const { data } = await api.post(`/api/terminals/${term.sid}/wrap`, { task_id: selected, close: true });
       setWrapped({ report: data.report, drafting: data.drafting });
       setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
+    setWrapping(false);
+  };
+  // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
+  // out becomes a handover note that gets typed into the NEXT session, because a pty has no
+  // resumable id - killing the session used to throw all of that away.
+  const pause = async () => {
+    if (!term) return;
+    setWrapping("pause"); setErr("");
+    try {
+      const { data } = await api.post(`/api/terminals/${term.sid}/pause`, { task_id: selected });
+      setWrapped({ note: data.note });
+      setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not pause the session"); }
     setWrapping(false);
   };
   useEffect(() => { setWrapping(false); setWrapped(null); }, [selected]);
@@ -221,17 +235,21 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* the session just closed: its write-up takes the space the terminal had, so the
                     result of the work is the thing you are looking at */}
                 {wrapped ? (
-                  <Box sx={{ ...card, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe" }}>
+                  <Box sx={{ ...card, bgcolor: wrapped.note ? "#fff8e6" : "#f5f3ff",
+                    border: `1px solid ${wrapped.note ? "#f3ddb8" : "#ddd6fe"}` }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-                      <DoneAllIcon sx={{ fontSize: 17, color: "#15803d" }} />
+                      {wrapped.note ? <PauseCircleIcon sx={{ fontSize: 17, color: "#b45309" }} />
+                        : <DoneAllIcon sx={{ fontSize: 17, color: "#15803d" }} />}
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, flex: 1 }}>
-                        Session closed — here is what it did
+                        {wrapped.note ? "Paused — here is where it got to" : "Session closed — here is what it did"}
                       </Typography>
                       <Button size="small" sx={{ fontSize: 11 }} onClick={() => setWrapped(null)}>dismiss</Button>
                     </Box>
-                    <CoderReport body={wrapped.report} />
+                    <CoderReport body={wrapped.report || wrapped.note} />
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>
-                      {wrapped.drafting
+                      {wrapped.note
+                        ? "Nothing was sent and nothing closed — the task is still open. Start a session again and the agent is handed this note, so it carries on instead of starting over."
+                        : wrapped.drafting
                         ? "The reply to whoever wrote in is drafted and waiting in Review — approving it sends it and closes this task."
                         : "Nothing to reply to on this task, so it closed here."}
                     </Typography>
@@ -242,22 +260,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
                       </Typography>
-                      <Button size="small" variant="contained" disableElevation disabled={wrapping}
-                        startIcon={wrapping ? <CircularProgress size={11} sx={{ color: "#fff" }} />
+                      <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
+                        startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
                           : <DoneAllIcon sx={{ fontSize: 15 }} />}
                         sx={{ fontSize: 11.5, bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
                         onClick={wrapUp}>
-                        {wrapping ? "wrapping up…" : "Done — wrap it up"}
+                        {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
                       </Button>
-                      <Button size="small" sx={{ fontSize: 11 }}
-                        onClick={async () => { await api.delete("/api/terminals/" + term.sid).catch(() => {}); setTerm(null); }}>
-                        end session
+                      <Button size="small" disabled={!!wrapping} sx={{ fontSize: 11, color: DIM }}
+                        startIcon={wrapping === "pause" ? <CircularProgress size={11} /> : <PauseCircleIcon sx={{ fontSize: 15 }} />}
+                        title="Stop for now without losing what it worked out - the next session is handed its note"
+                        onClick={pause}>
+                        {wrapping === "pause" ? "saving what it found…" : "Pause — save what it found"}
                       </Button>
                     </Box>
                     <TerminalPane sid={term.sid} height="55vh" onExit={() => findTerm(selected)} />
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#0e7490", display: "block", mt: 0.5 }}>
-                        Closing the session and writing up what is on screen — the agent is not asked anything.
+                        {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."
+                          : "Closing the session and writing up what is on screen — the agent is not asked anything."}
                       </Typography>
                     )}
                   </>

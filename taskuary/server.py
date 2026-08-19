@@ -369,10 +369,11 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
             if rv.get('TaskId'):
                 store.add_comment(rv['TaskId'], ACTOR, 'human', f'NOT SENT - {send_err}. The approved text is above.')
     if body.verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
-    # reply-only items are not real tasks: answering them IS the work, so close on decision
+    # reply-only items are not real tasks: answering them IS the work, so close on decision -
+    # and a coder-finished task waits on exactly this send, so sending it closes that too
     if body.verb in ('approve', 'edit') and rv.get('TaskId'):
         t = store.get_task(rv['TaskId'])
-        if (t or {}).get('Kind') == 'reply' and t.get('Status') not in ('done', 'dropped'):
+        if ((t or {}).get('Kind') == 'reply' or rv.get('Kind') == 'draft_reply') and t.get('Status') not in ('done', 'dropped'):
             store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
     store.audit('review', rid, body.verb, ACTOR, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
     return {'ok': True, 'status': verb2status[body.verb], 'sent': sent, 'send_error': send_err}
@@ -381,17 +382,12 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
 def draft_review(rid: int):
     """(Re)generate the AI draft for a pending review inline. The main AI writes replies -
     a coding CLI is the wrong (and expensive) tool for two sentences of email - unless the
-    owner deliberately configured an agent named `responder`."""
+    owner deliberately configured an agent named `responder`. On a review a coder closed,
+    the redraft reads its report, so it reports the work instead of promising it."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
-    if store.get_agent('responder'):
-        out = hub_agents.dispatch(store, rv['TaskId'], 'responder', 'Draft the reply this message needs.', ACTOR)
-        if out['status'] != 'done': raise HTTPException(502, 'draft agent failed - see the run log')
-        store.update_review_draft(rid, out['result'], out['run_id'])
-        store.audit('review', rid, 'redraft', ACTOR, run_id=out['run_id'])
-        return {'ok': True, 'draft': out['result'], 'runId': out['run_id']}
     try:
-        draft = responder.draft_for_review(store, rv['TaskId'], rid)
+        draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
     except Exception as e:
         raise HTTPException(422, str(e)[:300])
     store.audit('review', rid, 'redraft', ACTOR)

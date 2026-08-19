@@ -517,10 +517,51 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(parse_cli_json('plain'), ('plain', None))
 
     def test_coder_report_contract(self):
-        out = 'work\n' + RESULT_MARKER + '\n{"summary": "s", "needs_you": "", "email_reply": "r"}'
+        out = 'work\n' + RESULT_MARKER + '\n{"summary": "s", "actions": "a", "needs_you": ""}'
         rep = parse_coder_result(out)
-        self.assertEqual((rep['parsed'], rep['needs_you'], rep['email_reply']), (True, '', 'r'))
+        self.assertEqual((rep['parsed'], rep['needs_you'], rep['summary']), (True, '', 's'))
+        self.assertNotIn('email_reply', rep)          # the coder reports; the responder writes the email
         self.assertFalse(parse_coder_result('no marker')['parsed'])
+
+    def test_finished_coder_hands_the_reply_to_the_responder(self):
+        """The coder does not write email. It closes the work and reports; the SAME responder
+        that answers reply-only mail turns that report into the draft the owner approves - and
+        the draft has to survive the close, which used to supersede it on the spot."""
+        from unittest import mock
+        from taskuary.coder import run_coding_task
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'importer is down', 'Kind': 'coding'}, 'o')
+        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Subject': 'importer is down',
+                       'FromEmail': 'ap@client.com', 'SentAt': '2026-08-18 09:00', 'BodyText': 'nothing imported'})
+        rid = s.start_run(tid, 'coder', 'i', 'o')
+        res = RESULT_MARKER + '\n' + json.dumps({'summary': 'ran the import', 'actions': 'fixed the date parse',
+                                                 'determination': 'a bad date killed the batch', 'needs_you': ''})
+        seen = {}
+        def fake_llm(system, user, **kw):
+            seen['system'], seen['user'] = system, user
+            return 'The import is running again - a bad date had stopped the batch.'
+        with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'done', 'result': res}), \
+             mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
+            run_coding_task(s, tid, 'o', None, {})
+        pend = s.list_reviews('pending')
+        # the work is done, the answer is not sent - so the task waits on the owner, not on nobody
+        self.assertEqual((len(pend), pend[0]['Kind'], s.get_task(tid)['Status']), (1, 'draft_reply', 'waiting'))
+        self.assertIn('import is running again', pend[0]['DraftText'])
+        self.assertIn('fixed the date parse', seen['user'])            # the report is the source of truth
+        self.assertIn('FINISHED', seen['system'])                      # …and it reports, never promises
+
+    def test_a_configured_responder_agent_still_wins(self):
+        from unittest import mock
+        from taskuary import responder
+        s = MemoryStore()
+        tid = s.create_task({'Title': 't'}, 'o')
+        s.upsert_agent('responder', 'reply', 'cli', '{"cmd": "claude"}')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})
+        with mock.patch('taskuary.agents.dispatch', return_value={'run_id': 1, 'status': 'done', 'result': 'mine'}) as d:
+            self.assertEqual(responder.write_draft(s, tid, rid, 'Actions: fixed it'), 'mine')
+        self.assertIn('fixed it', d.call_args.args[3])
+        self.assertEqual(s.get_review(rid)['DraftText'], 'mine')
 
     def test_answered_question_closes_and_only_approval_escalates(self):
         """Finishing the work - including just answering - closes the task. Escalation means

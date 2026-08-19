@@ -323,6 +323,20 @@ class ApiTests(unittest.TestCase):
         self.assertIn('mailbox not found', out['send_error'])
         self.assertTrue(any('NOT SENT' in cm['Body'] for cm in server.store.list_comments(tid)))
 
+    def test_sending_the_coders_reply_closes_the_task_it_was_waiting_on(self):
+        """A coding task the coder finished waits on one thing: you sending the answer. The
+        send is the last step, so it closes the task - it must not sit in 'waiting' forever."""
+        tid = c.post('/api/tasks', json={'Title': 'importer down', 'Kind': 'coding'}).json()['taskId']
+        server.store.update_task(tid, {'Status': 'waiting'}, 'coder')
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:BBB', 'Channel': 'email',
+                                        'SourceName': 'me@corp.com', 'FromEmail': 'ap@client.com',
+                                        'BodyText': 'nothing imported', 'Status': 'routed'})
+        rid = server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
+                                       'DraftText': 'Running again - a bad date had stopped it.'})
+        with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['ap@client.com']}):
+            c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'})
+        self.assertEqual(server.store.get_task(tid)['Status'], 'done')
+
     def test_handoff_drafts_then_sends(self):
         tid = c.post('/api/tasks', json={'Title': 'AD account for Christina'}).json()['taskId']
         with mock.patch.object(server.outbound, 'draft_handoff', return_value='Ross - this one is yours: …') as d:

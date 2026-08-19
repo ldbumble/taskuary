@@ -9,8 +9,10 @@ from . import github as gh
 
 RESULT_MARKER = '===RESULT JSON==='
 REPORT_CONTRACT = ('\n\nEnd your output with the marker ' + RESULT_MARKER + ' on its own line, followed by ONE JSON object:\n'
-                   '{"summary": "...", "triage": "...", "determination": "...", "actions": "...",\n'
-                   ' "email_reply": "<reply to the original sender>", "needs_you": ""}\n'
+                   '{"summary": "...", "triage": "...", "determination": "...", "actions": "...", "needs_you": ""}\n'
+                   'Report the work; do NOT write the email. The responder turns your report into the '
+                   "owner's reply, in their voice, and the owner approves it before anything sends - so say "
+                   'plainly what you did, what you found and what it means for whoever asked.\n'
                    'needs_you is the ONLY thing that keeps this task open. Leave it "" whenever you finished '
                    'the work - INCLUDING when the work was answering a question - and the task closes with '
                    'your report attached. Fill it in ONLY when the owner must approve or decide something in '
@@ -27,7 +29,7 @@ def github_cfg(store) -> dict:
     return g
 
 
-FIELDS = ('summary', 'triage', 'determination', 'actions', 'email_reply', 'needs_you')
+FIELDS = ('summary', 'triage', 'determination', 'actions', 'needs_you')
 
 def parse_coder_result(out: str) -> dict:
     """`needs_you` is the run's whole control flow, so a report we could not parse is itself
@@ -39,6 +41,21 @@ def parse_coder_result(out: str) -> dict:
         return {k: str(j.get(k) or '') for k in FIELDS} | {'parsed': True}
     except Exception:
         return dict.fromkeys(FIELDS, '') | {'summary': (out or '')[-800:], 'parsed': False}
+
+
+def resolution_text(rep: dict) -> str:
+    return '\n'.join(f'{k.capitalize()}: {rep[k]}' for k in ('determination', 'actions', 'summary') if rep.get(k))
+
+
+def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
+    """The coder reported; the responder writes what the sender actually reads. One voice for
+    every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
+    that fails to write still leaves the review standing: 'Draft with AI' retries it."""
+    from . import responder
+    rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply',
+                            'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
+    try: responder.write_draft(store, task_id, rid, resolution_text(rep), 'coder')
+    except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
 
 
 def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None, github_cfg: dict = None,
@@ -96,11 +113,12 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
         if tok and issue:
             try: gh.close_issue(tok, repo, issue['number'], f'Closed by the Taskuary coder.\n\n{rep["summary"]}')
             except Exception as e: logger.warning(f'issue close failed: {e}')
-        if rep['email_reply'] and mid:
-            store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': out['run_id'], 'Kind': 'draft_reply',
-                              'DraftText': rep['email_reply'], 'Status': 'pending',
-                              'Reason': 'coder resolved the task - reply awaiting approval'})
-        store.update_task(task_id, {'Status': 'done'}, 'coder')
+        # the work is finished but the answer has not left the building: hold at 'waiting on
+        # you' until the reply is decided (approve/edit sends and closes, no-reply just closes).
+        # Marking it done here would supersede the very review it just raised. Nothing to reply
+        # to -> nothing to wait for, so it closes.
+        if mid: raise_reply(store, task_id, mid, out['run_id'], rep)
+        store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, 'coder')
     else:
         # waiting on a person, and the raw status says so too - the board column, the chip and
         # Status all have to agree, or you get "escalated but in_progress" again

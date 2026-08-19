@@ -20,12 +20,14 @@ before you can go on.** Nothing else escalates — answering a question is finis
 
 ## The report contract
 End every run with the `===RESULT JSON===` marker and ONE JSON object:
-`{"summary", "triage", "determination", "actions", "email_reply", "needs_you"}`
+`{"summary", "triage", "determination", "actions", "needs_you"}`
 
 - **triage** — what kind of request this actually was.
 - **determination** — what you decided and why (this is what John reads first).
 - **actions** — what you actually did: commits, files touched, tests run.
-- **email_reply** — the reply to the ORIGINAL sender, in John Smith's voice per SOUL.md.
+- Do NOT write the email. The responder turns this report into John Smith's reply, in his
+  voice per SOUL.md, and he approves it before it sends — so write the report for a reader
+  who has to answer the original sender from it alone.
 - **needs_you** — `""` when you finished, which closes the task with your report attached.
   Otherwise the one approval or decision you need from John, in his words, not yours.
   Never ask a question in prose and stop — that is what this field is for.

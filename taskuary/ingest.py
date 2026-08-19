@@ -192,13 +192,8 @@ def _auto_code(store, tid):
 def _auto_draft(store, tid, rid):
     """A reply needs an answer, not an agent: the MAIN AI writes it and it waits for approval.
     A CLI agent named `responder` takes over only if the owner deliberately configured one."""
-    from . import agents as hub_agents, responder
-    try:
-        if store.get_agent('responder'):
-            out = hub_agents.dispatch(store, tid, 'responder', 'Draft the reply this message needs.', 'auto-draft')
-            if out['status'] == 'done': store.update_review_draft(rid, out['result'], out['run_id'])
-            return
-        responder.draft_for_review(store, tid, rid)
+    from . import responder
+    try: responder.write_draft(store, tid, rid, actor='auto-draft')
     except Exception as e:
         logger.warning(f'auto-draft failed for task {tid}: {e}')
 

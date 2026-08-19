@@ -72,8 +72,8 @@ export default function BoardView({ onOpenTask }) {
   const [repos, setRepos] = useState([]);
   const { agents, models } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
-  // how = the ONE way this task gets worked. Two agents on one task (a live session plus a
-  // headless run) was the confusing part, so it is a choice, not two buttons.
+  // how = does an agent start on it now, or does it just get filed. There is no third
+  // option: work always happens in a session you can watch and talk to.
   const [nt, setNt] = useState({ Title: "", Summary: "", how: "live", repo: "", agent: "coder", model: "" });
 
   const load = useCallback(async () => {
@@ -112,11 +112,8 @@ export default function BoardView({ onOpenTask }) {
     const { data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: "coding",
       Tags: nt.repo ? `repo:${nt.repo}` : null });
     setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "" }));
-    // the details field IS the prompt - it is typed into the live session, or sent down as
-    // the headless run's instruction, depending on how you chose to work it
+    // the details field IS the prompt - it gets typed into the session
     if (nt.how === "live") return onOpenTask(data.taskId, { start: true, agent: nt.agent, model: nt.model });
-    if (nt.how === "headless") await api.post(`/api/tasks/${data.taskId}/code`, { repo: nt.repo || null,
-      agent: nt.agent || null, model: nt.model || null, instruction: nt.Summary || null });
     load();
   };
 
@@ -218,8 +215,7 @@ export default function BoardView({ onOpenTask }) {
               How it gets worked — one agent, one way
             </Typography>
             <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}>
-              <MenuItem value="live" sx={{ fontSize: 12.5 }}>Live {nt.agent} session — opens the task, prompt typed in, you can talk to it</MenuItem>
-              <MenuItem value="headless" sx={{ fontSize: 12.5 }}>Headless run — issue → work → report, nothing to watch</MenuItem>
+              <MenuItem value="live" sx={{ fontSize: 12.5 }}>Start {nt.agent} on it — opens the task, prompt typed in, you can talk to it</MenuItem>
               <MenuItem value="file" sx={{ fontSize: 12.5 }}>Just file it — nobody starts working yet</MenuItem>
             </Select>
           </Box>

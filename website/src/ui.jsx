@@ -287,6 +287,7 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
       const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
         { agent, model: model || null, instruction: prompt.trim() || null });
       setSent(data); setPrompt("");
+      onOpenTask?.(data.taskId);          // the session IS the page - go watch it
     } catch (e) { setErr(e?.response?.data?.detail || "Could not reach the agent"); }
     setBusy(false);
   };
@@ -294,7 +295,7 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense }) => {
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: dense ? 0.5 : 1 }}>
       <SmartToyIcon sx={{ fontSize: 15, color: "#15803d" }} />
       <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
-        {sent.agent} is on it — {sent.ref}
+        {sent.agent} is on it in a live session — {sent.ref}
       </Typography>
       <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
       <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>send another</Button>

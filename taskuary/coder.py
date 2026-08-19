@@ -47,6 +47,22 @@ def resolution_text(rep: dict) -> str:
     return '\n'.join(f'{k.capitalize()}: {rep[k]}' for k in ('determination', 'actions', 'summary') if rep.get(k))
 
 
+def reply_target(store, task_id: int):
+    """Which message a reply answers: the last one that came IN. Our own sent mail rides in
+    the chain as 'context', and answering that would mail ourselves."""
+    return next((m['MessageId'] for m in reversed(store.list_messages(task_id)) if m.get('Status') != 'context'), None)
+
+
+def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder') -> dict:
+    """One ending for finished work, however it got worked - a headless run, or a live session
+    you wrapped up. The responder drafts the reply the sender gets and the task waits on you to
+    send it; nothing to reply to means nothing to wait for, so it just closes."""
+    mid = reply_target(store, task_id)
+    if mid: raise_reply(store, task_id, mid, run_id, rep)
+    store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
+    return {'drafting': bool(mid), 'message_id': mid}
+
+
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
     """The coder reported; the responder writes what the sender actually reads. One voice for
     every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
@@ -106,19 +122,16 @@ def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None
                           f"Actions: {rep['actions']}\nSummary: {rep['summary']}")
         if not rep['parsed'] and not rep['needs_you']:
             rep['needs_you'] = 'the agent stopped without its report contract - read the run output and decide'
-    msgs = store.list_messages(task_id)
-    mid = msgs[-1].get('MessageId') if msgs else None
+    mid = reply_target(store, task_id)
     needs = rep['needs_you'].strip()
     if not needs:
         if tok and issue:
             try: gh.close_issue(tok, repo, issue['number'], f'Closed by the Taskuary coder.\n\n{rep["summary"]}')
             except Exception as e: logger.warning(f'issue close failed: {e}')
-        # the work is finished but the answer has not left the building: hold at 'waiting on
-        # you' until the reply is decided (approve/edit sends and closes, no-reply just closes).
-        # Marking it done here would supersede the very review it just raised. Nothing to reply
-        # to -> nothing to wait for, so it closes.
-        if mid: raise_reply(store, task_id, mid, out['run_id'], rep)
-        store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, 'coder')
+        # the work is finished but the answer has not left the building: finish() holds it at
+        # 'waiting on you' until the reply is decided (approve/edit sends and closes, no-reply
+        # just closes). Marking it done here would supersede the very review it raises.
+        finish(store, task_id, rep, out['run_id'])
     else:
         # waiting on a person, and the raw status says so too - the board column, the chip and
         # Status all have to agree, or you get "escalated but in_progress" again

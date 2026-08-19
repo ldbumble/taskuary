@@ -10,10 +10,12 @@ import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
+import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import { Handoff } from "./Handoff.jsx";
 import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
@@ -397,7 +399,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <Box sx={{ position: "sticky", top: 60 }}>
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
               decide={decide} onDetails={() => setOpen(sel)} onOpenTask={onOpenTask} onClose={() => setSel(null)}
-              onSkipped={() => { setSel(null); load(); }} />
+              onSkipped={() => { setSel(null); load(); }} onRefresh={() => load()} />
           </Box>
         </Box>
       )}
@@ -536,10 +538,14 @@ const PanelLabel = ({ children }) => (
 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
-const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, onOpenTask, onClose, onSkipped }) => {
+const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, onOpenTask, onClose, onSkipped, onRefresh }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
+  // you usually realise it is somebody else's job while reading it here, not after opening
+  // the Tasks tab - so the hand-off form opens in this panel too
+  const [handoff, setHandoff] = useState(false);
+  useEffect(() => { setHandoff(false); }, [sel.MessageId]);
   const skipSender = async () => {
     const { data } = await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
       Action: "skip", Reason: "flood sender — skipped from the timeline", SortOrder: 10, Active: true });
@@ -656,6 +662,11 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
                   ? <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task {ref(sel.TaskId)} →</Button>
                   : <Button size="small" onClick={onDetails}>See details →</Button>}
                 <SplitTask row={sel} onSplit={() => load()} />
+                {sel.TaskId && (
+                  <Button size="small" startIcon={<ForwardToInboxIcon sx={{ fontSize: 14 }} />}
+                    sx={{ fontSize: 11, color: handoff ? "#4f46e5" : DIM }} onClick={() => setHandoff((h) => !h)}
+                    title="Not ours to do? Send it to the person whose job it is">Hand off</Button>
+                )}
                 <Box sx={{ flex: 1 }} />
                 {/* not ours -> the reason goes to memory, and triage reads it next time */}
                 <NotMine messageId={sel.MessageId} onDone={onSkipped} />
@@ -668,6 +679,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
                       Skip this sender
                     </Button>)}
               </Box>
+
+              {handoff && sel.TaskId && (
+                <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
+                  <PanelLabel>Hand this to a person</PanelLabel>
+                  <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
+                </Box>
+              )}
             </>
           )}
         </Box>

@@ -51,6 +51,31 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(c.delete('/api/terminals/nope').status_code, 404)
         self.assertEqual(c.get('/api/terminals').json()['data'], [])
 
+    def test_wrapping_up_a_session_ends_it_like_a_headless_run(self):
+        """"Done - wrap it up" used to file a comment, mark the task done and leave you with a
+        live shell and no answer to the person who wrote in. It has to end the way a headless
+        run ends: report filed, reply drafted for approval, session gone."""
+        tid = c.post('/api/tasks', json={'Title': 'lookJobCode 325', 'Kind': 'coding'}).json()['taskId']
+        server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:CCC', 'Channel': 'email',
+                                  'SourceName': 'me@corp.com', 'FromEmail': 'john@corp.com',
+                                  'BodyText': 'all CNA should be restricted', 'Status': 'routed'})
+        t = terminal.Term(ECHO, os.getcwd(), 'test')
+        t.task_id, t.agent = tid, 'coder'
+        terminal.SESSIONS[t.sid] = t
+        try:
+            # wrap_up runs on a thread and types into the pty; drive `filed` directly instead
+            with mock.patch.object(terminal, 'wrap_up', lambda term, on_done, **kw: on_done('Flipped 325 to N/N.')), \
+                 mock.patch('taskuary.llm.build_llm', return_value=lambda s, u, **kw: 'Done - 325 no longer gets a mailbox.'):
+                self.assertEqual(c.post(f'/api/terminals/{t.sid}/wrap', json={'task_id': tid}).json()['taskId'], tid)
+            pend = [r for r in server.store.list_reviews('pending') if r['TaskId'] == tid]
+            self.assertEqual((len(pend), pend[0]['Kind']), (1, 'draft_reply'))
+            self.assertIn('no longer gets a mailbox', pend[0]['DraftText'])
+            self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')   # waiting on you to send it
+            self.assertTrue(any('Flipped 325' in cm['Body'] for cm in server.store.list_comments(tid)))
+            self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])     # and the session is gone
+        finally:
+            terminal.close(t.sid)
+
     def test_agent_argv_drops_the_headless_flags(self):
         # -p / --output-format stream-json make the CLI a one-shot pipe; a TUI needs neither
         with mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']):

@@ -10,7 +10,8 @@ import BlockIcon from "@mui/icons-material/Block";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
+import { Handoff } from "./Handoff.jsx";
 import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
@@ -28,12 +29,6 @@ const STATE_FILTERS = [
   { key: "done", label: "done", c: PILL_COLORS.green },
 ];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
-
-// Compact modern select styling shared by the detail-header dropdowns.
-const selSx = { fontSize: 12.5, bgcolor: "#fff", borderRadius: 2,
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: "#e5e8ee" },
-  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#c9cff0" },
-  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#4f46e5" } };
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted }) {
   const [tasks, setTasks] = useState(null);
@@ -90,8 +85,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
     setComment(""); loadDetail(selected);
   };
-  // "We're done": the agent writes its own closing summary, it files under What the agent
-  // did, and the task closes. No copy-pasting out of the terminal.
+  // "We're done": the agent writes its own closing summary, it files under What the agent did,
+  // the responder drafts the reply the sender gets, and the session ends. No copy-pasting out
+  // of the terminal, and no writing the email yourself.
   const wrapUp = async () => {
     if (!term) return;
     setWrapping(true);
@@ -100,8 +96,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   };
   useEffect(() => { setWrapping(false); }, [selected]);
   useEffect(() => {
-    if (!wrapping || detail?.task?.Status !== "done") return;
-    setWrapping(false); loadTasks(); onChanged?.();     // the list still said "agent working"
+    // 'waiting' is the finished state when a reply is drafted and needs your approval, so
+    // waiting for 'done' alone left this spinning forever on exactly the tasks that worked
+    if (!wrapping || !["done", "waiting"].includes(detail?.task?.Status)) return;
+    setWrapping(false); setTerm(null); loadTasks(); onChanged?.();   // the list still said "agent working"
   }, [wrapping, detail, loadTasks, onChanged]);
 
   // The agent stopped because it needs a person. Answering IS the work: "go ahead" hands
@@ -264,7 +262,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <TerminalPane sid={term.sid} height="55vh" onExit={() => findTerm(selected)} />
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#0e7490", display: "block", mt: 0.5 }}>
-                        Asked it to wrap up — its summary lands under <b>What the agent did</b> and the task closes itself.
+                        Asked it to wrap up — that prompt in the terminal is how it gets asked. Its summary files under
+                        {" "}<b>What the agent did</b>, the reply to whoever wrote in goes to <b>Review</b> for your
+                        approval, and this session ends itself.
                       </Typography>
                     )}
                   </>
@@ -413,71 +413,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     </Box>
   );
 }
-
-// Some work is not ours to do: hand it to the person whose job it is, with the AI writing
-// the forward message out of the task's own context (systems, ids, errors) so you are not
-// retyping the thread into an email.
-const msgOf = (e, fallback) => (e?.response?.status === 404
-  ? "This needs the new server — restart Taskuary and try again."
-  : e?.response?.data?.detail || fallback);
-
-const Handoff = ({ taskId, onSent }) => {
-  const [to, setTo] = useState("");
-  const [channel, setChannel] = useState("email");
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState("");
-  const [people, setPeople] = useState([]);
-  const [sent, setSent] = useState(null);
-  const [err, setErr] = useState("");
-  useEffect(() => { api.get("/api/people").then(({ data }) => setPeople(data.data || [])).catch(() => {}); }, []);
-  const call = async (body) => (await api.post(`/api/tasks/${taskId}/handoff`, body)).data;
-  const draft = async () => {
-    setBusy("draft"); setErr("");
-    try { setText((await call({ to, channel, draft_only: true })).draft); }
-    catch (e) { setErr(msgOf(e, "Could not write the message")); }
-    setBusy("");
-  };
-  const send = async () => {
-    setBusy("send"); setErr("");
-    try { const d = await call({ to, channel, text }); setSent(d.sent); onSent?.(); }
-    catch (e) { setErr(msgOf(e, "Could not send it")); }
-    setBusy("");
-  };
-  if (sent) return (
-    <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>
-      ✓ sent to {(sent.to || []).join(", ") || "the chat"} by {sent.channel}
-    </Typography>
-  );
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-        <Select size="small" value={channel} onChange={(e) => setChannel(e.target.value)} sx={{ ...selSx, minWidth: 110 }}>
-          <MenuItem value="email" sx={{ fontSize: 12.5 }}>email</MenuItem>
-          <MenuItem value="teams" sx={{ fontSize: 12.5 }}>Teams chat</MenuItem>
-        </Select>
-        <Autocomplete freeSolo size="small" sx={{ flex: 1, minWidth: 220 }} options={people.map((p) => p.Email)}
-          value={to} onInputChange={(_e, v) => setTo(v || "")}
-          getOptionLabel={(o) => String(o)}
-          renderOption={(props, o) => {
-            const p = people.find((x) => x.Email === o);
-            return <li {...props} style={{ fontSize: 12.5 }}>{p?.Name || o}<span style={{ color: FAINT }}>&nbsp;· {o}</span></li>;
-          }}
-          renderInput={(params) => <TextField {...params} placeholder="who should own this — email address" />} />
-        <Button size="small" onClick={draft} disabled={!!busy}>
-          {busy === "draft" ? <CircularProgress size={12} /> : text ? "Rewrite" : "Draft with AI"}
-        </Button>
-      </Box>
-      <TextField multiline minRows={4} size="small" value={text} onChange={(e) => setText(e.target.value)}
-        placeholder="What they need to know. Draft with AI writes it from this task's own context — you edit before it goes." />
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-        <Button size="small" variant="contained" disableElevation disabled={!!busy || !to.trim() || !text.trim()}
-          startIcon={busy === "send" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-          onClick={send}>Send it</Button>
-        {err && <Typography variant="caption" sx={{ color: "#b91c1c" }}>{err}</Typography>}
-      </Box>
-    </Box>
-  );
-};
 
 // The history is a log, so it reads like one: who, when, what - one line each until you
 // open it. Agent answers run to thousands of characters and used to bury the page.

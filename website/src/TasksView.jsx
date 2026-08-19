@@ -1,8 +1,8 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, Link, MenuItem, Select, TextField, Tooltip, Typography,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Drawer, IconButton, Link, MenuItem, Select, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -15,7 +15,6 @@ import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, Diff
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
-import { Autocomplete } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
@@ -227,14 +226,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 </Box>
               </Box>
               <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
-                {handoff && (
-                  <Box sx={{ ...card, p: 1.5, mb: 1.5, bgcolor: PANEL2 }}>
-                    <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10 }}>
-                      Hand this to a person
-                    </Typography>
-                    <Handoff taskId={selected} onSent={() => { loadDetail(selected); loadTasks(); }} />
-                  </Box>
-                )}
                 {esc && (
                   <Box sx={{ bgcolor: "#fff8e6", border: "1px solid #f3ddb8", borderRadius: 2, px: 1.5, py: 1.25, mb: 1.5 }}>
                     <Typography variant="body2" sx={{ color: "#b45309", fontWeight: 700 }}>The agent needs you before it goes on</Typography>
@@ -385,6 +376,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         </Box>
       </Box>
 
+      {/* ── hand off: a right-hand drawer, so it cannot hide above a tall terminal ── */}
+      <Drawer anchor="right" open={!!handoff && !!t} onClose={() => setHandoff(false)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+          <ForwardToInboxIcon sx={{ fontSize: 18, color: "#4f46e5" }} />
+          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
+          <IconButton size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+        </Box>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
+          {detail?.ref} · {t?.Title}
+        </Typography>
+        {handoff && <Handoff taskId={selected} onSent={() => { loadDetail(selected); loadTasks(); }} />}
+      </Drawer>
+
       {/* ── new task dialog ───────────────────────────────────────────── */}
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>New task</DialogTitle>
@@ -412,6 +417,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 // Some work is not ours to do: hand it to the person whose job it is, with the AI writing
 // the forward message out of the task's own context (systems, ids, errors) so you are not
 // retyping the thread into an email.
+const msgOf = (e, fallback) => (e?.response?.status === 404
+  ? "This needs the new server — restart Taskuary and try again."
+  : e?.response?.data?.detail || fallback);
+
 const Handoff = ({ taskId, onSent }) => {
   const [to, setTo] = useState("");
   const [channel, setChannel] = useState("email");
@@ -425,13 +434,13 @@ const Handoff = ({ taskId, onSent }) => {
   const draft = async () => {
     setBusy("draft"); setErr("");
     try { setText((await call({ to, channel, draft_only: true })).draft); }
-    catch (e) { setErr(e?.response?.data?.detail || "Could not write the message"); }
+    catch (e) { setErr(msgOf(e, "Could not write the message")); }
     setBusy("");
   };
   const send = async () => {
     setBusy("send"); setErr("");
     try { const d = await call({ to, channel, text }); setSent(d.sent); onSent?.(); }
-    catch (e) { setErr(e?.response?.data?.detail || "Could not send it"); }
+    catch (e) { setErr(msgOf(e, "Could not send it")); }
     setBusy("");
   };
   if (sent) return (

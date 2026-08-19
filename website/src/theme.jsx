@@ -93,6 +93,11 @@ export const theme = createTheme({
 });
 
 export const mono = { fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace" };
+// Compact modern select styling, shared by the detail-header dropdowns and the hand-off form.
+export const selSx = { fontSize: 12.5, bgcolor: "#fff", borderRadius: 2,
+  "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER },
+  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#c9cff0" },
+  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: ACCENT } };
 export const card = { bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, p: 1.5,
   boxShadow: "0 1px 2px rgba(16,24,40,.04)" };
 // Double-border frame: a soft gray mat around a white card (layered, Linear/Arc-style).

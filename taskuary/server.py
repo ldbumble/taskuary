@@ -16,7 +16,7 @@ from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_repo
 from . import agents as hub_agents
 from . import policy as policy_engine
 from . import terminal as hub_term
-from .coder import run_coding_task
+from .coder import finish as coder_finish, run_coding_task
 from .converse import message_agent
 from . import outbound, responder
 
@@ -719,19 +719,24 @@ class WrapBody(BaseModel): task_id: int | None = None; close: bool = True
 
 @app.post('/api/terminals/{sid}/wrap')
 def wrap_terminal(sid: str, body: WrapBody):
-    """"We're done" for a live session: the agent writes its closing summary, the summary
-    files onto the task like any coder report, and the task closes. One button instead of
-    'stop it, copy what it said, mark done'."""
+    """"We're done" for a live session, and it now ends the SAME way a headless run does: the
+    agent writes its closing summary, that files onto the task as its report, the responder
+    drafts the reply the sender gets, and the session shuts down. One button instead of 'stop
+    it, copy what it said, mark done, write the email yourself'. The prompt you see typed into
+    the terminal IS the mechanism - a pty has no other channel to ask through."""
     t = hub_term.get(sid)
     if not t or not t.alive: raise HTTPException(404, 'no live terminal here')
     tid = body.task_id or t.task_id
     if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
     store.add_comment(tid, ACTOR, 'human', 'Told the agent we are done - asked it to wrap up.')
     def filed(text):
-        store.add_comment(tid, t.agent or 'agent', 'agent',
-                          'CODER REPORT\n' + (text or '(the agent ended the session without a wrap-up)'))
+        rep = {'summary': text or '(the agent ended the session without a wrap-up)'}
+        store.add_comment(tid, t.agent or 'agent', 'agent', 'CODER REPORT\n' + rep['summary'])
         if body.close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-            store.update_task(tid, {'Status': 'done'}, ACTOR)
+            coder_finish(store, tid, rep, None, t.agent or 'coder')
+        # the wrap-up WAS the end of the session: a pty left running is how you get an agent
+        # still holding a repo on a task you already closed
+        if body.close: hub_term.close(sid)
     hub_term.wrap_up(t, filed)
     store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid, 'close': body.close})
     return {'wrap': 'running', 'taskId': tid}

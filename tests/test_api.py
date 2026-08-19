@@ -335,6 +335,38 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/tasks/{tid}/handoff',
                                 json={'to': 'ross', 'channel': 'teams', 'text': 'x'}).status_code, 422)
 
+    def test_a_live_session_is_visible_work(self):
+        """A pty session is not a 'run', so the board used to show a task as Queued while its
+        CLI sat there asking a question. Sessions now surface next to runs - with the idle
+        time that separates 'thinking' from 'waiting on you'."""
+        import time as _t
+        from taskuary import terminal as term
+        tid = c.post('/api/tasks', json={'Title': 'live one'}).json()['taskId']
+
+        class FakeTerm:
+            alive, task_id, agent, label = True, tid, 'coder', 'coder'
+            sid, cwd, argv = 'sid1', 'C:/repo', ['claude']
+            started = '2026-08-18 20:00:00'
+            def __init__(self): self.last = _t.time()
+            idle = term.Term.idle
+            tail = lambda self, n=3: ['Christina needs an AD account created. How do you want it done?']
+            info = term.Term.info
+
+        term.SESSIONS['sid1'] = FakeTerm()
+        try:
+            t = next(x for x in c.get('/api/tasks').json()['data'] if x['TaskId'] == tid)
+            self.assertEqual(t['Session']['agent'], 'coder')
+            self.assertLess(t['Session']['idle'], 5)                       # just spoke = working
+            live = next(r for r in c.get('/api/runs/live').json()['data'] if r['TaskId'] == tid)
+            self.assertEqual((live['kind'], live['RunId']), ('session', None))
+            self.assertIn('How do you want it done?', live['tail'][0])
+            self.assertEqual(c.get(f'/api/tasks/{tid}').json()['session']['sid'], 'sid1')
+            term.SESSIONS['sid1'].last -= 120                              # gone quiet: parked at its prompt
+            t = next(x for x in c.get('/api/tasks').json()['data'] if x['TaskId'] == tid)
+            self.assertGreater(t['Session']['idle'], term.IDLE_WAITING)
+        finally:
+            term.SESSIONS.pop('sid1', None)
+
     def test_runs_audit_ingest_status(self):
         self.assertEqual(c.get('/api/runs/999999').status_code, 404)
         self.assertIsInstance(c.get('/api/audit/recent').json()['data'], list)

@@ -344,6 +344,11 @@ export const TASK_STATES = [
   { key: "dropped", label: "dropped", c: { bg: "#eef0f3", fg: "#8a94a6", bd: "#e5e8ee" } },
 ];
 const ST = Object.fromEntries(TASK_STATES.map((x) => [x.key, x]));
+// A CLI that has printed nothing for this long is parked at its own prompt - the next move
+// is yours, not its. Thinking agents print constantly; a question is silence.
+export const IDLE_WAITING = 45;
+export const busyNow = (t) => (t?.RunStatus === "running")
+  || (t?.Session?.alive && t.Session.idle < IDLE_WAITING);
 // The ladder, top down: dropped, done, an agent is ACTUALLY running it, else it is yours.
 // "in_progress with nothing running" used to read as "agent working" - a task whose agent
 // finished without closing it then sat there looking busy and nobody was told.
@@ -351,8 +356,8 @@ export const stateOf = (t) => {
   if (!t) return ST.queued;
   if (t.Status === "dropped") return ST.dropped;
   if (t.Status === "done") return ST.done;
-  if (t.RunStatus === "running") return ST.working;
-  return ST.needs_you;
+  if (busyNow(t)) return ST.working;
+  return ST.needs_you;                       // incl. a session sitting at a question
 };
 export const StateChip = ({ task }) => {
   const st = stateOf(task);

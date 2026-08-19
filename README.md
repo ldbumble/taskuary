@@ -64,10 +64,12 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   emails get a pill strip to flip between them. **Send to coding agent** on any row
   hands that item — a failed report, an email, a chat — to a CLI agent with your own
   prompt; it becomes a task carrying the full message as context.
-- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Cards
-  working right now show a **live peephole** — the last lines of the agent's console — and
-  open into the full session. *Waiting on you* means exactly one thing: the agent stopped
-  because a person has to approve or decide. Drag between columns; "New task for the agent"
+- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Which lane a
+  card sits in is what is TRUE right now, not what a status column last recorded: a live CLI
+  session counts as an agent working, and **that same session gone quiet is a question** —
+  the card moves itself to *Waiting on you* and shows what it asked. Cards working right now
+  show a **live peephole** — the last lines of the agent's console, and how long it has been
+  going — and open into the full session. Drag between columns; "New task for the agent"
   takes a task name, the **prompt**, which **CLI and model**, and **one** way it gets
   worked — a live session, a headless run, or just filed — so two agents never end up on
   the same task.
@@ -209,7 +211,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 111 tests, ~20s, no network or credentials needed
+pytest -q                   # 112 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

@@ -71,7 +71,7 @@ class Term:
         self.sid = uuid.uuid4().hex[:12]
         self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
-        self.buf, self.n, self.ended = deque(), 0, None
+        self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
         self.subs = []                                    # (loop, asyncio.Queue)
         self.taps = []                                    # plain callables, for server-side readers
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols)
@@ -91,6 +91,7 @@ class Term:
             try: data = self.pty.read()
             except Exception as e: logger.debug(f'terminal {self.sid} read ended: {e}'); break
             if not data: break
+            self.last = time.time()                       # silence is the signal: see idle()
             self._append(data); self._emit(data)
             for f in list(self.taps):
                 try: f(data)
@@ -129,10 +130,21 @@ class Term:
         self.alive, self.ended = False, time.time()
         self.pty.kill()
         self._emit(None)
-    def info(self):
+    def idle(self) -> float:
+        """Seconds since this session last printed anything. An agent that has gone quiet is
+        not working - it is waiting at its own prompt, which means it is waiting on YOU."""
+        return round(time.time() - self.last, 1)
+
+    def tail(self, n=3) -> list:
+        """The last few readable lines - a card-sized peephole into what it is doing."""
+        lines = [l for l in plain(''.join(self.buf)[-6000:]).splitlines() if l.strip()]
+        return lines[-n:]
+
+    def info(self, tail=0):
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'alive': self.alive, 'started': self.started,
-                'cmd': ' '.join(self.argv)}
+                'idle': self.idle(), 'cmd': ' '.join(self.argv),
+                **({'tail': self.tail(tail)} if tail else {})}
 
 
 def default_shell():
@@ -215,6 +227,21 @@ def wrap_up(t: Term, on_done, prompt: str = WRAP_PROMPT, timeout: int = WRAP_WAI
 
 
 def get(sid): return SESSIONS.get(sid)
+
+
+# A session that has printed nothing for this long is parked at a prompt (or finished) -
+# either way the next move is the owner's, not the agent's.
+IDLE_WAITING = 45
+
+def for_task(task_id, tail=0):
+    """The live session working a task, if any - what makes a task 'agent working' even
+    though no headless run exists."""
+    t = next((x for x in SESSIONS.values() if x.task_id == task_id and x.alive), None)
+    return t.info(tail) if t else None
+
+
+def live_sessions(tail=3):
+    return [t.info(tail) for t in SESSIONS.values() if t.alive]
 
 
 def close(sid):

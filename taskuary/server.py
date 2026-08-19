@@ -115,7 +115,11 @@ def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel:
 
 
 @app.get('/api/tasks')
-def tasks(status: str = None): return {'data': [{**t, 'ref': task_ref(t['TaskId'])} for t in store.list_tasks(status)]}
+def tasks(status: str = None):
+    """An interactive session IS an agent working - the UI has to see it, or a task with a
+    live CLI on it reads as 'queued' while the agent sits there asking a question."""
+    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId'])}
+                     for t in store.list_tasks(status)]}
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):
@@ -128,7 +132,7 @@ def create_task(body: TaskBody):
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
-    return d
+    return {**d, 'session': hub_term.for_task(task_id, tail=3)}
 
 @app.patch('/api/tasks/{task_id}')
 def update_task(task_id: int, body: TaskBody):
@@ -302,8 +306,15 @@ def live_runs(lines: int = 3):
     for r in store.running_runs():
         try: evs = [e for e in json.loads(r.get('TraceJson') or '[]') if e.get('kind') == 'live']
         except ValueError: evs = []                    # mid-write JSON: next poll fixes it
-        out.append({'RunId': r['RunId'], 'TaskId': r['TaskId'], 'AgentName': r['AgentName'],
-                    'StartedAt': r['StartedAt'], 'tail': [e['detail'] for e in evs[-max(1, min(lines, 10)):]]})
+        out.append({'RunId': r['RunId'], 'TaskId': r['TaskId'], 'AgentName': r['AgentName'], 'kind': 'run',
+                    'StartedAt': r['StartedAt'], 'idle': 0,
+                    'tail': [e['detail'] for e in evs[-max(1, min(lines, 10)):]]})
+    # live pty sessions count as work in progress too - and their idle time is what says
+    # whether the agent is thinking or parked at a question waiting for the owner
+    for t in hub_term.live_sessions(tail=max(1, min(lines, 10))):
+        if t.get('taskId'):
+            out.append({'RunId': None, 'TaskId': t['taskId'], 'AgentName': t['agent'] or t['label'],
+                        'kind': 'session', 'StartedAt': t['started'], 'idle': t['idle'], 'tail': t.get('tail') or []})
     return {'data': out}
 
 @app.get('/api/runs/{run_id}')

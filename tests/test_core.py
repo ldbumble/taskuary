@@ -477,9 +477,37 @@ class CoreTests(unittest.TestCase):
             self.assertIn('Fixed the date parse', report_from_transcript(s, tid, 'Ran it. Fixed the date parse.')['summary'])
         self.assertIn('nothing on screen', report_from_transcript(s, tid, '   ')['summary'])
 
-    def test_terminal_plain_text(self):
+    def test_plain_resolves_repaints_and_keeps_the_gaps(self):
+        """A TUI animates by rewriting the line and moves the cursor instead of printing spaces.
+        Splitting on the carriage return turned one spinner into a hundred lines of debris, and
+        deleting cursor-forward ran "112 active" together into "112active" in real wrap-ups."""
         from taskuary.terminal import plain
-        self.assertEqual(plain('\x1b[35m\u2502 hi \x1b[0m\r\n\u2502 there\r\n'), 'hi\nthere\n')
+        esc, cr = chr(27), chr(13)
+        self.assertEqual(plain(esc + '[35m' + chr(0x2502) + ' ' + esc + '[0mhi ' + cr + chr(10) + chr(0x2502) + ' there' + cr + chr(10)),
+                         'hi' + chr(10) + 'there' + chr(10))
+        self.assertEqual(plain('112' + esc + '[1Cactive employees'), '112 active employees')
+        self.assertEqual(plain('112' + esc + '[4Cactive'), '112    active')
+        # a frame that clears to end-of-line leaves nothing of the old one behind
+        self.assertEqual(plain('Levitating... (0s)' + cr + esc + '[KBaking... (11s)'), 'Baking... (11s)')
+
+    def test_declutter_drops_the_chrome_and_keeps_the_words(self):
+        """What the agent SAID is a handful of lines; the rest is spinner frames, a hint bar and a
+        token counter, painted hundreds of times. All of it used to land in the wrap-up."""
+        from taskuary.terminal import declutter
+        junk = [chr(0x273b), '*', chr(0x2722) + chr(0x2026) + '2', chr(0x2736) + '103 tokens)', '85516 tokens',
+                chr(0x273b) + 'an8', 'e69', 'va6',                         # a frame painted mid-line
+                chr(0x2500) * 90,                                          # a full-width rule
+                chr(0x23bf) + ' Tip: Use /statusline to set up a custom status line that will display beneath the input box',
+                chr(0x2500) * 90, chr(0x276f), chr(0x00b7) + ' esc to interrupt ' + chr(0x00b7) + ' ' + chr(0x2190) + ' for agents',
+                chr(0x273b) + ' Baked for 13s ' + chr(0x00b7) + ' 1 shell still running']
+        real = ['Changed: one UPDATE against UserDb.dbo.lookJobCode where JobCode=325.',
+                'Left for next time: 112 active employees on code 325.']
+        out = declutter(chr(10).join([real[0]] + junk + [real[1]]))
+        self.assertEqual(out.splitlines(), real)
+        # a real sentence is never chrome, however it reads
+        long_line = 'The operator can hit esc to interrupt the agent at any point, which is the whole point of a live session.'
+        self.assertIn(long_line, declutter(long_line))
+        self.assertEqual(declutter('same' + chr(10) + 'same' + chr(10) + 'same'), 'same')   # repaints collapse
 
     def test_cli_json_parse(self):
         self.assertEqual(parse_cli_json('{"result": "OK", "session_id": "abc"}'), ('OK', 'abc'))

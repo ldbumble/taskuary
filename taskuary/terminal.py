@@ -203,11 +203,55 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
 # ── wrapping up: "we're done" -> the transcript IS the report ───────────────────────
 _ANSI = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]|\x1b[=>]'
                    r'|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+_FORWARD = re.compile(r'\x1b\[(\d*)C')          # cursor-forward: a GAP, not nothing
+_ERASE = re.compile(r'\x1b\[0?K')             # erase-to-end: the old paint is GONE
+
+
+def _overlay(line: str) -> str:
+    """A bare carriage return rewrites the line in place - that is how a TUI animates. Splitting
+    on it (what we used to do) turned one spinner into a hundred lines of debris; joining the
+    segments blind glued words together. Paint them over each other, like the terminal does."""
+    out = ''
+    for seg in line.split('\r'):
+        out = seg + out[len(seg):] if len(seg) < len(out) else seg
+    return out
+
 
 def plain(s: str) -> str:
-    """A TUI's bytes as readable text: escape sequences gone, box gutters trimmed."""
-    s = _ANSI.sub('', s or '').replace('\r\n', '\n').replace('\r', '\n')
-    return '\n'.join(l.strip(' │┃┊▎|').rstrip() for l in s.split('\n'))
+    """A TUI's bytes as readable text: repaints resolved, escape sequences gone, box gutters
+    trimmed. Cursor-forward becomes spaces - deleting it is what ran "112 active" together
+    into "112active" in the first wrap-ups."""
+    s = (s or '').replace('\r\n', '\n')
+    s = _FORWARD.sub(lambda m: ' ' * max(1, int(m.group(1) or 1)), s)
+    lines = [_overlay(l) for l in s.split('\n')]
+    return '\n'.join(_ANSI.sub('', l).strip(' │┃┊▎|').rstrip() for l in lines)
+
+
+# What a TUI paints over and over and none of it is what the agent SAID: spinner frames, the
+# hint bar, the token counter, rules, the statusline tip. It all landed in the wrap-up - and in
+# the transcript we hand the AI to write from.
+_CHROME = re.compile(r'esc to interrupt|\? for shortcuts|for agents|to manage|\bTip:\s|^\s*\d[\d,]*\s+tokens?\b|\(\d+s\)\s*$|\b\d[\d,]*\s+tokens\)\s*$|still r?unning\s*$', re.I)
+_WORDLESS = re.compile(r'^[^A-Za-z]*$')
+_HINT = re.compile(r'\bTip:\s+Use /')      # a slash-command hint, any length
+_SPIN = re.compile('[·✢✳✻✽✶✷✸✹✺⏺◐◓◑◒✦❯›]')       # the frames themselves
+
+
+def declutter(text: str) -> str:
+    """Keep the lines that carry words. Chrome only matches short lines, so a sentence that
+    happens to say "esc to interrupt" survives."""
+    out = []
+    for l in (text or '').splitlines():
+        l = l.rstrip()
+        if not l.strip():
+            if out and out[-1]: out.append('')            # keep paragraph breaks, never runs
+            continue
+        if _WORDLESS.match(l): continue                   # glyphs, rules, box art
+        if _HINT.search(l) or (len(l) < 90 and _CHROME.search(l)): continue
+        # a frame painted mid-line leaves fused debris ('✻an8', 'e69'): short, and barely letters
+        if len(l) <= 12 and (_SPIN.search(l) or sum(c.isalpha() for c in l) <= 3): continue
+        if out and out[-1] == l: continue                 # repaints of the same line
+        out.append(l)
+    return '\n'.join(out).strip()
 
 
 def harvest(t: Term, chars: int = 12000) -> str:
@@ -215,7 +259,7 @@ def harvest(t: Term, chars: int = 12000) -> str:
     for a summary into the pty and wait: another prompt to read, minutes of waiting, and one
     more chance for an agent you just told to stop to go and do more work. Everything needed
     is already on screen - take it and let the main AI write the report."""
-    return plain(t.scrollback()[-chars * 4:]).strip()[-chars:]
+    return declutter(plain(t.scrollback()[-chars * 4:]))[-chars:]
 
 
 def seed_text(store, tid: int, instruction: str = None) -> str:

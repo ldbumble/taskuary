@@ -178,7 +178,7 @@ export const CoderReport = ({ body }) => {
   }
   // free prose (a shell session, a note written by hand) - show it as written
   if (!rows.length) {
-    return text ? <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK }}>{text}</Typography> : null;
+    return text ? <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, overflowWrap: "anywhere" }}>{text}</Typography> : null;
   }
   return (
     <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>

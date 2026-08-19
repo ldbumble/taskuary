@@ -147,14 +147,14 @@ const REPORT_COLORS = { Triage: "#0e7490", Determination: "#7e22ce", Actions: "#
    the set. One list, one shape per row: what it is, and what it does. */
 export const ChoiceRow = ({ icon, label, hint, tint = "#eef0ff", onClick, first, busy }) => (
   <Box onClick={busy ? undefined : onClick}
-    sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.25, py: 0.95, cursor: busy ? "default" : "pointer",
+    sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, py: 0.7, cursor: busy ? "default" : "pointer",
       borderTop: first ? "none" : `1px solid ${BORDER}`, transition: "background .12s",
       "&:hover": { bgcolor: busy ? "transparent" : "#f7f8fa" }, "&:hover .thubChoiceGo": { opacity: 1, transform: "none" } }}>
-    <Box sx={{ width: 26, height: 26, borderRadius: 1.5, bgcolor: tint, flexShrink: 0,
+    <Box sx={{ width: 24, height: 24, borderRadius: 1.5, bgcolor: tint, flexShrink: 0,
       display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</Box>
     <Box sx={{ flex: 1, minWidth: 0 }}>
       <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.3 }}>{label}</Typography>
-      {hint && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{hint}</Typography>}
+      {hint && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.25, fontSize: 10.5 }}>{hint}</Typography>}
     </Box>
     {busy ? <CircularProgress size={13} />
       : <ChevronRightIcon className="thubChoiceGo" sx={{ fontSize: 16, color: FAINT, opacity: 0,

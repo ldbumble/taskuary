@@ -24,7 +24,6 @@ const STATE_FILTERS = [
   { key: "", label: "all" },
   { key: "needs_you", label: "needs you", c: PILL_COLORS.amber },
   { key: "working", label: "working", c: PILL_COLORS.purple },
-  { key: "queued", label: "queued" },
   { key: "done", label: "done", c: PILL_COLORS.green },
 ];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -369,7 +368,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 )}
 
                 <Fold title={`Notes & history · ${detail.comments.length}`}>
-                  {detail.comments.map((c) => <CommentLine key={c.CommentId} c={c} />)}
+                  <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                    <tbody>{detail.comments.map((c) => <CommentRow key={c.CommentId} c={c} />)}</tbody>
+                  </Box>
                   <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
                     <TextField fullWidth placeholder="Add a note (humans only)" value={comment}
                       onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
@@ -406,24 +407,34 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   );
 }
 
-// An agent's answer can be thousands of characters - show the first screenful, keep the
-// rest one click away, so the thread stays readable.
-const CommentLine = ({ c }) => {
+// The history is a log, so it reads like one: who, when, what - one line each until you
+// open it. Agent answers run to thousands of characters and used to bury the page.
+const CommentRow = ({ c }) => {
   const [open, setOpen] = useState(false);
-  const body = String(c.Body || "");
-  const long = body.length > 420;
+  const body = String(c.Body || "").trim();
+  const long = body.length > 150 || body.includes("\n");
   return (
-    <Box sx={{ mb: 0.6 }}>
-      <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap" }}>
-        <b style={{ color: c.ActorType === "agent" ? "#7e22ce" : "#4f46e5" }}>{c.Actor}</b>
-        <span style={{ color: "#98a1b3", fontSize: 11 }}> {timeAgo(c.CreatedAt)}</span> — {long && !open ? `${body.slice(0, 420)}…` : body}
-      </Typography>
-      {long && (
-        <Typography variant="caption" onClick={() => setOpen(!open)}
-          sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-          {open ? "show less ↑" : `show all ${body.length.toLocaleString()} chars ↓`}
+    <Box component="tr" sx={{ borderTop: `1px solid ${BORDER}`, verticalAlign: "top",
+      "&:hover": { bgcolor: open ? "transparent" : PANEL2 } }}>
+      <Box component="td" sx={{ py: 0.6, pr: 1, whiteSpace: "nowrap" }}>
+        <Typography variant="caption" sx={{ ...mono, fontWeight: 700, fontSize: 10.5,
+          color: c.ActorType === "agent" ? "#7e22ce" : "#4f46e5" }}>{c.Actor}</Typography>
+      </Box>
+      <Box component="td" sx={{ py: 0.6, pr: 1.25, whiteSpace: "nowrap" }}>
+        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{timeAgo(c.CreatedAt)}</Typography>
+      </Box>
+      <Box component="td" sx={{ py: 0.6, width: "100%", cursor: long ? "pointer" : "default" }}
+        onClick={() => long && setOpen(!open)}>
+        <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", lineHeight: 1.5,
+          ...(open ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
+          {body}
         </Typography>
-      )}
+        {long && (
+          <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 10.5 }}>
+            {open ? "less ↑" : `${body.length.toLocaleString()} chars ↓`}
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 };

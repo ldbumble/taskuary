@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from . import config
 from . import store as store_mod
 from .store import SQLiteStore, task_ref
-from .ingest import ingest_message, task_from_message
+from .ingest import ingest_message, split_message, task_from_message
 from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
 from . import agents as hub_agents
 from . import policy as policy_engine
@@ -251,6 +251,16 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
                         body.instruction or 'Investigate this and fix it end to end.', ACTOR,
                         {'model': body.model} if body.model else None)
     return {'dispatch': 'running', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid)}
+
+class SplitBody(BaseModel): kind: str | None = None
+
+@app.post('/api/messages/{mid}/split')
+def split_msg(mid: int, body: SplitBody = None):
+    """Give this message its own task. Two unrelated asks in one chat thread are one
+    conversation but two jobs, and an agent sent at the task only ever gets the first."""
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    tid = split_message(store, mid, ACTOR, (body.kind if body else None))
+    return {'taskId': tid, 'ref': task_ref(tid)}
 
 @app.get('/api/runs/live')
 def live_runs(lines: int = 3):

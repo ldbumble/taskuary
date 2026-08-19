@@ -10,7 +10,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING } from "./ui.jsx";
 
 // "coder · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
@@ -24,7 +24,9 @@ const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] |
 
 // A card's peephole into the running agent: the last couple of console lines, live.
 // Click the card for the whole terminal (task page).
-const LiveTail = ({ run }) => (
+const LiveTail = ({ run }) => {
+  const waiting = run.kind === "session" && run.idle >= IDLE_WAITING;
+  return (
   <Box sx={{ mt: 0.75, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 1, py: 0.6 }}>
     {(run.tail || []).slice(-2).map((l, i, all) => (
       <Typography key={i} noWrap variant="caption"
@@ -34,24 +36,32 @@ const LiveTail = ({ run }) => (
         {l.replace(/\n/g, " ")}
       </Typography>
     ))}
-    <Typography variant="caption" sx={{ ...mono, color: CATPPUCCIN.cyan, fontSize: 9.5,
-      "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
-      ▮ {run.AgentName} working {elapsed(run.StartedAt)} — click the card for the full session
+    <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
+      ...(waiting ? {} : { "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }) }}>
+      {waiting ? `⏸ ${run.AgentName} is waiting on you — answer it in the task`
+        : `▮ ${run.AgentName} working ${elapsed(run.StartedAt)} — click the card for the full session`}
     </Typography>
   </Box>
-);
+  );
+};
 
 // Column model: where a card sits is derived from task status + its latest review.
+// Which lane a card sits in is decided by what is TRUE right now - a live CLI session is an
+// agent working, and that same session gone quiet is a question waiting on you. Reading it
+// off the Status column alone left a card in "Queued" while its agent asked what to do.
+const laneOf = (t, live) => {
+  const l = live[t.TaskId];
+  if (t.Status === "done") return "done";
+  if (l) return l.kind === "session" && l.idle >= IDLE_WAITING ? "waiting" : "working";
+  if (t.ReviewStatus === "pending" || t.Status === "waiting") return "waiting";
+  if (t.RunStatus === "running") return "working";
+  return "queued";
+};
 const COLS = [
-  { key: "queued", title: "Queued", dot: "#8a94a6", status: "open",
-    match: (t) => t.Status === "open" && t.ReviewStatus !== "pending" },
-  { key: "working", title: "Agent working", dot: "#0e7490", status: "in_progress",
-    match: (t) => t.Status === "in_progress" && t.ReviewStatus !== "pending" },
-  // waiting means one thing: a person has to approve or decide before the agent goes on
-  { key: "waiting", title: "Waiting on you", dot: "#b45309", status: "waiting",
-    match: (t) => (t.ReviewStatus === "pending" || t.Status === "waiting") && !["done", "dropped"].includes(t.Status) },
-  { key: "done", title: "Done", dot: "#15803d", status: "done",
-    match: (t) => t.Status === "done" },
+  { key: "queued", title: "Queued", dot: "#8a94a6", status: "open" },
+  { key: "working", title: "Agent working", dot: "#0e7490", status: "in_progress" },
+  { key: "waiting", title: "Waiting on you", dot: "#b45309", status: "waiting" },
+  { key: "done", title: "Done", dot: "#15803d", status: "done" },
 ];
 
 export default function BoardView({ onOpenTask }) {
@@ -122,7 +132,7 @@ export default function BoardView({ onOpenTask }) {
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
         {COLS.map((col) => {
-          const cards = tasks.filter(col.match);
+          const cards = tasks.filter((t) => laneOf(t, live) === col.key);
           return (
             <Box key={col.key} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(col)}
               sx={{ bgcolor: "#f1f3f6", border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 1,

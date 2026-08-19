@@ -13,7 +13,8 @@ import CallSplitIcon from "@mui/icons-material/CallSplit";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted } from "./ui.jsx";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -548,6 +549,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
   const rep = [...(detail?.comments || [])].reverse().find((c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const pending = sel.ReviewId && sel.ReviewStatus === "pending";
+  // is somebody already on this? a live pty session or a running headless run both count,
+  // and a session gone quiet is a question waiting for an answer, not work in progress
+  const ses = detail?.session;
+  const run = (detail?.runs || []).find((r) => r.Status === "running");
+  const onIt = ses ? { agent: ses.agent || ses.label, waiting: ses.idle >= IDLE_WAITING }
+    : run ? { agent: run.AgentName, waiting: false } : null;
   const loading = sel.TaskId && !detail;
   const history = historyOf(sel, detail);
   return (
@@ -623,14 +630,31 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
                 </>
               )}
 
-              {/* hand THIS item (failed report, email, chat) to an agent with your own prompt */}
+              {/* hand THIS item (failed report, email, chat) to an agent with your own prompt -
+                  unless an agent is already on this task, in which case sending it again just
+                  puts a second one on the same work */}
               <Box sx={{ mt: 1.5, borderTop: `1px solid ${BORDER}`, pt: 1 }}>
-                <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+                {onIt ? (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                    <SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#b45309" : "#7e22ce" }} />
+                    <Typography variant="caption" sx={{ color: onIt.waiting ? "#b45309" : "#7e22ce", fontWeight: 600 }}>
+                      {onIt.waiting
+                        ? `${onIt.agent} is waiting for your answer in this task`
+                        : `${onIt.agent} is working this task right now`}
+                    </Typography>
+                    <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask(sel.TaskId)}>
+                      {onIt.waiting ? "answer it →" : "watch it →"}
+                    </Button>
+                  </Box>
+                ) : (
+                  <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+                )}
               </Box>
 
               <Box sx={{ display: "flex", gap: 1, mt: 0.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center", flexWrap: "wrap" }}>
-                <Button size="small" onClick={onDetails}>See details →</Button>
-                {sel.TaskId && <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task</Button>}
+                {sel.TaskId
+                  ? <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task {ref(sel.TaskId)} →</Button>
+                  : <Button size="small" onClick={onDetails}>See details →</Button>}
                 <SplitTask row={sel} onSplit={() => load()} />
                 <Box sx={{ flex: 1 }} />
                 {/* not ours -> the reason goes to memory, and triage reads it next time */}

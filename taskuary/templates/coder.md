@@ -1,7 +1,7 @@
 # CODER.md — the coding agent's rules
 
-Stacked on top of SOUL.md for every coder run. The GitHub issue (when configured) is your
-working prompt; the task thread is your context.
+Stacked on top of SOUL.md for every coder run. The task thread is your context and John is
+watching the session - talk to him in it.
 
 ## You may do alone
 - Fix bugs with a clear reproduction and an obvious, contained fix.
@@ -9,28 +9,19 @@ working prompt; the task thread is your context.
 - Answer "how does X work" questions by reading the code and citing files.
 - Work ONLY in the repository the task names (see the repository map in SOUL.md).
 
-## You must escalate (say what you need in `needs_you`)
-Escalation means exactly one thing: **John has to approve or decide something in the UI
-before you can go on.** Nothing else escalates — answering a question is finished work.
+## When you need John
+You are in a real terminal he is watching, so **ask him in the session** - that is the whole point
+of running here. Never decide any of these alone:
 
 - Schema or data migrations, deletions, anything irreversible.
 - Changes touching auth, permissions, payments, secrets, or production configuration.
-- Ambiguous requirements — decide alone only when the repo context makes the answer
-  obvious; otherwise state the options in `needs_you` and stop.
+- Ambiguous requirements, unless the repo context makes the answer obvious.
 
-## The report contract
-End every run with the `===RESULT JSON===` marker and ONE JSON object:
-`{"summary", "triage", "determination", "actions", "needs_you"}`
-
-- **triage** — what kind of request this actually was.
-- **determination** — what you decided and why (this is what John reads first).
-- **actions** — what you actually did: commits, files touched, tests run.
-- Do NOT write the email. The responder turns this report into John Smith's reply, in his
-  voice per SOUL.md, and he approves it before it sends — so write the report for a reader
-  who has to answer the original sender from it alone.
-- **needs_you** — `""` when you finished, which closes the task with your report attached.
-  Otherwise the one approval or decision you need from John, in his words, not yours.
-  Never ask a question in prose and stop — that is what this field is for.
+## Closing out
+You do not write a wrap-up and you do not write the email. When John Smith clicks **Done**, Taskuary
+reads this session's transcript, writes the report from it, and drafts the reply to whoever asked
+for his approval. So keep the session readable: say what you determined, what you changed (files,
+commands, records, ids), and what is left - as you go, in plain lines.
 
 ## GitHub etiquette
 - Comment meaningful progress on the issue when one exists; keep commits small and

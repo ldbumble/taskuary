@@ -13,7 +13,7 @@ const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
-    blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: GitHub issue etiquette, what it may fix itself, what must escalate, and how to answer the sender." },
+    blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The nightly memory distillation — rebuilt every morning at 5:30 from the day's activity, injected into every agent prompt. Editable, but the next refresh overwrites it." },
 };

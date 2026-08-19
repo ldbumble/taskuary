@@ -1,46 +1,41 @@
-"""Coding-task lifecycle: (optional) GitHub issue first, then the CLI works it with a
-required report contract, then auto-close or escalation - and the diff rides on the run.
+"""How a coding task ENDS. The work itself happens in a live session you watch (terminal.py);
+this closes the loop: the transcript becomes the report, the responder drafts the reply the
+sender gets, and the task waits on you to send it.
 """
 import json, re
 from loguru import logger
-from .store import task_ref
-from . import agents as hub_agents
-from . import github as gh
 
-RESULT_MARKER = '===RESULT JSON==='
-REPORT_CONTRACT = ('\n\nEnd your output with the marker ' + RESULT_MARKER + ' on its own line, followed by ONE JSON object:\n'
-                   '{"summary": "...", "triage": "...", "determination": "...", "actions": "...", "needs_you": ""}\n'
-                   'Report the work; do NOT write the email. The responder turns your report into the '
-                   "owner's reply, in their voice, and the owner approves it before anything sends - so say "
-                   'plainly what you did, what you found and what it means for whoever asked.\n'
-                   'needs_you is the ONLY thing that keeps this task open. Leave it "" whenever you finished '
-                   'the work - INCLUDING when the work was answering a question - and the task closes with '
-                   'your report attached. Fill it in ONLY when the owner must approve or decide something in '
-                   'the UI before you can go on, and say exactly what you need from them. Never ask a question '
-                   'in prose and stop: decide within your CODER.md rules, or put the ask in needs_you.')
+FIELDS = ('determination', 'actions', 'summary')
 
 
-def github_cfg(store) -> dict:
-    """[github] from config.toml, with the GitHub connector's saved PAT winning."""
-    from . import config
-    g = dict(config.load().get('github') or {})
-    c = store.get_connector_by_type('github', with_secret=True)
-    if c and c.get('Secret'): g['token'] = c['Secret']
-    return g
+TRANSCRIPT_SYSTEM = (
+    'You are reading the terminal transcript of a coding agent that has just worked a task for '
+    "the owner, who has now closed the session. Write the owner's record of what happened, from "
+    'the transcript ALONE - never a step it did not take, never a claim it did not make.\n'
+    'Output ONLY this JSON: {"determination": "...", "actions": "...", "summary": "..."} - '
+    'determination is what was decided and why, actions is what was actually changed (files, '
+    'commands, records, ids), summary is the two-sentence version for someone who read none of it.')
 
 
-FIELDS = ('summary', 'triage', 'determination', 'actions', 'needs_you')
-
-def parse_coder_result(out: str) -> dict:
-    """`needs_you` is the run's whole control flow, so a report we could not parse is itself
-    a "needs you" - never a silent close. Legacy `close:false` alone no longer holds a task
-    open: answering the question IS the work, and unfinished work has to say what it needs."""
+def report_from_transcript(store, task_id: int, transcript: str, agent: str = 'coder') -> dict:
+    """The report, written from what is already on screen. The agent is never asked for prose:
+    by the time you click Done you are done talking to it, and a transcript cannot argue. No AI
+    configured (or a bad answer) files the transcript tail itself - the record never disappears."""
+    from .llm import build_llm
+    blank = dict.fromkeys(FIELDS, '')
+    if not (transcript or '').strip(): return blank | {'summary': '(the session ended with nothing on screen)'}
     try:
-        tail = out.split(RESULT_MARKER)[-1]
-        j = json.loads(re.sub(r'^```(json)?|```$', '', tail.strip(), flags=re.M))
-        return {k: str(j.get(k) or '') for k in FIELDS} | {'parsed': True}
-    except Exception:
-        return dict.fromkeys(FIELDS, '') | {'summary': (out or '')[-800:], 'parsed': False}
+        llm = build_llm(store)
+        if not llm: raise RuntimeError('no AI connector is set up to write the report')
+        out = llm(TRANSCRIPT_SYSTEM, f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\n"
+                                     f'Transcript:\n{transcript}', max_tokens=900)
+        j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
+        rep = blank | {k: str(j.get(k) or '') for k in ('determination', 'actions', 'summary')}
+        if not any(rep.values()): raise ValueError('empty report')
+        return rep
+    except Exception as e:
+        logger.warning(f'transcript report failed for task {task_id}: {e}')
+        return blank | {'summary': transcript[-2000:]}
 
 
 def resolution_text(rep: dict) -> str:
@@ -54,9 +49,8 @@ def reply_target(store, task_id: int):
 
 
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder') -> dict:
-    """One ending for finished work, however it got worked - a headless run, or a live session
-    you wrapped up. The responder drafts the reply the sender gets and the task waits on you to
-    send it; nothing to reply to means nothing to wait for, so it just closes."""
+    """The end of finished work: the responder drafts the reply the sender gets and the task waits
+    on you to send it. Nothing to reply to means nothing to wait for, so it just closes."""
     mid = reply_target(store, task_id)
     if mid: raise_reply(store, task_id, mid, run_id, rep)
     store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
@@ -64,7 +58,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
 
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
-    """The coder reported; the responder writes what the sender actually reads. One voice for
+    """The session reported; the responder writes what the sender actually reads. One voice for
     every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
     that fails to write still leaves the review standing: 'Draft with AI' retries it."""
     from . import responder
@@ -72,75 +66,3 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
                             'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
     try: responder.write_draft(store, task_id, rid, resolution_text(rep), 'coder')
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
-
-
-def run_coding_task(store, task_id: int, actor: str = 'system', repo: str = None, github_cfg: dict = None,
-                    agent: str = 'coder', model: str = None, instruction: str = None) -> dict:
-    """`agent` picks WHICH CLI works it (claude, codex, gemini… whatever is configured) and
-    `model` which model that CLI runs; `instruction` is the owner's own prompt for this run.
-    The lifecycle around them - issue, report contract, close or escalate - is the same."""
-    t = store.get_task(task_id)
-    if not t: raise ValueError(f'no task {task_id}')
-    ctx = hub_agents.task_context(store, task_id)
-    tok = (github_cfg or {}).get('token')
-    repo = repo or (github_cfg or {}).get('default_repo')
-    issue = None
-    if tok and repo:
-        try:
-            issue = gh.create_issue(tok, repo, f'[{task_ref(task_id)}] {(t.get("Title") or "coding task")[:120]}',
-                                    f'{ctx}\n\n---\nAgent prompt: work this task per CODER.md; report and close when resolved.')
-            store.add_comment(task_id, 'coder', 'agent', f'Opened GitHub issue {repo}#{issue["number"]}: {issue["url"]}')
-        except Exception as e:
-            logger.warning(f'issue creation failed, continuing without: {e}')
-
-    profile = json.loads((store.get_agent(agent) or {}).get('Config') or '{}')
-    cwd = (profile.get('cwd_map') or {}).get(repo)
-    where = f'{repo}#{issue["number"]}' if issue else '(no GitHub issue configured)'
-    override = {**({'cwd': cwd} if cwd else {}), **({'model': model} if model else {})}
-    out = hub_agents.dispatch(store, task_id, agent,
-                              (instruction.strip() if instruction and instruction.strip()
-                               else 'Work this coding task end to end.')
-                              + f' GitHub issue: {where}.'
-                              + (f' Repository: {repo}.' if repo else '') + REPORT_CONTRACT,
-                              actor, profile_override=override or None)
-    if not store.get_task(task_id):                                   # deleted mid-run
-        if tok and issue:
-            try: gh.close_issue(tok, repo, issue['number'], 'Task deleted while the agent worked - closing.')
-            except Exception: pass
-        return {'closed': False, 'aborted': 'task deleted mid-run'}
-    rep = parse_coder_result(out.get('result') or '')
-    err = None
-    if out['status'] != 'done':
-        run = store.get_run(out['run_id']) or {}
-        err = (run.get('LastError') or 'see the run log')[:300]
-        rep['determination'] = rep['needs_you'] = f'run failed: {err}'
-        store.add_comment(task_id, 'coder', 'agent', f'Coder run FAILED: {err}')
-    else:
-        # the report lands on the task either way - you read what it did even when it's done
-        store.add_comment(task_id, 'coder', 'agent',
-                          f"CODER REPORT\nTriage: {rep['triage']}\nDetermination: {rep['determination']}\n"
-                          f"Actions: {rep['actions']}\nSummary: {rep['summary']}")
-        if not rep['parsed'] and not rep['needs_you']:
-            rep['needs_you'] = 'the agent stopped without its report contract - read the run output and decide'
-    mid = reply_target(store, task_id)
-    needs = rep['needs_you'].strip()
-    if not needs:
-        if tok and issue:
-            try: gh.close_issue(tok, repo, issue['number'], f'Closed by the Taskuary coder.\n\n{rep["summary"]}')
-            except Exception as e: logger.warning(f'issue close failed: {e}')
-        # the work is finished but the answer has not left the building: finish() holds it at
-        # 'waiting on you' until the reply is decided (approve/edit sends and closes, no-reply
-        # just closes). Marking it done here would supersede the very review it raises.
-        finish(store, task_id, rep, out['run_id'])
-    else:
-        # waiting on a person, and the raw status says so too - the board column, the chip and
-        # Status all have to agree, or you get "escalated but in_progress" again
-        reason = f'coder needs you: {needs[:300]}'
-        existing = store.pending_review(task_id, 'escalation')
-        if existing: store.update_review_reason(existing['ReviewId'], reason, out.get('run_id'))
-        else: store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': out.get('run_id'), 'Kind': 'escalation',
-                                'Status': 'pending', 'Reason': reason})
-        if (store.get_task(task_id) or {}).get('Status') != 'dropped':
-            store.update_task(task_id, {'Status': 'waiting'}, 'coder')
-    return {'closed': not needs, 'needs_you': needs, 'repo': repo, 'issue': issue, 'report': rep,
-            **({'error': err} if err else {})}

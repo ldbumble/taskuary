@@ -16,8 +16,8 @@ from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_repo
 from . import agents as hub_agents
 from . import policy as policy_engine
 from . import terminal as hub_term
-from .coder import finish as coder_finish, run_coding_task
-from .converse import message_agent
+from .coder import (finish as coder_finish, reply_target as coder_reply_target, report_from_transcript,
+                    resolution_text)
 from . import outbound, responder
 
 cfg = config.load()
@@ -139,25 +139,16 @@ def update_task(task_id: int, body: TaskBody):
     store.update_task(task_id, {k: v for k, v in body.dict().items() if v is not None}, ACTOR)
     return {'ok': True}
 
-@app.post('/api/tasks/{task_id}/message')
-def msg_agent(task_id: int, body: TextBody, background: BackgroundTasks):
-    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    store.add_comment(task_id, ACTOR, 'human', body.body)
-    background.add_task(message_agent, store, task_id, body.body, ACTOR)
-    return {'chat': 'running'}
-
-def _github_cfg():
-    from .coder import github_cfg
-    return github_cfg(store)
-
 @app.post('/api/tasks/{task_id}/code')
 def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
+    """Put the CLI on this task - in a REAL session, like every other way of starting one. This
+    used to be the headless path (pipes, no window, a report you read afterwards); nothing starts
+    where you cannot watch it, interrupt it or answer it, so it is now the same as /dispatch."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     agent = (body.agent if body else None) or 'coder'
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
-    background.add_task(run_coding_task, store, task_id, ACTOR, (body.repo if body else None), _github_cfg(),
-                        agent, (body.model if body else None), (body.instruction if body else None))
-    return {'coder': 'running', 'agent': agent, 'model': (body.model if body else None)}
+    ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None))
+    return {'coder': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
 
 @app.post('/api/tasks/{task_id}/comments')
 def comment(task_id: int, body: TextBody):
@@ -259,6 +250,22 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     ses = start_session(store, tid, body.agent, body.model, body.instruction)
     return {'dispatch': 'session', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid), 'session': ses}
 
+class MineBody(BaseModel): kind: str = 'general'
+
+@app.post('/api/messages/{mid}/mine')
+def mine_message(mid: int, body: MineBody = None):
+    """"This one is mine": a real task, on my list, with no agent sent at it. A lot of mail is
+    genuinely work and genuinely not an agent's - go into some web app, approve the thing - and
+    filing it as "nothing to do" is a lie. It lands as a task assigned to you, which the feed
+    already reads as needs-you (no run on it, not done). The day a computer-use connector exists,
+    THIS is the queue it takes from."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'general', ACTOR)
+    if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
+    store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
+    return {'taskId': tid, 'ref': task_ref(tid)}
+
 class SplitBody(BaseModel): kind: str | None = None
 
 @app.post('/api/messages/{mid}/split')
@@ -332,25 +339,8 @@ def reviews(status: str = None): return {'data': store.list_reviews(status)}
 def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
-    verb2status = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
-                   'go_ahead': 'approved'}
+    verb2status = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
     if body.verb not in verb2status: raise HTTPException(422, 'bad verb')
-    # go_ahead is the answer to an escalation: you approved it in the UI, so the same agent
-    # picks the task back up with your approval as its instruction
-    if body.verb == 'go_ahead':
-        tid = rv.get('TaskId')
-        if not tid or not store.get_task(tid): raise HTTPException(422, 'the escalated task is gone')
-        store.decide_review(rid, 'approved', None, ACTOR, body.note)
-        note = (body.note or '').strip()
-        store.add_comment(tid, ACTOR, 'human', f'Approved — go ahead.{f" {note}" if note else ""}')
-        run = (store.list_runs(tid) or [{}])[0]
-        agent = run.get('AgentName') or 'coder'
-        if background: background.add_task(run_coding_task, store, tid, ACTOR, None, _github_cfg(), agent, None,
-                                           f'The owner reviewed your escalation ("{(rv.get("Reason") or "")[:300]}") '
-                                           f'and approved it in the UI. Their words: {note or "go ahead"}. '
-                                           'Finish the task now.')
-        store.audit('review', rid, 'go_ahead', ACTOR, detail={'task': tid, 'agent': agent})
-        return {'ok': True, 'status': 'approved', 'coder': 'running', 'agent': agent}
     final = body.final_text if body.verb == 'edit' else (rv.get('DraftText') if body.verb == 'approve' else None)
     store.decide_review(rid, verb2status[body.verb], final, ACTOR, body.note)
     if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f'Reviewed draft ({body.verb}):\n{final}')
@@ -719,27 +709,26 @@ class WrapBody(BaseModel): task_id: int | None = None; close: bool = True
 
 @app.post('/api/terminals/{sid}/wrap')
 def wrap_terminal(sid: str, body: WrapBody):
-    """"We're done" for a live session, and it now ends the SAME way a headless run does: the
-    agent writes its closing summary, that files onto the task as its report, the responder
-    drafts the reply the sender gets, and the session shuts down. One button instead of 'stop
-    it, copy what it said, mark done, write the email yourself'. The prompt you see typed into
-    the terminal IS the mechanism - a pty has no other channel to ask through."""
+    """"We're done" - and it asks the agent NOTHING. The transcript is already on screen, so we
+    take it, end the session, and let the main AI turn it into the report; the responder drafts
+    the reply from that report and the task waits on you to send it. Typing a wrap-up prompt into
+    the pty meant one more prompt to read, minutes of waiting, and a fresh chance for an agent you
+    just stopped to go do more work."""
     t = hub_term.get(sid)
     if not t or not t.alive: raise HTTPException(404, 'no live terminal here')
     tid = body.task_id or t.task_id
     if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
-    store.add_comment(tid, ACTOR, 'human', 'Told the agent we are done - asked it to wrap up.')
-    def filed(text):
-        rep = {'summary': text or '(the agent ended the session without a wrap-up)'}
-        store.add_comment(tid, t.agent or 'agent', 'agent', 'CODER REPORT\n' + rep['summary'])
-        if body.close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-            coder_finish(store, tid, rep, None, t.agent or 'coder')
-        # the wrap-up WAS the end of the session: a pty left running is how you get an agent
-        # still holding a repo on a task you already closed
-        if body.close: hub_term.close(sid)
-    hub_term.wrap_up(t, filed)
+    text = hub_term.harvest(t)
+    hub_term.close(sid)                      # done means done - the pty and its shells go too
+    rep = report_from_transcript(store, tid, text, t.agent or 'coder')
+    report = resolution_text(rep)
+    store.add_comment(tid, ACTOR, 'human', 'Closed the session - wrapped up from what was on screen.')
+    store.add_comment(tid, t.agent or 'agent', 'agent', f'CODER REPORT\n{report}')
+    if body.close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+        coder_finish(store, tid, rep, None, t.agent or 'coder')
     store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid, 'close': body.close})
-    return {'wrap': 'running', 'taskId': tid}
+    return {'wrap': 'done', 'taskId': tid, 'report': report,
+            'drafting': bool(body.close and coder_reply_target(store, tid))}
 
 @app.delete('/api/terminals/{sid}')
 def close_terminal(sid: str):

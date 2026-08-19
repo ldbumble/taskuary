@@ -52,7 +52,7 @@ const KNOB_META = {
     help: "The hub has NO send path by design. Approved replies become Outlook DRAFTS instead and you hit Send in Outlook yourself." },
   coder_auto_enabled: { group: "Coder agent", label: "Auto-dispatch the coder", type: "switch",
     desc: "Run the full coder lifecycle (issue → CLI → report → close) on every new real task.",
-    help: "On: every new REAL task automatically runs the coder at ingest - GitHub issue opened, claude CLI works it, report + reply, auto-close or escalation. Requires the claude CLI installed and authenticated on the server. Off: you click 'Send to coder' on the task." },
+    help: "On: every new REAL task opens a live coder session at ingest - your CLI, in the repo, with the task in its lap, and you can watch or interrupt it. Requires the CLI installed and authenticated on the server. Off: you start the session yourself from the task." },
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days of messages the Timeline shows. Display only — nothing is deleted.",
     help: "Purely a display window for the Timeline tab. Older messages remain in the database and in task histories." },

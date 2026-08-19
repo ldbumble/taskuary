@@ -1,22 +1,22 @@
 // Timeline: left time rail, messages slide in as compact blurbs - who/where, the subject,
-// and one plain sentence saying what the hub DID with it (routed where, drafted, escalated,
-// ignored) plus its current status. Click a blurb for the full drill-through. Refreshes
+// and one plain sentence saying what the hub DID with it (routed where, drafted, filed,
+// ignored) plus its current status. Hover or click a blurb for the whole story. Refreshes
 // itself every 30s so new mail animates in while the tab is open.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, Link, ListSubheader, MenuItem, Select, TextField, Typography,
+  Alert, Box, Button, Chip, CircularProgress, IconButton, LinearProgress, ListSubheader, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
+import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, RunTrace, CoderReport, DiffBlock, Empty, scoreBar, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, CoderReport, DiffBlock, Empty, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -47,9 +47,8 @@ const actionOf = (r) => (r.Channel === "report" ? "report"
   : r.MsgStatus === "feed" ? "feed"
     : r.MsgStatus === "ignored" ? "ignore"
       : r.MsgStatus === "filed" ? "filed"
-        : r.ReviewKind === "escalation" ? "escalate"
-          : r.ReviewKind === "auto" ? "auto"
-            : r.ReviewId ? "draft" : "task_only");
+        : r.ReviewKind === "auto" ? "auto"
+          : r.ReviewId ? "draft" : "task_only");
 
 // NeedsYou comes from the server and means one thing: nobody else is moving this. It
 // outranks the verdict chip, because "what happened to it" matters less than "is it mine".
@@ -71,8 +70,7 @@ const blurb = (r) => {
   if (r.MsgStatus === "ignored") return `Ignored by policy — ${r.RouteReason || "no task created"}`;
   if (r.MsgStatus === "filed") return `Filed, nothing to do — ${r.RouteReason || "informational"}`;
   const routed = r.Decision === "attach" ? `Added to ${ref(r.TaskId)} (existing thread)` : `New task ${ref(r.TaskId)} created`;
-  const state = r.ReviewStatus === "pending" && r.ReviewKind === "escalation" ? "escalated — waiting on you"
-    : r.ReviewStatus === "pending" ? "AI drafted a reply — waiting on your review"
+  const state = r.ReviewStatus === "pending" ? "a reply is drafted — waiting on your review"
       : r.ReviewStatus === "auto" ? "AI answered automatically"
         : r.TaskStatus === "done" ? `completed${r.ReviewStatus ? ` · you said ${r.ReviewStatus.replace("_", " ")}` : ""}`
           : needsYou(r) ? "needs you — no agent is working it right now"
@@ -89,7 +87,6 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [pick, setPick] = useState("");              // "" all in category | "channel:x" | "src:channel:name"
   const [srcByChannel, setSrcByChannel] = useState({});   // channel -> connection names
   const [noMore, setNoMore] = useState(false);
-  const [open, setOpen] = useState(null);
   const [detail, setDetail] = useState(null);
   const [editText, setEditText] = useState("");
   const [err, setErr] = useState("");
@@ -217,7 +214,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
   const decide = async (reviewId, verb, finalText) => {
     await api.post(`/api/reviews/${reviewId}/decide`, { verb, final_text: finalText || null });
-    setOpen(null); setSel(null); setEditText("");      // stale edits must never block hover
+    setSel(null); setEditText("");                     // stale edits must never block hover
     load(); onChanged?.();
   };
 
@@ -398,100 +395,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
         <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch" }}>
           <Box sx={{ position: "sticky", top: 60 }}>
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
-              decide={decide} onDetails={() => setOpen(sel)} onOpenTask={onOpenTask} onClose={() => setSel(null)}
+              decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
               onSkipped={() => { setSel(null); load(); }} onRefresh={() => load()} />
           </Box>
         </Box>
       )}
-
-      {/* ── drill-through ──────────────────────────────────────────────── */}
-      <Drawer anchor="right" open={!!open} onClose={() => setOpen(null)}
-        PaperProps={{ sx: { width: 540, bgcolor: PANEL, p: 2.5, borderLeft: `1px solid ${BORDER}` } }}>
-        {open && (
-          <>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <ChannelIcon channel={open.Channel} sx={{ color: "#4f46e5" }} />
-              <Typography variant="subtitle1" sx={{ color: INK, fontWeight: 700, flex: 1, fontSize: 14 }} noWrap>
-                {open.Subject || "(no subject)"}
-              </Typography>
-              <IconButton size="small" onClick={() => setOpen(null)}><CloseIcon fontSize="small" /></IconButton>
-            </Box>
-            <Typography variant="caption" sx={{ color: DIM }}>
-              {open.FromName || open.FromEmail}{open.SourceName ? ` · ${open.SourceName}` : ""} · {fmtDateTime(open.SentAt)}
-              {open.SourceLink && (
-                <Link href={open.SourceLink} target="_blank" rel="noopener" sx={{ ml: 1, color: ACCENT2 }}>
-                  open source <OpenInNewIcon sx={{ fontSize: 11, verticalAlign: "middle" }} />
-                </Link>
-              )}
-            </Typography>
-
-            {open.TaskId ? !detail ? <CircularProgress size={20} sx={{ m: 3 }} /> : (
-              <>
-                <DrawerBlock title="What the router did">
-                  {detail.routes.filter((rt) => rt.MessageId === open.MessageId).map((rt) => (
-                    <Box key={rt.RouteId}>
-                      <Typography variant="body2" sx={{ color: INK }}>{rt.Decision} — {rt.Reason}</Typography>
-                      {(JSON.parse(rt.CandidatesJson || "[]")).map((c) => (
-                        <Typography key={c.task_id} variant="caption" sx={{ display: "flex", alignItems: "center", color: DIM }}>
-                          {scoreBar(c.score)} {ref(c.task_id)} (thread {c.signals.thread}, subj {c.signals.subject}, body {c.signals.body})
-                        </Typography>
-                      ))}
-                    </Box>
-                  ))}
-                </DrawerBlock>
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10 }}>
-                    {detail.messages.length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}
-                  </Typography>
-                  <Box sx={{ mt: 0.5 }}>
-                    <MessageBlock key={open.MessageId} messages={detail.messages} focusId={open.MessageId} maxH={220} />
-                  </Box>
-                </Box>
-                {(() => {
-                  // The coder's report - did it change code, what it did, where it stands.
-                  const rep = [...(detail.comments || [])].reverse().find((c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
-                  return rep ? (
-                    <DrawerBlock title="What the coder did">
-                      <Box sx={{ maxHeight: 260, overflow: "auto" }}><CoderReport body={rep.Body} /></Box>
-                    </DrawerBlock>
-                  ) : null;
-                })()}
-                {open.ReviewId && open.ReviewStatus === "pending" && (
-                  <DrawerBlock title={open.ReviewKind === "escalation" ? "Escalated — needs you" : "Draft reply — needs you"}>
-                    <ReviewActions reviewId={open.ReviewId} kind={open.ReviewKind} draft={pendingDraft(detail, open)}
-                      editText={editText} setEditText={setEditText} decide={decide} />
-                  </DrawerBlock>
-                )}
-                <DrawerBlock title="Agent activity">
-                  {!detail.runs.length ? <Typography variant="caption" sx={{ color: DIM }}>No agent has touched this yet.</Typography>
-                    : detail.runs.map((r) => (
-                      <Box key={r.RunId} sx={{ mb: 1 }}>
-                        <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
-                        <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
-                        {r.Result && <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: "#15803d", display: "block", mt: 0.5 }}>{r.Result.slice(0, 700)}</Typography>}
-                      </Box>
-                    ))}
-                </DrawerBlock>
-                <Button size="small" onClick={() => { onOpenTask(open.TaskId); setOpen(null); }} sx={{ mt: 2 }}>
-                  Open task {ref(open.TaskId)} →
-                </Button>
-              </>
-            ) : (
-              <>
-                <DrawerBlock title={open.MsgStatus === "filed" ? "Filed — nothing to do" : "Ignored"}>
-                  <Typography variant="body2" sx={{ color: DIM }}>{open.RouteReason || "Policy ignored this message — no task was created."}</Typography>
-                </DrawerBlock>
-                <DrawerBlock title="Message">
-                  <MessageBlock messages={detail?.messages} focusId={open.MessageId} fallback={open.Preview} maxH={320} />
-                </DrawerBlock>
-              </>
-            )}
-            <Box sx={{ mt: 2 }}>
-              <SendToAgent messageId={open.MessageId} subject={open.Subject} onOpenTask={(tid) => { onOpenTask(tid); setOpen(null); }} />
-            </Box>
-          </>
-        )}
-      </Drawer>
     </Box>
   );
 }
@@ -538,7 +446,7 @@ const PanelLabel = ({ children }) => (
 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
-const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, onOpenTask, onClose, onSkipped, onRefresh }) => {
+const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
@@ -630,8 +538,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
 
               {pending && (
                 <>
-                  <PanelLabel>{sel.ReviewKind === "escalation" ? "Escalated — needs you" : "Draft reply — review, edit, approve"}</PanelLabel>
-                  <ReviewActions reviewId={sel.ReviewId} kind={sel.ReviewKind} draft={pendingDraft(detail || { runs: [] }, sel)}
+                  <PanelLabel>Draft reply — review, edit, approve</PanelLabel>
+                  <ReviewActions reviewId={sel.ReviewId} draft={pendingDraft(detail || { runs: [] }, sel)}
                     editText={editText} setEditText={setEditText} decide={decide} />
                 </>
               )}
@@ -660,7 +568,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
               <Box sx={{ display: "flex", gap: 1, mt: 0.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center", flexWrap: "wrap" }}>
                 {sel.TaskId
                   ? <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task {ref(sel.TaskId)} →</Button>
-                  : <Button size="small" onClick={onDetails}>See details →</Button>}
+                  : <MineToDo messageId={sel.MessageId} onMade={() => onRefresh?.()} />}
                 <SplitTask row={sel} onSplit={() => load()} />
                 {sel.TaskId && (
                   <Button size="small" startIcon={<ForwardToInboxIcon sx={{ fontSize: 14 }} />}
@@ -818,6 +726,36 @@ const pendingDraft = (detail, open) => {
 
 // Two asks arriving in one chat thread are one conversation but two jobs - and an agent
 // sent at the task only ever receives the first one's prompt.
+// Not everything a person has to do is an agent's job: approve the workflow in ADP, click the
+// thing in the portal. That is still work, and filing it as "nothing to do" is a lie - so it
+// becomes a task with YOUR name on it and no agent sent at it. (A computer-use connector would
+// take its queue from exactly here.)
+const MineToDo = ({ messageId, onMade }) => {
+  const [busy, setBusy] = useState(false);
+  const [made, setMade] = useState(null);
+  const [err, setErr] = useState("");
+  if (made) return (
+    <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
+      &#10003; {made} &mdash; on your list, no agent on it
+    </Typography>
+  );
+  const go = async () => {
+    setBusy(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/messages/${messageId}/mine`, {});
+      setMade(data.ref); onMade?.(data.taskId);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not make the task"); }
+    setBusy(false);
+  };
+  return (
+    <Button size="small" disabled={busy} onClick={go} startIcon={<AssignmentIndIcon sx={{ fontSize: 14 }} />}
+      title="Real work, but not an agent's: a task on your own list, nobody dispatched"
+      sx={{ fontSize: 11, color: "#4f46e5" }}>
+      {busy ? "making it…" : err || "Mine to do — make it a task"}
+    </Button>
+  );
+};
+
 const SplitTask = ({ row, onSplit }) => {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
@@ -845,33 +783,16 @@ const SplitTask = ({ row, onSplit }) => {
   );
 };
 
-const DrawerBlock = ({ title, children }) => (
-  <Box sx={{ mt: 2 }}>
-    <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10 }}>{title}</Typography>
-    <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25, mt: 0.5 }}>{children}</Box>
-  </Box>
-);
-
-const ReviewActions = ({ reviewId, kind, draft, editText, setEditText, decide }) => (
+const ReviewActions = ({ reviewId, draft, editText, setEditText, decide }) => (
   <Box>
-    {kind !== "escalation" && (
-      <TextField fullWidth multiline minRows={3} size="small" placeholder="Edit the draft (or approve as-is)"
-        value={editText || draft} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
-    )}
+    <TextField fullWidth multiline minRows={3} size="small" placeholder="Edit the draft (or approve as-is)"
+      value={editText || draft} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-      {/* an escalation asks one thing: may it go on? approving hands the task straight back */}
-      {kind === "escalation" && <Button size="small" variant="contained" disableElevation
-        sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
-        onClick={() => decide(reviewId, "go_ahead")}>Go ahead — approved</Button>}
-      {kind !== "escalation" && <Button size="small" variant="contained" onClick={() => decide(reviewId, "approve")}>Approve</Button>}
-      {kind !== "escalation" && <Button size="small" variant="outlined" disabled={!editText.trim() || editText === draft}
-        onClick={() => decide(reviewId, "edit", editText)}>Approve my edit</Button>}
-      {kind !== "escalation" && <Button size="small" sx={{ color: "#8a94a6" }} onClick={() => decide(reviewId, "no_reply")}>
-        No reply needed
-      </Button>}
-      <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>
-        {kind === "escalation" ? "Dismiss — I handled it" : "Reject"}
-      </Button>
+      <Button size="small" variant="contained" onClick={() => decide(reviewId, "approve")}>Approve</Button>
+      <Button size="small" variant="outlined" disabled={!editText.trim() || editText === draft}
+        onClick={() => decide(reviewId, "edit", editText)}>Approve my edit</Button>
+      <Button size="small" sx={{ color: "#8a94a6" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
+      <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>
     </Box>
   </Box>
 );

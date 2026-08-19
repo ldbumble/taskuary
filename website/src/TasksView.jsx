@@ -41,6 +41,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [run, setRun] = useState({ agent: "coder", model: "", instruction: "" });
   const [comment, setComment] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
+  const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
   const pollRef = useRef(null);
 
   // fetch everything once and filter on the derived state - the server only knows raw
@@ -85,32 +86,23 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
     setComment(""); loadDetail(selected);
   };
-  // "We're done": the agent writes its own closing summary, it files under What the agent did,
-  // the responder drafts the reply the sender gets, and the session ends. No copy-pasting out
-  // of the terminal, and no writing the email yourself.
+  // "We're done": nothing is typed at the agent. The session closes, its transcript becomes the
+  // report (written by the main AI), the responder drafts the reply out of that report, and the
+  // result lands right here under where the terminal was.
   const wrapUp = async () => {
     if (!term) return;
-    setWrapping(true);
-    try { await api.post(`/api/terminals/${term.sid}/wrap`, { task_id: selected, close: true }); }
-    catch (e) { setErr(e?.response?.data?.detail || "Could not ask the agent to wrap up"); setWrapping(false); }
+    setWrapping(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/terminals/${term.sid}/wrap`, { task_id: selected, close: true });
+      setWrapped({ report: data.report, drafting: data.drafting });
+      setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
+    setWrapping(false);
   };
-  useEffect(() => { setWrapping(false); }, [selected]);
-  useEffect(() => {
-    // 'waiting' is the finished state when a reply is drafted and needs your approval, so
-    // waiting for 'done' alone left this spinning forever on exactly the tasks that worked
-    if (!wrapping || !["done", "waiting"].includes(detail?.task?.Status)) return;
-    setWrapping(false); setTerm(null); loadTasks(); onChanged?.();   // the list still said "agent working"
-  }, [wrapping, detail, loadTasks, onChanged]);
+  useEffect(() => { setWrapping(false); setWrapped(null); }, [selected]);
 
-  // The agent stopped because it needs a person. Answering IS the work: "go ahead" hands
-  // the same task back to the same agent with your words attached.
-  const [approve, setApprove] = useState("");
   const [handoff, setHandoff] = useState(false);
   useEffect(() => { setHandoff(false); }, [selected]);
-  const goAhead = async (rid) => {
-    await api.post(`/api/reviews/${rid}/decide`, { verb: "go_ahead", note: approve.trim() || null });
-    setApprove(""); setTimeout(() => { loadDetail(selected); loadTasks(); onChanged?.(); }, 800);
-  };
   const notATask = async () => {
     await api.post(`/api/tasks/${selected}/not-a-task`);
     onSelect(null); loadTasks(); onChanged?.();
@@ -148,7 +140,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       && String(c.Body || "").startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
-  const esc = (detail?.reviews || []).find((r) => r.Kind === "escalation" && r.Status === "pending");
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
       {/* ── list: one anchored panel - filter header on top, rows scroll inside ── */}
@@ -224,24 +215,28 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 </Box>
               </Box>
               <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
-                {esc && (
-                  <Box sx={{ bgcolor: "#fff8e6", border: "1px solid #f3ddb8", borderRadius: 2, px: 1.5, py: 1.25, mb: 1.5 }}>
-                    <Typography variant="body2" sx={{ color: "#b45309", fontWeight: 700 }}>The agent needs you before it goes on</Typography>
-                    <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{esc.Reason}</Typography>
-                    <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
-                      <TextField size="small" sx={{ flex: 1, minWidth: 240, bgcolor: "#fff" }} value={approve}
-                        placeholder="Anything to tell it with your approval (optional)"
-                        onChange={(e) => setApprove(e.target.value)} onKeyDown={(e) => e.key === "Enter" && goAhead(esc.ReviewId)} />
-                      <Button size="small" variant="contained" disableElevation
-                        sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
-                        onClick={() => goAhead(esc.ReviewId)}>Go ahead — approved</Button>
-                    </Box>
-                  </Box>
-                )}
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
-                {term ? (
+                {/* the session just closed: its write-up takes the space the terminal had, so the
+                    result of the work is the thing you are looking at */}
+                {wrapped ? (
+                  <Box sx={{ ...card, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+                      <DoneAllIcon sx={{ fontSize: 17, color: "#15803d" }} />
+                      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, flex: 1 }}>
+                        Session closed — here is what it did
+                      </Typography>
+                      <Button size="small" sx={{ fontSize: 11 }} onClick={() => setWrapped(null)}>dismiss</Button>
+                    </Box>
+                    <CoderReport body={wrapped.report} />
+                    <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>
+                      {wrapped.drafting
+                        ? "The reply to whoever wrote in is drafted and waiting in Review — approving it sends it and closes this task."
+                        : "Nothing to reply to on this task, so it closed here."}
+                    </Typography>
+                  </Box>
+                ) : term ? (
                   <>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
@@ -262,9 +257,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <TerminalPane sid={term.sid} height="55vh" onExit={() => findTerm(selected)} />
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#0e7490", display: "block", mt: 0.5 }}>
-                        Asked it to wrap up — that prompt in the terminal is how it gets asked. Its summary files under
-                        {" "}<b>What the agent did</b>, the reply to whoever wrote in goes to <b>Review</b> for your
-                        approval, and this session ends itself.
+                        Closing the session and writing up what is on screen — the agent is not asked anything.
                       </Typography>
                     )}
                   </>

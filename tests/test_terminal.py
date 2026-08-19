@@ -82,6 +82,32 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_pausing_keeps_what_it_found_and_hands_it_to_the_next_session(self):
+        """Killing a session threw away everything it had worked out. Pausing writes the handover
+        note first, leaves the task OPEN (no report, no reply draft), and the next session on that
+        task gets the note typed into it so it carries on instead of starting over."""
+        tid = c.post('/api/tasks', json={'Title': 'importer is down', 'Kind': 'coding'}).json()['taskId']
+        t = terminal.Term(ECHO, os.getcwd(), 'test')
+        t.task_id, t.agent = tid, 'coder'
+        terminal.SESSIONS[t.sid] = t
+        self.assertTrue(_wait(lambda: 'hello-from-pty' in t.scrollback()))
+        note = '{"found": "a malformed date kills the batch", "did": "nothing yet", "next": "patch the date parse"}'
+        try:
+            with mock.patch('taskuary.llm.build_llm', return_value=lambda s, u, **kw: note):
+                out = c.post(f'/api/terminals/{t.sid}/pause', json={'task_id': tid}).json()
+            self.assertEqual(out['pause'], 'done')
+            self.assertIn('malformed date', out['note'])
+            self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])      # session ended
+            self.assertEqual(server.store.get_task(tid)['Status'], 'open')       # paused is not finished
+            self.assertEqual([r for r in server.store.list_reviews('pending') if r['TaskId'] == tid], [])
+            self.assertTrue(any('HANDOVER NOTE' in cm['Body'] for cm in server.store.list_comments(tid)))
+            # ...and the note rides into the next session
+            seed = terminal.seed_text(server.store, tid)
+            self.assertIn('malformed date', seed)
+            self.assertIn('do not start over', seed)
+        finally:
+            terminal.close(t.sid)
+
     def test_agent_argv_drops_the_headless_flags(self):
         # -p / --output-format stream-json make the CLI a one-shot pipe; a TUI needs neither
         with mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']):

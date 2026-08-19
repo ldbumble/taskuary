@@ -38,6 +38,37 @@ def report_from_transcript(store, task_id: int, transcript: str, agent: str = 'c
         return blank | {'summary': transcript[-2000:]}
 
 
+PAUSE_MARKER = 'HANDOVER NOTE'
+PAUSE_SYSTEM = (
+    'You are reading the terminal transcript of a coding agent that has been PAUSED mid-task - the '
+    'owner is stopping for now and the same work will be picked up later, by an agent with no memory '
+    'of this session. Write the handover note it will be given. From the transcript ALONE.\n'
+    'Output ONLY this JSON: {"found": "...", "did": "...", "next": "..."} - found is what it worked '
+    'out about the problem (causes, file and record names, ids, dead ends worth not repeating), did '
+    'is what it already changed, next is the concrete next step it was about to take. Say "nothing '
+    'yet" in a field rather than inventing.')
+
+
+def pause_note(store, task_id: int, transcript: str) -> str:
+    """What a paused session knew, in the words the next session needs. A pty has no resumable
+    id (no --resume for a TUI), so the note IS the continuity - it gets typed into the next
+    session by terminal.seed_text. No AI, or a bad answer, keeps the transcript tail instead."""
+    from .llm import build_llm
+    if not (transcript or '').strip(): return 'Nothing on screen - the session was paused before it did anything.'
+    try:
+        llm = build_llm(store)
+        if not llm: raise RuntimeError('no AI connector is set up to write the note')
+        out = llm(PAUSE_SYSTEM, f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\n"
+                                f'Transcript:\n{transcript}', max_tokens=900)
+        j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
+        note = '\n'.join(f'{k.capitalize()}: {j[k]}' for k in ('found', 'did', 'next') if str(j.get(k) or '').strip())
+        if not note: raise ValueError('empty note')
+        return note
+    except Exception as e:
+        logger.warning(f'pause note failed for task {task_id}: {e}')
+        return f'(no AI note - the last of the session, verbatim)\n{transcript[-2000:]}'
+
+
 def resolution_text(rep: dict) -> str:
     return '\n'.join(f'{k.capitalize()}: {rep[k]}' for k in ('determination', 'actions', 'summary') if rep.get(k))
 

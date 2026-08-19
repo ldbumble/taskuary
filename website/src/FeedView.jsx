@@ -11,12 +11,14 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, CoderReport, DiffBlock, Empty, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -544,49 +546,44 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 </>
               )}
 
-              {/* hand THIS item (failed report, email, chat) to an agent with your own prompt -
-                  unless an agent is already on this task, in which case sending it again just
-                  puts a second one on the same work */}
-              <Box sx={{ mt: 1.5, borderTop: `1px solid ${BORDER}`, pt: 1 }}>
+              {/* ONE list of what can happen to this item. These were four buttons in two rows,
+                  four sizes, two of them right-aligned - so "what are my options" needed a hunt. */}
+              <PanelLabel>What should happen with this?</PanelLabel>
+              <ChoiceList>
                 {onIt ? (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                    <SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#b45309" : "#7e22ce" }} />
-                    <Typography variant="caption" sx={{ color: onIt.waiting ? "#b45309" : "#7e22ce", fontWeight: 600 }}>
-                      {onIt.waiting
-                        ? `${onIt.agent} is waiting for your answer in this task`
-                        : `${onIt.agent} is working this task right now`}
-                    </Typography>
-                    <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask(sel.TaskId)}>
-                      {onIt.waiting ? "answer it →" : "watch it →"}
-                    </Button>
-                  </Box>
+                  <ChoiceRow first tint="#f5f3ff" onClick={() => onOpenTask(sel.TaskId)}
+                    icon={<SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#b45309" : "#7e22ce" }} />}
+                    label={onIt.waiting ? `${onIt.agent} is waiting for your answer` : `${onIt.agent} is working this now`}
+                    hint={onIt.waiting ? "open the task and answer it in the session" : "open the task to watch it live"} />
                 ) : (
-                  <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+                  <SendToAgent row first messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
                 )}
-              </Box>
-
-              <Box sx={{ display: "flex", gap: 1, mt: 0.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center", flexWrap: "wrap" }}>
-                {sel.TaskId
-                  ? <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task {ref(sel.TaskId)} →</Button>
-                  : <MineToDo messageId={sel.MessageId} onMade={() => onRefresh?.()} />}
-                <SplitTask row={sel} onSplit={() => load()} />
+                {sel.TaskId ? (
+                  <ChoiceRow tint="#eef0ff" onClick={() => onOpenTask(sel.TaskId)}
+                    icon={<OpenInFullIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                    label={`Open task ${ref(sel.TaskId)}`} hint="the whole story: session, report, history" />
+                ) : (
+                  <MineToDo messageId={sel.MessageId} onMade={() => onRefresh?.()} />
+                )}
                 {sel.TaskId && (
-                  <Button size="small" startIcon={<ForwardToInboxIcon sx={{ fontSize: 14 }} />}
-                    sx={{ fontSize: 11, color: handoff ? "#4f46e5" : DIM }} onClick={() => setHandoff((h) => !h)}
-                    title="Not ours to do? Send it to the person whose job it is">Hand off</Button>
+                  <ChoiceRow tint="#eef0ff" onClick={() => setHandoff((h) => !h)}
+                    icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                    label="Hand it to a person" hint="not ours to do — the AI writes the forward, you send it" />
                 )}
-                <Box sx={{ flex: 1 }} />
+                <SplitTask row={sel} onSplit={() => load()} />
                 {/* not ours -> the reason goes to memory, and triage reads it next time */}
-                <NotMine messageId={sel.MessageId} onDone={onSkipped} />
-                {sel.Channel === "email" && sel.FromEmail && (skipped !== null
-                  ? <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
-                      ✓ sender skipped{skipped ? ` — ${skipped} past message${skipped === 1 ? "" : "s"} hidden too` : ""}
-                    </Typography>
-                  : <Button size="small" sx={{ color: "#8a94a6", fontSize: 11 }} onClick={skipSender}
-                      title={`Hide ${sel.FromEmail} from the timeline — past messages included (undo in Settings → Routing policies)`}>
-                      Skip this sender
-                    </Button>)}
-              </Box>
+                <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
+                {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
+                  <ChoiceRow tint="#e8f6ee" busy
+                    icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}
+                    label="Sender skipped"
+                    hint={skipped ? `${skipped} past message${skipped === 1 ? "" : "s"} hidden too` : "they will not appear again"} />
+                ) : (
+                  <ChoiceRow tint="#eef0f3" onClick={skipSender}
+                    icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#8a94a6" }} />}
+                    label="Skip this sender" hint={`hide ${sel.FromEmail} and their past mail — undo in Settings`} />
+                ))}
+              </ChoiceList>
 
               {handoff && sel.TaskId && (
                 <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
@@ -734,11 +731,6 @@ const MineToDo = ({ messageId, onMade }) => {
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState(null);
   const [err, setErr] = useState("");
-  if (made) return (
-    <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
-      &#10003; {made} &mdash; on your list, no agent on it
-    </Typography>
-  );
   const go = async () => {
     setBusy(true); setErr("");
     try {
@@ -748,11 +740,10 @@ const MineToDo = ({ messageId, onMade }) => {
     setBusy(false);
   };
   return (
-    <Button size="small" disabled={busy} onClick={go} startIcon={<AssignmentIndIcon sx={{ fontSize: 14 }} />}
-      title="Real work, but not an agent's: a task on your own list, nobody dispatched"
-      sx={{ fontSize: 11, color: "#4f46e5" }}>
-      {busy ? "making it…" : err || "Mine to do — make it a task"}
-    </Button>
+    <ChoiceRow tint="#eef0ff" busy={busy || !!made} onClick={go}
+      icon={<AssignmentIndIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+      label={made ? `${made} — on your list` : "Mine to do"}
+      hint={err || (made ? "a task with your name on it, no agent" : "a task on your own list — nobody is dispatched")} />
   );
 };
 
@@ -761,11 +752,6 @@ const SplitTask = ({ row, onSplit }) => {
   const [done, setDone] = useState(null);
   const [err, setErr] = useState("");
   if (!row.TaskId || (row.ChainSize || 1) < 2) return null;
-  if (done) return (
-    <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
-      ✓ now its own task {ref(done)} — send it to an agent above
-    </Typography>
-  );
   const go = async () => {
     setBusy(true); setErr("");
     try {
@@ -775,11 +761,10 @@ const SplitTask = ({ row, onSplit }) => {
     setBusy(false);
   };
   return (
-    <Button size="small" disabled={busy} onClick={go} startIcon={<CallSplitIcon sx={{ fontSize: 14 }} />}
-      title={`This is a separate ask from the rest of ${ref(row.TaskId)} - give it its own task and prompt`}
-      sx={{ fontSize: 11, color: "#0e7490" }}>
-      {busy ? "splitting…" : err || "Make this its own task"}
-    </Button>
+    <ChoiceRow tint="#e6f7fb" busy={busy || !!done} onClick={go}
+      icon={<CallSplitIcon sx={{ fontSize: 14, color: "#0e7490" }} />}
+      label={done ? `Now its own task ${ref(done)}` : "Give it its own task"}
+      hint={err || (done ? "send it to an agent above" : `a separate ask from the rest of ${ref(row.TaskId)}`)} />
   );
 };
 

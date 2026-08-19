@@ -16,8 +16,8 @@ from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_repo
 from . import agents as hub_agents
 from . import policy as policy_engine
 from . import terminal as hub_term
-from .coder import (finish as coder_finish, reply_target as coder_reply_target, report_from_transcript,
-                    resolution_text)
+from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
+                    report_from_transcript, resolution_text)
 from . import outbound, responder
 
 cfg = config.load()
@@ -729,6 +729,24 @@ def wrap_terminal(sid: str, body: WrapBody):
     store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid, 'close': body.close})
     return {'wrap': 'done', 'taskId': tid, 'report': report,
             'drafting': bool(body.close and coder_reply_target(store, tid))}
+
+@app.post('/api/terminals/{sid}/pause')
+def pause_terminal(sid: str, body: WrapBody):
+    """Stop for now WITHOUT throwing the work away. Killing a session used to lose everything it
+    had worked out - the pty dies, the scrollback goes, and the next session starts from nothing.
+    This writes the handover note first (from the transcript, by the main AI), files it on the
+    task, and hands it to whoever resumes: the next session is seeded with it. The task stays
+    open - pausing is not finishing, so no report and no reply draft."""
+    t = hub_term.get(sid)
+    if not t or not t.alive: raise HTTPException(404, 'no live terminal here')
+    tid = body.task_id or t.task_id
+    if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
+    note = pause_note(store, tid, hub_term.harvest(t))
+    hub_term.close(sid)
+    store.add_comment(tid, t.agent or 'agent', 'agent', f'{PAUSE_MARKER}\n{note}')
+    store.add_comment(tid, ACTOR, 'human', 'Paused the session - picking this up later.')
+    store.audit('terminal', tid, 'pause', ACTOR, detail={'sid': sid})
+    return {'pause': 'done', 'taskId': tid, 'note': note}
 
 @app.delete('/api/terminals/{sid}')
 def close_terminal(sid: str):

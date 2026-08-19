@@ -71,8 +71,8 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   show a **live peephole** — the last lines of the agent's console, and how long it has been
   going — and open into the full session. Drag between columns; "New task for the agent"
   takes a task name, the **prompt**, which **CLI and model**, and **one** way it gets
-  worked — a live session, a headless run, or just filed — so two agents never end up on
-  the same task.
+  worked: start an agent on it now, or just file it. Work always happens in a session you
+  can watch and talk to.
 - **Hand off to a person** — some work is not yours to do. Pick the channel and the
   colleague (the picker knows everyone who has written to you), and the AI writes the
   forward message out of the task's own context — systems, ids, error codes, what you need

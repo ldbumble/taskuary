@@ -167,10 +167,8 @@ def comment(task_id: int, body: TextBody):
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
-    background.add_task(hub_agents.dispatch, store, task_id, body.agent, body.instruction or 'Work this task.', ACTOR,
-                        {'model': body.model} if body.model else None)
-    return {'dispatch': 'running', 'agent': body.agent, 'model': body.model}
+    ses = start_session(store, task_id, body.agent, body.model, body.instruction)
+    return {'dispatch': 'session', 'agent': body.agent, 'model': body.model, 'session': ses}
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int):
@@ -243,6 +241,12 @@ def not_mine_suggest(mid: int):
     if not m: raise HTTPException(404, 'message not found')
     return {'note': _not_mine_note(m), 'from': m.get('FromEmail')}
 
+def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
+    try:
+        return hub_term.start_on_task(store_, tid, agent or 'coder', model, instruction, ACTOR)
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        raise HTTPException(422, str(e))
+
 @app.post('/api/messages/{mid}/dispatch')
 def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     """Hand ANY timeline item (failed report, email, chat) to an agent with your own
@@ -252,10 +256,8 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     if not m: raise HTTPException(404, 'message not found')
     if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR)
-    background.add_task(hub_agents.dispatch, store, tid, body.agent,
-                        body.instruction or 'Investigate this and fix it end to end.', ACTOR,
-                        {'model': body.model} if body.model else None)
-    return {'dispatch': 'running', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid)}
+    ses = start_session(store, tid, body.agent, body.model, body.instruction)
+    return {'dispatch': 'session', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid), 'session': ses}
 
 class SplitBody(BaseModel): kind: str | None = None
 

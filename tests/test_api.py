@@ -219,14 +219,16 @@ class ApiTests(unittest.TestCase):
         self.assertIsNone(out['task_id'])
         self.assertEqual(c.get(f'/api/messages/{mid}').json()['Subject'], 'Process Check - FAILED')
         server.store.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
-        with mock.patch.object(server.hub_agents, 'dispatch', return_value={'run_id': 1, 'status': 'done', 'result': 'ok'}) as d:
+        # sending it to an agent opens a REAL session on the task - there is no pipe behind
+        # any button, so the owner can always read, interrupt and answer what it is doing
+        with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1'}) as d:
             r = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder', 'instruction': 'find why it failed'}).json()
         tid = r['taskId']
-        self.assertEqual(r['ref'], f'TQ-{tid:04d}')
-        self.assertEqual(d.call_args[0][3], 'find why it failed')
+        self.assertEqual((r['ref'], r['dispatch']), (f'TQ-{tid:04d}', 'session'))
+        self.assertEqual(d.call_args[0][1:5], (tid, 'coder', None, 'find why it failed'))   # your prompt is typed in
         self.assertEqual([m['MessageId'] for m in server.store.list_messages(tid)], [mid])
         # a second send reuses the task it already made instead of forking a new one
-        with mock.patch.object(server.hub_agents, 'dispatch', return_value={'run_id': 2, 'status': 'done', 'result': 'ok'}):
+        with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1', 'existing': True}):
             self.assertEqual(c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder'}).json()['taskId'], tid)
         self.assertEqual(c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'ghost'}).status_code, 422)
         self.assertEqual(c.post('/api/messages/999999/dispatch', json={'agent': 'coder'}).status_code, 404)

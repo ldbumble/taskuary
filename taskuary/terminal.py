@@ -152,13 +152,29 @@ def default_shell():
     return [os.environ.get('SHELL') or '/bin/bash', '-i']
 
 
+# Flags that turn a CLI into a one-shot pipe. Everything ELSE in the profile's args belongs
+# in an interactive session too - dropping them all took --dangerously-skip-permissions with
+# them, so an unattended session stopped at the first approval prompt instead of working.
+PIPE_FLAGS = {'-p', '--print'}
+PIPE_OPTS = {'--output-format', '--input-format'}
+
+def interactive_args(args) -> list:
+    out, skip = [], False
+    for a in (args or []):
+        if skip: skip = False; continue
+        if a in PIPE_FLAGS: continue
+        if a in PIPE_OPTS: skip = True; continue
+        out.append(a)
+    return out
+
+
 def agent_argv(profile: dict, model: str = None) -> list:
-    """Interactive invocation of a configured CLI: its command WITHOUT the headless flags
-    (-p / --output-format json turn it into a one-shot pipe). `interactive_args` in the
-    profile overrides, for CLIs that need a subcommand to open their TUI, and the model flag
-    is the same one the headless runner uses (`model_arg`, e.g. codex wants -m)."""
+    """Interactive invocation of a configured CLI: its command, its own flags minus the pipe
+    ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
+    `interactive_args` in the profile replaces the lot, for CLIs that need a subcommand."""
     from .agents import _resolve_cmd
-    argv = _resolve_cmd(profile.get('cmd') or 'claude') + list(profile.get('interactive_args') or [])
+    argv = _resolve_cmd(profile.get('cmd') or 'claude')
+    argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args'))
     model = model or profile.get('model')
     return argv + ([profile.get('model_arg') or '--model', str(model)] if model else [])
 
@@ -224,6 +240,40 @@ def wrap_up(t: Term, on_done, prompt: str = WRAP_PROMPT, timeout: int = WRAP_WAI
         finally:
             t.untap(sink)
     threading.Thread(target=go, daemon=True).start()
+
+
+def seed_text(store, tid: int, instruction: str = None) -> str:
+    """What gets typed into a fresh session: the ask, the owner's own prompt, and the message
+    that started it. One line - a newline submits in a TUI."""
+    from .store import task_ref
+    t = store.get_task(tid) or {}
+    msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
+    m = msgs[-1] if msgs else None
+    parts = [f"Work Taskuary task {task_ref(tid)} - {t.get('Title') or ''}."]
+    if instruction and instruction.strip(): parts.append(instruction.strip())
+    if m: parts.append(f"It came in on {m.get('Channel')} from {m.get('FromName') or m.get('FromEmail')}: "
+                       f"{(m.get('BodyText') or '')[:3000]}")
+    elif t.get('Summary'): parts.append(str(t['Summary'])[:3000])
+    return ' '.join(' '.join(parts).split())
+
+
+def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
+                  actor: str = 'owner') -> dict:
+    """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
+    agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
+    import re
+    live = for_task(tid)
+    if live: return {**live, 'existing': True}
+    t = store.get_task(tid)
+    if not t: raise ValueError(f'no task {tid}')
+    if not store.get_agent(agent or ''): raise ValueError(f'unknown agent: {agent}')
+    repo = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
+    term = open_session(store, agent, tid, repo, None, 32, 110, actor, model)
+    term.seed(seed_text(store, tid, instruction))
+    store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',
+                      f'{agent} started on this task in a live session ({term.cwd}).')
+    if t.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)
+    return {**term.info(), 'existing': False}
 
 
 def get(sid): return SESSIONS.get(sid)

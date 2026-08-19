@@ -168,15 +168,25 @@ def _spawn(fn, *args):
     threading.Thread(target=fn, args=args, daemon=True).start()
 
 
+AUTO_SESSIONS = 4      # unattended sessions to keep alive at once; past this it waits for you
+
 def _auto_code(store, tid):
-    from .coder import github_cfg, run_coding_task
+    """Auto-dispatch puts the CLI on the task in a REAL session - the same one you see when
+    you open the task. Nothing runs where you cannot watch it, interrupt it or answer it."""
+    from . import terminal as term
     # the note belongs INSIDE the worker: written before the thread started, a task could
-    # claim "auto-dispatched" with no run behind it whenever the process died first
-    store.add_comment(tid, 'router', 'agent', 'auto-dispatched to the coder (coder_auto_enabled)')
+    # claim "auto-dispatched" with no session behind it whenever the process died first
+    if len([t for t in term.SESSIONS.values() if t.alive]) >= AUTO_SESSIONS:
+        store.add_comment(tid, 'router', 'agent',
+                          f'Not auto-started: {AUTO_SESSIONS} agent sessions are already live. '
+                          'Open the task and start it when you are ready.')
+        return
     try:
-        run_coding_task(store, tid, 'auto-dispatch', None, github_cfg(store))
+        term.start_on_task(store, tid, 'coder', actor='router')
+        store.add_comment(tid, 'router', 'agent', 'auto-started a live coder session (coder_auto_enabled)')
     except Exception as e:
-        logger.warning(f'auto coder dispatch failed for task {tid}: {e}')
+        logger.warning(f'auto dispatch failed for task {tid}: {e}')
+        store.add_comment(tid, 'router', 'agent', f'Auto-start failed: {str(e)[:200]}')
 
 
 def _auto_draft(store, tid, rid):

@@ -86,14 +86,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
     setFilter(""); loadTasks(); onSelect(data.taskId);
   };
-  // ONE way to start work on a task: pick the agent + model, optionally say what to do,
-  // Run. The full coder lifecycle (issue -> work -> report -> close) runs behind it.
-  const runAgent = async () => {
-    await api.post(`/api/tasks/${selected}/code`, { agent: run.agent, model: run.model || null,
-      instruction: run.instruction || null, repo: repoOf(detail?.task) });
-    setRun((r) => ({ ...r, instruction: "" }));
-    setTimeout(() => { loadDetail(selected); loadTasks(); }, 800);   // run row appears; polling takes over
-  };
   const post = async () => {
     if (!comment.trim()) return;
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
@@ -293,8 +285,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Typography>
                     {liveRun && (
                       <Typography variant="caption" sx={{ color: "#b45309", display: "block", mb: 1.25 }}>
-                        {liveRun.AgentName} is already working this task headlessly (run {liveRun.RunId}) — watch it under
-                        Earlier runs below. Starting a session here puts a second agent on the same task.
+                        {liveRun.AgentName} has a run going on this task (run {liveRun.RunId}) — watch it under Earlier
+                        runs below. Starting a session here puts a second agent on the same task.
                       </Typography>
                     )}
                     <Box sx={{ display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap" }}>
@@ -307,13 +299,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Button>
                     </Box>
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-                      Or{" "}
-                      <Box component="span" onClick={runAgent}
-                        sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-                        run it headless
-                      </Box>{" "}
-                      — nothing to watch: it opens the GitHub issue, works, writes its report here and closes the task.
-                      It only stops and waits if it needs your approval for something.
+                      Everything the agent does happens here, in the open — you can read it, interrupt it and answer it.
                     </Typography>
                   </Box>
                 )}
@@ -364,7 +350,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {!detail.messages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
                 </Fold>
 
-                {/* a headless run has no session to attach to - its trace is the record */}
+                {/* runs from before sessions (and any API-driven run) keep their trace here */}
                 {detail.runs.length > 0 && (
                   <Fold title={`Earlier runs · ${detail.runs.length}`}>
                     {detail.runs.map((r) => (

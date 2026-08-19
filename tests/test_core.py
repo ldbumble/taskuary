@@ -161,6 +161,37 @@ class CoreTests(unittest.TestCase):
         row = s._one('SELECT ConversationId FROM message WHERE MessageId=?', (feed[0]['MessageId'],))
         self.assertEqual(row['ConversationId'], 'teams:19:aa')          # a chat is one thread, like a mail chain
 
+    def test_needs_you_is_anything_no_agent_is_moving(self):
+        """The old rule was 'a review is pending', so a task whose agent finished without
+        closing it sat in_progress, looking busy, telling nobody."""
+        s = MemoryStore()
+        out = ingest_message(s, self.msg(external_id='ny1'), llm=TASK_LLM)
+        tid = out['task_id']
+        row = lambda: next(m for m in s.feed() if m['MessageId'] == out['message_id'])
+        self.assertEqual(row()['NeedsYou'], 1)                       # nobody has touched it yet
+        rid = s.start_run(tid, 'coder', 'work it', 'o')
+        self.assertEqual(row()['NeedsYou'], 0)                       # an agent IS working it
+        s.update_run(rid, {'Status': 'done'}, finished=True)
+        self.assertEqual(row()['NeedsYou'], 1)                       # it stopped and left it open - yours
+        self.assertEqual(len(s.feed(pending_only=True)), 1)
+        s.update_task(tid, {'Status': 'done'}, 'o')
+        self.assertEqual((row()['NeedsYou'], len(s.feed(pending_only=True))), (0, 0))
+
+    def test_splitting_a_second_ask_off_a_thread(self):
+        from taskuary.ingest import split_message
+        s = MemoryStore()
+        a = ingest_message(s, self.msg(external_id='s1', conversation_id='c9', subject='Chat'), llm=TASK_LLM)
+        b = ingest_message(s, self.msg(external_id='s2', conversation_id='c9', subject='Chat',
+                                       body='unrelated: should job code 325 have a license?'), llm=TASK_LLM)
+        self.assertEqual(b['task_id'], a['task_id'])                 # same thread, one task
+        tid = split_message(s, b['message_id'], 'owner')
+        self.assertNotEqual(tid, a['task_id'])
+        self.assertEqual(s.get_message(b['message_id'])['TaskId'], tid)
+        self.assertEqual(len(s.list_messages(a['task_id'])), 1)      # the parent keeps only its own
+        # the title comes from the ask, not the chat's name, which every message shares
+        self.assertIn('job code 325', s.get_task(tid)['Title'])
+        self.assertTrue(any('Split' in c['Body'] for c in s.list_comments(a['task_id'])))
+
     def test_one_report_can_pull_from_several_sources(self):
         from taskuary.reports import REGISTRY, render_report
         s = MemoryStore()

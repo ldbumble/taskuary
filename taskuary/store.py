@@ -310,10 +310,19 @@ class SQLiteStore:
                    (name, content, actor, _now(), content, actor, _now()))
 
     # feed
+    # One definition of "this is on me", used by the chip, the counter and the filter alike:
+    # a decision is pending, OR the task is not finished and no agent is working it right
+    # now. A task nobody is running is nobody's but yours.
+    NEEDS_YOU = """(CASE WHEN (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1)='pending'
+                          OR (m.TaskId IS NOT NULL AND t.Status NOT IN ('done', 'dropped')
+                              AND NOT EXISTS (SELECT 1 FROM run WHERE TaskId=m.TaskId AND Status='running'))
+                    THEN 1 ELSE 0 END)"""
+
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId,
-                       t.Title, t.Status TaskStatus, t.Priority,
+                       t.Title, t.Status TaskStatus, t.Priority, {self.NEEDS_YOU} NeedsYou,
+                       (SELECT COUNT(*) FROM message x WHERE x.TaskId=m.TaskId AND x.Status<>'context') ChainSize,
                        (SELECT Decision FROM route WHERE MessageId=m.MessageId ORDER BY RouteId DESC LIMIT 1) Decision,
                        (SELECT Reason FROM route WHERE MessageId=m.MessageId ORDER BY RouteId DESC LIMIT 1) RouteReason,
                        (SELECT ReviewId FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewId,
@@ -322,8 +331,7 @@ class SQLiteStore:
                 FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
                 WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped') '''
         p = [f'-{int(days)} days']
-        if pending_only:
-            q += " AND (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1)='pending'"
+        if pending_only: q += f' AND {self.NEEDS_YOU}=1'
         # channel accepts a csv so the UI can filter by a CATEGORY (messages = email,
         # teams, slack) without needing one request per channel
         if channel:

@@ -5,7 +5,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
 answering is the responder's job (reply_only), doing is the coder's.
 """
-import threading
+import re, threading
 from loguru import logger
 from .routing import route, draft_task_fields
 from .policy import evaluate
@@ -124,6 +124,43 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     store.attach_message(mid, tid)
     store.add_route(mid, tid, 'create', None, 'promoted by the owner to hand it to an agent', [], actor)
     store.audit('task', tid, 'create_from_message', actor, detail={'message_id': mid, 'subject': title})
+    return tid
+
+
+GREETING = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b', re.I)
+
+def ask_line(body: str) -> str:
+    """The line that carries the ask - never the greeting it opens with."""
+    lines = [l.strip() for l in (body or '').splitlines() if l.strip()]
+    real = [l for l in lines if not GREETING.match(l) and len(l) > 12]
+    return (real or lines or [''])[0][:120]
+
+
+def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> int:
+    """Pull one message OUT of the task it was threaded onto and give it its own. Two asks
+    that arrived in the same chat are one conversation but two jobs - and an agent sent at
+    the task only ever gets the first one's prompt."""
+    m = store.get_message(mid)
+    if not m: raise ValueError(f'no message {mid}')
+    old = m.get('TaskId')
+    parent = store.get_task(old) if old else None
+    title = (m.get('Subject') or m.get('FromName') or 'message')[:200]
+    body = str(m.get('BodyText') or '')
+    # the ask itself is the title when the subject is just the chat's name every message
+    # shares - and the ask is never the greeting line it opens with
+    if parent and (parent.get('Title') or '').strip().lower() == title.strip().lower():
+        lines = [l.strip() for l in body.splitlines() if l.strip()]
+        greet = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b', re.I)
+        title = next((l for l in lines if not greet.match(l) and len(l) > 12), lines[0] if lines else title)[:120]
+    tid = store.create_task({'Title': title, 'Summary': body[:2000],
+                             'Kind': kind or (parent or {}).get('Kind') or 'coding',
+                             'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
+    store.attach_message(mid, tid)
+    store.add_route(mid, tid, 'create', None,
+                    f'split off {task_ref(old)} - a separate ask in the same thread' if old else 'made its own task',
+                    [], actor)
+    if old: store.add_comment(old, actor, 'human', f'Split "{title}" out into {task_ref(tid)} - unrelated ask.')
+    store.audit('task', tid, 'split_from_message', actor, detail={'message_id': mid, 'from_task': old})
     return tid
 
 

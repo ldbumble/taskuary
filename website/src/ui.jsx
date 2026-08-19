@@ -27,10 +27,16 @@ export const RefChip = ({ taskId, onClick }) => taskId ? (
     sx={{ ...mono, bgcolor: "#eef0ff", color: "#4f46e5", height: 19, fontSize: 10.5 }} />
 ) : null;
 
-export const ActionChip = ({ action, reviewStatus, taskStatus }) => {
+export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou }) => {
   // A finished task outranks everything else the chip could say.
   if (taskStatus === "done" && reviewStatus !== "pending") {
     return <Chip size="small" label="completed" sx={{ bgcolor: "#e8f6ee", color: "#15803d", height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+  }
+  // and "nobody is moving this" outranks the verdict: what happened to it matters less
+  // than whether it is sitting on you right now
+  if (needsYou) {
+    return <Chip size="small" label="needs you" sx={{ bgcolor: "#fef4e6", color: "#b45309", border: "1px solid #f3ddb8",
+      height: 19, fontSize: 10.5, fontWeight: 700 }} />;
   }
   // What actually matters to the reader: current state, not just the original verdict.
   // 'report' and 'feed' are NOT verdicts - nothing judged those items; they are here to be
@@ -337,13 +343,16 @@ export const TASK_STATES = [
   { key: "done", label: "done", c: { bg: "#e8f6ee", fg: "#15803d", bd: "#cbe8d6" } },
   { key: "dropped", label: "dropped", c: { bg: "#eef0f3", fg: "#8a94a6", bd: "#e5e8ee" } },
 ];
+const ST = Object.fromEntries(TASK_STATES.map((x) => [x.key, x]));
+// The ladder, top down: dropped, done, an agent is ACTUALLY running it, else it is yours.
+// "in_progress with nothing running" used to read as "agent working" - a task whose agent
+// finished without closing it then sat there looking busy and nobody was told.
 export const stateOf = (t) => {
-  if (!t) return TASK_STATES[2];
-  if (t.Status === "dropped") return TASK_STATES[4];
-  if (t.ReviewStatus === "pending" || t.Status === "waiting") return TASK_STATES[0];   // a decision is on you
-  if (t.Status === "done") return TASK_STATES[3];
-  if (t.RunStatus === "running" || t.Status === "in_progress") return TASK_STATES[1];
-  return TASK_STATES[2];
+  if (!t) return ST.queued;
+  if (t.Status === "dropped") return ST.dropped;
+  if (t.Status === "done") return ST.done;
+  if (t.RunStatus === "running") return ST.working;
+  return ST.needs_you;
 };
 export const StateChip = ({ task }) => {
   const st = stateOf(task);

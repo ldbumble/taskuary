@@ -9,6 +9,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import CallSplitIcon from "@mui/icons-material/CallSplit";
 import api from "./api";
 import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
@@ -47,6 +48,10 @@ const actionOf = (r) => (r.Channel === "report" ? "report"
           : r.ReviewKind === "auto" ? "auto"
             : r.ReviewId ? "draft" : "task_only");
 
+// NeedsYou comes from the server and means one thing: nobody else is moving this. It
+// outranks the verdict chip, because "what happened to it" matters less than "is it mine".
+const needsYou = (r) => !!r.NeedsYou && r.TaskStatus !== "done";
+
 // Teams chats get a synthesized "<sender> in <source>" subject - redundant next to the
 // sender + source we already show, so drop it.
 const subjectOf = (r) => {
@@ -67,7 +72,8 @@ const blurb = (r) => {
     : r.ReviewStatus === "pending" ? "AI drafted a reply — waiting on your review"
       : r.ReviewStatus === "auto" ? "AI answered automatically"
         : r.TaskStatus === "done" ? `completed${r.ReviewStatus ? ` · you said ${r.ReviewStatus.replace("_", " ")}` : ""}`
-          : r.ReviewStatus ? `reviewed (${r.ReviewStatus})` : "queued for the coder to work";
+          : needsYou(r) ? "needs you — no agent is working it right now"
+            : r.ReviewStatus ? `reviewed (${r.ReviewStatus})` : "an agent is working it";
   return `${routed} · ${state}`;
 };
 
@@ -229,7 +235,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const stats = [
     { label: "in today", n: todays.length, f: "" },
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
-    { label: "need me", n: (rows || []).filter((r) => r.ReviewStatus === "pending").length, f: "pending", hot: true },
+    { label: "need me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true },
     { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
   ];
 
@@ -352,7 +358,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                         <Typography variant="body2" noWrap sx={{ color: DIM, flex: 1, minWidth: 0 }}>{subjectOf(r) ? `— ${subjectOf(r)}` : ""}</Typography>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexShrink: 0 }}>
                           <RefChip taskId={r.TaskId} onClick={(e) => { e.stopPropagation(); onOpenTask(r.TaskId); }} />
-                          <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} />
+                          <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
                           <ChevronRightIcon className="thubGo" sx={{ fontSize: 18, color: "#4f46e5",
                             opacity: sel?.MessageId === r.MessageId ? 1 : 0,
                             transform: sel?.MessageId === r.MessageId ? "translateX(0)" : "translateX(-6px)",
@@ -564,7 +570,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
             </Typography>
           </Box>
           <RefChip taskId={sel.TaskId} onClick={() => onOpenTask(sel.TaskId)} />
-          <ActionChip action={actionOf(sel)} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} />
+          <ActionChip action={actionOf(sel)} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} needsYou={needsYou(sel)} />
           <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
 
@@ -625,6 +631,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onDetails, o
               <Box sx={{ display: "flex", gap: 1, mt: 0.5, borderTop: `1px solid ${BORDER}`, pt: 1.25, alignItems: "center", flexWrap: "wrap" }}>
                 <Button size="small" onClick={onDetails}>See details →</Button>
                 {sel.TaskId && <Button size="small" onClick={() => onOpenTask(sel.TaskId)}>Open task</Button>}
+                <SplitTask row={sel} onSplit={() => load()} />
                 <Box sx={{ flex: 1 }} />
                 {/* not ours -> the reason goes to memory, and triage reads it next time */}
                 <NotMine messageId={sel.MessageId} onDone={onSkipped} />
@@ -765,6 +772,35 @@ const pendingDraft = (detail, open) => {
   if (rv?.DraftText) return rv.DraftText;
   const run = (detail.runs || []).find((r) => r.AgentName === "responder" && r.Status === "done");
   return run?.Result || "";
+};
+
+// Two asks arriving in one chat thread are one conversation but two jobs - and an agent
+// sent at the task only ever receives the first one's prompt.
+const SplitTask = ({ row, onSplit }) => {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+  const [err, setErr] = useState("");
+  if (!row.TaskId || (row.ChainSize || 1) < 2) return null;
+  if (done) return (
+    <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
+      ✓ now its own task {ref(done)} — send it to an agent above
+    </Typography>
+  );
+  const go = async () => {
+    setBusy(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/messages/${row.MessageId}/split`, {});
+      setDone(data.taskId); onSplit?.(data.taskId);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not split it out"); }
+    setBusy(false);
+  };
+  return (
+    <Button size="small" disabled={busy} onClick={go} startIcon={<CallSplitIcon sx={{ fontSize: 14 }} />}
+      title={`This is a separate ask from the rest of ${ref(row.TaskId)} - give it its own task and prompt`}
+      sx={{ fontSize: 11, color: "#0e7490" }}>
+      {busy ? "splitting…" : err || "Make this its own task"}
+    </Button>
+  );
 };
 
 const DrawerBlock = ({ title, children }) => (

@@ -506,8 +506,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {rep && (
                 <>
                   <PanelLabel>What the coder did</PanelLabel>
-                  <Box sx={{ bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5, px: 1.25, py: 0.5,
-                    maxHeight: 280, overflow: "auto" }}>
+                  <Box sx={{ bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
                     <CoderReport body={rep.Body} />
                   </Box>
                 </>
@@ -523,7 +522,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {history.length > 0 && (
                 <>
                   <PanelLabel>History</PanelLabel>
-                  <Box sx={{ maxHeight: 180, overflowY: "auto", bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 0.25 }}>
+                  <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 0.25 }}>
                     {history.map((h, i) => (
                       <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.6,
                         borderTop: i ? `1px solid ${BORDER}` : "none" }}>
@@ -638,16 +637,14 @@ const DayHeader = ({ label }) => {
 // A chain can hold several emails (the inbound thread + your replies). One clean strip
 // of pills above the body flips between them - the clicked timeline row is preselected,
 // "↩ you" marks your own replies. Keyed by focusId so a new selection resets the pick.
-const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
+const MessageBlock = ({ messages, focusId, fallback }) => {
   const msgs = messages || [];
   const [mid, setMid] = useState(null);
-  const [full, setFull] = useState(false);
   const [showQuoted, setShowQuoted] = useState(false);
   const cur = msgs.find((m) => m.MessageId === mid) || msgs.find((m) => m.MessageId === focusId) || msgs[msgs.length - 1];
   // what just arrived, separated from the thread quoted underneath it
   const { latest, quoted } = splitQuoted(cleanText(cur?.BodyText) || fallback || "…");
   const text = latest || quoted;
-  const long = text.length > 700;                    // long bodies scroll in place; "expand" gives them the panel
   const you = cur?.Status === "context";
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
@@ -685,20 +682,9 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
             {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
           </Box>
         )}
-        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left",
-          maxHeight: full ? "60vh" : maxH, overflowY: "auto", overscrollBehavior: "contain",
-          // a hairline scrollbar that's always visible, so a clipped body never looks finished
-          "&::-webkit-scrollbar": { width: 8 },
-          "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
+        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
           {text}
         </Typography>
-        {long && (
-          <Typography variant="caption" onClick={() => setFull(!full)}
-            sx={{ color: "#4f46e5", fontWeight: 600, cursor: "pointer", display: "inline-block", mt: 0.5,
-              "&:hover": { textDecoration: "underline" } }}>
-            {full ? "collapse ↑" : `expand — ${text.length.toLocaleString()} chars ↓`}
-          </Typography>
-        )}
         {/* the thread quoted underneath: folded away by default, one click to read */}
         {latest && quoted && (
           <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
@@ -708,7 +694,7 @@ const MessageBlock = ({ messages, focusId, fallback, maxH = 240 }) => {
             </Typography>
             {showQuoted && (
               <Typography variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap", color: FAINT, mt: 0.5,
-                borderLeft: `2px solid ${BORDER}`, pl: 1, maxHeight: 300, overflowY: "auto" }}>
+                borderLeft: `2px solid ${BORDER}`, pl: 1 }}>
                 {quoted}
               </Typography>
             )}

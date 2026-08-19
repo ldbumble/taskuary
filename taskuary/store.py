@@ -342,6 +342,12 @@ class SQLiteStore:
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
         return self._rows(q, p)
 
+    def people(self, limit=60):
+        """Everyone who has written to you lately - the hand-off picker's address book."""
+        return self._rows("""SELECT FromEmail Email, MAX(FromName) Name, COUNT(*) N, MAX(SentAt) Last
+                             FROM message WHERE FromEmail LIKE '%@%' AND Status<>'context'
+                             GROUP BY LOWER(FromEmail) ORDER BY Last DESC LIMIT ?""", (int(limit),))
+
     def task_detail(self, task_id):
         t = self.get_task(task_id)
         if not t: return None

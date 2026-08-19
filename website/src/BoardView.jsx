@@ -12,6 +12,14 @@ import api from "./api";
 import { PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty } from "./ui.jsx";
 
+// "coder · running" says nothing you can act on. How long it has been going, and what it is
+// touching right now, is what tells you whether to leave it alone or go look.
+const elapsed = (since) => {
+  if (!since) return "";
+  const s = Math.max(0, (Date.now() - new Date(String(since).replace(" ", "T"))) / 1000);
+  return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`;
+};
+
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
 // A card's peephole into the running agent: the last couple of console lines, live.
@@ -28,7 +36,7 @@ const LiveTail = ({ run }) => (
     ))}
     <Typography variant="caption" sx={{ ...mono, color: CATPPUCCIN.cyan, fontSize: 9.5,
       "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
-      ▮ {run.AgentName} working — click the card for the full session
+      ▮ {run.AgentName} working {elapsed(run.StartedAt)} — click the card for the full session
     </Typography>
   </Box>
 );
@@ -134,7 +142,8 @@ export default function BoardView({ onOpenTask }) {
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 13 }} />
                     {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />}
                     {t.RunStatus && (
-                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.RunStatus}`}
+                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.RunStatus}`
+                        + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 17, fontSize: 9.5, fontWeight: 700,
                           bgcolor: t.RunStatus === "running" ? "#fef4e6" : t.RunStatus === "error" ? "#fdecec" : "#e8f6ee",
                           color: t.RunStatus === "running" ? "#b45309" : t.RunStatus === "error" ? "#b91c1c" : "#15803d" }} />

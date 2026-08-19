@@ -297,6 +297,44 @@ class ApiTests(unittest.TestCase):
         self.assertIn('yes, drop it', rct.call_args[0][-1])                     # instruction carries your words
         self.assertTrue(any('Approved' in cm['Body'] for cm in server.store.list_comments(tid)))
 
+    def test_approving_a_draft_actually_answers_the_sender(self):
+        """Approving used to file a verdict and stop - the person who wrote in never heard
+        back. Approve IS send, in the original thread, and a failure says so on the task."""
+        tid = c.post('/api/tasks', json={'Title': 'reply to Mindy', 'Kind': 'reply'}).json()['taskId']
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:AAA', 'Channel': 'email',
+                                        'SourceName': 'me@corp.com', 'Subject': 'PTO', 'FromEmail': 'mindy@corp.com',
+                                        'BodyText': 'am I covered monday?', 'Status': 'routed'})
+        rid = server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                       'DraftText': 'Yes - covered, enjoy Monday.'})
+        with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['mindy@corp.com'],
+                                                                           'threaded': True}) as send:
+            out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'}).json()
+        self.assertEqual((out['sent']['channel'], out['sent']['threaded']), ('email', True))
+        self.assertEqual(send.call_args[0][1], ['mindy@corp.com'])            # to
+        self.assertEqual(send.call_args[0][3], 'Yes - covered, enjoy Monday.')  # body
+        self.assertEqual(send.call_args[0][4], 'AAA')                          # threaded on the Graph id
+        # and when Graph refuses, the approved text is still on the task, marked NOT SENT
+        rid2 = server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                        'DraftText': 'second try'})
+        with mock.patch.object(server.outbound, 'send_email', side_effect=RuntimeError('mailbox not found')):
+            out = c.post(f'/api/reviews/{rid2}/decide', json={'verb': 'approve'}).json()
+        self.assertIn('mailbox not found', out['send_error'])
+        self.assertTrue(any('NOT SENT' in cm['Body'] for cm in server.store.list_comments(tid)))
+
+    def test_handoff_drafts_then_sends(self):
+        tid = c.post('/api/tasks', json={'Title': 'AD account for Christina'}).json()['taskId']
+        with mock.patch.object(server.outbound, 'draft_handoff', return_value='Ross - this one is yours: …') as d:
+            out = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'ross@corp.com', 'draft_only': True}).json()
+        self.assertEqual(out['draft'], 'Ross - this one is yours: …')
+        self.assertEqual(d.call_args[0][2], 'ross@corp.com')
+        with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['ross@corp.com']}):
+            out = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'ross@corp.com', 'text': 'take this please'}).json()
+        self.assertEqual(out['sent']['to'], ['ross@corp.com'])
+        self.assertTrue(any('Handed off to ross@corp.com' in cm['Body'] for cm in server.store.list_comments(tid)))
+        # a chat hand-off needs a chat: this task never came from one
+        self.assertEqual(c.post(f'/api/tasks/{tid}/handoff',
+                                json={'to': 'ross', 'channel': 'teams', 'text': 'x'}).status_code, 422)
+
     def test_runs_audit_ingest_status(self):
         self.assertEqual(c.get('/api/runs/999999').status_code, 404)
         self.assertIsInstance(c.get('/api/audit/recent').json()['data'], list)

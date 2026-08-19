@@ -715,7 +715,7 @@ def wrap_terminal(sid: str, body: WrapBody):
     the pty meant one more prompt to read, minutes of waiting, and a fresh chance for an agent you
     just stopped to go do more work."""
     t = hub_term.get(sid)
-    if not t or not t.alive: raise HTTPException(404, 'no live terminal here')
+    if not t: raise HTTPException(404, 'no terminal here')
     tid = body.task_id or t.task_id
     if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
     text = hub_term.harvest(t)
@@ -738,7 +738,7 @@ def pause_terminal(sid: str, body: WrapBody):
     task, and hands it to whoever resumes: the next session is seeded with it. The task stays
     open - pausing is not finishing, so no report and no reply draft."""
     t = hub_term.get(sid)
-    if not t or not t.alive: raise HTTPException(404, 'no live terminal here')
+    if not t: raise HTTPException(404, 'no terminal here')
     tid = body.task_id or t.task_id
     if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
     note = pause_note(store, tid, hub_term.harvest(t))

@@ -63,6 +63,7 @@ class TerminalTests(unittest.TestCase):
         t.task_id, t.agent = tid, 'coder'
         terminal.SESSIONS[t.sid] = t
         self.assertTrue(_wait(lambda: 'hello-from-pty' in t.scrollback()))     # something on screen to harvest
+        self.assertTrue(_wait(lambda: not t.alive))     # the CLI exited by itself - wrap-up must still work
         typed = []
         t.write = typed.append
         report = '{"determination": "325 was Y/Y", "actions": "flipped it to N/N", "summary": "no mailbox now"}'
@@ -91,6 +92,7 @@ class TerminalTests(unittest.TestCase):
         t.task_id, t.agent = tid, 'coder'
         terminal.SESSIONS[t.sid] = t
         self.assertTrue(_wait(lambda: 'hello-from-pty' in t.scrollback()))
+        self.assertTrue(_wait(lambda: not t.alive))     # same for pausing an exited session
         note = '{"found": "a malformed date kills the batch", "did": "nothing yet", "next": "patch the date parse"}'
         try:
             with mock.patch('taskuary.llm.build_llm', return_value=lambda s, u, **kw: note):

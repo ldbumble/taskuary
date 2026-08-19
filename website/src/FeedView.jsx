@@ -497,7 +497,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
           <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
 
-        <Box sx={{ px: 2, py: 1.5, overflowY: "auto", textAlign: "left", flex: 1 }}>
+        <Box sx={{ px: 2, py: 1.5, overflowY: "auto", textAlign: "left", flex: 1, minHeight: 150 }}>
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
               <PanelLabel>{(detail?.messages || []).length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}</PanelLabel>
@@ -546,54 +546,61 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 </>
               )}
 
-              {/* ONE list of what can happen to this item. These were four buttons in two rows,
-                  four sizes, two of them right-aligned - so "what are my options" needed a hunt. */}
-              <PanelLabel>What should happen with this?</PanelLabel>
-              <ChoiceList>
-                {onIt ? (
-                  <ChoiceRow first tint="#f5f3ff" onClick={() => onOpenTask(sel.TaskId)}
-                    icon={<SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#b45309" : "#7e22ce" }} />}
-                    label={onIt.waiting ? `${onIt.agent} is waiting for your answer` : `${onIt.agent} is working this now`}
-                    hint={onIt.waiting ? "open the task and answer it in the session" : "open the task to watch it live"} />
-                ) : (
-                  <SendToAgent row first messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
-                )}
-                {sel.TaskId ? (
-                  <ChoiceRow tint="#eef0ff" onClick={() => onOpenTask(sel.TaskId)}
-                    icon={<OpenInFullIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
-                    label={`Open task ${ref(sel.TaskId)}`} hint="the whole story: session, report, history" />
-                ) : (
-                  <MineToDo messageId={sel.MessageId} onMade={() => onRefresh?.()} />
-                )}
-                {sel.TaskId && (
-                  <ChoiceRow tint="#eef0ff" onClick={() => setHandoff((h) => !h)}
-                    icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
-                    label="Hand it to a person" hint="not ours to do — the AI writes the forward, you send it" />
-                )}
-                <SplitTask row={sel} onSplit={() => load()} />
-                {/* not ours -> the reason goes to memory, and triage reads it next time */}
-                <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
-                {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
-                  <ChoiceRow tint="#e8f6ee" busy
-                    icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}
-                    label="Sender skipped"
-                    hint={skipped ? `${skipped} past message${skipped === 1 ? "" : "s"} hidden too` : "they will not appear again"} />
-                ) : (
-                  <ChoiceRow tint="#eef0f3" onClick={skipSender}
-                    icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#8a94a6" }} />}
-                    label="Skip this sender" hint={`hide ${sel.FromEmail} and their past mail — undo in Settings`} />
-                ))}
-              </ChoiceList>
-
-              {handoff && sel.TaskId && (
-                <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
-                  <PanelLabel>Hand this to a person</PanelLabel>
-                  <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
-                </Box>
-              )}
             </>
           )}
         </Box>
+
+        {/* pinned: whatever the message does, the four options are on screen */}
+        {!loading && (
+          <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2,
+            px: 2, pt: 0.25, pb: 1.25, maxHeight: "46vh", overflowY: "auto" }}>
+          {/* These were four buttons in two rows, four sizes, two right-aligned - so "what are
+              my options" needed a hunt, and a long message pushed the fourth off-screen. */}
+            <PanelLabel>What should happen with this?</PanelLabel>
+            <ChoiceList>
+              {onIt ? (
+                <ChoiceRow first tint="#f5f3ff" onClick={() => onOpenTask(sel.TaskId)}
+                  icon={<SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#b45309" : "#7e22ce" }} />}
+                  label={onIt.waiting ? `${onIt.agent} is waiting for your answer` : `${onIt.agent} is working this now`}
+                  hint={onIt.waiting ? "open the task and answer it in the session" : "open the task to watch it live"} />
+              ) : (
+                <SendToAgent row first messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+              )}
+              {sel.TaskId ? (
+                <ChoiceRow tint="#eef0ff" onClick={() => onOpenTask(sel.TaskId)}
+                  icon={<OpenInFullIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                  label={`Open task ${ref(sel.TaskId)}`} hint="the whole story: session, report, history" />
+              ) : (
+                <MineToDo messageId={sel.MessageId} onMade={() => onRefresh?.()} />
+              )}
+              {sel.TaskId && (
+                <ChoiceRow tint="#eef0ff" onClick={() => setHandoff((h) => !h)}
+                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                  label="Hand it to a person" hint="not ours to do — the AI writes the forward, you send it" />
+              )}
+              <SplitTask row={sel} onSplit={() => load()} />
+              {/* not ours -> the reason goes to memory, and triage reads it next time */}
+              <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
+              {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
+                <ChoiceRow tint="#e8f6ee" busy
+                  icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}
+                  label="Sender skipped"
+                  hint={skipped ? `${skipped} past message${skipped === 1 ? "" : "s"} hidden too` : "they will not appear again"} />
+              ) : (
+                <ChoiceRow tint="#eef0f3" onClick={skipSender}
+                  icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#8a94a6" }} />}
+                  label="Skip this sender" hint={`hide ${sel.FromEmail} and their past mail — undo in Settings`} />
+              ))}
+            </ChoiceList>
+
+            {handoff && sel.TaskId && (
+              <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
+                <PanelLabel>Hand this to a person</PanelLabel>
+                <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
+              </Box>
+            )}
+          </Box>
+        )}
       </Box>
     </Box>
   );

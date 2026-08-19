@@ -4,11 +4,22 @@ upgrade (provider-agnostic - wire your own OpenAI/Anthropic/local call in config
 """
 import json, re
 
-INTENT_SYSTEM = ('Classify one inbound work message. Answer JSON only: '
-                 '{"intent": "task|reply_only|fyi", "why": "<8 words max>"}. '
-                 'task = the owner must DO something beyond replying. '
-                 'reply_only = it just needs an answer, even one requiring a quick lookup. '
-                 'fyi = informational only - nothing to do, nothing to answer.')
+# What each verdict COSTS is part of the judgement, so it is in the prompt: a task starts a
+# real agent in a real repo; a reply is one cheap draft the owner approves. Defaulting to
+# "task" turned questions into background work nobody asked for.
+INTENT_SYSTEM = (
+    'Classify one inbound work message. Answer JSON only: '
+    '{"intent": "task|reply_only|fyi", "why": "<8 words max>"}.\n'
+    'task = someone must DO something beyond writing back: change a system, fix or build something, '
+    'produce or chase something. This starts a coding agent on a repository, so choose it only when '
+    'work has to happen.\n'
+    'reply_only = answering IS the work - a question, a status check, a scheduling note, anything you '
+    'can settle in a message, even one needing a quick lookup. The reply is drafted for the owner to '
+    'approve, so nothing is dropped by choosing this.\n'
+    'fyi = informational only: automated notices, reports, newsletters, thanks, threads the owner is '
+    'merely copied on.\n'
+    'Torn between task and reply_only? Choose reply_only. The owner can turn a reply into a task in '
+    'one click, and a wrongly-started agent costs far more than a draft.')
 
 _ASK = re.compile(r'\b(can you|could you|are you|do you|would you|let me know|please confirm|any update)\b', re.I)
 _ACT = re.compile(r'\b(please (add|send|update|fix|remove|create|set up)|need you to|action required|please complete)\b', re.I)

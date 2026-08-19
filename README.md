@@ -86,6 +86,12 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   runs it headless instead when you'd rather not watch. Every task shows **one** state —
   *needs you*, *agent working*, *queued*, *done* — instead of three columns you had to
   combine in your head.
+- **Two roads out of triage, and only one of them costs anything.** A message that just
+  needs an answer is *reply_only*: **the main AI writes the reply** in your voice per
+  SOUL.md, it waits in Review, and approving sends it — no task, no agent, no repository. A
+  message that needs work doing becomes a task and starts an agent. Torn cases go to
+  reply_only on purpose: you can turn a reply into a task in one click, and a wrongly-started
+  agent costs far more than a draft.
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI. **Approving sends**: the answer goes back out on the channel it arrived on,
   in the original mail thread or the same chat — and if the send fails, the approved text
@@ -211,7 +217,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 112 tests, ~20s, no network or credentials needed
+pytest -q                   # 113 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

@@ -18,7 +18,7 @@ from . import policy as policy_engine
 from . import terminal as hub_term
 from .coder import run_coding_task
 from .converse import message_agent
-from . import outbound
+from . import outbound, responder
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -379,17 +379,23 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
 
 @app.post('/api/reviews/{rid}/draft')
 def draft_review(rid: int):
-    """(Re)generate the AI draft for a pending review inline."""
+    """(Re)generate the AI draft for a pending review inline. The main AI writes replies -
+    a coding CLI is the wrong (and expensive) tool for two sentences of email - unless the
+    owner deliberately configured an agent named `responder`."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
-    names = [a['Name'] for a in store.list_agents()]
-    name = 'responder' if 'responder' in names else (names[0] if names else None)
-    if not name: raise HTTPException(422, 'no agents configured')
-    out = hub_agents.dispatch(store, rv['TaskId'], name, 'Draft the reply this message needs.', ACTOR)
-    if out['status'] != 'done': raise HTTPException(502, 'draft agent failed - see the run log')
-    store.update_review_draft(rid, out['result'], out['run_id'])
-    store.audit('review', rid, 'redraft', ACTOR, run_id=out['run_id'])
-    return {'ok': True, 'draft': out['result'], 'runId': out['run_id']}
+    if store.get_agent('responder'):
+        out = hub_agents.dispatch(store, rv['TaskId'], 'responder', 'Draft the reply this message needs.', ACTOR)
+        if out['status'] != 'done': raise HTTPException(502, 'draft agent failed - see the run log')
+        store.update_review_draft(rid, out['result'], out['run_id'])
+        store.audit('review', rid, 'redraft', ACTOR, run_id=out['run_id'])
+        return {'ok': True, 'draft': out['result'], 'runId': out['run_id']}
+    try:
+        draft = responder.draft_for_review(store, rv['TaskId'], rid)
+    except Exception as e:
+        raise HTTPException(422, str(e)[:300])
+    store.audit('review', rid, 'redraft', ACTOR)
+    return {'ok': True, 'draft': draft}
 
 def _llm():
     try:

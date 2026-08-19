@@ -18,6 +18,7 @@ from . import policy as policy_engine
 from . import terminal as hub_term
 from .coder import run_coding_task
 from .converse import message_agent
+from . import outbound
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -262,6 +263,37 @@ def split_msg(mid: int, body: SplitBody = None):
     tid = split_message(store, mid, ACTOR, (body.kind if body else None))
     return {'taskId': tid, 'ref': task_ref(tid)}
 
+class HandoffBody(BaseModel):
+    to: str | None = None; channel: str = 'email'; note: str | None = None
+    text: str | None = None; draft_only: bool = False
+
+@app.get('/api/people')
+def people(): return {'data': store.people()}
+
+@app.post('/api/tasks/{task_id}/handoff')
+def handoff(task_id: int, body: HandoffBody):
+    """Hand the task to a PERSON: the AI writes the forward message from the task's own
+    context, you edit it, and it goes out on the channel you picked."""
+    t = store.get_task(task_id)
+    if not t: raise HTTPException(404, 'task not found')
+    try:
+        text = (body.text or '').strip() or outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
+        if body.draft_only: return {'draft': text}
+        if not body.to: raise HTTPException(422, 'who is it going to?')
+        if body.channel == 'email':
+            sent = outbound.send_email(store, [body.to], f"{task_ref(task_id)} {t.get('Title') or ''}".strip(), text)
+        elif body.channel == 'teams':
+            msgs = [m for m in store.list_messages(task_id) if m['Channel'] == 'teams']
+            if not msgs: raise HTTPException(422, 'this task did not come from a chat, so there is no chat to post in - use email')
+            sent = outbound.send_teams(store, (msgs[-1].get('ConversationId') or '')[6:], text)
+        else:
+            raise HTTPException(422, f'cannot send on {body.channel}')
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(422, str(e)[:400])
+    store.add_comment(task_id, ACTOR, 'human', f'Handed off to {body.to} by {body.channel}:\n{text}')
+    store.audit('task', task_id, 'handoff', ACTOR, detail={'to': body.to, 'channel': body.channel})
+    return {'sent': sent, 'text': text}
+
 @app.get('/api/runs/live')
 def live_runs(lines: int = 3):
     """The tail of every run that is working right now - the Board renders it as a tiny
@@ -309,14 +341,28 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     final = body.final_text if body.verb == 'edit' else (rv.get('DraftText') if body.verb == 'approve' else None)
     store.decide_review(rid, verb2status[body.verb], final, ACTOR, body.note)
     if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f'Reviewed draft ({body.verb}):\n{final}')
+    # APPROVING IS SENDING. A verdict that never leaves the machine is half a funnel: the
+    # answer goes back on the channel the request arrived on, in its own thread.
+    sent, send_err = None, None
+    if final and rv.get('MessageId'):
+        msg = store.get_message(rv['MessageId'])
+        try:
+            sent = outbound.reply_to_message(store, msg, final)
+            store.add_comment(rv['TaskId'], ACTOR, 'human',
+                              f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}.")
+        except Exception as e:
+            send_err = str(e)[:300]
+            logger.warning(f'reply send failed for review {rid}: {send_err}')
+            if rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], ACTOR, 'human', f'NOT SENT - {send_err}. The approved text is above.')
     if body.verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
     # reply-only items are not real tasks: answering them IS the work, so close on decision
     if body.verb in ('approve', 'edit') and rv.get('TaskId'):
         t = store.get_task(rv['TaskId'])
         if (t or {}).get('Kind') == 'reply' and t.get('Status') not in ('done', 'dropped'):
             store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
-    store.audit('review', rid, body.verb, ACTOR, detail={'kind': rv.get('Kind')})
-    return {'ok': True, 'status': verb2status[body.verb]}
+    store.audit('review', rid, body.verb, ACTOR, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
+    return {'ok': True, 'status': verb2status[body.verb], 'sent': sent, 'send_error': send_err}
 
 @app.post('/api/reviews/{rid}/draft')
 def draft_review(rid: int):

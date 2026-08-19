@@ -71,6 +71,10 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   takes a task name, the **prompt**, which **CLI and model**, and **one** way it gets
   worked — a live session, a headless run, or just filed — so two agents never end up on
   the same task.
+- **Hand off to a person** — some work is not yours to do. Pick the channel and the
+  colleague (the picker knows everyone who has written to you), and the AI writes the
+  forward message out of the task's own context — systems, ids, error codes, what you need
+  back — for you to edit before it goes.
 - **Tasks** — **the page is a terminal.** Open a task, pick the CLI and model, and you get a
   real session in that task's repo with the prompt already typed in — you talk to it like
   any other terminal, because it *is* one. When you're finished, **Done — wrap it up** tells
@@ -81,7 +85,9 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   *needs you*, *agent working*, *queued*, *done* — instead of three columns you had to
   combine in your head.
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
-  Draft-with-AI. Nothing sends without you. An **escalation** is one question — *may it go
+  Draft-with-AI. **Approving sends**: the answer goes back out on the channel it arrived on,
+  in the original mail thread or the same chat — and if the send fails, the approved text
+  stays on the task marked *NOT SENT* rather than vanishing. Nothing sends without you. An **escalation** is one question — *may it go
   on?* — so it gets one answer: **Go ahead** hands the task straight back to the same agent
   with your words attached, or you take it yourself and mark it done. An agent that merely
   answered a question does not escalate; it reports and closes.
@@ -203,7 +209,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 107 tests, ~20s, no network or credentials needed
+pytest -q                   # 111 tests, ~20s, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

@@ -84,6 +84,37 @@ class CoreTests(unittest.TestCase):
             ingest_message(s, self.msg(external_id='ac2'), llm=TASK_LLM)
         run.assert_not_called()
 
+    def test_reply_only_is_drafted_by_the_main_ai_not_a_coding_agent(self):
+        """A question needs an answer, not an agent. Drafting used to require a CLI agent
+        named 'responder' - nobody has one, so reply mail sat undrafted, and the fallback
+        was the CODING agent opening a repo to write two sentences."""
+        from unittest import mock
+        import taskuary.ingest as ing
+
+        class InlineThread:
+            def __init__(self, target=None, args=(), daemon=None): self.t, self.a = target, args
+            def start(self): self.t(*self.a)
+
+        s = MemoryStore()
+        s.set_setting('auto_draft_enabled', '1', 't')
+        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')     # the only agent, and NOT for this
+        seen = {}
+        def fake_llm(system, user, **kw):
+            seen['system'], seen['user'] = system, user
+            return 'Yes - Monday is covered. I will confirm the cover with Hindy.'
+        with mock.patch.object(ing, 'threading') as th, \
+             mock.patch('taskuary.llm.build_llm', return_value=fake_llm), \
+             mock.patch('taskuary.agents.dispatch') as cli:
+            th.Thread = InlineThread
+            out = ingest_message(s, self.msg(external_id='r1', subject='Tuesday?',
+                                             body='are you available tuesday?'), llm=REPLY_LLM)
+        cli.assert_not_called()                                            # no CLI was opened
+        rv = s.list_reviews('pending')[0]
+        self.assertEqual(rv['TaskId'], out['task_id'])
+        self.assertIn('Monday is covered', rv['DraftText'])
+        self.assertIn('are you available tuesday?', seen['user'])          # the thread went in
+        self.assertIn('Output ONLY the message body', seen['system'])
+
     def test_skip_policy_hides_flood_senders(self):
         s = MemoryStore()
         s.save_policy({'Name': 'skip:api', 'Kind': 'sender', 'Pattern': 'noreply@vendor.example',

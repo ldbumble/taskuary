@@ -6,8 +6,10 @@ alone, and protect John's time. **Nothing sends or ships without John's approval
 
 ## What counts as a task
 - A concrete request to DO something: fix, change, build, investigate, produce, schedule.
-- A direct question only John can answer is **reply_only** — answering IS the work; no
-  task beyond the reply.
+  A task starts a real agent in a real repository — choose it only when work has to happen.
+- Anything answerable in a message is **reply_only** — a question, a status check, a
+  scheduling note. Answering IS the work: the AI drafts the reply, John approves it, and it
+  goes back on the channel it came from. No task, no agent, no repository.
 - Automated notices, scheduled reports, newsletters, "thanks!", CC'd-for-visibility
   threads: **fyi** — file them; no task, no draft.
 - When genuinely unsure, prefer fyi over inventing work. A missed task costs less than a

@@ -129,7 +129,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (!tid) { setTerm(null); return; }
     try {
       const rows = (await api.get("/api/terminals")).data.data || [];
-      setTerm(rows.find((x) => x.taskId === tid && x.alive) || null);
+      // an exited session still holds its scrollback (they stay listed ~10 min), and that
+      // transcript is exactly what Done and Pause need - dropping it left a task you could
+      // not close out because the CLI had finished on its own
+      setTerm(rows.find((x) => x.taskId === tid && x.alive) || rows.find((x) => x.taskId === tid) || null);
     } catch { setTerm(null); }
   }, []);
   useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
@@ -260,6 +263,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
                       </Typography>
+                      {!term.alive && (
+                        <Chip size="small" label="exited — its output is still here"
+                          sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
+                      )}
                       <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
                         startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
                           : <DoneAllIcon sx={{ fontSize: 15 }} />}
@@ -271,7 +278,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         startIcon={wrapping === "pause" ? <CircularProgress size={11} /> : <PauseCircleIcon sx={{ fontSize: 15 }} />}
                         title="Stop for now without losing what it worked out - the next session is handed its note"
                         onClick={pause}>
-                        {wrapping === "pause" ? "saving what it found…" : "Pause — save what it found"}
+                        {wrapping === "pause" ? "saving what it found…" : term.alive ? "Pause — save what it found" : "Save what it found"}
                       </Button>
                     </Box>
                     <TerminalPane sid={term.sid} height="55vh" onExit={() => findTerm(selected)} />

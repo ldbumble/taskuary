@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, RefChip, timeAgo, Empty, FilterPills } from "./ui.jsx";
@@ -32,7 +31,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
     setBusy(r.ReviewId);
     try {
       await api.post(`/api/reviews/${r.ReviewId}/decide`, { verb, final_text: verb === "edit" ? edits[r.ReviewId] : null,
-        note: verb === "go_ahead" ? (edits[r.ReviewId] || "").trim() || null : null });
+        note: null });
       load(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
     setBusy(null);
@@ -62,17 +61,15 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ width: 28, height: 28, borderRadius: 1.5, flexShrink: 0, display: "flex",
               alignItems: "center", justifyContent: "center",
-              bgcolor: r.Kind === "escalation" ? "#fdecec" : "#e6f7fb" }}>
-              {r.Kind === "escalation"
-                ? <ReportProblemIcon sx={{ fontSize: 15, color: "#b91c1c" }} />
-                : <AutoAwesomeIcon sx={{ fontSize: 15, color: "#0e7490" }} />}
+              bgcolor: "#e6f7fb" }}>
+              <AutoAwesomeIcon sx={{ fontSize: 15, color: "#0e7490" }} />
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ color: INK, fontWeight: 700, lineHeight: 1.25 }} noWrap>
                 {r.Subject || r.Title || "(no subject)"}
               </Typography>
               <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
-                {r.Kind === "escalation" ? "Escalation" : r.Kind === "auto" ? "Auto-answered" : "Draft reply"} · {r.FromEmail} · {timeAgo(r.CreatedAt)}
+                {r.Kind === "auto" ? "Auto-answered" : "Draft reply"} · {r.FromEmail} · {timeAgo(r.CreatedAt)}
               </Typography>
             </Box>
             <ChannelIcon channel={r.Channel} />
@@ -82,7 +79,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
           <Box sx={{ px: 1.5, py: 1.25 }}>
             {r.Reason && <Typography variant="caption" sx={{ color: "#7e22ce", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
 
-            {r.Status === "pending" && r.Kind !== "escalation" && (
+            {r.Status === "pending" && (
               <Box sx={{ mt: 0.5 }}>
                 <TextField fullWidth multiline minRows={2} maxRows={8}
                   value={edits[r.ReviewId] ?? (r.DraftText || "")}
@@ -102,24 +99,6 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                   <Button size="small" disabled={busy === r.ReviewId} onClick={() => redraft(r)}>
                     {busy === r.ReviewId ? <CircularProgress size={12} /> : r.DraftText ? "Redraft" : "Draft with AI"}
                   </Button>
-                </Box>
-              </Box>
-            )}
-            {/* An escalation is one question: may the agent go on? Answer it here - either
-                approve (and the same agent picks the task straight back up with your words)
-                or take it yourself. */}
-            {r.Status === "pending" && r.Kind === "escalation" && (
-              <Box sx={{ mt: 0.75 }}>
-                <TextField fullWidth size="small" placeholder="Anything to tell the agent with your approval (optional)"
-                  value={edits[r.ReviewId] ?? ""} onChange={(e) => setEdits({ ...edits, [r.ReviewId]: e.target.value })}
-                  inputProps={{ style: { fontSize: 12.5 } }} />
-                <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
-                  <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
-                    sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
-                    onClick={() => decide(r, "go_ahead")}>Go ahead — approved</Button>
-                  <Button size="small" variant="outlined" onClick={() => onOpenTask(r.TaskId)}>Open the task</Button>
-                  <Box sx={{ flex: 1 }} />
-                  <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Dismiss — I handled it</Button>
                 </Box>
               </Box>
             )}

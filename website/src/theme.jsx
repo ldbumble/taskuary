@@ -16,7 +16,6 @@ export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7c6cf0)`;
 export const ACTION_COLORS = {
   auto: { bg: "#e6f7fb", fg: "#0e7490", label: "auto-answered" },
   draft: { bg: "#fef4e6", fg: "#b45309", label: "needs review" },
-  escalate: { bg: "#fdecec", fg: "#b91c1c", label: "escalated" },
   ignore: { bg: "#eef0f3", fg: "#8a94a6", label: "ignored" },
   report: { bg: "#e6f7fb", fg: "#0e7490", label: "report" },
   feed: { bg: "#eef7f0", fg: "#15803d", label: "info" },

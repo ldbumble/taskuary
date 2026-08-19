@@ -111,18 +111,20 @@ def notes_for(store, msg: dict) -> list:
             or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() == dom)]
 
 
-def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding') -> int:
-    """Promote a filed/ignored/report message into a real task so it can be handed to an
-    agent (the timeline's 'send this to the coder' path). Already-routed messages keep
-    the task they are on."""
+def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding', assignee: str = None) -> int:
+    """Promote a filed/ignored/report message into a real task: to hand to an agent, or - with
+    `assignee` - to keep on your own list, because plenty of work is real work no agent can do
+    (go into some web app and click the thing). Already-routed messages keep the task they are on."""
     m = store.get_message(mid)
     if not m: raise ValueError(f'no message {mid}')
     if m.get('TaskId'): return m['TaskId']
     title = (m.get('Subject') or f"{m.get('FromName') or m.get('FromEmail') or m.get('Channel')} message")[:200]
     tid = store.create_task({'Title': title, 'Summary': str(m.get('BodyText') or '')[:1000], 'Kind': kind,
-                             'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
+                             'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink'),
+                             **({'Assignee': assignee} if assignee else {})}, actor)
     store.attach_message(mid, tid)
-    store.add_route(mid, tid, 'create', None, 'promoted by the owner to hand it to an agent', [], actor)
+    store.add_route(mid, tid, 'create', None,
+                    f"promoted by the owner - {'theirs to do' if assignee else 'to hand it to an agent'}", [], actor)
     store.audit('task', tid, 'create_from_message', actor, detail={'message_id': mid, 'subject': title})
     return tid
 

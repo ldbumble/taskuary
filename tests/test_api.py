@@ -27,8 +27,8 @@ class ApiTests(unittest.TestCase):
     def test_decide_accepts_explicit_null_final_text(self):
         # the UI sends {"verb": "reject", "final_text": null} - pydantic v2 422'd on the
         # explicit null (str = None is not Optional), which blanked the Review screen
-        tid = c.post('/api/tasks', json={'Title': 'escalated thing'}).json()['taskId']
-        server.store.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': 'r'})
+        tid = c.post('/api/tasks', json={'Title': 'a drafted thing'}).json()['taskId']
+        server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r'})
         rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
                    if r['TaskId'] == tid)
         r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'reject', 'final_text': None})
@@ -275,29 +275,17 @@ class ApiTests(unittest.TestCase):
         server.store.update_run(rid, {'Status': 'done'}, finished=True)
         self.assertFalse(any(r['RunId'] == rid for r in c.get('/api/runs/live').json()['data']))
 
-    def test_code_endpoint_takes_an_agent(self):
+    def test_code_endpoint_opens_a_real_session_never_a_headless_run(self):
+        """Nothing starts where it cannot be watched. /code was the last headless door: it now
+        opens the same live session as every other way of putting a CLI on a task."""
         tid = c.post('/api/tasks', json={'Title': 'pick my CLI'}).json()['taskId']
         server.store.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex"}')
-        with mock.patch.object(server, 'run_coding_task') as rct:
+        with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 'x'}) as start:
             out = c.post(f'/api/tasks/{tid}/code', json={'agent': 'codex', 'model': 'gpt-5-codex',
                                                          'instruction': 'just the importer'}).json()
-        self.assertEqual((out['agent'], out['model']), ('codex', 'gpt-5-codex'))
-        # (store, task, actor, repo, github_cfg, agent, model, instruction)
-        self.assertEqual(rct.call_args[0][-3:], ('codex', 'gpt-5-codex', 'just the importer'))
+        self.assertEqual((out['coder'], out['agent'], out['model']), ('session', 'codex', 'gpt-5-codex'))
+        self.assertEqual(start.call_args[0][1:], (tid, 'codex', 'gpt-5-codex', 'just the importer', server.ACTOR))
         self.assertEqual(c.post(f'/api/tasks/{tid}/code', json={'agent': 'ghost'}).status_code, 422)
-
-    def test_go_ahead_hands_the_task_back_to_the_same_agent(self):
-        tid = c.post('/api/tasks', json={'Title': 'needs approval'}).json()['taskId']
-        server.store.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex"}')
-        server.store.start_run(tid, 'codex', 'work it', 'owner')
-        rid = server.store.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending',
-                                       'Reason': 'coder needs you: may I drop the column?'})
-        with mock.patch.object(server, 'run_coding_task') as rct:
-            out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'go_ahead', 'note': 'yes, drop it'}).json()
-        self.assertEqual((out['status'], out['agent']), ('approved', 'codex'))
-        self.assertEqual(server.store.get_review(rid)['Status'], 'approved')
-        self.assertIn('yes, drop it', rct.call_args[0][-1])                     # instruction carries your words
-        self.assertTrue(any('Approved' in cm['Body'] for cm in server.store.list_comments(tid)))
 
     def test_approving_a_draft_actually_answers_the_sender(self):
         """Approving used to file a verdict and stop - the person who wrote in never heard
@@ -336,6 +324,24 @@ class ApiTests(unittest.TestCase):
         with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['ap@client.com']}):
             c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'})
         self.assertEqual(server.store.get_task(tid)['Status'], 'done')
+
+    def test_mine_makes_a_task_for_the_owner_with_nobody_dispatched(self):
+        """An ADP "approve this workflow" mail is real work and not an agent's. Filing it as
+        nothing-to-do was the only option; now it becomes a task with your name on it, which
+        the feed reads as needs-you, and no agent gets sent at it."""
+        mid = server.store.add_message({'ExternalId': 'adp:1', 'Channel': 'email', 'SourceName': 'me@corp.com',
+                                        'Subject': 'Action Needed: Pending Workflow Approval', 'FromEmail': 'noreply@adp.com',
+                                        'SentAt': '2026-08-19 08:25', 'BodyText': 'Mindy Gorelick needs your approval.',
+                                        'Status': 'ignored'})
+        out = c.post(f'/api/messages/{mid}/mine', json={}).json()
+        t = server.store.get_task(out['taskId'])
+        self.assertEqual((t['Kind'], t['Status'], t['Assignee']), ('general', 'open', server.ACTOR))
+        self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])   # off the filed pile
+        self.assertEqual(server.store.list_runs(out['taskId']), [])                # nobody dispatched
+        row = next(r for r in server.store.feed() if r['MessageId'] == mid)
+        self.assertEqual((row['NeedsYou'], row['TaskId']), (1, out['taskId']))
+        # clicking it twice must not spawn a second task
+        self.assertEqual(c.post(f'/api/messages/{mid}/mine', json={}).json()['taskId'], out['taskId'])
 
     def test_handoff_drafts_then_sends(self):
         tid = c.post('/api/tasks', json={'Title': 'AD account for Christina'}).json()['taskId']

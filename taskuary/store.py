@@ -116,6 +116,11 @@ class SQLiteStore:
                                WHERE Status='pending' AND ReviewId NOT IN (
                                    SELECT MAX(ReviewId) FROM review WHERE Status='pending'
                                    GROUP BY TaskId, Kind)""")
+            # escalation reviews are gone: they only ever came from the headless report contract
+            # ('needs_you'), and a live session asks you IN the terminal. Old pending ones would
+            # render as a reply draft with nothing to send, so they resolve on first open - the
+            # task keeps its 'waiting' status, so nothing quietly stops needing you.
+            self.cx.execute("UPDATE review SET Status='superseded' WHERE Status='pending' AND Kind='escalation'")
             self.cx.commit()
 
     def _rows(self, q, p=()):

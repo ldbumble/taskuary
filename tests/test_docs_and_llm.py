@@ -11,7 +11,7 @@ class TemplateTests(unittest.TestCase):
         soul, coder = s.get_doc('soul'), s.get_doc('coder')
         self.assertIn('John Smith', soul); self.assertIn('John Smith', coder)
         self.assertIn(docsync.CONN_START, soul)
-        self.assertIn('===RESULT JSON===', coder)
+        self.assertIn('Closing out', coder)      # no report contract: the transcript IS the report
         self.assertTrue(s.get_doc('digest'))
 
     def test_owner_edits_never_overwritten(self):

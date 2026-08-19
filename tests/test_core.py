@@ -5,7 +5,6 @@ from taskuary.ingest import ingest_message
 from taskuary.routing import route
 from taskuary.triage import heuristic_intent
 from taskuary.agents import parse_cli_json
-from taskuary.coder import parse_coder_result, RESULT_MARKER
 from taskuary.reports import is_due, run_report_source, REGISTRY
 
 
@@ -80,9 +79,9 @@ class CoreTests(unittest.TestCase):
     def test_no_auto_dispatch_when_disabled(self):
         from unittest import mock
         s = MemoryStore()
-        with mock.patch('taskuary.coder.run_coding_task') as run:
+        with mock.patch('taskuary.terminal.start_on_task') as start:
             ingest_message(s, self.msg(external_id='ac2'), llm=TASK_LLM)
-        run.assert_not_called()
+        start.assert_not_called()
 
     def test_reply_only_is_drafted_by_the_main_ai_not_a_coding_agent(self):
         """A question needs an answer, not an agent. Drafting used to require a CLI agent
@@ -349,20 +348,6 @@ class CoreTests(unittest.TestCase):
         # only 'skip' rewrites history - an ignore rule leaves it alone
         self.assertEqual(apply_retroactively(s, {**pol, 'Action': 'ignore'}), 0)
 
-    def test_model_and_prompt_reach_the_cli(self):
-        from unittest import mock
-        from taskuary import coder
-        s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude", "args": ["-p"], "cwd_map": {"o/r": "C:/src"}}')
-        tid = s.create_task({'Title': 'fix the export', 'Kind': 'coding'}, 'owner')
-        with mock.patch('taskuary.agents.run_cli', return_value=('done', None, None)) as rc:
-            coder.run_coding_task(s, tid, 'owner', repo='o/r', github_cfg={},
-                                  model='opus', instruction='Only touch the exporter.')
-        prof, prompt = rc.call_args[0][0], rc.call_args[0][1]
-        self.assertEqual((prof['model'], prof['cwd']), ('opus', 'C:/src'))   # per-run model, repo's checkout
-        self.assertIn('Only touch the exporter.', prompt)                    # the owner's prompt leads
-        self.assertIn('RESULT JSON', prompt)                                 # report contract still rides along
-
     def test_run_cli_appends_the_model_flag(self):
         from unittest import mock
         import sys
@@ -441,28 +426,6 @@ class CoreTests(unittest.TestCase):
         with mock.patch('shutil.which', return_value=None):
             with self.assertRaises(FileNotFoundError): _resolve_cmd('claude')
 
-    def test_failed_coder_run_escalates_not_empty_report(self):
-        from unittest import mock
-        from taskuary.coder import run_coding_task
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'fix it', 'Kind': 'coding'}, 'o')
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
-        rid = s.start_run(tid, 'coder', 'i', 'o')
-        s.update_run(rid, {'Status': 'error', 'LastError': 'claude not found'}, finished=True)
-        with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'error', 'result': None}):
-            out = run_coding_task(s, tid, 'o', None, {})
-        self.assertIn('error', out)
-        bodies = [c['Body'] for c in s.list_comments(tid)]
-        self.assertTrue(any('Coder run FAILED' in b for b in bodies))
-        self.assertFalse(any(b.startswith('CODER REPORT') for b in bodies))
-        pend = s.list_reviews('pending')
-        self.assertEqual((len(pend), pend[0]['Kind']), (1, 'escalation'))
-        self.assertIn('run failed: claude not found', pend[0]['Reason'])
-        # a second failed run UPDATES the escalation instead of stacking a new one
-        with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'error', 'result': None}):
-            run_coding_task(s, tid, 'o', None, {})
-        self.assertEqual(len(s.list_reviews('pending')), 1)
-
     def test_row_cap_admits_when_the_number_is_just_the_default(self):
         from taskuary.reports import row_limit, rows_out
         self.assertEqual((row_limit({}), row_limit({'max_rows': 50})), ((200, False), (50, True)))
@@ -480,33 +443,39 @@ class CoreTests(unittest.TestCase):
                              ['codex', '-m', 'gpt-5-codex'])
             self.assertEqual(agent_argv({'cmd': 'gemini', 'interactive_args': ['chat']}), ['gemini', 'chat'])
 
-    def test_wrap_up_takes_the_agents_summary_not_our_own_prompt(self):
-        """The wrap prompt necessarily contains the marker, so its echo must not win: the
-        summary is whatever follows the LAST marker in the session."""
-        from unittest import mock
+    def test_wrap_up_reads_the_screen_and_asks_the_agent_nothing(self):
+        """Closing a session used to TYPE a summary request into the pty and wait for an answer.
+        The transcript is already there: harvest it, and let the main AI write the report."""
         from taskuary import terminal as term
 
         class FakeTerm:
-            alive = True
-            def __init__(self): self.taps, self.typed = [], []
-            def tap(self, f): self.taps.append(f)
-            def untap(self, f): self.taps = [x for x in self.taps if x is not f]
-            def feed(self, s):
-                for f in list(self.taps): f(s)
-            def write(self, s):
-                self.typed.append(s)
-                self.feed('\x1b[2m> ' + s + '\r\n')                  # the TUI echoes what we typed
-                self.feed('\x1b[35m\u2502 \x1b[0m===TASKUARY WRAP===\r\n\u2502 Fixed the importer.\r\n')
+            def __init__(self, s): self.buf, self.typed = [s], []
+            def scrollback(self): return ''.join(self.buf)
+            def write(self, s): self.typed.append(s)
 
-        t, got = FakeTerm(), []
-        with mock.patch.object(term, 'WRAP_QUIET', .1):
-            term.wrap_up(t, got.append, timeout=5)
-            for _ in range(60):
-                if got: break
-                time.sleep(.1)
-        self.assertEqual(got, ['Fixed the importer.'])
-        self.assertIn('wrap-up', t.typed[0])
-        self.assertEqual(t.taps, [])                                 # and it stops listening
+        esc, bar = chr(27), chr(0x2502)                              # a TUI paints colour and gutters
+        t = FakeTerm(f'{esc}[35m{bar} {esc}[0mRan the importer.' + chr(13) + chr(10) + f'{bar} Fixed the date parse.' + chr(13) + chr(10))
+        self.assertEqual(term.harvest(t), 'Ran the importer.' + chr(10) + 'Fixed the date parse.')
+        self.assertEqual(t.typed, [])                                # nothing was asked of the agent
+        self.assertFalse(hasattr(term, 'WRAP_PROMPT'))               # and there is no prompt left to send
+
+    def test_report_comes_from_the_transcript_and_survives_a_missing_ai(self):
+        from unittest import mock
+        from taskuary.coder import report_from_transcript
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'importer', 'Kind': 'coding'}, 'o')
+        seen = {}
+        def fake_llm(system, user, **kw):
+            seen['user'] = user
+            return '{"determination": "bad date", "actions": "fixed run_pto.py", "summary": "runs again"}'
+        with mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
+            rep = report_from_transcript(s, tid, 'Ran the importer. Fixed the date parse.')
+        self.assertEqual((rep['determination'], rep['actions'], rep['summary']), ('bad date', 'fixed run_pto.py', 'runs again'))
+        self.assertIn('Fixed the date parse', seen['user'])
+        # no AI (or a bad answer) must never lose the record - the transcript itself is filed
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertIn('Fixed the date parse', report_from_transcript(s, tid, 'Ran it. Fixed the date parse.')['summary'])
+        self.assertIn('nothing on screen', report_from_transcript(s, tid, '   ')['summary'])
 
     def test_terminal_plain_text(self):
         from taskuary.terminal import plain
@@ -516,40 +485,35 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(parse_cli_json('{"result": "OK", "session_id": "abc"}'), ('OK', 'abc'))
         self.assertEqual(parse_cli_json('plain'), ('plain', None))
 
-    def test_coder_report_contract(self):
-        out = 'work\n' + RESULT_MARKER + '\n{"summary": "s", "actions": "a", "needs_you": ""}'
-        rep = parse_coder_result(out)
-        self.assertEqual((rep['parsed'], rep['needs_you'], rep['summary']), (True, '', 's'))
-        self.assertNotIn('email_reply', rep)          # the coder reports; the responder writes the email
-        self.assertFalse(parse_coder_result('no marker')['parsed'])
-
-    def test_finished_coder_hands_the_reply_to_the_responder(self):
-        """The coder does not write email. It closes the work and reports; the SAME responder
-        that answers reply-only mail turns that report into the draft the owner approves - and
-        the draft has to survive the close, which used to supersede it on the spot."""
+    def test_finishing_hands_the_reply_to_the_responder(self):
+        """A finished session does not write email. It reports; the SAME responder that answers
+        reply-only mail turns that report into the draft you approve - and the draft has to
+        survive the close, which used to supersede it on the spot."""
         from unittest import mock
-        from taskuary.coder import run_coding_task
+        from taskuary.coder import finish
         s = MemoryStore()
         tid = s.create_task({'Title': 'importer is down', 'Kind': 'coding'}, 'o')
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
         s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Subject': 'importer is down',
                        'FromEmail': 'ap@client.com', 'SentAt': '2026-08-18 09:00', 'BodyText': 'nothing imported'})
-        rid = s.start_run(tid, 'coder', 'i', 'o')
-        res = RESULT_MARKER + '\n' + json.dumps({'summary': 'ran the import', 'actions': 'fixed the date parse',
-                                                 'determination': 'a bad date killed the batch', 'needs_you': ''})
+        rep = {'determination': 'a bad date killed the batch', 'actions': 'fixed the date parse', 'summary': 'ran the import'}
         seen = {}
         def fake_llm(system, user, **kw):
             seen['system'], seen['user'] = system, user
             return 'The import is running again - a bad date had stopped the batch.'
-        with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'done', 'result': res}), \
-             mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
-            run_coding_task(s, tid, 'o', None, {})
+        with mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
+            finish(s, tid, rep)
         pend = s.list_reviews('pending')
-        # the work is done, the answer is not sent - so the task waits on the owner, not on nobody
         self.assertEqual((len(pend), pend[0]['Kind'], s.get_task(tid)['Status']), (1, 'draft_reply', 'waiting'))
         self.assertIn('import is running again', pend[0]['DraftText'])
         self.assertIn('fixed the date parse', seen['user'])            # the report is the source of truth
-        self.assertIn('FINISHED', seen['system'])                      # …and it reports, never promises
+        self.assertIn('FINISHED', seen['system'])                      # ...and it reports, never promises
+
+    def test_finishing_with_nobody_to_reply_to_just_closes(self):
+        from taskuary.coder import finish
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'my own note', 'Kind': 'coding'}, 'o')
+        self.assertEqual(finish(s, tid, {'summary': 'did it'})['drafting'], False)
+        self.assertEqual((s.get_task(tid)['Status'], s.list_reviews('pending')), ('done', []))
 
     def test_a_configured_responder_agent_still_wins(self):
         from unittest import mock
@@ -563,27 +527,10 @@ class CoreTests(unittest.TestCase):
         self.assertIn('fixed it', d.call_args.args[3])
         self.assertEqual(s.get_review(rid)['DraftText'], 'mine')
 
-    def test_answered_question_closes_and_only_approval_escalates(self):
-        """Finishing the work - including just answering - closes the task. Escalation means
-        one thing: a person has to approve or decide before the agent can go on."""
-        from unittest import mock
-        from taskuary.coder import run_coding_task
-        for needs, status, pending in [('', 'done', 0), ('may I drop the column?', 'waiting', 1)]:
-            s = MemoryStore()
-            tid = s.create_task({'Title': 'question', 'Kind': 'coding'}, 'o')
-            s.upsert_agent('coder', 'coding', 'cli', '{}')
-            rid = s.start_run(tid, 'coder', 'i', 'o')
-            res = RESULT_MARKER + '\n' + json.dumps({'summary': 'answered it', 'needs_you': needs})
-            with mock.patch('taskuary.agents.dispatch', return_value={'run_id': rid, 'status': 'done', 'result': res}):
-                out = run_coding_task(s, tid, 'o', None, {})
-            self.assertEqual((out['closed'], s.get_task(tid)['Status'], len(s.list_reviews('pending'))),
-                             (not needs, status, pending))
-            self.assertTrue(any(c['Body'].startswith('CODER REPORT') for c in s.list_comments(tid)))
-
     def test_closing_a_task_resolves_its_pending_reviews(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 't'}, 'o')
-        s.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': 'r'})
+        s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})
         s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'd'})
         s.update_task(tid, {'Status': 'done'}, 'owner')
         self.assertEqual(s.list_reviews('pending'), [])   # done IS the decision
@@ -591,9 +538,9 @@ class CoreTests(unittest.TestCase):
     def test_orphaned_reviews_never_queue(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 't'}, 'u')
-        s.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': 'r'})
+        s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})
         s.delete_task(tid)
-        s.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': 'late'})
+        s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'late'})
         self.assertEqual(s.list_reviews('pending'), [])
 
     def test_startup_heals_stacked_pending_reviews(self):
@@ -603,13 +550,13 @@ class CoreTests(unittest.TestCase):
         s = SQLiteStore(path)
         tid = s.create_task({'Title': 't'}, 'o')
         for i in range(3):
-            s.add_review({'TaskId': tid, 'Kind': 'escalation', 'Status': 'pending', 'Reason': f'r{i}'})
+            s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': f'r{i}'})
         s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'd'})
         s2 = SQLiteStore(path)   # reopen = restart
         pend = s2.list_reviews('pending')
-        self.assertEqual(len(pend), 2)   # newest escalation + the draft survive
-        self.assertEqual({p['Kind'] for p in pend}, {'escalation', 'draft'})
-        self.assertEqual(next(p['Reason'] for p in pend if p['Kind'] == 'escalation'), 'r2')
+        self.assertEqual(len(pend), 2)   # newest of each kind survives
+        self.assertEqual({p['Kind'] for p in pend}, {'draft_reply', 'draft'})
+        self.assertEqual(next(p['Reason'] for p in pend if p['Kind'] == 'draft_reply'), 'r2')
 
     def test_audit_chain_verifies(self):
         s = MemoryStore()

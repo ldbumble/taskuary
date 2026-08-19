@@ -43,7 +43,7 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou }) => {
   // read. Only 'ignored' means a policy actually rejected something.
   const key = ["report", "feed", "filed"].includes(action) ? action
     : reviewStatus === "auto" ? "auto"
-      : reviewStatus === "pending" ? (action === "escalate" ? "escalate" : "draft")
+      : reviewStatus === "pending" ? "draft"
         : action || "task_only";
   const c = ACTION_COLORS[key] || ACTION_COLORS.task_only;
   const decided = reviewStatus && !["pending", "auto"].includes(reviewStatus);

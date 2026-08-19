@@ -51,10 +51,10 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(c.delete('/api/terminals/nope').status_code, 404)
         self.assertEqual(c.get('/api/terminals').json()['data'], [])
 
-    def test_wrapping_up_a_session_ends_it_like_a_headless_run(self):
-        """"Done - wrap it up" used to file a comment, mark the task done and leave you with a
-        live shell and no answer to the person who wrote in. It has to end the way a headless
-        run ends: report filed, reply drafted for approval, session gone."""
+    def test_wrapping_up_reads_the_screen_then_closes_everything(self):
+        """"Done - wrap it up" asks the agent NOTHING. It takes the transcript that is already on
+        screen, ends the session, has the main AI write the report from it, and leaves the reply
+        drafted for approval. Nothing typed at the agent, nothing left running."""
         tid = c.post('/api/tasks', json={'Title': 'lookJobCode 325', 'Kind': 'coding'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:CCC', 'Channel': 'email',
                                   'SourceName': 'me@corp.com', 'FromEmail': 'john@corp.com',
@@ -62,17 +62,23 @@ class TerminalTests(unittest.TestCase):
         t = terminal.Term(ECHO, os.getcwd(), 'test')
         t.task_id, t.agent = tid, 'coder'
         terminal.SESSIONS[t.sid] = t
+        self.assertTrue(_wait(lambda: 'hello-from-pty' in t.scrollback()))     # something on screen to harvest
+        typed = []
+        t.write = typed.append
+        report = '{"determination": "325 was Y/Y", "actions": "flipped it to N/N", "summary": "no mailbox now"}'
         try:
-            # wrap_up runs on a thread and types into the pty; drive `filed` directly instead
-            with mock.patch.object(terminal, 'wrap_up', lambda term, on_done, **kw: on_done('Flipped 325 to N/N.')), \
-                 mock.patch('taskuary.llm.build_llm', return_value=lambda s, u, **kw: 'Done - 325 no longer gets a mailbox.'):
-                self.assertEqual(c.post(f'/api/terminals/{t.sid}/wrap', json={'task_id': tid}).json()['taskId'], tid)
+            with mock.patch('taskuary.llm.build_llm', side_effect=[lambda s, u, **kw: report,
+                                                                   lambda s, u, **kw: 'Done - 325 no longer gets a mailbox.']):
+                out = c.post(f'/api/terminals/{t.sid}/wrap', json={'task_id': tid}).json()
+            self.assertEqual(out['wrap'], 'done')
+            self.assertIn('flipped it to N/N', out['report'])
+            self.assertEqual(typed, [])                                        # the agent was never asked
+            self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])     # session gone
             pend = [r for r in server.store.list_reviews('pending') if r['TaskId'] == tid]
             self.assertEqual((len(pend), pend[0]['Kind']), (1, 'draft_reply'))
             self.assertIn('no longer gets a mailbox', pend[0]['DraftText'])
-            self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')   # waiting on you to send it
-            self.assertTrue(any('Flipped 325' in cm['Body'] for cm in server.store.list_comments(tid)))
-            self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])     # and the session is gone
+            self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')  # waiting on you to send it
+            self.assertTrue(any('flipped it to N/N' in cm['Body'] for cm in server.store.list_comments(tid)))
         finally:
             terminal.close(t.sid)
 

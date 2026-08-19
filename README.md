@@ -95,10 +95,9 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 - **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
   Draft-with-AI. **Approving sends**: the answer goes back out on the channel it arrived on,
   in the original mail thread or the same chat — and if the send fails, the approved text
-  stays on the task marked *NOT SENT* rather than vanishing. Nothing sends without you. An **escalation** is one question — *may it go
-  on?* — so it gets one answer: **Go ahead** hands the task straight back to the same agent
-  with your words attached, or you take it yourself and mark it done. An agent that merely
-  answered a question does not escalate; it reports and closes.
+  stays on the task marked *NOT SENT* rather than vanishing. Nothing sends without you. Agents
+  never queue a question here: they run in a terminal you are watching, so they ask you in the
+  session and you answer by typing back.
 - **Reports** — a funnel you lay out: **any number of sources at the top** (the same
   connection twice with different SQL is fine — drag to reorder, one click to duplicate)
   feeding **one prompt at the bottom**, then the schedule. Every source's rows reach the

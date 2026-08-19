@@ -200,14 +200,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     return t
 
 
-# ── wrapping up: "we're done" -> the agent's own closing summary ────────────────────
-WRAP_MARKER = '===TASKUARY WRAP==='
-WRAP_PROMPT = ("The owner is closing this Taskuary task. Stop working and write your wrap-up now, nothing "
-               "else: first a line containing only " + WRAP_MARKER + " then 5-15 plain-text lines - what you "
-               "determined, what you actually changed, and anything left for next time. No questions, no code "
-               "blocks, no further tool calls.")
-WRAP_WAIT, WRAP_QUIET = 420, 5      # seconds: give a thinking agent room, then take the answer
-
+# ── wrapping up: "we're done" -> the transcript IS the report ───────────────────────
 _ANSI = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]|\x1b[=>]'
                    r'|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 
@@ -217,29 +210,12 @@ def plain(s: str) -> str:
     return '\n'.join(l.strip(' │┃┊▎|').rstrip() for l in s.split('\n'))
 
 
-def wrap_up(t: Term, on_done, prompt: str = WRAP_PROMPT, timeout: int = WRAP_WAIT):
-    """Ask a LIVE session for its closing summary and hand the text back. A pty is all we
-    have here - no session id to resume, and no JSON contract that survives a TUI wrapping
-    long lines - so we ask for a marker line and take the plain text after the last one.
-    The marker also appears in the echo of our own prompt, which is exactly the fallback we
-    want: a CLI that ignores the instruction still gives us everything it said afterwards."""
-    got = []
-    sink = got.append                     # one identity, so untap can find it again
-    t.tap(sink)
-    def go():
-        try:
-            t.write(prompt.replace('\n', ' ') + '\r')
-            t0, last, quiet = time.time(), 0, 0
-            while t.alive and time.time() - t0 < timeout:
-                time.sleep(.5)
-                n = sum(len(x) for x in got)
-                quiet, last = (quiet + .5, last) if n == last else (0, n)
-                if quiet >= WRAP_QUIET and WRAP_MARKER in plain(''.join(got)): break
-            txt = plain(''.join(got))
-            on_done(txt.rsplit(WRAP_MARKER, 1)[-1].strip()[:8000])
-        finally:
-            t.untap(sink)
-    threading.Thread(target=go, daemon=True).start()
+def harvest(t: Term, chars: int = 12000) -> str:
+    """What the session actually said, as readable text. Closing a task used to TYPE a request
+    for a summary into the pty and wait: another prompt to read, minutes of waiting, and one
+    more chance for an agent you just told to stop to go and do more work. Everything needed
+    is already on screen - take it and let the main AI write the report."""
+    return plain(t.scrollback()[-chars * 4:]).strip()[-chars:]
 
 
 def seed_text(store, tid: int, instruction: str = None) -> str:

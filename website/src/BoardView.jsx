@@ -166,7 +166,7 @@ export default function BoardView({ onOpenTask }) {
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75 }}>
                     <Chip size="small" label={t.Kind} sx={{ height: 17, fontSize: 9.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
-                      action={t.ReviewKind === "escalation" ? "escalate" : t.ReviewKind === "auto" ? "auto" : "draft"} />}
+                      action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 10.5 }}>open →</Typography>
                   </Box>

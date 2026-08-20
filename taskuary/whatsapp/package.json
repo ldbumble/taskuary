@@ -1,0 +1,11 @@
+{
+  "name": "taskuary-whatsapp-bridge",
+  "private": true,
+  "type": "module",
+  "description": "Baileys sidecar for Taskuary's WhatsApp channel - installed separately on purpose; Taskuary itself only ever talks to it over localhost HTTP.",
+  "scripts": { "start": "node bridge.mjs" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

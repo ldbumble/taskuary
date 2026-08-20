@@ -1,0 +1,161 @@
+"""Telegram and WhatsApp as inbound channels - the personal-messenger half of the funnel.
+
+Telegram is light: a bot token and plain HTTPS (getUpdates / sendMessage), so it is built in
+entirely. WhatsApp has no sanctioned API for a personal account - the working road is Baileys,
+a Node library speaking the WhatsApp Web protocol - so Taskuary does NOT embed it: a small
+bridge script (taskuary/whatsapp/bridge.mjs) runs beside the app with its own npm install, and
+this module just polls the bridge over localhost HTTP. Heavy dependency, separate install;
+Taskuary's side is ~40 lines either way.
+
+Both are CHAT: messages land with a conversation id per chat, replies go back into the same
+chat, and the responder already knows not to sign chat messages.
+"""
+import base64, json
+import requests
+from loguru import logger
+
+TG_API = 'https://api.telegram.org'
+TG_LIMIT = 25                # messages per poll, like the other channels
+WA_URL = 'http://127.0.0.1:8977'   # the bridge's default; override in the connector config
+
+
+def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
+
+
+# ── Telegram ─────────────────────────────────────────────────────────────────────────────
+def tg(token: str, method: str, **params):
+    r = requests.post(f'{TG_API}/bot{token}/{method}', json=params, timeout=30)
+    j = r.json()
+    if not j.get('ok'): raise RuntimeError(f"telegram {method}: {j.get('description') or r.status_code}")
+    return j['result']
+
+
+def tg_test(store, c) -> str:
+    """getMe proves the token; a '*' source is added so the poller has something to walk -
+    Telegram chats announce themselves in getUpdates, there is nothing to type in."""
+    if not c.get('Secret'): raise RuntimeError('no bot token saved - paste the token @BotFather gave you under Credentials')
+    me = tg(c['Secret'], 'getMe')
+    if not any(s['Channel'] == 'telegram' for s in store.list_sources(active_only=False)):
+        store.save_source({'Channel': 'telegram', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
+    return (f"authenticated as @{me.get('username')} - message the bot (or add it to a group) and its "
+            f"chats flow in on the next sync")
+
+
+def _tg_photo(token: str, m: dict) -> list:
+    """The largest rendition of an attached photo/document, shaped like a Graph fileAttachment
+    so channels.save_attachments and vision reuse the one pipeline."""
+    out = []
+    for kind, meta in (('photo', (m.get('photo') or [])[-1:]), ('document', [m['document']] if m.get('document') else [])):
+        for f in meta:
+            try:
+                path = tg(token, 'getFile', file_id=f['file_id']).get('file_path') or ''
+                data = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60).content
+                name = f.get('file_name') or (path.rsplit('/', 1)[-1] or f'{kind}.jpg')
+                ct = f.get('mime_type') or ('image/jpeg' if kind == 'photo' else 'application/octet-stream')
+                out.append({'id': f['file_id'][:60], 'name': name, 'contentType': ct,
+                            'size': len(data), 'contentBytes': base64.b64encode(data).decode(),
+                            'isInline': kind == 'photo'})
+            except Exception as e:
+                logger.warning(f'telegram file fetch failed: {e}')
+    return out
+
+
+def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
+    """getUpdates with the offset watermark kept on the connector - Telegram's own cursor, so a
+    restart never re-ingests. Sources with a real chat id filter; '*' takes everything."""
+    from datetime import datetime
+    from .channels import images_for_triage, save_attachments
+    from .ingest import ingest_message
+    tok, cfg = c['Secret'], _cfg(c)
+    if not tok: return 0
+    want = {s['Address'] for s in sources if s['Address'] and s['Address'] != '*'}
+    ups = tg(tok, 'getUpdates', offset=int(cfg.get('tg_offset') or 0), limit=TG_LIMIT,
+             allowed_updates=['message'])
+    n = 0
+    for u in ups:
+        m = u.get('message') or {}
+        chat, frm = m.get('chat') or {}, m.get('from') or {}
+        cid = str(chat.get('id') or '')
+        if not cid or (want and cid not in want) or frm.get('is_bot'): continue
+        text = m.get('text') or m.get('caption') or ''
+        atts = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else []
+        if not text and not atts: continue
+        who = ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) or frm.get('username') or 'someone'
+        out = ingest_message(store, file_only=file_only, msg={
+            'external_id': f"telegram:{cid}:{m.get('message_id')}", 'channel': 'telegram',
+            'subject': None, 'body': text or '(no text - see the attachment)',
+            'from_name': who, 'from_email': f"@{frm['username']}" if frm.get('username') else None,
+            'conversation_id': f'telegram:{cid}',
+            'sent_at': datetime.fromtimestamp(m.get('date') or 0).strftime('%Y-%m-%d %H:%M:%S'),
+            'source_name': chat.get('title') or who,
+            'images': images_for_triage(store, atts)}, llm=llm)
+        n += out['status'] != 'duplicate'
+        if atts and out.get('message_id') and out['status'] != 'duplicate':
+            try: save_attachments(store, out['message_id'], atts, f"telegram:{cid}:{m.get('message_id')}")
+            except Exception as e: logger.warning(f'telegram attachments failed: {e}')
+    if ups:
+        store.set_connector_config(c['ConnectorId'], {**cfg, 'tg_offset': ups[-1]['update_id'] + 1})
+    return n
+
+
+def tg_send(store, chat_id: str, body: str) -> dict:
+    c = store.get_connector_by_type('telegram', with_secret=True)
+    if not (c and c.get('Secret')): raise RuntimeError('the Telegram connection is not set up')
+    tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000])
+    return {'channel': 'telegram', 'chat': chat_id}
+
+
+# ── WhatsApp (via the Baileys bridge) ────────────────────────────────────────────────────
+def _wa(c, path, body=None):
+    url = (_cfg(c).get('bridge_url') or WA_URL).rstrip('/')
+    try:
+        r = requests.post(f'{url}{path}', json=body, timeout=20) if body is not None \
+            else requests.get(f'{url}{path}', timeout=20)
+    except requests.ConnectionError:
+        raise RuntimeError(f'the WhatsApp bridge is not running at {url} - start it: '
+                           f'cd taskuary/whatsapp && npm install && node bridge.mjs')
+    if r.status_code >= 300: raise RuntimeError(f'bridge {path} failed ({r.status_code}): {r.text[:200]}')
+    return r.json()
+
+
+def wa_test(store, c) -> str:
+    st = _wa(c, '/status')
+    if not st.get('connected'):
+        raise RuntimeError('bridge is running but WhatsApp is not paired yet - '
+                           + (f"enter code {st['pairingCode']} on your phone (Linked devices)" if st.get('pairingCode')
+                              else 'scan the QR the bridge printed in its own terminal'))
+    if not any(s['Channel'] == 'whatsapp' for s in store.list_sources(active_only=False)):
+        store.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
+    return f"paired as {st.get('me') or 'your account'} - chats flow in on the next sync"
+
+
+def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
+    """The bridge keeps a sequence number per message; ours is on the connector, so nothing is
+    read twice and a bridge restart just resets both to live traffic."""
+    from datetime import datetime
+    from .ingest import ingest_message
+    cfg = _cfg(c)
+    want = {s['Address'] for s in sources if s['Address'] and s['Address'] != '*'}
+    out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
+    n = 0
+    for m in out.get('messages', []):
+        jid = m.get('jid') or ''
+        if not jid or m.get('fromMe') or (want and jid not in want): continue
+        if not (m.get('text') or '').strip(): continue
+        r = ingest_message(store, file_only=file_only, msg={
+            'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp',
+            'subject': None, 'body': m['text'], 'from_name': m.get('name') or jid.split('@')[0],
+            'conversation_id': f'whatsapp:{jid}',
+            'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
+            'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp'}, llm=llm)
+        n += r['status'] != 'duplicate'
+    if out.get('seq') is not None:
+        store.set_connector_config(c['ConnectorId'], {**cfg, 'wa_seq': out['seq']})
+    return n
+
+
+def wa_send(store, jid: str, body: str) -> dict:
+    c = store.get_connector_by_type('whatsapp', with_secret=True)
+    if not c: raise RuntimeError('the WhatsApp connection is not set up')
+    _wa(c, '/send', {'jid': jid, 'text': body[:4000]})
+    return {'channel': 'whatsapp', 'chat': jid}

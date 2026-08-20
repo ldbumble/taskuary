@@ -5,7 +5,6 @@ the primary use case; `driver` auto-picks the newest installed 'ODBC Driver NN f
 Server'. TrustServerCertificate=yes because Driver 18 mandates encryption and local
 instances rarely have real certs. A raw "conn_str" overrides everything built.
 """
-import json
 
 
 def drivers() -> list:

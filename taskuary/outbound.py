@@ -9,7 +9,6 @@ Nothing sends itself. Every call here is behind a human verdict or an explicit h
 """
 import json
 import requests
-from loguru import logger
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
@@ -90,6 +89,11 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
         chat = (msg.get('ConversationId') or '')[6:]        # 'teams:19:...'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
         return send_teams(store, chat, body)
+    if ch in ('telegram', 'whatsapp'):
+        from . import messengers
+        chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'telegram:<id>' / 'whatsapp:<jid>'
+        if not chat: raise RuntimeError('this chat message has no chat id to answer in')
+        return (messengers.tg_send if ch == 'telegram' else messengers.wa_send)(store, chat, body)
     raise RuntimeError(f"nothing to answer on: {ch or 'unknown'} messages are read-only here")
 
 

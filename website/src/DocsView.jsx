@@ -19,6 +19,49 @@ const DOCS = {
 };
 const NAMES = Object.keys(DOCS);
 
+// Your name, in one place. The documents refer to the owner nine times between them; typed
+// literally, changing it meant finding every one - so they carry {{owner}} tokens and this is
+// where the actual name lives. Saving also rewrites any literal name still in the docs.
+const OwnerCard = () => {
+  const [who, setWho] = useState(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    api.get("/api/owner").then(({ data }) => {
+      setWho(data);
+      setName(data.owner === "the owner" ? "" : data.owner || "");
+      setEmail(data.owner_email || "");
+    }).catch(() => setWho({}));
+  }, []);
+  const save = async () => {
+    setMsg("");
+    try {
+      const { data } = await api.put("/api/owner", { name: name.trim(), email: email.trim() || null });
+      setMsg(`saved ✓${data.retokened?.length ? ` — ${data.retokened.join(", ")} rewritten to use it everywhere` : ""}`);
+    } catch (e) { setMsg(e?.response?.data?.detail || "could not save"); }
+  };
+  if (!who) return null;
+  return (
+    <Box sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #e3e6ec", borderRadius: 2,
+      display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
+      <Box sx={{ minWidth: 260, flex: 1 }}>
+        <Typography variant="body2" sx={{ color: INK, fontWeight: 700 }}>Who the documents speak for</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>
+          One field, every mention: the docs say {"{{owner}}"} and this fills it in — signatures, escalation
+          rules, the coder's instructions. Saving also converts any name still typed into them.
+        </Typography>
+      </Box>
+      <TextField size="small" label="Your name" value={name} onChange={(e) => setName(e.target.value)}
+        sx={{ bgcolor: "#fff", width: 200 }} />
+      <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+        sx={{ bgcolor: "#fff", width: 230 }} />
+      <Button size="small" variant="contained" disableElevation disabled={!name.trim()} onClick={save}>Save</Button>
+      {msg && <Typography variant="caption" sx={{ color: msg.startsWith("saved") ? "#15803d" : "#b91c1c" }}>{msg}</Typography>}
+    </Box>
+  );
+};
+
 export default function DocsView() {
   const [docName, setDocName] = useState(null);   // null = landing
   const [docs, setDocs] = useState({ soul: "", coder: "", digest: "" });
@@ -65,6 +108,7 @@ export default function DocsView() {
     <Box sx={{ maxWidth: 1160 }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>Operator documents</Typography>
+      <OwnerCard />
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3 }}>
         {NAMES.map((n) => (
           <LandingCard key={n} icon={DOCS[n].icon} title={DOCS[n].label} desc={DOCS[n].blurb}

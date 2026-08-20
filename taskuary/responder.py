@@ -46,7 +46,7 @@ DONE = ('The work this thread asked for is FINISHED - the report below says what
         'be done, say that and why, just as briefly. Never mention agents, tasks, tickets, '
         'repositories or tooling: the owner did this.')
 
-CHAT_CHANNELS = ('teams', 'slack')
+CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp')
 REPLY_TOKENS = 300          # a ceiling as well as an instruction: 800 invited an essay
 
 # SOUL.md tells the model how to sign off, and it obeys - in a chat window too, where it reads

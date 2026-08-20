@@ -265,14 +265,20 @@ def set_task_repo(task_id: int, body: RepoBody):
         out['session'] = start_session(store, task_id, body.agent)
     return out
 
+class NotATaskBody(BaseModel): learn: bool = True
+
 @app.post('/api/tasks/{task_id}/not-a-task')
-def not_a_task(task_id: int):
+def not_a_task(task_id: int, body: NotATaskBody = None):
     """Owner verdict: never needed to be a task. Teaches (sender ignore policy + memory
-    note), then deletes the task - its messages stay in the feed as 'filed'."""
+    note), then deletes the task - its messages stay in the feed as 'filed'.
+
+    learn=false is the lighter verdict: THIS one is just chatter (someone answered "yes"),
+    with nothing to conclude about the sender - delete the task, teach nothing, keep their
+    future messages flowing exactly as before."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     msgs, learned = store.list_messages(task_id), None
     em = (msgs[0].get('FromEmail') or '').lower() if msgs else ''
-    if em:
+    if em and (body is None or body.learn):
         store.save_policy({'Name': f'not-a-task: {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'ignore',
                            'Reason': 'owner said not a task', 'SortOrder': 50, 'Active': 1}, ACTOR)
         mid = store.add_memory({'Scope': 'sender', 'ScopeKey': em, 'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
@@ -380,6 +386,29 @@ def fetch_attachments(mid: int):
     except Exception as e:
         raise HTTPException(422, str(e)[:300])
     return {'fetched': n, 'data': [_att_row(a) for a in store.list_attachments(mid)]}
+
+class OpenReplyBody(BaseModel): draft: bool = True
+
+@app.post('/api/messages/{mid}/reply')
+def open_reply(mid: int, body: OpenReplyBody = None):
+    """Put a reply on the table for ANY message - the coder finished and you want to answer, or
+    triage never queued one. Creates the pending review (reusing one if it exists) and, unless
+    draft=false, writes the AI draft right now so the box comes back filled. Approving still
+    sends; nothing here does."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, 'reply', ACTOR)
+    rv = store.pending_review(tid)
+    rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
+                                                      'Status': 'pending', 'Reason': 'you opened a reply on this message'})
+    draft = (rv or {}).get('DraftText') or ''
+    if not draft and (body is None or body.draft):
+        try: draft = responder.write_draft(store, tid, rid, actor=ACTOR)
+        except Exception as e:
+            logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
+    store.audit('review', rid, 'open_reply', ACTOR, detail={'message_id': mid})
+    return {'reviewId': rid, 'taskId': tid, 'draft': draft}
+
 
 class NotMineBody(BaseModel): note: str | None = None; scope: str = 'sender'
 
@@ -931,33 +960,41 @@ def catch_up_on_startup():
     except ValueError: days = 0
     if days <= 0: return
     logger.info(f'startup: catching up on the last {days} days')
-    threading.Thread(target=lambda: _poll_reports(days), daemon=True).start()
+    def _catch_up():
+        _poll_reports(days)
+        # ...and only THEN synthesize the digest, so it reads the days just pulled in - a 5:30
+        # schedule never fired on an app that is a window you open, not a service
+        from .digest import refresh_if_stale
+        try: refresh_if_stale(store)
+        except Exception as e: logger.warning(f'digest refresh failed: {e}')
+    threading.Thread(target=_catch_up, daemon=True).start()
 
 
 def _heal_owner_docs():
-    """Docs written before the {{owner}} tokens carry LITERAL names - the template's John Smith,
-    and whatever the owner typed over some of them - so replies kept signing as John even though
-    SOUL.md said otherwise. Once per launch: seed the owner setting from SOUL.md if it is empty,
-    then sweep both the placeholder and the known name into tokens. Idempotent; the owner's
-    prose survives ("Johnson Controls" is not a name match)."""
+    """The shipped docs read as a person on purpose - John Smith is the open-source example, not
+    a token soup - and they stay that way until a REAL owner is known. The moment one is (the
+    owner card, or a name typed into SOUL.md), the docs convert themselves once per launch: the
+    placeholder and the known name both sweep into {{owner}} tokens, so every mention follows
+    the one setting from then on. "Johnson Controls" is not a name match; owner prose survives."""
     try:
+        soul = store.get_doc('soul') or ''
         if not (store.get_settings().get('owner_name') or '').strip():
-            soul = store.get_doc('soul') or ''
             name = store_mod.owner_from_soul(soul)
-            if name and name != 'the owner':
+            if name and name not in ('the owner', 'John Smith'):   # John Smith IS the placeholder
                 store.set_setting('owner_name', name, 'startup')
                 em = store_mod.email_from_soul(soul)
-                if em: store.set_setting('owner_email', em, 'startup')
+                if em and em != 'john.smith@example.com': store.set_setting('owner_email', em, 'startup')
         who = store.owner()
+        if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
+            return                                    # nobody real named yet: the example stands
         for doc in ('soul', 'coder', 'digest'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')
-            if who['owner'] not in ('the owner', '') and '{{' not in who['owner']:
-                t = store_mod.retoken_doc(t, who['owner'], who['owner_email'])
+            t = store_mod.retoken_doc(t, who['owner'], who['owner_email'])
             if t != raw:
                 store.save_doc(doc, t, 'startup')
-                logger.info(f'{doc}.md: literal owner names converted to tokens')
+                logger.info(f'{doc}.md: owner names converted to tokens (owner: {who["owner"]})')
     except Exception as e:
         logger.warning(f'owner-doc heal failed: {e}')
 

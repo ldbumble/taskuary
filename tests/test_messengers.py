@@ -123,18 +123,21 @@ class WhatsAppTests(unittest.TestCase):
 
 
 class OwnerTests(unittest.TestCase):
-    def test_the_name_lives_in_one_setting_and_reaches_every_doc(self):
+    def test_the_name_lives_in_one_setting_and_reaches_every_tokened_doc(self):
         s = MemoryStore()
         s.set_setting('owner_name', 'Dana Reyes', 'o')
         s.set_setting('owner_email', 'dana@northwind.example', 'o')
+        s.save_doc('soul', 'You work for **{{owner}}** ({{owner_email}}). {{owner_first}} decides.', 'o')
         self.assertIn('Dana Reyes', s.doc('soul'))
+        self.assertIn('Dana decides', s.doc('soul'))
         self.assertNotIn('{{owner', s.doc('soul'))
-        self.assertIn('Dana is', s.doc('coder'))
 
-    def test_a_tokenized_doc_never_leaks_the_token_as_the_fallback_name(self):
-        s = MemoryStore()                                      # no owner_name set at all
-        self.assertEqual(s.owner()['owner'], 'the owner')      # not '{{owner}}'
-        self.assertIn('You work for **the owner**', s.doc('soul'))
+    def test_the_shipped_example_is_not_an_identity(self):
+        """The open-source docs say John Smith on purpose - readable, not token soup. He must
+        never become the fallback owner, or replies sign as the example."""
+        s = MemoryStore()                                      # fresh install: template docs
+        self.assertEqual(s.owner()['owner'], 'the owner')      # not 'John Smith'
+        self.assertEqual(s.owner()['owner_email'], '')
 
     def test_retoken_sweeps_a_drifted_doc_without_touching_prose(self):
         drifted = ('You work for **Uri Nussbaum** (uri@x.net). Protect Uri\'s time.\n'

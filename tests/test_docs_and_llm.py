@@ -39,6 +39,29 @@ class TemplateTests(unittest.TestCase):
         self.assertTrue({'outlook', 'teams', 'slack', 'github', 'anthropic', 'openai', 'azure_openai'} <= types)
 
 
+class LightModelTests(unittest.TestCase):
+    def test_the_cli_brain_downshifts_to_the_light_model(self):
+        """One brain, two gears: triage/drafts/summaries run the agent's light_model; the main
+        model stays reserved for coding sessions (agent_argv, untouched here)."""
+        import json
+        from unittest import mock
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        s.upsert_agent('coder', 'coding', 'cli',
+                       json.dumps({'cmd': 'claude', 'model': 'opus', 'light_model': 'haiku'}))
+        seen = {}
+        def fake_run_cli(prof, prompt, trace, resume=None):
+            seen.update(prof); return ('{"intent":"fyi","why":"x"}', None, None)
+        with mock.patch('taskuary.agents.run_cli', fake_run_cli):
+            out = llm.make_cli_llm(s, 'coder')('sys', 'user')
+        self.assertEqual(seen['model'], 'haiku')                  # the cheap gear reads the mail
+        self.assertIn('fyi', out)
+        # and the coding session still gets the big one
+        from taskuary.terminal import agent_argv
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']):
+            self.assertIn('opus', agent_argv(json.loads(s.get_agent('coder')['Config'])))
+
+
 class DocSyncTests(unittest.TestCase):
     def test_sync_connections_fills_marker_block(self):
         s = MemoryStore()

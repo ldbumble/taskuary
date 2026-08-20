@@ -486,6 +486,36 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(len(pend), 1)
         self.assertEqual(c.patch('/api/tasks/999999', json={'Kind': 'reply'}).status_code, 404)
 
+    def test_a_reply_can_be_opened_on_any_message(self):
+        """After a coder ran (or triage filed it) there was NO way to answer from the panel -
+        nothing pending meant the draft box was unreachable. Opening a reply creates the review
+        and drafts it; opening again reuses the same one."""
+        tid = c.post('/api/tasks', json={'Title': 'coder finished this', 'Kind': 'coding'}).json()['taskId']
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:REPLY1', 'Channel': 'email',
+                                        'FromEmail': 'asker@corp.com', 'BodyText': 'is it fixed?', 'Status': 'routed'})
+        with mock.patch('taskuary.responder.write_draft', return_value='Fixed - deploys again tonight.') as wd:
+            out = c.post(f'/api/messages/{mid}/reply', json={}).json()
+        self.assertEqual(out['draft'], 'Fixed - deploys again tonight.')
+        self.assertEqual(wd.call_args.args[2], out['reviewId'])
+        pend = [r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['TaskId'] == tid]
+        self.assertEqual(len(pend), 1)
+        again = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()
+        self.assertEqual(again['reviewId'], out['reviewId'])            # reused, never stacked
+        self.assertEqual(c.post('/api/messages/999999/reply', json={}).status_code, 404)
+
+    def test_not_a_task_without_learning_deletes_and_teaches_nothing(self):
+        """Someone answered 'yes' - that is chatter, not a verdict about the sender. The lighter
+        not-a-task deletes the task and leaves no policy and no memory behind."""
+        tid = c.post('/api/tasks', json={'Title': 'yes'}).json()['taskId']
+        server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:CHAT1', 'Channel': 'teams',
+                                  'FromEmail': 'mindy@corp.com', 'BodyText': 'yes', 'Status': 'routed'})
+        before_p = len(c.get('/api/policies').json()['data'])
+        r = c.post(f'/api/tasks/{tid}/not-a-task', json={'learn': False}).json()
+        self.assertIsNone(r['learned'])
+        self.assertEqual(len(c.get('/api/policies').json()['data']), before_p)
+        self.assertNotIn('mindy@corp.com', str(server.store.list_memories()))
+        self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)   # the task is gone
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -15,7 +15,7 @@ const DOCS = {
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
-    blurb: "The nightly memory distillation — rebuilt every morning at 5:30 from the day's activity, injected into every agent prompt. Editable, but the next refresh overwrites it." },
+    blurb: "The rolling memory — synthesized when the app opens (once a day, after the startup catch-up pulls in what it missed), injected into every agent prompt. Editable, but the next refresh overwrites it." },
 };
 const NAMES = Object.keys(DOCS);
 

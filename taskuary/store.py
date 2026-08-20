@@ -426,8 +426,11 @@ class SQLiteStore:
         """Who this hub belongs to, from one setting. Falls back to whatever SOUL.md says so an
         existing document keeps working before the owner has ever touched the field."""
         st = self.get_settings()
-        name = (st.get('owner_name') or '').strip() or owner_from_soul(self.get_doc('soul') or '') or 'the owner'
+        soul_name = owner_from_soul(self.get_doc('soul') or '')
+        if soul_name == 'John Smith': soul_name = None            # the shipped example, not a person
+        name = (st.get('owner_name') or '').strip() or soul_name or 'the owner'
         email = (st.get('owner_email') or '').strip() or email_from_soul(self.get_doc('soul') or '')
+        if email == 'john.smith@example.com': email = ''
         return {'owner': name, 'owner_first': name.split()[0] if name.split() else name, 'owner_email': email}
 
     # feed

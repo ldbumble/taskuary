@@ -344,7 +344,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         {wrapping === "pause" ? "saving what it found…" : term.alive ? "Pause — save what it found" : "Save what it found"}
                       </Button>
                     </Box>
-                    <TerminalPane sid={term.sid} height="min(72vh, 900px)" onExit={() => findTerm(selected)} />
+                    {/* sized to what is actually left on screen below the header and the button strip, so the
+    detail panel does not have to be scrolled to see the bottom of the session - the
+    terminal has its own scrollbar for its own scrollback */}
+                    <TerminalPane sid={term.sid} height="clamp(300px, calc(100vh - 300px), 820px)"
+                      onExit={() => findTerm(selected)} />
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#0e7490", display: "block", mt: 0.5 }}>
                         {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."

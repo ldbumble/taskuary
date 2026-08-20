@@ -577,7 +577,11 @@ def transcript_for(store, task_id) -> tuple:
     pty still being around - the work happened either way, and a task you cannot close out is
     the worst of the two failures."""
     t = session_for(task_id)
-    if t: return harvest(t), (t.agent or 'coder'), t.sid
+    if t:
+        text = harvest(t)
+        # a session that has printed nothing yet (just opened, or spawn failed) must not shadow
+        # the FILED transcript of the session that actually did the work
+        if text.strip(): return text, (t.agent or 'coder'), t.sid
     row = store.last_transcript(task_id) or {}
     return (row.get('Text') or ''), (row.get('Agent') or 'coder'), row.get('Sid')
 

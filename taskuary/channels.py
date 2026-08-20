@@ -116,6 +116,12 @@ def test_connector(store, cid: int) -> dict:
                 detail += f" · channel read OK for {src['Address']}"
             else:
                 detail += ' - add a channel ID under Sources to probe reads'
+        elif c['Type'] == 'telegram':
+            from .messengers import tg_test
+            detail = tg_test(store, store.get_connector(c['ConnectorId'], with_secret=True))
+        elif c['Type'] == 'whatsapp':
+            from .messengers import wa_test
+            detail = wa_test(store, store.get_connector(c['ConnectorId'], with_secret=True))
         elif c['Type'] == 'mssql':
             from .mssql import test as mssql_test
             conn_cfg = _cfg(c)
@@ -368,7 +374,8 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
     return n
 
 
-CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github'}
+CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
+          'telegram': 'telegram', 'whatsapp': 'whatsapp'}
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
@@ -459,6 +466,14 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                     n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'github':
                     n += ingest_github_issues(store, s['Address'], tok, since, llm, file_only)
+                elif c['Type'] in ('telegram', 'whatsapp'):
+                    # one poll per CONNECTOR, not per source: both keep a cursor on the connector,
+                    # and the sources are just filters over what arrives (see messengers)
+                    from . import messengers
+                    mine = [x for x in store.list_sources() if x['Channel'] == CH2SRC[c['Type']]]
+                    if s['SourceId'] != mine[0]['SourceId']: continue
+                    poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
+                    n += poll(store, full, mine, llm, file_only)
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)

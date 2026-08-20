@@ -13,3 +13,8 @@ website/ui.png
 
 # scratch screenshots dropped in the repo root
 /*.png
+
+# the WhatsApp bridge's own install and pairing state - never committed
+taskuary/whatsapp/node_modules/
+taskuary/whatsapp/wa-auth/
+taskuary/whatsapp/package-lock.json

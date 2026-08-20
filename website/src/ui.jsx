@@ -12,15 +12,19 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import TagIcon from "@mui/icons-material/Tag";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import SendIcon from "@mui/icons-material/Send";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { ACTION_COLORS, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
-export const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#0e7490", slack: "#611f69", ai: "#b45309" };
+export const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#0e7490",
+  slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", ai: "#b45309" };
 export const ChannelIcon = ({ channel, sx }) => {
   const Icon = channel === "teams" ? GroupsIcon : channel === "github" ? GitHubIcon
     : channel === "report" ? AssessmentIcon : channel === "email" ? MailOutlineIcon
-    : channel === "slack" ? TagIcon : channel === "ai" ? AutoAwesomeIcon : TerminalIcon;
+    : channel === "slack" ? TagIcon : channel === "telegram" ? SendIcon
+      : channel === "whatsapp" ? WhatsAppIcon : channel === "ai" ? AutoAwesomeIcon : TerminalIcon;
   return <Icon sx={{ fontSize: 15, color: CHANNEL_COLORS[channel] || "#98a1b3", ...sx }} />;
 };
 

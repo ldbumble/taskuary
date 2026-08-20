@@ -30,7 +30,10 @@ def render_doc(text: str, who: dict) -> str:
 
 def owner_from_soul(soul: str):
     mt = _SOUL_NAME.search(soul or '')
-    return mt.group('name').strip() if mt else None
+    name = mt.group('name').strip() if mt else None
+    # a tokenized doc says "You work for **{{owner}}**" - that is not a name, it is the hole
+    # the name goes in, and taking it literally rendered every doc with '{{owner}}' as the owner
+    return None if (name and '{{' in name) else name
 
 def email_from_soul(soul: str):
     mt = _SOUL_NAME.search(soul or '')
@@ -124,6 +127,7 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
 #   tool    - the agents may read from / write to it (listed for them in SOUL.md)
 # Defaults match how each system is usually used; every one is owner-configurable.
 DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
+                 'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool'}
 ROLES = ('trigger', 'feed', 'report', 'tool')
 
@@ -149,6 +153,7 @@ class SQLiteStore:
                          ('slack', 'Slack'), ('github', 'GitHub'),
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
                          ('azure_openai', 'Azure OpenAI'), ('mssql', 'Microsoft SQL Server'),
+                         ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
                          ('winrm', 'Remote Windows (WinRM)')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))
@@ -320,9 +325,12 @@ class SQLiteStore:
         """Park this task's pending reply drafts while an agent works it. A draft written from the
         mail alone promises what the session has not found yet - and it sat in Review as if it
         were ready to send. Held leaves the queue; the wrap-up brings it back, rewritten."""
-        return self._exec("UPDATE review SET Status='held', Reason=COALESCE(?, Reason) "
-                          "WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply')",
-                          (reason, task_id))
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET Status='held', Reason=COALESCE(?, Reason) "
+                                  "WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply')",
+                                  (reason, task_id))
+            self.cx.commit()
+            return cur.rowcount                    # lastrowid is meaningless on an UPDATE
     def held_review(self, task_id, mid=None):
         q = "SELECT * FROM review WHERE TaskId=? AND Status='held'" + (' AND MessageId=?' if mid else '') + ' ORDER BY ReviewId DESC LIMIT 1'
         return self._one(q, (task_id, mid) if mid else (task_id,))
@@ -375,6 +383,10 @@ class SQLiteStore:
         """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
         self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL WHERE ConnectorId=?', (cid,))
         self._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))
+    def set_connector_config(self, cid, cfg: dict):
+        """Just the config JSON - how the pollers keep their watermark (Telegram's update
+        offset, the WhatsApp bridge's sequence) without touching secrets or roles."""
+        self._exec('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps(cfg), cid))
     def touch_connector(self, cid, error=None):
         if error: self._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', (error[:500], cid))
         else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))

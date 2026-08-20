@@ -61,7 +61,12 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   diff, history — and decide inline. Mail is stored whole (not Graph's 255-char preview)
   and shown the way you'd read it: an *inbound* / *↩ your reply* marker, the new text
   first, and the thread quoted underneath folded behind one click. Chains holding several
-  emails get a pill strip to flip between them. **Send to coding agent** on any row
+  emails get a pill strip to flip between them. **What rode along with the mail comes in
+  too** — half the time "see below" *is* the ask, so screenshots are drawn in the panel at the
+  size you can read them (click for full size), and the spreadsheet, the PDF, the invoice are
+  one click from the sentence about them. Signature logos stay chips, not pictures. A clip on
+  the row says there is something attached; mail that arrived before Taskuary kept attachments
+  has a one-click *look for attachments on this mail*. **Send to coding agent** on any row
   hands that item — a failed report, an email, a chat — to a CLI agent with your own
   prompt; it becomes a task carrying the full message as context.
 - **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Which lane a
@@ -77,15 +82,38 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   colleague (the picker knows everyone who has written to you), and the AI writes the
   forward message out of the task's own context — systems, ids, error codes, what you need
   back — for you to edit before it goes.
+- **Split / merge — when triage drew the boundary in the wrong place.** One task holding two
+  jobs, or two tasks holding one: the same question ("is this one job?") and the same drawer,
+  offered from the Tasks header and the Timeline panel. **Break it in two** and the AI reads
+  the mail for the second ask and names both halves — the first half *keeps* the task, its
+  ref, its session, its report and its history, the second becomes a new task, and only the
+  messages you tick move with it. **Fold it into another** runs the router's own signals
+  backwards to rank which open task this is really a duplicate of, says *why* for each, and
+  lets you choose which one survives; the loser is dropped with a pointer at the survivor —
+  never deleted, because what triage did and what you did about it is the part worth reading
+  later. A task an agent is working cannot be folded away underneath it.
 - **Tasks** — **the page is a terminal.** Open a task, pick the CLI and model, and you get a
   real session in that task's repo with the prompt already typed in — you talk to it like
-  any other terminal, because it *is* one. When you're finished, **Done — wrap it up** tells
+  any other terminal, because it *is* one. **Taskuary picks the checkout**, not the agent:
+  with no `repo:` tag on the task, the ask is matched against the repo map SOUL.md already
+  keeps, and the task says which repo it chose and why. And the prompt carries **everything** —
+  the ask, the mail behind it, the handover note a paused session left, and the CODER.md rules —
+  because those docs live in Taskuary's database, nowhere the agent can read, so an agent
+  handed a thin prompt spent its first minute calling the API back for what it should have
+  been given. When you're finished, **Done — wrap it up** tells
   the agent so: it writes its own closing summary, the summary files onto the task under
   *What the agent did*, and the task closes. No stopping it, copying out of the terminal and
-  marking done by hand. The messages, earlier runs and notes are folded underneath. One quiet link
+  marking done by hand. **Done and Pause belong to the task, not to the terminal**: when a
+  session ends its readable transcript is filed, so a CLI that finished on its own hours ago
+  can still be written up — the buttons used to vanish with the pty and leave work that could
+  never be closed out. The messages, earlier runs and notes are folded underneath. One quiet link
   runs it headless instead when you'd rather not watch. Every task shows **one** state —
   *needs you*, *agent working*, *queued*, *done* — instead of three columns you had to
   combine in your head.
+- **Out of the box it WORKS the mail**, rather than watching it arrive: a job goes to the
+  coding agent, a question gets a drafted reply. Neither sends anything — a draft waits for your
+  approval and a session is one you are watching — so both ship on, and either can be switched
+  off in Settings.
 - **Two roads out of triage, and only one of them costs anything.** A message that just
   needs an answer is *reply_only*: **the main AI writes the reply** in your voice per
   SOUL.md, it waits in Review, and approving sends it — no task, no agent, no repository. A
@@ -97,7 +125,11 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   in the original mail thread or the same chat — and if the send fails, the approved text
   stays on the task marked *NOT SENT* rather than vanishing. Nothing sends without you. Agents
   never queue a question here: they run in a terminal you are watching, so they ask you in the
-  session and you answer by typing back.
+  session and you answer by typing back. **A reply waits for the agent working the same task.**
+  Triage answers a question from the mail alone; the moment a session starts on that task, the
+  draft stops looking ready to send and moves to *waiting on the agent* — it was promising a fix
+  nobody had looked at yet. Wrapping the session up brings it back rewritten from what the agent
+  actually found, and *Answer now anyway* releases it if the sender needs telling something today.
 - **Reports** — a funnel you lay out: **any number of sources at the top** (the same
   connection twice with different SQL is fine — drag to reorder, one click to duplicate)
   feeding **one prompt at the bottom**, then the schedule. Every source's rows reach the
@@ -105,7 +137,13 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   instead of killing the report. Preview runs the whole pipeline before you save. **max
   rows** (per source; blank means the 200-row default) decides how much reaches the summary,
   and the headline says *capped* when rows were left behind — naming whether that was your
-  number or the default — so the AI never calls a truncated slice "all of them".
+  number or the default — so the AI never calls a truncated slice "all of them". A report's
+  **rows come back as files**, not only as prose about them: an **.xlsx** to open in Excel
+  (numbers stored as numbers, so they sum) and a **bar chart** drawn in the panel, both
+  attached to the report itself, and **the model that just read every row names what to plot**
+  (better than a heuristic hunting for "all numeric" and picking the id column) on a line that
+  never reaches the reader. Preview draws the chart before you schedule anything. Prose-only
+  reports — an AI summary, a failure — produce neither. No new dependency to freeze into the exe: both are written on the standard library.
 - **Terminals** — your coding CLI for real: a pseudo-terminal (ConPTY on Windows) streamed
   to xterm.js over a websocket. Its own TUI, its approval prompts, your keystrokes — the
   session, not a transcript of one. It lives in exactly one place, **the task page**: no
@@ -126,6 +164,14 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   by default; GitHub starts as a tool — make it
   a feed to watch new issues, or a trigger to have them worked. Nothing polls a connection
   you gave neither role.
+- **Attachments, and an AI that can see them.** "See below." is half the mail this app reads,
+  and below was a screenshot — so what rode along with a message is fetched *before* triage and
+  handed to it: when the model has vision, the picture of the error IS the request it classifies,
+  instead of three words of body text filed as informational. Images go to a session too, by
+  path, so the agent opens them itself. Both switchable in Settings, along with how many days
+  Taskuary reaches back **when you open it** — it is a window, not a service, so "anything since
+  I last polled" is the wrong question after a weekend off; startup widens the window (3 days by
+  default) without dragging a long-idle connection forward.
 - **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
   rules injected into every agent run. They ship as templates and maintain themselves —
   connectors and discovered repos write themselves in.

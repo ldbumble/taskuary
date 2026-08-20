@@ -40,6 +40,10 @@ export const XTERM_THEME = {
   blue: CATPPUCCIN.blue, magenta: CATPPUCCIN.magenta, cyan: CATPPUCCIN.cyan, white: "#bac2de",
   brightBlack: CATPPUCCIN.overlay, brightRed: "#f38ba8", brightGreen: "#a6e3a1", brightYellow: "#f9e2af",
   brightBlue: "#89b4fa", brightMagenta: "#f5c2e7", brightCyan: "#94e2d5", brightWhite: "#f5f5f7",
+  // xterm's default slider is 20% white on a dark pane - invisible, so a session that scrolls
+  // perfectly well reads as "I cannot scroll back". These are opaque enough to see and grab.
+  scrollbarSliderBackground: "#5c6378", scrollbarSliderHoverBackground: "#7b83a0",
+  scrollbarSliderActiveBackground: "#9aa2c0",
 };
 
 export const TASK_STATUS_COLORS = {

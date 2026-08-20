@@ -1,6 +1,9 @@
 """Core engine tests - everything runs on the in-memory SQLite store, no network."""
-import json, time, unittest
+import json, tempfile, time, unittest
+from pathlib import Path
+from taskuary import store as store_mod
 from taskuary.store import MemoryStore, task_ref
+from taskuary import artifacts, reshape
 from taskuary.ingest import ingest_message
 from taskuary.routing import route
 from taskuary.triage import heuristic_intent
@@ -77,11 +80,23 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(any('auto-started a live coder session' in c['Body'] for c in s.list_comments(out['task_id'])))
 
     def test_no_auto_dispatch_when_disabled(self):
+        """Dispatching is ON by default now, so this asserts the SWITCH works - turned off,
+        a real task is filed and waits for the owner to start it."""
         from unittest import mock
         s = MemoryStore()
+        s.set_setting('coder_auto_enabled', '0', 'owner')
         with mock.patch('taskuary.terminal.start_on_task') as start:
-            ingest_message(s, self.msg(external_id='ac2'), llm=TASK_LLM)
+            out = ingest_message(s, self.msg(external_id='ac2'), llm=TASK_LLM)
         start.assert_not_called()
+        self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
+
+    def test_out_of_the_box_a_job_goes_to_the_agent_and_a_question_gets_a_draft(self):
+        """Both switches used to ship OFF, so a fresh install watched the mail arrive and did
+        nothing with it. Neither one sends anything: a draft waits for approval, and a session
+        is one you are watching."""
+        d = store_mod.DEFAULT_SETTINGS
+        self.assertEqual((d['coder_auto_enabled'], d['auto_draft_enabled']), ('1', '1'))
+        self.assertEqual(MemoryStore().get_settings()['coder_auto_enabled'], '1')
 
     def test_reply_only_is_drafted_by_the_main_ai_not_a_coding_agent(self):
         """A question needs an answer, not an agent. Drafting used to require a CLI agent
@@ -604,6 +619,153 @@ class CoreTests(unittest.TestCase):
             self.assertEqual((m['Channel'], m['Status'], m['TaskId']), ('report', 'feed', None))
         finally:
             REGISTRY.pop('_t')
+
+    # ── the AI got the SHAPE wrong: one task holding two jobs, or two holding one ──
+    def _two_job_task(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'PTO import failing', 'Summary': 'Please fix the PTO import mapping.\n'
+                             'Also we need the 112 active employees added to the roster.', 'Kind': 'coding',
+                             'Priority': 'high', 'Source': 'email', 'Tags': 'repo:mfaVita/FanApp'}, 'owner')
+        mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'PTO import failing',
+                             'FromEmail': 'rita@example.com', 'SentAt': '2026-08-19 09:00',
+                             'BodyText': 'Please fix the PTO import mapping.\nAlso add the 112 active employees.'})
+        return s, tid, mid
+
+    def test_split_keeps_the_history_here_and_carries_the_ticked_mail_over(self):
+        s, tid, mid = self._two_job_task()
+        new = reshape.split_task(s, tid, {'title': 'Add the 112 active employees', 'summary': 'roster'},
+                                 {'title': 'Fix the PTO import mapping'}, [mid])
+        self.assertEqual(s.get_task(tid)['Title'], 'Fix the PTO import mapping')      # the ref stays put
+        t2 = s.get_task(new)
+        self.assertEqual((t2['Kind'], t2['Priority'], t2['Tags']), ('coding', 'high', 'repo:mfaVita/FanApp'))
+        self.assertEqual(s.get_message(mid)['TaskId'], new)                            # moved, with a route
+        self.assertEqual([r['Decision'] for r in s.list_routes(new)], ['split'])
+        self.assertIn(task_ref(new), s.list_comments(tid)[-1]['Body'])                 # each side says where
+        self.assertIn(task_ref(tid), s.list_comments(new)[-1]['Body'])
+
+    def test_split_never_hands_the_new_task_an_agent_but_keeps_your_own_name_on_it(self):
+        s, tid, _mid = self._two_job_task()
+        s.update_task(tid, {'Assignee': 'agent:coder'}, 'owner')
+        self.assertIsNone(s.get_task(reshape.split_task(s, tid, {'title': 'the other job'}))['Assignee'])
+        s.update_task(tid, {'Assignee': 'owner'}, 'owner')
+        self.assertEqual(s.get_task(reshape.split_task(s, tid, {'title': 'mine too'}))['Assignee'], 'owner')
+
+    def test_split_needs_a_title_and_ignores_mail_that_is_not_on_the_task(self):
+        s, tid, _mid = self._two_job_task()
+        with self.assertRaises(ValueError): reshape.split_task(s, tid, {'title': '  '})
+        new = reshape.split_task(s, tid, {'title': 'second job'}, None, [9999])
+        self.assertEqual(s.list_messages(new), [])
+
+    def test_propose_split_reads_the_ai_and_falls_back_to_the_ask_lines(self):
+        s, tid, _mid = self._two_job_task()
+        out = reshape.propose_split(s, tid, lambda sys, user, mt=None: '{"two": true, "why": "two asks",'
+                                    ' "first": {"title": "Fix the import", "summary": "a"},'
+                                    ' "second": {"title": "Add the employees", "summary": "b"}}')
+        self.assertEqual((out['ai'], out['two'], out['second']['title']), (True, True, 'Add the employees'))
+        # no brain, or a brain that falls over: never claims a split, just offers the pieces
+        for llm in (None, lambda *a, **k: 'not json at all'):
+            out = reshape.propose_split(s, tid, llm)
+            self.assertFalse(out['two'])
+            self.assertTrue(out['first']['summary'])
+            self.assertIn('112 active employees', out['second']['title'])
+        self.assertEqual(len(reshape.propose_split(s, tid)['messages']), 1)
+
+    # ── a report hands back the spreadsheet and the chart, not just prose about them ──
+    def _report_rows(self):
+        return [{'Employee': 'Tabita C Vaughan', 'Debit': 242.25, 'Period': 'Jun.28 thru Jul.11'},
+                {'Employee': 'Avis M Rodgers', 'Debit': 1536.0},
+                {'Employee': 'Donna T Eanes', 'Debit': 2611.2, 'Period': 'Jul.12 thru Jul.25', 'Memo': None}]
+
+    def test_report_rows_become_a_real_xlsx_with_numbers_as_numbers(self):
+        import openpyxl                      # the reader, not the writer - the writer is ours
+        rows = self._report_rows()
+        p = Path(tempfile.mkdtemp()) / 'r.xlsx'
+        self.assertTrue(artifacts.to_xlsx(rows, p, 'Payroll Journal'))
+        ws = openpyxl.load_workbook(p).active
+        got = [[c.value for c in r] for r in ws.iter_rows()]
+        self.assertEqual(ws.title, 'Payroll Journal')
+        self.assertEqual(got[0], ['Employee', 'Debit', 'Period', 'Memo'])   # a ragged row must not shift columns
+        self.assertEqual(got[2], ['Avis M Rodgers', 1536.0, None, None])
+        self.assertIsInstance(got[1][1], float)                             # Excel can sum it
+        self.assertFalse(artifacts.to_xlsx([], p))
+
+    def test_the_chart_needs_a_measure_and_says_what_it_plotted(self):
+        rows = self._report_rows()
+        self.assertEqual(artifacts.chart_columns(rows), ('Employee', 'Debit'))
+        p = Path(tempfile.mkdtemp()) / 'c.svg'
+        self.assertEqual(artifacts.to_svg_chart(rows, p, 'Payroll'), 'Debit by Employee')
+        svg = p.read_text(encoding='utf-8')
+        self.assertIn('Tabita C Vaughan', svg)
+        self.assertIn('<rect', svg)
+        self.assertNotIn('<script', svg)
+        # a table of names and ids is not a chart just because we can draw axes
+        self.assertEqual(artifacts.chart_columns([{'a': 'x', 'b': 'y'}]), ('a', None))
+        self.assertEqual(artifacts.to_svg_chart([{'a': 'x'}], p), '')
+
+    def test_prose_reports_produce_no_files_and_row_reports_produce_both(self):
+        s = MemoryStore()
+        body = '\n'.join(json.dumps(r) for r in self._report_rows())
+        mid = s.add_message({'Channel': 'report', 'Subject': 'Payroll Journal', 'BodyText': body, 'Status': 'feed'})
+        self.assertEqual(len(artifacts.attach_report_output(s, mid, 'Payroll Journal', body)), 2)
+        names = [a['Name'] for a in s.list_attachments(mid)]
+        self.assertTrue(any(n.endswith('.xlsx') for n in names) and any(n.endswith('.svg') for n in names))
+        self.assertEqual([a['Inline'] for a in s.list_attachments(mid) if a['Name'].endswith('.svg')], [1])
+        prose = s.add_message({'Channel': 'report', 'Subject': 'Digest', 'BodyText': 'Everything looks fine today.'})
+        self.assertEqual(artifacts.attach_report_output(s, prose, 'Digest', 'Everything looks fine today.'), [])
+        # a body that mixes an AI summary with the rows still yields the rows
+        mixed = 'Three employees posted to the wrong period.\n' + body
+        self.assertEqual(len(artifacts.rows_from_body(mixed)), 3)
+
+    def test_ask_lines_finds_two_asks_whether_they_are_two_lines_or_one(self):
+        two = 'Please fix the PTO import mapping.\nAlso add the 112 active employees.'
+        one = 'Hi Uri,\nPlease fix the PTO import mapping. Also add the 112 active employees.\nThanks'
+        for body in (two, one):
+            self.assertEqual(len(reshape.ask_lines(body)), 2, body)
+        # one job described in two sentences is still one piece per line, and greetings never count
+        self.assertEqual(reshape.ask_lines('Hello there\nPlease fix the import mapping'), ['Please fix the import mapping'])
+
+    def test_merge_moves_the_mail_appends_the_ask_and_drops_the_duplicate(self):
+        s = MemoryStore()
+        keep = s.create_task({'Title': 'Add the employees', 'Summary': 'roster work'}, 'owner')
+        dupe = s.create_task({'Title': 'Employee roster', 'Summary': 'the 112 active employees'}, 'owner')
+        mid = s.add_message({'TaskId': dupe, 'Channel': 'email', 'Subject': 'roster', 'SentAt': '2026-08-19 10:00'})
+        s.add_review({'TaskId': dupe, 'Kind': 'draft', 'Status': 'pending'})
+        out = reshape.merge_tasks(s, dupe, keep)
+        self.assertEqual((out['task_id'], out['moved']), (keep, 1))
+        self.assertEqual(s.get_message(mid)['TaskId'], keep)
+        self.assertIn('the 112 active employees', s.get_task(keep)['Summary'])
+        self.assertEqual(s.get_task(dupe)['Status'], 'dropped')                        # dropped, never deleted
+        self.assertIn(task_ref(keep), s.list_comments(dupe)[-1]['Body'])
+        self.assertEqual([r['Status'] for r in s.list_reviews()], ['superseded'])       # its draft goes with it
+
+    def test_merge_refuses_itself_a_stranger_and_a_task_an_agent_is_working(self):
+        s = MemoryStore()
+        a = s.create_task({'Title': 'a'}, 'owner'); b = s.create_task({'Title': 'b'}, 'owner')
+        for src, dst in ((a, a), (a, 9999), (9999, b)):
+            with self.assertRaises(ValueError): reshape.merge_tasks(s, src, dst)
+        s.start_run(a, 'coder', 'go', 'owner')
+        with self.assertRaises(ValueError): reshape.merge_tasks(s, a, b)
+
+    def test_merge_candidates_rank_the_task_it_is_really_a_copy_of(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'PTO import mapping is wrong', 'Summary': 'the PTO import maps the wrong column'}, 'owner')
+        twin = s.create_task({'Title': 'PTO import maps the wrong column', 'Summary': 'PTO import mapping is wrong'}, 'owner')
+        s.create_task({'Title': 'Order new laptops for the studio'}, 'owner')
+        cands = reshape.merge_candidates(s, tid)
+        self.assertEqual(cands[0]['task_id'], twin)
+        self.assertEqual(cands[0]['ref'], task_ref(twin))
+        self.assertGreater(cands[0]['score'], cands[-1]['score'])
+        self.assertNotIn(tid, [c['task_id'] for c in cands])
+        # a hand-typed task keeps its whole ask in Summary - scoring that reads only titles and
+        # message bodies (store.snapshots) called two obvious duplicates 0.00 alike
+        s2 = MemoryStore()
+        a = s2.create_task({'Title': 'Roster work', 'Summary': 'add the 112 active employees to the roster'}, 'owner')
+        b = s2.create_task({'Title': 'Headcount', 'Summary': 'the roster needs the 112 active employees'}, 'owner')
+        self.assertGreater(reshape.merge_candidates(s2, b)[0]['score'], 0.1)
+        self.assertEqual(reshape.merge_candidates(s2, b)[0]['task_id'], a)
+        # a task already closed is nothing to fold into
+        s2.update_task(a, {'Status': 'done'}, 'owner')
+        self.assertEqual(reshape.merge_candidates(s2, b), [])
 
 
 if __name__ == '__main__':

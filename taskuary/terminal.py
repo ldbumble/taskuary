@@ -12,7 +12,10 @@ from loguru import logger
 
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
 SESSIONS = {}               # sid -> Term
-SEED_WAIT, SEED_QUIET = 25, 1.4     # seconds: how long to wait for a TUI, and what 'settled' means
+SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
+SEED_SETTLE = 8                     # cap on waiting for the input box to finish laying out a long paste
+SEED_ENTER = 1.0                    # how long to give the TUI to react to Enter before pressing again
+DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
 
 
 # A terminal must start a FRESH session. Taskuary can itself be launched from inside an
@@ -50,8 +53,12 @@ class _UnixPty:
         self.p = subprocess.Popen(argv, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
                                   close_fds=True, start_new_session=True, env=clean_env())
         os.close(slave)
+        import codecs
+        self.dec = codecs.getincrementaldecoder('utf-8')(errors='replace')
     def read(self):
-        try: return os.read(self.fd, 65536).decode('utf-8', 'replace')
+        # decoded INCREMENTALLY: a multibyte glyph split across two reads used to decode as two
+        # replacement chars, and a TUI draws in box glyphs all day
+        try: return self.dec.decode(os.read(self.fd, 65536))
         except OSError: return ''
     def write(self, s): os.write(self.fd, s.encode())
     def resize(self, rows, cols):
@@ -67,15 +74,19 @@ class Term:
     """One live pty session. The reader thread fans output out to every attached socket
     and keeps a scrollback so reopening the tab shows the session as it stands."""
 
-    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110):
+    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None):
         self.sid = uuid.uuid4().hex[:12]
         self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
+        self.seeded = ''                                  # the prompt we typed: echoed back, not said
+        self.store = store                                # so the pty can file its own transcript when it ends
         self.subs = []                                    # (loop, asyncio.Queue)
         self.taps = []                                    # plain callables, for server-side readers
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols)
         self.alive = True
+        # started LAST, and store comes in through the constructor: a CLI that dies immediately
+        # used to reach keep() before the caller had handed the session anywhere to file itself
         threading.Thread(target=self._pump, daemon=True).start()
 
     def _append(self, s):
@@ -97,21 +108,49 @@ class Term:
                 try: f(data)
                 except Exception as e: logger.debug(f'terminal tap failed: {e}')
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
+        self.keep()                                       # the transcript must outlive the pty
         self._emit(None)
 
+    def keep(self):
+        """File this session's readable transcript on its task. A pty is not storage: sessions are
+        reaped, and once the last one was gone the task could no longer be wrapped up at all - the
+        buttons had nothing to read and quietly disappeared. Written on exit AND on close, because
+        either can come first."""
+        if not (self.store and self.task_id): return
+        try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd)
+        except Exception as e: logger.warning(f'could not file the transcript for {self.sid}: {e}')
+
+    def settle(self, cap: float) -> bool:
+        """Wait until the TUI stops painting - that gap IS 'ready'. A fixed delay either typed
+        into the middle of a redraw (swallowed) or waited seconds longer than it needed."""
+        start, quiet, last = time.time(), 0, self.n
+        while self.alive and quiet < SEED_QUIET and time.time() - start < cap:
+            time.sleep(.1)
+            quiet, last = (quiet + .1, last) if self.n == last else (0, self.n)
+        return self.alive
+
     def seed(self, text: str):
-        """Type the first prompt in for the user - but only once the CLI is actually ready
-        for it. Agent TUIs take a few seconds to boot and redraw, and anything typed while
-        they are still painting is swallowed, so wait for output to start and then go quiet
-        (that gap IS 'ready'), rather than guessing a delay."""
+        """Type the first prompt in AND SEND IT. The owner asked for the work when they clicked
+        the button, so leaving a filled-in box for them to come back and press Enter on is not
+        starting - it is a session that looks busy and has done nothing.
+
+        Two waits, both measured rather than guessed: for the CLI to finish booting before the
+        text goes in, and for the input box to finish laying the paste out before Enter does.
+        Then Enter is pressed until the session ANSWERS - a carriage return arriving mid-redraw
+        reads as part of the same edit and is dropped, and some TUIs submit on \\n not \\r."""
         def go():
             start = time.time()
             while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
-            quiet, last = 0, self.n
-            while self.alive and quiet < SEED_QUIET and time.time() - start < SEED_WAIT:
-                time.sleep(.2)
-                quiet, last = (quiet + .2, last) if self.n == last else (0, self.n)
-            if self.alive: self.write(text.replace('\n', ' ') + '\r')
+            if not self.settle(max(1.0, SEED_WAIT - (time.time() - start))): return
+            self.seeded = ' '.join(text.split())
+            self.write(self.seeded)
+            for key in ('\r', '\r', '\n'):
+                if not self.settle(SEED_SETTLE): return
+                was = self.n
+                self.write(key)
+                time.sleep(SEED_ENTER)
+                if self.n > was: return                   # it answered: the prompt went in
+            logger.warning(f'terminal {self.sid}: prompt typed but nothing came back - press Enter')
         threading.Thread(target=go, daemon=True).start()
 
     def tap(self, fn): self.taps.append(fn)
@@ -127,6 +166,7 @@ class Term:
             try: self.pty.resize(int(rows), int(cols))
             except Exception: pass
     def close(self):
+        self.keep()                                       # before the bytes go, not after
         self.alive, self.ended = False, time.time()
         self.pty.kill()
         self._emit(None)
@@ -194,8 +234,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if not cwd and repo: cwd = (profile.get('cwd_map') or {}).get(repo)
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
-    t = Term(argv, cwd, label, task_id, agent, rows, cols)
+    t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    # A reply drafted from the mail alone promises what this session has not worked out yet, so
+    # it stops waiting in Review and comes back rewritten from the report - see coder.raise_reply.
+    if task_id and store.hold_reviews(task_id, 'held while an agent works the task - the reply is written from what it finds'):
+        logger.debug(f'held the pending reply on task {task_id} while {agent or "a session"} works it')
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})
     return t
 
@@ -254,48 +298,136 @@ def declutter(text: str) -> str:
     return '\n'.join(out).strip()
 
 
+def letters(s: str) -> int:
+    """How much of this is words - the measure of whether there is anything to report FROM."""
+    return sum(1 for c in (s or '') if c.isalpha())
+
+
+def _drop_echo(text: str, seed: str) -> str:
+    """A pty ECHOES what was typed into it, so the seeded prompt - the ask, the mail, all of
+    CODER.md - comes back as if the agent had said it. It is the one line in the transcript we
+    know the agent did not write, and the AI writing the report should not read it twice."""
+    head = ' '.join((seed or '').split())[:60]
+    if len(head) < 20: return text
+    return '\n'.join(l for l in text.splitlines() if head not in ' '.join(l.split()))
+
+
 def harvest(t: Term, chars: int = 12000) -> str:
-    """What the session actually said, as readable text. Closing a task used to TYPE a request
-    for a summary into the pty and wait: another prompt to read, minutes of waiting, and one
-    more chance for an agent you just told to stop to go and do more work. Everything needed
-    is already on screen - take it and let the main AI write the report."""
-    return declutter(plain(t.scrollback()[-chars * 4:]))[-chars:]
+    """What the session actually said, as readable text. Closing a task asks the agent nothing:
+    everything needed is already on screen.
+
+    The tail used to be taken off the RAW stream (the last chars*4 bytes). In a busy TUI that
+    window is almost entirely escape sequences and status repaints, so a 27-minute session full
+    of real work rendered down to fragments - and the report came back saying the transcript was
+    corrupted. Render the whole scrollback FIRST, then keep the tail of the readable text."""
+    raw = _drop_echo(plain(t.scrollback()), getattr(t, 'seeded', '')).strip()
+    tidy = declutter(raw)
+    # noise an AI can discount; emptiness it cannot. If decluttering took the words out with the
+    # chrome, hand over the rendered text instead of nothing.
+    return (tidy if letters(tidy) >= 160 else raw)[-chars:]
 
 
-def seed_text(store, tid: int, instruction: str = None) -> str:
-    """What gets typed into a fresh session: the ask, the owner's own prompt, and the message
-    that started it. One line - a newline submits in a TUI."""
+def rules_text(store, chars: int = DOC_CHARS) -> str:
+    """CODER.md, flattened. The doc says it is 'stacked on top of SOUL.md for every coder run'
+    - it never was: these docs live in Taskuary's own database, nowhere the agent can read, so
+    the rules only reach a session if the prompt carries them."""
+    doc = str(store.get_doc('coder') or '')
+    keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip()
+            for l in doc.splitlines() if l.strip()]
+    return ' '.join(' '.join(keep).split())[:chars]
+
+
+def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None) -> str:
+    """What gets typed into a fresh session, and the ONLY context it should need: the ask, the
+    mail behind it, which checkout to work in, and the coder rules. One line - a newline
+    submits in a TUI.
+
+    It says so explicitly, because an agent that goes back to Taskuary for the message spends
+    a minute of tool calls re-fetching what it was already handed."""
     from .store import task_ref
     t = store.get_task(tid) or {}
     msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     m = msgs[-1] if msgs else None
-    parts = [f"Work Taskuary task {task_ref(tid)} - {t.get('Title') or ''}."]
-    if instruction and instruction.strip(): parts.append(instruction.strip())
-    if m: parts.append(f"It came in on {m.get('Channel')} from {m.get('FromName') or m.get('FromEmail')}: "
-                       f"{(m.get('BodyText') or '')[:3000]}")
-    elif t.get('Summary'): parts.append(str(t['Summary'])[:3000])
+    parts = [f"TASK {task_ref(tid)} - {t.get('Title') or ''}."]
+    if repo or cwd: parts.append(f"REPO: {repo or cwd} - you are already in it; work only here.")
+    if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
+    if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
+                       f"subject \"{m.get('Subject') or ''}\": {(m.get('BodyText') or '')[:3000]}")
+    elif t.get('Summary'): parts.append(f"ASK: {str(t['Summary'])[:3000]}")
+    # the screenshot is often the whole ask ("see below"), and the file paths are local - the
+    # session can open them itself instead of being told an image existed
+    atts = [a for msg in msgs for a in store.list_attachments(msg['MessageId']) if a.get('Path')]
+    if atts: parts.append('FILES that came with it, already on this machine - open them: '
+                          + '; '.join(f"{a['Name']} ({a['Path']})" for a in atts[:8]))
     # a paused session left a handover note: carry it in, or the next agent redoes the digging
     from .coder import PAUSE_MARKER
     note = next((c['Body'] for c in reversed(store.list_comments(tid))
                  if str(c.get('Body') or '').startswith(PAUSE_MARKER)), None)
-    if note: parts.append(f"An earlier session on this task was paused and left this handover - "
-                          f"continue from it, do not start over: {note[:3000]}")
+    if note: parts.append('HANDOVER: an earlier session on this task was paused and left this - '
+                          f'continue from it, do not start over: {note[:3000]}')
+    rules = rules_text(store)
+    if rules: parts.append(f'RULES: {rules}')
+    # The job, spelled out. An agent handed a bare task description went looking for the ticket
+    # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
+    # re-fetching what is already in this paragraph.
+    parts.append('WHAT TO DO: work it from THIS message alone. Diagnose the problem, fix it if it '
+                 'is fixable, and if it is not, say plainly what the problem is and what it would '
+                 'take. Do NOT call the Taskuary API, read its database or go looking for this task '
+                 'anywhere - everything known about it is above. Ask the owner here in the session '
+                 'if something is genuinely missing.')
     return ' '.join(' '.join(parts).split())
+
+
+_REPO_LINE = re.compile(r'^-\s+\*\*([^*]+)\*\*:\s*(.*)$', re.M)
+
+def repo_map(store) -> dict:
+    """{repo: what it is} out of SOUL.md's repo map - the routing table the operator doc already
+    keeps. It is the answer to "which repo is this about", written down once."""
+    return {mt.group(1).strip(): mt.group(2).strip() for mt in _REPO_LINE.finditer(str(store.get_doc('soul') or ''))}
+
+
+def guess_repo(store, tid: int, profile: dict) -> tuple:
+    """Which checkout does this task belong in? The tag on the task wins. Otherwise match the
+    ask against the repo map - but only over repos this agent can actually open (cwd_map), since
+    naming a repo it has no path for just lands the session in the default folder anyway.
+
+    Taskuary deciding this is the point: an agent left to work it out reads SOUL.md over the API,
+    or guesses from the folder it happens to have started in."""
+    from .routing import cosine, tokens
+    t = store.get_task(tid) or {}
+    tag = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
+    if tag: return tag, 'tagged on the task'
+    have = list((profile.get('cwd_map') or {}).keys())
+    if not have: return None, None
+    if len(have) == 1: return have[0], 'the only repo this agent has a path for'
+    blob = ' '.join([t.get('Title') or '', str(t.get('Summary') or '')[:2000]]
+                    + [str(m.get('BodyText') or '')[:2000] for m in store.list_messages(tid)])
+    xs, desc = tokens(blob), repo_map(store)
+    def score(r):
+        named = 1.0 if r.split('/')[-1].lower() in blob.lower() else 0.0
+        return named + cosine(xs, tokens(f"{r.replace('/', ' ')} {desc.get(r, '')}"))
+    best = max(have, key=score)
+    if score(best) < .08: return None, None
+    return best, ('named in the ask' if best.split('/')[-1].lower() in blob.lower()
+                  else 'closest match in the SOUL.md repo map')
 
 
 def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
                   actor: str = 'owner') -> dict:
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
     agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
-    import re
+    import json
     live = for_task(tid)
     if live: return {**live, 'existing': True}
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
-    if not store.get_agent(agent or ''): raise ValueError(f'unknown agent: {agent}')
-    repo = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
+    row = store.get_agent(agent or '')
+    if not row: raise ValueError(f'unknown agent: {agent}')
+    repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
     term = open_session(store, agent, tid, repo, None, 32, 110, actor, model)
-    term.seed(seed_text(store, tid, instruction))
+    if repo and why != 'tagged on the task':
+        store.add_comment(tid, actor, 'human', f'Session opened in {repo} - {why}.')
+    term.seed(seed_text(store, tid, instruction, repo, term.cwd))
     store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',
                       f'{agent} started on this task in a live session ({term.cwd}).')
     if t.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)
@@ -316,6 +448,25 @@ def for_task(task_id, tail=0):
     return t.info(tail) if t else None
 
 
+def session_for(task_id):
+    """This task's session OBJECT - the live one if there is one, else the most recent that has
+    not been reaped yet. Unlike for_task, an exited session counts: its scrollback is exactly
+    what wrapping up needs to read."""
+    mine = [x for x in SESSIONS.values() if x.task_id == task_id]
+    return next((x for x in mine if x.alive), None) or (max(mine, key=lambda x: x.started) if mine else None)
+
+
+def transcript_for(store, task_id) -> tuple:
+    """(text, agent, sid) to wrap a task up from. A session still in memory is read live;
+    otherwise the one the last session filed when it ended. Wrapping up must not depend on a
+    pty still being around - the work happened either way, and a task you cannot close out is
+    the worst of the two failures."""
+    t = session_for(task_id)
+    if t: return harvest(t), (t.agent or 'coder'), t.sid
+    row = store.last_transcript(task_id) or {}
+    return (row.get('Text') or ''), (row.get('Agent') or 'coder'), row.get('Sid')
+
+
 def live_sessions(tail=3):
     return [t.info(tail) for t in SESSIONS.values() if t.alive]
 
@@ -330,7 +481,8 @@ KEEP_DEAD = 600     # an exited session stays listed this long so you can still 
 
 
 def reap():
-    """Drop long-finished sessions nobody is watching (a fresh exit stays readable)."""
+    """Drop long-finished sessions nobody is watching (a fresh exit stays readable). The
+    transcript was filed when the pty ended, so what is dropped here is only the bytes."""
     for sid in [s for s, t in SESSIONS.items()
                 if not t.alive and not t.subs and time.time() - (t.ended or 0) > KEEP_DEAD]:
         SESSIONS.pop(sid, None)

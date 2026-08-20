@@ -8,7 +8,9 @@ import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./the
 import { ChannelIcon, RefChip, timeAgo, Empty, FilterPills } from "./ui.jsx";
 
 const FILTERS = [
-  { key: "pending", label: "pending", c: PILL_COLORS.amber }, { key: "auto", label: "auto-handled", c: PILL_COLORS.teal },
+  { key: "pending", label: "pending", c: PILL_COLORS.amber },
+  { key: "held", label: "waiting on the agent", c: PILL_COLORS.teal },
+  { key: "auto", label: "auto-handled", c: PILL_COLORS.teal },
   { key: "approved", label: "approved", c: PILL_COLORS.green }, { key: "edited", label: "edited" },
   { key: "no_reply", label: "no reply", c: PILL_COLORS.gray }, { key: "rejected", label: "rejected", c: PILL_COLORS.red },
   { key: "", label: "all" },
@@ -37,6 +39,15 @@ export default function ReviewView({ onOpenTask, onChanged }) {
     setBusy(null);
   };
 
+  // A held draft is one the session's findings will rewrite. Sometimes the sender needs telling
+  // something today anyway - a reply stuck behind an agent that never finished is worse.
+  const release = async (r) => {
+    setBusy(r.ReviewId);
+    try { await api.post(`/api/reviews/${r.ReviewId}/release`); load(); onChanged?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || "Could not release it"); }
+    setBusy(null);
+  };
+
   const redraft = async (r) => {
     setBusy(r.ReviewId);
     try { await api.post(`/api/reviews/${r.ReviewId}/draft`); load(); }
@@ -53,7 +64,9 @@ export default function ReviewView({ onOpenTask, onChanged }) {
       </Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mt: 1.5 }}>{err}</Alert>}
       {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (
-        <Empty>{filter === "pending" ? "Queue is clear — nothing needs you." : "Nothing here."}</Empty>
+        <Empty>{filter === "pending" ? "Queue is clear — nothing needs you."
+          : filter === "held" ? "Nothing is waiting on an agent."
+          : "Nothing here."}</Empty>
       ) : rows.map((r) => (
         <Box key={r.ReviewId} sx={{ ...card, mt: 1.25, p: 0, overflow: "hidden" }}>
           {/* header strip: what kind of decision this is + who/what it's about */}
@@ -69,7 +82,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                 {r.Subject || r.Title || "(no subject)"}
               </Typography>
               <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
-                {r.Kind === "auto" ? "Auto-answered" : "Draft reply"} · {r.FromEmail} · {timeAgo(r.CreatedAt)}
+                {r.Status === "held" ? "Reply on hold" : r.Kind === "auto" ? "Auto-answered" : "Draft reply"}
+                {" · "}{r.FromEmail} · {timeAgo(r.CreatedAt)}
               </Typography>
             </Box>
             <ChannelIcon channel={r.Channel} />
@@ -102,7 +116,30 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                 </Box>
               </Box>
             )}
-            {r.Status !== "pending" && (r.FinalText || r.DraftText) && (
+            {r.Status === "held" && (
+              <Box sx={{ mt: 0.5, bgcolor: "#e6f7fb", border: "1px solid #c2e7f0", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
+                <Typography variant="caption" sx={{ color: "#0e7490", fontWeight: 700, display: "block" }}>
+                  Waiting on the agent working this task
+                </Typography>
+                <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25 }}>
+                  This reply was drafted from the message alone, before anyone had looked at the problem — so it
+                  would be promising what nobody has checked yet. When the session is wrapped up, it comes back
+                  here rewritten from what the agent actually found.
+                </Typography>
+                <Box sx={{ display: "flex", gap: 0.75, mt: 0.75, alignItems: "center" }}>
+                  <Button size="small" variant="outlined" disabled={busy === r.ReviewId} onClick={() => release(r)}>
+                    Answer now anyway
+                  </Button>
+                  <Button size="small" sx={{ color: DIM }} onClick={() => onOpenTask(r.TaskId)}>Open the task</Button>
+                </Box>
+                {r.DraftText && (
+                  <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: FAINT, display: "block", mt: 0.75 }}>
+                    {r.DraftText.slice(0, 300)}
+                  </Typography>
+                )}
+              </Box>
+            )}
+            {!["pending", "held"].includes(r.Status) && (r.FinalText || r.DraftText) && (
               <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block", mt: 0.75,
                 bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1 }}>
                 {(r.FinalText || r.DraftText).slice(0, 500)}

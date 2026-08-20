@@ -93,7 +93,8 @@ export default function TaskHubPage() {
           {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
           {tab === "Tasks" && <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask}
-            onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)} />}
+            onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
+            onGoReview={() => { refreshPending(); setTab("Review"); }} />}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
           {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}

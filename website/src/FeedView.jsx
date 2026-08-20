@@ -4,11 +4,12 @@
 // itself every 30s so new mail animates in while the tab is open.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, IconButton, LinearProgress, ListSubheader, MenuItem, Select, TextField, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, ListSubheader, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
@@ -18,6 +19,8 @@ import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frame
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
+import { Reshape } from "./Reshape.jsx";
+import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
@@ -359,6 +362,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
                         {r.SourceName && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 150, flexShrink: 0 }}>· {r.SourceName}</Typography>}
                         <Typography variant="body2" noWrap sx={{ color: DIM, flex: 1, minWidth: 0 }}>{subjectOf(r) ? `— ${subjectOf(r)}` : ""}</Typography>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexShrink: 0 }}>
+                          {r.Attachments > 0 && (
+                            <Typography variant="caption" title={`${r.Attachments} attached`}
+                              sx={{ color: FAINT, display: "flex", alignItems: "center", fontSize: 10.5 }}>
+                              <AttachFileIcon sx={{ fontSize: 13 }} />{r.Attachments > 1 ? r.Attachments : ""}
+                            </Typography>
+                          )}
                           <RefChip taskId={r.TaskId} onClick={(e) => { e.stopPropagation(); onOpenTask(r.TaskId); }} />
                           <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
                           <ChevronRightIcon className="thubGo" sx={{ fontSize: 18, color: "#4f46e5",
@@ -455,7 +464,10 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // you usually realise it is somebody else's job while reading it here, not after opening
   // the Tasks tab - so the hand-off form opens in this panel too
   const [handoff, setHandoff] = useState(false);
-  useEffect(() => { setHandoff(false); }, [sel.MessageId]);
+  // the same realisation - "this is not one job" - usually arrives while reading the mail,
+  // so the fix is offered here too; the form itself is a drawer, since this panel is narrow
+  const [reshape, setReshape] = useState(false);
+  useEffect(() => { setHandoff(false); setReshape(false); }, [sel.MessageId]);
   const skipSender = async () => {
     const { data } = await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
       Action: "skip", Reason: "flood sender — skipped from the timeline", SortOrder: 10, Active: true });
@@ -577,7 +589,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
                   label="Hand it to a person" hint="not ours to do — the AI writes the forward, you send it" />
               )}
-              <SplitTask row={sel} onSplit={() => load()} />
+              <SplitTask row={sel} onSplit={() => onRefresh?.()} />
+              {sel.TaskId && (
+                <ChoiceRow tint="#e6f7fb" onClick={() => setReshape(true)}
+                  icon={<CallSplitIcon sx={{ fontSize: 14, color: "#0e7490" }} />}
+                  label="Two jobs in here, or a duplicate?"
+                  hint={`break ${ref(sel.TaskId)} in two, or fold it into the task it repeats`} />
+              )}
               {/* not ours -> the reason goes to memory, and triage reads it next time */}
               <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
               {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
@@ -591,6 +609,22 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   label="Skip this sender" hint={`hide ${sel.FromEmail} and their past mail — undo in Settings`} />
               ))}
             </ChoiceList>
+
+            <Drawer anchor="right" open={!!reshape && !!sel.TaskId} onClose={() => setReshape(false)}
+              PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+                <CallSplitIcon sx={{ fontSize: 18, color: "#0e7490" }} />
+                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
+                <IconButton size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+              </Box>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
+                {sel.TaskId ? ref(sel.TaskId) : ""} · {sel.Subject}
+              </Typography>
+              {reshape && sel.TaskId && (
+                <Reshape taskId={sel.TaskId} taskRef={ref(sel.TaskId)}
+                  onDone={(r) => { onRefresh?.(); if (r?.merged) onOpenTask?.(r.merged); }} />
+              )}
+            </Drawer>
 
             {handoff && sel.TaskId && (
               <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
@@ -700,6 +734,8 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
             )}
           </Box>
         )}
+        {/* "See below." - and below was a screenshot. Drawn here, not listed as a filename. */}
+        {cur && <Attachments messageId={cur.MessageId} canFetch={cur.Channel === "email"} />}
       </Box>
     </>
   );
@@ -756,7 +792,7 @@ const SplitTask = ({ row, onSplit }) => {
   return (
     <ChoiceRow tint="#e6f7fb" busy={busy || !!done} onClick={go}
       icon={<CallSplitIcon sx={{ fontSize: 14, color: "#0e7490" }} />}
-      label={done ? `Now its own task ${ref(done)}` : "Give it its own task"}
+      label={done ? `Now its own task ${ref(done)}` : "Give this message its own task"}
       hint={err || (done ? "send it to an agent above" : `a separate ask from the rest of ${ref(row.TaskId)}`)} />
   );
 };

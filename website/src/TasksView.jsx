@@ -1,7 +1,7 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
   Drawer, IconButton, Link, MenuItem, Select, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -12,11 +12,14 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
+import { Reshape } from "./Reshape.jsx";
+import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
+import CallSplitIcon from "@mui/icons-material/CallSplit";
 import { TerminalPane } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
@@ -31,7 +34,7 @@ const STATE_FILTERS = [
 ];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
 
-export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted }) {
+export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReview }) {
   const [tasks, setTasks] = useState(null);
   const [filter, setFilter] = useState("");            // "" = all; the rest are derived states
   const [detail, setDetail] = useState(null);
@@ -91,10 +94,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // report (written by the main AI), the responder drafts the reply out of that report, and the
   // result lands right here under where the terminal was.
   const wrapUp = async () => {
-    if (!term) return;
+    if (!canWrap) return;
     setWrapping("wrap"); setErr("");
     try {
-      const { data } = await api.post(`/api/terminals/${term.sid}/wrap`, { task_id: selected, close: true });
+      const { data } = await api.post(`/api/tasks/${selected}/wrap`, { close: true });
       setWrapped({ report: data.report, drafting: data.drafting });
       setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
@@ -104,10 +107,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
   // resumable id - killing the session used to throw all of that away.
   const pause = async () => {
-    if (!term) return;
+    if (!canWrap) return;
     setWrapping("pause"); setErr("");
     try {
-      const { data } = await api.post(`/api/terminals/${term.sid}/pause`, { task_id: selected });
+      const { data } = await api.post(`/api/tasks/${selected}/pause`, {});
       setWrapped({ note: data.note });
       setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Could not pause the session"); }
@@ -116,7 +119,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => { setWrapping(false); setWrapped(null); }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
-  useEffect(() => { setHandoff(false); }, [selected]);
+  const [reshape, setReshape] = useState(false);
+  useEffect(() => { setHandoff(false); setReshape(false); }, [selected]);
+  // A fold DROPS the task you were looking at, so follow the work to the survivor - staying
+  // put would leave the detail pane on a task that no longer holds anything.
+  const reshaped = (r) => {
+    loadTasks(); onChanged?.();
+    if (r?.dropped === selected) onSelect(r.merged); else loadDetail(selected);
+  };
   const notATask = async () => {
     await api.post(`/api/tasks/${selected}/not-a-task`);
     onSelect(null); loadTasks(); onChanged?.();
@@ -125,6 +135,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // yet", null means "looked, none running": the difference decides whether we may
   // auto-start one, so they must not collapse into each other.
   const [term, setTerm] = useState(undefined);
+  // Wrapping up belongs to the TASK, not to the pty. An exited session is dropped after ten
+  // minutes, and with it went the only handle these buttons had - so a task whose CLI had
+  // finished on its own could never be closed out. The transcript is filed when a session ends.
+  const canWrap = !!term || !!detail?.transcript;
   const findTerm = useCallback(async (tid) => {
     if (!tid) { setTerm(null); return; }
     try {
@@ -219,6 +233,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     sx={{ bgcolor: PANEL, color: handoff ? "#4f46e5" : undefined }}
                     onClick={() => setHandoff((h) => !h)}
                     title="Not ours to do? Send it to the person whose job it is">Hand off</Button>
+                  <Button size="small" variant="outlined" startIcon={<CallSplitIcon sx={{ fontSize: 15 }} />}
+                    sx={{ bgcolor: PANEL, color: reshape ? "#0e7490" : undefined }}
+                    onClick={() => setReshape((r) => !r)}
+                    title="Two jobs in here, or the same job twice? Break it in two, or fold it into another task">Split / merge</Button>
                   <Button size="small" color="error" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 14 }} />}
                     sx={{ bgcolor: PANEL }} onClick={notATask}>Not a task</Button>
                   <Tooltip title="Close — back to the list (the task stays)">
@@ -237,7 +255,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     reference material about the same task, folded away. */}
                 {/* the session just closed: its write-up takes the space the terminal had, so the
                     result of the work is the thing you are looking at */}
-                {wrapped ? (
+                {wrapping && !wrapped ? (
+                  <Box sx={{ ...card, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <CircularProgress size={15} />
+                      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
+                        {wrapping === "pause" ? "Saving what this session found…" : "Wrapping up this session…"}
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>
+                      {wrapping === "pause"
+                        ? "Reading the transcript and writing the handover note for the next session. The agent is not asked anything."
+                        : "Reading the transcript, writing the report from it, then drafting the reply for your approval. The agent is not asked anything — this takes a few seconds."}
+                    </Typography>
+                    <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />
+                  </Box>
+                ) : wrapped ? (
                   <Box sx={{ ...card, bgcolor: wrapped.note ? "#fff8e6" : "#f5f3ff",
                     border: `1px solid ${wrapped.note ? "#f3ddb8" : "#ddd6fe"}` }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
@@ -256,6 +289,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         ? "The reply to whoever wrote in is drafted and waiting in Review — approving it sends it and closes this task."
                         : "Nothing to reply to on this task, so it closed here."}
                     </Typography>
+                    {/* the card used to name Review without offering a way to get there */}
+                    {wrapped.drafting && onGoReview && (
+                      <Button size="small" variant="contained" disableElevation sx={{ mt: 1 }}
+                        startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                        onClick={onGoReview}>Read the draft in Review</Button>
+                    )}
                   </Box>
                 ) : term ? (
                   <>
@@ -281,7 +320,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         {wrapping === "pause" ? "saving what it found…" : term.alive ? "Pause — save what it found" : "Save what it found"}
                       </Button>
                     </Box>
-                    <TerminalPane sid={term.sid} height="55vh" onExit={() => findTerm(selected)} />
+                    <TerminalPane sid={term.sid} height="min(72vh, 900px)" onExit={() => findTerm(selected)} />
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#0e7490", display: "block", mt: 0.5 }}>
                         {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."
@@ -313,11 +352,37 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
                       Everything the agent does happens here, in the open — you can read it, interrupt it and answer it.
                     </Typography>
+                    {/* An earlier session finished and its terminal is long gone, but the work it
+                        did is still un-closed-out. The transcript outlives the pty, so the two
+                        buttons that were only ever on the terminal strip belong here too. */}
+                    {detail?.transcript && (
+                      <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px dashed ${BORDER}` }}>
+                        <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75 }}>
+                          A {detail.transcript.agent || "coder"} session ran this task on{" "}
+                          {fmtDateTime(detail.transcript.at)} and its terminal has since closed — what it
+                          did was kept, so you can still write it up.
+                        </Typography>
+                        <Box sx={{ display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap" }}>
+                          <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
+                            startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
+                              : <DoneAllIcon sx={{ fontSize: 15 }} />}
+                            sx={{ fontSize: 11.5, bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                            onClick={wrapUp}>
+                            {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
+                          </Button>
+                          <Button size="small" disabled={!!wrapping} sx={{ fontSize: 11, color: DIM }}
+                            startIcon={wrapping === "pause" ? <CircularProgress size={11} /> : <PauseCircleIcon sx={{ fontSize: 15 }} />}
+                            onClick={pause}>
+                            {wrapping === "pause" ? "saving what it found…" : "Save what it found"}
+                          </Button>
+                        </Box>
+                      </Box>
+                    )}
                   </Box>
                 )}
 
                 {/* the summary the agent left behind, once it has finished */}
-                {report && (
+                {report && !wrapped && (
                   <Block title="What the agent did">
                     <Box sx={{ bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
                       <CoderReport body={report.Body} />
@@ -356,6 +421,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
                           {cleanText(m.BodyText)}
                         </Typography>
+                        <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} dense />
                       </Box>
                     );
                   })}
@@ -409,6 +475,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           {detail?.ref} · {t?.Title}
         </Typography>
         {handoff && <Handoff taskId={selected} onSent={() => { loadDetail(selected); loadTasks(); }} />}
+      </Drawer>
+
+      {/* ── split / merge: the same right-hand drawer, because it is one question ── */}
+      <Drawer anchor="right" open={!!reshape && !!t} onClose={() => setReshape(false)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+          <CallSplitIcon sx={{ fontSize: 18, color: "#0e7490" }} />
+          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
+          <IconButton size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+        </Box>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
+          {detail?.ref} · {t?.Title}
+        </Typography>
+        {reshape && <Reshape taskId={selected} taskRef={detail?.ref} onDone={reshaped} />}
       </Drawer>
 
       {/* ── new task dialog ───────────────────────────────────────────── */}

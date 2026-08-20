@@ -181,6 +181,30 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
   click on the Timeline hides that sender's future mail *and* their back catalogue, and
   switching the rule off puts the history back.
 
+## Telegram & WhatsApp — the funnel in your pocket
+
+![A Telegram question on the timeline with its reply drafted and one Approve & send button, a WhatsApp task below it](docs/screenshot-messengers.png)
+
+The personal messengers work both directions, and each direction is a role you switch on:
+
+- **In (trigger)** — message your Telegram bot, or anyone messages your WhatsApp, and it
+  lands on the Timeline through the same triage as mail: a question gets a drafted reply
+  (unsigned and short, because it is chat), a job becomes a task, a photo of the broken thing
+  reaches the vision triage and draws in the panel. Approving sends the answer back **into the
+  same chat**. Telegram is built in — a @BotFather token and nothing else. WhatsApp runs
+  through a small bridge beside the app (`cd taskuary/whatsapp && npm install && node
+  bridge.mjs`, pair once by QR or phone code) so the heavy unofficial-protocol dependency
+  never enters Taskuary itself.
+- **Out (notify)** — the Timeline pushed to you, instead of you polling the tab. Give the
+  connector the *notify* role, name the chat in its config, and Taskuary pings it: by default
+  (*needs_me*) only what is actually waiting on you — a question to answer, a task nobody was
+  dispatched at, and the one that matters most, *"the work is done, the reply is drafted and
+  waiting in Review"*. Set the level to *all* for every new item, *off* for silence. Events
+  that happened in the notify chat itself are never echoed back into it.
+
+One channel can wear both roles at once: ask for something from your phone, an agent works
+it, and the "done — approve the reply" ping arrives back on the same phone.
+
 ## One brain or two
 
 **Two is the recommended setup**, and they do different jobs:

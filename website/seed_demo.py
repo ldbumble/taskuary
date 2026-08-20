@@ -84,4 +84,19 @@ m5 = s.add_message({'TaskId': tid3, 'ExternalId': 'demo5', 'ConversationId': 'c-
     'BodyText': 'Adding one more thing - she also needs access to the invoice approval queue.', 'Status': 'routed'})
 s.add_route(m5, tid3, 'attach', 0.81, 'same conversation thread',
             [{'task_id': tid3, 'score': 0.81, 'signals': {'thread': 1, 'subject': 0.7, 'body': 0.4}}], 'router')
+# 6. the personal messengers: a Telegram question with the reply drafted, a WhatsApp task
+tid7 = s.create_task({'Title': 'Can you resend the Q3 numbers?', 'Kind': 'reply', 'Status': 'open', 'Source': 'telegram'}, 'router')
+m10 = s.add_message({'TaskId': tid7, 'ExternalId': 'demo10', 'ConversationId': 'telegram:88214', 'Channel': 'telegram',
+    'SourceName': 'Leah (Telegram)', 'Subject': None, 'FromName': 'Leah Stern', 'FromEmail': '@leahstern',
+    'SentAt': t(0, 55), 'BodyText': 'Hey - can you resend the Q3 numbers? The link from last week expired.', 'Status': 'routed'})
+s.add_route(m10, tid7, 'create', None, 'reply-only question', [], 'router')
+s.add_review({'TaskId': tid7, 'MessageId': m10, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'AI drafted a reply for your review',
+    'DraftText': 'Fresh link: finance.example.com/q3-2026 - this one does not expire.'})
+
+tid8 = s.create_task({'Title': 'Scanner in the mailroom is jamming again', 'Kind': 'coding', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
+m11 = s.add_message({'TaskId': tid8, 'ExternalId': 'demo11', 'ConversationId': 'whatsapp:15550100@s.whatsapp.net',
+    'Channel': 'whatsapp', 'SourceName': 'Rob (WhatsApp)', 'FromName': 'Rob Feld',
+    'SentAt': t(2, 5), 'BodyText': 'the mailroom scanner is jamming on every third page again, same as March. can someone look before the 3pm batch?', 'Status': 'routed'})
+s.add_route(m11, tid8, 'create', None, 'asks the owner to do something', [], 'router')
+
 print('demo data seeded')

@@ -47,7 +47,8 @@ const META = {
       "Add each channel ID under Sources (channel → View details → ID at the bottom).",
       "Test authenticates and probes a real channel read."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs (optional — blank takes every chat)", srcPh: "-1001234567890",
-    fields: [], secretLabel: "bot token (from @BotFather)",
+    fields: [["notify chat id (only for the notify role — message the bot, then /getUpdates shows it)", "notify_chat"]],
+    secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - message it (or add it to a group) and the chats flow through triage; approved replies go back into the same chat.",
     howto: ["Message @BotFather in Telegram → /newbot → copy the token.",
       "Paste the token under Credentials (write-only).",
@@ -55,7 +56,9 @@ const META = {
       "For a group: add the bot to it and disable its privacy mode (@BotFather → /setprivacy) so it sees messages.",
       "Add specific chat IDs under Sources only if you want to LIMIT which chats come in."] },
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (optional — blank takes every chat)", srcPh: "15551234567@s.whatsapp.net",
-    fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"]], secretLabel: null,
+    fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
+      ["notify chat JID (only for the notify role, e.g. 15551234567@s.whatsapp.net)", "notify_chat"]],
+    secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
     howto: ["The heavy dependency is deliberately NOT bundled: in the Taskuary folder run `cd taskuary/whatsapp && npm install && node bridge.mjs` (Node 18+).",
       "Pair once: scan the QR the bridge prints (WhatsApp → Linked devices), or run it with --phone 1555… and enter the code it gives you.",
@@ -547,6 +550,7 @@ const ROLE_META = {
   feed: ["Timeline feed — shows, never assigns", "Poll it and show every new item on the Timeline, but stop there: no triage, no AI call, no task. Good for GitHub issues or a chatty channel you want to SEE without being handed."],
   report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result on the Timeline."],
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
+  notify: ["Notifications", "The OUTBOUND direction: Taskuary pushes timeline events into this channel — a ping when something needs you. Name the chat in Credentials (notify chat id); what qualifies is the notify level in Settings. Telegram, WhatsApp and Teams can carry it."],
 };
 
 const RoleStep = ({ conn, reload }) => {

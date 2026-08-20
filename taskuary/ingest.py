@@ -96,7 +96,31 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             _spawn(_auto_code, store, tid)
     store.add_route(mid, tid, r['decision'], r['score'], r['reason'], r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
+    # the timeline pushed INTO a chat: 'needs_me' pings only what is waiting on YOU - a question
+    # to answer, or a task nobody was dispatched at. A task an agent just started is being
+    # handled; the ping for those comes later, when its reply is drafted (coder.raise_reply).
+    lvl = cfg.get('notify_level') or 'needs_me'
+    # on an attach there was no fresh triage (`f` only exists on create) - the task itself knows
+    kind = f['kind'] if r['decision'] != 'attach' else (store.get_task(tid) or {}).get('Kind')
+    dispatched = kind != 'reply' and cfg.get('coder_auto_enabled') == '1'
+    if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
+        _notify_new(store, msg, tid, mid,
+                    'a question for you' if kind == 'reply' else 'new task on your list')
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
+
+
+def _notify_new(store, msg: dict, tid, mid, why: str):
+    """One short line to the notify channels. Failure is a log line, never a broken ingest."""
+    from .outbound import notify
+    from .store import task_ref
+    try:
+        who = msg.get('from_name') or msg.get('from_email') or msg.get('source_name') or 'someone'
+        body_head = str(msg.get('body') or '').strip().splitlines()
+        head = msg.get('subject') or (body_head[0][:80] if body_head else '(no subject)')
+        line = f"{task_ref(tid)} - {why}\n{head}\nfrom {who} on {msg.get('channel') or 'api'}"
+        notify(store, line, about={'Channel': msg.get('channel'), 'ConversationId': msg.get('conversation_id')})
+    except Exception as e:
+        logger.warning(f'notify failed for message {mid}: {e}')
 
 
 def notes_for(store, msg: dict) -> list:

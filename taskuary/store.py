@@ -116,7 +116,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'report_images_enabled': '1',   # reports hand back a chart, and draw it in the body
                     # the ONE copy of your name. The docs say {{owner}} / {{owner_first}} /
                     # {{owner_email}} and are filled in when an AI reads them - see store.doc().
-                    'owner_name': '', 'owner_email': ''}
+                    'owner_name': '', 'owner_email': '',
+                    # what gets pushed to notify-role channels: off | needs_me | all
+                    'notify_level': 'needs_me'}
 
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,
@@ -125,11 +127,13 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
 #             no AI call. "I want to see new GitHub issues, not be assigned them."
 #   report  - selectable as a scheduled report source (Reports tab)
 #   tool    - the agents may read from / write to it (listed for them in SOUL.md)
+#   notify  - the OUTBOUND direction: Taskuary pushes timeline events INTO this channel
+#             (a Telegram/WhatsApp ping when something needs you) - see outbound.notify
 # Defaults match how each system is usually used; every one is owner-configurable.
 DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
                  'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool'}
-ROLES = ('trigger', 'feed', 'report', 'tool')
+ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
 

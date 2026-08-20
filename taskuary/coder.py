@@ -110,3 +110,12 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
                                 'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
     try: responder.write_draft(store, task_id, rid, resolution_text(rep), 'coder')
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
+    # the ping that matters most: work FINISHED and its reply is sitting in Review on you
+    if (store.get_settings().get('notify_level') or 'needs_me') != 'off':
+        from .outbound import notify
+        from .store import task_ref
+        t = store.get_task(task_id) or {}
+        head = (t.get('Title') or '')[:100]
+        try: notify(store, f'{task_ref(task_id)} is done - the reply is drafted and waiting on '
+                           f'your approval in Review.\n{head}')
+        except Exception as e: logger.warning(f'notify failed for task {task_id}: {e}')

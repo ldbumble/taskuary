@@ -116,6 +116,9 @@ def test_connector(store, cid: int) -> dict:
                 detail += f" · channel read OK for {src['Address']}"
             else:
                 detail += ' - add a channel ID under Sources to probe reads'
+        elif c['Type'] in ('gmail', 'imap'):
+            from .imapmail import test_imap
+            detail = test_imap(store, store.get_connector(c['ConnectorId'], with_secret=True))
         elif c['Type'] == 'telegram':
             from .messengers import tg_test
             detail = tg_test(store, store.get_connector(c['ConnectorId'], with_secret=True))
@@ -375,7 +378,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
 
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
-          'telegram': 'telegram', 'whatsapp': 'whatsapp'}
+          'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email'}
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
@@ -434,6 +437,9 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                 tok = full.get('Secret')
             for s in store.list_sources():
                 if s['Channel'] != CH2SRC[c['Type']]: continue
+                # a source belongs to ONE connector: outlook and an IMAP mailbox are both
+                # channel 'email', and without this the Graph poller tried the Gmail address
+                if s.get('ConnectorId') and s['ConnectorId'] != c['ConnectorId']: continue
                 since = _since(s, backfill_days)
                 if c['Type'] == 'outlook':
                     since_iso = since.astimezone().isoformat()
@@ -466,6 +472,11 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                     n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'github':
                     n += ingest_github_issues(store, s['Address'], tok, since, llm, file_only)
+                elif c['Type'] in ('gmail', 'imap'):
+                    # one poll per connector (the UID watermark lives there); its own source only
+                    from . import imapmail
+                    if s['ConnectorId'] != c['ConnectorId']: continue
+                    n += imapmail.poll_imap(store, full, [s], llm, file_only, backfill_days)
                 elif c['Type'] in ('telegram', 'whatsapp'):
                     # one poll per CONNECTOR, not per source: both keep a cursor on the connector,
                     # and the sources are just filters over what arrives (see messengers)

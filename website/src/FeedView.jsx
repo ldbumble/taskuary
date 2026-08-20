@@ -161,6 +161,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // (/ingest/status) instead of guessing with a fixed wait - the button stays "Updating"
   // and the list shows loading until the server says the poll finished.
   const [syncing, setSyncing] = useState(false);
+  const [syncWhat, setSyncWhat] = useState("");
   const [lastSync, setLastSync] = useState(null);
   const syncNow = useCallback(async (silent) => {
     if (!silent) setSyncing(true);
@@ -170,12 +171,37 @@ export default function FeedView({ onOpenTask, onChanged }) {
     const check = async () => {
       try {
         const { data } = await api.get("/api/ingest/status");
-        if (data.status?.state === "running" && Date.now() - t0 < 180000) { setTimeout(check, 2000); return; }
+        if (data.status?.state === "running" && Date.now() - t0 < 180000) {
+          setSyncWhat(data.status.what || ""); setTimeout(check, 2000); return;
+        }
       } catch { /* fall through and settle */ }
-      settle();
+      setSyncWhat(""); settle();
     };
     setTimeout(check, 1500);
   }, [load]);
+
+  // The startup catch-up runs before this tab is even open - if it is still going when the
+  // page mounts, say so and refresh the list the moment it finishes. It used to run silently,
+  // and a timeline that had not refreshed read as "it did not sync".
+  useEffect(() => {
+    let alive = true, sawRunning = false;    // local, not state: the closure would freeze state
+    const watch = async () => {
+      try {
+        const { data } = await api.get("/api/ingest/status");
+        if (!alive) return;
+        if (data.status?.state === "running") {
+          sawRunning = true;
+          setSyncing(true); setSyncWhat(data.status.what || "");
+          setTimeout(watch, 2000);
+        } else if (sawRunning) {
+          setSyncing(false); setSyncWhat(""); setLastSync(new Date()); load(rowsLen.current);
+        }
+      } catch { if (alive) { setSyncing(false); setSyncWhat(""); } }
+    };
+    watch();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setRows(null); rowsLen.current = 0; setNoMore(false);
@@ -290,7 +316,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <Box sx={{ flex: 1, minWidth: 8 }} />
             <Button size="small" variant="contained" disableElevation disabled={syncing} onClick={() => syncNow(false)}
               startIcon={syncing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing ? "Updating…" : "Sync now"}</Button>
+              sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing ? (syncWhat || "Updating…") : "Sync now"}</Button>
           </Box>
           {/* stats strip - and the sync caption lives here, so the controls row above keeps
               its budget whether or not the mailbox picker is showing */}

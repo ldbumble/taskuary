@@ -941,8 +941,18 @@ def toggle_memory(mid: int, body: MemoryToggle):
 @app.get('/api/audit/recent')
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
 
-def _poll_reports(backfill_days: int = 0):
-    store.set_setting('ingest_status', json.dumps({'state': 'running'}), 'system')
+def _poll_reports(backfill_days: int = 0, what: str = 'syncing'):
+    # one poll at a time: hitting Sync while the startup catch-up runs used to race two
+    # pollers over the same watermarks. A stale 'running' (a crash mid-poll) expires in 10min.
+    try: cur = json.loads(store.get_settings().get('ingest_status') or '{}')
+    except ValueError: cur = {}
+    if cur.get('state') == 'running':
+        try: started = datetime.fromisoformat(cur.get('at') or '')
+        except ValueError: started = None
+        if started and (datetime.now() - started).total_seconds() < 600:
+            logger.info('poll already running - skipped'); return
+    store.set_setting('ingest_status', json.dumps(
+        {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
     try:
         run_due_reports(store)
         from .channels import poll_channels
@@ -961,7 +971,7 @@ def catch_up_on_startup():
     if days <= 0: return
     logger.info(f'startup: catching up on the last {days} days')
     def _catch_up():
-        _poll_reports(days)
+        _poll_reports(days, what=f'catching up on the last {days} days')
         # ...and only THEN synthesize the digest, so it reads the days just pulled in - a 5:30
         # schedule never fired on an app that is a window you open, not a service
         from .digest import refresh_if_stale

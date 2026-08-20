@@ -22,6 +22,8 @@ import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import { Divider, ListItemIcon, ListItemText, Menu } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
@@ -35,6 +37,9 @@ const STATE_FILTERS = [
   { key: "done", label: "done", c: PILL_COLORS.green },
 ];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
+// what a task IS decides which machinery works it: coding gets a repo session, a reply
+// gets the responder and the Review queue, general is your own list
+const KINDS = ["general", "coding", "reply"];
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReview }) {
   const [tasks, setTasks] = useState(null);
@@ -123,6 +128,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [handoff, setHandoff] = useState(false);
   const [reshape, setReshape] = useState(false);
   const [repoPick, setRepoPick] = useState(false);
+  const [menuEl, setMenuEl] = useState(null);
   useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); }, [selected]);
   // A fold DROPS the task you were looking at, so follow the work to the survivor - staying
   // put would leave the detail pane on a task that no longer holds anything.
@@ -183,7 +189,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           height: "calc(100vh - 118px)", minHeight: 420 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.75,
             borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
-            <FilterPills options={STATE_FILTERS} value={filter} onChange={setFilter} />
+            {/* each pill says how many live behind it - a filter you cannot size up is a guess */}
+            <FilterPills value={filter} onChange={setFilter}
+              options={STATE_FILTERS.map((f) => ({ ...f,
+                label: tasks ? (f.key ? f.label + " " + tasks.filter((x) => stateOf(x).key === f.key).length
+                                      : f.label + " " + tasks.length) : f.label }))} />
             <Box sx={{ flex: 1 }} />
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}>New</Button>
           </Box>
@@ -216,11 +226,57 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             <>
               {/* header strip: identity + controls, framed off from the story below */}
               <Box sx={{ px: 2, py: 1.25, bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+                {/* one primary action, everything else behind one tidy menu - six buttons in a
+                    row read as none of them mattering */}
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Typography sx={{ ...mono, color: "#4f46e5", fontWeight: 700, fontSize: 12.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 700, fontSize: 14.5, minWidth: 200 }}>{t.Title}</Typography>
                   <StateChip task={{ ...t, ReviewStatus: (detail.reviews || [])[0]?.Status,
                     RunStatus: (detail.runs || [])[0]?.Status }} />
+                  {t.Status !== "done" && (
+                    <Button size="small" variant="contained" disableElevation sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                      onClick={() => patch({ Status: "done" })}>Mark done — I took care of it</Button>
+                  )}
+                  <Tooltip title="Hand off, split or merge, pick the repo, not a task…">
+                    <IconButton size="small" onClick={(e) => setMenuEl(e.currentTarget)}
+                      sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: PANEL }}>
+                      <MoreHorizIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Menu anchorEl={menuEl} open={!!menuEl} onClose={() => setMenuEl(null)}
+                    slotProps={{ paper: { sx: { minWidth: 280 } } }}>
+                    <MenuItem onClick={() => { setMenuEl(null); setHandoff(true); }}>
+                      <ListItemIcon><ForwardToInboxIcon sx={{ fontSize: 17, color: "#4f46e5" }} /></ListItemIcon>
+                      <ListItemText primary="Hand it to a person"
+                        secondary="not ours to do — the AI writes the forward, you send it" />
+                    </MenuItem>
+                    <MenuItem onClick={() => { setMenuEl(null); setReshape(true); }}>
+                      <ListItemIcon><CallSplitIcon sx={{ fontSize: 17, color: "#0e7490" }} /></ListItemIcon>
+                      <ListItemText primary="Two jobs in here, or a duplicate?"
+                        secondary="break it in two, or fold it into the task it repeats" />
+                    </MenuItem>
+                    <MenuItem onClick={() => { setMenuEl(null); setRepoPick(true); }}>
+                      <ListItemIcon><AccountTreeIcon sx={{ fontSize: 17, color: "#4f46e5" }} /></ListItemIcon>
+                      <ListItemText primary={repoOf(t) ? `Repo: ${repoOf(t)}` : "Pick the repository"}
+                        secondary="which checkout the session works in" />
+                    </MenuItem>
+                    <Divider />
+                    <MenuItem onClick={() => { setMenuEl(null); notATask(); }} sx={{ color: "#b91c1c" }}>
+                      <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#b91c1c" }} /></ListItemIcon>
+                      <ListItemText primary="Not a task" secondary="delete it and teach triage why" />
+                    </MenuItem>
+                  </Menu>
+                  <Tooltip title="Close — back to the list (the task stays)">
+                    <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+                  </Tooltip>
+                </Box>
+                {/* the meta row carries the knobs. Kind is a CONTROL, not a caption: "this is not
+                    a coding task" is said here, and saying reply routes it to the Review queue */}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
+                  <Select value={t.Kind || "general"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
+                    title="What this IS decides who works it: coding gets a repo session, a reply gets a draft in Review, general stays on your list">
+                    {KINDS.map((k) => <MenuItem key={k} value={k} sx={{ fontSize: 12 }}>{k === "reply" ? "reply — just needs an answer" : k}</MenuItem>)}
+                  </Select>
                   <Select value={t.Status} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
                     title="the raw status, if you need to move it by hand">
                     {STATUSES.map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{s}</MenuItem>)}
@@ -228,32 +284,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <Select value={t.Priority} onChange={(e) => patch({ Priority: e.target.value })} sx={selSx}>
                     {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
                   </Select>
-                  {t.Status !== "done" && (
-                    <Button size="small" variant="contained" disableElevation sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
-                      onClick={() => patch({ Status: "done" })}>Mark done — I took care of it</Button>
-                  )}
-                  <Button size="small" variant="outlined" startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-                    sx={{ bgcolor: PANEL, color: handoff ? "#4f46e5" : undefined }}
-                    onClick={() => setHandoff((h) => !h)}
-                    title="Not ours to do? Send it to the person whose job it is">Hand off</Button>
-                  <Button size="small" variant="outlined" startIcon={<CallSplitIcon sx={{ fontSize: 15 }} />}
-                    sx={{ bgcolor: PANEL, color: reshape ? "#0e7490" : undefined }}
-                    onClick={() => setReshape((r) => !r)}
-                    title="Two jobs in here, or the same job twice? Break it in two, or fold it into another task">Split / merge</Button>
-                  <Button size="small" variant="outlined" startIcon={<AccountTreeIcon sx={{ fontSize: 15 }} />}
-                    sx={{ bgcolor: PANEL, color: repoPick ? "#4f46e5" : undefined }}
-                    onClick={() => setRepoPick((r) => !r)}
-                    title="Which checkout is this task about? Taskuary guessed one - override it here">
-                    {repoOf(t) || "Repo"}</Button>
-                  <Button size="small" color="error" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 14 }} />}
-                    sx={{ bgcolor: PANEL }} onClick={notATask}>Not a task</Button>
-                  <Tooltip title="Close — back to the list (the task stays)">
-                    <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
-                  </Tooltip>
-                </Box>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
                   <Typography variant="caption" sx={{ color: FAINT }}>
-                    {t.Kind} · from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
+                    from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
                   </Typography>
                 </Box>
               </Box>

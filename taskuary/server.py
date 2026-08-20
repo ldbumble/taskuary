@@ -149,8 +149,27 @@ def task_detail(task_id: int):
             'transcript': {'agent': tr['Agent'], 'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
 
 @app.patch('/api/tasks/{task_id}')
-def update_task(task_id: int, body: TaskBody):
-    store.update_task(task_id, {k: v for k, v in body.dict().items() if v is not None}, ACTOR)
+def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None):
+    t = store.get_task(task_id)
+    if not t: raise HTTPException(404, 'task not found')
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    store.update_task(task_id, fields, ACTOR)
+    # "This is not a coding task - it just needs an answer." Changing the kind to reply IS that
+    # verdict, so the task enters the Review queue the way a question would have at triage:
+    # a draft review appears (auto-drafted when that is on), instead of a repo session.
+    if fields.get('Kind') == 'reply' and t.get('Kind') != 'reply':
+        mid = coder_reply_target(store, task_id)
+        if mid and not store.pending_review(task_id):
+            rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                    'Reason': 'reclassified by you: a question, not work to do - needs a reply'})
+            store.add_comment(task_id, ACTOR, 'human', 'Reclassified as a question - it needs an answer, not an agent.')
+            if store.get_settings().get('auto_draft_enabled') == '1' and background is not None:
+                # guarded like ingest's auto-draft: no AI connected means an undrafted review
+                # waiting in the queue, never an exception out of a background task
+                def _draft(tid=task_id, r=rid):
+                    try: responder.write_draft(store, tid, r, actor='auto-draft')
+                    except Exception as e: logger.warning(f'auto-draft failed for task {tid}: {e}')
+                background.add_task(_draft)
     return {'ok': True}
 
 @app.post('/api/tasks/{task_id}/code')

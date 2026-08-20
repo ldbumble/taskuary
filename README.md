@@ -51,135 +51,46 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 
 ## The workspace
 
-- **Timeline** — every inbound item on a day-grouped rail: who/where, what Taskuary did
-  with it, current state. Two controls, and neither grows as your connections do: pills for
-  state (everything / needs me) and **category** (messages / code / reports), then one
-  grouped picker to drill through — *all mailboxes*, or one mailbox; *all repositories*, or
-  one repo; *all reports*, or one report. Chips say what a row IS: *report* and *info* are
-  things to read, *filed* means triage saw nothing to do, and *ignored* means a policy rule
-  rejected it. Click a row for the full review canvas — message, agent report, code
-  diff, history — and decide inline. Mail is stored whole (not Graph's 255-char preview)
-  and shown the way you'd read it: an *inbound* / *↩ your reply* marker, the new text
-  first, and the thread quoted underneath folded behind one click. Chains holding several
-  emails get a pill strip to flip between them. **What rode along with the mail comes in
-  too** — half the time "see below" *is* the ask, so screenshots are drawn in the panel at the
-  size you can read them (click for full size), and the spreadsheet, the PDF, the invoice are
-  one click from the sentence about them. Signature logos stay chips, not pictures. A clip on
-  the row says there is something attached; mail that arrived before Taskuary kept attachments
-  has a one-click *look for attachments on this mail*. **Send to coding agent** on any row
-  hands that item — a failed report, an email, a chat — to a CLI agent with your own
-  prompt; it becomes a task carrying the full message as context.
-- **Board** — the agent kanban: Queued / Agent working / Waiting on you / Done. Which lane a
-  card sits in is what is TRUE right now, not what a status column last recorded: a live CLI
-  session counts as an agent working, and **that same session gone quiet is a question** —
-  the card moves itself to *Waiting on you* and shows what it asked. Cards working right now
-  show a **live peephole** — the last lines of the agent's console, and how long it has been
-  going — and open into the full session. Drag between columns; "New task for the agent"
-  takes a task name, the **prompt**, which **CLI and model**, and **one** way it gets
-  worked: start an agent on it now, or just file it. Work always happens in a session you
-  can watch and talk to.
-- **Hand off to a person** — some work is not yours to do. Pick the channel and the
-  colleague (the picker knows everyone who has written to you), and the AI writes the
-  forward message out of the task's own context — systems, ids, error codes, what you need
-  back — for you to edit before it goes.
-- **Split / merge — when triage drew the boundary in the wrong place.** One task holding two
-  jobs, or two tasks holding one: the same question ("is this one job?") and the same drawer,
-  offered from the Tasks header and the Timeline panel. **Break it in two** and the AI reads
-  the mail for the second ask and names both halves — the first half *keeps* the task, its
-  ref, its session, its report and its history, the second becomes a new task, and only the
-  messages you tick move with it. **Fold it into another** runs the router's own signals
-  backwards to rank which open task this is really a duplicate of, says *why* for each, and
-  lets you choose which one survives; the loser is dropped with a pointer at the survivor —
-  never deleted, because what triage did and what you did about it is the part worth reading
-  later. A task an agent is working cannot be folded away underneath it.
-- **Tasks** — **the page is a terminal.** Open a task, pick the CLI and model, and you get a
-  real session in that task's repo with the prompt already typed in — you talk to it like
-  any other terminal, because it *is* one. **Taskuary picks the checkout**, not the agent:
-  with no `repo:` tag on the task, the ask is matched against the repo map SOUL.md already
-  keeps, and the task says which repo it chose and why. And the prompt carries **everything** —
-  the ask, the mail behind it, the handover note a paused session left, and the CODER.md rules —
-  because those docs live in Taskuary's database, nowhere the agent can read, so an agent
-  handed a thin prompt spent its first minute calling the API back for what it should have
-  been given. When you're finished, **Done — wrap it up** tells
-  the agent so: it writes its own closing summary, the summary files onto the task under
-  *What the agent did*, and the task closes. No stopping it, copying out of the terminal and
-  marking done by hand. **Done and Pause belong to the task, not to the terminal**: when a
-  session ends its readable transcript is filed, so a CLI that finished on its own hours ago
-  can still be written up — the buttons used to vanish with the pty and leave work that could
-  never be closed out. The messages, earlier runs and notes are folded underneath. One quiet link
-  runs it headless instead when you'd rather not watch. Every task shows **one** state —
-  *needs you*, *agent working*, *queued*, *done* — instead of three columns you had to
-  combine in your head.
-- **Out of the box it WORKS the mail**, rather than watching it arrive: a job goes to the
-  coding agent, a question gets a drafted reply. Neither sends anything — a draft waits for your
-  approval and a session is one you are watching — so both ship on, and either can be switched
-  off in Settings.
-- **Two roads out of triage, and only one of them costs anything.** A message that just
-  needs an answer is *reply_only*: **the main AI writes the reply** in your voice per
-  SOUL.md, it waits in Review, and approving sends it — no task, no agent, no repository. A
-  message that needs work doing becomes a task and starts an agent. Torn cases go to
-  reply_only on purpose: you can turn a reply into a task in one click, and a wrongly-started
-  agent costs far more than a draft.
-- **Review** — the decision queue: approve / approve-my-edit / no-reply / reject, plus
-  Draft-with-AI. **Approving sends**: the answer goes back out on the channel it arrived on,
-  in the original mail thread or the same chat — and if the send fails, the approved text
-  stays on the task marked *NOT SENT* rather than vanishing. Nothing sends without you. Agents
-  never queue a question here: they run in a terminal you are watching, so they ask you in the
-  session and you answer by typing back. **A reply waits for the agent working the same task.**
-  Triage answers a question from the mail alone; the moment a session starts on that task, the
-  draft stops looking ready to send and moves to *waiting on the agent* — it was promising a fix
-  nobody had looked at yet. Wrapping the session up brings it back rewritten from what the agent
-  actually found, and *Answer now anyway* releases it if the sender needs telling something today.
-- **Reports** — a funnel you lay out: **any number of sources at the top** (the same
-  connection twice with different SQL is fine — drag to reorder, one click to duplicate)
-  feeding **one prompt at the bottom**, then the schedule. Every source's rows reach the
-  summary together, each under its own label, and a source that fails is reported in place
-  instead of killing the report. Preview runs the whole pipeline before you save. **max
-  rows** (per source; blank means the 200-row default) decides how much reaches the summary,
-  and the headline says *capped* when rows were left behind — naming whether that was your
-  number or the default — so the AI never calls a truncated slice "all of them". A report's
-  **rows come back as files**, not only as prose about them: an **.xlsx** to open in Excel
-  (numbers stored as numbers, so they sum) and a **bar chart** drawn in the panel, both
-  attached to the report itself, and **the model that just read every row names what to plot**
-  (better than a heuristic hunting for "all numeric" and picking the id column) on a line that
-  never reaches the reader. Preview draws the chart before you schedule anything. Prose-only
-  reports — an AI summary, a failure — produce neither. No new dependency to freeze into the exe: both are written on the standard library.
-- **Terminals** — your coding CLI for real: a pseudo-terminal (ConPTY on Windows) streamed
-  to xterm.js over a websocket. Its own TUI, its approval prompts, your keystrokes — the
-  session, not a transcript of one. It lives in exactly one place, **the task page**: no
-  terminal tab, no dock at the bottom of the screen, because a session belongs to the task
-  it is working. The pty lives server-side, so leaving the task or reloading the page never
-  kills it — reopening the task re-attaches. Sessions start clean (no inherited agent
-  session state) and are painted in Catppuccin Mocha; run
-  `/plugin install catppuccin@matcra587/claude-themes` inside Claude Code to match it
-  there.
-- **Connectors** — a searchable catalog of connections with a setup wizard per card: AI
-  models and CLI agents, messaging channels, GitHub, SQL Server. Every connection has a
-  **role** you choose: *inbound trigger* (items go through triage and can become tasks),
-  *timeline feed* (items are shown and stop there — no triage, no AI call, no task),
-  *report source* (query it on a schedule), *agent tool* (the agents may read from it and
-  create things in it). Teams brings every chat in as a thread — one task per conversation,
-  bots and call-started events left out, external/federated group chats included (the
-  connector card says how many messages, chats and people it can see). Mail and chat trigger
-  by default; GitHub starts as a tool — make it
-  a feed to watch new issues, or a trigger to have them worked. Nothing polls a connection
-  you gave neither role.
-- **Attachments, and an AI that can see them.** "See below." is half the mail this app reads,
-  and below was a screenshot — so what rode along with a message is fetched *before* triage and
-  handed to it: when the model has vision, the picture of the error IS the request it classifies,
-  instead of three words of body text filed as informational. Images go to a session too, by
-  path, so the agent opens them itself. Both switchable in Settings, along with how many days
-  Taskuary reaches back **when you open it** — it is a window, not a service, so "anything since
-  I last polled" is the wrong question after a weekend off; startup widens the window (3 days by
-  default) without dragging a long-idle connection forward.
-- **Docs** — the operator documents (SOUL.md / CODER.md / DIGEST.md): plain-markdown
-  rules injected into every agent run. They ship as templates and maintain themselves —
-  connectors and discovered repos write themselves in.
-- **Settings** — triage knobs with plain-English help (including which brain does the
-  triage), deterministic routing policies, the agent's learned memory, and one-click
-  audit-chain verification. **Skip** rules mute flood senders in both directions: one
-  click on the Timeline hides that sender's future mail *and* their back catalogue, and
-  switching the rule off puts the history back.
+One tab per question, two lines each; the details live in the app's own help text.
+
+- **Timeline** — everything inbound on one day-grouped rail, chips saying what each row IS
+  and whether it needs you. Click a row: the whole message (stored whole, not a preview),
+  its attachments drawn inline — half of "see below" mail is the screenshot — and every way
+  out: approve the drafted reply, send it to a coding agent, hand it to a person, split or
+  merge, "not our task" (which teaches triage for next time).
+- **Board** — the agent kanban: Queued / Working / Waiting on you / Done, by what is TRUE
+  right now — a live session counts as working, and a session gone quiet moves its card to
+  *waiting on you* with the question showing. Cards working now show a live peephole.
+- **Tasks** — **the page is a terminal**: your CLI in the task's repo, prompt typed in and
+  sent, and you keep talking. Taskuary picks the checkout from the SOUL.md repo map (one
+  click to override); the prompt carries the ask, the mail, the files and the rules, so the
+  agent never re-fetches what it was handed. **Done — wrap it up** reads the transcript,
+  writes the report and drafts the reply — the agent is asked nothing, and both still work
+  after the terminal itself is long gone. Pause keeps a handover note the next session is
+  seeded with. The kind is a control: *"this is not a coding task"* is one dropdown, and
+  saying `reply` routes it into Review instead of a repo.
+- **Review** — the decision queue. **Approve & send** sends whatever is in the box on the
+  channel it arrived on, in-thread; a refused send says so right there and keeps the text.
+  A reply drafted before an agent looked at the problem waits as *held* and comes back
+  rewritten from what the agent actually found.
+- **Reports** — sources at the top (SQL, REST, MCP…), one AI prompt at the bottom, a
+  schedule. The rows come back as an **.xlsx** and a **bar chart** the summarizing model
+  itself chose the columns for; capped slices are named as capped so the AI never calls a
+  truncated slice "all of them". Preview runs the whole pipeline first.
+- **Connectors** — a catalog with a wizard per card. Every connection has **roles** you
+  choose: *trigger* (inbound work), *feed* (shown, never triaged), *report*, *tool* (agents
+  may use it), *notify* (Taskuary pushes pings TO it). Nothing is polled without a role.
+- **Docs** — SOUL.md / CODER.md / DIGEST.md, the plain-markdown rules injected into every
+  run; they maintain themselves as connectors and repos appear. Your name lives in ONE
+  field here and fills every `{{owner}}` mention across the documents.
+- **Settings** — triage knobs with plain-English help, deterministic routing policies that
+  no model confidence can override, the learned memory, notification level, and one-click
+  audit-chain verification.
+
+Two principles hold everywhere: **nothing sends or ships without your approval**, and
+**agents work where you can watch** — a real terminal, never a hidden run. Out of the box
+it works the mail (auto-dispatch + auto-draft, both switchable); triage is AI-gated, so
+with no AI connected messages file visibly instead of heuristics spraying tasks.
 
 ## Telegram & WhatsApp — the funnel in your pocket
 

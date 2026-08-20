@@ -124,7 +124,8 @@ class TerminalTests(unittest.TestCase):
                                   'BodyText': 'files with adjustments import in the wrong month'})
         seed = terminal.seed_text(server.store, tid, 'use the payroll date', 'mfaVita/FanApp', 'C:/src/FanApp')
         for s in ['payroll import month is wrong', 'Dana Reyes', 'wrong month', 'use the payroll date',
-                  'REPO: mfaVita/FanApp', 'Do NOT call the Taskuary API', 'fix it if it is fixable']:
+                  'REPO: mfaVita/FanApp', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
+                  'Do NOT create GitHub issues']:
             self.assertIn(s, seed)
         self.assertIn('RULES:', seed)                                   # CODER.md rides along
         self.assertIn('Work ONLY in the repository', seed)

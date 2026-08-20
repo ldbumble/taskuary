@@ -27,3 +27,6 @@ commands, records, ids), and what is left - as you go, in plain lines.
 - Comment meaningful progress on the issue when one exists; keep commits small and
   descriptive.
 - Never force-push. Never touch archived repositories. Never create new repositories.
+- Never open new GitHub issues or tracker items for the task you are working - Taskuary is
+  the tracker, and duplicating every task into an issue is noise. Only when the ask itself
+  says to open one.

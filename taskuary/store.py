@@ -139,6 +139,7 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
 # Defaults match how each system is usually used; every one is owner-configurable.
 DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
                  'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool',
+                 'gmail': 'trigger,tool', 'imap': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool'}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
@@ -165,6 +166,7 @@ class SQLiteStore:
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
                          ('azure_openai', 'Azure OpenAI'), ('mssql', 'Microsoft SQL Server'),
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
+                         ('gmail', 'Gmail / Google Workspace'), ('imap', 'Any mailbox (IMAP)'),
                          ('winrm', 'Remote Windows (WinRM)')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))
@@ -427,6 +429,22 @@ class SQLiteStore:
         be typed into six places across SOUL.md and three more in CODER.md, so changing it changed
         one of them - a doc that half calls you by name and half calls you John Smith."""
         return render_doc(self.get_doc(name) or '', self.owner())
+    def github_permissions(self) -> tuple:
+        """(use_github_as_tracker, agents_may_push) - read from the GitHub CONNECTOR, where the
+        GitHub decisions belong, falling back to the legacy settings so nothing regresses.
+        use_as_tracker means exactly that: the team runs on GitHub issues, so agents may open
+        and update them for the work; off means Taskuary is the tracker and issues are noise."""
+        cfg = {}
+        try:
+            c = self.get_connector_by_type('github')
+            cfg = json.loads((c or {}).get('ConfigJson') or '{}')
+        except Exception:
+            pass
+        st = self.get_settings()
+        tracker = cfg['use_as_tracker'] if 'use_as_tracker' in cfg else st.get('agent_issues_enabled') == '1'
+        push = cfg['agents_push'] if 'agents_push' in cfg else st.get('agent_push_enabled') == '1'
+        return bool(tracker), bool(push)
+
     def owner(self) -> dict:
         """Who this hub belongs to, from one setting. Falls back to whatever SOUL.md says so an
         existing document keeps working before the owner has ever touched the field."""

@@ -181,6 +181,7 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | type | status | notes |
 |------|--------|-------|
 | `outlook` / `teams` / `slack` | ✅ | inbound channels → Timeline through AI triage |
+| `gmail` / `imap` | ✅ | any mailbox that speaks IMAP — Gmail (App Password), a domain.com address, Yahoo, an ISP. In through triage, approved replies back over the provider's own SMTP, in-thread |
 | `telegram` | ✅ | a bot token from @BotFather and nothing else — chats in through triage, approved replies back into the chat, photos reach the vision triage |
 | `whatsapp` | ✅ | your own account, via a small Baileys bridge that runs beside the app (`cd taskuary/whatsapp && npm install && node bridge.mjs`, pair once by QR or code). The heavy dependency deliberately lives there, not in Taskuary — unofficial protocol, use a number you'd risk |
 | `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md; optional inbound trigger (new issues → Timeline → triage) |

@@ -318,8 +318,15 @@ class TerminalTests(unittest.TestCase):
         try:
             seed = terminal.seed_text(server.store, tid)
             self.assertNotIn('Do NOT create GitHub issues', seed)
-            self.assertIn('may open GitHub issues', seed)
+            self.assertIn('GitHub is the issue tracker', seed)
             self.assertIn('as the work needs', docsync.role_text(server.store, 'tool'))
+            # ...and the GitHub CONNECTOR's own config outranks the legacy setting: the decision
+            # about GitHub lives on the GitHub card
+            server.store.set_connector_config(server.store.get_connector_by_type('github')['ConnectorId'],
+                                              {'use_as_tracker': False, 'agents_push': True})
+            self.assertIn('Do NOT create GitHub issues', terminal.seed_text(server.store, tid))
+            self.assertIn('may push and deploy', terminal.seed_text(server.store, tid))
+            server.store.set_connector_config(server.store.get_connector_by_type('github')['ConnectorId'], {})
         finally:
             server.store.set_setting('agent_issues_enabled', '0', 'test')
 

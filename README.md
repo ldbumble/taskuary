@@ -183,7 +183,10 @@ then `taskuary-desktop` — the same UI in a native window. A prebuilt single-fi
 
 ## Telegram & WhatsApp — the funnel in your pocket
 
-![A Telegram question on the timeline with its reply drafted and one Approve & send button, a WhatsApp task below it](docs/screenshot-messengers.png)
+![Left: the Taskuary bot pinging your own Telegram — a question arrived, a task was filed, the work is done and its reply waits in Review. Right: a WhatsApp ask, and the approved answer landing back in the same chat](docs/screenshot-phone.png)
+
+*The phone's side of it (the message text is exactly what Taskuary sends). What the same moment
+looks like inside the app: [the timeline view](docs/screenshot-messengers.png).*
 
 The personal messengers work both directions, and each direction is a role you switch on:
 

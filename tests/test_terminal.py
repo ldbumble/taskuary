@@ -276,6 +276,24 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(ses['sid'])
 
+
+    def test_agents_open_issues_only_when_the_setting_says_so(self):
+        """Off (the default): the seed forbids tracker items and the SOUL.md tool blurb scopes
+        writes to the ask. On: both sides grant the licence. One switch, both documents."""
+        from taskuary import docsync
+        tid = c.post('/api/tasks', json={'Title': 'issue policy probe', 'Kind': 'coding'}).json()['taskId']
+        server.store.set_setting('agent_issues_enabled', '0', 'test')
+        self.assertIn('Do NOT create GitHub issues', terminal.seed_text(server.store, tid))
+        self.assertIn('never issues or tracker items', docsync.role_text(server.store, 'tool'))
+        server.store.set_setting('agent_issues_enabled', '1', 'test')
+        try:
+            seed = terminal.seed_text(server.store, tid)
+            self.assertNotIn('Do NOT create GitHub issues', seed)
+            self.assertIn('may open GitHub issues', seed)
+            self.assertIn('as the work needs', docsync.role_text(server.store, 'tool'))
+        finally:
+            server.store.set_setting('agent_issues_enabled', '0', 'test')
+
     def test_agent_argv_drops_the_headless_flags(self):
         # -p / --output-format stream-json make the CLI a one-shot pipe; a TUI needs neither
         with mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']):

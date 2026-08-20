@@ -108,5 +108,22 @@ class ImapTests(unittest.TestCase):
         self.assertEqual(src['ConnectorId'], c['ConnectorId'])  # owned, so outlook skips it
 
 
+class SourceOwnershipTests(unittest.TestCase):
+    def test_orphaned_sources_adopt_their_legacy_owner_at_init(self):
+        """Sources written before ownership existed had no ConnectorId, so the new Gmail card
+        claimed the Outlook mailboxes - same channel, nobody's sources. Init adopts each orphan
+        to the channel's legacy owner; reports keep their own rules."""
+        import tempfile, os
+        path = os.path.join(tempfile.mkdtemp(), 't.db')
+        from taskuary.store import SQLiteStore
+        a = SQLiteStore(path)
+        a._exec("INSERT INTO source (Channel, Address, Active) VALUES ('email', 'me@corp.example', 1)")
+        a._exec("INSERT INTO source (Channel, Address, Active) VALUES ('report', 'Census', 1)")
+        b = SQLiteStore(path)                                    # a second init runs the heal
+        row = b._one("SELECT * FROM source WHERE Address='me@corp.example'")
+        self.assertEqual(row['ConnectorId'], b.get_connector_by_type('outlook')['ConnectorId'])
+        self.assertIsNone(b._one("SELECT * FROM source WHERE Address='Census'")['ConnectorId'])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -438,7 +438,8 @@ def poll_channels(store, backfill_days: int = 0) -> int:
             for s in store.list_sources():
                 if s['Channel'] != CH2SRC[c['Type']]: continue
                 # a source belongs to ONE connector: outlook and an IMAP mailbox are both
-                # channel 'email', and without this the Graph poller tried the Gmail address
+                # channel 'email', and without this the Graph poller tried the Gmail address.
+                # (Orphans are adopted at startup, so ownership is always present now.)
                 if s.get('ConnectorId') and s['ConnectorId'] != c['ConnectorId']: continue
                 since = _since(s, backfill_days)
                 if c['Type'] == 'outlook':

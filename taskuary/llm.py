@@ -58,7 +58,14 @@ def make_cli_llm(store, agent_name: str):
     row = store.get_agent(agent_name)
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
-    if prof.get('light_model'): prof['model'] = prof['light_model']
+    light = str(prof.get('light_model') or '')
+    if light.startswith('effort:'):
+        # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -
+        # so its cheap gear is reasoning effort on the same model (verified: -c
+        # model_reasoning_effort=low answers in a fraction of the tokens)
+        prof['args'] = list(prof.get('args') or []) + ['-c', f"model_reasoning_effort={light.split(':', 1)[1].strip()}"]
+    elif light:
+        prof['model'] = light
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
     def llm(system, user, max_tokens=MAX_TOKENS, images=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says

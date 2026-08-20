@@ -56,6 +56,13 @@ class LightModelTests(unittest.TestCase):
             out = llm.make_cli_llm(s, 'coder')('sys', 'user')
         self.assertEqual(seen['model'], 'haiku')                  # the cheap gear reads the mail
         self.assertIn('fyi', out)
+        # codex has no smaller model on a ChatGPT plan - its light gear is reasoning effort
+        s.upsert_agent('codex', 'coding', 'cli',
+                       json.dumps({'cmd': 'codex', 'args': ['exec'], 'model': 'gpt-5.6-sol', 'light_model': 'effort:low'}))
+        with mock.patch('taskuary.agents.run_cli', fake_run_cli):
+            llm.make_cli_llm(s, 'codex')('sys', 'user')
+        self.assertEqual(seen['model'], 'gpt-5.6-sol')            # the model is untouched...
+        self.assertIn('model_reasoning_effort=low', ' '.join(seen['args']))   # ...the effort drops
         # and the coding session still gets the big one
         from taskuary.terminal import agent_argv
         with mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']):

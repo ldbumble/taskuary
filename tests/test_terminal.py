@@ -456,3 +456,42 @@ class RepoRoutingTests(unittest.TestCase):
         # unpinning hands the choice back to the guess
         c.put(f'/api/tasks/{tid}/repo', json={'repo': None})
         self.assertNotIn('repo:', str(server.store.get_task(tid)['Tags'] or ''))
+
+
+class FindCheckoutTests(unittest.TestCase):
+    """"Why can't it find the local repo? It's there?" - it is, in a folder that is not named
+    after the repo, which is why matching on the GIT REMOTE is the whole point."""
+
+    def _tree(self):
+        import tempfile
+        root = Path(tempfile.mkdtemp())
+        # the checkout, under a name that does not match the repo
+        co = root / 'work' / 'oddname'
+        (co / '.git').mkdir(parents=True)
+        (co / '.git' / 'config').write_text('[remote "origin"]\n\turl = https://github.com/acme/widget.git\n')
+        # a decoy with the right folder name but the wrong remote
+        decoy = root / 'work' / 'widget'
+        (decoy / '.git').mkdir(parents=True)
+        (decoy / '.git' / 'config').write_text('[remote "origin"]\n\turl = https://github.com/other/widget-fork.git\n')
+        (root / 'work' / 'node_modules' / 'widget').mkdir(parents=True)   # never descended into
+        return root, co
+
+    def test_finds_by_remote_not_by_folder_name(self):
+        root, co = self._tree()
+        hint = {'cwd': str(root / 'work' / 'somewhere-known')}
+        (root / 'work' / 'somewhere-known').mkdir()
+        found = terminal.find_checkout('acme/widget', hint)
+        self.assertEqual(found, str(co))                       # oddname, because its REMOTE matches
+        self.assertIsNone(terminal.find_checkout('acme/nothere', hint, seconds=1.0))
+
+    def test_open_session_adopts_the_found_path_and_remembers_it(self):
+        root, co = self._tree()
+        server.store.upsert_agent('finder', 'coding', 'cli',
+                                  json.dumps({'cmd': 'claude', 'cwd': str(root / 'work'),
+                                              'cwd_map': {'acme/other': str(root / 'work')}}))
+        with mock.patch.object(terminal, 'Term') as T:          # never spawn a real pty here
+            T.return_value = mock.Mock(sid='x', cwd=str(co), info=lambda: {})
+            terminal.open_session(server.store, 'finder', None, 'acme/widget')
+            self.assertEqual(T.call_args.args[1], str(co))      # the session opens IN the checkout
+        prof = json.loads(server.store.get_agent('finder')['Config'])
+        self.assertEqual(prof['cwd_map']['acme/widget'], str(co))   # ...and it is remembered

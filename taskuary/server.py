@@ -25,10 +25,15 @@ from . import outbound, responder
 cfg = config.load()
 store = SQLiteStore(config.db_path())
 for name, prof in cfg.get('agents', {}).items():
+    # merge, don't clobber: paths DISCOVERED at runtime (find_checkout) live on the agent row,
+    # and a boot that rewrites Config from config.toml wholesale would forget them
+    _old = json.loads((store.get_agent(name) or {}).get('Config') or '{}')
+    prof = {**prof, 'cwd_map': {**(_old.get('cwd_map') or {}), **(prof.get('cwd_map') or {})}}
     store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
 @asynccontextmanager
 async def _lifespan(_app):
     catch_up_on_startup()          # defined below; resolved when the app actually starts
+    _heal_owner_docs()
     _refresh_soul_connections()
     yield
 
@@ -218,7 +223,9 @@ def _repo_rows(task_id: int, agent: str = 'coder'):
     paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
     tagged = (re.search(r'repo:([^\s,]+)', str((store.get_task(task_id) or {}).get('Tags') or '')) or [None, None])[1]
     return [{'repo': r, 'score': sc, 'what': desc.get(r, ''), 'path': paths.get(r),
-             'has_path': has, 'tagged': r == tagged}
+             'has_path': has, 'tagged': r == tagged,
+             # a pathless repo is searched for on the spot, so the picker can offer the answer
+             'found': None if has else hub_term.find_checkout(r, prof, seconds=1.5)}
             for r, sc, has in hub_term.rank_repos(store, task_id, prof)]
 
 @app.get('/api/tasks/{task_id}/repos')
@@ -925,6 +932,34 @@ def catch_up_on_startup():
     if days <= 0: return
     logger.info(f'startup: catching up on the last {days} days')
     threading.Thread(target=lambda: _poll_reports(days), daemon=True).start()
+
+
+def _heal_owner_docs():
+    """Docs written before the {{owner}} tokens carry LITERAL names - the template's John Smith,
+    and whatever the owner typed over some of them - so replies kept signing as John even though
+    SOUL.md said otherwise. Once per launch: seed the owner setting from SOUL.md if it is empty,
+    then sweep both the placeholder and the known name into tokens. Idempotent; the owner's
+    prose survives ("Johnson Controls" is not a name match)."""
+    try:
+        if not (store.get_settings().get('owner_name') or '').strip():
+            soul = store.get_doc('soul') or ''
+            name = store_mod.owner_from_soul(soul)
+            if name and name != 'the owner':
+                store.set_setting('owner_name', name, 'startup')
+                em = store_mod.email_from_soul(soul)
+                if em: store.set_setting('owner_email', em, 'startup')
+        who = store.owner()
+        for doc in ('soul', 'coder', 'digest'):
+            raw = store.get_doc(doc)
+            if not raw: continue
+            t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')
+            if who['owner'] not in ('the owner', '') and '{{' not in who['owner']:
+                t = store_mod.retoken_doc(t, who['owner'], who['owner_email'])
+            if t != raw:
+                store.save_doc(doc, t, 'startup')
+                logger.info(f'{doc}.md: literal owner names converted to tokens')
+    except Exception as e:
+        logger.warning(f'owner-doc heal failed: {e}')
 
 
 def _refresh_soul_connections():

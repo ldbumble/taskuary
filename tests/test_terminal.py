@@ -241,12 +241,19 @@ class TerminalTests(unittest.TestCase):
         write the report from what the TUI said - not from its spinner."""
         fake = str(Path(__file__).parent / 'fake_tui.py')
         server.store.upsert_agent('faketui', 'coding', 'cli', json.dumps({'cmd': sys.executable, 'args': [fake]}))
+        # fake_tui reads stdin in CANONICAL mode: macOS caps a line at 1024 bytes and drops the
+        # overflow at the tty layer. Real TUIs are raw-mode (no cap) - so trim what only bloats
+        # this test's prompt, and assert it fits, or the failure mode is invisible.
+        saved_coder = server.store.get_doc('coder')
+        server.store.save_doc('coder', '', 'test')
+        self.addCleanup(lambda: server.store.save_doc('coder', saved_coder or '', 'test'))
         tid = c.post('/api/tasks', json={'Title': 'payroll adjustments post to the wrong month',
                                          'Kind': 'coding'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:E2E', 'Channel': 'email',
                                   'FromName': 'Dana Reyes', 'FromEmail': 'dreyes@northwind.example',
                                   'Subject': 'Payroll File Imports', 'SentAt': '2026-08-19 15:03',
                                   'BodyText': 'files with adjustments import in the wrong month'})
+        self.assertLess(len(terminal.seed_text(server.store, tid)), 1000)   # must fit a canonical tty line
         ses = c.post('/api/terminals', json={'agent': 'faketui', 'task_id': tid, 'seed': True,
                                              'cwd': os.getcwd()}).json()
         t = terminal.get(ses['sid'])
@@ -447,8 +454,9 @@ class RepoRoutingTests(unittest.TestCase):
 
     def test_a_repo_with_no_path_refuses_instead_of_opening_the_wrong_folder(self):
         # find_checkout scans the REAL disk now, so the refusal only fires on a genuine miss -
-        # pin that with a search that must come up empty
-        with mock.patch.object(terminal, 'find_checkout', return_value=None),              self.assertRaises(ValueError) as e:
+        # pin that with a search that must come up empty. CI has no claude, so resolution is
+        # mocked too: this test is about the repo guard, not the binary.
+        with mock.patch.object(terminal, 'find_checkout', return_value=None),              mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]),              self.assertRaises(ValueError) as e:
             terminal.open_session(server.store, 'coder', self._task('x'), 'mfaVita/TopE')
         self.assertIn('no local path for mfaVita/TopE', str(e.exception))
         self.assertIn('search of your code folders', str(e.exception))
@@ -514,7 +522,7 @@ class FindCheckoutTests(unittest.TestCase):
         server.store.upsert_agent('finder', 'coding', 'cli',
                                   json.dumps({'cmd': 'claude', 'cwd': str(root / 'work'),
                                               'cwd_map': {'acme/other': str(root / 'work')}}))
-        with mock.patch.object(terminal, 'Term') as T:          # never spawn a real pty here
+        with mock.patch.object(terminal, 'Term') as T,              mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
             T.return_value = mock.Mock(sid='x', cwd=str(co), info=lambda: {})
             terminal.open_session(server.store, 'finder', None, 'acme/widget')
             self.assertEqual(T.call_args.args[1], str(co))      # the session opens IN the checkout

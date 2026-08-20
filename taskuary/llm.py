@@ -49,10 +49,16 @@ MAX_TOKENS = 400
 
 def make_cli_llm(store, agent_name: str):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
-    is dropped - triage is about the message, not about any checkout."""
+    is dropped - triage is about the message, not about any checkout.
+
+    And the MODEL drops a tier: `light_model` on the agent profile (Connectors > AI CLI
+    agents) is what runs here - triage, drafts, summaries, the digest - while the profile's
+    main `model` stays reserved for the coding sessions. One brain, two gears: the classifier
+    reads one email; it does not need the model that rewrites your codebase."""
     row = store.get_agent(agent_name)
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
+    if prof.get('light_model'): prof['model'] = prof['light_model']
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
     def llm(system, user, max_tokens=MAX_TOKENS, images=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says

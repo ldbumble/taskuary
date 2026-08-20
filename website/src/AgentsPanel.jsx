@@ -29,7 +29,7 @@ const PRESETS = [
 
 const NEWLINE = String.fromCharCode(10);
 const ARGS_PH = ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'].join(NEWLINE);
-const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "" };
+const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "", lightModel: "" };
 const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(Boolean);
 
 export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) => {
@@ -46,7 +46,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
   const edit = (name) => {
     const a = agents[name] || {};
     setDraft({ name, cmd: a.cmd || "", args: (a.args || []).join(NEWLINE), resume: (a.resume_args || []).join(" "),
-      timeout: a.timeout || "", cwd: a.cwd || "",
+      timeout: a.timeout || "", cwd: a.cwd || "", lightModel: a.light_model || "",
       cwdMap: Object.entries(a.cwd_map || {}).map(([k, v]) => `${k} = ${v}`).join(NEWLINE) });
   };
   const save = async () => {
@@ -57,6 +57,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     const map = {};
     for (const l of lines(draft.cwdMap)) { const i = l.indexOf("="); if (i > 0) map[l.slice(0, i).trim()] = l.slice(i + 1).trim(); }
     if (Object.keys(map).length) p.cwd_map = map;
+    if (draft.lightModel.trim()) p.light_model = draft.lightModel.trim();
     try { await api.put(`/api/agents/${encodeURIComponent(draft.name.trim())}`, p); setDraft(null); load(); }
     catch (e) { setErr(e?.response?.data?.detail || "save failed"); }
   };
@@ -128,7 +129,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
               sx={{ bgcolor: "#fef4e6", color: "#b45309", height: 20, fontSize: 10 }} />
           )}
           <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
-            timeout {a.timeout || 1200}s{a.resume_args ? " · resumable" : ""}
+            timeout {a.timeout || 1200}s{a.resume_args ? " · resumable" : ""}{a.light_model ? ` · light: ${a.light_model}` : ""}
           </Typography>
           <Button size="small" startIcon={<BoltIcon sx={{ fontSize: 13 }} />} disabled={tests[name]?.busy}
             onClick={() => runTest(name)}>{tests[name]?.busy ? "Testing…" : "Test"}</Button>
@@ -162,6 +163,10 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
               onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
           </Box>
           <TextField label="working dir (optional)" value={draft.cwd} onChange={(e) => setDraft({ ...draft, cwd: e.target.value })} />
+          <TextField label="light model — triage, drafts, summaries (blank = same model as coding)"
+            placeholder="haiku (claude) · gpt-5 (codex) · gemini-2.5-flash"
+            helperText="One brain, two gears: when this CLI is the triage brain, the cheap fast tier classifies the mail while the main model stays reserved for the coding sessions."
+            value={draft.lightModel} onChange={(e) => setDraft({ ...draft, lightModel: e.target.value })} />
           <TextField label="repo → dir map (one 'org/repo = C:/src/checkout' per line)" multiline minRows={2}
             value={draft.cwdMap} onChange={(e) => setDraft({ ...draft, cwdMap: e.target.value })} />
           <Box sx={{ display: "flex", gap: 0.75 }}>

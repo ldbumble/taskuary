@@ -121,24 +121,22 @@ it, and the "done — approve the reply" ping arrives back on the same phone.
 
 ## One brain or two
 
-**Two is the recommended setup**, and they do different jobs:
+Two different jobs, two very different price tags: **triage** reads one message and answers
+in a line (thousands of times a month), **coding** rewrites your repositories (a few times a
+day). Taskuary lets you split them or tier them:
 
-| | Triage brain | Working brain |
-|---|---|---|
-| what it does | classifies every inbound message: task / reply-only / FYI | writes the code, drafts the replies, works the task |
-| what it is | a small cloud model (Anthropic / OpenAI / Azure OpenAI key) | your CLI agent (Claude Code, Codex, Gemini…) |
-| per message | well under a second, a fraction of a cent | seconds to minutes, real agent tokens |
+| setup | triage / drafts / summaries | coding sessions | when |
+|---|---|---|---|
+| **Two brains** (recommended) | a small cloud model — Anthropic / OpenAI / Azure OpenAI connector, fractions of a cent per message | your CLI agent, its full model | you have (or can get) one cheap API key |
+| **One brain, two gears** | the same CLI, downshifted to its **light model** (set it on the agent: `haiku`, `gemini-2.5-flash`…) | the same CLI, its main model | one subscription, no API key — Claude Max, Codex |
+| **One brain, one gear** | the CLI at full model | the CLI at full model | works, but every newsletter costs a frontier-model run |
 
-**One brain works too.** Set Settings → Triage & routing → **Triage brain** to a CLI agent
-and the same brain that writes your code also triages your inbox — no second API key, no
-second bill. The cost is speed and tokens: every message that reaches the AI spawns a CLI
-run, which adds up fast on a busy mailbox. Obvious automated noise is filtered by
-heuristics before either brain is called.
-
-The other direction works too: a connection marked *agent tool* is named for the agents in
-SOUL.md along with `POST /api/tools/run` — one call runs a query, script, or MCP tool
-through the saved credentials and hands the raw output back, so an agent working a task
-can look something up in SQL Server or act in another system without leaving the run.
+Suggested setup: connect an **Anthropic** key with `claude-haiku-4-5` as the triage brain
+(Settings → Triage & routing), keep `claude` as the coder with its default model — or, with
+no API key at all, set the coder's **light model** to `haiku` (Connectors → AI CLI agents →
+Edit) and point the triage brain at `cli: coder`. Either way the expensive model only ever
+runs when there is real work in a real repository, and the cheap one handles the reading:
+intent triage, reply drafts, report summaries, the morning digest.
 
 ## Memory: it learns from your verdicts
 

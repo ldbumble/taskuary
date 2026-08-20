@@ -1,7 +1,7 @@
 // Bring-your-own-AI-CLI editor - shared by Settings (Agents page) and Connectors
 // (AI CLI agents card). Any CLI that reads a prompt on stdin is a teammate.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
@@ -29,6 +29,14 @@ const PRESETS = [
 
 const NEWLINE = String.fromCharCode(10);
 const ARGS_PH = ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'].join(NEWLINE);
+// the model quick-picks per CLI (mirrors the server's CLI_MODELS) - the light-model field is
+// a DROPDOWN of what the CLI actually takes, not a text box to guess spellings into
+const MODEL_PICKS = {
+  claude: ["haiku", "sonnet", "opus", "claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"],
+  codex: ["gpt-5", "gpt-5-codex"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro"],
+};
+
 const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "", lightModel: "" };
 const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(Boolean);
 
@@ -74,6 +82,21 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     await api.patch("/api/settings", { name: "default_agent", value: name });
     setDefAgent(name);
   };
+  // WHICH brain triages is one exclusive choice across everything that could do it - the AI
+  // connectors holding keys and these CLI agents. Selecting one deselects the other, because
+  // it is one setting; /api/brains already lists every candidate with whether it is ready.
+  const [brains, setBrains] = useState([]);
+  const [triage, setTriage] = useState("");
+  useEffect(() => {
+    api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
+    api.get("/api/settings").then(({ data }) => {
+      setTriage((data.data || []).find((x) => x.Name === "triage_ai")?.Value || "");
+    }).catch(() => {});
+  }, []);
+  const pickTriage = async (value) => {
+    await api.patch("/api/settings", { name: "triage_ai", value });
+    setTriage(value);
+  };
 
   const runTest = async (name) => {
     setTests((t) => ({ ...t, [name]: { busy: true } }));
@@ -104,6 +127,29 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
             icon={<SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />} onOpen={() => usePreset(pr)} />
         ))}
       </Box>
+      {brains.length > 0 && (
+        <Box sx={{ mb: 2, p: 1.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
+          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>Who does the triage?</Typography>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
+            One brain reads and classifies every inbound message — an AI connector (cheap, instant)
+            or one of the CLI agents below (no API key; give it a light model so triage does not run
+            the coding tier). Picking one unpicks the other: it is a single choice.
+          </Typography>
+          <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+            {brains.map((b) => {
+              const on = triage === b.value;
+              return (
+                <Chip key={b.value || "auto"} size="small" label={b.label} clickable={b.ready}
+                  onClick={() => b.ready && pickTriage(b.value)}
+                  title={b.ready ? "" : "not ready — save a key / finish setup on its connector first"}
+                  sx={{ height: 24, fontSize: 11, fontWeight: on ? 700 : 400, opacity: b.ready ? 1 : 0.45,
+                    bgcolor: on ? "#4f46e5" : "#fff", color: on ? "#fff" : DIM,
+                    border: `1px solid ${on ? "#4f46e5" : BORDER}` }} />
+              );
+            })}
+          </Box>
+        </Box>
+      )}
       {!Object.keys(agents).length && <Empty>No agents yet — click a preset above, Save, then Test.</Empty>}
       {Object.entries(agents).map(([name, a]) => (
         <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, px: 1,
@@ -163,10 +209,22 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
               onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
           </Box>
           <TextField label="working dir (optional)" value={draft.cwd} onChange={(e) => setDraft({ ...draft, cwd: e.target.value })} />
-          <TextField label="light model — triage, drafts, summaries (blank = same model as coding)"
-            placeholder="haiku (claude) · gpt-5 (codex) · gemini-2.5-flash"
-            helperText="One brain, two gears: when this CLI is the triage brain, the cheap fast tier classifies the mail while the main model stays reserved for the coding sessions."
-            value={draft.lightModel} onChange={(e) => setDraft({ ...draft, lightModel: e.target.value })} />
+          <Box>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.5 }}>
+              light model — what triage, drafts and summaries run on when this CLI is the triage
+              brain; coding sessions keep the main model
+            </Typography>
+            <Select size="small" displayEmpty value={draft.lightModel} sx={{ minWidth: 260, bgcolor: "#fff" }}
+              onChange={(e) => setDraft({ ...draft, lightModel: e.target.value })}>
+              <MenuItem value="" sx={{ fontSize: 12.5 }}>same model as coding (no downshift)</MenuItem>
+              {(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).map((mo) => (
+                <MenuItem key={mo} value={mo} sx={{ fontSize: 12.5 }}>{mo}</MenuItem>
+              ))}
+              {draft.lightModel && !(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).includes(draft.lightModel) && (
+                <MenuItem value={draft.lightModel} sx={{ fontSize: 12.5 }}>{draft.lightModel}</MenuItem>
+              )}
+            </Select>
+          </Box>
           <TextField label="repo → dir map (one 'org/repo = C:/src/checkout' per line)" multiline minRows={2}
             value={draft.cwdMap} onChange={(e) => setDraft({ ...draft, cwdMap: e.target.value })} />
           <Box sx={{ display: "flex", gap: 0.75 }}>

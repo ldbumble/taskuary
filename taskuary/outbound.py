@@ -39,9 +39,13 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
     if not to and not reply_to_graph_id: raise RuntimeError('no recipient')
     hdr = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
     if reply_to_graph_id:
+        # Graph reads the reply `comment` as HTML, so plain-text newlines collapse into one long
+        # line - greeting, body and signature all jammed together. Escape and give the breaks back.
+        import html as _html
+        comment = _html.escape(body).replace(chr(10), '<br>')
         r = requests.post(f'{GRAPH}/users/{box}/messages/{reply_to_graph_id}/reply', headers=hdr, timeout=30,
                           data=json.dumps({'message': {'toRecipients': [{'emailAddress': {'address': a}} for a in to]}
-                                           if to else {}, 'comment': body}))
+                                           if to else {}, 'comment': comment}))
     else:
         r = requests.post(f'{GRAPH}/users/{box}/sendMail', headers=hdr, timeout=30,
                           data=json.dumps({'message': {'subject': subject or '(no subject)',

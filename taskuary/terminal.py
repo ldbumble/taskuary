@@ -478,9 +478,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     parts = [f"TASK {task_ref(tid)} - {t.get('Title') or ''}."]
     if repo or cwd: parts.append(f"REPO: {repo or cwd} - you are already in it; work only here.")
     if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
+    from .triage import strip_boilerplate
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
-                       f"subject \"{m.get('Subject') or ''}\": {(m.get('BodyText') or '')[:3000]}")
-    elif t.get('Summary'): parts.append(f"ASK: {str(t['Summary'])[:3000]}")
+                       f"subject \"{m.get('Subject') or ''}\": "
+                       f"{strip_boilerplate(m.get('BodyText') or '')[:3000]}")
+    elif t.get('Summary'): parts.append(f"ASK: {strip_boilerplate(str(t['Summary']))[:3000]}")
     # the screenshot is often the whole ask ("see below"), and the file paths are local - the
     # session can open them itself instead of being told an image existed
     atts = [a for msg in msgs for a in store.list_attachments(msg['MessageId']) if a.get('Path')]
@@ -497,7 +499,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.
-    issues_ok = store.get_settings().get('agent_issues_enabled') == '1'
+    st = store.get_settings()
+    issues_ok, push_ok = st.get('agent_issues_enabled') == '1', st.get('agent_push_enabled') == '1'
     parts.append('WHAT TO DO: work it from THIS message alone. Diagnose the problem, fix it if it '
                  'is fixable, and if it is not, say plainly what the problem is and what it would '
                  'take. Do NOT call the Taskuary API, read its database or go looking for this task '
@@ -507,6 +510,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                     'Do NOT create GitHub issues, PRs or any other tracker items for this work '
                     'unless this message explicitly asks for one - Taskuary IS the tracker, and '
                     'this task is the record. ')
+                 + ('You may push and deploy as the work needs. ' if push_ok else
+                    'Do NOT push, deploy, publish or release anything - commit locally and stop; '
+                    'the owner reviews and pushes. Only when this message explicitly says to. ')
                  + 'Ask the owner here in the session if something is genuinely missing.')
     return ' '.join(' '.join(parts).split())
 

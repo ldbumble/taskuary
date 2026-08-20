@@ -489,13 +489,17 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.
+    issues_ok = store.get_settings().get('agent_issues_enabled') == '1'
     parts.append('WHAT TO DO: work it from THIS message alone. Diagnose the problem, fix it if it '
                  'is fixable, and if it is not, say plainly what the problem is and what it would '
                  'take. Do NOT call the Taskuary API, read its database or go looking for this task '
-                 'anywhere - everything known about it is above. Do NOT create GitHub issues, PRs or '
-                 'any other tracker items for this work unless this message explicitly asks for one - '
-                 'Taskuary IS the tracker, and this task is the record. Ask the owner here in the '
-                 'session if something is genuinely missing.')
+                 'anywhere - everything known about it is above. '
+                 + ('You may open GitHub issues where they genuinely help the work. '
+                    if issues_ok else
+                    'Do NOT create GitHub issues, PRs or any other tracker items for this work '
+                    'unless this message explicitly asks for one - Taskuary IS the tracker, and '
+                    'this task is the record. ')
+                 + 'Ask the owner here in the session if something is genuinely missing.')
     return ' '.join(' '.join(parts).split())
 
 

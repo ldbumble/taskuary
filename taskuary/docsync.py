@@ -14,11 +14,16 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
 
 # The tool blurb used to say "create/update things in it as the work needs" - and an agent
 # handed that read it as licence to open a GitHub issue for every task it worked, duplicating
-# a tracker that already exists. The licence is now scoped to what the ASK names.
+# a tracker that already exists. The licence now follows the agent_issues_enabled setting.
 ROLE_TEXT = {'trigger': 'inbound trigger — new items land on the timeline and go through triage',
-             'tool': 'yours to read, and to create/update things in ONLY when the task explicitly '
-                     'asks for it — never issues or tracker items for your own work: the task is the record',
              'report': 'scheduled report source'}
+TOOL_TEXT = {'0': 'yours to read, and to create/update things in ONLY when the task explicitly '
+                  'asks for it — never issues or tracker items for your own work: the task is the record',
+             '1': 'yours to use — read from it and create/update things in it as the work needs'}
+
+def role_text(store, role):
+    if role == 'tool': return TOOL_TEXT.get(store.get_settings().get('agent_issues_enabled') or '0', TOOL_TEXT['0'])
+    return ROLE_TEXT.get(role)
 
 
 def sync_connections(store, actor='system'):
@@ -33,7 +38,7 @@ def sync_connections(store, actor='system'):
                 if s['Channel'] == CH2SRC.get(c['Type']) and s['Active']
                 and (s.get('ConnectorId') in (None, c['ConnectorId']))]
         # what each connection IS to the agents, not just that it exists
-        what = '; '.join(ROLE_TEXT[r] for r in ('trigger', 'tool', 'report') if r in roles_of(c))
+        what = '; '.join(role_text(store, r) for r in ('trigger', 'tool', 'report') if r in roles_of(c))
         if mine: lines.append(f"- {c['Name']}: {', '.join(sorted(mine)[:12])}" + (f" — {what}" if what else ''))
         elif what: lines.append(f"- {c['Name']} — {what}")
     for s in srcs:

@@ -7,11 +7,16 @@ from PyInstaller.utils.hooks import collect_all
 try: wp_datas, wp_bins, wp_hidden = collect_all('winpty')
 except Exception: wp_datas, wp_bins, wp_hidden = [], [], []
 
+# pyte renders session transcripts (terminal.render); wcwidth, which it uses, ships data tables
+try: pt_datas, pt_bins, pt_hidden = collect_all('wcwidth')
+except Exception: pt_datas, pt_bins, pt_hidden = [], [], []
+
 a = Analysis(['taskuary/desktop.py'],
-             datas=[('taskuary/web', 'taskuary/web'), *wp_datas],
-             binaries=wp_bins,
+             datas=[('taskuary/web', 'taskuary/web'), *wp_datas, *pt_datas],
+             binaries=wp_bins + pt_bins,
              hiddenimports=['taskuary.server', 'pyodbc', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
-                            'websockets', 'uvicorn.protocols.websockets.websockets_impl', *wp_hidden],
+                            'websockets', 'uvicorn.protocols.websockets.websockets_impl', 'pyte',
+                            *wp_hidden, *pt_hidden],
              excludes=['tkinter', 'matplotlib', 'PIL', 'sqlalchemy'])
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, a.binaries, a.datas, name='Taskuary', console=False, upx=False,

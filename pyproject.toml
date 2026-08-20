@@ -31,6 +31,7 @@ dependencies = [
     "tomli>=2; python_version<'3.11'",
     "websockets>=12",                            # uvicorn's ws transport - the terminal streams over it
     "pywinpty>=2; sys_platform=='win32'",        # ConPTY: the interactive agent terminal
+    "pyte>=0.8",                                 # a real VT emulator: how a session transcript is read
 ]
 
 [project.optional-dependencies]

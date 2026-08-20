@@ -63,14 +63,22 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   }, [sid]);
   return (
     <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden", bgcolor: CATPPUCCIN.bg }}>
-      {/* 10k lines of scrollback that you can reach: xterm 6 draws its own slider inside
-          .xterm-scrollable-element (not a native scrollbar), and at its default 20% opacity on a
-          dark pane it is invisible - which is what "I cannot scroll up" actually was. Colour comes
-          from XTERM_THEME; this only makes it a little wider and rounder to grab. */}
+      {/* A scrollbar on the session itself, the way a console has one.
+          xterm 6 does not use a native scrollbar: it embeds VS Code's scrollable element, which
+          AUTO-HIDES - the bar ships as `class="invisible scrollbar vertical fade"`, opacity 0 and
+          pointer-events none. So the slider was there the whole time, correctly sized and
+          positioned, and simply could not be seen or grabbed; the only scrollbar on screen was the
+          page's, which is why reaching the scrollback meant scrolling the whole window instead.
+          Colour comes from XTERM_THEME - this keeps the vertical bar on permanently. */}
       <Box ref={host} sx={{ height, p: 1, "& .xterm": { height: "100%" },
-        "& .xterm-scrollable-element > .scrollbar > .slider": { borderRadius: 99, width: "8px !important",
-          marginLeft: "3px", transition: "background .15s" },
-        "& .xterm-viewport": { overflowY: "auto" } }} />
+        "& .xterm-scrollable-element > .scrollbar.vertical": {
+          opacity: "1 !important", pointerEvents: "auto !important", visibility: "visible !important",
+          // a visible TRACK, not just a slider: a bare thumb floating on a dark pane still reads
+          // as "there is no scrollbar" - the channel is what says the pane scrolls
+          background: "rgba(255,255,255,.06)", borderLeft: "1px solid rgba(255,255,255,.08)" },
+        "& .xterm-scrollable-element > .scrollbar.vertical > .slider": {
+          borderRadius: 99, width: "8px !important", marginLeft: "3px", transition: "background .15s" },
+        "& .xterm-scrollable-element > .scrollbar.vertical:hover > .slider": { width: "11px !important" } }} />
       {state !== "live" && (
         <Typography variant="caption" sx={{ ...mono, position: "absolute", top: 6, right: 10, fontSize: 10,
           color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>

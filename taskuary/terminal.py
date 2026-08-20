@@ -77,6 +77,7 @@ class Term:
     def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None):
         self.sid = uuid.uuid4().hex[:12]
         self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
+        self.rows, self.cols = rows, cols                 # replaying the stream needs the real geometry
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
@@ -163,7 +164,9 @@ class Term:
         if self.alive: self.pty.write(s)
     def resize(self, rows, cols):
         if self.alive:
-            try: self.pty.resize(int(rows), int(cols))
+            try:
+                self.pty.resize(int(rows), int(cols))
+                self.rows, self.cols = int(rows), int(cols)
             except Exception: pass
     def close(self):
         self.keep()                                       # before the bytes go, not after
@@ -273,11 +276,46 @@ def _overlay(line: str) -> str:
 def plain(s: str) -> str:
     """A TUI's bytes as readable text: repaints resolved, escape sequences gone, box gutters
     trimmed. Cursor-forward becomes spaces - deleting it is what ran "112 active" together
-    into "112active" in the first wrap-ups."""
+    into "112active" in the first wrap-ups.
+
+    Kept as the FALLBACK for `render` (and for streams with no positioning in them). It cannot
+    be made correct: see render() for why."""
     s = (s or '').replace('\r\n', '\n')
     s = _FORWARD.sub(lambda m: ' ' * max(1, int(m.group(1) or 1)), s)
     lines = [_overlay(l) for l in s.split('\n')]
     return '\n'.join(_ANSI.sub('', l).strip(' │┃┊▎|').rstrip() for l in lines)
+
+
+HISTORY_LINES = 6000        # scrollback pyte keeps while replaying a session
+
+def render(raw: str, cols: int = 110, rows: int = 32) -> str:
+    """The pty stream as a terminal would SHOW it, which is the only faithful way to read one.
+
+    Hand-rolling this was the mistake. Claude Code lays its output out with ABSOLUTE moves -
+    ESC[54G to a column, ESC[1B down a line - and a regex that deletes those instead of obeying
+    them glues every word together ("Run/inittocreateaCLAUDE.mdfile") and collapses a whole
+    session into a couple of hundred characters of debris. That is exactly what the wrap-up was
+    handing the AI, which is why reports came back saying the transcript was unreadable: it was.
+
+    pyte is a real VT emulator, pure Python, so the one-file exe is unaffected. Its history is
+    the scrollback. Anything it cannot parse falls back to plain() rather than losing the run."""
+    if not (raw or '').strip(): return ''
+    try:
+        import pyte
+    except ImportError:
+        logger.warning('pyte is not installed - transcripts will be rendered with the fallback')
+        return plain(raw)
+    try:
+        sc = pyte.HistoryScreen(max(40, int(cols or 110)), max(4, int(rows or 32)),
+                                history=HISTORY_LINES, ratio=1.0)
+        pyte.Stream(sc).feed(raw)
+        # history rows are sparse Char maps; display rows are already strings
+        def line(r):
+            return r.rstrip() if isinstance(r, str) else ''.join(r[x].data for x in range(sc.columns)).rstrip()
+        return '\n'.join(line(r) for r in list(sc.history.top) + list(sc.display))
+    except Exception as e:
+        logger.warning(f'terminal render failed ({e}) - falling back to plain()')
+        return plain(raw)
 
 
 # What a TUI paints over and over and none of it is what the agent SAID: spinner frames, the
@@ -287,6 +325,25 @@ _CHROME = re.compile(r'esc to interrupt|\? for shortcuts|for agents|to manage|\b
 _WORDLESS = re.compile(r'^[^A-Za-z]*$')
 _HINT = re.compile(r'\bTip:\s+Use /')      # a slash-command hint, any length
 _SPIN = re.compile('[·✢✳✻✽✶✷✸✹✺⏺◐◓◑◒✦❯›]')       # the frames themselves
+# A row of a drawn BOX - the welcome banner, the input frame - once a real emulator renders the
+# layout instead of deleting it. Only when the inside is mostly padding: a boxed line of actual
+# prose is content, a line of gutters and gaps is furniture.
+_FRAMED = re.compile(r'^[\s]*[│┃](?P<in>.*)[│┃][\s]*$')
+
+def _is_frame_row(l: str) -> bool:
+    mt = _FRAMED.match(l)
+    if not mt: return False
+    inner = mt.group('in')
+    return bool(re.search(r'\s{6,}', inner)) or inner.count(' ') > len(inner) * .4
+
+
+# The gutter a TUI paints down the left of its own output. render() keeps it, because a terminal
+# really does show it; the report reads better without it.
+_GUTTER_L = re.compile(r'^\s*[│┃┊▎|]\s?')
+_GUTTER_R = re.compile(r'\s*[│┃┊▎|]\s*$')
+
+def degutter(text: str) -> str:
+    return '\n'.join(_GUTTER_R.sub('', _GUTTER_L.sub('', l)).rstrip() for l in (text or '').splitlines())
 
 
 def declutter(text: str) -> str:
@@ -295,6 +352,8 @@ def declutter(text: str) -> str:
     out = []
     for l in (text or '').splitlines():
         l = l.rstrip()
+        if _is_frame_row(l): continue                     # the banner and the input frame
+        l = _GUTTER_R.sub('', _GUTTER_L.sub('', l)).rstrip()   # see degutter
         if not l.strip():
             if out and out[-1]: out.append('')            # keep paragraph breaks, never runs
             continue
@@ -312,28 +371,40 @@ def letters(s: str) -> int:
     return sum(1 for c in (s or '') if c.isalpha())
 
 
+_GUTTER = ' \t│┃┊▎|╭╮╰╯─━>❯›'
+
 def _drop_echo(text: str, seed: str) -> str:
     """A pty ECHOES what was typed into it, so the seeded prompt - the ask, the mail, all of
-    CODER.md - comes back as if the agent had said it. It is the one line in the transcript we
-    know the agent did not write, and the AI writing the report should not read it twice."""
-    head = ' '.join((seed or '').split())[:60]
-    if len(head) < 20: return text
-    return '\n'.join(l for l in text.splitlines() if head not in ' '.join(l.split()))
+    CODER.md - comes back as if the agent had said it. It is the one thing in the transcript we
+    know the agent did not write, and the AI writing the report should not read it twice.
+
+    Matched by CONTAINMENT, not by a fixed head: a real terminal wraps an 8000-character prompt
+    across dozens of lines inside a box, so no single line ever started with the same 60 chars."""
+    s = ' '.join((seed or '').split())
+    if len(s) < 40: return text
+    out = []
+    for l in text.splitlines():
+        n = ' '.join(l.strip(_GUTTER).split())
+        if len(n) > 24 and n in s: continue     # this line is literally a slice of what we typed
+        out.append(l)
+    return '\n'.join(out)
 
 
 def harvest(t: Term, chars: int = 12000) -> str:
     """What the session actually said, as readable text. Closing a task asks the agent nothing:
     everything needed is already on screen.
 
-    The tail used to be taken off the RAW stream (the last chars*4 bytes). In a busy TUI that
-    window is almost entirely escape sequences and status repaints, so a 27-minute session full
-    of real work rendered down to fragments - and the report came back saying the transcript was
-    corrupted. Render the whole scrollback FIRST, then keep the tail of the readable text."""
-    raw = _drop_echo(plain(t.scrollback()), getattr(t, 'seeded', '')).strip()
+    Two lessons are baked in here. The tail used to be taken off the RAW stream, which in a busy
+    TUI is almost all escape codes - so render the whole scrollback FIRST and keep the tail of the
+    readable text. And the rendering has to be a real terminal (see render): a regex that strips
+    absolute cursor moves instead of obeying them turned a 27-minute session into 216 characters
+    of glued-together debris, which is what the AI was being asked to write a report from."""
+    raw = _drop_echo(render(t.scrollback(), getattr(t, 'cols', 110), getattr(t, 'rows', 32)),
+                     getattr(t, 'seeded', '')).strip()
     tidy = declutter(raw)
     # noise an AI can discount; emptiness it cannot. If decluttering took the words out with the
-    # chrome, hand over the rendered text instead of nothing.
-    return (tidy if letters(tidy) >= 160 else raw)[-chars:]
+    # chrome, hand over the rendered text instead of nothing - minus the gutter either way.
+    return (tidy if letters(tidy) >= 160 else degutter(raw).strip())[-chars:]
 
 
 def rules_text(store, chars: int = DOC_CHARS) -> str:

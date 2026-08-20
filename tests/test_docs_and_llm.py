@@ -9,15 +9,20 @@ class TemplateTests(unittest.TestCase):
     def test_docs_seeded_from_templates(self):
         s = MemoryStore()
         soul, coder = s.get_doc('soul'), s.get_doc('coder')
-        # the templates carry TOKENS, not a name: the owner's name lives in one setting and is
-        # filled in when an AI reads the doc, so changing it changes all nine places at once
-        self.assertIn('{{owner}}', soul); self.assertIn('{{owner_first}}', coder)
-        self.assertNotIn('John', soul); self.assertNotIn('John', coder)
+        # the OPEN-SOURCE docs read as a person, not token soup: John Smith is the example.
+        # A real owner converts every mention at once - via retoken + the one setting.
+        self.assertIn('John Smith', soul); self.assertIn('John', coder)
+        self.assertEqual(s.owner()['owner'], 'the owner')       # the example is not an identity
         s.set_setting('owner_name', 'Dana Reyes', 'owner')
         s.set_setting('owner_email', 'dana@northwind.example', 'owner')
+        from taskuary.store import retoken_doc
+        for name in ('soul', 'coder'):                          # what _heal_owner_docs does at launch
+            s.save_doc(name, retoken_doc(retoken_doc(s.get_doc(name), 'John Smith', 'john.smith@example.com'),
+                                         'Dana Reyes', 'dana@northwind.example'), 'test')
         self.assertIn('Dana Reyes', s.doc('soul'))
         self.assertIn('dana@northwind.example', s.doc('soul'))
         self.assertIn('Dana is', s.doc('coder'))                # {{owner_first}}, in prose
+        self.assertNotIn('John', s.doc('soul'))
         self.assertNotIn('{{owner', s.doc('soul'))              # nothing unresolved reaches the AI
         self.assertIn(docsync.CONN_START, soul)
         self.assertIn('Closing out', coder)      # no report contract: the transcript IS the report
@@ -47,7 +52,7 @@ class DocSyncTests(unittest.TestCase):
         self.assertIn('GitHub: you/repo', soul)
         self.assertIn('Report "Census" (mssql, every 30m)', soul)
         # prose outside the markers untouched
-        self.assertIn('{{owner}}', soul)
+        self.assertIn('John Smith', soul)
 
     def test_update_repo_map_preserves_notes(self):
         s = MemoryStore()

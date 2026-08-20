@@ -101,6 +101,10 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
         );
       })}
       {err && <Typography variant="caption" sx={{ color: "#b91c1c", display: "block" }}>{err}</Typography>}
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+        Paths saved here land on the agent — also editable in bulk under Settings → Agents
+        (the repo → dir map).
+      </Typography>
       {picked && (
         <Button size="small" sx={{ fontSize: 10.5, color: DIM }} disabled={busy}
           onClick={async () => { setBusy(true); await api.put(`/api/tasks/${taskId}/repo`, { repo: null, agent }); setBusy(false); load(); onDone?.({}); }}>

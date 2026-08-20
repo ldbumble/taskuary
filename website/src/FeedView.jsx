@@ -470,10 +470,22 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // you usually realise it is somebody else's job while reading it here, not after opening
   // the Tasks tab - so the hand-off form opens in this panel too
   const [handoff, setHandoff] = useState(false);
+  // a reply opened from THIS panel on a message with no pending review
+  const [opened, setOpened] = useState(null);
+  const [opening, setOpening] = useState(false);
+  const openReply = async () => {
+    setOpening(true);
+    try {
+      const { data } = await api.post(`/api/messages/${sel.MessageId}/reply`, {});
+      setOpened({ reviewId: data.reviewId, draft: data.draft || "" });
+      onRefresh?.();
+    } catch (e) { /* the row's hint stays; nothing sent */ }
+    setOpening(false);
+  };
   // the same realisation - "this is not one job" - usually arrives while reading the mail,
   // so the fix is offered here too; the form itself is a drawer, since this panel is narrow
   const [reshape, setReshape] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); }, [sel.MessageId]);
+  useEffect(() => { setHandoff(false); setReshape(false); setOpened(null); setOpening(false); }, [sel.MessageId]);
   const skipSender = async () => {
     const { data } = await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
       Action: "skip", Reason: "flood sender — skipped from the timeline", SortOrder: 10, Active: true });
@@ -563,6 +575,23 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     sendErr={sendErr} clearSendErr={clearSendErr} />
                 </>
               )}
+              {/* no reply on the table (the coder ran, or triage filed it) - put one there. The
+                  box was simply UNREACHABLE from here before: nothing pending meant no way to
+                  answer at all. */}
+              {!pending && opened && (
+                <>
+                  <PanelLabel>Draft reply — review, edit, approve</PanelLabel>
+                  <ReviewActions reviewId={opened.reviewId} draft={opened.draft}
+                    editText={editText} setEditText={setEditText} decide={decide}
+                    sendErr={sendErr} clearSendErr={clearSendErr} />
+                </>
+              )}
+              {!pending && !opened && sel.Channel !== "report" && (
+                <ChoiceRow tint="#eef0ff" busy={opening} onClick={openReply}
+                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                  label="Reply to this"
+                  hint="the AI drafts it from the thread (and the coder's report, if one ran) — approving sends" />
+              )}
 
             </>
           )}
@@ -605,6 +634,17 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               )}
               {/* not ours -> the reason goes to memory, and triage reads it next time */}
               <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
+              {/* ...and the lighter verdict: THIS one is just chatter (someone said "yes"),
+                  nothing to learn about the sender - the task goes, their mail keeps flowing */}
+              {sel.TaskId && (
+                <ChoiceRow tint="#f4f5f7" onClick={async () => {
+                    await api.post(`/api/tasks/${sel.TaskId}/not-a-task`, { learn: false });
+                    onSkipped?.();
+                  }}
+                  icon={<CloseIcon sx={{ fontSize: 14, color: "#697386" }} />}
+                  label="Not a task — just conversation"
+                  hint={`delete ${ref(sel.TaskId)}, learn nothing; the messages stay on the timeline`} />
+              )}
               {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
                 <ChoiceRow tint="#e8f6ee" busy
                   icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}

@@ -424,9 +424,12 @@ class RepoRoutingTests(unittest.TestCase):
         self.assertEqual(terminal.guess_repo(server.store, pay, prof)[0], 'mfaVita/FanApp')
 
     def test_a_repo_with_no_path_refuses_instead_of_opening_the_wrong_folder(self):
-        with self.assertRaises(ValueError) as e:
+        # find_checkout scans the REAL disk now, so the refusal only fires on a genuine miss -
+        # pin that with a search that must come up empty
+        with mock.patch.object(terminal, 'find_checkout', return_value=None),              self.assertRaises(ValueError) as e:
             terminal.open_session(server.store, 'coder', self._task('x'), 'mfaVita/TopE')
         self.assertIn('no local path for mfaVita/TopE', str(e.exception))
+        self.assertIn('search of your code folders', str(e.exception))
         self.assertIn('Pick the repository', str(e.exception))    # the fix is ON the task now
         self.assertIn('wrong tree', str(e.exception))
 

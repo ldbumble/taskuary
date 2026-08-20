@@ -13,6 +13,7 @@ import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
+import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
@@ -20,6 +21,7 @@ import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import { TerminalPane } from "./TerminalView.jsx";
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
@@ -120,7 +122,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
   const [handoff, setHandoff] = useState(false);
   const [reshape, setReshape] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); }, [selected]);
+  const [repoPick, setRepoPick] = useState(false);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); }, [selected]);
   // A fold DROPS the task you were looking at, so follow the work to the survivor - staying
   // put would leave the detail pane on a task that no longer holds anything.
   const reshaped = (r) => {
@@ -237,6 +240,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     sx={{ bgcolor: PANEL, color: reshape ? "#0e7490" : undefined }}
                     onClick={() => setReshape((r) => !r)}
                     title="Two jobs in here, or the same job twice? Break it in two, or fold it into another task">Split / merge</Button>
+                  <Button size="small" variant="outlined" startIcon={<AccountTreeIcon sx={{ fontSize: 15 }} />}
+                    sx={{ bgcolor: PANEL, color: repoPick ? "#4f46e5" : undefined }}
+                    onClick={() => setRepoPick((r) => !r)}
+                    title="Which checkout is this task about? Taskuary guessed one - override it here">
+                    {repoOf(t) || "Repo"}</Button>
                   <Button size="small" color="error" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 14 }} />}
                     sx={{ bgcolor: PANEL }} onClick={notATask}>Not a task</Button>
                   <Tooltip title="Close — back to the list (the task stays)">
@@ -255,6 +263,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     reference material about the same task, folded away. */}
                 {/* the session just closed: its write-up takes the space the terminal had, so the
                     result of the work is the thing you are looking at */}
+                {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
+                    good faith, so it is stated on the page rather than buried in the prompt. */}
+                {repoPick && (
+                  <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
+                      <AccountTreeIcon sx={{ fontSize: 16, color: "#4f46e5" }} />
+                      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1 }}>
+                        Which repository is this about?
+                      </Typography>
+                      <IconButton size="small" onClick={() => setRepoPick(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+                    </Box>
+                    <RepoPicker taskId={selected} agent={term?.agent || run.agent || "coder"}
+                      hasSession={!!term?.alive}
+                      onDone={() => { loadDetail(selected); loadTasks(); findTerm(selected); }} />
+                  </Box>
+                )}
                 {wrapping && !wrapped ? (
                   <Box sx={{ ...card, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>

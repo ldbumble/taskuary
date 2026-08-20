@@ -11,7 +11,7 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![The Taskuary timeline: every inbound item on a day rail, with the AI-drafted reply ready to approve](docs/screenshot-timeline.png)
+![The Taskuary timeline: every inbound item on a day rail, the AI-drafted reply ready to approve, and one list of what could happen with it - send it to a coding agent, hand it to a person, break it in two or fold it into the task it duplicates](docs/screenshot-timeline.png)
 
 ## Why
 

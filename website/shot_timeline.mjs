@@ -1,5 +1,6 @@
-import puppeteer from "puppeteer-core";
-const b = await puppeteer.launch({ executablePath: "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", headless: "new" });
+import { fileURLToPath } from "node:url";
+import { launch } from "./browser.mjs";
+const b = await launch();
 const p = await b.newPage();
 await p.setViewport({ width: 1600, height: 920, deviceScaleFactor: 1.25 });
 await p.goto(process.argv[2], { waitUntil: "networkidle0" });
@@ -13,6 +14,9 @@ await p.evaluate(() => {
   rows[rows.length - 1]?.click();
 });
 await new Promise((r) => setTimeout(r, 1500));
-await p.screenshot({ path: new URL("../docs/screenshot-timeline.png", import.meta.url), clip: { x: 0, y: 0, width: 1600, height: 860 } });
+// a plain path, not a URL object: puppeteer sniffs the type off the extension with
+// lastIndexOf, which a URL does not have
+await p.screenshot({ path: fileURLToPath(new URL("../docs/screenshot-timeline.png", import.meta.url)),
+                    clip: { x: 0, y: 0, width: 1600, height: 860 } });
 await b.close();
 console.log("timeline shot ok");

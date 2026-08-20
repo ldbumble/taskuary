@@ -9,7 +9,16 @@ class TemplateTests(unittest.TestCase):
     def test_docs_seeded_from_templates(self):
         s = MemoryStore()
         soul, coder = s.get_doc('soul'), s.get_doc('coder')
-        self.assertIn('John Smith', soul); self.assertIn('John Smith', coder)
+        # the templates carry TOKENS, not a name: the owner's name lives in one setting and is
+        # filled in when an AI reads the doc, so changing it changes all nine places at once
+        self.assertIn('{{owner}}', soul); self.assertIn('{{owner_first}}', coder)
+        self.assertNotIn('John', soul); self.assertNotIn('John', coder)
+        s.set_setting('owner_name', 'Dana Reyes', 'owner')
+        s.set_setting('owner_email', 'dana@northwind.example', 'owner')
+        self.assertIn('Dana Reyes', s.doc('soul'))
+        self.assertIn('dana@northwind.example', s.doc('soul'))
+        self.assertIn('Dana is', s.doc('coder'))                # {{owner_first}}, in prose
+        self.assertNotIn('{{owner', s.doc('soul'))              # nothing unresolved reaches the AI
         self.assertIn(docsync.CONN_START, soul)
         self.assertIn('Closing out', coder)      # no report contract: the transcript IS the report
         self.assertTrue(s.get_doc('digest'))
@@ -38,7 +47,7 @@ class DocSyncTests(unittest.TestCase):
         self.assertIn('GitHub: you/repo', soul)
         self.assertIn('Report "Census" (mssql, every 30m)', soul)
         # prose outside the markers untouched
-        self.assertIn('John Smith', soul)
+        self.assertIn('{{owner}}', soul)
 
     def test_update_repo_map_preserves_notes(self):
         s = MemoryStore()

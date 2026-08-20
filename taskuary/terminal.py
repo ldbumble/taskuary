@@ -411,7 +411,7 @@ def rules_text(store, chars: int = DOC_CHARS) -> str:
     """CODER.md, flattened. The doc says it is 'stacked on top of SOUL.md for every coder run'
     - it never was: these docs live in Taskuary's own database, nowhere the agent can read, so
     the rules only reach a session if the prompt carries them."""
-    doc = str(store.get_doc('coder') or '')
+    doc = str(store.doc('coder') or '')
     keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip()
             for l in doc.splitlines() if l.strip()]
     return ' '.join(' '.join(keep).split())[:chars]
@@ -463,7 +463,7 @@ _REPO_LINE = re.compile(r'^-\s+\*\*([^*]+)\*\*:\s*(.*)$', re.M)
 def repo_map(store) -> dict:
     """{repo: what it is} out of SOUL.md's repo map - the routing table the operator doc already
     keeps. It is the answer to "which repo is this about", written down once."""
-    return {mt.group(1).strip(): mt.group(2).strip() for mt in _REPO_LINE.finditer(str(store.get_doc('soul') or ''))}
+    return {mt.group(1).strip(): mt.group(2).strip() for mt in _REPO_LINE.finditer(str(store.doc('soul') or ''))}
 
 
 def task_blob(store, tid: int) -> str:

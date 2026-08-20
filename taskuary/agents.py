@@ -193,9 +193,9 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
     try:
         ctx = task_context(store, task_id)
         mem = memory_block(store, store.list_messages(task_id))
-        soul = store.get_doc('soul')
+        soul = store.doc('soul')
         if agent.get('Kind') == 'coding':
-            cdoc = store.get_doc('coder')
+            cdoc = store.doc('coder')
             if cdoc: soul = f'{soul}\n\n{cdoc}' if soul else cdoc
         prompt = ((f"Operator's document (authoritative rules):\n{soul}\n\n---\n\n" if soul else '')
                   + ctx + (f'\n\n{mem}' if mem else '') + f'\n\nInstruction: {instruction}')

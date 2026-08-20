@@ -60,10 +60,20 @@ def send_teams(store, chat_id: str, body: str) -> dict:
     r = requests.post(f'{GRAPH}/chats/{chat_id}/messages', timeout=30,
                       headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'},
                       data=json.dumps({'body': {'contentType': 'text', 'content': body}}))
-    if r.status_code == 403:
-        raise RuntimeError('Teams refused the post (403). App-only posting needs the ChatMessage.Send '
-                           'application permission on your app registration - reading chats does not include it. '
-                           'Add it (admin consent), or hand off by email instead.')
+    if r.status_code in (401, 403):
+        # Graph explains itself and we used to throw that away, so a chat that CANNOT be posted to
+        # (someone outside the tenant is in it) read as a permission you had forgotten to grant.
+        try: said = str(((r.json() or {}).get('error') or {}).get('message') or '')
+        except ValueError: said = r.text[:300]
+        low = said.lower()
+        if any(w in low for w in ('federat', 'external', 'guest', 'cross-tenant', 'crosstenant')):
+            why = ('someone outside your tenant is in this chat, and Graph does not let an app post into '
+                   'a federated chat at all - no permission changes that. Reply by email instead.')
+        else:
+            why = ('app-only posting needs the ChatMessage.Send APPLICATION permission on your app '
+                   'registration, with admin consent - reading chats does not include it.')
+        raise RuntimeError(f'Teams refused the post ({r.status_code}): {why}'
+                           + (f' Graph said: "{said[:200]}"' if said else ''))
     if r.status_code >= 300:
         raise RuntimeError(f'graph chat post failed ({r.status_code}): {r.text[:300]}')
     return {'channel': 'teams', 'chat': chat_id}
@@ -99,5 +109,5 @@ def draft_handoff(store, task_id: int, to: str, note: str = None, llm=None) -> s
     if not llm: raise RuntimeError('no AI connector is set up to write the message')
     ctx = hub_agents.task_context(store, task_id)
     ask = f'Forward this to {to}.' + (f' The owner adds: {note}' if note else '')
-    out = llm(f"{HANDOFF_SYSTEM}\n\n{store.get_doc('soul') or ''}", f'{ask}\n\n{ctx}', max_tokens=700)
+    out = llm(f"{HANDOFF_SYSTEM}\n\n{store.doc('soul') or ''}", f'{ask}\n\n{ctx}', max_tokens=700)
     return (out or '').strip()

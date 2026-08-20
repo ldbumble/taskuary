@@ -38,7 +38,7 @@ dependencies = [
 mssql = ["pyodbc>=4"]
 desktop = ["pywebview>=4"]
 build = ["pyinstaller>=6"]
-dev = ["pytest>=7", "httpx>=0.24"]
+dev = ["pytest>=7", "httpx>=0.24", "openpyxl>=3"]   # openpyxl READS xlsx in tests; the writer is ours
 
 [project.urls]
 Homepage = "https://github.com/ldbumble/taskuary"

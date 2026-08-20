@@ -85,9 +85,10 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
               + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else ''))
     if notes:
         system += '\n\nStanding notes from the owner:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
+    from .triage import strip_boilerplate
     thread = '\n\n'.join(
         f"--- {'YOU' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail'))}"
-        f" · {m.get('SentAt')} · {m.get('Channel')}\n{str(m.get('BodyText') or '')[:4000]}"
+        f" · {m.get('SentAt')} · {m.get('Channel')}\n{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}"
         for m in store.list_messages(task_id)[-6:])
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'

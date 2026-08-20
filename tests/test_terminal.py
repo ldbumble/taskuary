@@ -277,6 +277,24 @@ class TerminalTests(unittest.TestCase):
             terminal.close(ses['sid'])
 
 
+    def test_the_seed_carries_the_message_not_the_signature(self):
+        """Corporate mail is half signature and legal footer, and all of it rode into every
+        session prompt - context spent on a confidentiality NOTICE instead of the ask."""
+        tid = c.post('/api/tasks', json={'Title': 'reimbursement error', 'Kind': 'coding'}).json()['taskId']
+        server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:SIG1', 'Channel': 'email',
+                                  'FromName': 'Dana Reyes', 'Subject': 'Reimbursement App',
+                                  'BodyText': chr(10).join([
+                                      'I am seeing ????? at the end of each transaction.', '',
+                                      'Thank you,', '', 'Dana Reyes', 'Director of Payroll',
+                                      'Phone: 555-0100', '',
+                                      'NOTICE: This confidential message contains information intended '
+                                      'for a specific individual and purpose.'])})
+        seed = terminal.seed_text(server.store, tid)
+        self.assertIn('????? at the end of each transaction', seed)
+        self.assertNotIn('NOTICE', seed)
+        self.assertNotIn('Phone: 555-0100', seed)
+        self.assertNotIn('Director of Payroll', seed)
+
     def test_agents_open_issues_only_when_the_setting_says_so(self):
         """Off (the default): the seed forbids tracker items and the SOUL.md tool blurb scopes
         writes to the ask. On: both sides grant the licence. One switch, both documents."""
@@ -284,6 +302,10 @@ class TerminalTests(unittest.TestCase):
         tid = c.post('/api/tasks', json={'Title': 'issue policy probe', 'Kind': 'coding'}).json()['taskId']
         server.store.set_setting('agent_issues_enabled', '0', 'test')
         self.assertIn('Do NOT create GitHub issues', terminal.seed_text(server.store, tid))
+        self.assertIn('Do NOT push, deploy', terminal.seed_text(server.store, tid))
+        server.store.set_setting('agent_push_enabled', '1', 'test')
+        self.assertIn('may push and deploy', terminal.seed_text(server.store, tid))
+        server.store.set_setting('agent_push_enabled', '0', 'test')
         self.assertIn('never issues or tracker items', docsync.role_text(server.store, 'tool'))
         server.store.set_setting('agent_issues_enabled', '1', 'test')
         try:

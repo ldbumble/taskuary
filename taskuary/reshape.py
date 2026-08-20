@@ -36,10 +36,11 @@ MAX_SUMMARY = 4000
 def task_text(store, tid: int, msgs=None) -> str:
     """Everything the task knows about itself, as one blob: what it says it is, plus what
     was actually written to us."""
+    from .triage import strip_boilerplate as sb
     t = store.get_task(tid) or {}
     ms = msgs if msgs is not None else store.list_messages(tid)
-    return '\n'.join([t.get('Title') or '', str(t.get('Summary') or '')[:2000]]
-                     + [f"{m.get('Subject') or ''}\n{str(m.get('BodyText') or '')[:2000]}" for m in ms])
+    return '\n'.join([t.get('Title') or '', sb(str(t.get('Summary') or ''))[:2000]]
+                     + [f"{m.get('Subject') or ''}\n{sb(str(m.get('BodyText') or ''))[:2000]}" for m in ms])
 
 
 # An ask is a line that tells someone to do something. Two of them in one message is the

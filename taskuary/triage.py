@@ -35,10 +35,13 @@ def heuristic_intent(msg: dict) -> dict:
     return {'intent': 'task', 'why': 'default'}
 
 
-def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None) -> dict:
+def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None) -> dict:
     """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
     they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
-    'Not our task' stick: the next message like it is classified with that lesson in hand."""
+    'Not our task' stick: the next message like it is classified with that lesson in hand.
+
+    `images` are the attached screenshots, for a model that can see them. Half of "see below"
+    mail says nothing in its body - triage read three words and filed it as informational."""
     if llm:
         try:
             system = INTENT_SYSTEM + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
@@ -48,7 +51,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None) -
                            + '\n'.join(f'- {n}' for n in notes[:20])[:2000])
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
                                'body': str(msg.get('body') or '')[:1500]})
-            j = json.loads(re.sub(r'^```(json)?|```$', '', llm(system, user).strip(), flags=re.M))
+            if images:
+                system += ('\n\nImages from the message are attached. They are part of the ask - a '
+                           'screenshot of the error IS the request. Read them before deciding.')
+            out = llm(system, user, images=images) if images else llm(system, user)
+            j = json.loads(re.sub(r'^```(json)?|```$', '', out.strip(), flags=re.M))
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
                 return {'intent': j['intent'], 'why': str(j.get('why') or '')[:200]}
         except Exception:

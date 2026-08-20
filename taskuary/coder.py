@@ -82,7 +82,10 @@ def reply_target(store, task_id: int):
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder') -> dict:
     """The end of finished work: the responder drafts the reply the sender gets and the task waits
     on you to send it. Nothing to reply to means nothing to wait for, so it just closes."""
-    mid = reply_target(store, task_id)
+    # a held draft is itself proof there is someone waiting on an answer, so it names the message
+    # to reply to when reply_target cannot find one (a chat thread, a promoted feed item)
+    held = store.held_review(task_id) or {}
+    mid = reply_target(store, task_id) or held.get('MessageId')
     if mid: raise_reply(store, task_id, mid, run_id, rep)
     store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
     return {'drafting': bool(mid), 'message_id': mid}
@@ -91,9 +94,19 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
     """The session reported; the responder writes what the sender actually reads. One voice for
     every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
-    that fails to write still leaves the review standing: 'Draft with AI' retries it."""
+    that fails to write still leaves the review standing: 'Draft with AI' retries it.
+
+    A reply triage already drafted from the mail alone was HELD when the session started - it
+    promised what the agent had not looked at yet. That same review comes back here and is
+    rewritten from the report, so the sender gets one answer, and it is the true one."""
     from . import responder
-    rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply',
-                            'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
+    held = store.held_review(task_id, mid) or store.held_review(task_id)
+    if held:
+        rid = held['ReviewId']
+        store.unhold_review(rid, 'the agent finished - the reply is rewritten from what it found')
+        store.update_review_reason(rid, 'the agent finished - the reply is rewritten from what it found', run_id)
+    else:
+        rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply',
+                                'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
     try: responder.write_draft(store, task_id, rid, resolution_text(rep), 'coder')
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')

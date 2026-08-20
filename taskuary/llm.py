@@ -9,9 +9,38 @@ triage.classify_intent expects. Which brain is the owner's choice (setting `tria
 Cloud keys are cheap and instant per message; a CLI run is slower and heavier but keeps
 everything on one model (and one bill). Configure it in Settings -> Triage & routing.
 """
-import json, requests
+import base64, json, mimetypes, requests
+from pathlib import Path
 
 AI_TYPES = ('anthropic', 'openai', 'azure_openai')
+
+# What a vision model will look at. "See below." is half the mail this app reads, and below was
+# a screenshot - a text-only funnel filed the sentence and threw the actual ask away.
+VISION_TYPES = ('image/png', 'image/jpeg', 'image/gif', 'image/webp')
+VISION_MAX, VISION_BYTES = 4, 5 * 1024 * 1024      # per call: how many images, and how big each
+
+
+def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
+    """[(media_type, base64)] for the images on these messages, or [] when the owner has vision
+    switched off. SVG and PDF are skipped: no provider takes them as image input."""
+    if str(store.get_settings().get('vision_enabled') or '1') != '1': return []
+    out = []
+    for mid in message_ids or []:
+        for a in store.list_attachments(mid):
+            if len(out) >= cap: return out
+            ct = str(a.get('ContentType') or '').split(';')[0].lower()
+            path = a.get('Path')
+            if not path: continue
+            if ct not in VISION_TYPES:
+                ct = mimetypes.guess_type(path)[0] or ''
+                if ct not in VISION_TYPES: continue
+            f = Path(path)
+            try:
+                if not f.is_file() or f.stat().st_size > VISION_BYTES: continue
+                out.append((ct, base64.b64encode(f.read_bytes()).decode()))
+            except OSError:
+                continue
+    return out
 # Triage answers with a one-line JSON object, so it needs almost nothing. A report SUMMARY
 # needs room - and on a reasoning model a small budget is spent thinking and the visible
 # answer comes back EMPTY, which is how reports ended up filing raw data with no summary.
@@ -25,9 +54,10 @@ def make_cli_llm(store, agent_name: str):
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
-    def llm(system, user, max_tokens=MAX_TOKENS):
-        """max_tokens is advisory here - a CLI has no such flag; the system prompt already
-        says how long the answer should be."""
+    def llm(system, user, max_tokens=MAX_TOKENS, images=None):
+        """max_tokens is advisory here - a CLI has no such flag; the system prompt already says
+        how long the answer should be. `images` is accepted and dropped: a CLI reads files off
+        disk itself, and the prompt already names their paths."""
         from .agents import run_cli
         out, _sid, _diff = run_cli(prof, f'{system}\n\n{user}', lambda *a: None)
         return out
@@ -51,9 +81,12 @@ def make_llm(t, cfg: dict, key: str):
         import anthropic
         cli = anthropic.Anthropic(api_key=key)
         model = cfg.get('model') or 'claude-opus-5'
-        def llm(system, user, max_tokens=MAX_TOKENS):
+        def llm(system, user, max_tokens=MAX_TOKENS, images=None):
+            # images FIRST: every provider reads a picture better when the question follows it
+            content = ([{'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}}
+                        for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
             r = cli.messages.create(model=model, max_tokens=max_tokens, system=system,
-                                    messages=[{'role': 'user', 'content': user}])
+                                    messages=[{'role': 'user', 'content': content}])
             if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
             return next((b.text for b in r.content if b.type == 'text'), '')
         return llm
@@ -72,11 +105,13 @@ def make_llm(t, cfg: dict, key: str):
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
 
-    def llm(system, user, max_tokens=MAX_TOKENS):
+    def llm(system, user, max_tokens=MAX_TOKENS, images=None):
         # two independent compat axes: newer models reject max_tokens ("use
         # max_completion_tokens"), older Azure api-versions reject max_completion_tokens,
         # and older Azure resources 404 the v1 url - walk the grid until one works
-        msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}]
+        content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{b64}'}}
+                    for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
+        msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}]
         last = None
         for url in urls:
             for tok_param in ('max_completion_tokens', 'max_tokens'):

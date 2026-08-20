@@ -56,8 +56,17 @@ const KNOB_META = {
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days of messages the Timeline shows. Display only — nothing is deleted.",
     help: "Purely a display window for the Timeline tab. Older messages remain in the database and in task histories." },
+  startup_sync_days: { group: "Attachments & images", label: "Catch-up on startup (days)", type: "number",
+    desc: "How far back to reach when the app opens, to pull in what arrived while it was closed.",
+    help: "Taskuary is not a service - it is a window you open, so 'anything since I last polled' is the wrong question after a weekend off. On startup every trigger connection is asked for this many days, which only ever WIDENS the window: a source last polled a month ago is not pulled forward. 0 turns the catch-up off and startup just does a normal incremental poll." },
+  vision_enabled: { group: "Attachments & images", label: "Let the AI see attached images", type: "switch",
+    desc: "Send attached screenshots to the AI, so \"see below\" mail is read rather than guessed at.",
+    help: "Half of 'see below' mail says nothing in its body - the screenshot of the error IS the request, and a text-only funnel filed the sentence and threw the ask away. On: PNG/JPEG/GIF/WebP attachments (up to 4 per message, 5MB each) are sent alongside the text when the triage brain can see them. SVG and PDF are skipped - no provider takes them as image input. A CLI brain ignores this and opens the files off disk instead: the session prompt names their paths. Off: only the text is ever sent, which is also the setting to use if your model has no vision or you would rather images never leave the machine." },
+  report_images_enabled: { group: "Attachments & images", label: "Charts on reports", type: "switch",
+    desc: "A report hands back a bar chart as well as the spreadsheet, and the AI picks what to plot.",
+    help: "A report already produces rows, so the same run hands back an .xlsx to open and an .svg chart drawn in the panel. The summarising model - which has just read every row - names the column worth plotting on a CHART: line, which beats a heuristic hunting for 'all numeric' and picking the id column; that line is an instruction to Taskuary and never reaches the reader. Off: the spreadsheet is still attached, there is just no chart." },
 };
-const GROUPS = ["Triage & routing", "Drafting & replies", "Coder agent", "Display", "Other"];
+const GROUPS = ["Triage & routing", "Drafting & replies", "Coder agent", "Attachments & images", "Display", "Other"];
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
 const SECTION_HELP = {

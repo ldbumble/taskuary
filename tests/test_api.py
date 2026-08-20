@@ -37,6 +37,66 @@ class ApiTests(unittest.TestCase):
         # explicit nulls must be accepted across the board (create-task dialog sends them)
         self.assertEqual(c.post('/api/tasks', json={'Title': 't2', 'Summary': None, 'Tags': None}).status_code, 200)
 
+    def test_split_suggest_asks_the_brain_and_split_makes_the_second_task(self):
+        tid = c.post('/api/tasks', json={'Title': 'PTO import failing',
+                                         'Summary': 'Please fix the mapping. Also add the 112 active employees.'}).json()['taskId']
+        with mock.patch.object(server, '_llm', lambda: (lambda sysmsg, user, mt=None:
+                '{"two": true, "why": "two asks", "first": {"title": "Fix the mapping", "summary": "x"},'
+                ' "second": {"title": "Add the 112 active employees", "summary": "y"}}')):
+            sug = c.get(f'/api/tasks/{tid}/split/suggest').json()
+        self.assertEqual((sug['ai'], sug['two'], sug['second']['title']), (True, True, 'Add the 112 active employees'))
+        # with no AI connector it still answers - the owner types the second job themselves
+        self.assertFalse(c.get(f'/api/tasks/{tid}/split/suggest').json()['ai'])
+        r = c.post(f'/api/tasks/{tid}/split', json={'first': sug['first'], 'second': sug['second']})
+        new = r.json()['taskId']
+        self.assertEqual(c.get(f'/api/tasks/{new}').json()['task']['Title'], 'Add the 112 active employees')
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Title'], 'Fix the mapping')
+        self.assertEqual(c.post(f'/api/tasks/{tid}/split', json={'second': {'title': ''}}).status_code, 422)
+        self.assertEqual(c.get('/api/tasks/999999/split/suggest').status_code, 404)
+
+    def test_merge_folds_one_task_into_the_other_and_refuses_nonsense(self):
+        keep = c.post('/api/tasks', json={'Title': 'Roster work', 'Summary': 'add the employees'}).json()['taskId']
+        dupe = c.post('/api/tasks', json={'Title': 'Add the employees to the roster'}).json()['taskId']
+        cands = c.get(f'/api/tasks/{dupe}/merge-candidates').json()['data']
+        self.assertIn(keep, [x['task_id'] for x in cands])
+        self.assertTrue(all('why' in x and 'ref' in x for x in cands))
+        out = c.post(f'/api/tasks/{dupe}/merge', json={'into': keep}).json()
+        self.assertEqual(out['task_id'], keep)
+        self.assertEqual(c.get(f'/api/tasks/{dupe}').json()['task']['Status'], 'dropped')
+        self.assertEqual(c.post(f'/api/tasks/{keep}/merge', json={'into': keep}).status_code, 422)
+        self.assertEqual(c.post(f'/api/tasks/{keep}/merge', json={'into': 999999}).status_code, 404)
+
+    def test_attachments_are_kept_served_and_counted(self):
+        """"See below" mail is a screenshot with a sentence on top - a text-only funnel threw the
+        actual ask away. The bytes go to disk, the panel draws the images, the row shows a clip."""
+        import base64
+        from taskuary import channels
+        mid = server.store.add_message({'ExternalId': 'graph:ATT1', 'Channel': 'email', 'Subject': 'Payroll File Imports',
+                                        'FromEmail': 'dreyes@northwind.example', 'SentAt': '2026-08-19 15:03',
+                                        'BodyText': 'We need to fix this error. See below.', 'Status': 'filed'})
+        png = base64.b64encode(bytes.fromhex('89504e470d0a1a0a')).decode()
+        channels.save_attachments(server.store, mid, [
+            {'id': 'a1', 'name': 'payroll.png', 'contentType': 'image/png', 'size': 8, 'isInline': True, 'contentBytes': png},
+            {'id': 'a2', 'name': 'ledger.xlsx', 'size': 4096,
+             'contentType': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'contentBytes': png},
+            {'id': 'a3', 'name': 'forwarded mail', 'size': 900},          # itemAttachment: no bytes to keep
+        ], 'graph:ATT1')
+        rows = c.get(f'/api/messages/{mid}/attachments').json()['data']
+        self.assertEqual([r['name'] for r in rows], ['payroll.png', 'ledger.xlsx', 'forwarded mail'])
+        self.assertEqual([r['is_image'] for r in rows], [True, False, False])
+        self.assertIsNone(rows[2]['url'])                                  # nothing saved, so nothing to serve
+        img = c.get(rows[0]['url'])
+        self.assertEqual((img.status_code, img.headers['content-type']), (200, 'image/png'))
+        self.assertIn('inline', img.headers.get('content-disposition', ''))
+        self.assertIn('attachment', c.get(rows[1]['url']).headers.get('content-disposition', ''))
+        self.assertEqual(c.get(f'/api/attachments/{rows[2]["id"]}').status_code, 404)
+        # re-running the same Graph payload never duplicates them, and the feed row carries the count
+        self.assertEqual(channels.save_attachments(server.store, mid, [{'id': 'a1', 'name': 'payroll.png'}], 'graph:ATT1'), 0)
+        row = next(r for r in c.get('/api/feed').json()['data'] if r['MessageId'] == mid)
+        self.assertEqual(row['Attachments'], 3)
+        self.assertEqual(c.post(f'/api/messages/{mid}/attachments/fetch', json={}).status_code, 422)  # no Outlook connection
+        self.assertEqual(c.get('/api/messages/999999/attachments').status_code, 404)
+
     def test_settings_roundtrip(self):
         self.assertEqual(c.patch('/api/settings', json={'name': 'feed_days', 'value': '7'}).json(), {'ok': True})
         vals = {s['Name']: s['Value'] for s in c.get('/api/settings').json()['data']}

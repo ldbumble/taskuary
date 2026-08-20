@@ -14,6 +14,7 @@ REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText',
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
+ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
 
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
@@ -33,6 +34,10 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT);
+CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
+  Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
+CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
+  Agent TEXT, Cwd TEXT, Text TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER,
   Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS comment (CommentId INTEGER PRIMARY KEY, TaskId INTEGER, Actor TEXT,
@@ -59,9 +64,15 @@ CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, Sco
 CREATE TABLE IF NOT EXISTS doc (Name TEXT PRIMARY KEY, Content TEXT, UpdatedBy TEXT, UpdatedAt TEXT);
 """
 
-DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '0', 'attach_threshold': '0.42',
-                    'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '0',
-                    'triage_ai': ''}      # '' = first active AI connector | connector:<type> | cli:<agent>
+# Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
+# draft. Both stop short of anything leaving the building - a draft waits for you to send it,
+# and a session is one you watch - so ON is a safe default and OFF was just a slower start.
+DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
+                    'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
+                    'triage_ai': '',      # '' = first active AI connector | connector:<type> | cli:<agent>
+                    'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
+                    'vision_enabled': '1',          # send attached images to the AI, when the model can see
+                    'report_images_enabled': '1'}   # reports hand back a chart, and draw it in the body
 
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,
@@ -186,6 +197,23 @@ class SQLiteStore:
     def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
     def attach_message(self, mid, task_id):
         self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
+    # What was ON the mail: the screenshot of the spreadsheet, the invoice PDF. The bytes live on
+    # disk (`Path`) - a database that grows by 8MB a mail is a database nobody backs up.
+    def add_attachment(self, fields): return self._insert('attachment', fields, ATT_COLS, {'CreatedAt': _now()})
+    def list_attachments(self, mid): return self._rows('SELECT * FROM attachment WHERE MessageId=? ORDER BY AttachmentId', (mid,))
+    def get_attachment(self, aid): return self._one('SELECT * FROM attachment WHERE AttachmentId=?', (aid,))
+    def attachment_exists(self, external_id):
+        return self._one('SELECT 1 x FROM attachment WHERE ExternalId=?', (external_id,)) is not None
+    # A pty is not storage: the session's readable transcript is written here when it ends, so
+    # "Done - wrap it up" still works an hour later, on a task whose CLI has long since exited.
+    def add_transcript(self, task_id, sid, text, agent=None, cwd=None):
+        if not (text or '').strip(): return None
+        self._exec('DELETE FROM transcript WHERE Sid=?', (sid,))      # one row per session, always the latest
+        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,CreatedAt) VALUES (?,?,?,?,?,?)',
+                          (task_id, sid, agent, cwd, text, _now()))
+    def last_transcript(self, task_id):
+        return self._one('SELECT * FROM transcript WHERE TaskId=? ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
+
     def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router'):
         return self._exec('INSERT INTO route (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt) VALUES (?,?,?,?,?,?,?,?)',
                           (mid, tid, decision, score, reason, json.dumps(candidates), routed_by, _now()))
@@ -247,6 +275,18 @@ class SQLiteStore:
     def pending_review(self, task_id, kind=None):
         q = "SELECT * FROM review WHERE TaskId=? AND Status='pending'" + (" AND Kind=?" if kind else "") + " ORDER BY ReviewId DESC LIMIT 1"
         return self._one(q, (task_id, kind) if kind else (task_id,))
+    def hold_reviews(self, task_id, reason=None):
+        """Park this task's pending reply drafts while an agent works it. A draft written from the
+        mail alone promises what the session has not found yet - and it sat in Review as if it
+        were ready to send. Held leaves the queue; the wrap-up brings it back, rewritten."""
+        return self._exec("UPDATE review SET Status='held', Reason=COALESCE(?, Reason) "
+                          "WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply')",
+                          (reason, task_id))
+    def held_review(self, task_id, mid=None):
+        q = "SELECT * FROM review WHERE TaskId=? AND Status='held'" + (' AND MessageId=?' if mid else '') + ' ORDER BY ReviewId DESC LIMIT 1'
+        return self._one(q, (task_id, mid) if mid else (task_id,))
+    def unhold_review(self, rid, reason=None):
+        self._exec("UPDATE review SET Status='pending', Reason=COALESCE(?, Reason) WHERE ReviewId=?", (reason, rid))
     def update_review_reason(self, rid, reason, run_id=None):
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
     def update_review_draft(self, rid, draft, run_id):
@@ -332,7 +372,8 @@ class SQLiteStore:
                        (SELECT Reason FROM route WHERE MessageId=m.MessageId ORDER BY RouteId DESC LIMIT 1) RouteReason,
                        (SELECT ReviewId FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewId,
                        (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
-                       (SELECT Kind FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewKind
+                       (SELECT Kind FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewKind,
+                       (SELECT COUNT(*) FROM attachment a WHERE a.MessageId=m.MessageId) Attachments
                 FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
                 WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped') '''
         p = [f'-{int(days)} days']
@@ -356,7 +397,9 @@ class SQLiteStore:
     def task_detail(self, task_id):
         t = self.get_task(task_id)
         if not t: return None
-        return {'task': t, 'ref': task_ref(task_id), 'messages': self.list_messages(task_id),
+        msgs = self.list_messages(task_id)
+        return {'task': t, 'ref': task_ref(task_id), 'messages': msgs,
+                'attachments': [a for m in msgs for a in self.list_attachments(m['MessageId'])],
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
                 'reviews': self._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC', (task_id,))}

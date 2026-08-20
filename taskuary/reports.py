@@ -132,6 +132,15 @@ AI_SYSTEM = ('You summarize scheduled report data for a busy operator. Follow th
              'may be cut mid-way) - never describe a capped or truncated slice as complete, and say '
              'plainly when something the instruction asks about is not present in the rows you got.')
 
+# The rows come back as a spreadsheet and a chart, and the model that just read every row knows
+# which column is the measure better than a heuristic hunting for "all numeric" does.
+CHART_SYSTEM = ('\n\nThe rows are also turned into a bar chart for the reader. If ONE column is a '
+                'measure worth plotting, end your answer with a single line:\n'
+                'CHART: <value column> | <label column> | <short chart title>\n'
+                'Use the exact column names from the data. Omit the line entirely when the rows are '
+                'not worth plotting (no measure, one row, or every value the same) - a chart of '
+                'nothing is worse than no chart.')
+
 
 def run_sources(store, subs: list):
     """Several sources feeding ONE report: each runs on its own connection and query, the
@@ -165,7 +174,9 @@ def render_report(store, cfg: dict, llm=None):
         try:
             data = summary[:AI_CHARS]
             if len(summary) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
-            ai = (llm(AI_SYSTEM, f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{data}",
+            charts = str(store.get_settings().get('report_images_enabled') or '1') == '1'
+            ai = (llm(AI_SYSTEM + (CHART_SYSTEM if charts else ''),
+                      f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{data}",
                       max_tokens=SUMMARY_TOKENS) or '').strip()
             # an empty answer used to file as a bare '--- raw data ---' wall, which reads
             # like the prompt was never run. Say what happened instead.
@@ -207,13 +218,25 @@ def run_report_source(store, src: dict, llm=None) -> dict:
         subject, body = f'{title} — FAILED', f'Report error: {str(e)[:500]}'
         logger.warning(f'report {src["Address"]} failed: {e}')
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # the CHART: line is an instruction to Taskuary about what to draw, not prose for the reader:
+    # artifacts reads it off `body`, and what gets filed is the summary without it
+    from .artifacts import strip_directive
     mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}',
                              'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
                              'SourceName': title, 'Subject': subject, 'FromName': title,
-                             'SentAt': stamp, 'BodyText': body, 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+                             'SentAt': stamp, 'BodyText': strip_directive(body),
+                             'SourceLink': cfg.get('link'), 'Status': 'feed'})
     store.add_route(mid, None, 'feed', None, 'scheduled report - informational, never a task', [], 'report')
+    # the rows are the report: hand back the spreadsheet to open and the chart to look at, not
+    # just prose about them. Prose-only reports (an AI summary, a failure) produce neither.
+    try:
+        from .artifacts import attach_report_output
+        made = attach_report_output(store, mid, title, body)
+    except Exception as e:
+        made = []
+        logger.warning(f'report artifacts for {title} failed: {e}')
     store.audit('message', mid, 'report', 'report', 'agent', title)
-    return {'message_id': mid, 'subject': subject}
+    return {'message_id': mid, 'subject': subject, 'files': len(made)}
 
 
 def run_due_reports(store) -> int:

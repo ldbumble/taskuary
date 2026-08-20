@@ -62,7 +62,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                         fail['err'] = str(e)[:200]
                         raise
                 intent = classify_intent(msg, llm=_guarded, soul=store.get_doc('soul'),
-                                         notes=notes_for(store, msg))
+                                         notes=notes_for(store, msg), images=msg.get('images'))
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic
                     mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})

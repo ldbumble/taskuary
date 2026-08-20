@@ -295,6 +295,17 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 <Typography variant="body2" sx={{ fontWeight: 600, color: "#15803d" }}>✓ {preview.headline}</Typography>
                 <Box component="pre" sx={{ ...mono, whiteSpace: "pre-wrap", bgcolor: PANEL2, border: `1px solid ${BORDER}`,
                   borderRadius: 1.5, p: 1.25, fontSize: 11, maxHeight: 260, overflow: "auto", color: INK }}>{preview.summary}</Box>
+                {/* the chart is half of what a scheduled run hands back, so the dry run shows it too -
+                    rendered in memory server-side, since a preview files no message to attach it to */}
+                {preview.chart && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+                      The chart this report will hand back, from {preview.rows} row{preview.rows === 1 ? "" : "s"}:
+                    </Typography>
+                    <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "auto", bgcolor: "#fff" }}
+                      dangerouslySetInnerHTML={{ __html: preview.chart }} />
+                  </Box>
+                )}
               </Box>
             ) : <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#b91c1c" }}>✗ {preview.error}</Typography>)}
           </StepContent>

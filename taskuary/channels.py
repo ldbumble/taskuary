@@ -13,7 +13,7 @@ from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
-MAIL_SELECT = 'id,subject,from,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink'
+MAIL_SELECT = 'id,subject,from,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments'
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -164,6 +164,69 @@ def _clean(html):
 # Graph's bodyPreview is capped at 255 chars - reading it FIRST truncated every stored mail,
 # so the panel (and the agents) only ever saw the opening sentence. Full body wins.
 def _body(m): return (_clean((m.get('body') or {}).get('content')) or m.get('bodyPreview') or '')[:20000]
+
+# What rode along with the mail. Screenshots of the thing that is broken ARE the ask half the
+# time ("see below"), and a text-only funnel threw them away.
+ATT_MAX, ATT_BYTES = 12, 12 * 1024 * 1024      # per message: how many, and how big each may be
+_SAFE = re.compile(r'[^A-Za-z0-9._-]+')
+
+def save_attachments(store, mid: int, items: list, ext_prefix: str) -> int:
+    """Write the bytes to disk and the metadata to the db. Items are Graph fileAttachments;
+    anything without contentBytes (an attached mail, a OneDrive link) is recorded WITHOUT a
+    path, so the panel can still say it was there and point at the original."""
+    import base64
+    from .artifacts import attachment_dir
+    n = 0
+    for i, a in enumerate(items[:ATT_MAX]):
+        ext_id = f"{ext_prefix}:{a.get('id') or i}"
+        if store.attachment_exists(ext_id): continue
+        name = (a.get('name') or f'attachment-{i}')[:120]
+        raw = a.get('contentBytes')
+        path = None
+        if raw:
+            try: data = base64.b64decode(raw)
+            except Exception: data = b''
+            if data and len(data) <= ATT_BYTES:
+                f = attachment_dir(mid) / f'{i}-{_SAFE.sub("_", name)}'
+                f.write_bytes(data)
+                path = str(f)
+        store.add_attachment({'MessageId': mid, 'ExternalId': ext_id, 'Name': name,
+                              'ContentType': a.get('contentType') or 'application/octet-stream',
+                              'Size': int(a.get('size') or 0), 'ContentId': a.get('contentId'),
+                              'Inline': 1 if a.get('isInline') else 0, 'Path': path})
+        n += 1
+    return n
+
+
+def mail_attachments(tok: str, upn: str, graph_id: str) -> list:
+    """One message's attachments from Graph, raw. Called only when the mail says it has some -
+    an extra request per mail otherwise, for nothing."""
+    r = requests.get(f'{GRAPH}/users/{upn}/messages/{graph_id}/attachments',
+                     headers={'Authorization': f'Bearer {tok}'}, timeout=60)
+    r.raise_for_status()
+    return r.json().get('value', [])
+
+
+def fetch_mail_attachments(store, mid: int, tok: str, upn: str, graph_id: str) -> int:
+    return save_attachments(store, mid, mail_attachments(tok, upn, graph_id), f'graph:{graph_id}')
+
+
+def images_for_triage(store, items: list) -> list:
+    """[(media_type, base64)] for the pictures on a mail, straight from the Graph payload - so
+    triage can SEE them. They have to be read before the message row exists: the attachments used
+    to be saved after ingest, which meant the one classifying "See below." never saw what was
+    below it, and filed a screenshot of a stack trace as informational."""
+    from .llm import VISION_BYTES, VISION_MAX, VISION_TYPES
+    if str(store.get_settings().get('vision_enabled') or '1') != '1': return []
+    out = []
+    for a in items:
+        if len(out) >= VISION_MAX: break
+        ct = str(a.get('contentType') or '').split(';')[0].lower()
+        raw = a.get('contentBytes')
+        if ct not in VISION_TYPES or not raw or int(a.get('size') or 0) > VISION_BYTES: continue
+        out.append((ct, raw))                    # Graph already hands it over base64-encoded
+    return out
+
 
 def _local(iso):
     try: return datetime.fromisoformat(iso.replace('Z', '+00:00')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
@@ -329,16 +392,21 @@ def ingest_github_issues(store, repo: str, tok: str, since, llm=None, file_only=
     return n
 
 
-def _since(s):
-    if not s.get('LastPolledAt'): return datetime.now() - timedelta(days=1)
-    return datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T'))
+def _since(s, backfill_days: int = 0):
+    """How far back to ask this source for. `backfill_days` WIDENS the window without moving the
+    watermark - what the app does on startup, because whatever arrived while it was shut down was
+    never polled by anyone, and 'since I last ran' is the wrong question after a weekend off."""
+    last = (datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T')) if s.get('LastPolledAt')
+            else datetime.now() - timedelta(days=1))
+    return min(last, datetime.now() - timedelta(days=backfill_days)) if backfill_days else last
 
 
-def poll_channels(store) -> int:
+def poll_channels(store, backfill_days: int = 0) -> int:
     """Ingest new items for every connection the owner marked as a TRIGGER, through the
     same triage funnel (incl. the configured AI, if any). A connection without the trigger
     role is still usable by agents and reports - it just never creates work on its own.
-    Failures land on the card."""
+    Failures land on the card. `backfill_days` reaches further back than the watermark - see
+    _since; it is how startup catches up on mail that arrived while the app was closed."""
     from .llm import build_llm
     from .store import roles_of
     try: llm = build_llm(store)
@@ -359,7 +427,7 @@ def poll_channels(store) -> int:
                 tok = full.get('Secret')
             for s in store.list_sources():
                 if s['Channel'] != CH2SRC[c['Type']]: continue
-                since = _since(s)
+                since = _since(s, backfill_days)
                 if c['Type'] == 'outlook':
                     since_iso = since.astimezone().isoformat()
                     # your replies ride along as CONTEXT: attached to the thread's task,
@@ -370,13 +438,23 @@ def poll_channels(store) -> int:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
                         if (frm.get('address') or '').lower() == s['Address'].lower():
                             continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
+                        # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
+                        # triage and handed to it - then saved once the message row exists
+                        atts = []
+                        if m.get('hasAttachments'):
+                            try: atts = mail_attachments(tok, s['Address'], m['id'])
+                            except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
                         out = ingest_message(store, file_only=file_only, msg={
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
                             'subject': m.get('subject'), 'body': _body(m),
                             'from_name': frm.get('name'), 'from_email': frm.get('address'),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
-                            'source_link': m.get('webLink'), 'source_name': s['Address']}, llm=llm)
+                            'source_link': m.get('webLink'), 'source_name': s['Address'],
+                            'images': images_for_triage(store, atts)}, llm=llm)
                         n += out['status'] != 'duplicate'
+                        if atts and out.get('message_id') and out['status'] != 'duplicate':
+                            try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
+                            except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")
                 elif c['Type'] == 'teams':
                     n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'github':

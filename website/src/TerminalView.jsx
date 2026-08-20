@@ -63,7 +63,14 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   }, [sid]);
   return (
     <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden", bgcolor: CATPPUCCIN.bg }}>
-      <Box ref={host} sx={{ height, p: 1, "& .xterm": { height: "100%" } }} />
+      {/* 10k lines of scrollback that you can reach: xterm 6 draws its own slider inside
+          .xterm-scrollable-element (not a native scrollbar), and at its default 20% opacity on a
+          dark pane it is invisible - which is what "I cannot scroll up" actually was. Colour comes
+          from XTERM_THEME; this only makes it a little wider and rounder to grab. */}
+      <Box ref={host} sx={{ height, p: 1, "& .xterm": { height: "100%" },
+        "& .xterm-scrollable-element > .scrollbar > .slider": { borderRadius: 99, width: "8px !important",
+          marginLeft: "3px", transition: "background .15s" },
+        "& .xterm-viewport": { overflowY: "auto" } }} />
       {state !== "live" && (
         <Typography variant="caption" sx={{ ...mono, position: "absolute", top: 6, right: 10, fontSize: 10,
           color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>

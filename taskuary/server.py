@@ -1,7 +1,8 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json
+import asyncio, json, threading
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -15,6 +16,7 @@ from .ingest import ingest_message, split_message, task_from_message
 from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
 from . import agents as hub_agents
 from . import policy as policy_engine
+from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
@@ -24,7 +26,12 @@ cfg = config.load()
 store = SQLiteStore(config.db_path())
 for name, prof in cfg.get('agents', {}).items():
     store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
-app = FastAPI(title='Taskuary', docs_url='/api/docs')
+@asynccontextmanager
+async def _lifespan(_app):
+    catch_up_on_startup()          # defined below; resolved when the app actually starts
+    yield
+
+app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
 ACTOR = 'owner'
 
 
@@ -47,7 +54,10 @@ async def request_log(request: Request, call_next):
 async def token_gate(request: Request, call_next):
     tok = cfg['server'].get('token')
     if tok and request.url.path.startswith('/api') and request.headers.get('X-Taskuary-Token') != tok:
-        return HTMLResponse('unauthorized', status_code=401)
+        # an <img src> cannot carry a header, so attachment READS take the token in the query
+        # string - the same concession websockets already needed
+        if not (request.url.path.startswith('/api/attachments/') and request.query_params.get('token') == tok):
+            return HTMLResponse('unauthorized', status_code=401)
     return await call_next(request)
 
 
@@ -132,7 +142,11 @@ def create_task(body: TaskBody):
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
-    return {**d, 'session': hub_term.for_task(task_id, tail=3)}
+    # a session that has ended still leaves work to close out, so the page has to know one
+    # happened - the Done and Pause buttons used to vanish with the pty
+    tr = store.last_transcript(task_id)
+    return {**d, 'session': hub_term.for_task(task_id, tail=3),
+            'transcript': {'agent': tr['Agent'], 'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
 
 @app.patch('/api/tasks/{task_id}')
 def update_task(task_id: int, body: TaskBody):
@@ -178,6 +192,47 @@ def not_a_task(task_id: int):
     store.delete_task(task_id)
     return {'ok': True, 'learned': learned}
 
+class SplitHalf(BaseModel): title: str | None = None; summary: str | None = None
+class TaskSplitBody(BaseModel):
+    second: SplitHalf
+    first: SplitHalf | None = None
+    move_message_ids: list[int] = []
+class MergeBody(BaseModel): into: int
+
+@app.get('/api/tasks/{task_id}/split/suggest')
+def split_suggest(task_id: int):
+    """What are the two jobs in here? A proposal only - nothing is created until the owner
+    confirms, and with no AI brain connected it hands back the ask-shaped lines instead."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    return reshape.propose_split(store, task_id, _llm())
+
+@app.post('/api/tasks/{task_id}/split')
+def split_task_api(task_id: int, body: TaskSplitBody):
+    """Triage filed two jobs as one. This task keeps its ref, session and report; the second
+    job becomes a new task, with the messages you ticked."""
+    try:
+        new = reshape.split_task(store, task_id, body.second.dict(),
+                                 body.first.dict() if body.first else None, body.move_message_ids, ACTOR)
+    except ValueError as e:
+        raise HTTPException(404 if 'no task' in str(e) else 422, str(e))
+    return {'taskId': new, 'ref': task_ref(new)}
+
+@app.get('/api/tasks/{task_id}/merge-candidates')
+def merge_candidates_api(task_id: int):
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    return {'data': reshape.merge_candidates(store, task_id)}
+
+@app.post('/api/tasks/{task_id}/merge')
+def merge_task_api(task_id: int, body: MergeBody):
+    """Fold this task into `into` - the same job, filed twice. This one is dropped with a
+    pointer at the survivor; a task with a live session cannot be folded away underneath it."""
+    if hub_term.for_task(task_id):     # for_task only ever returns a LIVE session
+        raise HTTPException(422, f'{task_ref(task_id)} has a session running - close or pause it first')
+    try:
+        return reshape.merge_tasks(store, task_id, body.into, ACTOR)
+    except ValueError as e:
+        raise HTTPException(404 if 'no task' in str(e) else 422, str(e))
+
 @app.post('/api/tasks/purge-dropped')
 def purge_dropped():
     victims = [t['TaskId'] for t in store.list_tasks('dropped')]
@@ -192,6 +247,49 @@ def get_message(mid: int):
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     return m
+
+def _att_row(a: dict) -> dict:
+    """One attachment as the panel needs it: enough to decide whether to draw it or list it."""
+    return {'id': a['AttachmentId'], 'name': a['Name'], 'content_type': a['ContentType'] or '',
+            'size': a['Size'], 'inline': bool(a['Inline']), 'saved': bool(a['Path']),
+            'is_image': str(a['ContentType'] or '').startswith('image/'),
+            'url': f"/api/attachments/{a['AttachmentId']}" if a['Path'] else None}
+
+@app.get('/api/messages/{mid}/attachments')
+def message_attachments(mid: int):
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    return {'data': [_att_row(a) for a in store.list_attachments(mid)]}
+
+@app.get('/api/attachments/{aid}')
+def attachment(aid: int, download: bool = False):
+    """The bytes. Images are served inline so the panel can just draw them; everything else
+    downloads under its own name."""
+    a = store.get_attachment(aid)
+    if not a: raise HTTPException(404, 'attachment not found')
+    if not a['Path'] or not Path(a['Path']).exists():
+        raise HTTPException(404, 'this one was never saved - open the original message for it')
+    disp = 'attachment' if (download or not str(a['ContentType'] or '').startswith('image/')) else 'inline'
+    return FileResponse(a['Path'], media_type=a['ContentType'] or 'application/octet-stream',
+                        filename=a['Name'], content_disposition_type=disp)
+
+@app.post('/api/messages/{mid}/attachments/fetch')
+def fetch_attachments(mid: int):
+    """Pull a message's attachments now - for mail that arrived before Taskuary kept them, and
+    for a retry after a Graph hiccup."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    ext = str(m.get('ExternalId') or '')
+    if m.get('Channel') != 'email' or not ext.startswith('graph:'):
+        raise HTTPException(422, 'only Outlook mail can be re-fetched')
+    c = store.get_connector_by_type('outlook', with_secret=True)
+    if not c: raise HTTPException(422, 'no Outlook connection')
+    from .channels import fetch_mail_attachments, graph_creds, graph_token
+    try:
+        gcfg, gsec, _ = graph_creds(store, c)
+        n = fetch_mail_attachments(store, mid, graph_token(gcfg, gsec), m.get('SourceName'), ext.split(':', 1)[1])
+    except Exception as e:
+        raise HTTPException(422, str(e)[:300])
+    return {'fetched': n, 'data': [_att_row(a) for a in store.list_attachments(mid)]}
 
 class NotMineBody(BaseModel): note: str | None = None; scope: str = 'sender'
 
@@ -368,6 +466,18 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     store.audit('review', rid, body.verb, ACTOR, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
     return {'ok': True, 'status': verb2status[body.verb], 'sent': sent, 'send_error': send_err}
 
+@app.post('/api/reviews/{rid}/release')
+def release_review(rid: int):
+    """Answer now without waiting for the session. A held draft is one the agent's findings are
+    supposed to rewrite - but sometimes the sender just needs telling something today, and a
+    reply held behind an agent that never finished is worse than an early one."""
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'review not found')
+    if rv['Status'] != 'held': raise HTTPException(422, 'this one is not being held')
+    store.unhold_review(rid, 'released by you - answered without waiting for the session')
+    store.audit('review', rid, 'release', ACTOR)
+    return {'ok': True}
+
 @app.post('/api/reviews/{rid}/draft')
 def draft_review(rid: int):
     """(Re)generate the AI draft for a pending review inline. The main AI writes replies -
@@ -526,7 +636,15 @@ def report_preview(body: dict):
     without filing a row. Exactly what a scheduled run would produce."""
     try:
         head, summary = render_report(store, body, _llm() if body.get('ai_prompt') else None)
-        return {'ok': True, 'headline': head, 'summary': summary[:4000]}
+        # the chart is half of what a scheduled run hands back, so the dry run has to show it -
+        # rendered in memory here, since a preview files no message to hang an attachment on
+        from .artifacts import chart_directive, rows_from_body, strip_directive, to_svg_chart
+        svg, rows = '', rows_from_body(summary)
+        if rows and str(store.get_settings().get('report_images_enabled') or '1') == '1':
+            val, lab, ctitle = chart_directive(summary)
+            svg = to_svg_chart(rows, None, ctitle or body.get('title') or head, val, lab) or ''
+        return {'ok': True, 'headline': head, 'summary': strip_directive(summary)[:4000],
+                'rows': len(rows), 'chart': svg}
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
 
@@ -658,14 +776,26 @@ def toggle_memory(mid: int, body: MemoryToggle):
 @app.get('/api/audit/recent')
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
 
-def _poll_reports():
+def _poll_reports(backfill_days: int = 0):
     store.set_setting('ingest_status', json.dumps({'state': 'running'}), 'system')
     try:
         run_due_reports(store)
         from .channels import poll_channels
-        poll_channels(store)
+        poll_channels(store, backfill_days)
     finally:
         store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+
+
+def catch_up_on_startup():
+    """Whatever arrived while the app was closed was polled by nobody, and Taskuary is not a
+    service - it is a window you open. So opening it reaches back past the watermark
+    (`startup_sync_days`, default 3) instead of asking "anything since I last ran", which after
+    a weekend off is the wrong question. 0 turns it off."""
+    try: days = int(store.get_settings().get('startup_sync_days') or 0)
+    except ValueError: days = 0
+    if days <= 0: return
+    logger.info(f'startup: catching up on the last {days} days')
+    threading.Thread(target=lambda: _poll_reports(days), daemon=True).start()
 
 @app.post('/api/ingest/poll')
 def ingest_poll(background: BackgroundTasks):
@@ -690,63 +820,90 @@ def terminals(): return {'data': hub_term.listing()}
 def open_terminal(body: TermBody):
     """Spawn an agent CLI (or a plain shell) under a real pty. seed=true types the task's
     context in as the first line, so the agent starts on it and you keep talking."""
+    tk = store.get_task(body.task_id) if body.task_id else None
+    # Taskuary picks the checkout, not the agent: with no repo named, match the ask against the
+    # SOUL.md repo map (which lives in this database, nowhere the agent can read).
+    repo, why = body.repo, None
+    if body.agent and tk and not repo and not body.cwd:
+        row = store.get_agent(body.agent)
+        repo, why = hub_term.guess_repo(store, body.task_id, json.loads((row or {}).get('Config') or '{}'))
     try:
-        t = hub_term.open_session(store, body.agent, body.task_id, body.repo, body.cwd, body.rows, body.cols,
+        t = hub_term.open_session(store, body.agent, body.task_id, repo, body.cwd, body.rows, body.cols,
                                   ACTOR, body.model)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         # a CLI you configured but never installed is the common one - say which, don't 500
         raise HTTPException(422, str(e))
-    # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text
-    tk = store.get_task(body.task_id) if body.task_id else None
+    # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text.
+    # This used to build its own thin prompt (title + summary, no message), which is exactly why
+    # an agent started here went back to the API for the mail: it had not been given it.
     if body.seed and body.agent and tk:
-        ask = (tk.get('Summary') or '').strip()          # the task's details field IS the prompt
-        seed = f"Work Taskuary task {task_ref(body.task_id)} - {tk.get('Title')}." + (f' {ask}' if ask else '')
-        t.seed(seed[:4000])
-        store.add_comment(body.task_id, ACTOR, 'human', f'Opened an interactive {t.label} session in {t.cwd}')
+        t.seed(hub_term.seed_text(store, body.task_id, None, repo, t.cwd)[:8000])
+        store.add_comment(body.task_id, ACTOR, 'human',
+                          f'Opened an interactive {t.label} session in {t.cwd}' + (f' - {why}.' if why else '.'))
     return t.info()
 
 class WrapBody(BaseModel): task_id: int | None = None; close: bool = True
 
-@app.post('/api/terminals/{sid}/wrap')
-def wrap_terminal(sid: str, body: WrapBody):
+# Wrapping up belongs to the TASK, not to a pty. Keying it on a live session meant that once the
+# CLI had exited and been reaped - ten minutes - the buttons had nothing to read and quietly
+# vanished, leaving a task that could never be closed out. The transcript is filed when a session
+# ends, so these work whether the terminal is live, exited, or long gone.
+def _wrap_task(tid: int, close: bool, sid: str = None):
+    if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
+    text, agent, found = hub_term.transcript_for(store, tid)
+    if not text.strip(): raise HTTPException(422, 'nothing to wrap up - this task has no session transcript')
+    if found: hub_term.close(found)          # done means done - the pty and its shells go too
+    rep = report_from_transcript(store, tid, text, agent)
+    report = resolution_text(rep)
+    store.add_comment(tid, ACTOR, 'human', 'Closed the session - wrapped up from what was on screen.')
+    store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}')
+    if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+        coder_finish(store, tid, rep, None, agent)
+    store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid or found, 'close': close})
+    return {'wrap': 'done', 'taskId': tid, 'report': report,
+            'drafting': bool(close and coder_reply_target(store, tid))}
+
+
+def _pause_task(tid: int, sid: str = None):
+    if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
+    text, agent, found = hub_term.transcript_for(store, tid)
+    if not text.strip(): raise HTTPException(422, 'nothing to save - this task has no session transcript')
+    note = pause_note(store, tid, text)
+    if found: hub_term.close(found)
+    store.add_comment(tid, agent, 'agent', f'{PAUSE_MARKER}\n{note}')
+    store.add_comment(tid, ACTOR, 'human', 'Paused the session - picking this up later.')
+    store.audit('terminal', tid, 'pause', ACTOR, detail={'sid': sid or found})
+    return {'pause': 'done', 'taskId': tid, 'note': note}
+
+
+@app.post('/api/tasks/{task_id}/wrap')
+def wrap_task(task_id: int, body: WrapBody):
     """"We're done" - and it asks the agent NOTHING. The transcript is already on screen, so we
     take it, end the session, and let the main AI turn it into the report; the responder drafts
     the reply from that report and the task waits on you to send it. Typing a wrap-up prompt into
     the pty meant one more prompt to read, minutes of waiting, and a fresh chance for an agent you
     just stopped to go do more work."""
-    t = hub_term.get(sid)
-    if not t: raise HTTPException(404, 'no terminal here')
-    tid = body.task_id or t.task_id
-    if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
-    text = hub_term.harvest(t)
-    hub_term.close(sid)                      # done means done - the pty and its shells go too
-    rep = report_from_transcript(store, tid, text, t.agent or 'coder')
-    report = resolution_text(rep)
-    store.add_comment(tid, ACTOR, 'human', 'Closed the session - wrapped up from what was on screen.')
-    store.add_comment(tid, t.agent or 'agent', 'agent', f'CODER REPORT\n{report}')
-    if body.close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-        coder_finish(store, tid, rep, None, t.agent or 'coder')
-    store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid, 'close': body.close})
-    return {'wrap': 'done', 'taskId': tid, 'report': report,
-            'drafting': bool(body.close and coder_reply_target(store, tid))}
+    return _wrap_task(task_id, body.close)
 
-@app.post('/api/terminals/{sid}/pause')
-def pause_terminal(sid: str, body: WrapBody):
+@app.post('/api/tasks/{task_id}/pause')
+def pause_task(task_id: int, body: WrapBody):
     """Stop for now WITHOUT throwing the work away. Killing a session used to lose everything it
     had worked out - the pty dies, the scrollback goes, and the next session starts from nothing.
     This writes the handover note first (from the transcript, by the main AI), files it on the
     task, and hands it to whoever resumes: the next session is seeded with it. The task stays
     open - pausing is not finishing, so no report and no reply draft."""
+    return _pause_task(task_id)
+
+@app.post('/api/terminals/{sid}/wrap')
+def wrap_terminal(sid: str, body: WrapBody):
+    """Same thing, addressed by session - what the terminal pane itself has a handle on."""
     t = hub_term.get(sid)
-    if not t: raise HTTPException(404, 'no terminal here')
-    tid = body.task_id or t.task_id
-    if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
-    note = pause_note(store, tid, hub_term.harvest(t))
-    hub_term.close(sid)
-    store.add_comment(tid, t.agent or 'agent', 'agent', f'{PAUSE_MARKER}\n{note}')
-    store.add_comment(tid, ACTOR, 'human', 'Paused the session - picking this up later.')
-    store.audit('terminal', tid, 'pause', ACTOR, detail={'sid': sid})
-    return {'pause': 'done', 'taskId': tid, 'note': note}
+    return _wrap_task(body.task_id or (t.task_id if t else None), body.close, sid)
+
+@app.post('/api/terminals/{sid}/pause')
+def pause_terminal(sid: str, body: WrapBody):
+    t = hub_term.get(sid)
+    return _pause_task(body.task_id or (t.task_id if t else None), sid)
 
 @app.delete('/api/terminals/{sid}')
 def close_terminal(sid: str):

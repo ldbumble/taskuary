@@ -8,6 +8,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { Crumb, Empty, LandingCard } from "./ui.jsx";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import BoltIcon from "@mui/icons-material/Bolt";
+import StarIcon from "@mui/icons-material/Star";
 
 // One-click presets: pick your CLI, Save, Test - done. Taskuary pipes the prompt on
 // STDIN; --yolo / --full-auto / --dangerously-skip-permissions style flags matter,
@@ -61,6 +62,18 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
   };
   const del = async (name) => { await api.delete(`/api/agents/${encodeURIComponent(name)}`); load(); };
   const [tests, setTests] = useState({});
+  // which agent works tasks when nothing names one - the row wears it, and one click moves it
+  const [defAgent, setDefAgent] = useState("");
+  useEffect(() => {
+    api.get("/api/settings").then(({ data }) => {
+      setDefAgent((data.data || []).find((x) => x.Name === "default_agent")?.Value || "coder");
+    }).catch(() => {});
+  }, []);
+  const makeDefault = async (name) => {
+    await api.patch("/api/settings", { name: "default_agent", value: name });
+    setDefAgent(name);
+  };
+
   const runTest = async (name) => {
     setTests((t) => ({ ...t, [name]: { busy: true } }));
     try {
@@ -92,8 +105,21 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       </Box>
       {!Object.keys(agents).length && <Empty>No agents yet — click a preset above, Save, then Test.</Empty>}
       {Object.entries(agents).map(([name, a]) => (
-        <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}` }}>
+        <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, px: 1,
+          borderBottom: `1px solid ${BORDER}`, borderRadius: 1.5,
+          bgcolor: defAgent === name ? "#f6f7ff" : "transparent",
+          borderLeft: `3px solid ${defAgent === name ? "#4f46e5" : "transparent"}` }}>
           <Chip size="small" label={name} sx={{ bgcolor: "#eef0ff", color: "#4f46e5", height: 21, fontSize: 10.5, fontWeight: 700 }} />
+          {defAgent === name ? (
+            <Chip size="small" icon={<StarIcon sx={{ fontSize: 12 }} />} label="default"
+              title="Works every task nothing names an agent for — Start session, Send to coding agent, auto-dispatch"
+              sx={{ bgcolor: "#4f46e5", color: "#fff", height: 20, fontSize: 10, fontWeight: 700,
+                "& .MuiChip-icon": { color: "#fff" } }} />
+          ) : (
+            <Button size="small" sx={{ fontSize: 10, minWidth: 0, px: 0.75, color: FAINT }}
+              title="Make this the agent every task uses unless another is picked"
+              onClick={() => makeDefault(name)}>make default</Button>
+          )}
           <Typography sx={{ ...mono, color: INK, fontSize: 12.5, flex: 1, minWidth: 0 }} noWrap>
             {a.cmd} {(a.args || []).join(" ")}
           </Typography>

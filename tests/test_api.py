@@ -503,6 +503,26 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(again['reviewId'], out['reviewId'])            # reused, never stacked
         self.assertEqual(c.post('/api/messages/999999/reply', json={}).status_code, 404)
 
+    def test_replying_to_a_filed_message_creates_no_task(self):
+        """Answering chatter is a REPLY, not a project - promoting the filed message to a task
+        just to hold the review put a TQ badge on 'it was just his demo'. The review rides
+        task-less, still lands in the pending queue, and approving still sends."""
+        mid = server.store.add_message({'ExternalId': 'graph:FILED1', 'Channel': 'teams',
+                                        'FromName': 'J. D. Hancock', 'ConversationId': 'teams:19:x',
+                                        'BodyText': 'It was just his demo. Ready to move over.', 'Status': 'filed'})
+        tasks_before = len(server.store.list_tasks())
+        with mock.patch('taskuary.responder.draft_for_message', return_value='Got it - send it over.'):
+            out = c.post(f'/api/messages/{mid}/reply', json={}).json()
+        self.assertIsNone(out['taskId'])
+        self.assertEqual(len(server.store.list_tasks()), tasks_before)          # no task materialized
+        pend = [r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+                if r['ReviewId'] == out['reviewId']]
+        self.assertEqual(len(pend), 1)                                          # still visible in the queue
+        with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'teams', 'to': []}):
+            r = c.post(f"/api/reviews/{out['reviewId']}/decide", json={'verb': 'approve', 'final_text': 'Got it.'}).json()
+        self.assertTrue(r['sent'])
+        self.assertEqual(len(server.store.list_tasks()), tasks_before)          # approving made none either
+
     def test_not_a_task_without_learning_deletes_and_teaches_nothing(self):
         """Someone answered 'yes' - that is chatter, not a verdict about the sender. The lighter
         not-a-task deletes the task and leaves no policy and no memory behind."""

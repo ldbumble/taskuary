@@ -323,9 +323,12 @@ class SQLiteStore:
     def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def list_reviews(self, status=None):
+        # LEFT JOIN: a reply opened on a FILED message carries no task at all - the inner join
+        # made those reviews invisible everywhere, including the pending queue
         q = '''SELECT rv.*, t.Title, m.Subject, m.FromEmail, m.Channel FROM review rv
-               JOIN task t ON t.TaskId=rv.TaskId LEFT JOIN message m ON m.MessageId=rv.MessageId'''
-        return self._rows(q + (' WHERE rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
+               LEFT JOIN task t ON t.TaskId=rv.TaskId LEFT JOIN message m ON m.MessageId=rv.MessageId
+               WHERE (rv.TaskId IS NULL OR t.TaskId IS NOT NULL)'''
+        return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
     def decide_review(self, rid, status, final, by, note=None):
         self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',
                    (status, final, by, _now(), note, rid))

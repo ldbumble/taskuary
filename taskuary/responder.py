@@ -125,3 +125,28 @@ def write_draft(store, task_id: int, review_id: int, resolution: str = None, act
         store.update_review_draft(review_id, out['result'], out['run_id'])
         return out['result']
     return draft_for_review(store, task_id, review_id, llm, resolution)
+
+
+def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
+    """A reply for a message with NO task behind it - chatter that just deserves an answer.
+    Same voice, same rules, same channel-awareness; the context is the message itself."""
+    from .llm import build_llm
+    from .ingest import notes_for
+    from .triage import strip_boilerplate
+    llm = llm or build_llm(store)
+    if not llm: raise RuntimeError('no AI connector is set up to write replies')
+    soul = store.doc('soul') or ''
+    owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
+    chat = str(m.get('Channel') or '').lower() in CHAT_CHANNELS
+    system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
+              + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else ''))
+    notes = notes_for(store, {'from_email': m.get('FromEmail')})
+    if notes:
+        system += '\n\nStanding notes from the owner:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
+    user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
+            f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
+    out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
+    if not out: raise RuntimeError('the AI returned an empty reply')
+    out = (strip_signoff(out) or out) if chat else out
+    store.update_review_draft(review_id, out, None)
+    return out

@@ -29,6 +29,7 @@ for name, prof in cfg.get('agents', {}).items():
 @asynccontextmanager
 async def _lifespan(_app):
     catch_up_on_startup()          # defined below; resolved when the app actually starts
+    _refresh_soul_connections()
     yield
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
@@ -924,6 +925,15 @@ def catch_up_on_startup():
     if days <= 0: return
     logger.info(f'startup: catching up on the last {days} days')
     threading.Thread(target=lambda: _poll_reports(days), daemon=True).start()
+
+
+def _refresh_soul_connections():
+    """The connections block in SOUL.md is GENERATED text, so a fix to its wording has to reach
+    installs that never touch a connector again - refresh it once per launch. The owner's own
+    prose outside the markers is untouched, as always."""
+    from .docsync import sync_connections
+    try: sync_connections(store, 'startup')
+    except Exception as e: logger.warning(f'connection sync at startup failed: {e}')
 
 @app.post('/api/ingest/poll')
 def ingest_poll(background: BackgroundTasks):

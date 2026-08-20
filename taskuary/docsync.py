@@ -12,8 +12,12 @@ REPO_MAP_HEADER = '## Repository map'
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github'}
 
 
+# The tool blurb used to say "create/update things in it as the work needs" - and an agent
+# handed that read it as licence to open a GitHub issue for every task it worked, duplicating
+# a tracker that already exists. The licence is now scoped to what the ASK names.
 ROLE_TEXT = {'trigger': 'inbound trigger — new items land on the timeline and go through triage',
-             'tool': 'YOURS TO USE — read from it and create/update things in it as the work needs',
+             'tool': 'yours to read, and to create/update things in ONLY when the task explicitly '
+                     'asks for it — never issues or tracker items for your own work: the task is the record',
              'report': 'scheduled report source'}
 
 

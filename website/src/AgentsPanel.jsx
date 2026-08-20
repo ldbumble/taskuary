@@ -31,11 +31,15 @@ const NEWLINE = String.fromCharCode(10);
 const ARGS_PH = ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'].join(NEWLINE);
 // the model quick-picks per CLI (mirrors the server's CLI_MODELS) - the light-model field is
 // a DROPDOWN of what the CLI actually takes, not a text box to guess spellings into
+// codex on a ChatGPT plan has no smaller model - its cheap gear is REASONING EFFORT on the
+// same model, spelled effort:<level> and translated to -c model_reasoning_effort=<level>
 const MODEL_PICKS = {
   claude: ["haiku", "sonnet", "opus", "claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"],
-  codex: ["gpt-5", "gpt-5-codex"],
+  codex: ["effort:low", "effort:minimal", "effort:medium", "gpt-5", "gpt-5-codex"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro"],
 };
+const pickLabel = (v) => v.startsWith("effort:")
+  ? `same model, ${v.slice(7)} reasoning effort` : v;
 
 const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "", lightModel: "" };
 const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(Boolean);
@@ -218,7 +222,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
               onChange={(e) => setDraft({ ...draft, lightModel: e.target.value })}>
               <MenuItem value="" sx={{ fontSize: 12.5 }}>same model as coding (no downshift)</MenuItem>
               {(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).map((mo) => (
-                <MenuItem key={mo} value={mo} sx={{ fontSize: 12.5 }}>{mo}</MenuItem>
+                <MenuItem key={mo} value={mo} sx={{ fontSize: 12.5 }}>{pickLabel(mo)}</MenuItem>
               ))}
               {draft.lightModel && !(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).includes(draft.lightModel) && (
                 <MenuItem value={draft.lightModel} sx={{ fontSize: 12.5 }}>{draft.lightModel}</MenuItem>

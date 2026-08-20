@@ -49,7 +49,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
-  const [run, setRun] = useState({ agent: "coder", model: "", instruction: "" });
+  const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
   const [comment, setComment] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
@@ -161,7 +161,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
   const openTerm = useCallback(async (body) => {
     try { const { data } = await api.post("/api/terminals", body); setTerm(data); }
-    catch (e) { setErr(e?.response?.data?.detail || "Could not start a terminal"); }
+    catch (e) {
+      const msg = e?.response?.data?.detail || "Could not start a terminal";
+      setErr(msg);
+      // the repo guard refused (right repo, no local path): the fix IS the picker, so open it
+      // here instead of sending the user off to read the error's directions
+      if (/no local path/i.test(msg)) setRepoPick(true);
+    }
   }, []);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one
@@ -275,7 +281,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
                   <Select value={t.Kind || "general"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
                     title="What this IS decides who works it: coding gets a repo session, a reply gets a draft in Review, general stays on your list">
-                    {KINDS.map((k) => <MenuItem key={k} value={k} sx={{ fontSize: 12 }}>{k === "reply" ? "reply — just needs an answer" : k}</MenuItem>)}
+                    {[...new Set([t.Kind || "general", ...KINDS])].map((k) =>
+                      <MenuItem key={k} value={k} sx={{ fontSize: 12 }}>{k === "reply" ? "reply — just needs an answer" : k}</MenuItem>)}
                   </Select>
                   <Select value={t.Status} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
                     title="the raw status, if you need to move it by hand">
@@ -579,8 +586,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 // open it. Agent answers run to thousands of characters and used to bury the page.
 const CommentRow = ({ c }) => {
   const [open, setOpen] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const ref = useRef(null);
   const body = String(c.Body || "").trim();
-  const long = body.length > 150 || body.includes("\n");
+  // Whether anything is actually HIDDEN is a layout question, not a character count. Any
+  // two-line note counted as long, then fitted both lines on show - so the expander sat there
+  // saying "252 chars" and did nothing when clicked. Measure the clamp, only while applied.
+  useEffect(() => {
+    if (!open && ref.current) setClamped(ref.current.scrollHeight > ref.current.clientHeight + 1);
+  }, [body, open]);
+  const long = clamped || open;
   return (
     <Box component="tr" sx={{ borderTop: `1px solid ${BORDER}`, verticalAlign: "top",
       "&:hover": { bgcolor: open ? "transparent" : PANEL2 } }}>

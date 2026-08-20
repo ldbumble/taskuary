@@ -178,7 +178,7 @@ export default function ConnectorsView() {
   const chanCard = (c) => {
     const m = META[c.Type] || {};
     const srcs = m.channel && m.channel !== "ai"
-      ? sources.filter((s) => s.ConnectorId === c.ConnectorId || (!s.ConnectorId && m.channel === s.Channel)) : null;
+      ? sources.filter((s) => s.ConnectorId === c.ConnectorId) : null;   // owned, never channel-shared
     const roles = String(c.Roles || "").split(",").filter(Boolean);
     const status = `${c.Active ? "on" : "off"}`
       + (roles.length ? ` · ${roles.join(" + ")}` : "")
@@ -300,7 +300,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
 
-  const mine = sources.filter((s) => s.ConnectorId === conn.ConnectorId || (!s.ConnectorId && m.channel === s.Channel));
+  const mine = sources.filter((s) => s.ConnectorId === conn.ConnectorId);   // owned, never channel-shared
 
   const saveCreds = async () => {
     setBusy("save"); setMsg("");

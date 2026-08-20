@@ -688,7 +688,8 @@ def brains():
     """Everything that could do intent triage: cloud AI connectors with a key, plus your
     CLI agents (same brain that codes). Value goes into the `triage_ai` setting."""
     from .llm import AI_TYPES
-    out = [{'value': '', 'label': 'auto — first active AI connector (recommended)', 'kind': 'auto', 'ready': True}]
+    # no steering: auto is one option among equals, and which brain triages is the owner's call
+    out = [{'value': '', 'label': 'auto — first active AI connector', 'kind': 'auto', 'ready': True}]
     out += [{'value': f"connector:{c['Type']}", 'label': c['Name'], 'kind': 'api',
              'ready': bool(c['Active'] and c['HasSecret'])}
             for c in store.list_connectors() if c['Type'] in AI_TYPES]

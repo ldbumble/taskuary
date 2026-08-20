@@ -180,6 +180,14 @@ class SQLiteStore:
                 if f.exists():
                     self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',
                                     (name, f.read_text(encoding='utf-8'), 'template', _now()))
+            # data heal: sources written before ownership existed have no ConnectorId, so a
+            # NEW connector on the same channel (the Gmail card) claimed the Outlook mailboxes.
+            # Adopt each orphan to the channel's legacy owner - Graph was the only email/teams/
+            # slack road back then, so the attribution is certain. Reports keep their own rules.
+            for ch, typ in (('email', 'outlook'), ('teams', 'teams'), ('slack', 'slack'), ('github', 'github')):
+                self.cx.execute('''UPDATE source SET ConnectorId =
+                                     (SELECT ConnectorId FROM connector WHERE Type = ?)
+                                   WHERE Channel = ? AND ConnectorId IS NULL''', (typ, ch))
             # data heal: dbs written before review dedupe can hold stacked pending reviews
             # of the same kind on one task - keep the newest, supersede the rest
             self.cx.execute("""UPDATE review SET Status='superseded'

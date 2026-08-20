@@ -465,5 +465,27 @@ class ApiTests(unittest.TestCase):
             server.cfg['server'].pop('token')
 
 
+    def test_reclassifying_to_reply_routes_the_task_into_review(self):
+        """"This is not a coding task" - the mail asked for FILES, not a fix, and triage sent an
+        agent at it. Switching the kind to reply is the correction: a draft review appears, the
+        way the question would have been handled at triage."""
+        tid = c.post('/api/tasks', json={'Title': 'PTO true up', 'Kind': 'coding'}).json()['taskId']
+        server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:KIND1', 'Channel': 'email',
+                                  'FromEmail': 'gw@corp.com', 'BodyText': 'can you send me the PTO files for July?',
+                                  'Status': 'routed'})
+        r = c.patch(f'/api/tasks/{tid}', json={'Kind': 'reply'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Kind'], 'reply')
+        pend = [x for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if x['TaskId'] == tid]
+        self.assertEqual(len(pend), 1)
+        self.assertIn('a question, not work to do', pend[0]['Reason'])
+        # saying it twice must not stack a second review
+        c.patch(f'/api/tasks/{tid}', json={'Kind': 'general'})
+        c.patch(f'/api/tasks/{tid}', json={'Kind': 'reply'})
+        pend = [x for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if x['TaskId'] == tid]
+        self.assertEqual(len(pend), 1)
+        self.assertEqual(c.patch('/api/tasks/999999', json={'Kind': 'reply'}).status_code, 404)
+
+
 if __name__ == '__main__':
     unittest.main()

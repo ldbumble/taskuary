@@ -9,6 +9,7 @@ Nothing sends itself. Every call here is behind a human verdict or an explicit h
 """
 import json
 import requests
+from loguru import logger
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
@@ -115,3 +116,38 @@ def draft_handoff(store, task_id: int, to: str, note: str = None, llm=None) -> s
     ask = f'Forward this to {to}.' + (f' The owner adds: {note}' if note else '')
     out = llm(f"{HANDOFF_SYSTEM}\n\n{store.doc('soul') or ''}", f'{ask}\n\n{ctx}', max_tokens=700)
     return (out or '').strip()
+
+
+# ── notifications: the timeline pushed INTO a chat, instead of you polling the tab ──────
+# A channel can be an input (trigger), an output (notify), or both: give the connector the
+# notify role and name the chat in its config (notify_chat). What qualifies is one setting -
+# notify_level: needs_me (default) pings only what is waiting on YOU; all pings every new item.
+def notify_targets(store) -> list:
+    """[(channel, chat_id)] for every connector wearing the notify role with a chat named."""
+    from .channels import _cfg
+    from .store import roles_of
+    out = []
+    for c in store.list_connectors():
+        if not c['Active'] or 'notify' not in roles_of(c): continue
+        chat = str(_cfg(c).get('notify_chat') or '').strip()
+        if chat and c['Type'] in ('telegram', 'whatsapp', 'teams'): out.append((c['Type'], chat))
+    return out
+
+
+def notify(store, text: str, about: dict = None) -> int:
+    """Push one short line to every notify channel. Never raises - a ping that fails must not
+    take the ingest down with it - and never echoes: an event that HAPPENED in the notify chat
+    is one you are already looking at."""
+    from . import messengers
+    sent = 0
+    for ch, chat in notify_targets(store):
+        if about and about.get('Channel') == ch and str(about.get('ConversationId') or '').endswith(chat):
+            continue
+        try:
+            if ch == 'telegram': messengers.tg_send(store, chat, text)
+            elif ch == 'whatsapp': messengers.wa_send(store, chat, text)
+            else: send_teams(store, chat, text)
+            sent += 1
+        except Exception as e:
+            logger.warning(f'notify via {ch} failed: {e}')
+    return sent

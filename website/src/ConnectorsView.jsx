@@ -65,6 +65,23 @@ const META = {
       "Leave the bridge running; Test here confirms the pairing and adds a catch-all source.",
       "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."] },
+  gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
+    fields: [["mailbox address", "address"]], secretLabel: "App Password (16 characters)",
+    desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread.",
+    howto: ["Turn on 2-Step Verification for the Google account (App Passwords require it).",
+      "Create an App Password: myaccount.google.com -> Security -> App passwords -> app: Mail.",
+      "Enter the mailbox address under Credentials and paste the 16-character App Password (write-only).",
+      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync.",
+      "Replies you approve are sent from this same address over SMTP, threaded into the conversation."] },
+  imap: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@yourdomain.com",
+    fields: [["mailbox address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
+             ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"]],
+    secretLabel: "mailbox password",
+    desc: "Any mailbox that speaks IMAP - a domain.com address, Yahoo, an ISP, your webhost. In through triage, replies out over its SMTP.",
+    howto: ["Find your provider's IMAP and SMTP hostnames (usually imap./smtp. + your domain; ports 993/587).",
+      "Enter the address and IMAP host under Credentials; SMTP host only if it does not follow the imap->smtp pattern.",
+      "Paste the mailbox password (write-only). Providers with app passwords (Yahoo, iCloud) want those.",
+      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
     fields: [], secretLabel: "fine-grained PAT",
     desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop.",
@@ -178,7 +195,7 @@ export default function ConnectorsView() {
       ...["anthropic", "openai", "azure_openai"].filter((t) => byType[t]).map((t) => chanCard(byType[t])),
       ...PLANNED_AI.map((p) => ({ key: p.name, title: p.name, desc: p.desc, channel: "ai", haystack: `${p.name} ${p.desc}`, planned: true })),
     ]},
-    { title: "Messaging", cards: ["outlook", "teams", "slack", "telegram", "whatsapp"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Developer", cards: ["github"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Data connections", cards: [
       {
@@ -366,6 +383,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
       </Box>
     )}] : []),
     ...(isAI ? [] : [{ label: "Role", done: !!(conn.Roles || "").length, body: <RoleStep conn={conn} reload={reload} /> }]),
+    ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1 }}>
         <Switch checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
@@ -551,6 +569,44 @@ const ROLE_META = {
   report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result on the Timeline."],
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
   notify: ["Notifications", "The OUTBOUND direction: Taskuary pushes timeline events into this channel — a ping when something needs you. Name the chat in Credentials (notify chat id); what qualifies is the notify level in Settings. Telegram, WhatsApp and Teams can carry it."],
+};
+
+// The GitHub DECISIONS live on the GitHub card: is GitHub the issue tracker for tasks (agents
+// open/update issues as the team expects) and may agents push/deploy on their own. These were
+// buried in Settings as global switches, which read as Taskuary behavior instead of what they
+// are - how this team uses this connector. Either can be on without the other.
+const GITHUB_PERMS = [
+  ["use_as_tracker", "GitHub is the issue tracker",
+   "On: your team runs on GitHub issues, so agents open and update them for the work they do. Off (default): Taskuary is the tracker - the task is the record - and agents never create issues or tracker items unless a task's ask explicitly says to."],
+  ["agents_push", "Agents may push / deploy",
+   "On: agents push and deploy as the work needs. Off (default): commits stay local for your review - you push - and only a task whose ask explicitly says to push may. Force-pushes and archived repositories stay forbidden either way."],
+];
+
+const GithubPerms = ({ conn, reload }) => {
+  const cfg = JSON.parse(conn.ConfigJson || "{}");
+  const toggle = async (key) => {
+    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId,
+      ConfigJson: JSON.stringify({ ...cfg, [key]: !cfg[key] }) });
+    reload();
+  };
+  return (
+    <Box sx={{ mt: 1, maxWidth: 620 }}>
+      {GITHUB_PERMS.map(([key, label, desc]) => (
+        <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
+          <Switch checked={!!cfg[key]} onChange={() => toggle(key)} sx={{ mt: -0.5 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+            <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
+          </Box>
+        </Box>
+      ))}
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
+        Both land in the instruction every agent session is seeded with, and in the SOUL.md line
+        describing this connection. A task whose ask explicitly says "open an issue" or "push"
+        may always do so, whatever these say.
+      </Typography>
+    </Box>
+  );
 };
 
 const RoleStep = ({ conn, reload }) => {

@@ -29,56 +29,66 @@ const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "draft", Re
 const SCOPES = ["global", "sender", "sender_domain", "source"];
 
 const KNOB_META = {
+  // ── Triage & routing: what happens to a message the moment it arrives ──
   intent_classify_enabled: { group: "Triage & routing", label: "Intent triage", type: "switch",
-    desc: "Classify every new message: task / reply-only question / FYI (filed, no draft).",
-    help: "The heart of the funnel: every new message is classified task (a requirement to DO something), reply_only (just needs an answer), or fyi (informational - filed with no task and no draft), guided by SOUL.md. Off = every message becomes a task, like v1 did." },
+    desc: "Classify every new message: a task to DO, a question to ANSWER, or FYI to file.",
+    help: "The heart of the funnel. Every inbound message is read (by the triage brain below, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself." },
   triage_ai: { group: "Triage & routing", label: "Triage brain", type: "brain",
-    desc: "Which AI classifies inbound messages. Two brains recommended: a cheap cloud model here, your CLI agent for the work.",
-    help: "TWO BRAINS IS THE RECOMMENDED SETUP: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies every inbound message in well under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working the tasks.\n\nONE BRAIN is supported: pick a CLI agent (claude, codex…) and the same brain that writes your code also triages your inbox. No second API key, no second bill. The cost is speed and tokens: every message spawns a CLI run that takes seconds to a minute and spends agent tokens, which gets expensive on a busy mailbox.\n\nauto = the first active AI connector with a key wins. Obvious automated noise is filtered by heuristics before any AI is called either way." },
-  default_action: { group: "Triage & routing", label: "Default action", type: "select", options: ["draft", "task_only", "escalate"],
-    desc: "What happens when no policy rule matches a message.",
-    help: "draft = the AI drafts a reply for your review (reply-only questions); task_only = just file a task, no draft; escalate = always send it to you. Note: messages triaged as REAL tasks skip the responder regardless - they queue for the coder." },
+    desc: "Which AI reads and classifies inbound messages.",
+    help: "TWO BRAINS is the recommended setup: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN also works: pick a CLI agent and the same brain that writes your code triages your inbox. No second API key — but every message becomes a CLI run that takes seconds to a minute, which adds up on a busy mailbox.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way." },
+  default_action: { group: "Triage & routing", label: "When no rule matches", type: "select", options: ["draft", "task_only", "escalate"],
+    desc: "The fallback when no routing policy claims a message.",
+    help: "draft = reply-only questions get an AI draft waiting in Review; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.\n\nThis is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless." },
   attach_threshold: { group: "Triage & routing", label: "Attach threshold", type: "number",
-    desc: "Similarity floor (0–1) for joining an existing task instead of opening a new one.",
-    help: "Lower = more messages glued onto old tasks; higher = more new tasks. True thread continuations (same conversation / RE:) attach regardless of this number." },
-  auto_draft_enabled: { group: "Drafting & replies", label: "Auto-draft during ingest", type: "switch",
-    desc: "Draft replies as messages arrive (reply-only questions and auto-answer rules).",
-    help: "On: the responder drafts replies as messages arrive. Off: nothing drafts by itself - you click 'Draft with AI' per item. Turning this off is the cheapest way to pause the LLM entirely." },
-  outlook_drafts_enabled: { group: "Drafting & replies", label: "Outlook drafts on approve", type: "switch",
-    desc: "Approved replies become reply-all DRAFTS in the mailbox — the hub never sends.",
-    help: "When you approve (or approve-with-edit) an email reply, the hub creates it as a reply-all DRAFT in the source mailbox via Graph (Mail.ReadWrite - a permission that cannot send). Requires that consent on the Graph app; failures are recorded in the audit log." },
-  send_enabled: { group: "Drafting & replies", label: "Send (legacy)", type: "switch",
-    desc: "Kept for compatibility only — there is no send path in the hub. Leave off.",
-    help: "The hub has NO send path by design. Approved replies become Outlook DRAFTS instead and you hit Send in Outlook yourself." },
-  default_agent: { group: "Coder agent", label: "Default agent", type: "auto",
-    desc: "Which CLI agent works tasks when nothing names one — pickers list it first.",
-    help: "The agent name (from Connectors → your CLI agents, e.g. coder or codex) that Start session, Send to coding agent and auto-dispatch use unless you pick another. Every agent picker lists it first." },
-  agent_issues_enabled: { group: "Coder agent", label: "Agents may open GitHub issues", type: "switch",
-    desc: "Off (default): agents never create issues or tracker items — the Taskuary task is the record.",
-    help: "Off: every session is told not to create GitHub issues, PRs or tracker items for its own work — Taskuary already tracks it, and one issue per task is noise. The SOUL.md tool blurb says the same. On: agents may open issues where they genuinely help (e.g. your team lives in GitHub). Either way, a task whose ASK says to open an issue may always do so." },
-  agent_push_enabled: { group: "Coder agent", label: "Agents may push / deploy", type: "switch",
-    desc: "Off (default): agents commit locally and stop — you review and push. On: they may push and deploy as the work needs.",
-    help: "Off: every session is told not to push, deploy, publish or release — commits stay local for your review, and only a task whose ask explicitly says to push may do so. On: the agent may push and deploy on its own judgement. Force-pushes and touching archived repos stay forbidden either way (CODER.md)." },
-  coder_auto_enabled: { group: "Coder agent", label: "Auto-dispatch the coder", type: "switch",
-    desc: "Run the full coder lifecycle (issue → CLI → report → close) on every new real task.",
-    help: "On: every new REAL task opens a live coder session at ingest - your CLI, in the repo, with the task in its lap, and you can watch or interrupt it. Requires the CLI installed and authenticated on the server. Off: you start the session yourself from the task." },
-  feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
-    desc: "How many days of messages the Timeline shows. Display only — nothing is deleted.",
-    help: "Purely a display window for the Timeline tab. Older messages remain in the database and in task histories." },
+    desc: "How similar a message must be (0–1) to join an existing task instead of opening a new one.",
+    help: "Lower = more messages glued onto existing tasks (risk: unrelated asks pile onto one task). Higher = more new tasks (risk: one conversation splinters). 0.42 is a sane default.\n\nTrue thread continuations — same email conversation, RE: replies — attach regardless of this number, so this only decides the borderline cases." },
+
+  // ── Replies: the drafts you approve ──
+  auto_draft_enabled: { group: "Replies", label: "Draft replies automatically", type: "switch",
+    desc: "Questions get their AI draft the moment they arrive, waiting in Review.",
+    help: "On: a message triaged as a question lands in Review with the reply already written — you edit or just Approve & send. Off: questions still queue in Review, but empty; you click 'Draft with AI' per item.\n\nNothing sends itself either way — approving is always yours. Turning this off is also the cheapest way to pause AI spending." },
+  outlook_drafts_enabled: { group: "Replies", label: "Outlook drafts on approve", type: "switch",
+    desc: "Approved Outlook replies are also saved as reply-all DRAFTS in the mailbox.",
+    help: "For the belt-and-braces workflow: on approval, the reply is additionally created as a reply-all draft inside the source mailbox via Graph (needs the Mail.ReadWrite consent), so you can give it one last look in Outlook and hit Send there. Failures land in the audit log, never block the approval." },
+  send_enabled: { group: "Replies", label: "(legacy, unused)", type: "switch",
+    desc: "Kept only for old databases — has no effect. Leave off.",
+    help: "An earlier design had a separate send gate. Sending is now simply what Approve & send does, so this switch controls nothing." },
+
+  // ── Coder agent: who works the tasks, and how eagerly ──
+  default_agent: { group: "Coder agent", label: "Default agent", type: "agent",
+    desc: "The CLI agent that works tasks when nothing names one.",
+    help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Connectors → AI CLI agents, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
+  coder_auto_enabled: { group: "Coder agent", label: "Auto-dispatch new tasks", type: "switch",
+    desc: "Every new real task immediately opens a live agent session in its repo.",
+    help: "On: the moment triage says 'this is work', your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded — visible on the Board, watchable, interruptible. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nRequires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way." },
+
+  // ── Notifications: the timeline pushed to you ──
   notify_level: { group: "Notifications", label: "Push to your chat", type: "select", options: ["needs_me", "all", "off"],
-    desc: "Send timeline events to a channel wearing the notify role — a Telegram/WhatsApp ping instead of watching the tab.",
-    help: "A channel can be an INPUT (trigger — its messages become tasks), an OUTPUT (notify — Taskuary pings you there), or both. Give a Telegram/WhatsApp/Teams connector the notify role and set its 'notify chat id' under Credentials; this setting decides what gets pushed.\n\nneeds_me = only what is waiting on YOU: a question that needs answering, a task nobody was dispatched at, and — the useful one — 'the work is done, the reply is drafted and waiting in Review'. all = every new item that lands on the Timeline. off = nothing is ever pushed.\n\nEvents that happened IN the notify chat itself are never echoed back into it." },
-  startup_sync_days: { group: "Attachments & images", label: "Catch-up on startup (days)", type: "number",
-    desc: "How far back to reach when the app opens, to pull in what arrived while it was closed.",
-    help: "Taskuary is not a service - it is a window you open, so 'anything since I last polled' is the wrong question after a weekend off. On startup every trigger connection is asked for this many days, which only ever WIDENS the window: a source last polled a month ago is not pulled forward. 0 turns the catch-up off and startup just does a normal incremental poll." },
-  vision_enabled: { group: "Attachments & images", label: "Let the AI see attached images", type: "switch",
-    desc: "Send attached screenshots to the AI, so \"see below\" mail is read rather than guessed at.",
-    help: "Half of 'see below' mail says nothing in its body - the screenshot of the error IS the request, and a text-only funnel filed the sentence and threw the ask away. On: PNG/JPEG/GIF/WebP attachments (up to 4 per message, 5MB each) are sent alongside the text when the triage brain can see them. SVG and PDF are skipped - no provider takes them as image input. A CLI brain ignores this and opens the files off disk instead: the session prompt names their paths. Off: only the text is ever sent, which is also the setting to use if your model has no vision or you would rather images never leave the machine." },
+    desc: "Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.",
+    help: "Give a chat connector the NOTIFY role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds_me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting in Review'. all = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output." },
+
+  // ── Attachments & images ──
+  vision_enabled: { group: "Attachments & images", label: "AI reads attached images", type: "switch",
+    desc: "Screenshots go to the triage AI — \"see below\" mail is read, not guessed at.",
+    help: "Half of \"see below\" mail says nothing in its body: the screenshot IS the request. On: attached images (PNG/JPEG/GIF/WebP, up to 4 per message, 5MB each) ride along into triage when the model has vision, and coding sessions get the local file paths to open themselves.\n\nOff: only text is ever sent to the AI — the setting to use if your model lacks vision or images must never leave the machine. The panel still displays attachments either way." },
   report_images_enabled: { group: "Attachments & images", label: "Charts on reports", type: "switch",
-    desc: "A report hands back a bar chart as well as the spreadsheet, and the AI picks what to plot.",
-    help: "A report already produces rows, so the same run hands back an .xlsx to open and an .svg chart drawn in the panel. The summarising model - which has just read every row - names the column worth plotting on a CHART: line, which beats a heuristic hunting for 'all numeric' and picking the id column; that line is an instruction to Taskuary and never reaches the reader. Off: the spreadsheet is still attached, there is just no chart." },
+    desc: "Reports hand back a bar chart alongside the spreadsheet.",
+    help: "A report's rows always come back as an .xlsx; with this on they also become an .svg bar chart drawn in the panel — and the summarizing model, which just read every row, picks which column to plot (better than a heuristic grabbing the id column). Off: spreadsheet only." },
+
+  // ── Sync & startup ──
+  startup_sync_days: { group: "Sync & startup", label: "Catch-up window (days)", type: "number",
+    desc: "How far back the app reaches when it opens, for what arrived while it was closed.",
+    help: "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup." },
+
+  // ── Display ──
+  feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
+    desc: "How many days the Timeline shows. Display only — nothing is deleted.",
+    help: "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search." },
 };
-const GROUPS = ["Triage & routing", "Drafting & replies", "Coder agent", "Notifications", "Attachments & images", "Display", "Other"];
+const GROUPS = ["Triage & routing", "Replies", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
+// internal state and settings that moved onto their connector - never shown as knobs
+const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_enabled",
+                        "owner_name", "owner_email"]);   // the owner lives on the Docs page
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
 const SECTION_HELP = {
@@ -112,12 +122,14 @@ export default function SettingsView() {
   const [err, setErr] = useState("");
 
   const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
+  const [agentNames, setAgentNames] = useState([]);
 
   const load = useCallback(async () => {
     try {
       const [p, s, m] = await Promise.all([api.get("/api/policies"), api.get("/api/settings"), api.get("/api/memory")]);
       setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []);
       api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
+      api.get("/api/agents").then(({ data }) => setAgentNames((data.data || []).map((a) => a.Name))).catch(() => {});
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load settings"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -132,7 +144,7 @@ export default function SettingsView() {
   // Deep search: every hit knows which page (and tab) it lives on and jumps there.
   const hit = (...parts) => parts.join(" ").toLowerCase().includes(q.toLowerCase());
   const results = !q ? [] : [
-    ...settings.filter((s) => { const m = meta(s.Name); return hit(s.Name, s.Description, m.label, m.desc, m.help, m.group); })
+    ...settings.filter((s) => { if (HIDDEN.has(s.Name)) return false; const m = meta(s.Name); return hit(s.Name, s.Description, m.label, m.desc, m.help, m.group); })
       .map((s) => ({ key: `k${s.Name}`, label: meta(s.Name).label, crumb: `Configuration → ${meta(s.Name).group}`,
         go: () => { setPage("config"); setCfgTab(meta(s.Name).group); setQ(""); } })),
     ...(policies || []).filter((p) => hit(p.Name, p.Kind, p.Pattern, p.Action, p.Reason))
@@ -143,6 +155,14 @@ export default function SettingsView() {
 
   const control = (s) => {
     const m = meta(s.Name);
+    // the agent roster is user-config, so the default-agent knob is a real dropdown of it
+    if (m.type === "agent") return (
+      <Select size="small" value={agentNames.includes(s.Value) ? s.Value : (agentNames[0] || "")}
+        onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
+        {agentNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{n}</MenuItem>)}
+        {!agentNames.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no agents yet — add one under Connectors</MenuItem>}
+      </Select>
+    );
     // the brains list is dynamic: AI connectors that actually hold a key + your CLI agents
     if (m.type === "brain") return (
       <Select size="small" displayEmpty value={brains.some((b) => b.value === s.Value) ? s.Value : ""}
@@ -178,7 +198,7 @@ export default function SettingsView() {
 
   /* ── detail pages ─────────────────────────────────────────────────────── */
   if (page === "config") {
-    const rows = settings.filter((s) => meta(s.Name).group === cfgTab);
+    const rows = settings.filter((s) => !HIDDEN.has(s.Name) && meta(s.Name).group === cfgTab);
     const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
     return (
       <Box sx={{ maxWidth: 980 }}>

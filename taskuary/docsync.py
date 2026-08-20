@@ -22,7 +22,7 @@ TOOL_TEXT = {'0': 'yours to read, and to create/update things in ONLY when the t
              '1': 'yours to use — read from it and create/update things in it as the work needs'}
 
 def role_text(store, role):
-    if role == 'tool': return TOOL_TEXT.get(store.get_settings().get('agent_issues_enabled') or '0', TOOL_TEXT['0'])
+    if role == 'tool': return TOOL_TEXT['1' if store.github_permissions()[0] else '0']
     return ROLE_TEXT.get(role)
 
 

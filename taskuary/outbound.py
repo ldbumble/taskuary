@@ -87,6 +87,16 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""
     ch, ext = msg.get('Channel'), str(msg.get('ExternalId') or '')
+    if ch == 'email' and ext.startswith('imap:'):
+        # mail that arrived over IMAP goes back over the provider's own SMTP, in-thread
+        from .imapmail import send_smtp
+        box = msg.get('SourceName') or ''
+        c = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
+                  if x['Type'] in ('gmail', 'imap') and x['Active']
+                  and json.loads(x.get('ConfigJson') or '{}').get('address', '').lower() == box.lower()), None)
+        if not c: raise RuntimeError(f'no IMAP connection is set up for {box}')
+        return send_smtp(store, c, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
+                         body, in_reply_to=msg.get('ConversationId'))
     if ch == 'email':
         return send_email(store, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
                           body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'))

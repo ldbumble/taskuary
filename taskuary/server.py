@@ -397,13 +397,17 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     sends; nothing here does."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, 'reply', ACTOR)
-    rv = store.pending_review(tid)
+    # a FILED message stays filed: answering it is a reply, not a project, and promoting it to a
+    # task just to hold the review put a TQ badge on chatter. The review rides task-less.
+    tid = m.get('TaskId')
+    rv = store.pending_review(tid) if tid else None
     rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
                                                       'Status': 'pending', 'Reason': 'you opened a reply on this message'})
     draft = (rv or {}).get('DraftText') or ''
     if not draft and (body is None or body.draft):
-        try: draft = responder.write_draft(store, tid, rid, actor=ACTOR)
+        try:
+            draft = (responder.write_draft(store, tid, rid, actor=ACTOR) if tid
+                     else responder.draft_for_message(store, m, rid))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
     store.audit('review', rid, 'open_reply', ACTOR, detail={'message_id': mid})
@@ -575,8 +579,9 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
         msg = store.get_message(rv['MessageId'])
         try:
             sent = outbound.reply_to_message(store, msg, final)
-            store.add_comment(rv['TaskId'], ACTOR, 'human',
-                              f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}.")
+            if rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], ACTOR, 'human',
+                                  f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}.")
         except Exception as e:
             send_err = str(e)[:300]
             logger.warning(f'reply send failed for review {rid}: {send_err}')

@@ -15,6 +15,7 @@ SESSIONS = {}               # sid -> Term
 SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
 SEED_SETTLE = 8                     # cap on waiting for the input box to finish laying out a long paste
 SEED_ENTER = 1.0                    # how long to give the TUI to react to Enter before pressing again
+SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate the prompt, and the total window
 DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
 
 
@@ -130,27 +131,52 @@ class Term:
             quiet, last = (quiet + .1, last) if self.n == last else (0, self.n)
         return self.alive
 
+    def _echoed(self) -> bool:
+        """Is the typed prompt actually ON the screen? A CLI that boots into a dialog - codex's
+        first-run "do you trust this directory?" is the live example - silently eats whatever is
+        typed at it, and pressing Enter blind would ANSWER that dialog, which is the owner's
+        security decision to make, not ours."""
+        head = ' '.join(self.seeded.split())[:40]
+        return len(head) > 10 and head in ' '.join(render(self.scrollback(), self.cols, self.rows).split())
+
     def seed(self, text: str):
         """Type the first prompt in AND SEND IT. The owner asked for the work when they clicked
         the button, so leaving a filled-in box for them to come back and press Enter on is not
         starting - it is a session that looks busy and has done nothing.
 
-        Two waits, both measured rather than guessed: for the CLI to finish booting before the
-        text goes in, and for the input box to finish laying the paste out before Enter does.
-        Then Enter is pressed until the session ANSWERS - a carriage return arriving mid-redraw
-        reads as part of the same edit and is dropped, and some TUIs submit on \\n not \\r."""
+        Everything here is verified, not assumed: wait for the boot to go quiet, type, then check
+        the text ECHOED before any Enter goes in. Not echoed means a boot dialog ate it (a trust
+        prompt, a login) - those are answered by the owner in the terminal, never by us - so wait
+        for the screen to move past it and type the prompt again. Echoed means press Enter until
+        the session answers, because a CR arriving mid-redraw reads as part of the same edit and
+        some TUIs submit on \\n not \\r."""
         def go():
             start = time.time()
             while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
             if not self.settle(max(1.0, SEED_WAIT - (time.time() - start))): return
             self.seeded = ' '.join(text.split())
-            self.write(self.seeded)
-            for key in ('\r', '\r', '\n'):
+            for attempt in range(SEED_RETRIES):
+                self.write(self.seeded)                   # attempt > 0 = retyped: the first copy was eaten
                 if not self.settle(SEED_SETTLE): return
-                was = self.n
-                self.write(key)
-                time.sleep(SEED_ENTER)
-                if self.n > was: return                   # it answered: the prompt went in
+                if not self._echoed():
+                    # a dialog is up: hold until the screen changes (the owner answered it),
+                    # inside the overall budget, then try the prompt again
+                    was = self.n
+                    while self.alive and self.n == was and time.time() - start < SEED_BUDGET:
+                        time.sleep(.5)
+                    if time.time() - start >= SEED_BUDGET:
+                        logger.warning(f'terminal {self.sid}: the CLI is waiting on a prompt of its own '
+                                       f'(trust/login?) - answer it and the seeded ask will need retyping')
+                        return
+                    if not self.settle(SEED_SETTLE): return
+                    continue
+                for key in ('\r', '\r', '\n'):
+                    was = self.n
+                    self.write(key)
+                    time.sleep(SEED_ENTER)
+                    if self.n > was: return               # it answered: the prompt went in
+                    if not self.settle(SEED_SETTLE): return
+                return                                    # echoed but never submitted: stop typing
             logger.warning(f'terminal {self.sid}: prompt typed but nothing came back - press Enter')
         threading.Thread(target=go, daemon=True).start()
 
@@ -200,12 +226,25 @@ def default_shell():
 # them, so an unattended session stopped at the first approval prompt instead of working.
 PIPE_FLAGS = {'-p', '--print'}
 PIPE_OPTS = {'--output-format', '--input-format'}
+# codex spells its pipe mode as a SUBCOMMAND, not a flag: `codex exec` is one prompt in, one
+# result out, and a session launched with it just runs headless and exits. Bare `codex` is
+# the TUI, so a leading exec is dropped the same way claude's -p is - and exec-only flags are
+# TRANSLATED, because the TUI rejects them outright: `--full-auto` exists only under exec, and
+# its interactive equivalent is the workspace-write sandbox (approvals then happen IN the
+# session, where a person is watching - which is the whole point of running one).
+PIPE_SUBCOMMANDS = {'exec', 'e'}
+PIPE_TRANSLATE = {'--full-auto': ['--sandbox', 'workspace-write']}
 
 def interactive_args(args) -> list:
     out, skip = [], False
-    for a in (args or []):
+    piped = bool(args) and args[0] in PIPE_SUBCOMMANDS
+    for i, a in enumerate(args or []):
         if skip: skip = False; continue
-        if a in PIPE_FLAGS: continue
+        if i == 0 and piped: continue
+        if piped and a in PIPE_TRANSLATE: out += PIPE_TRANSLATE[a]; continue
+        # -p is claude's pipe flag but codex's --profile, which takes a value: only strip it
+        # for a command that was not already marked headless some other way
+        if a in PIPE_FLAGS and not piped: continue
         if a in PIPE_OPTS: skip = True; continue
         out.append(a)
     return out
@@ -241,9 +280,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         paths = profile.get('cwd_map') or {}
         cwd = paths.get(repo)
         if not cwd and paths:
-            raise ValueError(f'no local path for {repo} on agent "{agent}" - add one (Connectors > the '
-                             f'agent > repo paths), or the session would open in '
-                             f'{profile.get("cwd") or os.getcwd()} and work the wrong checkout')
+            raise ValueError(f'no local path for {repo}. Open the task menu (...) > Pick the repository, '
+                             f'choose {repo} and give it the checkout path - otherwise the session would open '
+                             f'in {profile.get("cwd") or os.getcwd()} and work the wrong tree')
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)

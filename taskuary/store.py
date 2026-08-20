@@ -118,7 +118,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # {{owner_email}} and are filled in when an AI reads them - see store.doc().
                     'owner_name': '', 'owner_email': '',
                     # what gets pushed to notify-role channels: off | needs_me | all
-                    'notify_level': 'needs_me'}
+                    'notify_level': 'needs_me',
+                    # which CLI agent works tasks when nothing names one - pickers list it first
+                    'default_agent': 'coder'}
 
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,

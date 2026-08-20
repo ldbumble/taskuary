@@ -154,6 +154,14 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     if not t: raise HTTPException(404, 'task not found')
     fields = {k: v for k, v in body.dict().items() if v is not None}
     store.update_task(task_id, fields, ACTOR)
+    # "Mark done - I took care of it" means the agent's job is over too: a live session left
+    # running on a finished task is an agent nobody is coming back for. close() files the
+    # transcript first, so the record survives the pty as always.
+    if fields.get('Status') in ('done', 'dropped'):
+        live = hub_term.session_for(task_id)
+        if live and live.alive:
+            hub_term.close(live.sid)
+            store.add_comment(task_id, ACTOR, 'human', 'Task closed - ended the live agent session with it.')
     # "This is not a coding task - it just needs an answer." Changing the kind to reply IS that
     # verdict, so the task enters the Review queue the way a question would have at triage:
     # a draft review appears (auto-drafted when that is on), instead of a repo session.
@@ -772,7 +780,10 @@ def agents():
         prof = json.loads(a.get('Config') or '{}')
         picks = CLI_MODELS.get((prof.get('cmd') or '').lower(), [])
         return {'cmd': prof.get('cmd'), 'default': prof.get('model'), 'choices': picks}
-    return {'data': store.list_agents(), 'config': cfg.get('agents', {}),
+    # the default agent (a setting) comes FIRST: every picker's initial value is the head of
+    # this list, so "which CLI opens when I hit Start session" is decided in one place
+    rows = sorted(store.list_agents(), key=lambda a: a['Name'] != (store.get_settings().get('default_agent') or 'coder'))
+    return {'data': rows, 'config': cfg.get('agents', {}),
             'models': {a['Name']: _models(a) for a in store.list_agents()}}
 
 @app.post('/api/agents/{name}/test')

@@ -173,14 +173,36 @@ class TerminalTests(unittest.TestCase):
         t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(3)'], os.getcwd(), 'test')
         terminal.SESSIONS[t.sid] = t
         wrote = []
+        # a pty ECHOES what is typed - the seed verifies that before any Enter goes in, so the
+        # fake write feeds the buffer the way a real echo would
+        def fake_write(x): wrote.append(x); t._append(x)
         try:
-            with mock.patch.object(t, 'write', side_effect=lambda s: wrote.append(s)):
+            with mock.patch.object(t, 'write', side_effect=fake_write):
                 with mock.patch.object(terminal, 'SEED_QUIET', 0), mock.patch.object(terminal, 'SEED_ENTER', .05):
                     t.n = 1                                  # the TUI has printed: it is 'ready'
-                    t.seed('do the thing')
+                    t.seed('do the thing and then do the other thing')
                     self.assertTrue(_wait(lambda: len(wrote) >= 2))
-            self.assertEqual(wrote[0], 'do the thing')        # the text, with no CR glued on
+            self.assertEqual(wrote[0], 'do the thing and then do the other thing')
             self.assertEqual(wrote[1], '\r')                  # then Enter, on its own
+        finally:
+            terminal.close(t.sid)
+
+    def test_an_unechoed_prompt_is_never_submitted_blind(self):
+        """codex boots into "do you trust this directory?" - a dialog that eats typed text and
+        treats Enter as its ANSWER. If the text never echoes, no Enter may be pressed: trusting
+        a directory is the owner's security decision, not the seeder's."""
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(3)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        wrote = []
+        try:
+            with mock.patch.object(t, 'write', side_effect=wrote.append):   # NO echo: a dialog ate it
+                with mock.patch.object(terminal, 'SEED_QUIET', 0), mock.patch.object(terminal, 'SEED_ENTER', .05), \
+                     mock.patch.object(terminal, 'SEED_BUDGET', 1.5):
+                    t.n = 1
+                    t.seed('do the thing and then do the other thing')
+                    time.sleep(2.5)
+            self.assertNotIn('\r', wrote)                     # nothing answered the dialog for them
+            self.assertNotIn('\n', wrote)
         finally:
             terminal.close(t.sid)
 
@@ -386,7 +408,8 @@ class RepoRoutingTests(unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             terminal.open_session(server.store, 'coder', self._task('x'), 'mfaVita/TopE')
         self.assertIn('no local path for mfaVita/TopE', str(e.exception))
-        self.assertIn('wrong checkout', str(e.exception))
+        self.assertIn('Pick the repository', str(e.exception))    # the fix is ON the task now
+        self.assertIn('wrong tree', str(e.exception))
 
     def test_the_api_lists_every_repo_with_whether_it_can_be_opened(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')

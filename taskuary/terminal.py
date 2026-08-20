@@ -492,8 +492,10 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     parts.append('WHAT TO DO: work it from THIS message alone. Diagnose the problem, fix it if it '
                  'is fixable, and if it is not, say plainly what the problem is and what it would '
                  'take. Do NOT call the Taskuary API, read its database or go looking for this task '
-                 'anywhere - everything known about it is above. Ask the owner here in the session '
-                 'if something is genuinely missing.')
+                 'anywhere - everything known about it is above. Do NOT create GitHub issues, PRs or '
+                 'any other tracker items for this work unless this message explicitly asks for one - '
+                 'Taskuary IS the tracker, and this task is the record. Ask the owner here in the '
+                 'session if something is genuinely missing.')
     return ' '.join(' '.join(parts).split())
 
 

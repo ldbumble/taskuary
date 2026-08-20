@@ -24,8 +24,9 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
   useEffect(() => { setRows(null); setOpen(null); setPath(""); setErr(""); load(); }, [taskId, agent]);
 
   const choose = async (r, withPath) => {
-    // a repo Taskuary knows about but has no path for cannot be opened at all - ask once, here
-    if (!r.has_path && !withPath) { setOpen(r.repo); setPath(""); setErr(""); return; }
+    // a repo Taskuary knows about but has no path for cannot be opened at all - but the search
+    // usually FOUND the checkout already, so the answer is prefilled and one click confirms it
+    if (!r.has_path && !withPath) { setOpen(r.repo); setPath(r.found || ""); setErr(""); return; }
     setBusy(true); setErr("");
     try {
       const { data } = await api.put(`/api/tasks/${taskId}/repo`,
@@ -80,9 +81,11 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
                 session cannot open here at all - it would silently land in the default folder. */}
             {open === r.repo && (
               <Box sx={{ mt: 0.75, pl: 2.6 }}>
-                <Typography variant="caption" sx={{ color: "#b45309", display: "block", mb: 0.5 }}>
-                  Where is {r.repo} checked out on this machine? Saved on the {agent} agent, so every
-                  future task routed here uses it.
+                <Typography variant="caption" sx={{ color: r.found ? "#15803d" : "#b45309", display: "block", mb: 0.5 }}>
+                  {r.found
+                    ? `Found a checkout of ${r.repo} (matched by its git remote) — confirm or correct the path.`
+                    : `Where is ${r.repo} checked out on this machine? Saved on the ${agent} agent, so every
+                       future task routed here uses it.`}
                 </Typography>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <TextField size="small" fullWidth autoFocus value={path} placeholder="C:\\Users\\you\\Documents\\TopE"

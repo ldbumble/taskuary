@@ -279,10 +279,18 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if not cwd and repo:
         paths = profile.get('cwd_map') or {}
         cwd = paths.get(repo)
+        if not cwd:
+            # before refusing, LOOK - the checkout usually exists, just unconfigured
+            found = find_checkout(repo, profile)
+            if found:
+                cwd = found
+                if agent: remember_path(store, agent, repo, found)
+                logger.info(f'found {repo} at {found} - remembered on {agent or label}')
         if not cwd and paths:
-            raise ValueError(f'no local path for {repo}. Open the task menu (...) > Pick the repository, '
-                             f'choose {repo} and give it the checkout path - otherwise the session would open '
-                             f'in {profile.get("cwd") or os.getcwd()} and work the wrong tree')
+            raise ValueError(f'no local path for {repo}, and a search of your code folders found no '
+                             f'checkout with that git remote. Open the task menu (...) > Pick the '
+                             f'repository, choose {repo} and give it the path - otherwise the session '
+                             f'would open in {profile.get("cwd") or os.getcwd()} and work the wrong tree')
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
@@ -537,6 +545,60 @@ def rank_repos(store, tid: int, profile: dict) -> list:
         hit = len(dt & set(xs)) / max(4, len(dt))
         return round(named + 2 * hit + cosine(xs, list(dt)), 4)
     return sorted(((r, score(r), bool(paths.get(r))) for r in known), key=lambda x: -x[1])
+
+
+_SKIP_DIRS = {'node_modules', 'venv', '.venv', '__pycache__', 'dist', 'build', 'bin', 'obj',
+              'appdata', 'site-packages', 'windows', 'program files', 'program files (x86)'}
+
+def find_checkout(repo: str, profile: dict, budget: int = 4000, seconds: float = 3.0):
+    """Where IS this repo on disk? "No local path configured" reads as "cannot find it" to the
+    owner - who knows perfectly well the checkout exists - so before asking for a path, LOOK:
+    walk the folders around the checkouts we already know (plus the usual homes for code), and
+    match on the git remote, because the folder is not always named after the repo (this very
+    project is ldbumble/taskuary checked out in a folder called taskhub)."""
+    from pathlib import Path
+    want = repo.lower().rstrip('/')
+    roots = [Path(v).parent for v in list((profile.get('cwd_map') or {}).values())
+             + [profile.get('cwd') or ''] if v]
+    home = Path.home()
+    roots += [home / 'Documents', home / 'source' / 'repos', home / 'repos', home / 'code', home / 'projects']
+    seen, queue, deadline = set(), [(r, 0) for r in roots if r.is_dir()], time.time() + seconds
+    while queue and budget > 0 and time.time() < deadline:
+        d, depth = queue.pop(0)
+        key = str(d).lower()
+        if key in seen or d.name.lower() in _SKIP_DIRS or d.name.startswith('.'): continue
+        seen.add(key); budget -= 1
+        cfg = d / '.git' / 'config'
+        if cfg.is_file():
+            try:
+                if want in cfg.read_text(encoding='utf-8', errors='ignore').lower(): return str(d)
+            except OSError: pass
+            continue                        # a repo dir either way: never descend into one
+        if depth >= 3: continue
+        try: queue += [(c, depth + 1) for c in d.iterdir() if c.is_dir()]
+        except OSError: continue
+    return None
+
+
+def remember_path(store, agent: str, repo: str, path: str):
+    """A found checkout is worth keeping: onto the agent row AND config.toml, so the search
+    runs once per repo, not once per session."""
+    import json
+    from . import config as cfg_mod
+    row = store.get_agent(agent)
+    if not row: return
+    prof = json.loads(row.get('Config') or '{}')
+    prof.setdefault('cwd_map', {})[repo] = path
+    store.upsert_agent(agent, row.get('Kind') or 'coding', 'cli', json.dumps(prof))
+    try:
+        conf = cfg_mod.load()
+        # only when the agent has a real profile there - a partial {cwd_map} entry would be
+        # upserted at next boot as an agent with no cmd
+        if (conf.get('agents') or {}).get(agent):
+            conf['agents'][agent].setdefault('cwd_map', {})[repo] = path
+            cfg_mod.save(conf)
+    except Exception as e:
+        logger.warning(f'could not persist the found path to config: {e}')
 
 
 def guess_repo(store, tid: int, profile: dict) -> tuple:

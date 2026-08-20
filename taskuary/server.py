@@ -494,9 +494,16 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     if not rv: raise HTTPException(404, 'review not found')
     verb2status = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
     if body.verb not in verb2status: raise HTTPException(422, 'bad verb')
-    final = body.final_text if body.verb == 'edit' else (rv.get('DraftText') if body.verb == 'approve' else None)
-    store.decide_review(rid, verb2status[body.verb], final, ACTOR, body.note)
-    if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f'Reviewed draft ({body.verb}):\n{final}')
+    # ONE approve. Approving sends whatever is in the box, so making the owner choose between
+    # "approve" and "approve my edit" asked them to declare something we can just look at: if the
+    # text differs from the draft, it was edited. Both verbs still land, for older callers.
+    if body.verb in ('approve', 'edit'):
+        final = body.final_text if (body.final_text or '').strip() else rv.get('DraftText')
+        verb = 'edit' if (final or '').strip() != (rv.get('DraftText') or '').strip() else 'approve'
+    else:
+        final, verb = None, body.verb
+    store.decide_review(rid, verb2status[verb], final, ACTOR, body.note)
+    if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f'Reviewed draft ({verb}):\n{final}')
     # APPROVING IS SENDING. A verdict that never leaves the machine is half a funnel: the
     # answer goes back on the channel the request arrived on, in its own thread.
     sent, send_err = None, None
@@ -511,15 +518,15 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
             logger.warning(f'reply send failed for review {rid}: {send_err}')
             if rv.get('TaskId'):
                 store.add_comment(rv['TaskId'], ACTOR, 'human', f'NOT SENT - {send_err}. The approved text is above.')
-    if body.verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
+    if verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
     # reply-only items are not real tasks: answering them IS the work, so close on decision -
     # and a coder-finished task waits on exactly this send, so sending it closes that too
-    if body.verb in ('approve', 'edit') and rv.get('TaskId'):
+    if verb in ('approve', 'edit') and rv.get('TaskId'):
         t = store.get_task(rv['TaskId'])
         if ((t or {}).get('Kind') == 'reply' or rv.get('Kind') == 'draft_reply') and t.get('Status') not in ('done', 'dropped'):
             store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
-    store.audit('review', rid, body.verb, ACTOR, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
-    return {'ok': True, 'status': verb2status[body.verb], 'sent': sent, 'send_error': send_err}
+    store.audit('review', rid, verb, ACTOR, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
+    return {'ok': True, 'status': verb2status[verb], 'sent': sent, 'send_error': send_err}
 
 @app.post('/api/reviews/{rid}/release')
 def release_review(rid: int):
@@ -786,12 +793,42 @@ def delete_agent(name: str):
     return {'ok': True}
 
 @app.get('/api/doc/{name}')
-def get_doc(name: str): return {'name': name, 'content': store.get_doc(name) or ''}
+def get_doc(name: str):
+    """Raw for the editor, rendered so you can see what an agent will actually read."""
+    return {'name': name, 'content': store.get_doc(name) or '', 'rendered': store.doc(name) or '',
+            'owner': store.owner()}
 
 @app.put('/api/doc/{name}')
 def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
+
+class OwnerBody(BaseModel): name: str; email: str | None = None
+
+@app.get('/api/owner')
+def get_owner(): return {**store.owner(), 'tokens': list(store_mod.DOC_TOKENS)}
+
+@app.put('/api/owner')
+def put_owner(body: OwnerBody):
+    """Your name, in ONE place. SOUL.md and CODER.md refer to the owner nine times between them,
+    so typing it in changed one of them and left a document that half called you by name and half
+    called you John Smith. Saving here rewrites every literal occurrence of the OLD name into a
+    {{owner}} token, so the documents convert themselves once and never drift again."""
+    new = (body.name or '').strip()
+    if not new: raise HTTPException(422, 'a name is required')
+    was = store.owner()
+    changed = []
+    for doc in ('soul', 'coder', 'digest'):
+        raw = store.get_doc(doc)
+        if not raw: continue
+        tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
+        if tokened != raw:
+            store.save_doc(doc, tokened, ACTOR)
+            changed.append(doc)
+    store.set_setting('owner_name', new, ACTOR)
+    if body.email is not None: store.set_setting('owner_email', body.email.strip(), ACTOR)
+    store.audit('doc', 0, 'set_owner', ACTOR, detail={'from': was['owner'], 'to': new, 'retokened': changed})
+    return {**store.owner(), 'retokened': changed}
 
 @app.get('/api/policies')
 def policies(): return {'data': store.list_policies(active_only=False)}

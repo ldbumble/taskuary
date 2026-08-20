@@ -561,7 +561,7 @@ const CommentRow = ({ c }) => {
       </Box>
       <Box component="td" sx={{ py: 0.6, width: "100%", cursor: long ? "pointer" : "default" }}
         onClick={() => long && setOpen(!open)}>
-        <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", lineHeight: 1.5,
+        <Typography ref={ref} variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", lineHeight: 1.5,
           ...(open ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
           {body}
         </Typography>

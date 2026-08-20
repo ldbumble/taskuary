@@ -195,6 +195,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // Hovering a line auto-opens it in the review panel (260ms intent delay so scrolling
   // doesn't thrash); click selects instantly. A draft mid-edit locks the panel in place.
   const [sel, setSel] = useState(null);
+  const [sendErr, setSendErr] = useState("");     // approved, but the channel refused it
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
   const drill = async (row) => {
@@ -217,9 +218,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
 
+  // Approving IS sending, so a refusal has to land in front of you now - not as a NOT SENT line
+  // in the task history that you find tomorrow. The panel stays open when the send failed.
   const decide = async (reviewId, verb, finalText) => {
-    await api.post(`/api/reviews/${reviewId}/decide`, { verb, final_text: finalText || null });
-    setSel(null); setEditText("");                     // stale edits must never block hover
+    const { data } = await api.post(`/api/reviews/${reviewId}/decide`, { verb, final_text: finalText || null });
+    if (data?.send_error) { setSendErr(data.send_error); load(); onChanged?.(); return; }
+    setSendErr(""); setSel(null); setEditText("");     // stale edits must never block hover
     load(); onChanged?.();
   };
 
@@ -407,7 +411,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <Box sx={{ position: "sticky", top: 60 }}>
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
               decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
-              onSkipped={() => { setSel(null); load(); }} onRefresh={() => load()} />
+              onSkipped={() => { setSel(null); load(); }} onRefresh={() => load()}
+              sendErr={sendErr} clearSendErr={() => setSendErr("")} />
           </Box>
         </Box>
       )}
@@ -457,7 +462,8 @@ const PanelLabel = ({ children }) => (
 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
-const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh }) => {
+const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh,
+                        sendErr, clearSendErr }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
@@ -553,7 +559,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 <>
                   <PanelLabel>Draft reply — review, edit, approve</PanelLabel>
                   <ReviewActions reviewId={sel.ReviewId} draft={pendingDraft(detail || { runs: [] }, sel)}
-                    editText={editText} setEditText={setEditText} decide={decide} />
+                    editText={editText} setEditText={setEditText} decide={decide}
+                    sendErr={sendErr} clearSendErr={clearSendErr} />
                 </>
               )}
 
@@ -797,16 +804,27 @@ const SplitTask = ({ row, onSplit }) => {
   );
 };
 
-const ReviewActions = ({ reviewId, draft, editText, setEditText, decide }) => (
+const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr }) => (
   <Box>
     <TextField fullWidth multiline minRows={3} size="small" placeholder="Edit the draft (or approve as-is)"
       value={editText || draft} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-      <Button size="small" variant="contained" onClick={() => decide(reviewId, "approve")}>Approve</Button>
-      <Button size="small" variant="outlined" disabled={!editText.trim() || editText === draft}
-        onClick={() => decide(reviewId, "edit", editText)}>Approve my edit</Button>
+      {/* ONE approve: it sends what is in the box, edited or not - two buttons asked you to
+          declare something the text already shows */}
+      <Button size="small" variant="contained" disabled={!(editText || draft || "").trim()}
+        onClick={() => decide(reviewId, "approve", editText || draft)}
+        title="Sends the text above on the channel it arrived on">Approve &amp; send</Button>
       <Button size="small" sx={{ color: "#8a94a6" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
       <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>
     </Box>
+    {sendErr && (
+      <Alert severity="error" sx={{ mt: 1 }} onClose={clearSendErr}>
+        <b>Approved, but it did not send.</b> {sendErr}
+        <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
+          The text is kept on the task marked NOT SENT, so nothing is lost — send it by hand, or hand
+          the task to a person on a channel that works.
+        </Box>
+      </Alert>
+    )}
   </Box>
 );

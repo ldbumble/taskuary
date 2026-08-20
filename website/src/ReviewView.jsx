@@ -22,6 +22,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
   const [edits, setEdits] = useState({});
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState("");
+  const [sendErr, setSendErr] = useState(null);   // approved, but the channel refused it
 
   const load = useCallback(async () => {
     try { setRows((await api.get("/api/reviews", { params: filter ? { status: filter } : {} })).data.data || []); }
@@ -29,11 +30,14 @@ export default function ReviewView({ onOpenTask, onChanged }) {
   }, [filter]);
   useEffect(() => { load(); }, [load]);
 
+  // Approving IS sending, so a send that failed has to say so HERE, the moment you click - it
+  // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
   const decide = async (r, verb) => {
-    setBusy(r.ReviewId);
+    setBusy(r.ReviewId); setErr(""); setSendErr(null);
     try {
-      await api.post(`/api/reviews/${r.ReviewId}/decide`, { verb, final_text: verb === "edit" ? edits[r.ReviewId] : null,
-        note: null });
+      const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
+        { verb, final_text: verb === "approve" ? (edits[r.ReviewId] ?? r.DraftText ?? "") : null, note: null });
+      if (data.send_error) setSendErr({ id: r.ReviewId, msg: data.send_error });
       load(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
     setBusy(null);
@@ -101,11 +105,14 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                   placeholder={r.DraftText ? "" : "No draft yet — hit Draft with AI"}
                   inputProps={{ style: { fontSize: 12.5, lineHeight: 1.45 } }} />
                 <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
-                  <Button size="small" variant="contained" disabled={busy === r.ReviewId || !r.DraftText}
-                    onClick={() => decide(r, "approve")}>Approve</Button>
-                  <Button size="small" variant="outlined"
-                    disabled={busy === r.ReviewId || !(edits[r.ReviewId] || "").trim() || edits[r.ReviewId] === r.DraftText}
-                    onClick={() => decide(r, "edit")}>Approve my edit</Button>
+                  {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
+                      asked you to declare something the text already shows. */}
+                  <Button size="small" variant="contained"
+                    disabled={busy === r.ReviewId || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
+                    onClick={() => decide(r, "approve")}
+                    title="Sends the text above on the channel it arrived on">
+                    {busy === r.ReviewId ? "sending…" : "Approve & send"}
+                  </Button>
                   <Button size="small" sx={{ color: "#8a94a6" }} disabled={busy === r.ReviewId}
                     onClick={() => decide(r, "no_reply")}>No reply needed</Button>
                   <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Reject</Button>
@@ -114,6 +121,15 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     {busy === r.ReviewId ? <CircularProgress size={12} /> : r.DraftText ? "Redraft" : "Draft with AI"}
                   </Button>
                 </Box>
+                {sendErr?.id === r.ReviewId && (
+                  <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSendErr(null)}>
+                    <b>Approved, but it did not send.</b> {sendErr.msg}
+                    <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
+                      The text is kept on the task marked NOT SENT, so nothing is lost — send it by hand,
+                      or hand the task to a person on a channel that works.
+                    </Box>
+                  </Alert>
+                )}
               </Box>
             )}
             {r.Status === "held" && (

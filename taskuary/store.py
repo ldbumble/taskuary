@@ -2,7 +2,7 @@
 default) and in-memory (tests/demo). Every mutation is meant to be paired with .audit();
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
-import hashlib, json, sqlite3, threading
+import hashlib, json, re, sqlite3, threading
 from datetime import datetime
 
 GENESIS = '0' * 64
@@ -15,6 +15,44 @@ POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Acti
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
+
+# ── one owner, one place ─────────────────────────────────────────────────────────────────
+# The operator documents talk ABOUT the owner constantly ("protect John's time", "ask John in
+# the session", "Sign as John Smith"). Typed literally, changing your name means finding nine
+# of them, and the live docs ended up half Uri and half John Smith. So the docs carry tokens
+# and the name lives in one setting.
+DOC_TOKENS = ('owner', 'owner_first', 'owner_email')
+_TOKEN = re.compile(r'\{\{\s*(' + '|'.join(DOC_TOKENS) + r')\s*\}\}')
+_SOUL_NAME = re.compile(r'You work for \*\*(?P<name>[^*]+)\*\*(?:\s*\((?P<email>[^)]*)\))?')
+
+def render_doc(text: str, who: dict) -> str:
+    return _TOKEN.sub(lambda m: str(who.get(m.group(1)) or ''), text or '')
+
+def owner_from_soul(soul: str):
+    mt = _SOUL_NAME.search(soul or '')
+    return mt.group('name').strip() if mt else None
+
+def email_from_soul(soul: str):
+    mt = _SOUL_NAME.search(soul or '')
+    return (mt.group('email') or '').strip() if mt else ''
+
+def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
+    """Turn the literal name already written into a document into {{owner}}. Longest form
+    first, so "John Smith" does not become "{{owner}} Smith" - and never a name that is
+    already inside a token, or one that is part of a longer word ("Johnson").
+
+    This is what makes changing the name in ONE place change it everywhere: the document
+    rewrites itself once, and from then on the name lives only in the setting."""
+    out, full = text or '', (old_name or '').strip()
+    if (old_email or '').strip(): out = out.replace(old_email.strip(), '{{owner_email}}')
+    word = '\\b'
+    if len(full) > 2: out = re.sub(word + re.escape(full) + word, '{{owner}}', out)
+    first = full.split()[0] if full.split() else ''
+    if len(first) > 2 and first != full:
+        lhs, rhs = '(?<![{\\w])', '\\b(?![}\\w])'
+        out = re.sub(lhs + re.escape(first) + rhs, '{{owner_first}}', out)
+    return out
+
 
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
@@ -72,7 +110,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'triage_ai': '',      # '' = first active AI connector | connector:<type> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
                     'vision_enabled': '1',          # send attached images to the AI, when the model can see
-                    'report_images_enabled': '1'}   # reports hand back a chart, and draw it in the body
+                    'report_images_enabled': '1',   # reports hand back a chart, and draw it in the body
+                    # the ONE copy of your name. The docs say {{owner}} / {{owner_first}} /
+                    # {{owner_email}} and are filled in when an AI reads them - see store.doc().
+                    'owner_name': '', 'owner_email': ''}
 
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,
@@ -349,10 +390,24 @@ class SQLiteStore:
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')
     def set_memory_active(self, mid, active): self._exec('UPDATE memory SET Active=? WHERE MemoryId=?', (1 if active else 0, mid))
     def get_doc(self, name):
+        """The document AS WRITTEN - placeholders and all. This is what the editor loads and saves;
+        every consumer that feeds a doc to an AI wants `doc()` instead."""
         r = self._one('SELECT Content FROM doc WHERE Name=?', (name,)); return r['Content'] if r else None
     def save_doc(self, name, content, actor):
         self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
                    (name, content, actor, _now(), content, actor, _now()))
+    def doc(self, name):
+        """The document as the AI should read it: {{owner}} and friends filled in. The name used to
+        be typed into six places across SOUL.md and three more in CODER.md, so changing it changed
+        one of them - a doc that half calls you by name and half calls you John Smith."""
+        return render_doc(self.get_doc(name) or '', self.owner())
+    def owner(self) -> dict:
+        """Who this hub belongs to, from one setting. Falls back to whatever SOUL.md says so an
+        existing document keeps working before the owner has ever touched the field."""
+        st = self.get_settings()
+        name = (st.get('owner_name') or '').strip() or owner_from_soul(self.get_doc('soul') or '') or 'the owner'
+        email = (st.get('owner_email') or '').strip() or email_from_soul(self.get_doc('soul') or '')
+        return {'owner': name, 'owner_first': name.split()[0] if name.split() else name, 'owner_email': email}
 
     # feed
     # One definition of "this is on me", used by the chip, the counter and the filter alike:

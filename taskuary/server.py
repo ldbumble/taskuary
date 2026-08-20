@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, threading
+import asyncio, json, re, threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -174,6 +174,61 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     ses = start_session(store, task_id, body.agent, body.model, body.instruction)
     return {'dispatch': 'session', 'agent': body.agent, 'model': body.model, 'session': ses}
+
+class RepoBody(BaseModel):
+    repo: str | None = None          # None clears the tag and lets Taskuary guess again
+    path: str | None = None          # set the agent's local path for it, if it has none
+    agent: str = 'coder'
+    restart: bool = False            # close the session that is in the wrong tree and reopen here
+
+def _repo_rows(task_id: int, agent: str = 'coder'):
+    """Every repo Taskuary knows, ranked for this task, with whether the agent can open it. A repo
+    in SOUL.md with no local path is listed and flagged, not hidden - "we know what it is but not
+    where it is" is the thing the owner has to fix, and it cannot be fixed invisibly."""
+    row = store.get_agent(agent) or {}
+    prof = json.loads(row.get('Config') or '{}')
+    paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
+    tagged = (re.search(r'repo:([^\s,]+)', str((store.get_task(task_id) or {}).get('Tags') or '')) or [None, None])[1]
+    return [{'repo': r, 'score': sc, 'what': desc.get(r, ''), 'path': paths.get(r),
+             'has_path': has, 'tagged': r == tagged}
+            for r, sc, has in hub_term.rank_repos(store, task_id, prof)]
+
+@app.get('/api/tasks/{task_id}/repos')
+def task_repos(task_id: int, agent: str = 'coder'):
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    picked, why = hub_term.guess_repo(store, task_id, json.loads((store.get_agent(agent) or {}).get('Config') or '{}'))
+    return {'data': _repo_rows(task_id, agent), 'picked': picked, 'why': why}
+
+@app.put('/api/tasks/{task_id}/repo')
+def set_task_repo(task_id: int, body: RepoBody):
+    """Put this task in the right checkout. The `repo:` tag is the override that always wins over
+    the guess, so this is also how you correct one - and because a running session is already in
+    the wrong tree, `restart` closes it and opens a fresh one whose prompt names the new repo."""
+    t = store.get_task(task_id)
+    if not t: raise HTTPException(404, 'task not found')
+    tags = [x for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x and not x.startswith('repo:')]
+    if body.repo: tags.append(f'repo:{body.repo}')
+    store.update_task(task_id, {'Tags': ' '.join(tags)}, ACTOR)
+    # a repo Taskuary knows about but has no path for cannot be opened - take the path here
+    if body.repo and body.path:
+        row = store.get_agent(body.agent)
+        if not row: raise HTTPException(422, f'unknown agent: {body.agent}')
+        if not Path(body.path).is_dir(): raise HTTPException(422, f'not a directory: {body.path}')
+        prof = json.loads(row.get('Config') or '{}')
+        prof.setdefault('cwd_map', {})[body.repo] = body.path
+        cfg.setdefault('agents', {})[body.agent] = prof
+        config.save(cfg)
+        store.upsert_agent(body.agent, row.get('Kind') or 'coding', 'cli', json.dumps(prof))
+    store.add_comment(task_id, ACTOR, 'human',
+                      f'Repo set to {body.repo} - the session works there and the prompt says so.'
+                      if body.repo else 'Cleared the repo - Taskuary picks it from the ask again.')
+    store.audit('task', task_id, 'set_repo', ACTOR, detail={'repo': body.repo, 'path': body.path})
+    out = {'ok': True, 'repo': body.repo}
+    if body.restart:
+        live = hub_term.session_for(task_id)
+        if live: hub_term.close(live.sid)
+        out['session'] = start_session(store, task_id, body.agent)
+    return out
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int):

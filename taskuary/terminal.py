@@ -231,7 +231,16 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         argv, label = agent_argv(profile, model), agent
     else:
         argv, label = default_shell(), 'shell'
-    if not cwd and repo: cwd = (profile.get('cwd_map') or {}).get(repo)
+    # A named repo with no path used to fall through to the agent's default folder, so a task about
+    # one system opened a session in another and the agent edited the wrong tree in good faith.
+    # Refuse instead: not starting is recoverable, working the wrong checkout is not.
+    if not cwd and repo:
+        paths = profile.get('cwd_map') or {}
+        cwd = paths.get(repo)
+        if not cwd and paths:
+            raise ValueError(f'no local path for {repo} on agent "{agent}" - add one (Connectors > the '
+                             f'agent > repo paths), or the session would open in '
+                             f'{profile.get("cwd") or os.getcwd()} and work the wrong checkout')
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
@@ -386,30 +395,65 @@ def repo_map(store) -> dict:
     return {mt.group(1).strip(): mt.group(2).strip() for mt in _REPO_LINE.finditer(str(store.get_doc('soul') or ''))}
 
 
+def task_blob(store, tid: int) -> str:
+    t = store.get_task(tid) or {}
+    return ' '.join([t.get('Title') or '', str(t.get('Summary') or '')[:2000]]
+                    + [str(m.get('BodyText') or '')[:2000] for m in store.list_messages(tid)])
+
+
+def rank_repos(store, tid: int, profile: dict) -> list:
+    """Every repo Taskuary knows about, best match for this task first: [(repo, score, has_path)].
+
+    Scored over the WHOLE SOUL.md map, not just the repos this agent has a path for. Scoring only
+    the mapped ones is how a reimbursement task landed in the integrations repo: with one path
+    configured, "the only repo this agent has a path for" won without the ask ever being read."""
+    from .routing import cosine, tokens
+    paths, desc = (profile.get('cwd_map') or {}), repo_map(store)
+    known = list(dict.fromkeys(list(desc) + list(paths)))
+    text = task_blob(store, tid)
+    xs, blob = tokens(text), text.lower()
+    def score(r):
+        dt = set(tokens(f"{r.replace('/', ' ')} {desc.get(r, '')}"))
+        named = 1.0 if r.split('/')[-1].lower() in blob else 0.0
+        # how much of what this repo IS turns up in the ask. Cosine alone dilutes a decisive word
+        # ("reimbursement") to 0.07 against a long mail, which is how a real routing signal ended
+        # up under the floor and lost to a repo that matched nothing at all.
+        hit = len(dt & set(xs)) / max(4, len(dt))
+        return round(named + 2 * hit + cosine(xs, list(dt)), 4)
+    return sorted(((r, score(r), bool(paths.get(r))) for r in known), key=lambda x: -x[1])
+
+
 def guess_repo(store, tid: int, profile: dict) -> tuple:
-    """Which checkout does this task belong in? The tag on the task wins. Otherwise match the
-    ask against the repo map - but only over repos this agent can actually open (cwd_map), since
-    naming a repo it has no path for just lands the session in the default folder anyway.
+    """Which checkout does this task belong in? The tag on the task wins - that is the override,
+    and the only thing that always does what it says.
+
+    Otherwise the ask is matched against the SOUL.md repo map. A repo the ask clearly names is
+    returned even when this agent has no path for it, because open_session must then REFUSE
+    rather than quietly open the default folder - an agent editing the wrong checkout is far
+    worse than one that will not start. Only when the ask points nowhere at all does a single
+    configured repo become the default.
 
     Taskuary deciding this is the point: an agent left to work it out reads SOUL.md over the API,
     or guesses from the folder it happens to have started in."""
-    from .routing import cosine, tokens
     t = store.get_task(tid) or {}
     tag = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
     if tag: return tag, 'tagged on the task'
-    have = list((profile.get('cwd_map') or {}).keys())
-    if not have: return None, None
-    if len(have) == 1: return have[0], 'the only repo this agent has a path for'
-    blob = ' '.join([t.get('Title') or '', str(t.get('Summary') or '')[:2000]]
-                    + [str(m.get('BodyText') or '')[:2000] for m in store.list_messages(tid)])
-    xs, desc = tokens(blob), repo_map(store)
-    def score(r):
-        named = 1.0 if r.split('/')[-1].lower() in blob.lower() else 0.0
-        return named + cosine(xs, tokens(f"{r.replace('/', ' ')} {desc.get(r, '')}"))
-    best = max(have, key=score)
-    if score(best) < .08: return None, None
-    return best, ('named in the ask' if best.split('/')[-1].lower() in blob.lower()
-                  else 'closest match in the SOUL.md repo map')
+    paths = profile.get('cwd_map') or {}
+    # no repo paths at all = this agent does not do repo routing. Naming one anyway would put a
+    # REPO line in the prompt for a folder the session is not in.
+    if not paths: return (None, None)
+    ranked = rank_repos(store, tid, profile)
+    if not ranked: return (None, None)
+    best, sc, _has = ranked[0]
+    runner = ranked[1][1] if len(ranked) > 1 else 0.0
+    # "clearly the one" is a RELATIVE test: it beats the alternatives. A fixed floor is the wrong
+    # question on a long mail, and the old fallback - take the only repo we have a path for - is
+    # what put a reimbursement task in the integrations checkout, against the evidence.
+    if sc >= .05 and sc >= max(runner * 1.4, runner + .04):
+        return best, ('named in the ask' if best.split('/')[-1].lower() in task_blob(store, tid).lower()
+                      else 'closest match in the SOUL.md repo map')
+    # the ask points nowhere in particular: one configured repo is a fair default, several is a guess
+    return (list(paths)[0], 'the only repo this agent has a path for') if len(paths) == 1 else (None, None)
 
 
 def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,

@@ -1,7 +1,6 @@
 // Does the agent terminal actually SCROLL, and is the scrollbar visible? Drives a real
 // session in the Tasks tab and measures the xterm viewport.
-import puppeteer from "puppeteer-core";
-const EDGE = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
+import { launch } from "./browser.mjs";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const clickText = (page, label, tag = "*") => page.evaluate((label, tag) => {
   const el = [...document.querySelectorAll(tag)].filter((e) => e.offsetParent
@@ -12,7 +11,7 @@ const clickText = (page, label, tag = "*") => page.evaluate((label, tag) => {
 }, label, tag);
 (async () => {
   const [url, out] = [process.argv[2], process.argv[3]];
-  const b = await puppeteer.launch({ executablePath: EDGE, headless: "new" });
+  const b = await launch();
   const page = await b.newPage();
   const errs = [];
   page.on("pageerror", (e) => errs.push(e.message));

@@ -349,3 +349,68 @@ class DurableWrapTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/reviews/{rid}/release').status_code, 200)
         self.assertEqual(server.store.get_review(rid)['Status'], 'pending')
         self.assertEqual(c.post(f'/api/reviews/{rid}/release').status_code, 422)   # not held any more
+
+
+class RepoRoutingTests(unittest.TestCase):
+    """A wrong checkout means an agent editing the wrong tree in good faith. The real failure:
+    SOUL.md knew about the reimbursement repo, the agent had a path for only ONE repo, and
+    "the only repo this agent has a path for" won without the ask ever being read."""
+
+    SOUL = ('## Repository map\n'
+            '- **mfaVita/FanApp**: Python enterprise integration services, payroll imports, timesheets\n'
+            '- **mfaVita/TopE**: a travel and expense reimbursement platform with AI receipt validation\n')
+
+    def setUp(self):
+        server.store.save_doc('soul', self.SOUL, 'test')
+        server.store.upsert_agent('coder', 'coding', 'cli',
+                                  json.dumps({'cmd': 'claude', 'cwd': os.getcwd(),
+                                              'cwd_map': {'mfaVita/FanApp': os.getcwd()}}))
+
+    def _task(self, title, summary=''):
+        return c.post('/api/tasks', json={'Title': title, 'Summary': summary, 'Kind': 'coding'}).json()['taskId']
+
+    def test_the_ask_beats_the_only_repo_that_happens_to_be_configured(self):
+        prof = json.loads(server.store.get_agent('coder')['Config'])
+        tid = self._task('Reimbursement app', 'approving reimbursements shows an error on each transaction')
+        repo, why = terminal.guess_repo(server.store, tid, prof)
+        self.assertEqual(repo, 'mfaVita/TopE')           # NOT the one with a path
+        self.assertTrue(why)
+        ranked = terminal.rank_repos(server.store, tid, prof)
+        self.assertEqual(ranked[0][0], 'mfaVita/TopE')
+        self.assertFalse(ranked[0][2])                   # ...and we know we have no path for it
+        # a payroll task still goes to the integrations repo
+        pay = self._task('payroll import posts to the wrong month', 'the timesheets import is off')
+        self.assertEqual(terminal.guess_repo(server.store, pay, prof)[0], 'mfaVita/FanApp')
+
+    def test_a_repo_with_no_path_refuses_instead_of_opening_the_wrong_folder(self):
+        with self.assertRaises(ValueError) as e:
+            terminal.open_session(server.store, 'coder', self._task('x'), 'mfaVita/TopE')
+        self.assertIn('no local path for mfaVita/TopE', str(e.exception))
+        self.assertIn('wrong checkout', str(e.exception))
+
+    def test_the_api_lists_every_repo_with_whether_it_can_be_opened(self):
+        tid = self._task('Reimbursement app', 'approving reimbursements errors out')
+        out = c.get(f'/api/tasks/{tid}/repos').json()
+        self.assertEqual(out['picked'], 'mfaVita/TopE')
+        by = {r['repo']: r for r in out['data']}
+        self.assertFalse(by['mfaVita/TopE']['has_path'])
+        self.assertTrue(by['mfaVita/FanApp']['has_path'])
+        self.assertIn('reimbursement', by['mfaVita/TopE']['what'])
+
+    def test_pinning_a_repo_overrides_the_guess_and_takes_the_path_with_it(self):
+        tid = self._task('Reimbursement app', 'approving reimbursements errors out')
+        here = os.getcwd()
+        r = c.put(f'/api/tasks/{tid}/repo', json={'repo': 'mfaVita/TopE', 'path': here, 'agent': 'coder'})
+        self.assertEqual(r.status_code, 200)
+        prof = json.loads(server.store.get_agent('coder')['Config'])
+        self.assertEqual(prof['cwd_map']['mfaVita/TopE'], here)          # the path stuck
+        self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('mfaVita/TopE', 'tagged on the task'))
+        self.assertIn('repo:mfaVita/TopE', server.store.get_task(tid)['Tags'])
+        # ...and the prompt now says so, which is the whole point
+        self.assertIn('REPO: mfaVita/TopE', terminal.seed_text(server.store, tid, None, 'mfaVita/TopE', here))
+        # a bad path is refused rather than silently stored
+        self.assertEqual(c.put(f'/api/tasks/{tid}/repo',
+                               json={'repo': 'mfaVita/TopE', 'path': os.path.join(here, 'nope')}).status_code, 422)
+        # unpinning hands the choice back to the guess
+        c.put(f'/api/tasks/{tid}/repo', json={'repo': None})
+        self.assertNotIn('repo:', str(server.store.get_task(tid)['Tags'] or ''))

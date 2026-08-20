@@ -818,10 +818,16 @@ def put_owner(body: OwnerBody):
     if not new: raise HTTPException(422, 'a name is required')
     was = store.owner()
     changed = []
+    # 'the owner' is the fallback when no name is known, and real prose says those words -
+    # retokenizing them would punch {{owner}} holes all over a doc that never had a name in it
+    if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
     for doc in ('soul', 'coder', 'digest'):
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
+        # a drifted doc holds BOTH names - the one you typed in and the template's John Smith
+        # the edit missed - so the shipped placeholder is always swept too
+        tokened = store_mod.retoken_doc(tokened, 'John Smith', 'john.smith@example.com')
         if tokened != raw:
             store.save_doc(doc, tokened, ACTOR)
             changed.append(doc)

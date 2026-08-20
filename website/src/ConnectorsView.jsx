@@ -46,6 +46,22 @@ const META = {
       "Paste the xoxb- bot token under Credentials (write-only).",
       "Add each channel ID under Sources (channel → View details → ID at the bottom).",
       "Test authenticates and probes a real channel read."] },
+  telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs (optional — blank takes every chat)", srcPh: "-1001234567890",
+    fields: [], secretLabel: "bot token (from @BotFather)",
+    desc: "A Telegram bot as an inbound channel - message it (or add it to a group) and the chats flow through triage; approved replies go back into the same chat.",
+    howto: ["Message @BotFather in Telegram → /newbot → copy the token.",
+      "Paste the token under Credentials (write-only).",
+      "Test authenticates and adds a catch-all source; message your bot and Sync.",
+      "For a group: add the bot to it and disable its privacy mode (@BotFather → /setprivacy) so it sees messages.",
+      "Add specific chat IDs under Sources only if you want to LIMIT which chats come in."] },
+  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (optional — blank takes every chat)", srcPh: "15551234567@s.whatsapp.net",
+    fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"]], secretLabel: null,
+    desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
+    howto: ["The heavy dependency is deliberately NOT bundled: in the Taskuary folder run `cd taskuary/whatsapp && npm install && node bridge.mjs` (Node 18+).",
+      "Pair once: scan the QR the bridge prints (WhatsApp → Linked devices), or run it with --phone 1555… and enter the code it gives you.",
+      "Leave the bridge running; Test here confirms the pairing and adds a catch-all source.",
+      "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
+      "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
     fields: [], secretLabel: "fine-grained PAT",
     desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop.",
@@ -159,7 +175,7 @@ export default function ConnectorsView() {
       ...["anthropic", "openai", "azure_openai"].filter((t) => byType[t]).map((t) => chanCard(byType[t])),
       ...PLANNED_AI.map((p) => ({ key: p.name, title: p.name, desc: p.desc, channel: "ai", haystack: `${p.name} ${p.desc}`, planned: true })),
     ]},
-    { title: "Messaging", cards: ["outlook", "teams", "slack"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    { title: "Messaging", cards: ["outlook", "teams", "slack", "telegram", "whatsapp"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Developer", cards: ["github"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Data connections", cards: [
       {
@@ -300,15 +316,18 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   const setActive = async (on) => { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Active: on }); reload(); };
 
   const steps = [
-    { label: "Credentials", done: !!conn.HasSecret, body: (
+    { label: "Credentials", done: !!conn.HasSecret || !m.secretLabel, body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
         {m.fields.map(([label, key]) => (
           <TextField key={key} label={label} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
         ))}
-        <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
-          value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-          helperText="Write-only: stored server-side, never returned to the browser." />
+        {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
+        {m.secretLabel && (
+          <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
+            value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
+            helperText="Write-only: stored server-side, never returned to the browser." />
+        )}
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
           <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
             {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>

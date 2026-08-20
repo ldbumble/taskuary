@@ -36,13 +36,13 @@ const VIEW_FILTERS = [
 // Everything narrower lives in one grouped picker: category -> channel -> connection.
 const CATEGORIES = [
   { key: "", label: "everything", channels: null },
-  { key: "messages", label: "messages", channels: ["email", "teams", "slack"],
+  { key: "messages", label: "messages", channels: ["email", "teams", "slack", "telegram", "whatsapp"],
     c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
   { key: "code", label: "code", channels: ["github"], c: { bg: "#eceef1", fg: "#1c2536", bd: "#d3d8e0" } },
   { key: "reports", label: "reports", channels: ["report"], c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
-  github: "Repositories", report: "Reports" };
+  telegram: "Telegram chats", whatsapp: "WhatsApp chats", github: "Repositories", report: "Reports" };
 
 const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 
@@ -199,7 +199,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
   const drill = async (row) => {
-    setSel(row); setDetail(null); setEditText(""); want.current = row.MessageId;
+    setSel(row); setDetail(null); setEditText(""); setSendErr(""); want.current = row.MessageId;
     // no task = report / filed / ignored: fetch the message itself so the panel shows the
     // WHOLE body (the feed row only carries a truncated preview)
     try {

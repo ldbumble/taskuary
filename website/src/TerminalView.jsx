@@ -58,8 +58,25 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     window.addEventListener("resize", onResize);
     const ro = new ResizeObserver(onResize);
     ro.observe(host.current);
+    // The wheel never leaves the terminal. When xterm has nothing to scroll (an idle TUI in the
+    // alternate buffer, or a CLI that exited) it lets the event BUBBLE, so scrolling over the
+    // session yanked the whole page instead - "scroll defaults to page". A live TUI still gets
+    // the wheel first (xterm consumes it before this fires); this only swallows the leftovers.
+    const el = host.current;
+    const trap = (e) => e.preventDefault();
+    el.addEventListener("wheel", trap, { passive: false });
+    // ...and the scrollbar only shows when there is genuinely something behind it: a TUI in the
+    // alternate buffer scrolls ITSELF (the wheel is forwarded to it), so xterm's own bar would be
+    // a full-height slider that drags nothing.
+    const gauge = () => {
+      const scrollable = term.buffer.active.type === "normal" && term.buffer.active.length > term.rows;
+      el.style.setProperty("--sbar", scrollable ? "1" : "0");
+    };
+    gauge();
+    const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     term.focus();
-    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); ws.close(); term.dispose(); };
+    return () => { window.removeEventListener("resize", onResize); ro.disconnect();
+      el.removeEventListener("wheel", trap); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid]);
   return (
     <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden", bgcolor: CATPPUCCIN.bg }}>
@@ -72,7 +89,9 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           Colour comes from XTERM_THEME - this keeps the vertical bar on permanently. */}
       <Box ref={host} sx={{ height, p: 1, "& .xterm": { height: "100%" },
         "& .xterm-scrollable-element > .scrollbar.vertical": {
-          opacity: "1 !important", pointerEvents: "auto !important", visibility: "visible !important",
+          // pinned visible ONLY while scrollback exists (--sbar, set from the buffer state):
+          // an alternate-screen TUI scrolls itself, and a dead full-height slider is a lie
+          opacity: "var(--sbar, 0) !important", pointerEvents: "auto !important", visibility: "visible !important",
           // a visible TRACK, not just a slider: a bare thumb floating on a dark pane still reads
           // as "there is no scrollbar" - the channel is what says the pane scrolls
           background: "rgba(255,255,255,.06)", borderLeft: "1px solid rgba(255,255,255,.08)" },

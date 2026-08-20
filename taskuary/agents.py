@@ -29,14 +29,31 @@ def parse_cli_json(stdout: str):
         return (stdout or '').strip(), None
 
 
+def _fresh_path() -> str:
+    """PATH as it is NOW, not as it was when Taskuary started. A process keeps the environment
+    it was born with, so a CLI installed while the app was running said "command not found"
+    until a restart - the one thing the error told you to do that you should not have to.
+    Windows keeps the live value in the registry; elsewhere the inherited PATH is all there is."""
+    if os.name != 'nt': return os.environ.get('PATH', '')
+    import winreg
+    parts = [os.environ.get('PATH', '')]
+    for hive, key in ((winreg.HKEY_CURRENT_USER, 'Environment'),
+                      (winreg.HKEY_LOCAL_MACHINE, r'SYSTEM\CurrentControlSet\Control\Session Manager\Environment')):
+        try:
+            with winreg.OpenKey(hive, key) as k:
+                parts.append(os.path.expandvars(winreg.QueryValueEx(k, 'Path')[0]))
+        except OSError:
+            pass
+    return os.pathsep.join(p for p in parts if p)
+
+
 def _resolve_cmd(name: str) -> list:
     """Windows can't CreateProcess a bare 'claude': npm installs it as claude.cmd, which
     only PATH-resolves via which() and only executes through cmd /c."""
     import shutil
-    path = shutil.which(name)
+    path = shutil.which(name) or shutil.which(name, path=_fresh_path())
     if not path:
-        raise FileNotFoundError(
-            f"'{name}' not found on PATH - is the CLI installed? After installing, restart Taskuary so it sees the new PATH.")
+        raise FileNotFoundError(f"'{name}' not found on PATH - is the CLI installed?")
     if os.name == 'nt' and path.lower().endswith(('.cmd', '.bat')):
         return ['cmd', '/c', path]
     return [path]

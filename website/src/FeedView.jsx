@@ -93,7 +93,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [srcByChannel, setSrcByChannel] = useState({});   // channel -> connection names
   const [noMore, setNoMore] = useState(false);
   const [detail, setDetail] = useState(null);
-  const [editText, setEditText] = useState("");
+  const [editText, setEditText] = useState(null);    // null = untouched; "" = deliberately cleared
   const [err, setErr] = useState("");
   const seen = useRef(new Set());               // MessageIds already animated in
   const rowsLen = useRef(0);
@@ -199,7 +199,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
   const drill = async (row) => {
-    setSel(row); setDetail(null); setEditText(""); setSendErr(""); want.current = row.MessageId;
+    setSel(row); setDetail(null); setEditText(null); setSendErr(""); want.current = row.MessageId;
     // no task = report / filed / ignored: fetch the message itself so the panel shows the
     // WHOLE body (the feed row only carries a truncated preview)
     try {
@@ -213,7 +213,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const hoverSelect = (row) => {
     clearTimeout(hoverTimer.current);
     if (sel?.MessageId === row.MessageId) return;
-    if (sel && editText.trim()) return;                // don't yank an OPEN panel mid-edit
+    if (sel && (editText ?? "").trim()) return;        // don't yank an OPEN panel mid-edit
     hoverTimer.current = setTimeout(() => drill(row), 260);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
@@ -223,7 +223,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const decide = async (reviewId, verb, finalText) => {
     const { data } = await api.post(`/api/reviews/${reviewId}/decide`, { verb, final_text: finalText || null });
     if (data?.send_error) { setSendErr(data.send_error); load(); onChanged?.(); return; }
-    setSendErr(""); setSel(null); setEditText("");     // stale edits must never block hover
+    setSendErr(""); setSel(null); setEditText(null);   // stale edits must never block hover
     load(); onChanged?.();
   };
 
@@ -807,12 +807,12 @@ const SplitTask = ({ row, onSplit }) => {
 const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr }) => (
   <Box>
     <TextField fullWidth multiline minRows={3} size="small" placeholder="Edit the draft (or approve as-is)"
-      value={editText || draft} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
+      value={editText ?? draft ?? ""} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       {/* ONE approve: it sends what is in the box, edited or not - two buttons asked you to
           declare something the text already shows */}
-      <Button size="small" variant="contained" disabled={!(editText || draft || "").trim()}
-        onClick={() => decide(reviewId, "approve", editText || draft)}
+      <Button size="small" variant="contained" disabled={!(editText ?? draft ?? "").trim()}
+        onClick={() => decide(reviewId, "approve", editText ?? draft)}
         title="Sends the text above on the channel it arrived on">Approve &amp; send</Button>
       <Button size="small" sx={{ color: "#8a94a6" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
       <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>

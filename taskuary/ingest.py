@@ -208,7 +208,7 @@ def _auto_code(store, tid):
                           'Open the task and start it when you are ready.')
         return
     try:
-        term.start_on_task(store, tid, 'coder', actor='router')
+        term.start_on_task(store, tid, store.get_settings().get('default_agent') or 'coder', actor='router')
         store.add_comment(tid, 'router', 'agent', 'auto-started a live coder session (coder_auto_enabled)')
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')

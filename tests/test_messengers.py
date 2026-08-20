@@ -150,3 +150,88 @@ class OwnerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class NotifyTests(unittest.TestCase):
+    """A channel as an OUTPUT: timeline events pushed into a chat instead of you polling the
+    tab. The notify role names the connector, notify_chat names the chat, notify_level gates
+    what qualifies - and nothing ever echoes back into the chat it happened in."""
+    TASK_LLM = lambda self, s, u, **k: '{"intent": "task", "why": "asks for work"}'
+    REPLY_LLM = lambda self, s, u, **k: '{"intent": "reply_only", "why": "just a question"}'
+
+    def _store(self, level='needs_me'):
+        s = MemoryStore()
+        s.set_setting('notify_level', level, 'o')
+        s.set_setting('coder_auto_enabled', '0', 'o')          # tests must not spawn a real CLI
+        cid = s.get_connector_by_type('telegram')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'TOKEN', 'Active': 1,
+                          'Roles': 'trigger,notify', 'ConfigJson': json.dumps({'notify_chat': '777'})}, 'o')
+        return s
+
+    def _msg(self, **kw):
+        return {'external_id': kw.pop('ext', 'n1'), 'channel': 'email', 'subject': 'fix the export',
+                'body': 'the nightly export writes empty files', 'from_email': 'marcus@corp.com',
+                'from_name': 'Marcus', **kw}
+
+    def test_a_new_task_pings_the_chat_with_the_ref_and_the_ask(self):
+        from taskuary.ingest import ingest_message
+        s, sent = self._store(), []
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)):
+            out = ingest_message(s, self._msg(), llm=self.TASK_LLM)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0]['chat_id'], 777)
+        self.assertIn('TQ-0001', sent[0]['text'])
+        self.assertIn('fix the export', sent[0]['text'])
+        self.assertIn('Marcus', sent[0]['text'])
+        self.assertIsNotNone(out['task_id'])
+
+    def test_needs_me_stays_quiet_when_an_agent_was_dispatched(self):
+        from taskuary.ingest import ingest_message
+        s, sent = self._store(), []
+        s.set_setting('coder_auto_enabled', '1', 'o')
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)), \
+             mock.patch('taskuary.terminal.start_on_task'):
+            ingest_message(s, self._msg(), llm=self.TASK_LLM)
+        self.assertEqual(sent, [])                              # an agent has it - not waiting on you
+        # ...but a QUESTION pings even with auto-dispatch on: no agent answers questions
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)), \
+             mock.patch('taskuary.terminal.start_on_task'):
+            ingest_message(s, self._msg(ext='n2', subject='lunch order for the retreat?',
+                                        body='which caterer did we use last year?',
+                                        from_email='rita@corp.com'), llm=self.REPLY_LLM)
+        self.assertEqual(len(sent), 1)
+        self.assertIn('question for you', sent[0]['text'])
+
+    def test_off_is_off_and_a_failed_ping_never_breaks_the_ingest(self):
+        from taskuary.ingest import ingest_message
+        s, sent = self._store('off'), []
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)):
+            self.assertIsNotNone(ingest_message(s, self._msg(), llm=self.TASK_LLM)['task_id'])
+        self.assertEqual(sent, [])
+        s2 = self._store()
+        def boom(t, m, **p): raise RuntimeError('telegram down')
+        with mock.patch.object(messengers, 'tg', boom):
+            out = ingest_message(s2, self._msg(ext='n3'), llm=self.TASK_LLM)
+        self.assertIsNotNone(out['task_id'])                    # the work landed anyway
+
+    def test_an_event_in_the_notify_chat_never_echoes_back_into_it(self):
+        from taskuary.outbound import notify
+        s, sent = self._store(), []
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)):
+            n = notify(s, 'ping', about={'Channel': 'telegram', 'ConversationId': 'telegram:777'})
+        self.assertEqual((n, sent), (0, []))
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)):
+            self.assertEqual(notify(s, 'ping', about={'Channel': 'email', 'ConversationId': 'x'}), 1)
+
+    def test_the_wrap_up_pings_that_the_reply_is_waiting(self):
+        from taskuary.coder import raise_reply
+        s, sent = self._store(), []
+        tid = s.create_task({'Title': 'export writes empty files', 'Kind': 'coding'}, 'o')
+        mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'FromEmail': 'marcus@corp.com',
+                             'BodyText': 'broken again', 'Status': 'routed'})
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)), \
+             mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
+            raise_reply(s, tid, mid, None, {'summary': 'fixed'})
+        self.assertEqual(len(sent), 1)
+        self.assertIn('waiting on', sent[0]['text'])
+        self.assertIn('export writes empty files', sent[0]['text'])

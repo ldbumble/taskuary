@@ -56,6 +56,9 @@ const KNOB_META = {
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days of messages the Timeline shows. Display only — nothing is deleted.",
     help: "Purely a display window for the Timeline tab. Older messages remain in the database and in task histories." },
+  notify_level: { group: "Notifications", label: "Push to your chat", type: "select", options: ["needs_me", "all", "off"],
+    desc: "Send timeline events to a channel wearing the notify role — a Telegram/WhatsApp ping instead of watching the tab.",
+    help: "A channel can be an INPUT (trigger — its messages become tasks), an OUTPUT (notify — Taskuary pings you there), or both. Give a Telegram/WhatsApp/Teams connector the notify role and set its 'notify chat id' under Credentials; this setting decides what gets pushed.\n\nneeds_me = only what is waiting on YOU: a question that needs answering, a task nobody was dispatched at, and — the useful one — 'the work is done, the reply is drafted and waiting in Review'. all = every new item that lands on the Timeline. off = nothing is ever pushed.\n\nEvents that happened IN the notify chat itself are never echoed back into it." },
   startup_sync_days: { group: "Attachments & images", label: "Catch-up on startup (days)", type: "number",
     desc: "How far back to reach when the app opens, to pull in what arrived while it was closed.",
     help: "Taskuary is not a service - it is a window you open, so 'anything since I last polled' is the wrong question after a weekend off. On startup every trigger connection is asked for this many days, which only ever WIDENS the window: a source last polled a month ago is not pulled forward. 0 turns the catch-up off and startup just does a normal incremental poll." },
@@ -66,7 +69,7 @@ const KNOB_META = {
     desc: "A report hands back a bar chart as well as the spreadsheet, and the AI picks what to plot.",
     help: "A report already produces rows, so the same run hands back an .xlsx to open and an .svg chart drawn in the panel. The summarising model - which has just read every row - names the column worth plotting on a CHART: line, which beats a heuristic hunting for 'all numeric' and picking the id column; that line is an instruction to Taskuary and never reaches the reader. Off: the spreadsheet is still attached, there is just no chart." },
 };
-const GROUPS = ["Triage & routing", "Drafting & replies", "Coder agent", "Attachments & images", "Display", "Other"];
+const GROUPS = ["Triage & routing", "Drafting & replies", "Coder agent", "Notifications", "Attachments & images", "Display", "Other"];
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
 const SECTION_HELP = {

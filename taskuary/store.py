@@ -123,7 +123,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'default_agent': 'coder',
                     # may agents open GitHub issues/tracker items for the work itself? Off by
                     # default: Taskuary is the tracker, and one issue per task is noise.
-                    'agent_issues_enabled': '0'}
+                    'agent_issues_enabled': '0',
+                    # may agents push/deploy on their own? Off: commit locally, the owner pushes.
+                    'agent_push_enabled': '0'}
 
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,

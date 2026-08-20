@@ -3,6 +3,7 @@ FYI noise? Heuristic by default; pass any `llm(system, user) -> str-json` callab
 upgrade (provider-agnostic - wire your own OpenAI/Anthropic/local call in config).
 """
 import json, re
+import re as _re
 
 # What each verdict COSTS is part of the judgement, so it is in the prompt: a task starts a
 # real agent in a real repo; a reply is one cheap draft the owner approves. Defaulting to
@@ -35,6 +36,48 @@ def heuristic_intent(msg: dict) -> dict:
     return {'intent': 'task', 'why': 'default'}
 
 
+# ── the message, minus the wrapper ──────────────────────────────────────────────────────
+# Corporate mail arrives half signature: name, title, phone block, an inspirational quote,
+# and a confidentiality NOTICE longer than the ask. All of it rode into every AI call - the
+# triage, the seeded session, the reply drafts - spending context on boilerplate. The STORED
+# body stays whole (the panel shows the real mail); only what is fed to an AI is trimmed,
+# and always conservatively: when in doubt, keep.
+_LEGAL = _re.compile(r'^\s*(NOTICE|DISCLAIMER|CONFIDENTIALITY( NOTICE)?|LEGAL NOTICE)[:\s]'
+                     r'|this (e-?mail|message|communication)[^.]{0,120}(confidential|privileged|intended (solely|only))'
+                     r'|if you (are not the intended|have received this[^.]{0,40}in error)'
+                     r'|unauthorized (use|review|disclosure|distribution)', _re.I)
+_VALEDICTION = _re.compile(r'^\s*(thank(s| you)|best( regards| wishes)?|kind(est)? regards|regards|'
+                           r'sincerely|respectfully|warm(ly| regards)?|cheers|v/?r)\s*[,!.]*\s*$', _re.I)
+_CONTACT = _re.compile(r'^\s*(phone|tel|mobile|cell|fax|office|direct|email|e-?mail|web|www\.|address)'
+                       r'|^\s*\+?[\d(][\d\s().x-]{6,}$'
+                       r'|^[^@\s]+@[^@\s]+\.[a-z]{2,}\s*$', _re.I)
+_KEEP_MIN = 30          # never trim a message down past this - when in doubt, keep
+NL = chr(10)
+
+
+def strip_boilerplate(text: str) -> str:
+    """The words the sender actually typed: the legal footer and the signature block go,
+    everything before them stays byte-for-byte."""
+    lines = (text or '').splitlines()
+    # 1. the legal footer: from the first legalese line to the end
+    for i, l in enumerate(lines):
+        if _LEGAL.search(l) and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN:
+            lines = lines[:i]
+            break
+    # 2. the signature: a closing valediction in the tail, followed by the name/title/phone block
+    tail_from = max(1, len(lines) - 14)
+    for i in range(len(lines) - 1, tail_from - 1, -1):
+        if _VALEDICTION.match(lines[i]) and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN:
+            lines = lines[:i]
+            break
+    # 3. stray contact lines left at the very end (a block with no valediction above it)
+    while lines and (_CONTACT.match(lines[-1]) or not lines[-1].strip()):
+        if len(NL.join(lines[:-1]).strip()) < _KEEP_MIN: break
+        lines.pop()
+    out = NL.join(lines).rstrip()
+    return out if out.strip() else (text or '')
+
+
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None) -> dict:
     """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
     they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
@@ -50,7 +93,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'mail like this, and they outrank your own reading:\n'
                            + '\n'.join(f'- {n}' for n in notes[:20])[:2000])
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
-                               'body': str(msg.get('body') or '')[:1500]})
+                               'body': strip_boilerplate(str(msg.get('body') or ''))[:1500]})
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '
                            'screenshot of the error IS the request. Read them before deciding.')

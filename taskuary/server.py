@@ -1230,10 +1230,22 @@ async def terminal_ws(ws: WebSocket, sid: str):
     pump = asyncio.create_task(to_browser())
     try:
         if t.scrollback(): await ws.send_json({'type': 'out', 'data': t.scrollback()})
+        first_resize = True
         while True:
             m = await ws.receive_json()
             if m.get('type') == 'in': t.write(m.get('data') or '')
-            elif m.get('type') == 'resize': t.resize(m.get('rows') or 32, m.get('cols') or 110)
+            elif m.get('type') == 'resize':
+                rows, cols = m.get('rows') or 32, m.get('cols') or 110
+                # a full-screen TUI (codex) paints with absolute cursor moves, so the raw
+                # scrollback replay above renders as smeared bars on a reopened page - and
+                # nothing repaints until the CHILD is told to. A one-column wiggle on the
+                # first resize makes ConPTY signal a window change: a full redraw, the live
+                # screen instead of the replay's debris.
+                if first_resize:
+                    first_resize = False
+                    t.resize(rows, max(2, cols - 1))
+                    await asyncio.sleep(0.05)
+                t.resize(rows, cols)
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:

@@ -394,7 +394,10 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
     repo = src['Address']
     try: modes = json.loads(src.get('ConfigJson') or '{}')
     except ValueError: modes = {}
-    issues_mode = modes.get('issues') or ('feed' if file_only else 'tasks')
+    # an EXPLICIT picker beats the connector's role: "issues: tasks" means tasks even on a
+    # feed-only card. Unconfigured kinds follow the role (default_mode); PRs default off.
+    default_mode = 'feed' if file_only else 'tasks'
+    issues_mode = modes.get('issues') or default_mode
     prs_mode = modes.get('prs') or 'off'
     if issues_mode == 'off' and prs_mode == 'off': return 0
     n = 0
@@ -414,9 +417,20 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
             'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
             'conversation_id': f"gh:{repo}#{i['number']}", 'sent_at': _local(i.get('updated_at') or ''),
             'source_link': i.get('html_url'), 'source_name': repo, 'no_auto': True},
-            llm=llm, file_only=file_only or mode == 'feed')
+            llm=llm, file_only=mode == 'feed')
         n += out['status'] != 'duplicate'
     return n
+
+
+def _gh_explicit(store) -> bool:
+    """Any repo whose issues/PRs picker is set to something live - that IS the trigger intent,
+    whatever the connector card's role says."""
+    for s in store.list_sources():
+        if s['Channel'] != 'github': continue
+        try: m = json.loads(s.get('ConfigJson') or '{}')
+        except ValueError: m = {}
+        if {'tasks', 'feed'} & {m.get('issues'), m.get('prs')}: return True
+    return False
 
 
 def _since(s, backfill_days: int = 0):
@@ -442,8 +456,11 @@ def poll_channels(store, backfill_days: int = 0) -> int:
     for c in store.list_connectors():
         if not c['Active'] or c['Type'] not in CH2SRC: continue
         roles = roles_of(c)
-        # trigger = becomes work; feed = shows on the timeline and stops there; neither = never polled
-        if not roles & {'trigger', 'feed'}: continue
+        # trigger = becomes work; feed = shows on the timeline and stops there; neither = never
+        # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two
+        # switches where one reads as enough was a trap (a repo set to "PRs: tasks" on a
+        # tool-only card, a Sync that pulled nothing, and no error anywhere).
+        if not roles & {'trigger', 'feed'} and not (c['Type'] == 'github' and _gh_explicit(store)): continue
         file_only = 'trigger' not in roles
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:

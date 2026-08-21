@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![GitHub stars](https://img.shields.io/github/stars/ldbumble/taskuary?style=social)](https://github.com/ldbumble/taskuary/stargazers)
 
 ## Automate your job.
 
@@ -12,6 +13,9 @@ scheduled reports land on one timeline; AI triage says what is real work; the co
 you already use does it; you approve the result. Runs entirely on your machine.
 
 ![The Taskuary timeline, full of triaged work: the Morning digest report on top, mail and chats filed or turned into tasks with needs-you chips, and the open panel explaining exactly why the selected mail became a task - triage verdict, routing, and the reply draft waiting for approval](docs/screenshot-timeline.png)
+
+> ⭐ **Useful to you? Star the repo.** Stars are how other people find Taskuary — and the
+> clearest signal of what to keep building.
 
 ## Why
 

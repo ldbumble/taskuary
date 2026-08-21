@@ -388,7 +388,8 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
             Per repo, per kind: <b>tasks</b> = through triage (never auto-dispatched — a public repo would start
             an agent per drive-by PR; you promote what deserves work), <b>feed</b> = shown on the Timeline only,
             <b> off</b> = ignored. Every item carries its author and GitHub's association flag, so triage weighs
-            who is asking.
+            who is asking. Picking a value saves instantly and is all it takes — no Save button, no role change:
+            the next sync pulls that repo.
           </Typography>
         )}
         {mine.map((s) => (

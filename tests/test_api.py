@@ -46,6 +46,35 @@ class GithubIngestTests(unittest.TestCase):
                                       'tok', __import__('datetime').datetime.now())
         self.assertEqual((n2, len(s2.scan_messages())), (0, 0))          # off = ignored entirely
 
+    def test_a_repo_picker_alone_makes_github_poll(self):
+        """The two-switch trap: 'PRs: tasks' on a repo did nothing while the connector card kept
+        its default tool-only role - a Sync that pulled nothing and no error anywhere. An
+        explicit picker IS the trigger intent now, and it beats a feed-only role too."""
+        from taskuary.store import MemoryStore
+        from taskuary import channels
+        s = MemoryStore()
+        gh = next(x for x in s.list_connectors() if x['Type'] == 'github')
+        s.save_connector({'ConnectorId': gh['ConnectorId'], 'Active': 1, 'Secret': 'ghp_x'}, 'o')   # role: tool only
+        s.save_source({'Channel': 'github', 'Address': 'org/app', 'ConnectorId': gh['ConnectorId'],
+                       'Active': 1, 'ConfigJson': '{"prs": "tasks"}'}, 'o')
+        items = [{'number': 5, 'title': 'Fix the export', 'body': 'diff attached', 'html_url': 'https://x/5',
+                  'updated_at': '2026-08-20T10:00:00Z', 'user': {'login': 'kai'},
+                  'author_association': 'CONTRIBUTOR', 'pull_request': {'url': 'https://x/pr/5'}}]
+        with mock.patch('taskuary.github.list_items', return_value=items):
+            self.assertEqual(channels.poll_channels(s), 1)                   # the picker alone polls it
+        self.assertIn('org/app#5', s.feed()[0]['Subject'])
+        # ...and an explicit 'tasks' wins over a feed-only role (feed would have filed it silently)
+        s2 = MemoryStore()
+        gh2 = next(x for x in s2.list_connectors() if x['Type'] == 'github')
+        s2.save_connector({'ConnectorId': gh2['ConnectorId'], 'Active': 1, 'Secret': 'ghp_x', 'Roles': 'feed,tool'}, 'o')
+        s2.save_source({'Channel': 'github', 'Address': 'org/app', 'ConnectorId': gh2['ConnectorId'],
+                        'Active': 1, 'ConfigJson': '{"issues": "tasks"}'}, 'o')
+        issue = [{'number': 6, 'title': 'Importer dies', 'body': 'trace', 'html_url': 'https://x/6',
+                  'updated_at': '2026-08-20T10:00:00Z', 'user': {'login': 'kai'}, 'author_association': 'MEMBER'}]
+        with mock.patch('taskuary.github.list_items', return_value=issue):
+            channels.poll_channels(s2)
+        self.assertNotEqual(s2.feed()[0]['MsgStatus'], 'feed')               # triaged, not just shown
+
     def test_github_items_never_auto_dispatch(self):
         """An open repo must not start a coding agent per drive-by item: github messages carry
         no_auto, so they queue as needs-you while ordinary mail still self-dispatches."""

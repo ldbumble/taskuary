@@ -208,13 +208,17 @@ export const CoderReport = ({ body }) => {
 export const useAgents = () => {
   const [agents, setAgents] = useState([]);
   const [models, setModels] = useState({});
+  const [cmds, setCmds] = useState({});
   useEffect(() => {
     api.get("/api/agents").then(({ data }) => {
       setAgents((data.data || []).map((a) => a.Name));
       setModels(data.models || {});
+      // profile name -> the CLI it actually runs ('coder' is usually claude) - the Board
+      // tints a working card by the BRAND, and the name alone doesn't say which one it is
+      setCmds(Object.fromEntries(Object.entries(data.config || {}).map(([k, v]) => [k, (v || {}).cmd || k])));
     }).catch(() => {});
   }, []);
-  return { agents, models };
+  return { agents, models, cmds };
 };
 
 export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30 }) => {

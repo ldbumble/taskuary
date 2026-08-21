@@ -182,8 +182,14 @@ class SQLiteStore:
             for name in ('soul', 'coder', 'digest', 'learned', 'triage'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
+                    txt = f.read_text(encoding='utf-8')
                     self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',
-                                    (name, f.read_text(encoding='utf-8'), 'template', _now()))
+                                    (name, txt, 'template', _now()))
+                    # a doc NOBODY ever touched keeps tracking the shipped template, so template
+                    # improvements reach existing installs - the first edit (owner or machine)
+                    # changes UpdatedBy and makes the document theirs, never overwritten again
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=? AND UpdatedBy='template' AND Content<>?",
+                                    (txt, _now(), name, txt))
             # data heal: sources written before ownership existed have no ConnectorId, so a
             # NEW connector on the same channel (the Gmail card) claimed the Outlook mailboxes.
             # Adopt each orphan to the channel's legacy owner - Graph was the only email/teams/

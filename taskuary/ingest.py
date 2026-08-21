@@ -95,7 +95,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                     'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
             if cfg.get('auto_draft_enabled') == '1':
                 _spawn(_auto_draft, store, tid, rid)
-        elif cfg.get('coder_auto_enabled') == '1':
+        elif cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
+            # no_auto = the channel opted out of self-dispatch (github items always do: an
+            # open repo would start an agent per drive-by PR) - the task queues as needs-you
             _spawn(_auto_code, store, tid)
     store.add_route(mid, tid, r['decision'], r['score'], r['reason'], r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")

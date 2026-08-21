@@ -28,6 +28,21 @@ class TemplateTests(unittest.TestCase):
         self.assertIn('Closing out', coder)      # no report contract: the transcript IS the report
         self.assertTrue(s.get_doc('digest'))
 
+    def test_untouched_template_docs_track_shipped_improvements(self):
+        """A doc still marked UpdatedBy='template' was never edited by anyone - it keeps
+        tracking the shipped template across releases; the first edit makes it the owner's."""
+        import os, tempfile
+        from taskuary.store import SQLiteStore
+        p = os.path.join(tempfile.mkdtemp(), 't.db')
+        s = SQLiteStore(p)
+        s._exec("UPDATE doc SET Content='OLD SHIPPED TEXT' WHERE Name='triage'")   # an older release
+        s.save_doc('soul', 'my own rules', 'owner')
+        s.cx.close()
+        s2 = SQLiteStore(p)
+        self.assertIn('Classify one inbound work message', s2.get_doc('triage'))  # refreshed
+        self.assertEqual(s2.get_doc('soul'), 'my own rules')                       # theirs stays theirs
+        s2.cx.close()
+
     def test_owner_edits_never_overwritten(self):
         s = MemoryStore()
         s.save_doc('soul', 'my own rules', 'owner')

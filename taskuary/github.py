@@ -23,14 +23,20 @@ def list_accessible_repos(tok):
             for x in r.json()]
 
 
-def list_issues(tok, repo, since=None, state='open', limit=25):
-    """Open issues (pull requests filtered out), newest activity first. `since` is an ISO
-    timestamp - GitHub returns everything updated after it."""
+def list_items(tok, repo, since=None, state='open', limit=25):
+    """Open issues AND pull requests, newest activity first - the /issues endpoint carries
+    both, a 'pull_request' key telling them apart. `since` is an ISO timestamp - GitHub
+    returns everything updated after it."""
     p = {'state': state, 'sort': 'updated', 'direction': 'desc', 'per_page': min(limit, 100)}
     if since: p['since'] = since
     r = requests.get(f'{GH}/repos/{repo}/issues', headers=_h(tok), params=p, timeout=30)
     r.raise_for_status()
-    return [i for i in r.json() if 'pull_request' not in i][:limit]
+    return r.json()[:limit]
+
+
+def list_issues(tok, repo, since=None, state='open', limit=25):
+    """Just the issues - pull requests filtered out."""
+    return [i for i in list_items(tok, repo, since, state, limit=100) if 'pull_request' not in i][:limit]
 
 
 def readme_text(tok, repo) -> str:

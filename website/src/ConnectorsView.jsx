@@ -84,10 +84,11 @@ const META = {
       "Test logs in and adds the mailbox as a source; new mail flows in on the next sync."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
     fields: [], secretLabel: "fine-grained PAT",
-    desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop.",
+    desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
     howto: ["Create a fine-grained PAT: GitHub → Settings → Developer settings → Fine-grained tokens.",
       "Repository access: the repos the agent may touch. Permissions: Issues Read+Write, Pull requests Read+Write, Metadata Read.",
       "Paste the token under Credentials - that's ALL the config: on save Taskuary discovers every repo the token reaches, adds them under Sources, and writes the repository map into SOUL.md.",
+      "Per repo, pick what ISSUES and PRs do (needs the trigger role on this card): tasks = through triage, feed = timeline only, off = ignored. Triage sees each item's author and GitHub association, so a stranger's PR on a public repo files as FYI instead of becoming work — and github items never auto-start a coding agent; you promote the ones that deserve one.",
       "Test re-runs discovery and reports who it's authenticated as.",
       "Coding tasks then open an issue first, the agent works it, and closing the task closes the issue."] },
   anthropic: { group: "AI — agents & models", channel: "ai", srcLabel: null,
@@ -382,10 +383,34 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     )},
     ...(m.srcLabel ? [{ label: m.srcLabel, done: mine.some((s) => s.Active), body: (
       <Box sx={{ mt: 1 }}>
+        {conn.Type === "github" && (
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+            Per repo, per kind: <b>tasks</b> = through triage (never auto-dispatched — a public repo would start
+            an agent per drive-by PR; you promote what deserves work), <b>feed</b> = shown on the Timeline only,
+            <b> off</b> = ignored. Every item carries its author and GitHub's association flag, so triage weighs
+            who is asking.
+          </Typography>
+        )}
         {mine.map((s) => (
           <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
             <StatusDot ok={!!s.Active} />
             <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 13 }} noWrap>{s.Address}</Typography>
+            {conn.Type === "github" && ["issues", "prs"].map((kind) => {
+              const gc = parse(s.ConfigJson);
+              return (
+                <Select key={kind} size="small" value={gc[kind] || (kind === "prs" ? "off" : "tasks")}
+                  sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
+                  onChange={async (e) => {
+                    await api.post("/api/sources", { SourceId: s.SourceId,
+                      ConfigJson: JSON.stringify({ ...gc, [kind]: e.target.value }) });
+                    reload();
+                  }}>
+                  {["tasks", "feed", "off"].map((v) => (
+                    <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>{kind === "prs" ? "PRs" : "issues"}: {v}</MenuItem>
+                  ))}
+                </Select>
+              );
+            })}
             {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>polled {timeAgo(s.LastPolledAt)}</Typography>}
             <Switch checked={!!s.Active} onChange={() => toggleSource(s)} />
           </Box>

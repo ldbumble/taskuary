@@ -27,9 +27,14 @@ const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] |
 // that fight the theme. Live or running only; a finished run's card goes back to house style.
 const AGENT_HUES = { claude: "#7c6cf0", codex: "#0e7490", gemini: "#2563eb",
                      cursor: "#7e22ce", copilot: "#64748b" };
+// 'coder' says nothing about which model family answers - resolve every display through
+// the profile's actual command, so the board speaks CLI names (claude, codex, gemini)
+export const cliName = (name, cmds = {}) =>
+  String(cmds[name] || name || "").split(/[\\/]/).pop().replace(/\.(cmd|exe|bat|ps1)$/i, "").toLowerCase();
+
 const agentBadge = (name, runStatus, isLive, cmds = {}) => {
   if (!isLive && runStatus !== "running") return null;
-  const cmd = String(cmds[name] || name || "").toLowerCase();  // 'coder' resolves to the CLI it runs
+  const cmd = cliName(name, cmds);
   const hit = Object.entries(AGENT_HUES).find(([k]) => cmd.includes(k));
   if (!hit) return name ? { word: String(name), color: "#8a94a6" } : null;
   return { word: hit[0], color: hit[1] };
@@ -188,7 +193,7 @@ export default function BoardView({ onOpenTask }) {
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 13 }} />
                     {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />}
                     {t.RunStatus && (
-                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.RunStatus}`
+                      <Chip size="small" label={`${cliName(t.RunAgent, cmds) || "agent"} · ${t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 17, fontSize: 9.5, fontWeight: 700,
                           bgcolor: t.RunStatus === "running" ? "#fef4e6" : t.RunStatus === "error" ? "#fdecec" : "#e8f6ee",

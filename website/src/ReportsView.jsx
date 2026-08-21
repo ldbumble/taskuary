@@ -4,8 +4,8 @@
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Box, Button, CircularProgress, MenuItem, Select, Step, StepButton, StepContent,
-  Stepper, Switch, TextField, Typography,
+  Alert, Autocomplete, Box, Button, CircularProgress, MenuItem, Select, Step, StepButton,
+  StepContent, Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -284,9 +284,15 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       </MenuItem>
                     )}
                   </Select>
-                  <TextField size="small" label="model override (optional)" value={cfg.ai_model || ""}
-                    sx={{ bgcolor: "#fff", width: 210 }}
-                    onChange={(e) => setCfg({ ...cfg, ai_model: e.target.value })} />
+                  {/* the chosen brain knows its models - a dropdown, free typing for the rest */}
+                  <Autocomplete freeSolo size="small" sx={{ width: 230 }}
+                    options={(brains.find((b) => b.value === (cfg.ai_brain || "")) || {}).models || []}
+                    value={cfg.ai_model || ""}
+                    onChange={(_e, v) => setCfg({ ...cfg, ai_model: v || "" })}
+                    onInputChange={(_e, v, why) => { if (why === "input") setCfg({ ...cfg, ai_model: v }); }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="model (optional — the brain's default)" sx={{ bgcolor: "#fff" }} />
+                    )} />
                   <Typography variant="caption" sx={{ color: FAINT }}>
                     which AI writes this summary — a heavier model for the weekly review, the cheap tier for pings
                   </Typography>

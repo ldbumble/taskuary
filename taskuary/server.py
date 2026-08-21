@@ -783,15 +783,21 @@ def brains():
     out += [{'value': f"connector:{c['Type']}", 'label': c['Name'], 'kind': 'api',
              'ready': bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))}   # local models carry no key
             for c in store.list_connectors() if c['Type'] in AI_TYPES]
-    # named by WHAT RUNS, the way every agent picker speaks ('coder · claude'): a profile
-    # name alone says nothing, and triage-context caveats don't belong in a label reused by
-    # the report picker - the Settings help text carries the one-brain economics instead
+    # named by WHAT RUNS, leading with the CLI ('claude · coder'): the profile name is the
+    # detail, not the identity - 'coder' says nothing about which model family answers.
+    # Each entry also carries its known model choices, so pickers offer a dropdown instead
+    # of a spelling test (free typing still allowed for models we don't know about).
+    CONN_MODELS = {'anthropic': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
+                   'openai': ['gpt-4o-mini'],
+                   'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct']}
+    for o in out:
+        if o['kind'] == 'api': o['models'] = CONN_MODELS.get(o['value'][10:], [])
     def _cli_of(a):
         prof = cfg.get('agents', {}).get(a['Name']) or json.loads(a.get('Config') or '{}')
         return re.sub(r'\.(cmd|exe|bat|ps1)$', '', Path(str(prof.get('cmd') or a['Name'])).name.lower())
     out += [{'value': f"cli:{a['Name']}",
-             'label': (f"{a['Name']} · {_cli_of(a)}" if _cli_of(a) != a['Name'] else a['Name']) + ' (your CLI)',
-             'kind': 'cli', 'ready': True}
+             'label': (_cli_of(a) + (f" · {a['Name']}" if _cli_of(a) != a['Name'] else '')) + ' (your CLI)',
+             'kind': 'cli', 'ready': True, 'models': CLI_MODELS.get(_cli_of(a), [])}
             for a in store.list_agents()]
     return {'data': out, 'current': store.get_settings().get('triage_ai') or ''}
 

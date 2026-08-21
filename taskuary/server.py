@@ -940,7 +940,7 @@ def put_owner(body: OwnerBody):
     # 'the owner' is the fallback when no name is known, and real prose says those words -
     # retokenizing them would punch {{owner}} holes all over a doc that never had a name in it
     if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coder', 'digest', 'learned'):
+    for doc in ('soul', 'coder', 'digest', 'learned', 'triage'):
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
@@ -1052,7 +1052,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'coder', 'digest', 'learned'):
+        for doc in ('soul', 'coder', 'digest', 'learned', 'triage'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')

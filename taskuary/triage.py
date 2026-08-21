@@ -8,6 +8,8 @@ import re as _re
 # What each verdict COSTS is part of the judgement, so it is in the prompt: a task starts a
 # real agent in a real repo; a reply is one cheap draft the owner approves. Defaulting to
 # "task" turned questions into background work nobody asked for.
+# This text also ships as templates/triage.md - the editable TRIAGE.md doc that overrides it
+# (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "why": "<8 words max>"}.\n'
@@ -79,16 +81,22 @@ def strip_boilerplate(text: str) -> str:
 
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
-                    learned: str = None) -> dict:
+                    learned: str = None, system: str = None) -> dict:
     """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
     they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
     'Not our task' stick: the next message like it is classified with that lesson in hand.
 
     `images` are the attached screenshots, for a model that can see them. Half of "see below"
-    mail says nothing in its body - triage read three words and filed it as informational."""
+    mail says nothing in its body - triage read three words and filed it as informational.
+
+    `system` is TRIAGE.md, the owner-editable classifier instructions - HTML comments are
+    stripped (the doc's own how-to-edit note is for the owner, not the model), and a blanked
+    doc falls back to the shipped default. An edit that breaks the JSON contract degrades to
+    the keyword heuristics, never to a crash."""
     if llm:
         try:
-            system = INTENT_SYSTEM + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
+            base = re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM
+            system = base + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
             if learned:

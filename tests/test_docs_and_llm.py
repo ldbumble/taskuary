@@ -225,6 +225,25 @@ class LearnTests(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
             self.assertTrue(learn.reflect_if_due(s))             # threshold: due same-day too
 
+    def test_triage_md_overrides_the_shipped_prompt(self):
+        """The classifier's instructions are a DOC now, not python: seeded from the template,
+        owner-editable, comments stripped, and a blanked doc falls back to the shipped default."""
+        s = MemoryStore()
+        self.assertIn('Classify one inbound work message', s.get_doc('triage') or '')
+        seen = {}
+        def fake(sys_, usr, **kw): seen['sys'] = sys_; return '{"intent":"fyi","why":"x"}'
+        s.save_doc('triage', '<!-- how to edit -->\nMY RULES: everything from finance is a task.', 'owner')
+        from taskuary.ingest import ingest_message
+        ingest_message(s, {'external_id': 'tri-1', 'channel': 'email', 'from_email': 'x@y.co',
+                           'subject': 'hm', 'body': 'can you confirm?'}, llm=fake)
+        self.assertIn('MY RULES', seen['sys'])
+        self.assertNotIn('how to edit', seen['sys'])            # the editing note is for the owner
+        self.assertNotIn('Classify one inbound', seen['sys'])   # the default stepped aside
+        # a blanked doc means the shipped default, never an empty brain
+        from taskuary.triage import classify_intent
+        classify_intent({'subject': 's', 'body': 'b'}, llm=fake, system='<!-- only a comment -->')
+        self.assertIn('Classify one inbound work message', seen['sys'])
+
     def test_triage_and_ingest_read_the_learned_profile(self):
         from taskuary.triage import classify_intent
         seen = {}

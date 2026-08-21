@@ -24,6 +24,27 @@ the noise. Real work becomes a task and goes to your agent, which works in your 
 reports back with the diff. Replies come back as drafts. Nothing sends, closes, or ships
 without you — and nothing leaves your machine except the calls you configured.
 
+## It learns your job
+
+Every verdict you give teaches it. Edit a draft before sending — it learns your voice.
+Reject one — it learns what should never have been drafted. Say **"Not our task"** — it
+learns where your job ends, and that one sticks immediately as a standing note on that
+sender (yours to review under Settings → Agent memory).
+
+The general lessons take a stricter road, so one odd Tuesday never becomes a rule:
+
+```mermaid
+flowchart LR
+    A([your verdicts]) --> B[hypotheses]
+    B -- held up across people & threads --> C[LEARNED.md<br/>your profile]
+    C --> D([every triage, draft & agent run])
+```
+
+Three rules keep it honest: every learned line carries its evidence (`[s:4 | ev: rv12…]` —
+delete the line and the lesson is gone), a pattern seen once is never acted on, and a rule
+that would *hide* mail waits for your explicit OK. `SOUL.md` — the rules you write yourself —
+always outranks what's learned, and one switch in Settings turns the loop off.
+
 ## Get started
 
 ```bash
@@ -33,8 +54,9 @@ taskuary        # opens http://127.0.0.1:7787
 
 Python 3.10+ is all you need. Then, in **Connectors** — a minute or two each:
 
-1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI key. Triage is now on. (A small,
-   cheap model is the right pick here; the expensive one goes in step 3.)
+1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI / OpenRouter key — or no key at
+   all: the **Ollama** card runs triage on a local open-source model. Triage is now on.
+   (A small, cheap model is the right pick here; the expensive one goes in step 3.)
 2. **A channel** — Outlook, Teams, or Slack. Mail starts landing on the Timeline.
 3. **Your coding CLI** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot), Save,
    Test. Add a GitHub PAT and repos are discovered for you.
@@ -80,9 +102,9 @@ One tab per question, two lines each; the details live in the app's own help tex
 - **Connectors** — a catalog with a wizard per card. Every connection has **roles** you
   choose: *trigger* (inbound work), *feed* (shown, never triaged), *report*, *tool* (agents
   may use it), *notify* (Taskuary pushes pings TO it). Nothing is polled without a role.
-- **Docs** — SOUL.md / CODER.md / DIGEST.md, the plain-markdown rules injected into every
-  run; they maintain themselves as connectors and repos appear. Your name lives in ONE
-  field here and fills every `{{owner}}` mention across the documents.
+- **Docs** — the five plain-markdown documents that steer everything (see
+  [The five documents](#the-five-documents)); they maintain themselves as connectors and
+  repos appear. Your name lives in ONE field here and fills every `{{owner}}` mention.
 - **Settings** — triage knobs with plain-English help, deterministic routing policies that
   no model confidence can override, the learned memory, notification level, and one-click
   audit-chain verification.
@@ -140,83 +162,44 @@ runs when there is real work in a real repository, and the cheap one handles the
 intent triage, reply drafts, report summaries, the morning digest, the lessons distilled
 into LEARNED.md.
 
-## It learns your job from your verdicts
+## The five documents
 
-Triage lives or dies on knowing *you*: what you're responsible for, who you answer to,
-how you write, what deserves a task. You can type all of that into `SOUL.md` — most people
-won't. So Taskuary learns it from use: **every correction you make teaches it**, and the
-lessons land where you can read, edit, or delete them.
-
-**The specific layer — standing notes.** **"Not our task"** on any timeline item writes a
-note — editable before it's saved, scoped to that sender, their whole domain, or everyone —
-and every later message is classified with that note in hand. The classic case: colleagues
-cc'ing you on a thread that is theirs to handle. Say it once; triage stops opening tasks
-for it. Their mail keeps arriving (that's what *Skip this sender* is for) — only the
-judgement is learned. Settings → Agent memory lists every note; toggle one off and it stops
-being injected, while staying on the record.
-
-**The general layer — `LEARNED.md`.** The same verdicts also teach in general. Editing a
-draft before sending says how you actually write; rejecting one says what should never have
-been drafted; reclassifying a task as a question, or promoting a message triage filed, says
-where triage misjudges *your* work. Each correction is distilled — on the cheap triage
-brain, seconds after the verdict — into a **hypothesis** in `LEARNED.md` (Docs tab), and a
-periodic **reflection pass** consolidates: patterns confirmed across separate episodes get
-promoted into the active profile, contradicted ones weaken and die. The active profile is
-injected into every triage call, reply draft, and agent run.
-
-The design borrows what the agent-memory literature agrees on (ExpeL, PRELUDE, Generative
-Agents' reflection):
-
-- **Strength + provenance on every learned line** — `[s:4 | ev: rv12,mem3 | seen: …]` says
-  how often a pattern held and which of your verdicts taught it, so a wrong inference is
-  traceable and one delete removes it. Lines *you* write carry no tag and are never touched.
-- **One episode is a guess, not a rule** — hypotheses are never injected; they graduate only
-  after holding across separate episodes from different people or threads.
-- **Rules that hide things need your yes** — anything whose effect is "treat as fyi, never a
-  task" waits under *Proposed rules* until you adopt it, because a wrong ignore-rule
-  silences the very corrections that would revoke it.
-- **You stay sovereign** — `LEARNED.md` is a plain markdown doc you can edit like the
-  others, `SOUL.md` always outranks it, and *Learn from your verdicts* (Settings) turns the
-  whole loop off.
-
-### The four documents, at a glance
-
-Two you write, two the system writes — and each feeds exactly the AI calls it belongs in.
-Triage runs thousands of times on the cheap model, so it reads only what changes a verdict
-(SOUL, LEARNED, the notes — never the digest); the expensive CLI runs get the full stack.
+Plain markdown, all on the Docs tab, all yours to edit. Three you write, two write
+themselves — and each feeds exactly the calls it belongs in.
 
 ```mermaid
 flowchart LR
-    subgraph yours["you write these"]
-        SOUL[SOUL.md<br/>the constitution]
-        CODER[CODER.md<br/>the coder's rules]
+    subgraph yours["you write"]
+        TRI[TRIAGE.md]
+        SOUL[SOUL.md]
+        CODER[CODER.md]
     end
-    subgraph system["the system writes these — yours to edit"]
-        LEARNED[LEARNED.md<br/>your learned profile]
-        DIGEST[DIGEST.md<br/>rolling working memory]
+    subgraph auto["write themselves"]
+        LEARNED[LEARNED.md]
+        DIGEST[DIGEST.md]
     end
-    TRIAGE([intent triage<br/>light model · every message])
-    DRAFT([reply drafts<br/>light model])
-    RUN([headless agent runs<br/>your CLI · full model])
-    LIVE([live sessions<br/>your CLI · full model])
-    SOUL --> TRIAGE & DRAFT & RUN
-    SOUL -. repo map picks the checkout .-> LIVE
-    LEARNED --> TRIAGE & DRAFT & RUN
-    DIGEST --> RUN
-    CODER --> RUN & LIVE
-    TRIAGE -. your verdicts teach .-> LEARNED
-    DRAFT -. your edits teach .-> LEARNED
+    A([triage & replies<br/>cheap model])
+    B([coding agents<br/>your CLI])
+    YOU([you])
+    TRI --> A
+    SOUL --> A
+    SOUL --> B
+    LEARNED --> A
+    LEARNED --> B
+    CODER --> B
+    DIGEST --> YOU
 ```
 
-| document | written by | read by | what it drives |
-|---|---|---|---|
-| `SOUL.md` | **you** (the connections block and repo map maintain themselves) | triage + drafts (light model) and agent runs (your CLI); its repo map routes live sessions | what counts as a task, voice, escalation rules, which repo owns what |
-| `CODER.md` | **you** | agent runs and live sessions (your CLI, full model) | how the coder works, closes out, and answers the sender |
-| `LEARNED.md` | **the system**, from your verdicts — hot lessons per correction, consolidated by reflection; yours to edit, `SOUL.md` outranks it | triage, drafts, agent runs (active sections only — hypotheses stay home) | your style, your responsibilities, what deserves a task for *you* |
-| `DIGEST.md` | **the system**, once a day (light model) | agent runs (your CLI) | what's in flight today, who waits on whom |
+| document | what it is | who reads it |
+|---|---|---|
+| `TRIAGE.md` | the classifier's instructions — what makes a task, a question, or FYI; ships as a default, edit it to reshape every verdict | triage (cheap model) |
+| `SOUL.md` | the constitution: your rules, voice, escalation lines, the repo map | triage, replies, coding agents |
+| `CODER.md` | how the coding agent works and closes out | coding agents (your CLI) |
+| `LEARNED.md` | your profile, learned from your verdicts — `SOUL.md` outranks it | triage, replies, coding agents |
+| `DIGEST.md` | your morning brief: what's in flight, who waits on whom, rebuilt daily | you |
 
-Memory notes (Settings → Agent memory) ride alongside: sender-scoped verdicts injected into
-triage, drafts, and runs — the specific layer under LEARNED.md's general one.
+Standing notes (Settings → Agent memory) ride alongside: sender-scoped verdicts injected
+into triage and replies — the specific layer under `LEARNED.md`'s general one.
 
 ## Bring your own agent — and pick its model
 

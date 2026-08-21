@@ -155,8 +155,12 @@ def reflect(store, llm=None) -> bool:
                            f'EVENTS SINCE {since}:\n{gather(store, since)[:5000]}', max_tokens=1800))
     except Exception as e:
         logger.warning(f'reflection failed: {e}'); return False
+    # the 120-line budget in the prompt is a request; this is the law. A doc past the cap is a
+    # model that ignored its instructions, and an ever-growing LEARNED.md would silently lose
+    # its tail to the injection caps - the old doc is always the better answer than a bloated one.
     markers = (HYP_START, HYP_END, PROP_START, PROP_END)
-    if not (new.startswith('#') and len(new) > 200 and all(new.count(m) == 1 for m in markers)):
+    if not (new.startswith('#') and 200 < len(new) <= 12_000 and new.count('\n') <= 160
+            and all(new.count(m) == 1 for m in markers)):
         logger.warning('reflection produced an unusable doc - kept the old one'); return False
     store.save_doc(DOC, new, 'reflect')
     store.set_setting('learn_pending', '0', 'reflect')

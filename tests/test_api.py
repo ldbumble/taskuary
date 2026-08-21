@@ -180,6 +180,33 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/messages/{mid}/attachments/fetch', json={}).status_code, 422)  # no Outlook connection
         self.assertEqual(c.get('/api/messages/999999/attachments').status_code, 404)
 
+    def test_attachment_url_stays_in_the_attachments_dir_and_does_not_script(self):
+        """A Path pointing at config.toml used to be served as the attachment. SVG marked
+        image/svg+xml used to render as a document on this origin when opened in a tab,
+        and a CR/LF in the filename used to split Content-Disposition."""
+        from taskuary import artifacts
+        mid = server.store.add_message({'ExternalId': 'graph:ATTESC', 'Channel': 'email',
+                                        'Subject': 'escaped', 'Status': 'filed'})
+        outside = config.home() / 'not-an-attachment.txt'
+        outside.write_text('secret', encoding='utf-8')
+        aid_out = server.store.add_attachment({'MessageId': mid, 'ExternalId': 'esc:out',
+                                               'Name': 'secrets.txt', 'ContentType': 'text/plain',
+                                               'Path': str(outside)})
+        self.assertEqual(c.get(f'/api/attachments/{aid_out}').status_code, 404)
+        svg = artifacts.attachment_dir(mid) / '0-chart.svg'
+        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg"></svg>', encoding='utf-8')
+        aid_svg = server.store.add_attachment({'MessageId': mid, 'ExternalId': 'esc:svg',
+                                              'Name': 'chart.svg\r\nX-Injected: yes',
+                                              'ContentType': 'image/svg+xml', 'Path': str(svg)})
+        r = c.get(f'/api/attachments/{aid_svg}')
+        self.assertEqual(r.status_code, 200)
+        disp = r.headers.get('content-disposition', '')
+        self.assertIn('attachment', disp)
+        self.assertNotIn('\r', disp)
+        self.assertNotIn('X-Injected', disp)
+        self.assertEqual(r.headers.get('x-content-type-options'), 'nosniff')
+        self.assertEqual(r.headers.get('content-type', '').split(';')[0].strip(), 'image/svg+xml')
+
     def test_settings_roundtrip(self):
         self.assertEqual(c.patch('/api/settings', json={'name': 'feed_days', 'value': '7'}).json(), {'ok': True})
         vals = {s['Name']: s['Value'] for s in c.get('/api/settings').json()['data']}

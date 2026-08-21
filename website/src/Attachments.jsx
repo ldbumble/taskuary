@@ -56,23 +56,28 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
   const imgs = items.filter(drawable);
   const files = items.filter((a) => !drawable(a));
   return (
-    <Box sx={{ mt: 1, pt: 0.75, borderTop: `1px dashed ${BORDER}` }}>
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "flex", alignItems: "center", gap: 0.3 }}>
-        <AttachFileIcon sx={{ fontSize: 12 }} /> Attached · {items.length}
-      </Typography>
+    <Box sx={{ mt: 1 }}>
+      {/* images are PART of the message ("see below" mail IS the screenshot, a report's chart
+          IS the result) - drawn inline at reading size, not parked behind an attachment chip.
+          Only non-image files get the Attached row. */}
       {imgs.length > 0 && (
-        <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.5 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
           {imgs.map((a) => (
             <Box key={a.id} onClick={() => setBig(a)} title={`${a.name} · ${kb(a.size)} — click to enlarge`}
               sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", cursor: "zoom-in",
-                bgcolor: PANEL, "&:hover": { borderColor: "#c9cff0" } }}>
+                bgcolor: "#fff", alignSelf: "flex-start", maxWidth: "100%",
+                "&:hover": { borderColor: "#c9cff0" } }}>
               <Box component="img" src={attUrl(a)} alt={a.name}
-                sx={{ display: "block", maxHeight: dense ? 110 : 190, maxWidth: "100%", objectFit: "contain" }} />
+                sx={{ display: "block", maxHeight: dense ? 150 : 420, maxWidth: "100%", objectFit: "contain" }} />
             </Box>
           ))}
         </Box>
       )}
       {files.length > 0 && (
+        <Box sx={{ mt: imgs.length ? 0.75 : 0, pt: 0.75, borderTop: `1px dashed ${BORDER}` }}>
+          <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "flex", alignItems: "center", gap: 0.3 }}>
+            <AttachFileIcon sx={{ fontSize: 12 }} /> Attached · {files.length}
+          </Typography>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
           {files.map((a) => (
             <Box key={a.id} component={a.url ? "a" : "div"} href={a.url ? attUrl(a, true) : undefined}
@@ -87,8 +92,9 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
             </Box>
           ))}
         </Box>
+        </Box>
       )}
-      {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable at 190px */}
+      {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline */}
       <Dialog open={!!big} onClose={() => setBig(null)} maxWidth="xl"
         PaperProps={{ sx: { bgcolor: PANEL, p: 1 } }}>
         {big && (

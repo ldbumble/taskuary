@@ -762,7 +762,14 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
   const cur = msgs.find((m) => m.MessageId === mid) || msgs.find((m) => m.MessageId === focusId) || msgs[msgs.length - 1];
   // what just arrived, separated from the thread quoted underneath it
   const { latest, quoted } = splitQuoted(cleanText(cur?.BodyText) || fallback || "…");
-  const text = latest || quoted;
+  const whole = latest || quoted;
+  // a report's raw rows are receipts, not reading: the summary is the message, the rows fold
+  // away behind one click - same treatment the quoted thread below a reply gets
+  const RAW = "\n--- raw data ---";
+  const [showRaw, setShowRaw] = useState(false);
+  const cut = whole.indexOf(RAW);
+  const text = cut >= 0 ? whole.slice(0, cut).trimEnd() : whole;
+  const raw = cut >= 0 ? whole.slice(cut + RAW.length).trim() : "";
   const you = cur?.Status === "context";
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
@@ -803,6 +810,20 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
           {text}
         </Typography>
+        {raw && (
+          <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
+            <Typography variant="caption" onClick={() => setShowRaw(!showRaw)}
+              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#4f46e5" } }}>
+              {showRaw ? "hide" : "show"} raw data — {raw.length.toLocaleString()} chars {showRaw ? "↑" : "↓"}
+            </Typography>
+            {showRaw && (
+              <Typography variant="body2" sx={{ ...mono, whiteSpace: "pre-wrap", color: DIM, mt: 0.5,
+                fontSize: 11, textAlign: "left", wordBreak: "break-word" }}>
+                {raw}
+              </Typography>
+            )}
+          </Box>
+        )}
         {/* the thread quoted underneath: folded away by default, one click to read */}
         {latest && quoted && (
           <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>

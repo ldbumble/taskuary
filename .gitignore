@@ -18,3 +18,8 @@ website/ui.png
 taskuary/whatsapp/node_modules/
 taskuary/whatsapp/wa-auth/
 taskuary/whatsapp/package-lock.json
+
+# editor droppings and scratch files - a vim swap once leaked a username into the repo
+*.swp
+*.swo
+*.tmp

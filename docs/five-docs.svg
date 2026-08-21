@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 352" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <title>The five documents and who reads them: TRIAGE, SOUL and LEARNED feed triage and replies; SOUL, CODER and LEARNED feed coding agents; DIGEST is the owner's morning brief.</title>
+  <defs>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8b93a7"/>
+    </marker>
+  </defs>
+
+  <!-- you write -->
+  <rect x="16" y="16" width="180" height="182" rx="10" fill="none" stroke="#8b93a7" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="30" y="38" font-size="10" letter-spacing="1.5" fill="#8b93a7">YOU WRITE</text>
+  <rect x="30" y="50" width="152" height="38" rx="7" fill="#eeedfc" stroke="#4f46e5" stroke-width="1.3"/>
+  <text x="106" y="74" text-anchor="middle" font-size="13" font-weight="700" fill="#1c2130">TRIAGE.md</text>
+  <rect x="30" y="98" width="152" height="38" rx="7" fill="#eeedfc" stroke="#4f46e5" stroke-width="1.3"/>
+  <text x="106" y="122" text-anchor="middle" font-size="13" font-weight="700" fill="#1c2130">SOUL.md</text>
+  <rect x="30" y="146" width="152" height="38" rx="7" fill="#eeedfc" stroke="#4f46e5" stroke-width="1.3"/>
+  <text x="106" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#1c2130">CODER.md</text>
+
+  <!-- write themselves -->
+  <rect x="16" y="214" width="180" height="122" rx="10" fill="none" stroke="#8b93a7" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="30" y="236" font-size="10" letter-spacing="1.5" fill="#8b93a7">WRITE THEMSELVES</text>
+  <rect x="30" y="248" width="152" height="38" rx="7" fill="#eeedfc" stroke="#4f46e5" stroke-width="1.3" stroke-dasharray="5 4"/>
+  <text x="106" y="272" text-anchor="middle" font-size="13" font-weight="700" fill="#1c2130">LEARNED.md</text>
+  <rect x="30" y="290" width="152" height="38" rx="7" fill="#eeedfc" stroke="#4f46e5" stroke-width="1.3" stroke-dasharray="5 4"/>
+  <text x="106" y="314" text-anchor="middle" font-size="13" font-weight="700" fill="#1c2130">DIGEST.md</text>
+
+  <!-- consumers -->
+  <rect x="452" y="52" width="192" height="60" rx="30" fill="#4f46e5"/>
+  <text x="548" y="78" text-anchor="middle" font-size="13.5" font-weight="700" fill="#ffffff">triage &amp; replies</text>
+  <text x="548" y="96" text-anchor="middle" font-size="11" fill="#dcd9ff">the cheap model, every message</text>
+  <rect x="452" y="150" width="192" height="60" rx="30" fill="#4f46e5"/>
+  <text x="548" y="176" text-anchor="middle" font-size="13.5" font-weight="700" fill="#ffffff">coding agents</text>
+  <text x="548" y="194" text-anchor="middle" font-size="11" fill="#dcd9ff">your CLI, its full model</text>
+  <rect x="452" y="279" width="192" height="60" rx="30" fill="#7c6cf0"/>
+  <text x="548" y="305" text-anchor="middle" font-size="13.5" font-weight="700" fill="#ffffff">you</text>
+  <text x="548" y="323" text-anchor="middle" font-size="11" fill="#e4e1ff">the morning read</text>
+
+  <!-- edges -->
+  <path d="M182 69 C 320 69, 340 78, 448 80" fill="none" stroke="#8b93a7" stroke-width="1.4" marker-end="url(#b)"/>
+  <path d="M182 110 C 320 108, 340 86, 448 84" fill="none" stroke="#8b93a7" stroke-width="1.4" marker-end="url(#b)"/>
+  <path d="M182 124 C 320 128, 340 172, 448 176" fill="none" stroke="#8b93a7" stroke-width="1.4" marker-end="url(#b)"/>
+  <path d="M182 165 C 320 165, 340 182, 448 184" fill="none" stroke="#8b93a7" stroke-width="1.4" marker-end="url(#b)"/>
+  <path d="M182 260 C 330 254, 350 92, 448 88" fill="none" stroke="#8b93a7" stroke-width="1.4" marker-end="url(#b)"/>
+  <path d="M182 274 C 320 272, 340 192, 448 188" fill="none" stroke="#8b93a7" stroke-width="1.4" marker-end="url(#b)"/>
+  <path d="M182 309 C 320 309, 340 309, 448 309" fill="none" stroke="#8b93a7" stroke-width="1.4" marker-end="url(#b)"/>
+</svg>

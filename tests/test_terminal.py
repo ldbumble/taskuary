@@ -22,12 +22,13 @@ def _wait(fn, secs=20):
 
 
 class SeedEchoTests(unittest.TestCase):
-    def test_paste_chip_counts_as_the_echo(self):
-        """Claude Code folds a burst-typed prompt into '[Pasted text #N]' chips - the words never
-        render on screen. Unrecognized, the seeder read that as "a boot dialog ate it", retyped
-        once per retry (chips piling up) and never pressed Enter: a session that started nothing."""
+    def test_chips_wraps_and_tails_all_count_as_echo(self):
+        """Claude Code folds burst-typed text into '[Pasted text #N]' chips (the words never
+        render), the input box wraps mid-phrase, and a long seed scrolls so only its tail stays
+        visible - every one of those is a landed prompt, and an empty screen is not."""
         class T:
             cols, rows, seeded = 110, 32, 'TASK TQ-0001 - fix the import. WHAT TO DO: work it.'
+            _sees = terminal.Term._sees
             def scrollback(self): return '> [Pasted text #1][Pasted text #2]'
         self.assertTrue(terminal.Term._echoed(T()))
         class Wrapped(T):                                        # a chip broken by the input box's own wrap
@@ -36,9 +37,7 @@ class SeedEchoTests(unittest.TestCase):
         class Empty(T):
             def scrollback(self): return '> '
         self.assertFalse(terminal.Term._echoed(Empty()))         # nothing echoed: still a dialog risk
-        class Plain(T):
-            def scrollback(self): return '> TASK TQ-0001 - fix the import. WHAT TO DO: work it.'
-        self.assertTrue(terminal.Term._echoed(Plain()))          # TUIs that echo the words still count
+        self.assertFalse(Empty()._sees('TASK TQ-0001 - fix t')) # the toe check says not-listening too
         class TailOnly(T):                                       # a long seed scrolls the box: only its
             seeded = ('TASK TQ-0002 - a long ask that scrolls the input box entirely out of view. '
                       'WHAT TO DO: work it from this message alone.')
@@ -46,26 +45,54 @@ class SeedEchoTests(unittest.TestCase):
                 return '> box entirely out of view. WHAT TO DO: work it from this message alone.'
         self.assertTrue(terminal.Term._echoed(TailOnly()))
 
-    def test_seed_submits_through_paste_chips_without_retyping(self):
-        """The whole seed() loop against a scripted chip-drawing TUI: the prompt goes in ONCE,
-        Enter follows, no retype pile-up. This is the exact Image-#2 failure as a regression."""
+    def test_seed_types_a_toe_then_the_payload_and_submits(self):
+        """The whole seed() loop against a scripted chip-drawing TUI: a 20-char toe proves the
+        box is listening, the payload follows, Enter submits - and what lands is ONE complete
+        copy of the prompt, never a beheaded or doubled one (the Image-#2 and #4 regressions)."""
+        SEED = 'TASK TQ-0001 - fix the import. WHAT TO DO: work it from this message alone.'
         class FakeTerm:
             alive, n, cols, rows, sid, seeded = True, 1, 110, 32, 'probe', ''
-            _echoed = terminal.Term._echoed
-            def __init__(self): self.wrote, self.screen = [], '> '
+            _sees, _echoed = terminal.Term._sees, terminal.Term._echoed
+            def __init__(self): self.landed, self.keys, self.screen = '', [], '> '
             def settle(self, budget=None): return True
             def scrollback(self): return self.screen
             def write(self, s):
-                self.wrote.append(s)
-                if s not in ('\r', '\n'): self.screen += '[Pasted text #1]'    # chips, never the words
-                elif '[Pasted text' in self.screen:
-                    self.screen += ' * Working on it'; self.n += 5             # Enter submits, the session answers
+                if s in ('\r', '\n'):
+                    self.keys.append(s)
+                    if self.landed: self.screen += ' * Working on it'; self.n += 5   # Enter submits
+                    return
+                self.landed += s
+                self.screen += '[Pasted text #1]'                # chips, never the words
         f = FakeTerm()
-        terminal.Term.seed(f, 'TASK TQ-0001 - fix the import. WHAT TO DO: work it from this message alone.')
-        self.assertTrue(_wait(lambda: '\r' in f.wrote or '\n' in f.wrote), f.wrote)
-        typed = [w for w in f.wrote if w not in ('\r', '\n')]
-        self.assertEqual(len(typed), 1, f.wrote)                 # one type-in, zero retypes
+        terminal.Term.seed(f, SEED)
+        self.assertTrue(_wait(lambda: f.keys), f.landed)
+        self.assertEqual(f.landed, SEED)                         # complete, single copy
         self.assertIn('Working on it', f.screen)                 # ...and it actually started
+
+    def test_seed_survives_a_boot_dialog_eating_the_toe(self):
+        """A TUI still booting eats the earliest bytes. Only the 20-char toe is ever exposed to
+        that: it is retyped once the screen moves, and the payload still lands exactly once and
+        whole - the old one-shot write submitted whatever half survived the eating."""
+        SEED = 'TASK TQ-0002 - restart the importer. WHAT TO DO: work it from this message alone.'
+        class Hungry:
+            alive, cols, rows, sid, seeded = True, 110, 32, 'probe2', ''
+            _sees, _echoed = terminal.Term._sees, terminal.Term._echoed
+            def __init__(self): self.landed, self.keys, self.screen, self.ate = '', [], '> ', False; self._n = 1
+            @property
+            def n(self):
+                if self.ate: self._n += 1     # after the eat every look shows movement: the dialog repainting
+                return self._n
+            def settle(self, budget=None): return True
+            def scrollback(self): return self.screen
+            def write(self, s):
+                if s in ('\r', '\n'): self.keys.append(s); return
+                if not self.ate: self.ate = True; return         # the boot dialog swallows the first bytes
+                self.landed += s
+                self.screen += s
+        h = Hungry()
+        terminal.Term.seed(h, SEED)
+        self.assertTrue(_wait(lambda: h.keys), h.landed)
+        self.assertEqual(h.landed, SEED)                         # eaten toe retyped; payload whole, once
 
 
 class TerminalTests(unittest.TestCase):
@@ -229,9 +256,11 @@ class TerminalTests(unittest.TestCase):
                 with mock.patch.object(terminal, 'SEED_QUIET', 0), mock.patch.object(terminal, 'SEED_ENTER', .05):
                     t.n = 1                                  # the TUI has printed: it is 'ready'
                     t.seed('do the thing and then do the other thing')
-                    self.assertTrue(_wait(lambda: len(wrote) >= 2))
-            self.assertEqual(wrote[0], 'do the thing and then do the other thing')
-            self.assertEqual(wrote[1], '\r')                  # then Enter, on its own
+                    self.assertTrue(_wait(lambda: '\r' in wrote))
+            self.assertEqual(wrote[0], 'do the thing and the')    # the 20-char toe goes first, alone
+            self.assertEqual(''.join(wrote[:wrote.index(chr(13))]),
+                             'do the thing and then do the other thing')   # whole prompt, exactly once
+            self.assertEqual(wrote[wrote.index(chr(13))], '\r')   # then Enter, on its own
         finally:
             terminal.close(t.sid)
 

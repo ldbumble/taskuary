@@ -160,7 +160,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // Sync = trigger a real mailbox/Teams ingest server-side, then TRACK its actual state
   // (/ingest/status) instead of guessing with a fixed wait - the button stays "Updating"
   // and the list shows loading until the server says the poll finished.
-  const [syncing, setSyncing] = useState(false);
+  const [syncing, setSyncing] = useState(false);   // a sync YOU started - the list dims for it
+  const [bgSync, setBgSync] = useState(false);     // the startup catch-up - rows stay readable
   const [syncWhat, setSyncWhat] = useState("");
   const [lastSync, setLastSync] = useState(null);
   const syncNow = useCallback(async (silent) => {
@@ -191,12 +192,14 @@ export default function FeedView({ onOpenTask, onChanged }) {
         if (!alive) return;
         if (data.status?.state === "running") {
           sawRunning = true;
-          setSyncing(true); setSyncWhat(data.status.what || "");
+          // background catch-up: say so and keep polling, but never dim rows that are already
+          // real - a readable timeline behind a working banner, not a page that looks loading
+          setBgSync(true); setSyncWhat(data.status.what || "");
           setTimeout(watch, 2000);
         } else if (sawRunning) {
-          setSyncing(false); setSyncWhat(""); setLastSync(new Date()); load(rowsLen.current);
+          setBgSync(false); setSyncWhat(""); setLastSync(new Date()); load(rowsLen.current);
         }
-      } catch { if (alive) { setSyncing(false); setSyncWhat(""); } }
+      } catch { if (alive) { setBgSync(false); setSyncWhat(""); } }
     };
     watch();
     return () => { alive = false; };
@@ -314,9 +317,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
               </Select>
             )}
             <Box sx={{ flex: 1, minWidth: 8 }} />
-            <Button size="small" variant="contained" disableElevation disabled={syncing} onClick={() => syncNow(false)}
-              startIcon={syncing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing ? (syncWhat || "Updating…") : "Sync now"}</Button>
+            <Button size="small" variant="contained" disableElevation disabled={syncing || bgSync} onClick={() => syncNow(false)}
+              startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
+              sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? (syncWhat || "Updating…") : "Sync now"}</Button>
           </Box>
           {/* stats strip - and the sync caption lives here, so the controls row above keeps
               its budget whether or not the mailbox picker is showing */}
@@ -342,7 +345,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             </Box>
           )}
         </Box>
-        {syncing && <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />}
+        {(syncing || bgSync) && <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />}
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mt: 1.5 }}>{err}</Alert>}
         <Box sx={{ opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
           {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (

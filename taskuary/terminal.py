@@ -16,6 +16,10 @@ SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and w
 SEED_SETTLE = 8                     # cap on waiting for the input box to finish laying out a long paste
 SEED_ENTER = 1.0                    # how long to give the TUI to react to Enter before pressing again
 SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate the prompt, and the total window
+# One giant write loses characters: a TUI's input loop reads in frames, and a multi-KB burst
+# arrives faster than it drains - ~150 chars of a 2.4KB seed's FRONT vanished mid-stream in
+# live testing (Ink's long-paste dropping). Chunks with a breath between give it frames.
+SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
 
 
@@ -131,49 +135,52 @@ class Term:
             quiet, last = (quiet + .1, last) if self.n == last else (0, self.n)
         return self.alive
 
-    def _echoed(self) -> bool:
-        """Is the typed prompt actually ON the screen? A CLI that boots into a dialog - codex's
-        first-run "do you trust this directory?" is the live example - silently eats whatever is
-        typed at it, and pressing Enter blind would ANSWER that dialog, which is the owner's
-        security decision to make, not ours.
-
-        Claude Code (v2+) folds a burst-typed prompt into '[Pasted text #N]' chips - the words
-        themselves never render. The chip IS the echo: before it was recognized here, the seeder
-        read the missing words as "a dialog ate it", retyped once per retry (chips piling up on
-        screen) and never dared press Enter - a session that looked busy and started nothing.
-
-        And the words that DO render may be either end of the prompt: a long seed scrolls the
-        input box, so only its TAIL stays visible - the head check alone read a fully-typed
-        prompt as 'eaten' and retyped it on top of itself, three glued copies and no Enter.
-        All checks compare with ALL whitespace stripped, because the box wraps at the terminal
-        width and a chip or phrase broken across two lines is still the echo."""
+    def _sees(self, fragment: str) -> bool:
+        """Is this piece of typed text (or a paste chip standing in for it) ON the screen?
+        Claude Code (v2+) folds burst-typed text into '[Pasted text #N]' chips - the words
+        themselves never render, so the chip counts. Comparison strips ALL whitespace: the
+        input box wraps at the terminal width, and a chip or phrase broken across two lines
+        is still the echo."""
         scr = ''.join(render(self.scrollback(), self.cols, self.rows).split())
-        if '[Pastedtext' in scr: return True
-        flat = ''.join(self.seeded.split())
-        return len(flat) > 10 and (flat[:40] in scr or flat[-40:] in scr)
+        return '[Pastedtext' in scr or ''.join(fragment.split()) in scr
+
+    def _echoed(self) -> bool:
+        """Did the WHOLE prompt land? Only the tail is checkable - a long seed scrolls the input
+        box, so the head may legitimately be off-screen (checking the head here once read a
+        fully-typed prompt as 'eaten' and retyped it on top of itself, three glued copies and no
+        Enter). Tail-presence alone is safe ONLY because seed() proves the box is listening with
+        a short toe BEFORE the payload goes in - without that proof, a booting TUI that ate the
+        front of the prompt still shows the tail, and a beheaded ask gets submitted (it did)."""
+        return len(self.seeded) > 10 and self._sees(self.seeded[-40:])
 
     def seed(self, text: str):
         """Type the first prompt in AND SEND IT. The owner asked for the work when they clicked
         the button, so leaving a filled-in box for them to come back and press Enter on is not
         starting - it is a session that looks busy and has done nothing.
 
-        Everything here is verified, not assumed: wait for the boot to go quiet, type, then check
-        the text ECHOED before any Enter goes in. Not echoed means a boot dialog ate it (a trust
-        prompt, a login) - those are answered by the owner in the terminal, never by us - so wait
-        for the screen to move past it and type the prompt again. Echoed means press Enter until
-        the session answers, because a CR arriving mid-redraw reads as part of the same edit and
-        some TUIs submit on \\n not \\r."""
+        Everything here is verified, not assumed, in TWO steps. First a 20-char TOE: a booting
+        TUI eats the earliest bytes (a trust dialog, an input box not yet listening) - and when
+        it eats only the FRONT, the tail still lands, so typing everything at once submitted a
+        beheaded prompt whose problem statement was gone. Not-echoed toe = a dialog is up (the
+        owner answers those, never us) - wait for the screen to move, try the toe again. Echoed
+        toe = the box is live and listening, so the payload after it cannot be eaten. Then press
+        Enter until the session answers, because a CR arriving mid-redraw reads as part of the
+        same edit and some TUIs submit on \\n not \\r."""
         def go():
             start = time.time()
             while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
             if not self.settle(max(1.0, SEED_WAIT - (time.time() - start))): return
             self.seeded = ' '.join(text.split())
+            toe, rest = self.seeded[:20], self.seeded[20:]
             for attempt in range(SEED_RETRIES):
-                self.write(self.seeded)                   # attempt > 0 = retyped: the first copy was eaten
-                if not self.settle(SEED_SETTLE): return
-                if not self._echoed():
-                    # a dialog is up: hold until the screen changes (the owner answered it),
-                    # inside the overall budget, then try the prompt again
+                self.write(toe)                           # attempt > 0 = retyped: the first toe was eaten
+                for _ in range(4):                        # a TUI mid-boot echoes late: look again before
+                    if not self.settle(SEED_SETTLE): return             # calling it eaten (a too-early
+                    if self._sees(toe): break                           # verdict retyped a doubled toe)
+                    time.sleep(1)
+                if not self._sees(toe):
+                    # a dialog is up (or the box is not listening yet): hold until the screen
+                    # changes (the owner answered it / boot finished), then try the toe again
                     was = self.n
                     while self.alive and self.n == was and time.time() - start < SEED_BUDGET:
                         time.sleep(.5)
@@ -183,6 +190,11 @@ class Term:
                         return
                     if not self.settle(SEED_SETTLE): return
                     continue
+                # proven listening - and fed in frame-sized bites so nothing drops mid-stream
+                for i in range(0, len(rest), SEED_CHUNK):
+                    self.write(rest[i:i + SEED_CHUNK])
+                    time.sleep(SEED_CHUNK_GAP)
+                if not self.settle(SEED_SETTLE): return
                 for key in ('\r', '\r', '\n'):
                     was = self.n
                     self.write(key)

@@ -93,13 +93,24 @@ def run_mcp(cfg):
     return run_report(cfg)
 
 
+def run_digest(cfg):
+    """{"days": 3} - Taskuary's own activity as the data: open work, finished work, pending
+    reviews, fresh verdicts, who wrote how often. The Morning digest ships as a report ON
+    PURPOSE: the brief lands on the Timeline like any report, its prompt is edited on the
+    Reports tab, deleting the source turns it off - and it demonstrates how reports work
+    using data every install already has. `store` arrives via resolve_cfg, never persisted."""
+    from .digest import gather
+    days = int(cfg.get('days') or 3)
+    return f'the last {days} days, distilled', gather(cfg['store'], days)
+
+
 def _planned(name):
     def _fail(cfg): raise NotImplementedError(f"connector type '{name}' is on the roadmap - not implemented yet")
     return _fail
 
 
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
-            'rss': run_rss, **{n: _planned(n) for n in PLANNED}}
+            'rss': run_rss, 'digest': run_digest, **{n: _planned(n) for n in PLANNED}}
 
 
 def mssql_connection(store) -> dict:
@@ -121,6 +132,7 @@ def winrm_connection(store) -> dict:
 
 
 def resolve_cfg(store, cfg: dict) -> dict:
+    if cfg.get('type') == 'digest': return {**cfg, 'store': store}   # its data IS the store
     conn = {'mssql': mssql_connection, 'winrm': winrm_connection}.get(cfg.get('type'))
     if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg
@@ -236,6 +248,11 @@ def run_report_source(store, src: dict, llm=None) -> dict:
         made = []
         logger.warning(f'report artifacts for {title} failed: {e}')
     store.audit('message', mid, 'report', 'report', 'agent', title)
+    # the digest report is ALSO what keeps DIGEST.md alive: one run, two homes - the Timeline
+    # row you read in the morning, and the doc the Docs tab shows
+    if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
+        from .digest import HEADER
+        store.save_doc('digest', f'{HEADER}_refreshed {stamp[:16]}_\n\n{strip_directive(body)}\n', 'digest')
     return {'message_id': mid, 'subject': subject, 'files': len(made)}
 
 

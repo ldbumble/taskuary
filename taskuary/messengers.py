@@ -68,7 +68,10 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     from .ingest import ingest_message
     tok, cfg = c['Secret'], _cfg(c)
     if not tok: return 0
-    want = {s['Address'] for s in sources if s['Address'] and s['Address'] != '*'}
+    # only telegram sources filter here: a report source in the same list (the seeded Morning
+    # digest) must never become a chat-id nothing can match
+    want = {s['Address'] for s in sources
+            if s.get('Channel', 'telegram') == 'telegram' and s['Address'] and s['Address'] != '*'}
     ups = tg(tok, 'getUpdates', offset=int(cfg.get('tg_offset') or 0), limit=TG_LIMIT,
              allowed_updates=['message'])
     n = 0
@@ -135,7 +138,8 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     from datetime import datetime
     from .ingest import ingest_message
     cfg = _cfg(c)
-    want = {s['Address'] for s in sources if s['Address'] and s['Address'] != '*'}
+    want = {s['Address'] for s in sources
+            if s.get('Channel', 'whatsapp') == 'whatsapp' and s['Address'] and s['Address'] != '*'}
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n = 0
     for m in out.get('messages', []):

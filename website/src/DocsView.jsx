@@ -19,7 +19,7 @@ const DOCS = {
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
-    blurb: "Your morning brief — what's in flight, who waits on whom — synthesized when the app opens (once a day, after the startup catch-up). For your eyes; agents get their task's own context. Editable, but the next refresh overwrites it." },
+    blurb: "Your morning brief — what's in flight, who waits on whom. Written by the Morning digest report: the same brief lands on your Timeline daily, its prompt is edited on the Reports tab (that decides what goes in here), and deleting that report turns it off." },
   learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
 };

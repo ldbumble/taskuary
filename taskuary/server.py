@@ -1046,9 +1046,11 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing'):
     store.set_setting('ingest_status', json.dumps(
         {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
     try:
-        run_due_reports(store)
+        # channels FIRST: the Morning digest is a report over Taskuary's own data, and run
+        # before the catch-up it would summarize yesterday while today sat in the mailbox
         from .channels import poll_channels
         poll_channels(store, backfill_days)
+        run_due_reports(store)
     finally:
         try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
         finally: _POLL_BUSY.release()
@@ -1078,12 +1080,9 @@ def catch_up_on_startup():
     logger.info(f"startup: {'incremental poll (closed under an hour)' if days == 0 else f'catching up on the last {days} day(s)'}")
     def _catch_up():
         _poll_reports(days, what=f'catching up on the last {days} day(s)' if days else 'syncing')
-        # ...and only THEN synthesize the digest, so it reads the days just pulled in - a 5:30
-        # schedule never fired on an app that is a window you open, not a service
-        from .digest import refresh_if_stale
-        try: refresh_if_stale(store)
-        except Exception as e: logger.warning(f'digest refresh failed: {e}')
-        # ...and consolidate what the verdicts taught, on the same once-a-day rhythm
+        # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
+        # the poll above like every other one. Consolidate what the verdicts taught next,
+        # on the same once-a-day rhythm.
         try: learn.reflect_if_due(store)
         except Exception as e: logger.warning(f'reflection failed: {e}')
     threading.Thread(target=_catch_up, daemon=True).start()

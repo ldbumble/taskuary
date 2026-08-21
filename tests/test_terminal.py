@@ -120,6 +120,24 @@ class TerminalTests(unittest.TestCase):
             terminal.close(t.sid)
         self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])
 
+    def test_first_resize_wiggles_the_pty_so_a_tui_repaints(self):
+        """Reattaching to a full-screen TUI (codex) replayed raw scrollback and showed smeared
+        blank bars - nothing told the CHILD to repaint. The first resize of every socket now
+        wiggles one column so ConPTY signals a window change and the TUI redraws whole."""
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(8)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        sizes = []
+        try:
+            with mock.patch.object(t, 'resize', side_effect=lambda r, c_: sizes.append((r, c_))):
+                with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
+                    ws.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
+                    ws.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
+                    ws.send_json({'type': 'in', 'data': ''})     # ordering fence: resizes processed
+                    self.assertTrue(_wait(lambda: len(sizes) >= 3))
+            self.assertEqual(sizes[:3], [(30, 99), (30, 100), (30, 100)])   # wiggle once, then honest sizes
+        finally:
+            terminal.close(t.sid)
+
     def test_websocket_carries_output_and_exit(self):
         t = terminal.Term(ECHO, os.getcwd(), 'test')
         terminal.SESSIONS[t.sid] = t
@@ -618,9 +636,12 @@ class FindCheckoutTests(unittest.TestCase):
         server.store.upsert_agent('finder', 'coding', 'cli',
                                   json.dumps({'cmd': 'claude', 'cwd': str(root / 'work'),
                                               'cwd_map': {'acme/other': str(root / 'work')}}))
-        with mock.patch.object(terminal, 'Term') as T,              mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
-            T.return_value = mock.Mock(sid='x', cwd=str(co), info=lambda: {})
-            terminal.open_session(server.store, 'finder', None, 'acme/widget')
-            self.assertEqual(T.call_args.args[1], str(co))      # the session opens IN the checkout
-        prof = json.loads(server.store.get_agent('finder')['Config'])
-        self.assertEqual(prof['cwd_map']['acme/widget'], str(co))   # ...and it is remembered
+        try:
+            with mock.patch.object(terminal, 'Term') as T,              mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
+                T.return_value = mock.Mock(sid='x', cwd=str(co), info=lambda: {})
+                terminal.open_session(server.store, 'finder', None, 'acme/widget')
+                self.assertEqual(T.call_args.args[1], str(co))      # the session opens IN the checkout
+            prof = json.loads(server.store.get_agent('finder')['Config'])
+            self.assertEqual(prof['cwd_map']['acme/widget'], str(co))   # ...and it is remembered
+        finally:
+            terminal.SESSIONS.pop('x', None)     # the mock must not haunt later live_sessions() calls

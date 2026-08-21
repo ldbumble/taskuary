@@ -1,7 +1,12 @@
 name: ci
 on:
   push: { branches: [master, main] }
-  pull_request:
+  pull_request: { branches: [master, main] }
+
+# Fork PRs get a read-only token. First-time outside collaborators still need a
+# maintainer to click "Approve and run workflows" (repo Actions setting) - the
+# trigger is not missing; GitHub holds the run at action_required until then.
+permissions: { contents: read }
 
 jobs:
   test:
@@ -33,7 +38,8 @@ jobs:
         working-directory: website
 
   build-exe:
-    # proves the one-file desktop build stays green; artifact attached to the run
+    # push only: a fork PR must not mint the one-file exe (untrusted code + upload)
+    if: github.event_name == 'push'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5

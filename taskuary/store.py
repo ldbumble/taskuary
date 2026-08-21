@@ -19,7 +19,7 @@ ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId
 # ── one owner, one place ─────────────────────────────────────────────────────────────────
 # The operator documents talk ABOUT the owner constantly ("protect John's time", "ask John in
 # the session", "Sign as John Smith"). Typed literally, changing your name means finding nine
-# of them, and the live docs ended up half Uri and half John Smith. So the docs carry tokens
+# of them, and the live docs ended up half real name and half John Smith. So the docs carry tokens
 # and the name lives in one setting.
 DOC_TOKENS = ('owner', 'owner_first', 'owner_email')
 _TOKEN = re.compile(r'\{\{\s*(' + '|'.join(DOC_TOKENS) + r')\s*\}\}')

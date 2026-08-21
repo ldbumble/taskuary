@@ -40,7 +40,7 @@ a guess with a score. Say you strip the greeting off three drafts this week; the
 carries:
 
 ```
-- Uri drops greetings and signs off in one word. [s:4 | ev: rv12,rv15,rv31 | seen: 2026-08-19]
+- John drops greetings and signs off in one word. [s:4 | ev: rv12,rv15,rv31 | seen: 2026-08-19]
 ```
 
 Read the tag left to right: **s:4** is the score — how often the guess has held. It starts
@@ -300,7 +300,3 @@ Want a bigger piece? Say so in an issue — worktree isolation, a notifications/
 and a plugin API for connectors are all on the roadmap and all up for grabs. Interested in
 maintaining an area long-term? Open an issue titled `maintainer: <area>` and let's talk.
 
-## Credits
-
-Patterns borrowed with gratitude from **Buzz** (hash-chained audit), **Macro** (unified
-memory), and **vibe-kanban** (local-server app model, agents in worktrees). MIT licensed.

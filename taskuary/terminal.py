@@ -389,6 +389,23 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     return t
 
 
+# A replayed scrollback must not ASK QUESTIONS. The raw stream contains the TUI's terminal
+# queries (device attributes ESC[c, cursor position ESC[6n, color probes) - replaying them
+# on reattach made xterm ANSWER each one again, and the answers arrived at the CLI as
+# keystrokes: '[?1;2c' typed into codex's input box, stray cursor reports nudging its view.
+# Scrubbed from the REPLAY only; the live stream keeps them so real queries get real answers.
+_TERM_QUERIES = re.compile(
+    r'\x1b\[[0>=]?c'                                 # DA1/DA2/DA3 - who are you?
+    r'|\x1b\[[56]n'                                  # DSR status / CPR - where is the cursor?
+    r'|\x1b\[\?\d+\$p'                               # DECRQM - is mode N on?
+    r'|\x1b\]1[01];\?(?:\x07|\x1b\\)'                # OSC 10/11 - what are your colors?
+    r'|\x1b\[\?u'                                    # kitty keyboard protocol probe
+    r'|\x1bP\+q[0-9A-Fa-f;]*(?:\x07|\x1b\\)')        # XTGETTCAP
+
+def scrub_queries(s: str) -> str:
+    return _TERM_QUERIES.sub('', s or '')
+
+
 # ── wrapping up: "we're done" -> the transcript IS the report ───────────────────────
 _ANSI = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]|\x1b[=>]'
                    r'|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')

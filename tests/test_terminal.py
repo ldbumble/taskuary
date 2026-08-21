@@ -218,6 +218,29 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_replay_never_asks_the_terminal_questions(self):
+        """The scrollback replay carried the TUI's own terminal queries (ESC[c, ESC[6n...), and
+        xterm answered each one AGAIN on every reattach - '[?1;2c' typed into codex's input box.
+        The replay is scrubbed; content and colors survive; the live stream is untouched."""
+        raw = ('boot \x1b[32mgreen\x1b[0m text \x1b[c mid \x1b[6n more \x1b[>c '
+               '\x1b]11;?\x07 tail \x1b[?2004$p end')
+        scrubbed = terminal.scrub_queries(raw)
+        for q in ('\x1b[c', '\x1b[6n', '\x1b[>c', '\x1b]11;?\x07', '\x1b[?2004$p'):
+            self.assertNotIn(q, scrubbed)
+        self.assertIn('\x1b[32mgreen\x1b[0m', scrubbed)          # ordinary paint survives
+        self.assertIn('boot', scrubbed); self.assertIn('end', scrubbed)
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(4)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        try:
+            t._append('hello \x1b[6n world')
+            with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
+                first = ws.receive_json()
+            self.assertEqual(first['type'], 'out')
+            self.assertNotIn('\x1b[6n', first['data'])           # the replay asks nothing
+            self.assertIn('hello', first['data'])
+        finally:
+            terminal.close(t.sid)
+
     def test_websocket_carries_output_and_exit(self):
         t = terminal.Term(ECHO, os.getcwd(), 'test')
         terminal.SESSIONS[t.sid] = t

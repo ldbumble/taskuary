@@ -22,6 +22,17 @@ const elapsed = (since) => {
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
+// WHICH agent is on the card, at a glance: a whisper of its brand on the border while it
+// works - Claude's terracotta, Codex/OpenAI's teal, Gemini's blue. Live or running only;
+// a finished run's card goes back to house style.
+const AGENT_TINT = { claude: "#d97757", codex: "#10a37f", openai: "#10a37f", gemini: "#4285f4",
+                     cursor: "#8b5cf6", copilot: "#6e7681" };
+const agentTint = (name, runStatus, isLive, cmds = {}) => {
+  if (!isLive && runStatus !== "running") return null;
+  const n = String(cmds[name] || name || "").toLowerCase();   // 'coder' resolves to the CLI it runs
+  return (Object.entries(AGENT_TINT).find(([k]) => n.includes(k)) || [])[1] || null;
+};
+
 // A card's peephole into the running agent: the last couple of console lines, live.
 // Click the card for the whole terminal (task page).
 const LiveTail = ({ run }) => {
@@ -70,7 +81,7 @@ export default function BoardView({ onOpenTask }) {
   const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [repos, setRepos] = useState([]);
-  const { agents, models } = useAgents();
+  const { agents, models, cmds } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
   // how = does an agent start on it now, or does it just get filed. There is no third
   // option: work always happens in a session you can watch and talk to.
@@ -140,10 +151,13 @@ export default function BoardView({ onOpenTask }) {
                 <Chip size="small" label={cards.length} sx={{ height: 18, fontSize: 10.5, bgcolor: PANEL, border: `1px solid ${BORDER}`, color: DIM }} />
               </Box>
               {!cards.length && <Empty>Nothing here.</Empty>}
-              {cards.map((t) => (
+              {cards.map((t) => {
+                const tint = agentTint(live[t.TaskId]?.AgentName || t.RunAgent, t.RunStatus, !!live[t.TaskId], cmds);
+                return (
                 <Box key={t.TaskId} draggable onDragStart={() => setDragId(t.TaskId)} onDragEnd={() => setDragId(null)}
                   onClick={() => onOpenTask(t.TaskId)}
-                  sx={{ ...card, ...hoverable, p: 1.25, mb: 1, cursor: "grab", "&:active": { cursor: "grabbing" } }}>
+                  sx={{ ...card, ...hoverable, p: 1.25, mb: 1, cursor: "grab", "&:active": { cursor: "grabbing" },
+                    ...(tint ? { borderColor: `${tint}59`, borderLeft: `3px solid ${tint}` } : {}) }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                     <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 13 }} />
@@ -171,7 +185,8 @@ export default function BoardView({ onOpenTask }) {
                     <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 10.5 }}>open →</Typography>
                   </Box>
                 </Box>
-              ))}
+                );
+              })}
             </Box>
           );
         })}

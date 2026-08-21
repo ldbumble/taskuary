@@ -11,6 +11,60 @@ from taskuary.reports import REGISTRY
 c = TestClient(server.app)
 
 
+class GithubIngestTests(unittest.TestCase):
+    ITEMS = [
+        {'number': 1, 'title': 'Bug: importer crashes', 'body': 'stack trace here', 'html_url': 'https://x/1',
+         'updated_at': '2026-08-20T10:00:00Z', 'user': {'login': 'teammate'}, 'author_association': 'MEMBER'},
+        {'number': 2, 'title': 'Add my feature', 'body': 'please merge', 'html_url': 'https://x/2',
+         'updated_at': '2026-08-20T11:00:00Z', 'user': {'login': 'drive-by'},
+         'author_association': 'FIRST_TIME_CONTRIBUTOR', 'pull_request': {'url': 'https://x/pr/2'}},
+    ]
+
+    def test_per_repo_modes_and_the_contributor_line(self):
+        """Issues and PRs are the source's own call per repo - and every item leads with WHO
+        wrote it, so triage judges a stranger's PR on a public repo for what it is."""
+        from datetime import datetime
+        from taskuary.store import MemoryStore
+        from taskuary.channels import ingest_github_issues
+        s = MemoryStore()
+        seen = {}
+        fake = lambda sys_, usr, **kw: seen.update(usr=usr) or '{"intent": "task", "why": "bug"}'
+        src = {'Address': 'org/app', 'ConfigJson': '{"issues": "tasks", "prs": "feed"}'}
+        with mock.patch('taskuary.github.list_items', return_value=self.ITEMS):
+            n = ingest_github_issues(s, src, 'tok', datetime.now(), llm=fake)
+        self.assertEqual(n, 2)
+        msgs = s.scan_messages()
+        pr = next(m for m in msgs if '#2' in m['Subject'])
+        self.assertEqual((pr['Status'], pr['TaskId']), ('feed', None))   # PRs: shown, never triaged
+        self.assertIn('FIRST_TIME_CONTRIBUTOR', pr['BodyText'])          # who is asking rides along
+        issue = next(m for m in msgs if '#1' in m['Subject'])
+        self.assertIsNotNone(issue['TaskId'])                            # issues: through triage
+        self.assertIn('association: MEMBER', seen['usr'])                # ...and triage READ the author line
+        s2 = MemoryStore()
+        with mock.patch('taskuary.github.list_items', return_value=self.ITEMS):
+            n2 = ingest_github_issues(s2, {'Address': 'org/app', 'ConfigJson': '{"issues": "off", "prs": "off"}'},
+                                      'tok', __import__('datetime').datetime.now())
+        self.assertEqual((n2, len(s2.scan_messages())), (0, 0))          # off = ignored entirely
+
+    def test_github_items_never_auto_dispatch(self):
+        """An open repo must not start a coding agent per drive-by item: github messages carry
+        no_auto, so they queue as needs-you while ordinary mail still self-dispatches."""
+        from taskuary.store import MemoryStore
+        from taskuary.ingest import ingest_message
+        s = MemoryStore()
+        s.set_setting('coder_auto_enabled', '1', 't')
+        spawned = []
+        task_llm = lambda *a, **k: '{"intent": "task", "why": "work"}'
+        with mock.patch('taskuary.ingest._spawn', side_effect=lambda fn, *a: spawned.append(fn.__name__)):
+            ingest_message(s, {'external_id': 'gh1', 'channel': 'github', 'subject': 'org/app#9 docs 404',
+                               'body': '[issue by x - association: NONE]\nthe docs page 404s for new users',
+                               'from_email': 'x@users.noreply.github.com', 'no_auto': True}, llm=task_llm)
+            ingest_message(s, {'external_id': 'm1', 'channel': 'email', 'subject': 'payroll import',
+                               'body': 'please rerun the payroll import for August', 'from_email': 'boss@work.example'},
+                           llm=task_llm)
+        self.assertEqual(spawned, ['_auto_code'])                        # the mail dispatched; github queued
+
+
 class ApiTests(unittest.TestCase):
     def test_index_serves_ui(self):
         r = c.get('/')
@@ -412,6 +466,21 @@ class ApiTests(unittest.TestCase):
             self.assertTrue(c.post('/api/learn/reflect').json()['reflected'])
         from taskuary.learn import gather
         self.assertIn('DRAFT VERDICTS', gather(server.store, '2000-01-01'))
+
+    def test_done_and_doc_save_persist(self):
+        # Save on a doc is a real write-read roundtrip
+        was = c.get('/api/doc/coder').json()['content']
+        try:
+            c.put('/api/doc/coder', json={'content': '# my coder rules v2'})
+            self.assertEqual(c.get('/api/doc/coder').json()['content'], '# my coder rules v2')
+        finally:
+            c.put('/api/doc/coder', json={'content': was})
+        # Done on a task persists AND resolves its pending reviews with it
+        tid = c.post('/api/tasks', json={'Title': 'wrap me'}).json()['taskId']
+        server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r'})
+        c.patch(f'/api/tasks/{tid}', json={'Status': 'done'})
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
+        self.assertFalse(any(r['TaskId'] == tid for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']))
 
     def test_live_runs_tail(self):
         tid = c.post('/api/tasks', json={'Title': 'live'}).json()['taskId']

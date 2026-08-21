@@ -13,7 +13,10 @@ from loguru import logger
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
 SESSIONS = {}               # sid -> Term
 SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
-SEED_SETTLE = 8                     # cap on waiting for the input box to finish laying out a long paste
+# settle() waits for QUIET - and a TUI with an animated boot spinner is never quiet, so every
+# settle in the seed path used to burn its full cap (codex took ~30s before the prompt showed).
+# The toe probe makes long waits unnecessary: settle caps stay short, readiness is VERIFIED.
+SEED_SETTLE = 3
 SEED_ENTER = 1.0                    # how long to give the TUI to react to Enter before pressing again
 SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate the prompt, and the total window
 # One giant write loses characters: a TUI's input loop reads in frames, and a multi-KB burst
@@ -169,15 +172,15 @@ class Term:
         def go():
             start = time.time()
             while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
-            if not self.settle(max(1.0, SEED_WAIT - (time.time() - start))): return
+            if not self.settle(3): return                 # a breath after first output - the toe probes the rest
             self.seeded = ' '.join(text.split())
             toe, rest = self.seeded[:20], self.seeded[20:]
             for attempt in range(SEED_RETRIES):
                 self.write(toe)                           # attempt > 0 = retyped: the first toe was eaten
-                for _ in range(4):                        # a TUI mid-boot echoes late: look again before
-                    if not self.settle(SEED_SETTLE): return             # calling it eaten (a too-early
-                    if self._sees(toe): break                           # verdict retyped a doubled toe)
-                    time.sleep(1)
+                for _ in range(16):                       # fast poll, no settle: a TUI mid-boot echoes late,
+                    if self._sees(toe): break             # and a too-early verdict retyped a doubled toe
+                    if not self.alive: return
+                    time.sleep(.25)
                 if not self._sees(toe):
                     # a dialog is up (or the box is not listening yet): hold until the screen
                     # changes (the owner answered it / boot finished), then try the toe again
@@ -194,7 +197,8 @@ class Term:
                 for i in range(0, len(rest), SEED_CHUNK):
                     self.write(rest[i:i + SEED_CHUNK])
                     time.sleep(SEED_CHUNK_GAP)
-                if not self.settle(SEED_SETTLE): return
+                time.sleep(.5)                            # let the box finish laying the paste out
+                if not self.alive: return
                 for key in ('\r', '\r', '\n'):
                     was = self.n
                     self.write(key)
@@ -254,11 +258,12 @@ PIPE_OPTS = {'--output-format', '--input-format'}
 # codex spells its pipe mode as a SUBCOMMAND, not a flag: `codex exec` is one prompt in, one
 # result out, and a session launched with it just runs headless and exits. Bare `codex` is
 # the TUI, so a leading exec is dropped the same way claude's -p is - and exec-only flags are
-# TRANSLATED, because the TUI rejects them outright: `--full-auto` exists only under exec, and
-# its interactive equivalent is the workspace-write sandbox (approvals then happen IN the
-# session, where a person is watching - which is the whole point of running one).
+# TRANSLATED: `--full-auto` becomes the TUI's own spelling of the same intent - workspace-write
+# sandbox, approvals only when a command fails. Translating it to sandbox-only looked safer,
+# but it turned "auto" sessions into approval-click marathons the owner never asked for; the
+# CLI's dangerous modes still only ever come from the profile the owner wrote.
 PIPE_SUBCOMMANDS = {'exec', 'e'}
-PIPE_TRANSLATE = {'--full-auto': ['--sandbox', 'workspace-write']}
+PIPE_TRANSLATE = {'--full-auto': ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-failure']}
 
 def interactive_args(args) -> list:
     out, skip = [], False

@@ -382,22 +382,39 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
-def ingest_github_issues(store, repo: str, tok: str, since, llm=None, file_only=False) -> int:
-    """GitHub as an INBOUND channel: new issues land on the Timeline and go through the
-    same triage as mail. Issues Taskuary opened for its own tasks are skipped, otherwise
-    the coder would file work against itself forever."""
+def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=False) -> int:
+    """GitHub as an INBOUND channel: new issues - and, per repo, pull requests - land on the
+    Timeline and go through the same triage as mail. What each KIND does is the source's own
+    call (ConfigJson {"issues": "tasks|feed|off", "prs": ...}), because an open-source repo
+    usually wants PRs SEEN but not auto-worked. Every item leads with who wrote it and
+    GitHub's own author_association, so triage can weigh a stranger's PR on a public repo
+    for what it is - and github items never auto-dispatch a coder (no_auto): a popular repo
+    would otherwise start an agent per drive-by PR. Issues Taskuary opened for its own tasks
+    are skipped, otherwise the coder would file work against itself forever."""
+    repo = src['Address']
+    try: modes = json.loads(src.get('ConfigJson') or '{}')
+    except ValueError: modes = {}
+    issues_mode = modes.get('issues') or ('feed' if file_only else 'tasks')
+    prs_mode = modes.get('prs') or 'off'
+    if issues_mode == 'off' and prs_mode == 'off': return 0
     n = 0
-    from .github import list_issues
-    for i in reversed(list_issues(tok, repo, since=since.astimezone().isoformat())):
+    from .github import list_items
+    for i in reversed(list_items(tok, repo, since=since.astimezone().isoformat())):
         if TQ_ISSUE.match(i.get('title') or ''): continue
+        is_pr = 'pull_request' in i
+        mode = prs_mode if is_pr else issues_mode
+        if mode == 'off': continue
         who = (i.get('user') or {}).get('login') or 'github'
+        # WHO is asking is part of the ask on a public repo - triage reads this line first
+        head = f"[{'pull request' if is_pr else 'issue'} by {who} - association: {i.get('author_association') or 'NONE'}]"
         out = ingest_message(store, {
             'external_id': f"gh:{repo}#{i['number']}", 'channel': 'github',
             'subject': f"{repo}#{i['number']} {i.get('title') or ''}".strip(),
-            'body': (i.get('body') or '(no description)')[:20000],
+            'body': f"{head}\n{(i.get('body') or '(no description)')[:20000]}",
             'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
             'conversation_id': f"gh:{repo}#{i['number']}", 'sent_at': _local(i.get('updated_at') or ''),
-            'source_link': i.get('html_url'), 'source_name': repo}, llm=llm, file_only=file_only)
+            'source_link': i.get('html_url'), 'source_name': repo, 'no_auto': True},
+            llm=llm, file_only=file_only or mode == 'feed')
         n += out['status'] != 'duplicate'
     return n
 
@@ -472,7 +489,7 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                 elif c['Type'] == 'teams':
                     n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'github':
-                    n += ingest_github_issues(store, s['Address'], tok, since, llm, file_only)
+                    n += ingest_github_issues(store, s, tok, since, llm, file_only)
                 elif c['Type'] in ('gmail', 'imap'):
                     # one poll per connector (the UID watermark lives there); its own source only
                     from . import imapmail

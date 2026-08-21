@@ -166,7 +166,7 @@ class CoreTests(unittest.TestCase):
                    'user': {'login': 'jsmith'}, 'updated_at': '2026-08-18T09:00:00Z', 'html_url': 'https://gh/7'},
                   {'number': 8, 'title': '[TQ-0004] coder task', 'body': 'opened by taskuary itself',
                    'user': {'login': 'bot'}, 'updated_at': '2026-08-18T09:01:00Z', 'html_url': 'https://gh/8'}]
-        with mock.patch('taskuary.github.list_issues', return_value=issues) as li:
+        with mock.patch('taskuary.github.list_items', return_value=issues) as li:
             self.assertEqual(channels.poll_channels(s), 0)          # ...so nothing polls it
             li.assert_not_called()
             s.save_connector({'ConnectorId': gh['ConnectorId'], 'Roles': 'trigger,tool'}, 'o')
@@ -298,7 +298,7 @@ class CoreTests(unittest.TestCase):
         issues = [{'number': 9, 'title': 'Docs typo', 'body': 'small fix', 'user': {'login': 'jsmith'},
                    'updated_at': '2026-08-18T09:00:00Z', 'html_url': 'https://gh/9'}]
         boom = lambda *a, **k: (_ for _ in ()).throw(AssertionError('a feed must never call the AI'))
-        with mock.patch('taskuary.github.list_issues', return_value=issues), \
+        with mock.patch('taskuary.github.list_items', return_value=issues), \
              mock.patch('taskuary.llm.build_llm', return_value=boom):
             self.assertEqual(channels.poll_channels(s), 1)
         row = s.feed()[0]

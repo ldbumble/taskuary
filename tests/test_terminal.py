@@ -21,6 +21,19 @@ def _wait(fn, secs=20):
     return False
 
 
+class InteractiveArgsTests(unittest.TestCase):
+    def test_codex_full_auto_translates_to_interactive_auto(self):
+        """--full-auto belongs to `codex exec`; the live TUI gets the same INTENT spelled its
+        way - workspace-write sandbox, approvals only on failure. Translating it to the sandbox
+        alone turned 'auto' sessions into approval-click marathons the owner never asked for."""
+        self.assertEqual(terminal.interactive_args(['exec', '--full-auto', '--json']),
+                         ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-failure', '--json'])
+        # claude keeps its own auto flag; only the pipe flags are stripped
+        self.assertEqual(terminal.interactive_args(['-p', '--output-format', 'stream-json',
+                                                    '--dangerously-skip-permissions']),
+                         ['--dangerously-skip-permissions'])
+
+
 class SeedEchoTests(unittest.TestCase):
     def test_chips_wraps_and_tails_all_count_as_echo(self):
         """Claude Code folds burst-typed text into '[Pasted text #N]' chips (the words never

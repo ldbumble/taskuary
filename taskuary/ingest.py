@@ -250,8 +250,11 @@ def _auto_draft(store, tid, rid):
 
 
 def _fields(msg, task_id):
+    from .store import norm_stamp
     return {'TaskId': task_id, 'ExternalId': msg.get('external_id'), 'ConversationId': msg.get('conversation_id'),
             'Channel': msg.get('channel') or 'api', 'SourceName': msg.get('source_name'),
             'Subject': (msg.get('subject') or '')[:500], 'FromName': msg.get('from_name'),
-            'FromEmail': msg.get('from_email'), 'SentAt': msg.get('sent_at'),
+            # normalized HERE, the one gate every channel funnels through: a UTC ISO stamp from
+            # any single path sorts the whole timeline out of order (see store.norm_stamp)
+            'FromEmail': msg.get('from_email'), 'SentAt': norm_stamp(msg.get('sent_at')),
             'BodyText': msg.get('body'), 'SourceLink': msg.get('source_link'), 'Status': 'routed'}

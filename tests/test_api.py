@@ -150,6 +150,38 @@ class GithubIngestTests(unittest.TestCase):
         self.assertEqual(spawned, ['_auto_code'])                        # the mail dispatched; github queued
 
 
+class TimelineClockTests(unittest.TestCase):
+    def test_timestamps_land_on_one_clock(self):
+        """A single path storing raw UTC ISO ('...T18:44:00Z') string-sorted above LATER local
+        rows ('T' > ' ' at position 10) while displaying as the local afternoon - a timeline
+        visibly out of order. Every channel funnels through one normalizing gate now, and a
+        heal rewrites rows written before the gate existed."""
+        from datetime import datetime
+        from taskuary.store import MemoryStore, norm_stamp
+        utc = '2026-08-21T18:44:00Z'
+        want = (datetime.fromisoformat('2026-08-21T18:44:00+00:00').astimezone()
+                .replace(tzinfo=None).isoformat(sep=' ', timespec='seconds'))
+        self.assertEqual(norm_stamp(utc), want)
+        self.assertNotIn('T', norm_stamp(utc))
+        self.assertEqual(norm_stamp('2026-08-21 14:44:00'), '2026-08-21 14:44:00')  # local: untouched
+        self.assertEqual(norm_stamp('yesterday-ish'), 'yesterday-ish')              # unparseable passes
+        from taskuary.ingest import ingest_message
+        s = MemoryStore()
+        ingest_message(s, {'external_id': 'tz1', 'channel': 'api', 'subject': 'notice',
+                           'body': 'this is an automated notice, no action needed', 'sent_at': utc})
+        self.assertEqual(s.feed()[0]['SentAt'], want)
+        import os, tempfile
+        from taskuary.store import SQLiteStore
+        p = os.path.join(tempfile.mkdtemp(), 't.db')
+        s2 = SQLiteStore(p)
+        s2.add_message({'ExternalId': 'old', 'Channel': 'email', 'Subject': 'old', 'Status': 'filed'})
+        s2._exec('UPDATE message SET SentAt=? WHERE ExternalId=?', (utc, 'old'))
+        s2.cx.close()
+        s3 = SQLiteStore(p)                                                          # reopen = heal
+        self.assertEqual(s3._one("SELECT SentAt FROM message WHERE ExternalId='old'")['SentAt'], want)
+        s3.cx.close()
+
+
 class ApiTests(unittest.TestCase):
     def test_index_serves_ui(self):
         r = c.get('/')

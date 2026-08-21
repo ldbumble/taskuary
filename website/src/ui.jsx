@@ -415,7 +415,7 @@ export const TaskStatusChip = ({ status }) => (
 
 export const timeAgo = (s) => {
   if (!s) return "";
-  const mins = Math.max(0, (Date.now() - new Date(s.replace(" ", "T"))) / 60000);
+  const mins = Math.max(0, (Date.now() - asUtc(String(s))) / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${Math.round(mins)}m ago`;
   if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
@@ -445,12 +445,42 @@ export const splitQuoted = (text) => {
   return { latest: t.slice(0, at).trim(), quoted: t.slice(at).trim() };
 };
 
-// Times are stamped in LOCAL time - parse as-is; a trailing Z still wins when a
-// source provides real UTC (Graph does).
-const asUtc = (s) => new Date(s.replace(" ", "T"));
-export const fmtTime12 = (s) => s ? asUtc(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
-export const fmtDateTime = (s) => s ? asUtc(s).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
-export const localDay = (s) => s ? asUtc(s).toLocaleDateString("sv-SE") : "";   // YYYY-MM-DD in local zone
+// Times are stamped in the SERVER's local time (store.norm_stamp makes every channel land
+// there). The `timezone` setting names that zone: with it set, every time wears its short
+// label (2:44 PM EDT) and a browser in another zone still reads the stamps correctly -
+// naive local strings would otherwise be silently reinterpreted in the viewer's zone.
+let TZ = "";
+export const loadTz = (settings) => { TZ = (settings.find((s) => s.Name === "timezone") || {}).Value || ""; };
+api.get("/api/settings").then(({ data }) => loadTz(data.data || [])).catch(() => {});   // once per page load
+const tzOffsetMin = (d) => {
+  // what the configured zone's UTC offset was AT that moment (DST-correct), via Intl
+  const part = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "shortOffset" })
+    .formatToParts(d).find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+  const m = part.replace("GMT", "").match(/([+-]?)(\d+)(?::(\d+))?/) || [0, "+", "0"];
+  return (m[1] === "-" ? -1 : 1) * (parseInt(m[2] || 0) * 60 + parseInt(m[3] || 0));
+};
+const asUtc = (s) => {
+  const iso = s.replace(" ", "T");
+  if (!TZ) return new Date(iso);                       // blank = this browser IS the server's zone
+  try { return new Date(Date.parse(iso + "Z") - tzOffsetMin(new Date(iso + "Z")) * 60000); }
+  catch { return new Date(iso); }
+};
+export const tzLabel = () => {
+  if (!TZ) return "";
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "short" })
+      .formatToParts(new Date()).find((p) => p.type === "timeZoneName")?.value || "";
+  } catch { return ""; }
+};
+const tzOpt = () => (TZ ? { timeZone: TZ } : {});   // format in the configured zone, so digits match the label
+export const fmtTime12 = (s) => s ? asUtc(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "";
+export const fmtDateTime = (s) => {
+  if (!s) return "";
+  const base = asUtc(s).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...tzOpt() });
+  const z = tzLabel();
+  return z ? `${base} ${z}` : base;
+};
+export const localDay = (s) => s ? asUtc(s).toLocaleDateString("sv-SE", tzOpt()) : "";   // YYYY-MM-DD in that zone
 
 // ── Stripe-style two-level navigation atoms (Settings/Docs/Connectors share these) ──
 export const Crumb = ({ section, onBack, title }) => (

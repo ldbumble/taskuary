@@ -107,11 +107,19 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you
             _spawn(_auto_code, store, tid)
-    # the route row is the JUDGEMENT's record: routing says where it went, triage says why -
-    # the timeline panel shows this line verbatim, so the verdict is inspectable, not a vibe
-    why = (f" · triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
-           if r['decision'] != 'attach' else '')
-    store.add_route(mid, tid, r['decision'], r['score'], r['reason'] + why, r['candidates'], actor)
+    # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
+    # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
+    # and the tail says what happened NEXT - "it's a task" without "and who is working it"
+    # answered a question nobody asked
+    reason = r['reason']
+    if r['decision'] != 'attach':
+        act = ('a reply draft goes to Review for you' if f['kind'] == 'reply'
+               else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
+               else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
+               else 'auto-dispatch is off (Settings) - start the session from the task')
+        reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
+                  + f" · {r['reason']} · {act}")
+    store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     # the timeline pushed INTO a chat: 'needs_me' pings only what is waiting on YOU - a question
     # to answer, or a task nobody was dispatched at. A task an agent just started is being

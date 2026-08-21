@@ -372,8 +372,10 @@ def _attachment_path(raw: str):
     """The file on disk, if it is really one of ours. A Path column pointing outside
     ~/.taskuary/attachments would turn GET /api/attachments/:id into a local file read."""
     if not raw: return None
-    p, root = Path(raw).resolve(), (config.home() / 'attachments').resolve()
+    # resolve() is INSIDE the try: a malformed stored path (embedded NUL, illegal chars)
+    # raises right there, and that used to be a 500 where the honest answer is 404
     try:
+        p, root = Path(raw).resolve(), (config.home() / 'attachments').resolve()
         if not p.is_relative_to(root) or not p.is_file(): return None
     except (OSError, ValueError):
         return None

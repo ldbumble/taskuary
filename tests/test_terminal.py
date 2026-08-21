@@ -31,6 +31,23 @@ class SeedArgvTests(unittest.TestCase):
         self.assertEqual(terminal.seed_argv({'cmd': 'gemini'}, 'do it'), ['-i', 'do it'])
         self.assertIsNone(terminal.seed_argv({'cmd': 'mystery-tui'}, 'do it'))
 
+    def test_a_cmd_shim_never_gets_the_seed_on_its_command_line(self):
+        """cmd.exe parses & | and stray quotes as its OWN syntax: through an npm .CMD shim the
+        seed's `subject "T&E System"` was cut AT THE AMPERSAND and half a prompt arrived as if
+        whole. Shims take the verified typed road; only direct executables embed."""
+        server.store.upsert_agent('shimseed', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': os.getcwd()}))
+        seed = 'TASK TQ-0001 - subject "T&E System": fix & report'
+        with mock.patch.object(terminal, 'Term') as T, \
+             mock.patch('taskuary.agents._resolve_cmd',
+                        return_value=['cmd', '/c', r'C:\npm\claude.CMD']):
+            T.return_value = mock.Mock(sid='sh1', cwd=os.getcwd(), info=lambda: {})
+            try:
+                terminal.open_session(server.store, 'shimseed', seed_fn=lambda cwd: seed)
+                self.assertNotIn(seed, T.call_args.args[0])              # never through cmd.exe
+                T.return_value.seed.assert_called_once_with(seed)        # typed instead, whole
+            finally:
+                terminal.SESSIONS.pop('sh1', None)
+
     def test_open_session_embeds_the_seed_or_falls_back_to_typing(self):
         for cmd, embedded in (('claude', True), ('mystery-tui', False)):
             server.store.upsert_agent('argvseed', 'coding', 'cli', json.dumps({'cmd': cmd, 'cwd': os.getcwd()}))

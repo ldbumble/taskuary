@@ -5,7 +5,7 @@ mention yourself or your rules here - SOUL.md, LEARNED.md and your standing note
 appended after this text automatically on every call. Comments like this one are stripped
 before the model sees the prompt. Blank the document entirely and the shipped default is
 used again. -->
-Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", "why": "<8 words max>"}.
+Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", "why": "<one concrete sentence: what you saw in the message and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.
 
 task = someone must DO something beyond writing back: change a system, fix or build something, produce or chase something. This starts a coding agent on a repository, so choose it only when work has to happen.
 

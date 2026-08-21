@@ -559,6 +559,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
         <Box sx={{ px: 2, py: 1.5, overflowY: "auto", textAlign: "left", flex: 1, minHeight: 150 }}>
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
+              {/* the router's verdict, verbatim - triage is inspectable, not a vibe: the route
+                  reason carries "triage: <verdict> - <why>" straight from the classifier */}
+              {sel.RouteReason && (
+                <Typography variant="caption" sx={{ display: "block", color: FAINT, mb: 1.25,
+                  bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1, px: 1, py: 0.5 }}>
+                  <Box component="b" sx={{ color: DIM }}>Why it's here:</Box> {sel.RouteReason}
+                </Typography>
+              )}
               <PanelLabel>{(detail?.messages || []).length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}</PanelLabel>
               <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
 

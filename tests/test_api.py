@@ -75,6 +75,62 @@ class GithubIngestTests(unittest.TestCase):
             channels.poll_channels(s2)
         self.assertNotEqual(s2.feed()[0]['MsgStatus'], 'feed')               # triaged, not just shown
 
+    def _store(self, replies_on=False):
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        if replies_on:
+            gh = next(x for x in s.list_connectors() if x['Type'] == 'github')
+            s.save_connector({'ConnectorId': gh['ConnectorId'], 'ConfigJson': '{"reply_comments": true}'}, 'o')
+        return s
+
+    def test_finished_github_work_closes_clean_unless_replies_are_on(self):
+        """Answering a GitHub author means posting a PUBLIC comment - the owner's call (the
+        card's 'Reply to issue/PR authors'). Off: finished work closes with its report and no
+        dead-end draft sits in Review. On: the draft is raised, as for any other channel."""
+        from taskuary import coder
+        for on, status, reviews in ((False, 'done', 0), (True, 'waiting', 1)):
+            s = self._store(on)
+            tid = s.create_task({'Title': 'pr work', 'Kind': 'coding'}, 'o')
+            s.add_message({'TaskId': tid, 'ExternalId': 'gh:o/app#5', 'Channel': 'github',
+                           'FromEmail': 'x@users.noreply.github.com', 'Status': 'routed'})
+            with mock.patch('taskuary.llm.build_llm', return_value=None):
+                coder.finish(s, tid, {'summary': 'merged'})
+            self.assertEqual(s.get_task(tid)['Status'], status)
+            self.assertEqual(len([r for r in s.list_reviews('pending') if r['TaskId'] == tid]), reviews)
+
+    def test_github_questions_file_when_replies_off_and_the_verdict_is_on_the_route(self):
+        from taskuary.ingest import ingest_message
+        ask = {'external_id': 'q1', 'channel': 'github', 'subject': 'o/app#7 question',
+               'body': '[issue by kai - association: NONE]\nhow do I configure the importer here?',
+               'from_email': 'kai@users.noreply.github.com', 'no_auto': True}
+        reply_llm = lambda *a, **k: '{"intent": "reply_only", "why": "asks a question"}'
+        s = self._store(False)
+        self.assertEqual(ingest_message(s, dict(ask), llm=reply_llm)['status'], 'filed')
+        self.assertIn('GitHub replies are off', s.feed()[0]['RouteReason'])
+        s2 = self._store(True)
+        self.assertEqual(ingest_message(s2, dict(ask), llm=reply_llm)['status'], 'created')
+        # the route row carries the classifier's verdict verbatim - the panel's why-it's-here line
+        self.assertIn('triage: reply_only - asks a question', s2.feed()[0]['RouteReason'])
+
+    def test_approving_a_github_reply_posts_a_comment_only_when_allowed(self):
+        from taskuary import outbound
+        msg = {'Channel': 'github', 'ExternalId': 'gh:o/app#7', 'FromEmail': 'x@users.noreply.github.com'}
+        with self.assertRaises(RuntimeError):
+            outbound.reply_to_message(self._store(False), msg, 'answer')     # off: never posts
+        s = self._store(True)
+        gh = next(x for x in s.list_connectors() if x['Type'] == 'github')
+        s.save_connector({'ConnectorId': gh['ConnectorId'], 'Secret': 'ghp_x'}, 'o')
+        seen = {}
+        class R:
+            def raise_for_status(self): pass
+            def json(self): return {'html_url': 'https://gh/c/1'}
+        with mock.patch('taskuary.github.requests.post',
+                        side_effect=lambda url, **k: seen.update(url=url, body=k.get('json')) or R()):
+            out = outbound.reply_to_message(s, msg, 'answer text')
+        self.assertEqual((out['channel'], out['to']), ('github', ['o/app#7']))
+        self.assertIn('/repos/o/app/issues/7/comments', seen['url'])
+        self.assertEqual(seen['body']['body'], 'answer text')
+
     def test_github_items_never_auto_dispatch(self):
         """An open repo must not start a coding agent per drive-by item: github messages carry
         no_auto, so they queue as needs-you while ordinary mail still self-dispatches."""

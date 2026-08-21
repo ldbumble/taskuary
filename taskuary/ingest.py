@@ -77,7 +77,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             intent = {'intent': 'task', 'why': ''}
         if intent['intent'] == 'fyi':
             mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
-            store.add_route(mid, None, 'file', None, f"triage: {intent.get('why') or 'informational'}", [], 'triage')
+            store.add_route(mid, None, 'file', None, f"triage: fyi - {intent.get('why') or 'informational'}", [], 'triage')
+            return {'status': 'filed', 'task_id': None, 'message_id': mid}
+        if intent['intent'] == 'reply_only' and msg.get('channel') == 'github' and not store.github_replies_ok():
+            # a question on GitHub with replying switched off (the GitHub card's call): filing
+            # beats opening a reply task whose draft could never be sent anywhere
+            mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+            store.add_route(mid, None, 'file', None,
+                            f"triage: reply_only - {intent.get('why') or 'a question'} · GitHub replies are "
+                            'off (GitHub card), so it is filed instead of drafted', [], 'triage')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         f = draft_task_fields(msg)
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
@@ -99,7 +107,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you
             _spawn(_auto_code, store, tid)
-    store.add_route(mid, tid, r['decision'], r['score'], r['reason'], r['candidates'], actor)
+    # the route row is the JUDGEMENT's record: routing says where it went, triage says why -
+    # the timeline panel shows this line verbatim, so the verdict is inspectable, not a vibe
+    why = (f" · triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
+           if r['decision'] != 'attach' else '')
+    store.add_route(mid, tid, r['decision'], r['score'], r['reason'] + why, r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     # the timeline pushed INTO a chat: 'needs_me' pings only what is waiting on YOU - a question
     # to answer, or a task nobody was dispatched at. A task an agent just started is being

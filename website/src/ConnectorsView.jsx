@@ -622,6 +622,8 @@ const GITHUB_PERMS = [
    "On: your team runs on GitHub issues, so agents open and update them for the work they do. Off (default): Taskuary is the tracker - the task is the record - and agents never create issues or tracker items unless a task's ask explicitly says to."],
   ["agents_push", "Agents may push / deploy",
    "On: agents push and deploy as the work needs. Off (default): commits stay local for your review - you push - and only a task whose ask explicitly says to push may. Force-pushes and archived repositories stay forbidden either way."],
+  ["reply_comments", "Reply to issue/PR authors",
+   "On: questions from GitHub get a drafted reply, finished work drafts a close-out note, and approving one posts it as a PUBLIC comment on the issue/PR. Off (default): GitHub items never get reply drafts - questions file with their triage reason, finished work just closes with its report, and nothing is ever posted to a public thread on your behalf."],
 ];
 
 const GithubPerms = ({ conn, reload }) => {

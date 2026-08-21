@@ -84,6 +84,9 @@ const KNOB_META = {
     help: "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup." },
 
   // ── Display ──
+  timezone: { group: "Display", label: "Timezone", type: "auto",
+    desc: "IANA zone the app's clock speaks, e.g. America/New_York. Blank = this machine's local time.",
+    help: "Timestamps are stored in the server machine's local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.\n\nUse an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load." },
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
     help: "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search." },

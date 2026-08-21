@@ -60,6 +60,17 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 
+def norm_stamp(s) -> str:
+    """One clock for the timeline: every channel's timestamp lands as LOCAL 'YYYY-MM-DD
+    HH:MM:SS'. A single path storing raw UTC ISO ('...T18:44:00Z') string-sorted ABOVE later
+    local rows ('T' > ' ' at position 10) while displaying as the local afternoon - a
+    timeline visibly out of order. Anything unparseable passes through untouched."""
+    if not s: return _now()
+    try: d = datetime.fromisoformat(str(s).replace('Z', '+00:00'))
+    except ValueError: return str(s)
+    if d.tzinfo: d = d.astimezone()
+    return d.replace(tzinfo=None).isoformat(sep=' ', timespec='seconds')
+
 def chain_hash(prev, payload):
     return hashlib.sha256((prev + json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)).encode()).hexdigest()
 
@@ -128,7 +139,11 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'agent_push_enabled': '0',
                     # LEARNED.md: distill the owner's verdicts (edited drafts, rejections,
                     # reclassifications) into a general style/responsibility profile - see learn.py
-                    'learn_enabled': '1'}
+                    'learn_enabled': '1',
+                    # the zone timestamps are stamped in (blank = this machine's local). Setting
+                    # it makes every displayed time wear its label (2:44 PM EDT) and keeps a
+                    # browser in another zone reading the stamps correctly.
+                    'timezone': ''}
 
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,
@@ -201,6 +216,10 @@ class SQLiteStore:
                                  json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
+            # data heal: timestamps stored as raw ISO/UTC ('...T18:44:00Z') sorted above later
+            # local rows and lied about the hour - normalize the survivors once
+            for mid, sent in self.cx.execute("SELECT MessageId, SentAt FROM message WHERE SentAt LIKE '%T%'").fetchall():
+                self.cx.execute('UPDATE message SET SentAt=? WHERE MessageId=?', (norm_stamp(sent), mid))
             # data heal: sources written before ownership existed have no ConnectorId, so a
             # NEW connector on the same channel (the Gmail card) claimed the Outlook mailboxes.
             # Adopt each orphan to the channel's legacy owner - Graph was the only email/teams/

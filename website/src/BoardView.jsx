@@ -22,15 +22,17 @@ const elapsed = (since) => {
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
-// WHICH agent is on the card, at a glance: a whisper of its brand on the border while it
-// works - Claude's terracotta, Codex/OpenAI's teal, Gemini's blue. Live or running only;
-// a finished run's card goes back to house style.
-const AGENT_TINT = { claude: "#d97757", codex: "#10a37f", openai: "#10a37f", gemini: "#4285f4",
-                     cursor: "#8b5cf6", copilot: "#6e7681" };
-const agentTint = (name, runStatus, isLive, cmds = {}) => {
+// WHICH agent is on the card, said out loud: a small legend sitting ON the border with the
+// CLI's name, in a hue from the app's own palette - subtle but distinct, never brand colors
+// that fight the theme. Live or running only; a finished run's card goes back to house style.
+const AGENT_HUES = { claude: "#7c6cf0", codex: "#0e7490", gemini: "#2563eb",
+                     cursor: "#7e22ce", copilot: "#64748b" };
+const agentBadge = (name, runStatus, isLive, cmds = {}) => {
   if (!isLive && runStatus !== "running") return null;
-  const n = String(cmds[name] || name || "").toLowerCase();   // 'coder' resolves to the CLI it runs
-  return (Object.entries(AGENT_TINT).find(([k]) => n.includes(k)) || [])[1] || null;
+  const cmd = String(cmds[name] || name || "").toLowerCase();  // 'coder' resolves to the CLI it runs
+  const hit = Object.entries(AGENT_HUES).find(([k]) => cmd.includes(k));
+  if (!hit) return name ? { word: String(name), color: "#8a94a6" } : null;
+  return { word: hit[0], color: hit[1] };
 };
 
 // A card's peephole into the running agent: the last couple of console lines, live.
@@ -166,12 +168,21 @@ export default function BoardView({ onOpenTask }) {
               </Box>
               {!cards.length && <Empty>Nothing here.</Empty>}
               {cards.map((t) => {
-                const tint = agentTint(live[t.TaskId]?.AgentName || t.RunAgent, t.RunStatus, !!live[t.TaskId], cmds);
+                const badge = agentBadge(live[t.TaskId]?.AgentName || t.RunAgent, t.RunStatus, !!live[t.TaskId], cmds);
                 return (
                 <Box key={t.TaskId} draggable onDragStart={() => setDragId(t.TaskId)} onDragEnd={() => setDragId(null)}
                   onClick={() => onOpenTask(t.TaskId)}
                   sx={{ ...card, ...hoverable, p: 1.25, mb: 1, cursor: "grab", "&:active": { cursor: "grabbing" },
-                    ...(tint ? { borderColor: `${tint}59`, borderLeft: `3px solid ${tint}` } : {}) }}>
+                    position: "relative",
+                    ...(badge ? { mt: 1.25, borderColor: `${badge.color}55` } : {}) }}>
+                  {badge && (
+                    <Typography variant="caption" sx={{ ...mono, position: "absolute", top: -8, left: 10,
+                      px: 0.6, fontSize: 9, fontWeight: 700, lineHeight: "13px", letterSpacing: ".06em",
+                      color: badge.color, bgcolor: PANEL, border: `1px solid ${badge.color}55`,
+                      borderRadius: 1 }}>
+                      {badge.word}
+                    </Typography>
+                  )}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                     <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 13 }} />

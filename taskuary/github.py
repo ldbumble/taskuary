@@ -11,6 +11,13 @@ def create_issue(tok, repo, title, body):
     j = r.json()
     return {'number': j['number'], 'url': j['html_url']}
 
+def comment_issue(tok, repo, number, body):
+    """One comment on an issue or PR - how a Taskuary reply reaches a GitHub author."""
+    r = requests.post(f'{GH}/repos/{repo}/issues/{number}/comments', headers=_h(tok), json={'body': body}, timeout=20)
+    r.raise_for_status()
+    return r.json().get('html_url')
+
+
 def close_issue(tok, repo, number, comment=None):
     if comment:
         requests.post(f'{GH}/repos/{repo}/issues/{number}/comments', headers=_h(tok), json={'body': comment}, timeout=20).raise_for_status()

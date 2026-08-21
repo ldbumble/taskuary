@@ -86,6 +86,11 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # to reply to when reply_target cannot find one (a chat thread, a promoted feed item)
     held = store.held_review(task_id) or {}
     mid = reply_target(store, task_id) or held.get('MessageId')
+    # answering a GitHub author means posting a public comment on their thread - that is the
+    # owner's call (the GitHub card's 'Reply to issue/PR authors'), and with it off finished
+    # github work just closes: report on the task, no dead-end draft waiting in Review
+    if mid and (store.get_message(mid) or {}).get('Channel') == 'github' and not store.github_replies_ok():
+        mid = None
     if mid: raise_reply(store, task_id, mid, run_id, rep)
     store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
     return {'drafting': bool(mid), 'message_id': mid}

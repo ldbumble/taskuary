@@ -109,6 +109,20 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'telegram:<id>' / 'whatsapp:<jid>'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
         return (messengers.tg_send if ch == 'telegram' else messengers.wa_send)(store, chat, body)
+    if ch == 'github':
+        # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's
+        # explicit say-so (the GitHub card's 'Reply to issue/PR authors' switch)
+        if not store.github_replies_ok():
+            raise RuntimeError("replying on GitHub is off - flip 'Reply to issue/PR authors' "
+                               'on the GitHub connector card to post comments')
+        repo, _, num = ext[3:].rpartition('#')              # 'gh:owner/repo#N'
+        if not (ext.startswith('gh:') and repo and num.isdigit()):
+            raise RuntimeError('this github item carries no issue/PR reference to comment on')
+        c = store.get_connector_by_type('github', with_secret=True)
+        if not (c and c.get('Secret')): raise RuntimeError('no GitHub PAT saved')
+        from .github import comment_issue
+        url = comment_issue(c['Secret'], repo, int(num), body)
+        return {'channel': 'github', 'to': [f'{repo}#{num}'], 'url': url}
     raise RuntimeError(f"nothing to answer on: {ch or 'unknown'} messages are read-only here")
 
 

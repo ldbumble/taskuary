@@ -49,7 +49,7 @@ def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
 MAX_TOKENS = 400
 
 
-def make_cli_llm(store, agent_name: str):
+def make_cli_llm(store, agent_name: str, model: str = None):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -68,6 +68,7 @@ def make_cli_llm(store, agent_name: str):
         prof['args'] = list(prof.get('args') or []) + ['-c', f"model_reasoning_effort={light.split(':', 1)[1].strip()}"]
     elif light:
         prof['model'] = light
+    if model: prof['model'] = model     # an explicit per-job model outranks the light gear
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
     def llm(system, user, max_tokens=MAX_TOKENS, images=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says
@@ -79,16 +80,21 @@ def make_cli_llm(store, agent_name: str):
     return llm
 
 
-def build_llm(store):
-    pick = (store.get_settings().get('triage_ai') or '').strip()
-    if pick.startswith('cli:'): return make_cli_llm(store, pick[4:])
+def build_llm(store, pick=None, model=None):
+    """The brain named by `pick` ('' = first active AI connector, 'connector:<type>',
+    'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
+    their OWN brain and model per job instead of riding the triage tier."""
+    pick = (pick if pick is not None else store.get_settings().get('triage_ai') or '').strip()
+    if pick.startswith('cli:'): return make_cli_llm(store, pick[4:], model)
     want = pick[10:] if pick.startswith('connector:') else None
     for c in store.list_connectors():
         # a local model server (ollama) is the one brain that needs no key to be real
         ready = c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')
         if c['Type'] in AI_TYPES and ready and (not want or c['Type'] == want):
             full = store.get_connector(c['ConnectorId'], with_secret=True)
-            return make_llm(full['Type'], json.loads(full.get('ConfigJson') or '{}'), full.get('Secret'))
+            cfg = json.loads(full.get('ConfigJson') or '{}')
+            if model: cfg = {**cfg, 'model': model}
+            return make_llm(full['Type'], cfg, full.get('Secret'))
     return None
 
 

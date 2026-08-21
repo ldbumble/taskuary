@@ -150,6 +150,42 @@ class GithubIngestTests(unittest.TestCase):
         self.assertEqual(spawned, ['_auto_code'])                        # the mail dispatched; github queued
 
 
+class ReportScheduleAndBrainTests(unittest.TestCase):
+    def test_on_startup_reports_run_once_per_launch(self):
+        """Local-first scheduling: the app is a window you open, so 'when I open it' is a real
+        schedule - due exactly at launch, never on the 10-minute auto-sync."""
+        from taskuary.store import MemoryStore
+        from taskuary.reports import is_due, run_due_reports
+        self.assertFalse(is_due({'on_startup': True}, None))
+        self.assertTrue(is_due({'on_startup': True}, None, startup=True))
+        self.assertTrue(is_due({'on_startup': True}, '2026-08-21 09:00:00', startup=True))
+        s = MemoryStore()
+        s.save_source({'Channel': 'report', 'Address': 'Boot check', 'Active': 1,
+                       'ConfigJson': '{"type": "digest", "title": "Boot check", "on_startup": true}'}, 'o')
+        run_due_reports(s)                                    # a plain sync leaves it alone
+        self.assertFalse(any('Boot check' in (m['Subject'] or '') for m in s.scan_messages()))
+        run_due_reports(s, startup=True)
+        self.assertTrue(any('Boot check' in (m['Subject'] or '') for m in s.scan_messages()))
+
+    def test_a_report_names_its_own_brain_and_model(self):
+        """cfg['ai_brain'] + cfg['ai_model']: the weekly review gets the heavy model while the
+        pings stay on the cheap tier - unset falls back to the triage brain."""
+        from taskuary.store import MemoryStore
+        from taskuary.reports import report_llm
+        s = MemoryStore()
+        ol = next(x for x in s.list_connectors() if x['Type'] == 'ollama')
+        s.save_connector({'ConnectorId': ol['ConnectorId'], 'Active': 1, 'ConfigJson': '{"model": "small"}'}, 'o')
+        seen = {}
+        class R:
+            status_code, text = 200, ''
+            def raise_for_status(self): pass
+            def json(self): return {'choices': [{'message': {'content': 'ok'}}]}
+        with mock.patch('taskuary.llm.requests.post', side_effect=lambda url, **k: seen.update(body=k.get('json')) or R()):
+            report_llm(s, {'ai_brain': 'connector:ollama', 'ai_model': 'qwen2.5:14b'}, None)('sys', 'user')
+        self.assertEqual(seen['body']['model'], 'qwen2.5:14b')   # the report's model, not the connector's
+        self.assertIs(report_llm(s, {}, 'DEFAULT'), 'DEFAULT')   # unset: whatever the caller uses
+
+
 class TimelineClockTests(unittest.TestCase):
     def test_timestamps_land_on_one_clock(self):
         """A single path storing raw UTC ISO ('...T18:44:00Z') string-sorted above LATER local
@@ -572,7 +608,7 @@ class ApiTests(unittest.TestCase):
         lifetime, and the state still lands on idle."""
         import threading
         started, release, calls = threading.Event(), threading.Event(), []
-        def slow_reports(s): calls.append(1); started.set(); release.wait(10)
+        def slow_reports(s, startup=False): calls.append(1); started.set(); release.wait(10)
         with mock.patch.object(server, 'run_due_reports', slow_reports), \
              mock.patch('taskuary.channels.poll_channels', lambda s, d: None):
             t = threading.Thread(target=server._poll_reports, kwargs={'what': 'catching up'}, daemon=True)

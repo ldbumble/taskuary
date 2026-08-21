@@ -112,7 +112,7 @@ export default function ReportsView() {
       {!sources.length && <Empty>No reports yet — "New report" walks you through source, query, AI summary and schedule.</Empty>}
       {sources.map((s) => {
         const c = parse(s.ConfigJson);
-        const sched = c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
+        const sched = c.on_startup ? "on startup" : c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
         return (
           <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, borderBottom: `1px solid ${BORDER}` }}>
             <StatusDot ok={!!s.Active} />
@@ -151,6 +151,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const [test, setTest] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState("");
+  const [brains, setBrains] = useState([]);   // which AI writes THIS summary - same roster as triage
+  useEffect(() => { api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {}); }, []);
   const mssqlConn = connectors.find((c) => c.Type === "mssql");
   const mssqlOk = mssqlConn?.LastSyncAt && !mssqlConn?.LastError;
   const winrmConn = connectors.find((c) => c.Type === "winrm");
@@ -262,7 +264,24 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               </Box>
               <TextField fullWidth multiline minRows={3} value={cfg.ai_prompt || ""} sx={{ bgcolor: "#fff" }}
                 placeholder={AI_FIELD[3]} onChange={(e) => setCfg({ ...cfg, ai_prompt: e.target.value })} />
-              {cfg.ai_prompt && !aiActive && (
+              {cfg.ai_prompt && (
+                <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
+                  <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 230 }}
+                    onChange={(e) => setCfg({ ...cfg, ai_brain: e.target.value })}>
+                    <MenuItem value="" sx={{ fontSize: 12 }}>the triage brain (default)</MenuItem>
+                    {brains.filter((b) => b.value).map((b) => (
+                      <MenuItem key={b.value} value={b.value} sx={{ fontSize: 12 }}>{b.label}</MenuItem>
+                    ))}
+                  </Select>
+                  <TextField size="small" label="model override (optional)" value={cfg.ai_model || ""}
+                    sx={{ bgcolor: "#fff", width: 210 }}
+                    onChange={(e) => setCfg({ ...cfg, ai_model: e.target.value })} />
+                  <Typography variant="caption" sx={{ color: FAINT }}>
+                    which AI writes this summary — a heavier model for the weekly review, the cheap tier for pings
+                  </Typography>
+                </Box>
+              )}
+              {cfg.ai_prompt && !aiActive && !cfg.ai_brain && (
                 <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#b45309" }}>
                   ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connectors → AI).
                 </Typography>
@@ -313,13 +332,23 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
         <Step completed={!!cur}>
           <StepButton onClick={() => setStep(2)}>Schedule & save</StepButton>
           <StepContent>
-            <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-              <TextField label="every N minutes" type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 160 }}
-                onChange={(e) => setCfg({ ...cfg, every_minutes: e.target.value, daily_at: "" })} />
-              <TextField label="or daily at HH:MM" value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 160 }}
-                onChange={(e) => setCfg({ ...cfg, daily_at: e.target.value, every_minutes: "" })} />
+            <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
+              <TextField label="every N minutes" type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 150 }}
+                onChange={(e) => setCfg({ ...cfg, every_minutes: e.target.value, daily_at: "", on_startup: false })} />
+              <TextField label="or daily at HH:MM" value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 150 }}
+                onChange={(e) => setCfg({ ...cfg, daily_at: e.target.value, every_minutes: "", on_startup: false })} />
+              <Box sx={{ display: "flex", alignItems: "center" }}
+                title="It's local — opening the app IS a schedule. Runs once per launch, after the startup catch-up.">
+                <Switch checked={!!cfg.on_startup}
+                  onChange={(e) => setCfg({ ...cfg, on_startup: e.target.checked,
+                    ...(e.target.checked ? { every_minutes: "", daily_at: "" } : {}) })} />
+                <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
+              </Box>
               <Button variant="contained" disableElevation onClick={save}>Save report</Button>
             </Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+              All three blank = once a day, whenever the app is open.
+            </Typography>
             {test?.detail?.includes("saved") && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#15803d" }}>✓ {test.detail}</Typography>}
             {cur && (
               <Box sx={{ display: "flex", gap: 1, mt: 1.5, alignItems: "center" }}>

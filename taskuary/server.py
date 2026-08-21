@@ -783,7 +783,14 @@ def brains():
     out += [{'value': f"connector:{c['Type']}", 'label': c['Name'], 'kind': 'api',
              'ready': bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))}   # local models carry no key
             for c in store.list_connectors() if c['Type'] in AI_TYPES]
-    out += [{'value': f"cli:{a['Name']}", 'label': f"{a['Name']} (CLI agent — one-brain setup, slower per message)",
+    # named by WHAT RUNS, the way every agent picker speaks ('coder · claude'): a profile
+    # name alone says nothing, and triage-context caveats don't belong in a label reused by
+    # the report picker - the Settings help text carries the one-brain economics instead
+    def _cli_of(a):
+        prof = cfg.get('agents', {}).get(a['Name']) or json.loads(a.get('Config') or '{}')
+        return re.sub(r'\.(cmd|exe|bat|ps1)$', '', Path(str(prof.get('cmd') or a['Name'])).name.lower())
+    out += [{'value': f"cli:{a['Name']}",
+             'label': (f"{a['Name']} · {_cli_of(a)}" if _cli_of(a) != a['Name'] else a['Name']) + ' (your CLI)',
              'kind': 'cli', 'ready': True}
             for a in store.list_agents()]
     return {'data': out, 'current': store.get_settings().get('triage_ai') or ''}

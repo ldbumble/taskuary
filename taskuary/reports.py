@@ -8,7 +8,7 @@ timeline instead of silently absent. Adding a type = one ~15-line function + a R
 entry - PRs welcome.
 """
 import json, re, sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 
 PLANNED = ['postgres', 'mysql', 'snowflake', 'sharepoint_list', 'google_sheets', 's3_object',
@@ -218,6 +218,43 @@ def render_report(store, cfg: dict, llm=None):
     return head, summary
 
 
+def _cron_field(spec: str, lo: int, hi: int) -> set:
+    """One cron field -> the set of matching values. Supports * , - and /step (numeric only)."""
+    out = set()
+    for part in str(spec).split(','):
+        part, step = (part.split('/', 1) + ['1'])[:2]
+        step = int(step)
+        if part.strip() in ('*', ''): rng = range(lo, hi + 1)
+        elif '-' in part: a, b = part.split('-', 1); rng = range(int(a), int(b) + 1)
+        else: v = int(part); rng = range(v, v + 1)
+        out.update(x for x in rng if lo <= x <= hi)
+        if any(x < lo or x > hi for x in rng): raise ValueError(f'{spec}: out of range {lo}-{hi}')
+    return out
+
+
+def cron_prev(expr: str, now: datetime):
+    """The most recent minute matching a 5-field cron (min hour dom month dow) at or before
+    `now`, scanning back up to 35 days - None when malformed or nothing matches. Vixie rule:
+    dom and dow both restricted means EITHER may match. dow: 0 and 7 are Sunday."""
+    try:
+        parts = str(expr).split()
+        if len(parts) != 5: return None
+        mins, hrs, doms, mons, dows = (
+            _cron_field(p, lo, hi) for p, (lo, hi) in zip(parts, ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))))
+    except ValueError:
+        return None
+    dows = {0 if x == 7 else x for x in dows}
+    dom_star, dow_star = parts[2] == '*', parts[4] == '*'
+    t = now.replace(second=0, microsecond=0)
+    for _ in range(35 * 24 * 60):
+        cd = (t.weekday() + 1) % 7                        # python Mon=0 -> cron Sun=0
+        day_ok = (t.day in doms if dow_star else cd in dows if dom_star
+                  else (t.day in doms or cd in dows))
+        if t.minute in mins and t.hour in hrs and t.month in mons and day_ok: return t
+        t -= timedelta(minutes=1)
+    return None
+
+
 def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     # on_startup is local-first scheduling: the app is a window you open, so "when I open
     # it" is a real schedule. Due exactly once per launch - never on the 10-minute auto-sync,
@@ -227,6 +264,12 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     if not last_polled: return True
     try: last = datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))
     except ValueError: return True
+    if cfg.get('cron'):
+        # due when a scheduled minute passed since the last run. A local app sleeps: a cron
+        # slot missed while closed fires on the next poll after reopening, once, not N times.
+        prev = cron_prev(cfg['cron'], now)
+        if prev is not None: return prev > last
+        # malformed expression: fall through to the daily default, never a dead report
     if cfg.get('every_minutes'):
         try: return (now - last).total_seconds() >= float(cfg['every_minutes']) * 60
         except (TypeError, ValueError): pass               # 'every 30' typed as words: daily default

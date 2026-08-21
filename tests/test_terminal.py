@@ -21,6 +21,52 @@ def _wait(fn, secs=20):
     return False
 
 
+class SeedArgvTests(unittest.TestCase):
+    def test_prompt_rides_the_command_line_when_the_cli_takes_one(self):
+        """The fastest way to type a prompt is not to type it: claude/codex take it as an
+        argument, gemini behind -i - the session starts WITH it, no echo dance, no boot
+        dialog eating keystrokes. Unknown CLIs keep the verified typed path."""
+        self.assertEqual(terminal.seed_argv({'cmd': 'C:/x/claude.CMD'}, 'do it'), ['do it'])
+        self.assertEqual(terminal.seed_argv({'cmd': 'codex'}, 'do it'), ['do it'])
+        self.assertEqual(terminal.seed_argv({'cmd': 'gemini'}, 'do it'), ['-i', 'do it'])
+        self.assertIsNone(terminal.seed_argv({'cmd': 'mystery-tui'}, 'do it'))
+
+    def test_open_session_embeds_the_seed_or_falls_back_to_typing(self):
+        for cmd, embedded in (('claude', True), ('mystery-tui', False)):
+            server.store.upsert_agent('argvseed', 'coding', 'cli', json.dumps({'cmd': cmd, 'cwd': os.getcwd()}))
+            with mock.patch.object(terminal, 'Term') as T, \
+                 mock.patch('taskuary.agents._resolve_cmd', return_value=[cmd]):
+                T.return_value = mock.Mock(sid='e1', cwd=os.getcwd(), info=lambda: {})
+                try:
+                    terminal.open_session(server.store, 'argvseed', seed_fn=lambda cwd: 'TASK TQ-0001 - go')
+                    if embedded:
+                        self.assertEqual(T.call_args.args[0][-1], 'TASK TQ-0001 - go')   # starts WITH it
+                        T.return_value.seed.assert_not_called()
+                        self.assertEqual(T.return_value.seeded, 'TASK TQ-0001 - go')     # harvest drops the echo
+                    else:
+                        self.assertNotIn('TASK TQ-0001 - go', T.call_args.args[0])
+                        T.return_value.seed.assert_called_once_with('TASK TQ-0001 - go')
+                finally:
+                    terminal.SESSIONS.pop('e1', None)
+
+    def test_codex_auto_degrades_when_the_windows_sandbox_helper_is_missing(self):
+        """Without codex-windows-sandbox-setup.exe next to codex, workspace-write kills every
+        command before it runs - full-auto degrades to codex's bypass flag, the same trust the
+        claude preset ships. With the helper present the sandbox stays."""
+        import tempfile
+        auto = ['--sandbox', 'workspace-write', '--ask-for-approval', 'never']
+        d = tempfile.mkdtemp()
+        exe = os.path.join(d, 'codex.EXE'); open(exe, 'w').close()
+        if os.name == 'nt':
+            self.assertEqual(terminal._codex_windows_auto([exe] + auto),
+                             [exe, '--dangerously-bypass-approvals-and-sandbox'])
+            open(os.path.join(d, 'codex-windows-sandbox-setup.exe'), 'w').close()
+            self.assertEqual(terminal._codex_windows_auto([exe] + auto), [exe] + auto)
+        else:
+            self.assertEqual(terminal._codex_windows_auto([exe] + auto), [exe] + auto)   # posix sandboxes fine
+        self.assertEqual(terminal._codex_windows_auto(['claude'] + auto), ['claude'] + auto)
+
+
 class InteractiveArgsTests(unittest.TestCase):
     def test_codex_full_auto_translates_to_interactive_auto(self):
         """--full-auto belongs to `codex exec`; the live TUI gets the same INTENT spelled its
@@ -266,9 +312,11 @@ class TerminalTests(unittest.TestCase):
         class Fake:
             sid, cwd, label, agent, task_id = 'fake-sid', os.getcwd(), 'coder', 'coder', tid
             seeded = None
-            def seed(self, text): Fake.seeded = text
             def info(self): return {'sid': self.sid, 'cwd': self.cwd, 'alive': True}
-        with mock.patch.object(terminal, 'open_session', return_value=Fake()):
+        def fake_open(*a, seed_fn=None, **k):
+            Fake.seeded = seed_fn(os.getcwd()) if seed_fn else None    # the prompt now travels as seed_fn
+            return Fake()
+        with mock.patch.object(terminal, 'open_session', side_effect=fake_open):
             self.assertEqual(c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid, 'seed': True}).status_code, 200)
         for s in ('imports in the wrong month', 'dreyes@northwind.example', 'Do NOT call the Taskuary API', 'fix it if it is fixable'):
             self.assertIn(s, Fake.seeded)

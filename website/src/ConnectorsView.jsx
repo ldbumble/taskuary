@@ -389,7 +389,8 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
             an agent per drive-by PR; you promote what deserves work), <b>feed</b> = shown on the Timeline only,
             <b> off</b> = ignored. Every item carries its author and GitHub's association flag, so triage weighs
             who is asking. Picking a value saves instantly and is all it takes — no Save button, no role change:
-            the next sync pulls that repo.
+            the next sync pulls that repo. These pickers are INBOUND only — whether the coder opens or updates
+            issues for the tasks it works is the separate <b>Agent permissions</b> step below.
           </Typography>
         )}
         {mine.map((s) => (
@@ -632,6 +633,11 @@ const GithubPerms = ({ conn, reload }) => {
   };
   return (
     <Box sx={{ mt: 1, maxWidth: 620 }}>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+        OUTBOUND — what the coding agent may do <b>on GitHub</b> while it works your tasks. Unrelated
+        to the per-repo issues/PRs pickers under Repositories, which only control what comes
+        <b> in</b> to your timeline.
+      </Typography>
       {GITHUB_PERMS.map(([key, label, desc]) => (
         <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
           <Switch checked={!!cfg[key]} onChange={() => toggle(key)} sx={{ mt: -0.5 }} />

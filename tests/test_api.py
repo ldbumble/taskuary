@@ -128,17 +128,20 @@ class ApiTests(unittest.TestCase):
             REGISTRY.pop('_t')
 
     def test_tool_run_needs_the_tool_role(self):
-        """An agent using a connected system: allowed for tool-role connections, refused
-        otherwise, and errors come back as data instead of a 500."""
+        """An agent using a connected system: allowed for tool-role connections that are ON,
+        refused otherwise, and errors come back as data instead of a 500. Catalog cards are
+        seeded with the tool role from first launch - Active is what 'I set this up' means."""
         REGISTRY['_tool'] = lambda cfg: (f"ran {cfg.get('q')}", 'rows here')
         try:
             r = c.post('/api/tools/run', json={'type': '_tool', 'q': 'select 1'}).json()
             self.assertEqual((r['ok'], r['headline'], r['output']), (True, 'ran select 1', 'rows here'))
             self.assertEqual(c.post('/api/tools/run', json={'type': 'nope'}).status_code, 422)
             cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'winrm')
-            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report'})
+            # seeded: tool role, Active=0. Used to run anyway.
             self.assertEqual(c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'}).status_code, 403)
-            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report,tool'})
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report', 'Active': True})
+            self.assertEqual(c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'}).status_code, 403)
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report,tool', 'Active': True})
             REGISTRY['winrm'], real = lambda cfg: (_ for _ in ()).throw(RuntimeError('box unreachable')), REGISTRY['winrm']
             try:
                 out = c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'}).json()

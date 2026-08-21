@@ -64,9 +64,18 @@ const laneOf = (t, live) => {
   const l = live[t.TaskId];
   if (t.Status === "done") return "done";
   if (l) return l.kind === "session" && l.idle >= IDLE_WAITING ? "waiting" : "working";
+  if (t.RunStatus === "error") return "waiting";       // it failed: your move, never back to "queued"
   if (t.ReviewStatus === "pending" || t.Status === "waiting") return "waiting";
   if (t.RunStatus === "running") return "working";
+  if (t.Status === "in_progress") return "waiting";    // its session ended without a wrap-up: your move
   return "queued";
+};
+
+// Done is a TODAY column: yesterday's finished work is history, not board furniture - it
+// lives on in Tasks, reopenable any time.
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const COLS = [
   { key: "queued", title: "Queued", dot: "#8a94a6", status: "open" },
@@ -132,15 +141,20 @@ export default function BoardView({ onOpenTask }) {
   return (
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 2, gap: 1.5 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 17, flex: 1 }}>Agent board</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>
+          Done shows today only — older finished work lives in Tasks, reopenable any time.
+        </Typography>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
           onClick={() => setNewOpen(true)}>New task for the agent</Button>
       </Box>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
         {COLS.map((col) => {
-          const cards = tasks.filter((t) => laneOf(t, live) === col.key);
+          const today = localToday();
+          const cards = tasks.filter((t) => laneOf(t, live) === col.key
+            && (col.key !== "done" || String(t.ClosedAt || t.UpdatedAt || "").startsWith(today)));
           return (
             <Box key={col.key} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(col)}
               sx={{ bgcolor: "#f1f3f6", border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 1,

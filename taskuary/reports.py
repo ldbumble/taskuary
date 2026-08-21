@@ -173,9 +173,23 @@ def run_sources(store, subs: list):
     return ' · '.join(heads)[:400], '\n\n'.join(bodies)[:BODY_CHARS]
 
 
+def report_llm(store, cfg: dict, default_llm):
+    """The brain THIS report asked for (cfg['ai_brain'] in /api/brains values, optional
+    cfg['ai_model'] override) - a heavier model for the weekly review, the cheap tier for
+    pings. Falls back to the caller's default (the triage brain) when unset or broken."""
+    if not (cfg.get('ai_brain') or cfg.get('ai_model')): return default_llm
+    from .llm import build_llm
+    try: return build_llm(store, cfg.get('ai_brain') or None, cfg.get('ai_model') or None) or default_llm
+    except Exception as e:
+        logger.warning(f'report brain unavailable, using the default: {e}')
+        return default_llm
+
+
 def render_report(store, cfg: dict, llm=None):
     """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
-    AI connector turn raw rows into the summary that lands on the timeline."""
+    AI connector turn raw rows into the summary that lands on the timeline. The report may
+    name its own brain and model (report_llm); `llm` is the default it falls back to."""
+    llm = report_llm(store, cfg, llm)
     subs = [s for s in (cfg.get('sources') or []) if s.get('type')]
     if subs:
         head, summary = run_sources(store, subs)
@@ -204,7 +218,11 @@ def render_report(store, cfg: dict, llm=None):
     return head, summary
 
 
-def is_due(cfg: dict, last_polled) -> bool:
+def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
+    # on_startup is local-first scheduling: the app is a window you open, so "when I open
+    # it" is a real schedule. Due exactly once per launch - never on the 10-minute auto-sync,
+    # and a cron time it would have missed while closed is not its problem.
+    if cfg.get('on_startup'): return startup
     now = datetime.now()
     if not last_polled: return True
     try: last = datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))
@@ -256,14 +274,14 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     return {'message_id': mid, 'subject': subject, 'files': len(made)}
 
 
-def run_due_reports(store) -> int:
+def run_due_reports(store, startup: bool = False) -> int:
     from .llm import build_llm
     try: llm = build_llm(store)
     except Exception: llm = None
     n = 0
     for src in store.list_sources():
         if src['Channel'] != 'report': continue
-        if is_due(json.loads(src.get('ConfigJson') or '{}'), src.get('LastPolledAt')):
+        if is_due(json.loads(src.get('ConfigJson') or '{}'), src.get('LastPolledAt'), startup):
             run_report_source(store, src, llm)
             store.touch_source(src['SourceId'])
             n += 1

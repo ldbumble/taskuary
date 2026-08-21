@@ -1036,7 +1036,7 @@ def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(l
 
 _POLL_BUSY = threading.Lock()   # whether a poll runs IN THIS PROCESS; the DB flag is only for the UI
 
-def _poll_reports(backfill_days: int = 0, what: str = 'syncing'):
+def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False):
     # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
     # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
@@ -1050,7 +1050,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing'):
         # before the catch-up it would summarize yesterday while today sat in the mailbox
         from .channels import poll_channels
         poll_channels(store, backfill_days)
-        run_due_reports(store)
+        run_due_reports(store, startup)
     finally:
         try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
         finally: _POLL_BUSY.release()
@@ -1079,7 +1079,7 @@ def catch_up_on_startup():
     days = _catchup_days(days)
     logger.info(f"startup: {'incremental poll (closed under an hour)' if days == 0 else f'catching up on the last {days} day(s)'}")
     def _catch_up():
-        _poll_reports(days, what=f'catching up on the last {days} day(s)' if days else 'syncing')
+        _poll_reports(days, what=f'catching up on the last {days} day(s)' if days else 'syncing', startup=True)
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
         # the poll above like every other one. Consolidate what the verdicts taught next,
         # on the same once-a-day rhythm.

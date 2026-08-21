@@ -44,7 +44,9 @@ def sync_connections(store, actor='system'):
     for s in srcs:
         if s['Channel'] != 'report' or not s['Active']: continue
         cfg = json.loads(s.get('ConfigJson') or '{}')
-        sched = f"every {cfg['every_minutes']}m" if cfg.get('every_minutes') else f"daily {cfg.get('daily_at', '')}".strip()
+        sched = ('on startup' if cfg.get('on_startup')
+                 else f"every {cfg['every_minutes']}m" if cfg.get('every_minutes')
+                 else f"daily {cfg.get('daily_at', '')}".strip())
         lines.append(f"- Report \"{cfg.get('title') or s['Address']}\" ({cfg.get('type', 'rest')}, {sched})")
     # the tool role is only real if the agents know how to reach it - spell out the call
     if any('tool' in roles_of(c) for c in store.list_connectors() if c['Active']):

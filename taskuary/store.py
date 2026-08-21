@@ -190,6 +190,17 @@ class SQLiteStore:
                     # changes UpdatedBy and makes the document theirs, never overwritten again
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=? AND UpdatedBy='template' AND Content<>?",
                                     (txt, _now(), name, txt))
+            # the Morning digest ships as a real REPORT (reports.run_digest): the brief lands
+            # on the Timeline, its prompt is edited on the Reports tab, and deleting the
+            # source turns it off - the sentinel keeps a deletion deleted across restarts.
+            # It is also the working demo of how reports work, on data every install has.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='digest_report_seeded'").fetchone():
+                from .digest import PROMPT
+                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
+                                ('report', 'Morning digest', 'template', 1,
+                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3,
+                                             'ai_prompt': PROMPT})))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
             # data heal: sources written before ownership existed have no ConnectorId, so a
             # NEW connector on the same channel (the Gmail card) claimed the Outlook mailboxes.
             # Adopt each orphan to the channel's legacy owner - Graph was the only email/teams/

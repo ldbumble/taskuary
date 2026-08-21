@@ -11,7 +11,7 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![The Taskuary timeline: every inbound item on a day rail, the AI-drafted reply ready to approve, and one list of what could happen with it - send it to a coding agent, hand it to a person, break it in two or fold it into the task it duplicates](docs/screenshot-timeline.png)
+![The Taskuary timeline, full of triaged work: the Morning digest report on top, mail and chats filed or turned into tasks with needs-you chips, and the open panel explaining exactly why the selected mail became a task - triage verdict, routing, and the reply draft waiting for approval](docs/screenshot-timeline.png)
 
 ## Why
 
@@ -69,7 +69,9 @@ Python 3.10+ is all you need. Then, in **Connectors** — a minute or two each:
 3. **Your coding CLI** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot), Save,
    Test. Add a GitHub PAT and repos are discovered for you.
 4. **Reports** (optional) — point at SQL Server / MCP / SQLite / REST / RSS and schedule a
-   query with an AI prompt; the summary lands on your Timeline.
+   query with an AI prompt; the summary lands on your Timeline. One ships ready-made: the
+   **Morning digest**, a daily brief of your own funnel — edit its prompt to taste, or
+   delete it.
 
 No cloud key at all? Set **Settings → Triage & routing → Triage brain** to your CLI agent
 and skip step 1 — one brain does everything, slower and pricier per message. See
@@ -106,7 +108,9 @@ One tab per question, two lines each; the details live in the app's own help tex
 - **Reports** — sources at the top (SQL, REST, MCP…), one AI prompt at the bottom, a
   schedule. The rows come back as an **.xlsx** and a **bar chart** the summarizing model
   itself chose the columns for; capped slices are named as capped so the AI never calls a
-  truncated slice "all of them". Preview runs the whole pipeline first.
+  truncated slice "all of them". Preview runs the whole pipeline first. The **Morning
+  digest** ships as one of these — your own funnel as the data source, the daily brief on
+  the Timeline — so every install starts with a working example.
 - **Connectors** — a catalog with a wizard per card. Every connection has **roles** you
   choose: *trigger* (inbound work), *feed* (shown, never triaged), *report*, *tool* (agents
   may use it), *notify* (Taskuary pushes pings TO it). Nothing is polled without a role.
@@ -183,7 +187,7 @@ themselves — and each feeds exactly the calls it belongs in.
 | `SOUL.md` | the constitution: your rules, voice, escalation lines, the repo map | triage, replies, coding agents |
 | `CODER.md` | how the coding agent works and closes out | coding agents (your CLI) |
 | `LEARNED.md` | your profile, learned from your verdicts — `SOUL.md` outranks it | triage, replies, coding agents |
-| `DIGEST.md` | your morning brief: what's in flight, who waits on whom, rebuilt daily | you |
+| `DIGEST.md` | your morning brief: what's in flight, who waits on whom — written by the **Morning digest** report (Reports tab), whose prompt decides what goes in | you — it lands on your Timeline daily; delete the report to turn it off |
 
 Standing notes (Settings → Agent memory) ride alongside: sender-scoped verdicts injected
 into triage and replies — the specific layer under `LEARNED.md`'s general one.

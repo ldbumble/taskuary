@@ -72,7 +72,7 @@ class HarvestTests(unittest.TestCase):
     def test_the_prompt_we_typed_is_not_read_back_as_something_the_agent_said(self):
         """A pty echoes what was typed. The seed is 8000 characters of task context, and a real
         terminal WRAPS it across dozens of lines - so matching a fixed 60-char head never fired."""
-        seed = ('TASK TQ-0014 - Payroll file imports. REPO: mfaVita/TopE - you are already in it. '
+        seed = ('TASK TQ-0014 - Payroll file imports. REPO: northwind/TopE - you are already in it. '
                 'FROM Dana Reyes on email, subject "Payroll File Imports": the adjustments import '
                 'into the wrong month and finance has to unpick it every run. RULES: work only here.')
         # the echo, wrapped the way a terminal wraps it inside its input box

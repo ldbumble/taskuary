@@ -107,14 +107,29 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                 <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
                   {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
                       asked you to declare something the text already shows. */}
-                  <Button size="small" variant="contained"
-                    disabled={busy === r.ReviewId || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
-                    onClick={() => decide(r, "approve")}
-                    title="Sends the text above on the channel it arrived on">
-                    {busy === r.ReviewId ? "sending…" : "Approve & send"}
-                  </Button>
-                  <Button size="small" sx={{ color: "#8a94a6" }} disabled={busy === r.ReviewId}
-                    onClick={() => decide(r, "no_reply")}>No reply needed</Button>
+                  {/* a channel that cannot carry the reply must SAY so: github with replies
+                      off gets 'No response required' as THE action, not a send that bounces */}
+                  {r.CanSend === false ? (
+                    <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
+                      sx={{ bgcolor: "#64748b", "&:hover": { bgcolor: "#475569" } }}
+                      title={r.Channel === "github"
+                        ? "GitHub replies are off (GitHub card → Reply to issue/PR authors) — close this without sending"
+                        : "This channel can't be replied to — close this without sending"}
+                      onClick={() => decide(r, "no_reply")}>
+                      {busy === r.ReviewId ? "closing…" : "No response required"}
+                    </Button>
+                  ) : (
+                    <Button size="small" variant="contained"
+                      disabled={busy === r.ReviewId || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
+                      onClick={() => decide(r, "approve")}
+                      title="Sends the text above on the channel it arrived on">
+                      {busy === r.ReviewId ? "sending…" : "Approve & send"}
+                    </Button>
+                  )}
+                  {r.CanSend !== false && (
+                    <Button size="small" sx={{ color: "#8a94a6" }} disabled={busy === r.ReviewId}
+                      onClick={() => decide(r, "no_reply")}>No reply needed</Button>
+                  )}
                   <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Reject</Button>
                   <Box sx={{ flex: 1 }} />
                   <Button size="small" disabled={busy === r.ReviewId} onClick={() => redraft(r)}>

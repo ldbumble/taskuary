@@ -167,6 +167,17 @@ class ReportScheduleAndBrainTests(unittest.TestCase):
         run_due_reports(s, startup=True)
         self.assertTrue(any('Boot check' in (m['Subject'] or '') for m in s.scan_messages()))
 
+    def test_sloppy_schedules_never_kill_the_poll_thread(self):
+        """daily_at typed as '8' (no colon) raised an unpack error that took the WHOLE startup
+        poll thread down - every report and every channel with it. Tolerance, then defaults."""
+        from taskuary.reports import is_due
+        self.assertTrue(is_due({'daily_at': '0'}, '2020-01-01 00:00:00'))    # colon-less parses (0 = 00:00)
+        self.assertFalse(is_due({'daily_at': '23:59'}, __import__('datetime').datetime.now()
+                                .strftime('%Y-%m-%d %H:%M:%S')))
+        for junk in ('eightish', '25:99:00', ''):
+            is_due({'daily_at': junk}, '2026-08-20 07:00:00')                # must not raise
+        is_due({'every_minutes': 'thirty'}, '2026-08-20 07:00:00')           # ditto
+
     def test_a_report_names_its_own_brain_and_model(self):
         """cfg['ai_brain'] + cfg['ai_model']: the weekly review gets the heavy model while the
         pings stay on the cheap tier - unset falls back to the triage brain."""
@@ -649,6 +660,26 @@ class ApiTests(unittest.TestCase):
             self.assertTrue(c.post('/api/learn/reflect').json()['reflected'])
         from taskuary.learn import gather
         self.assertIn('DRAFT VERDICTS', gather(server.store, '2000-01-01'))
+
+    def test_reviews_say_whether_the_channel_can_carry_a_reply(self):
+        """A github draft with replies off offered Approve & send that could only bounce - the
+        rows now carry CanSend, and the UI turns that button into 'No response required'."""
+        push = c.post('/api/ingest/push', json={'external_id': 'cansend1', 'subject': 'o/app#9 q',
+                                                'body': '[issue by kai - association: NONE]\ncan you explain this?',
+                                                'from_email': 'kai@users.noreply.github.com', 'channel': 'github'}).json()
+        mid = push['message_id']
+        c.post(f'/api/messages/{mid}/reply')
+        row = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == mid)
+        self.assertFalse(row['CanSend'])                       # github, replies off: no send road
+        feedrow = next(r for r in c.get('/api/feed').json()['data'] if r['MessageId'] == mid)
+        self.assertFalse(feedrow['CanSend'])
+        push2 = c.post('/api/ingest/push', json={'external_id': 'cansend2', 'subject': 'rota',
+                                                 'body': 'can you explain the rota?', 'from_email': 'a@b.example',
+                                                 'channel': 'email'}).json()
+        c.post(f"/api/messages/{push2['message_id']}/reply")
+        row2 = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+                    if r['MessageId'] == push2['message_id'])
+        self.assertTrue(row2['CanSend'])                       # email always has a road
 
     def test_a_failed_send_returns_the_review_to_the_queue(self):
         """The Image-#5 bug: a Teams send died on permissions but the card read 'approved' and

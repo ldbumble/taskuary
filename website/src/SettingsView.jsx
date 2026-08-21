@@ -84,8 +84,8 @@ const KNOB_META = {
     help: "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup." },
 
   // ── Display ──
-  timezone: { group: "Display", label: "Timezone", type: "auto",
-    desc: "IANA zone the app's clock speaks, e.g. America/New_York. Blank = this machine's local time.",
+  timezone: { group: "Display", label: "Timezone", type: "timezone",
+    desc: "The zone the app's clock speaks. Blank = this machine's local time.",
     help: "Timestamps are stored in the server machine's local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.\n\nUse an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load." },
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
@@ -186,6 +186,19 @@ export default function SettingsView() {
         {m.options.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>{o.replace("_", " ")}</MenuItem>)}
       </Select>
     );
+    // the browser knows every IANA zone - a dropdown, not a spelling test
+    if (m.type === "timezone") {
+      const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+      return (
+        <Select size="small" displayEmpty value={zones.includes(s.Value) ? s.Value : ""}
+          MenuProps={{ PaperProps: { sx: { maxHeight: 380 } } }}
+          sx={{ minWidth: 240, fontSize: 12.5, bgcolor: "#fff" }}
+          onChange={(e) => saveSetting(s.Name, e.target.value)}>
+          <MenuItem value="" sx={{ fontSize: 12.5 }}>this machine's local time</MenuItem>
+          {zones.map((z) => <MenuItem key={z} value={z} sx={{ fontSize: 12.5 }}>{z}</MenuItem>)}
+        </Select>
+      );
+    }
     if (m.type === "number") return (
       <TextField type="number" defaultValue={s.Value} sx={{ width: 100, bgcolor: "#fff" }}
         inputProps={{ style: { fontSize: 12.5, padding: "6px 10px" } }}

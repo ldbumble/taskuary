@@ -625,7 +625,7 @@ class CoreTests(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'PTO import failing', 'Summary': 'Please fix the PTO import mapping.\n'
                              'Also we need the 112 active employees added to the roster.', 'Kind': 'coding',
-                             'Priority': 'high', 'Source': 'email', 'Tags': 'repo:mfaVita/FanApp'}, 'owner')
+                             'Priority': 'high', 'Source': 'email', 'Tags': 'repo:northwind/FanApp'}, 'owner')
         mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'PTO import failing',
                              'FromEmail': 'rita@example.com', 'SentAt': '2026-08-19 09:00',
                              'BodyText': 'Please fix the PTO import mapping.\nAlso add the 112 active employees.'})
@@ -637,7 +637,7 @@ class CoreTests(unittest.TestCase):
                                  {'title': 'Fix the PTO import mapping'}, [mid])
         self.assertEqual(s.get_task(tid)['Title'], 'Fix the PTO import mapping')      # the ref stays put
         t2 = s.get_task(new)
-        self.assertEqual((t2['Kind'], t2['Priority'], t2['Tags']), ('coding', 'high', 'repo:mfaVita/FanApp'))
+        self.assertEqual((t2['Kind'], t2['Priority'], t2['Tags']), ('coding', 'high', 'repo:northwind/FanApp'))
         self.assertEqual(s.get_message(mid)['TaskId'], new)                            # moved, with a route
         self.assertEqual([r['Decision'] for r in s.list_routes(new)], ['split'])
         self.assertIn(task_ref(new), s.list_comments(tid)[-1]['Body'])                 # each side says where

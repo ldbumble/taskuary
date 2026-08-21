@@ -188,22 +188,26 @@ class Term:
             toe, rest = self.seeded[:20], self.seeded[20:]
             for attempt in range(SEED_RETRIES):
                 self.write(toe)                           # attempt > 0 = retyped: the first toe was eaten
-                for _ in range(16):                       # fast poll, no settle: a TUI mid-boot echoes late,
-                    if self._sees(toe): break             # and a too-early verdict retyped a doubled toe
-                    if not self.alive: return
-                    time.sleep(.25)
+                end = time.time() + 12                    # generous: a loaded CI runner echoes LATE, and a
+                while self.alive and not self._sees(toe) and time.time() < end:
+                    time.sleep(.25)                       # fast poll, no quiet-wait - spinners are never quiet
+                if not self.alive: return
                 if not self._sees(toe):
-                    # a dialog is up (or the box is not listening yet): hold until the screen
-                    # changes (the owner answered it / boot finished), then try the toe again
+                    # a dialog is up, or the echo is still coming: hold until the screen moves,
+                    # and judge AGAIN before retyping - calling a late echo 'eaten' stalled the
+                    # whole seed on slow macOS runners (dialog-wait outlived the test's patience)
                     was = self.n
                     while self.alive and self.n == was and time.time() - start < SEED_BUDGET:
                         time.sleep(.5)
-                    if time.time() - start >= SEED_BUDGET:
+                    if self._sees(toe):
+                        pass                              # late echo: it landed - go type the payload
+                    elif time.time() - start >= SEED_BUDGET:
                         logger.warning(f'terminal {self.sid}: the CLI is waiting on a prompt of its own '
                                        f'(trust/login?) - answer it and the seeded ask will need retyping')
                         return
-                    if not self.settle(SEED_SETTLE): return
-                    continue
+                    else:
+                        if not self.settle(SEED_SETTLE): return
+                        continue
                 # proven listening - and fed in frame-sized bites so nothing drops mid-stream
                 for i in range(0, len(rest), SEED_CHUNK):
                     self.write(rest[i:i + SEED_CHUNK])

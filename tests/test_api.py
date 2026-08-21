@@ -385,6 +385,25 @@ class ApiTests(unittest.TestCase):
             release.set(); t.join(10)
         self.assertEqual(c.get('/api/ingest/status').json()['status']['state'], 'idle')
 
+    def test_startup_catchup_asks_for_the_gap_not_the_ceiling(self):
+        """Reopening an app closed ten minutes should not re-read three days of every mailbox -
+        the catch-up window is the actual time closed, with startup_sync_days as the ceiling."""
+        from datetime import datetime, timedelta
+        src = server.store.save_source({'Channel': 'email', 'Address': 'gap@test.example', 'Active': 1}, 't')
+        stamp = lambda h: (datetime.now() - timedelta(hours=h)).isoformat(sep=' ', timespec='seconds')
+        try:
+            server.store._exec('UPDATE source SET LastPolledAt=NULL', ())     # only this source speaks
+            server.store._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (stamp(0.2), src))
+            self.assertEqual(server._catchup_days(3), 0)      # closed ten minutes: plain incremental
+            server.store._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (stamp(30), src))
+            self.assertEqual(server._catchup_days(3), 2)      # overnight and change: two days
+            server.store._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (stamp(24 * 10), src))
+            self.assertEqual(server._catchup_days(3), 3)      # a long holiday still caps at the setting
+            server.store._exec('UPDATE source SET LastPolledAt=NULL', ())
+            self.assertEqual(server._catchup_days(3), 3)      # never polled: the full ceiling
+        finally:
+            server.store.delete_source(src)
+
     def test_learn_reflect_endpoint_and_gather(self):
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(c.post('/api/learn/reflect').json(), {'ok': True, 'reflected': False})

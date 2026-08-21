@@ -1013,17 +1013,30 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing'):
         finally: _POLL_BUSY.release()
 
 
+def _catchup_days(ceiling: int) -> int:
+    """How far past the watermark startup actually needs to reach: the time the app was CLOSED,
+    not the full `startup_sync_days` ceiling. Reopening ten minutes after closing used to re-read
+    three days of every mailbox (dedupe threw it all away, slowly - the whole timeline sat behind
+    a 'catching up' banner for it). Under an hour of gap is what the watermark already covers."""
+    last = max((str(s.get('LastPolledAt') or '') for s in store.list_sources()), default='')
+    if not last: return ceiling
+    try: gap_h = (datetime.now() - datetime.fromisoformat(last.replace(' ', 'T'))).total_seconds() / 3600
+    except ValueError: return ceiling
+    return 0 if gap_h <= 1 else min(ceiling, int(gap_h // 24) + 1)
+
+
 def catch_up_on_startup():
     """Whatever arrived while the app was closed was polled by nobody, and Taskuary is not a
-    service - it is a window you open. So opening it reaches back past the watermark
-    (`startup_sync_days`, default 3) instead of asking "anything since I last ran", which after
-    a weekend off is the wrong question. 0 turns it off."""
+    service - it is a window you open. So opening it reaches back past the watermark - but only
+    as far as the app was actually closed, with `startup_sync_days` (default 3) as the ceiling.
+    0 turns the startup poll off entirely."""
     try: days = int(store.get_settings().get('startup_sync_days') or 0)
     except ValueError: days = 0
     if days <= 0: return
-    logger.info(f'startup: catching up on the last {days} days')
+    days = _catchup_days(days)
+    logger.info(f"startup: {'incremental poll (closed under an hour)' if days == 0 else f'catching up on the last {days} day(s)'}")
     def _catch_up():
-        _poll_reports(days, what=f'catching up on the last {days} days')
+        _poll_reports(days, what=f'catching up on the last {days} day(s)' if days else 'syncing')
         # ...and only THEN synthesize the digest, so it reads the days just pulled in - a 5:30
         # schedule never fired on an app that is a window you open, not a service
         from .digest import refresh_if_stale

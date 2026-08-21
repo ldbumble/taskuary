@@ -33,17 +33,25 @@ sender (yours to review under Settings → Agent memory).
 
 The general lessons take a stricter road, so one odd Tuesday never becomes a rule:
 
-```mermaid
-flowchart LR
-    A([your verdicts]) --> B[hypotheses]
-    B -- held up across people & threads --> C[LEARNED.md<br/>your profile]
-    C --> D([every triage, draft & agent run])
+![Your verdicts become a hypothesis with score s:2; agreeing verdicts add a point and contradictions remove one; at s:4 with proof from two or more people it is promoted into LEARNED.md, which then rides into every triage, draft and agent run](docs/learning-loop.svg)
+
+**How the memory works, concretely.** Each lesson is one line in `LEARNED.md` (Docs tab) —
+a guess with a score. Say you strip the greeting off three drafts this week; the file soon
+carries:
+
+```
+- Uri drops greetings and signs off in one word. [s:4 | ev: rv12,rv15,rv31 | seen: 2026-08-19]
 ```
 
-Three rules keep it honest: every learned line carries its evidence (`[s:4 | ev: rv12…]` —
-delete the line and the lesson is gone), a pattern seen once is never acted on, and a rule
-that would *hide* mail waits for your explicit OK. `SOUL.md` — the rules you write yourself —
-always outranks what's learned, and one switch in Settings turns the loop off.
+Read the tag left to right: **s:4** is the score — how often the guess has held. It starts
+at 2, gains a point every verdict that agrees, loses one every verdict that contradicts; at
+**4** the line is promoted and starts steering triage and drafts, at **0** it's deleted.
+**ev:** is the receipts — the exact verdicts that taught it (`rv12` = your decision on
+review #12), so you can see *why* it believes something. **seen:** is the last day it held.
+Delete the line and the lesson is gone; lines you write yourself carry no tag and are never
+touched. Two more guardrails: a rule that would *hide* mail (never a task, auto-file) waits
+for your explicit OK instead of promoting itself, and `SOUL.md` — the rules you write —
+always outranks the learned file. One switch in Settings turns the whole loop off.
 
 ## Get started
 
@@ -167,28 +175,7 @@ into LEARNED.md.
 Plain markdown, all on the Docs tab, all yours to edit. Three you write, two write
 themselves — and each feeds exactly the calls it belongs in.
 
-```mermaid
-flowchart LR
-    subgraph yours["you write"]
-        TRI[TRIAGE.md]
-        SOUL[SOUL.md]
-        CODER[CODER.md]
-    end
-    subgraph auto["write themselves"]
-        LEARNED[LEARNED.md]
-        DIGEST[DIGEST.md]
-    end
-    A([triage & replies<br/>cheap model])
-    B([coding agents<br/>your CLI])
-    YOU([you])
-    TRI --> A
-    SOUL --> A
-    SOUL --> B
-    LEARNED --> A
-    LEARNED --> B
-    CODER --> B
-    DIGEST --> YOU
-```
+![TRIAGE.md, SOUL.md and LEARNED.md feed triage and replies on the cheap model; SOUL.md, CODER.md and LEARNED.md feed coding agents on your CLI; DIGEST.md is your own morning read](docs/five-docs.svg)
 
 | document | what it is | who reads it |
 |---|---|---|

@@ -1264,7 +1264,9 @@ async def terminal_ws(ws: WebSocket, sid: str):
             await ws.send_json({'type': 'out', 'data': data})
     pump = asyncio.create_task(to_browser())
     try:
-        if t.scrollback(): await ws.send_json({'type': 'out', 'data': t.scrollback()})
+        # scrubbed: a replayed scrollback that still contains the TUI's terminal queries makes
+        # xterm answer them AGAIN, and the answers land in the CLI as typed junk - see terminal.py
+        if t.scrollback(): await ws.send_json({'type': 'out', 'data': hub_term.scrub_queries(t.scrollback())})
         first_resize = True
         while True:
             m = await ws.receive_json()

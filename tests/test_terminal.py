@@ -166,6 +166,23 @@ class TerminalTests(unittest.TestCase):
             terminal.close(t.sid)
         self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])
 
+    def test_repaint_after_resize_does_not_reset_idle(self):
+        """The reattach wiggle forces a full repaint - output that says NOTHING about the agent.
+        Counting it reset idle(), so a session parked at its prompt flipped back to 'Agent
+        working' on every tab switch and the board flapped between lanes."""
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(6)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        try:
+            t.last = time.time() - 100                    # long parked at its prompt
+            t.resize(32, 109)                             # the reattach wiggle
+            t._saw_output()                               # ...and the repaint it triggers
+            self.assertGreater(t.idle(), 90)              # still parked: waiting on you
+            t.calm_until = 0
+            t._saw_output()                               # real output later
+            self.assertLess(t.idle(), 5)                  # genuinely active again
+        finally:
+            terminal.close(t.sid)
+
     def test_first_resize_wiggles_the_pty_so_a_tui_repaints(self):
         """Reattaching to a full-screen TUI (codex) replayed raw scrollback and showed smeared
         blank bars - nothing told the CHILD to repaint. The first resize of every socket now

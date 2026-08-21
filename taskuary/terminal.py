@@ -98,6 +98,7 @@ class Term:
         self.rows, self.cols = rows, cols                 # replaying the stream needs the real geometry
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
+        self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
         self.store = store                                # so the pty can file its own transcript when it ends
         self.subs = []                                    # (loop, asyncio.Queue)
@@ -121,7 +122,7 @@ class Term:
             try: data = self.pty.read()
             except Exception as e: logger.debug(f'terminal {self.sid} read ended: {e}'); break
             if not data: break
-            self.last = time.time()                       # silence is the signal: see idle()
+            self._saw_output()
             self._append(data); self._emit(data)
             for f in list(self.taps):
                 try: f(data)
@@ -227,11 +228,19 @@ class Term:
     def scrollback(self): return ''.join(self.buf)
     def write(self, s):
         if self.alive: self.pty.write(s)
+    def _saw_output(self):
+        """Silence is the signal (see idle()) - but not ALL output breaks it. The reattach
+        wiggle forces a full REPAINT, which is output that says nothing about the agent:
+        counting it reset idle(), so a session parked at its prompt flipped back to 'Agent
+        working' on every tab switch and the board flapped between lanes."""
+        if time.time() > self.calm_until: self.last = time.time()
+
     def resize(self, rows, cols):
         if self.alive:
             try:
                 self.pty.resize(int(rows), int(cols))
                 self.rows, self.cols = int(rows), int(cols)
+                self.calm_until = time.time() + 3         # the repaint this triggers is not activity
             except Exception: pass
     def close(self):
         self.keep()                                       # before the bytes go, not after

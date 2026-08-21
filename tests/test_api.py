@@ -325,6 +325,75 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post('/api/messages/999999/not-mine', json={}).status_code, 404)
         self.assertEqual(c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'weird'}).status_code, 422)
 
+    def test_editing_a_draft_teaches_learned_md(self):
+        """The README's promise, made true: your edit to a draft leaves a lesson behind - a
+        hypothesis in LEARNED.md, written by the triage brain the moment you decide."""
+        tid = c.post('/api/tasks', json={'Title': 'a question'}).json()['taskId']
+        server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r',
+                                 'DraftText': 'Dear sir, I will most certainly look into it.'})
+        rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+                   if r['TaskId'] == tid)
+        bullet = f'- {{{{owner_first}}}} drops formal openers. [s:2 | ev: rv{rid} | seen: 2026-08-21]'
+        seen = {}
+        fake = lambda sys_, usr, **kw: seen.update(usr=usr) or bullet
+        with mock.patch('taskuary.llm.build_llm', return_value=fake):
+            r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'On it.'})
+        self.assertEqual(r.json()['status'], 'edited')            # the diff, not the verb, says edited
+        self.assertIn('DRAFT:', seen['usr']); self.assertIn('On it.', seen['usr'])   # the edit IS the lesson
+        self.assertIn(bullet, server.store.get_doc('learned'))
+        # and a plain approve teaches nothing hot-path: it is aggregate confirmation, counted at reflection
+        server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r', 'DraftText': 'ok'})
+        rid2 = next(r2['ReviewId'] for r2 in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+                    if r2['TaskId'] == tid)
+        before = server.store.get_doc('learned')
+        with mock.patch('taskuary.llm.build_llm', return_value=fake):
+            c.post(f'/api/reviews/{rid2}/decide', json={'verb': 'approve', 'final_text': None})
+        self.assertEqual(server.store.get_doc('learned'), before)
+
+    def test_ingest_status_heals_ghost_running(self):
+        # a poll that died with the app used to leave 'running' behind forever - the timeline
+        # banner showed "catching up" until someone edited the database
+        server.store.set_setting('ingest_status', json.dumps(
+            {'state': 'running', 'what': 'catching up on the last 3 days', 'at': '2020-01-01 00:00:00'}), 't')
+        self.assertEqual(c.get('/api/ingest/status').json()['status']['state'], 'idle')
+        # while a poll REALLY runs (the lock is held), running is reported faithfully
+        server._POLL_BUSY.acquire()
+        try:
+            server.store.set_setting('ingest_status', json.dumps({'state': 'running', 'what': 'x'}), 't')
+            self.assertEqual(c.get('/api/ingest/status').json()['status']['state'], 'running')
+        finally:
+            server._POLL_BUSY.release()
+        self.assertEqual(c.get('/api/ingest/status').json()['status']['state'], 'idle')
+
+    def test_second_poll_skips_while_one_runs_however_long(self):
+        """The Image-#1 loop as a regression: a catch-up slower than the old 10-minute guard let
+        the auto-sync start second polls forever. Now overlap is impossible for the process's
+        lifetime, and the state still lands on idle."""
+        import threading
+        started, release, calls = threading.Event(), threading.Event(), []
+        def slow_reports(s): calls.append(1); started.set(); release.wait(10)
+        with mock.patch.object(server, 'run_due_reports', slow_reports), \
+             mock.patch('taskuary.channels.poll_channels', lambda s, d: None):
+            t = threading.Thread(target=server._poll_reports, kwargs={'what': 'catching up'}, daemon=True)
+            t.start()
+            self.assertTrue(started.wait(10))
+            self.assertEqual(c.get('/api/ingest/status').json()['status']['state'], 'running')
+            server._poll_reports(what='auto-sync')              # the 10-min timer firing mid-catch-up
+            self.assertEqual(calls, [1])                        # skipped, not raced
+            self.assertEqual(json.loads(server.store.get_settings()['ingest_status'])['what'],
+                             'catching up')                     # and it did not rewrite the banner
+            release.set(); t.join(10)
+        self.assertEqual(c.get('/api/ingest/status').json()['status']['state'], 'idle')
+
+    def test_learn_reflect_endpoint_and_gather(self):
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertEqual(c.post('/api/learn/reflect').json(), {'ok': True, 'reflected': False})
+        good = server.store.get_doc('learned')
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
+            self.assertTrue(c.post('/api/learn/reflect').json()['reflected'])
+        from taskuary.learn import gather
+        self.assertIn('DRAFT VERDICTS', gather(server.store, '2000-01-01'))
+
     def test_live_runs_tail(self):
         tid = c.post('/api/tasks', json={'Title': 'live'}).json()['taskId']
         rid = server.store.start_run(tid, 'coder', 'work it', 'owner')

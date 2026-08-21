@@ -125,7 +125,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # default: Taskuary is the tracker, and one issue per task is noise.
                     'agent_issues_enabled': '0',
                     # may agents push/deploy on their own? Off: commit locally, the owner pushes.
-                    'agent_push_enabled': '0'}
+                    'agent_push_enabled': '0',
+                    # LEARNED.md: distill the owner's verdicts (edited drafts, rejections,
+                    # reclassifications) into a general style/responsibility profile - see learn.py
+                    'learn_enabled': '1'}
 
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,
@@ -164,7 +167,8 @@ class SQLiteStore:
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
                          ('slack', 'Slack'), ('github', 'GitHub'),
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
-                         ('azure_openai', 'Azure OpenAI'), ('mssql', 'Microsoft SQL Server'),
+                         ('azure_openai', 'Azure OpenAI'), ('openrouter', 'OpenRouter'),
+                         ('ollama', 'Local models (Ollama)'), ('mssql', 'Microsoft SQL Server'),
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
                          ('gmail', 'Gmail / Google Workspace'), ('imap', 'Any mailbox (IMAP)'),
                          ('winrm', 'Remote Windows (WinRM)')):
@@ -175,7 +179,7 @@ class SQLiteStore:
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
             from pathlib import Path
-            for name in ('soul', 'coder', 'digest'):
+            for name in ('soul', 'coder', 'digest', 'learned'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',

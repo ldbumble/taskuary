@@ -5,6 +5,7 @@ import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mu
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
+import PsychologyIcon from "@mui/icons-material/Psychology";
 import api from "./api";
 import { FAINT, INK } from "./theme.jsx";
 import { Crumb, UnderTabs, LandingCard } from "./ui.jsx";
@@ -16,6 +17,8 @@ const DOCS = {
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The rolling memory — synthesized when the app opens (once a day, after the startup catch-up pulls in what it missed), injected into every agent prompt. Editable, but the next refresh overwrites it." },
+  learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+    blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
 };
 const NAMES = Object.keys(DOCS);
 
@@ -64,8 +67,8 @@ const OwnerCard = () => {
 
 export default function DocsView() {
   const [docName, setDocName] = useState(null);   // null = landing
-  const [docs, setDocs] = useState({ soul: "", coder: "", digest: "" });
-  const [saved, setSaved] = useState({ soul: "", coder: "", digest: "" });
+  const [docs, setDocs] = useState({ soul: "", coder: "", digest: "", learned: "" });
+  const [saved, setSaved] = useState({ soul: "", coder: "", digest: "", learned: "" });
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
 
@@ -93,6 +96,12 @@ export default function DocsView() {
           onChange={(label) => setDocName(NAMES.find((n) => DOCS[n].label === label))} />
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5 }}>
           <Typography variant="body2" sx={{ color: FAINT, flex: 1 }}>{DOCS[docName].blurb}</Typography>
+          {docName === "learned" && (
+            <Button size="small" variant="outlined" onClick={async () => {
+              // consolidate now instead of waiting for the threshold; reload to show the rewrite
+              try { await api.post("/api/learn/reflect"); await load(); } catch { /* no AI connected */ }
+            }}>Reflect now</Button>
+          )}
           <Button size="small" variant="contained" disableElevation disabled={docs[docName] === saved[docName]} onClick={save}>
             {docs[docName] === saved[docName] ? "Saved" : "Save"}
           </Button>
@@ -109,7 +118,7 @@ export default function DocsView() {
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>Operator documents</Typography>
       <OwnerCard />
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }, gap: 3 }}>
         {NAMES.map((n) => (
           <LandingCard key={n} icon={DOCS[n].icon} title={DOCS[n].label} desc={DOCS[n].blurb}
             onOpen={() => setDocName(n)} />

@@ -42,6 +42,9 @@ const KNOB_META = {
   attach_threshold: { group: "Triage & routing", label: "Attach threshold", type: "number",
     desc: "How similar a message must be (0–1) to join an existing task instead of opening a new one.",
     help: "Lower = more messages glued onto existing tasks (risk: unrelated asks pile onto one task). Higher = more new tasks (risk: one conversation splinters). 0.42 is a sane default.\n\nTrue thread continuations — same email conversation, RE: replies — attach regardless of this number, so this only decides the borderline cases." },
+  learn_enabled: { group: "Triage & routing", label: "Learn from your verdicts", type: "switch",
+    desc: "Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.",
+    help: "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Docs tab): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected." },
 
   // ── Replies: the drafts you approve ──
   auto_draft_enabled: { group: "Replies", label: "Draft replies automatically", type: "switch",
@@ -94,8 +97,8 @@ const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "
 const SECTION_HELP = {
   policies: { title: "Routing policies — the deterministic layer",
     body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: ignore > escalate > auto_answer > draft > task_only — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides), auto_answer (the draft is auto-approved — still never sent), draft (targeted default), task_only (file it, no reply).\n\nWhen you hit 'Not a task', a sender ignore rule is added here automatically — the learning loop writes into this table." },
-  memory: { title: "Agent memory — the learned layer",
-    body: "Standing notes distilled from your review verdicts (No reply needed, Not a task, Reject, and your edits) plus anything you add manually. Scopes: global (always injected), sender, sender_domain, source. Active notes are injected into every draft the agents write.\n\nThis is the durable memory; the nightly DIGEST.md (Docs tab) is the daily working memory. Toggle off anything learned wrong — deactivated notes stay for the record but are never injected." },
+  memory: { title: "Agent memory — the specific layer",
+    body: "Standing notes tied to a sender, domain, or everyone: written when you say 'Not a task' or 'Not our task' (editable before saving), plus anything you add manually. Active notes are injected into triage and every draft, and they outrank the AI's own reading.\n\nThis is the SPECIFIC memory — verdicts about senders and kinds of mail. The GENERAL lessons (your style, your responsibilities, what deserves a task) are distilled from the same verdicts into LEARNED.md on the Docs tab, and the daily DIGEST.md is the working memory. Toggle off anything learned wrong — deactivated notes stay for the record but are never injected." },
   audit: { title: "Audit integrity",
     body: "Every action (routing, verdicts, agent runs, deletions, config changes) is appended to a hash-chained audit log: each row's hash covers the previous row's hash, so editing history breaks every hash after it. Verify recomputes the whole chain." },
 };

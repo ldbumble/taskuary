@@ -2,7 +2,7 @@
 import unittest
 from unittest import mock
 from taskuary.store import MemoryStore
-from taskuary import docsync, llm
+from taskuary import docsync, learn, llm
 
 
 class TemplateTests(unittest.TestCase):
@@ -109,6 +109,136 @@ class DocSyncTests(unittest.TestCase):
         self.assertNotIn('fill me in', soul)
         self.assertIn('**o/app**: Payroll importer for the ledger.', soul)
         self.assertEqual(soul.count('o/app'), 1)
+
+
+class LocalAndOpenRouterTests(unittest.TestCase):
+    class _R:
+        status_code, text = 200, ''
+        def json(self): return {'choices': [{'message': {'content': '{"intent":"fyi","why":"x"}'}}]}
+
+    def test_ollama_speaks_openai_surface_without_a_key(self):
+        s = MemoryStore()
+        ol = next(c for c in s.list_connectors() if c['Type'] == 'ollama')
+        s.save_connector({'ConnectorId': ol['ConnectorId'], 'Active': 1, 'ConfigJson': '{"model": "llama3.2"}'}, 'o')
+        seen = {}
+        def fake_post(url, headers=None, json=None, timeout=None):
+            seen.update(url=url, headers=headers, body=json, timeout=timeout); return self._R()
+        with mock.patch('taskuary.llm.requests.post', fake_post):
+            out = llm.build_llm(s)('sys', 'user')                # picked with NO key saved
+        self.assertIn('fyi', out)
+        self.assertEqual(seen['url'], 'http://127.0.0.1:11434/v1/chat/completions')
+        self.assertNotIn('Authorization', seen['headers'])
+        self.assertEqual(seen['body']['model'], 'llama3.2')
+        self.assertEqual(seen['timeout'], 180)                   # room for a cold model load
+        # base_url reaches any OpenAI-compatible local server - LM Studio, llama.cpp, vLLM
+        s.save_connector({'ConnectorId': ol['ConnectorId'],
+                          'ConfigJson': '{"model": "m", "base_url": "http://127.0.0.1:1234/"}'}, 'o')
+        with mock.patch('taskuary.llm.requests.post', fake_post): llm.build_llm(s)('sys', 'u')
+        self.assertEqual(seen['url'], 'http://127.0.0.1:1234/v1/chat/completions')
+        # a model is required - only `ollama list` knows what is installed
+        s.save_connector({'ConnectorId': ol['ConnectorId'], 'ConfigJson': '{}'}, 'o')
+        with self.assertRaises(RuntimeError): llm.build_llm(s)
+
+    def test_openrouter_is_one_key_over_the_openai_schema(self):
+        s = MemoryStore()
+        orc = next(c for c in s.list_connectors() if c['Type'] == 'openrouter')
+        s.save_connector({'ConnectorId': orc['ConnectorId'], 'Active': 1, 'Secret': 'sk-or-x', 'ConfigJson': '{}'}, 'o')
+        seen = {}
+        def fake_post(url, headers=None, json=None, timeout=None):
+            seen.update(url=url, headers=headers, body=json); return self._R()
+        with mock.patch('taskuary.llm.requests.post', fake_post):
+            llm.build_llm(s)('sys', 'user')
+        self.assertEqual(seen['url'], 'https://openrouter.ai/api/v1/chat/completions')
+        self.assertEqual(seen['headers']['Authorization'], 'Bearer sk-or-x')
+        self.assertEqual(seen['body']['model'], 'openrouter/auto')       # empty model box still works
+        # a catalog model rides through as-is, and `triage_ai` can name this brain explicitly
+        s.save_connector({'ConnectorId': orc['ConnectorId'], 'ConfigJson': '{"model": "meta-llama/llama-3.3-70b-instruct"}'}, 'o')
+        ol = next(c for c in s.list_connectors() if c['Type'] == 'ollama')
+        s.save_connector({'ConnectorId': ol['ConnectorId'], 'Active': 1, 'ConfigJson': '{"model": "llama3.2"}'}, 'o')
+        s.set_setting('triage_ai', 'connector:openrouter', 'o')
+        with mock.patch('taskuary.llm.requests.post', fake_post): llm.build_llm(s)('sys', 'u')
+        self.assertEqual(seen['url'], 'https://openrouter.ai/api/v1/chat/completions')
+        self.assertEqual(seen['body']['model'], 'meta-llama/llama-3.3-70b-instruct')
+        # no key = not a brain (unlike ollama, the router really needs one)
+        self.assertRaises(RuntimeError, llm.make_llm, 'openrouter', {}, None)
+
+
+class LearnTests(unittest.TestCase):
+    def test_learned_seeded_and_injectable_strips_gated_sections(self):
+        s = MemoryStore()
+        doc = s.get_doc('learned')
+        self.assertIn(learn.HYP_START, doc); self.assertIn(learn.PROP_START, doc)
+        inj = learn.injectable(doc)
+        self.assertIn('Voice & style', inj)                     # active sections travel...
+        self.assertNotIn('hypotheses:start', inj)               # ...the gated ones never do
+        self.assertNotIn('Proposed rules', inj)
+        self.assertNotIn('still being tested', inj)
+
+    def test_learn_from_updates_hypotheses_and_guards_garbage(self):
+        s = MemoryStore()
+        bullet = '- {{owner_first}} prefers replies without pleasantries. [s:2 | ev: rv7 | seen: 2026-08-21]'
+        learn.learn_from(s, 'rv7: owner EDITED a draft', llm=lambda sys_, usr, **kw: bullet)
+        doc = s.get_doc('learned')
+        self.assertIn(bullet, doc.split(learn.HYP_START, 1)[1])  # landed inside the gated block
+        self.assertNotIn(bullet, learn.injectable(doc))          # a hypothesis is never injected
+        self.assertEqual(s.get_settings().get('learn_pending'), '1')
+        # a broken answer (a marker inside it would corrupt the splice) never lands in the doc
+        learn.learn_from(s, 'rv8: x', llm=lambda sys_, usr, **kw: f'junk {learn.HYP_END} junk')
+        self.assertEqual(s.get_doc('learned'), doc)
+        self.assertEqual(s.get_settings().get('learn_pending'), '2')   # the counter still ticks
+        # the off switch really is off: no write, no tick
+        s.set_setting('learn_enabled', '0', 't')
+        learn.learn_from(s, 'rv9: x', llm=lambda sys_, usr, **kw: '- x. [s:2 | ev: rv9 | seen: y]')
+        self.assertEqual(s.get_doc('learned'), doc)
+        self.assertEqual(s.get_settings().get('learn_pending'), '2')
+
+    def test_reflect_rewrites_whole_doc_and_rejects_bad_output(self):
+        s = MemoryStore()
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertFalse(learn.reflect(s))                   # no brain: the old doc always stands
+        good = s.get_doc('learned').replace(
+            '## Voice & style', '## Voice & style\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]')
+        self.assertTrue(learn.reflect(s, llm=lambda sys_, usr, **kw: good))
+        self.assertIn('Short replies, no filler', learn.injectable(s.get_doc('learned')))   # promoted = injected
+        self.assertEqual(s.get_settings().get('learn_pending'), '0')
+        self.assertTrue(s.get_settings().get('learn_last_reflect'))
+        # an unusable rewrite (markers lost) is refused, whole cloth
+        self.assertFalse(learn.reflect(s, llm=lambda sys_, usr, **kw: '# LEARNED.md\nno markers here'))
+        self.assertIn('Short replies, no filler', s.get_doc('learned'))
+
+    def test_reflect_if_due_debounce(self):
+        s = MemoryStore()
+        self.assertFalse(learn.reflect_if_due(s))                # nothing pending: silence
+        from datetime import datetime
+        s.set_setting('learn_pending', '1', 't')
+        s.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' '), 't')
+        self.assertFalse(learn.reflect_if_due(s))                # one lesson, already reflected today
+        s.set_setting('learn_last_reflect', '2020-01-01 00:00:00', 't')
+        good = s.get_doc('learned')
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
+            self.assertTrue(learn.reflect_if_due(s))             # one lesson + a stale day: due
+        s.set_setting('learn_pending', str(learn.REFLECT_AT), 't')
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
+            self.assertTrue(learn.reflect_if_due(s))             # threshold: due same-day too
+
+    def test_triage_and_ingest_read_the_learned_profile(self):
+        from taskuary.triage import classify_intent
+        seen = {}
+        def fake(sys_, usr, **kw): seen['sys'] = sys_; return '{"intent":"fyi","why":"x"}'
+        classify_intent({'subject': 's', 'body': 'b'}, llm=fake, soul='THE SOUL',
+                        learned='- Vendor invoices are FYI, never tasks.')
+        self.assertIn('Vendor invoices are FYI', seen['sys'])
+        self.assertLess(seen['sys'].index('THE SOUL'), seen['sys'].index('Vendor'))   # soul outranks, so it leads
+        # and the live path wires the doc in: a promoted line reaches the triage system prompt
+        s = MemoryStore()
+        s.save_doc('learned', s.get_doc('learned').replace(
+            '## What becomes a task', '## What becomes a task\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: 2026-08-01]'), 'reflect')
+        from taskuary.ingest import ingest_message
+        seen.clear()
+        ingest_message(s, {'external_id': 'lrn-1', 'channel': 'email', 'from_email': 'ap@vendor.example',
+                           'subject': 'Invoice 42', 'body': 'Attached is the invoice, can you confirm?'}, llm=fake)
+        self.assertIn('Vendor invoices are FYI', seen['sys'])
+        self.assertNotIn('still being tested', seen['sys'])      # gated sections stay home
 
 
 class GraphCredsTests(unittest.TestCase):

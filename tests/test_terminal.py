@@ -21,6 +21,53 @@ def _wait(fn, secs=20):
     return False
 
 
+class SeedEchoTests(unittest.TestCase):
+    def test_paste_chip_counts_as_the_echo(self):
+        """Claude Code folds a burst-typed prompt into '[Pasted text #N]' chips - the words never
+        render on screen. Unrecognized, the seeder read that as "a boot dialog ate it", retyped
+        once per retry (chips piling up) and never pressed Enter: a session that started nothing."""
+        class T:
+            cols, rows, seeded = 110, 32, 'TASK TQ-0001 - fix the import. WHAT TO DO: work it.'
+            def scrollback(self): return '> [Pasted text #1][Pasted text #2]'
+        self.assertTrue(terminal.Term._echoed(T()))
+        class Wrapped(T):                                        # a chip broken by the input box's own wrap
+            def scrollback(self): return '> [Pasted te' + chr(10) + 'xt #1]'
+        self.assertTrue(terminal.Term._echoed(Wrapped()))
+        class Empty(T):
+            def scrollback(self): return '> '
+        self.assertFalse(terminal.Term._echoed(Empty()))         # nothing echoed: still a dialog risk
+        class Plain(T):
+            def scrollback(self): return '> TASK TQ-0001 - fix the import. WHAT TO DO: work it.'
+        self.assertTrue(terminal.Term._echoed(Plain()))          # TUIs that echo the words still count
+        class TailOnly(T):                                       # a long seed scrolls the box: only its
+            seeded = ('TASK TQ-0002 - a long ask that scrolls the input box entirely out of view. '
+                      'WHAT TO DO: work it from this message alone.')
+            def scrollback(self):                                # ...tail stays visible - that is enough
+                return '> box entirely out of view. WHAT TO DO: work it from this message alone.'
+        self.assertTrue(terminal.Term._echoed(TailOnly()))
+
+    def test_seed_submits_through_paste_chips_without_retyping(self):
+        """The whole seed() loop against a scripted chip-drawing TUI: the prompt goes in ONCE,
+        Enter follows, no retype pile-up. This is the exact Image-#2 failure as a regression."""
+        class FakeTerm:
+            alive, n, cols, rows, sid, seeded = True, 1, 110, 32, 'probe', ''
+            _echoed = terminal.Term._echoed
+            def __init__(self): self.wrote, self.screen = [], '> '
+            def settle(self, budget=None): return True
+            def scrollback(self): return self.screen
+            def write(self, s):
+                self.wrote.append(s)
+                if s not in ('\r', '\n'): self.screen += '[Pasted text #1]'    # chips, never the words
+                elif '[Pasted text' in self.screen:
+                    self.screen += ' * Working on it'; self.n += 5             # Enter submits, the session answers
+        f = FakeTerm()
+        terminal.Term.seed(f, 'TASK TQ-0001 - fix the import. WHAT TO DO: work it from this message alone.')
+        self.assertTrue(_wait(lambda: '\r' in f.wrote or '\n' in f.wrote), f.wrote)
+        typed = [w for w in f.wrote if w not in ('\r', '\n')]
+        self.assertEqual(len(typed), 1, f.wrote)                 # one type-in, zero retypes
+        self.assertIn('Working on it', f.screen)                 # ...and it actually started
+
+
 class TerminalTests(unittest.TestCase):
     def test_pty_streams_into_scrollback_and_dies(self):
         t = terminal.Term(ECHO, os.getcwd(), 'test')

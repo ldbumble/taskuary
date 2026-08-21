@@ -330,9 +330,9 @@ class TerminalTests(unittest.TestCase):
                                   'FromName': 'Dana Reyes', 'FromEmail': 'dreyes@northwind.example',
                                   'Subject': 'Payroll File Imports', 'SentAt': '2026-08-19 15:03',
                                   'BodyText': 'files with adjustments import in the wrong month'})
-        seed = terminal.seed_text(server.store, tid, 'use the payroll date', 'mfaVita/FanApp', 'C:/src/FanApp')
+        seed = terminal.seed_text(server.store, tid, 'use the payroll date', 'northwind/FanApp', 'C:/src/FanApp')
         for s in ['payroll import month is wrong', 'Dana Reyes', 'wrong month', 'use the payroll date',
-                  'REPO: mfaVita/FanApp', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
+                  'REPO: northwind/FanApp', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
                   'Do NOT create GitHub issues']:
             self.assertIn(s, seed)
         self.assertIn('RULES:', seed)                                   # CODER.md rides along
@@ -340,17 +340,17 @@ class TerminalTests(unittest.TestCase):
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
 
     def test_repo_is_guessed_from_the_soul_map_when_the_task_has_no_tag(self):
-        prof = {'cwd_map': {'mfaVita/FanApp': 'C:/src/FanApp', 'mfaVita/Reports': 'C:/src/Reports'}}
+        prof = {'cwd_map': {'northwind/FanApp': 'C:/src/FanApp', 'northwind/Reports': 'C:/src/Reports'}}
         server.store.save_doc('soul', '## Repository map\n'
-                              '- **mfaVita/FanApp**: employee portal - PTO, payroll imports, timesheets\n'
-                              '- **mfaVita/Reports**: nightly financial reporting pipeline\n', 'test')
+                              '- **northwind/FanApp**: employee portal - PTO, payroll imports, timesheets\n'
+                              '- **northwind/Reports**: nightly financial reporting pipeline\n', 'test')
         pto = c.post('/api/tasks', json={'Title': 'PTO import maps the wrong month',
                                          'Summary': 'the payroll timesheet import is off'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, pto, prof)[0], 'mfaVita/FanApp')
+        self.assertEqual(terminal.guess_repo(server.store, pto, prof)[0], 'northwind/FanApp')
         named = c.post('/api/tasks', json={'Title': 'Reports is failing at 2am'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, named, prof), ('mfaVita/Reports', 'named in the ask'))
-        tagged = c.post('/api/tasks', json={'Title': 'anything', 'Tags': 'repo:mfaVita/Reports'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, tagged, prof), ('mfaVita/Reports', 'tagged on the task'))
+        self.assertEqual(terminal.guess_repo(server.store, named, prof), ('northwind/Reports', 'named in the ask'))
+        tagged = c.post('/api/tasks', json={'Title': 'anything', 'Tags': 'repo:northwind/Reports'}).json()['taskId']
+        self.assertEqual(terminal.guess_repo(server.store, tagged, prof), ('northwind/Reports', 'tagged on the task'))
         # nothing to match against, or nothing that matches: the agent's own folder, not a wrong repo
         self.assertEqual(terminal.guess_repo(server.store, pto, {}), (None, None))
         blank = c.post('/api/tasks', json={'Title': 'zzz qqq'}).json()['taskId']
@@ -646,14 +646,14 @@ class RepoRoutingTests(unittest.TestCase):
     "the only repo this agent has a path for" won without the ask ever being read."""
 
     SOUL = ('## Repository map\n'
-            '- **mfaVita/FanApp**: Python enterprise integration services, payroll imports, timesheets\n'
-            '- **mfaVita/TopE**: a travel and expense reimbursement platform with AI receipt validation\n')
+            '- **northwind/FanApp**: Python enterprise integration services, payroll imports, timesheets\n'
+            '- **northwind/TopE**: a travel and expense reimbursement platform with AI receipt validation\n')
 
     def setUp(self):
         server.store.save_doc('soul', self.SOUL, 'test')
         server.store.upsert_agent('coder', 'coding', 'cli',
                                   json.dumps({'cmd': 'claude', 'cwd': os.getcwd(),
-                                              'cwd_map': {'mfaVita/FanApp': os.getcwd()}}))
+                                              'cwd_map': {'northwind/FanApp': os.getcwd()}}))
 
     def _task(self, title, summary=''):
         return c.post('/api/tasks', json={'Title': title, 'Summary': summary, 'Kind': 'coding'}).json()['taskId']
@@ -662,22 +662,22 @@ class RepoRoutingTests(unittest.TestCase):
         prof = json.loads(server.store.get_agent('coder')['Config'])
         tid = self._task('Reimbursement app', 'approving reimbursements shows an error on each transaction')
         repo, why = terminal.guess_repo(server.store, tid, prof)
-        self.assertEqual(repo, 'mfaVita/TopE')           # NOT the one with a path
+        self.assertEqual(repo, 'northwind/TopE')           # NOT the one with a path
         self.assertTrue(why)
         ranked = terminal.rank_repos(server.store, tid, prof)
-        self.assertEqual(ranked[0][0], 'mfaVita/TopE')
+        self.assertEqual(ranked[0][0], 'northwind/TopE')
         self.assertFalse(ranked[0][2])                   # ...and we know we have no path for it
         # a payroll task still goes to the integrations repo
         pay = self._task('payroll import posts to the wrong month', 'the timesheets import is off')
-        self.assertEqual(terminal.guess_repo(server.store, pay, prof)[0], 'mfaVita/FanApp')
+        self.assertEqual(terminal.guess_repo(server.store, pay, prof)[0], 'northwind/FanApp')
 
     def test_a_repo_with_no_path_refuses_instead_of_opening_the_wrong_folder(self):
         # find_checkout scans the REAL disk now, so the refusal only fires on a genuine miss -
         # pin that with a search that must come up empty. CI has no claude, so resolution is
         # mocked too: this test is about the repo guard, not the binary.
         with mock.patch.object(terminal, 'find_checkout', return_value=None),              mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]),              self.assertRaises(ValueError) as e:
-            terminal.open_session(server.store, 'coder', self._task('x'), 'mfaVita/TopE')
-        self.assertIn('no local path for mfaVita/TopE', str(e.exception))
+            terminal.open_session(server.store, 'coder', self._task('x'), 'northwind/TopE')
+        self.assertIn('no local path for northwind/TopE', str(e.exception))
         self.assertIn('search of your code folders', str(e.exception))
         self.assertIn('Pick the repository', str(e.exception))    # the fix is ON the task now
         self.assertIn('wrong tree', str(e.exception))
@@ -685,26 +685,26 @@ class RepoRoutingTests(unittest.TestCase):
     def test_the_api_lists_every_repo_with_whether_it_can_be_opened(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         out = c.get(f'/api/tasks/{tid}/repos').json()
-        self.assertEqual(out['picked'], 'mfaVita/TopE')
+        self.assertEqual(out['picked'], 'northwind/TopE')
         by = {r['repo']: r for r in out['data']}
-        self.assertFalse(by['mfaVita/TopE']['has_path'])
-        self.assertTrue(by['mfaVita/FanApp']['has_path'])
-        self.assertIn('reimbursement', by['mfaVita/TopE']['what'])
+        self.assertFalse(by['northwind/TopE']['has_path'])
+        self.assertTrue(by['northwind/FanApp']['has_path'])
+        self.assertIn('reimbursement', by['northwind/TopE']['what'])
 
     def test_pinning_a_repo_overrides_the_guess_and_takes_the_path_with_it(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         here = os.getcwd()
-        r = c.put(f'/api/tasks/{tid}/repo', json={'repo': 'mfaVita/TopE', 'path': here, 'agent': 'coder'})
+        r = c.put(f'/api/tasks/{tid}/repo', json={'repo': 'northwind/TopE', 'path': here, 'agent': 'coder'})
         self.assertEqual(r.status_code, 200)
         prof = json.loads(server.store.get_agent('coder')['Config'])
-        self.assertEqual(prof['cwd_map']['mfaVita/TopE'], here)          # the path stuck
-        self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('mfaVita/TopE', 'tagged on the task'))
-        self.assertIn('repo:mfaVita/TopE', server.store.get_task(tid)['Tags'])
+        self.assertEqual(prof['cwd_map']['northwind/TopE'], here)          # the path stuck
+        self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('northwind/TopE', 'tagged on the task'))
+        self.assertIn('repo:northwind/TopE', server.store.get_task(tid)['Tags'])
         # ...and the prompt now says so, which is the whole point
-        self.assertIn('REPO: mfaVita/TopE', terminal.seed_text(server.store, tid, None, 'mfaVita/TopE', here))
+        self.assertIn('REPO: northwind/TopE', terminal.seed_text(server.store, tid, None, 'northwind/TopE', here))
         # a bad path is refused rather than silently stored
         self.assertEqual(c.put(f'/api/tasks/{tid}/repo',
-                               json={'repo': 'mfaVita/TopE', 'path': os.path.join(here, 'nope')}).status_code, 422)
+                               json={'repo': 'northwind/TopE', 'path': os.path.join(here, 'nope')}).status_code, 422)
         # unpinning hands the choice back to the guess
         c.put(f'/api/tasks/{tid}/repo', json={'repo': None})
         self.assertNotIn('repo:', str(server.store.get_task(tid)['Tags'] or ''))

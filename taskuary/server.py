@@ -124,10 +124,23 @@ _started = datetime.now().isoformat(sep=' ', timespec='seconds')
 @app.get('/api/version')
 def version(): return {'version': _ver, 'started': _started}
 
+def _can_send(channel, has_message=True, gh_ok=None) -> bool:
+    """Can an approved reply actually LEAVE on this channel? github only with the card's
+    'Reply to issue/PR authors' on; reports and message-less reviews never. The UI turns an
+    unsendable draft's Approve into 'No response required' instead of a send that bounces."""
+    if not has_message or channel in (None, '', 'report'): return False
+    if channel == 'github':
+        return store.github_replies_ok() if gh_ok is None else gh_ok
+    return True
+
+
 @app.get('/api/feed')
 def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None):
     days = int(store.get_settings().get('feed_days', 14))
-    return {'data': store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)}
+    rows = store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)
+    gh_ok = store.github_replies_ok()
+    for r in rows: r['CanSend'] = _can_send(r.get('Channel'), True, gh_ok)
+    return {'data': rows}
 
 
 @app.get('/api/tasks')
@@ -611,7 +624,11 @@ def get_run(run_id: int):
     return r
 
 @app.get('/api/reviews')
-def reviews(status: str = None): return {'data': store.list_reviews(status)}
+def reviews(status: str = None):
+    rows = store.list_reviews(status)
+    gh_ok = store.github_replies_ok()
+    for r in rows: r['CanSend'] = _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
+    return {'data': rows}
 
 @app.post('/api/reviews/{rid}/decide')
 def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):

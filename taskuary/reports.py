@@ -227,11 +227,18 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     if not last_polled: return True
     try: last = datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))
     except ValueError: return True
-    if cfg.get('every_minutes'): return (now - last).total_seconds() >= float(cfg['every_minutes']) * 60
+    if cfg.get('every_minutes'):
+        try: return (now - last).total_seconds() >= float(cfg['every_minutes']) * 60
+        except (TypeError, ValueError): pass               # 'every 30' typed as words: daily default
     if cfg.get('daily_at'):
-        hh, mm = str(cfg['daily_at']).split(':')
-        due = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
-        return now >= due and last < due
+        # tolerant of what people type: '8' and '8:30' both parse; garbage falls back to the
+        # daily default instead of an unpack error killing the WHOLE poll thread (it did)
+        try:
+            hh, mm = (str(cfg['daily_at']).strip() + ':0').split(':')[:2]
+            due = now.replace(hour=int(hh), minute=int(mm or 0), second=0, microsecond=0)
+            return now >= due and last < due
+        except (TypeError, ValueError):
+            pass
     return (now - last).total_seconds() >= 24 * 3600
 
 

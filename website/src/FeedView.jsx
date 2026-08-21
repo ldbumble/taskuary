@@ -609,7 +609,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   <PanelLabel>Draft reply — review, edit, approve</PanelLabel>
                   <ReviewActions reviewId={sel.ReviewId} draft={pendingDraft(detail || { runs: [] }, sel)}
                     editText={editText} setEditText={setEditText} decide={decide}
-                    sendErr={sendErr} clearSendErr={clearSendErr} />
+                    sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
                 </>
               )}
               {/* no reply on the table (the coder ran, or triage filed it) - put one there. The
@@ -620,7 +620,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   <PanelLabel>Draft reply — review, edit, approve</PanelLabel>
                   <ReviewActions reviewId={opened.reviewId} draft={opened.draft}
                     editText={editText} setEditText={setEditText} decide={decide}
-                    sendErr={sendErr} clearSendErr={clearSendErr} />
+                    sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
                 </>
               )}
               {!pending && !opened && sel.Channel !== "report" && (
@@ -902,17 +902,27 @@ const SplitTask = ({ row, onSplit }) => {
   );
 };
 
-const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr }) => (
+const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend }) => (
   <Box>
     <TextField fullWidth multiline minRows={3} size="small" placeholder="Edit the draft (or approve as-is)"
       value={editText ?? draft ?? ""} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       {/* ONE approve: it sends what is in the box, edited or not - two buttons asked you to
-          declare something the text already shows */}
-      <Button size="small" variant="contained" disabled={!(editText ?? draft ?? "").trim()}
-        onClick={() => decide(reviewId, "approve", editText ?? draft)}
-        title="Sends the text above on the channel it arrived on">Approve &amp; send</Button>
-      <Button size="small" sx={{ color: "#8a94a6" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
+          declare something the text already shows. A channel that cannot CARRY the reply
+          (github with replies off) offers closing instead of a send that bounces. */}
+      {canSend === false ? (
+        <Button size="small" variant="contained" disableElevation
+          sx={{ bgcolor: "#64748b", "&:hover": { bgcolor: "#475569" } }}
+          title="GitHub replies are off (GitHub card → Reply to issue/PR authors) — close this without sending"
+          onClick={() => decide(reviewId, "no_reply")}>No response required</Button>
+      ) : (
+        <>
+          <Button size="small" variant="contained" disabled={!(editText ?? draft ?? "").trim()}
+            onClick={() => decide(reviewId, "approve", editText ?? draft)}
+            title="Sends the text above on the channel it arrived on">Approve &amp; send</Button>
+          <Button size="small" sx={{ color: "#8a94a6" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
+        </>
+      )}
       <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>
     </Box>
     {sendErr && (

@@ -167,6 +167,25 @@ class ReportScheduleAndBrainTests(unittest.TestCase):
         run_due_reports(s, startup=True)
         self.assertTrue(any('Boot check' in (m['Subject'] or '') for m in s.scan_messages()))
 
+    def test_cron_schedules_fire_once_per_slot_and_survive_a_closed_app(self):
+        """Real 5-field cron: due when a scheduled minute passed since the last run - and a
+        slot missed while the app was closed fires ONCE on reopen, not N times."""
+        from datetime import datetime
+        from taskuary.reports import cron_prev, is_due
+        now = datetime(2026, 8, 21, 9, 0)                                     # a Friday
+        self.assertEqual(cron_prev('0 8 * * *', now), datetime(2026, 8, 21, 8, 0))
+        self.assertEqual(cron_prev('0 8 * * 1', now), datetime(2026, 8, 17, 8, 0))   # last Monday
+        self.assertEqual(cron_prev('*/15 9-17 * * 1-5', now), datetime(2026, 8, 21, 9, 0))
+        self.assertEqual(cron_prev('30 6 1 * *', now), datetime(2026, 8, 1, 6, 30))  # monthly
+        self.assertEqual(cron_prev('0 8 * * 7', now), cron_prev('0 8 * * 0', now))   # 7 = Sunday too
+        self.assertIsNone(cron_prev('not a cron', now))
+        self.assertIsNone(cron_prev('99 8 * * *', now))                       # out of range = malformed
+        today = datetime.now().strftime('%Y-%m-%d')
+        self.assertTrue(is_due({'cron': '0 0 * * *'}, f'{(datetime.now().date().__str__())} 00:00:00'
+                               .replace(today, '2020-01-01')))                # slot passed since last run
+        self.assertFalse(is_due({'cron': '0 0 * * *'}, f'{today} 00:30:00'))  # already ran after the slot
+        is_due({'cron': 'garbage here'}, f'{today} 00:30:00')                 # malformed: never raises
+
     def test_sloppy_schedules_never_kill_the_poll_thread(self):
         """daily_at typed as '8' (no colon) raised an unpack error that took the WHOLE startup
         poll thread down - every report and every channel with it. Tolerance, then defaults."""

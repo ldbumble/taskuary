@@ -45,6 +45,7 @@ def sync_connections(store, actor='system'):
         if s['Channel'] != 'report' or not s['Active']: continue
         cfg = json.loads(s.get('ConfigJson') or '{}')
         sched = ('on startup' if cfg.get('on_startup')
+                 else f"cron {cfg['cron']}" if cfg.get('cron')
                  else f"every {cfg['every_minutes']}m" if cfg.get('every_minutes')
                  else f"daily {cfg.get('daily_at', '')}".strip())
         lines.append(f"- Report \"{cfg.get('title') or s['Address']}\" ({cfg.get('type', 'rest')}, {sched})")

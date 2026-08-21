@@ -112,7 +112,8 @@ export default function ReportsView() {
       {!sources.length && <Empty>No reports yet — "New report" walks you through source, query, AI summary and schedule.</Empty>}
       {sources.map((s) => {
         const c = parse(s.ConfigJson);
-        const sched = c.on_startup ? "on startup" : c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
+        const sched = c.on_startup ? "on startup" : c.cron ? `cron ${c.cron}`
+          : c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
         return (
           <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, borderBottom: `1px solid ${BORDER}` }}>
             <StatusDot ok={!!s.Active} />
@@ -271,13 +272,15 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     <MenuItem value="" sx={{ fontSize: 12 }}>the triage brain (default)</MenuItem>
                     {/* only brains that can actually answer: a connector with no key saved is
                         not a choice, it is a trap. A saved pick that lost its key stays
-                        visible - disabled - instead of silently vanishing. */}
+                        visible - disabled - instead of silently vanishing. Labels are worded
+                        for THIS context: picking a CLI here runs it for this report only. */}
                     {brains.filter((b) => b.value && b.ready).map((b) => (
                       <MenuItem key={b.value} value={b.value} sx={{ fontSize: 12 }}>{b.label}</MenuItem>
                     ))}
                     {cfg.ai_brain && !brains.some((b) => b.value === cfg.ai_brain && b.ready) && (
                       <MenuItem value={cfg.ai_brain} disabled sx={{ fontSize: 12 }}>
-                        {(brains.find((b) => b.value === cfg.ai_brain) || {}).label || cfg.ai_brain} — not connected
+                        {cfg.ai_brain.startsWith("cli:") ? cfg.ai_brain.slice(4)
+                          : (brains.find((b) => b.value === cfg.ai_brain) || {}).label || cfg.ai_brain} — not connected
                       </MenuItem>
                     )}
                   </Select>
@@ -341,21 +344,25 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           <StepButton onClick={() => setStep(2)}>Schedule & save</StepButton>
           <StepContent>
             <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
-              <TextField label="every N minutes" type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 150 }}
-                onChange={(e) => setCfg({ ...cfg, every_minutes: e.target.value, daily_at: "", on_startup: false })} />
-              <TextField label="or daily at HH:MM" value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 150 }}
-                onChange={(e) => setCfg({ ...cfg, daily_at: e.target.value, every_minutes: "", on_startup: false })} />
+              <TextField label="every N minutes" type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 140 }}
+                onChange={(e) => setCfg({ ...cfg, every_minutes: e.target.value, daily_at: "", cron: "", on_startup: false })} />
+              <TextField label="daily at HH:MM" value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 140 }}
+                onChange={(e) => setCfg({ ...cfg, daily_at: e.target.value, every_minutes: "", cron: "", on_startup: false })} />
+              <TextField label="cron (min hr dom mon dow)" value={cfg.cron || ""} sx={{ bgcolor: "#fff", width: 190 }}
+                placeholder="0 8 * * 1-5"
+                title="Standard 5-field cron. A slot missed while the app was closed fires once on reopen."
+                onChange={(e) => setCfg({ ...cfg, cron: e.target.value, every_minutes: "", daily_at: "", on_startup: false })} />
               <Box sx={{ display: "flex", alignItems: "center" }}
                 title="It's local — opening the app IS a schedule. Runs once per launch, after the startup catch-up.">
                 <Switch checked={!!cfg.on_startup}
                   onChange={(e) => setCfg({ ...cfg, on_startup: e.target.checked,
-                    ...(e.target.checked ? { every_minutes: "", daily_at: "" } : {}) })} />
+                    ...(e.target.checked ? { every_minutes: "", daily_at: "", cron: "" } : {}) })} />
                 <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
               </Box>
               <Button variant="contained" disableElevation onClick={save}>Save report</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-              All three blank = once a day, whenever the app is open.
+              Pick one. Everything blank = once a day, whenever the app is open.
             </Typography>
             {test?.detail?.includes("saved") && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#15803d" }}>✓ {test.detail}</Typography>}
             {cur && (

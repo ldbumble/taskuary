@@ -150,13 +150,17 @@ class Term:
         return self.alive
 
     def _sees(self, fragment: str) -> bool:
-        """Is this piece of typed text (or a paste chip standing in for it) ON the screen?
-        Claude Code (v2+) folds burst-typed text into '[Pasted text #N]' chips - the words
-        themselves never render, so the chip counts. Comparison strips ALL whitespace: the
-        input box wraps at the terminal width, and a chip or phrase broken across two lines
-        is still the echo."""
+        """Did this piece of typed text land? Checked on the RENDERED screen first (where
+        Claude Code's '[Pasted text #N]' chips stand in for the words), then in the RAW
+        stream: a boot spinner that repaints with erase-line wipes the echo off the screen
+        the instant it lands, and judging by the screen alone called a landed toe 'eaten',
+        retyped it, and stalled the whole seed (the macOS CI flake). An echo in the raw
+        bytes is proof enough - eaten input never echoes anywhere. All comparisons strip
+        whitespace, because wrapping breaks phrases across lines."""
+        want = ''.join(fragment.split())
         scr = ''.join(render(self.scrollback(), self.cols, self.rows).split())
-        return '[Pastedtext' in scr or ''.join(fragment.split()) in scr
+        if '[Pastedtext' in scr or want in scr: return True
+        return want in ''.join(self.scrollback().split())
 
     def _echoed(self) -> bool:
         """Did the WHOLE prompt land? Only the tail is checkable - a long seed scrolls the input

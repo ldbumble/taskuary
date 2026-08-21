@@ -252,7 +252,8 @@ pyinstaller taskuary.spec   # dist/Taskuary.exe - single-file desktop build
 Data lives in `~/.taskuary/` (override with `TASKUARY_HOME`): `taskuary.db` (SQLite),
 `config.toml`, `taskuary.log`. For LAN use set `[server].token` in config and send it as
 the `X-Taskuary-Token` header. CI runs the test matrix on Windows / Linux / macOS ×
-py3.10 / 3.12 plus the web and exe builds on every push.
+py3.10 / 3.12 on every push and pull request, plus the web build. The single-file
+exe is built on push to master.
 
 ## Status / roadmap
 

@@ -205,6 +205,10 @@ class LearnTests(unittest.TestCase):
         # an unusable rewrite (markers lost) is refused, whole cloth
         self.assertFalse(learn.reflect(s, llm=lambda sys_, usr, **kw: '# LEARNED.md\nno markers here'))
         self.assertIn('Short replies, no filler', s.get_doc('learned'))
+        # ...and so is a bloated one: the size budget is enforced in code, not just requested
+        fat = good + ('\n- padding that ignored the line budget. [s:2 | ev: x | seen: y]' * 200)
+        self.assertFalse(learn.reflect(s, llm=lambda sys_, usr, **kw: fat))
+        self.assertIn('Short replies, no filler', s.get_doc('learned'))
 
     def test_reflect_if_due_debounce(self):
         s = MemoryStore()

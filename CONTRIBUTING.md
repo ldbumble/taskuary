@@ -71,8 +71,11 @@ Reports wizard, scheduling, AI summaries, and the Timeline all work automaticall
   commit the output.
 - **UI changes**: run `render_check.mjs` and include a screenshot in the PR.
 - **Update the README** when behavior users can see changes.
-- CI runs the suite on Ubuntu/Windows/macOS × Python 3.10/3.12 and builds the exe —
-  green CI is required to merge.
+- CI runs the suite on Ubuntu/Windows/macOS × Python 3.10/3.12 on every push and
+  pull request (the web build too; the exe is push-to-master only). Green CI is
+  required to merge. A **first pull request from a fork** sits on *Waiting for
+  approval* until a maintainer clicks **Approve and run workflows** — that is
+  GitHub's default for outside collaborators, not a missing `pull_request` trigger.
 
 ## Reporting bugs & proposing features
 

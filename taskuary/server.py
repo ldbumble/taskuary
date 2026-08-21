@@ -1128,17 +1128,18 @@ def open_terminal(body: TermBody):
     if body.agent and tk and not repo and not body.cwd:
         row = store.get_agent(body.agent)
         repo, why = hub_term.guess_repo(store, body.task_id, json.loads((row or {}).get('Config') or '{}'))
-    try:
-        t = hub_term.open_session(store, body.agent, body.task_id, repo, body.cwd, body.rows, body.cols,
-                                  ACTOR, body.model)
-    except (ValueError, RuntimeError, FileNotFoundError) as e:
-        # a CLI you configured but never installed is the common one - say which, don't 500
-        raise HTTPException(422, str(e))
     # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text.
     # This used to build its own thin prompt (title + summary, no message), which is exactly why
     # an agent started here went back to the API for the mail: it had not been given it.
-    if body.seed and body.agent and tk:
-        t.seed(hub_term.seed_text(store, body.task_id, None, repo, t.cwd)[:8000])
+    seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, None, repo, cwd)[:8000])
+               if body.seed and body.agent and tk else None)
+    try:
+        t = hub_term.open_session(store, body.agent, body.task_id, repo, body.cwd, body.rows, body.cols,
+                                  ACTOR, body.model, seed_fn=seed_fn)
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        # a CLI you configured but never installed is the common one - say which, don't 500
+        raise HTTPException(422, str(e))
+    if seed_fn:
         store.add_comment(body.task_id, ACTOR, 'human',
                           f'Opened an interactive {t.label} session in {t.cwd}' + (f' - {why}.' if why else '.'))
     return t.info()

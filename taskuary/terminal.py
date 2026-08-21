@@ -24,6 +24,16 @@ SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate th
 # live testing (Ink's long-paste dropping). Chunks with a breath between give it frames.
 SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
+# The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
+# on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
+# to boot dialogs eating keystrokes (codex's update chooser once swallowed half a toe and the
+# session opened on a beheaded ask). Typed seeding (Term.seed) stays for CLIs without one.
+SEED_ARGV = {'claude': lambda s: [s], 'codex': lambda s: [s], 'gemini': lambda s: ['-i', s]}
+
+def seed_argv(profile: dict, seed: str):
+    """The argv tail that hands the CLI its first prompt directly - None when only typing can."""
+    name = os.path.basename(str(profile.get('cmd') or 'claude')).lower()
+    return next((f(seed) for k, f in SEED_ARGV.items() if k in name), None)
 
 
 # A terminal must start a FRESH session. Taskuary can itself be launched from inside an
@@ -282,6 +292,23 @@ def interactive_args(args) -> list:
     return out
 
 
+def _codex_windows_auto(argv: list) -> list:
+    """codex's workspace-write sandbox needs a helper exe most Windows installs lack
+    (codex-windows-sandbox-setup.exe) - without it EVERY command dies before running ('the
+    Windows sandbox helper executable is missing'), so an auto session can read but never act.
+    When the helper is absent, full-auto degrades to codex's own bypass flag: the exact trust
+    the claude preset already ships (--dangerously-skip-permissions) - a watched session, no
+    sandbox. Only the TRANSLATED quad is touched; flags the owner typed are theirs."""
+    AUTO = ['--sandbox', 'workspace-write', '--ask-for-approval', 'never']
+    if os.name != 'nt': return argv
+    exe = next((a for a in argv if 'codex' in os.path.basename(str(a)).lower()), None)
+    if not exe: return argv
+    i = next((j for j in range(len(argv) - 3) if argv[j:j + 4] == AUTO), None)
+    if i is None: return argv
+    if os.path.exists(os.path.join(os.path.dirname(str(exe)), 'codex-windows-sandbox-setup.exe')): return argv
+    return argv[:i] + ['--dangerously-bypass-approvals-and-sandbox'] + argv[i + 4:]
+
+
 def agent_argv(profile: dict, model: str = None) -> list:
     """Interactive invocation of a configured CLI: its command, its own flags minus the pipe
     ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
@@ -290,12 +317,17 @@ def agent_argv(profile: dict, model: str = None) -> list:
     argv = _resolve_cmd(profile.get('cmd') or 'claude')
     argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args'))
     model = model or profile.get('model')
-    return argv + ([profile.get('model_arg') or '--model', str(model)] if model else [])
+    return _codex_windows_auto(argv + ([profile.get('model_arg') or '--model', str(model)] if model else []))
 
 
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
-                 rows: int = 32, cols: int = 110, actor: str = 'owner', model: str = None) -> Term:
-    """Start a terminal: a configured agent CLI, or a plain shell when agent is None."""
+                 rows: int = 32, cols: int = 110, actor: str = 'owner', model: str = None,
+                 seed_fn=None) -> Term:
+    """Start a terminal: a configured agent CLI, or a plain shell when agent is None.
+
+    `seed_fn(cwd) -> str` builds the first prompt once the working directory is known. CLIs
+    that take a prompt on the command line (claude, codex, gemini) get it THERE - the session
+    starts with it already submitted; the rest get it typed in (Term.seed)."""
     import json
     profile = {}
     if agent:
@@ -325,8 +357,14 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                              f'would open in {profile.get("cwd") or os.getcwd()} and work the wrong tree')
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
+    seed = ' '.join(seed_fn(cwd).split()) if (seed_fn and agent) else None
+    extra = seed_argv(profile, seed) if seed else None
+    if extra: argv = list(argv) + extra
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    if seed:
+        if extra: t.seeded = seed        # the CLI submits it itself; kept so harvest drops the echo
+        else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
     # it stops waiting in Review and comes back rewritten from the report - see coder.raise_reply.
     if task_id and store.hold_reviews(task_id, 'held while an agent works the task - the reply is written from what it finds'):
@@ -684,10 +722,10 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     row = store.get_agent(agent or '')
     if not row: raise ValueError(f'unknown agent: {agent}')
     repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
-    term = open_session(store, agent, tid, repo, None, 32, 110, actor, model)
+    term = open_session(store, agent, tid, repo, None, 32, 110, actor, model,
+                        seed_fn=lambda cwd: seed_text(store, tid, instruction, repo, cwd))
     if repo and why != 'tagged on the task':
         store.add_comment(tid, actor, 'human', f'Session opened in {repo} - {why}.')
-    term.seed(seed_text(store, tid, instruction, repo, term.cwd))
     store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',
                       f'{agent} started on this task in a live session ({term.cwd}).')
     if t.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)

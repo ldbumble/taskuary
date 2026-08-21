@@ -203,13 +203,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             <Box sx={{ flex: 1 }} />
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}>New</Button>
           </Box>
-          <Box sx={{ overflowY: "auto", flex: 1 }}>
+          {/* rows as separated cards on a soft ground - air between tasks instead of a ruled
+              ledger, selection said with the border alone. Scandinavian: fewer lines, calmer. */}
+          <Box sx={{ overflowY: "auto", flex: 1, bgcolor: "#f4f5f8", px: 1, py: 1 }}>
             {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length ? <Empty>No tasks here.</Empty> : shown.map((task) => (
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
-                sx={{ px: 1.25, py: 0.75, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-                  bgcolor: selected === task.TaskId ? "#eef0ff" : "transparent",
-                  borderLeft: `3px solid ${selected === task.TaskId ? "#4f46e5" : "transparent"}`,
-                  "&:hover": { bgcolor: selected === task.TaskId ? "#eef0ff" : "#f7f8fa" } }}>
+                sx={{ px: 1.25, py: 1, mb: 0.75, cursor: "pointer", bgcolor: "#fff", borderRadius: 1.75,
+                  border: `1px solid ${selected === task.TaskId ? "#4f46e5" : BORDER}`,
+                  boxShadow: selected === task.TaskId ? "0 1px 8px rgba(79,70,229,.14)" : "none",
+                  transition: "border-color .12s, box-shadow .12s",
+                  "&:hover": { borderColor: selected === task.TaskId ? "#4f46e5" : "#c9cff0" } }}>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{task.ref}</Typography>
                   <StateChip task={task} />
@@ -218,7 +221,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <Box sx={{ flex: 1 }} />
                   <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(task.CreatedAt)}</Typography>
                 </Box>
-                <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.1 }}>{task.Title}</Typography>
+                <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.4 }}>{task.Title}</Typography>
               </Box>
             ))}
           </Box>
@@ -230,22 +233,29 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         <Box sx={{ ...frameInner, height: "100%", display: "flex", flexDirection: "column" }}>
           {!t ? <Empty>Select a task to see its full story.</Empty> : (
             <>
-              {/* header strip: identity + controls, framed off from the story below */}
-              <Box sx={{ px: 2, py: 1.25, bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+              {/* header strip: identity + controls. Calm on purpose - white ground, one quiet
+                  outlined action, ghost icons: the loud green block + boxed dots read as three
+                  alarms where nothing was wrong */}
+              <Box sx={{ px: 2.5, py: 1.5, bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* one primary action, everything else behind one tidy menu - six buttons in a
                     row read as none of them mattering */}
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Typography sx={{ ...mono, color: "#4f46e5", fontWeight: 700, fontSize: 12.5 }}>{detail.ref}</Typography>
-                  <Typography sx={{ color: INK, flex: 1, fontWeight: 700, fontSize: 14.5, minWidth: 200 }}>{t.Title}</Typography>
+                  <Typography sx={{ color: INK, flex: 1, fontWeight: 650, fontSize: 15, minWidth: 200, letterSpacing: "-.01em" }} noWrap>
+                    {t.Title}
+                  </Typography>
                   <StateChip task={{ ...t, ReviewStatus: (detail.reviews || [])[0]?.Status,
                     RunStatus: (detail.runs || [])[0]?.Status }} />
                   {t.Status !== "done" && (
-                    <Button size="small" variant="contained" disableElevation sx={{ bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
-                      onClick={() => patch({ Status: "done" })}>Mark done — I took care of it</Button>
+                    <Tooltip title="I took care of it — close the task and wrap anything running">
+                      <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                        sx={{ color: "#15803d", borderColor: "#15803d66", px: 1.25,
+                          "&:hover": { borderColor: "#15803d", bgcolor: "#f0faf4" } }}
+                        onClick={() => patch({ Status: "done" })}>Mark done</Button>
+                    </Tooltip>
                   )}
                   <Tooltip title="Hand off, split or merge, pick the repo, not a task…">
-                    <IconButton size="small" onClick={(e) => setMenuEl(e.currentTarget)}
-                      sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: PANEL }}>
+                    <IconButton size="small" onClick={(e) => setMenuEl(e.currentTarget)}>
                       <MoreHorizIcon sx={{ fontSize: 18 }} />
                     </IconButton>
                   </Tooltip>
@@ -278,7 +288,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 </Box>
                 {/* the meta row carries the knobs. Kind is a CONTROL, not a caption: "this is not
                     a coding task" is said here, and saying reply routes it to the Review queue */}
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1 }}>
                   <Select value={t.Kind || "general"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
                     title="What this IS decides who works it: coding gets a repo session, a reply gets a draft in Review, general stays on your list">
                     {[...new Set([t.Kind || "general", ...KINDS])].map((k) =>

@@ -6,6 +6,7 @@ import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
+import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import api from "./api";
 import { FAINT, INK } from "./theme.jsx";
 import { Crumb, UnderTabs, LandingCard } from "./ui.jsx";
@@ -13,10 +14,12 @@ import { Crumb, UnderTabs, LandingCard } from "./ui.jsx";
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
+  triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+    blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
-    blurb: "The rolling memory — synthesized when the app opens (once a day, after the startup catch-up pulls in what it missed), injected into every agent prompt. Editable, but the next refresh overwrites it." },
+    blurb: "Your morning brief — what's in flight, who waits on whom — synthesized when the app opens (once a day, after the startup catch-up). For your eyes; agents get their task's own context. Editable, but the next refresh overwrites it." },
   learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
 };
@@ -67,8 +70,8 @@ const OwnerCard = () => {
 
 export default function DocsView() {
   const [docName, setDocName] = useState(null);   // null = landing
-  const [docs, setDocs] = useState({ soul: "", coder: "", digest: "", learned: "" });
-  const [saved, setSaved] = useState({ soul: "", coder: "", digest: "", learned: "" });
+  const [docs, setDocs] = useState({ soul: "", triage: "", coder: "", digest: "", learned: "" });
+  const [saved, setSaved] = useState({ soul: "", triage: "", coder: "", digest: "", learned: "" });
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
 

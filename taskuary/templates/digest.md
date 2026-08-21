@@ -1,5 +1,5 @@
-# DIGEST.md — rolling memory
+# DIGEST.md — your morning brief
 
-_Working memory distilled from recent activity, injected into agent prompts alongside
-SOUL.md. Editable — but a future refresh overwrites it. Durable rules belong in Agent
-memory (Settings) or SOUL.md itself._
+_What is in flight, distilled from recent activity when the app opens (once a day).
+For YOUR eyes - agents get their task's own context instead. Editable, but the next
+refresh overwrites it; durable rules belong in Agent memory (Settings) or SOUL.md._

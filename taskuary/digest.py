@@ -13,19 +13,19 @@ DAYS = 3                 # the window the synthesis reads - matches the startup 
 WORDS = 350
 
 SYSTEM = (
-    "You maintain DIGEST.md: the rolling working memory injected into every agent prompt "
-    "alongside SOUL.md. From the activity below, write what an agent (or the owner, half awake) "
-    "should hold in mind TODAY, in plain markdown bullets under {words} words:\n"
+    "You maintain DIGEST.md: the owner's rolling morning brief. From the activity below, "
+    "write what the owner, half awake, should hold in mind TODAY, "
+    "in plain markdown bullets under {words} words:\n"
     "- what is in flight and who is waiting on whom (name tasks by their TQ-refs)\n"
     "- questions still unanswered, replies still unapproved\n"
     "- verdicts the owner gave recently that should keep being honored\n"
     "- patterns worth a heads-up (a sender getting louder, the same system failing twice)\n"
     "Never invent facts; omit sections with nothing to say; no preamble, no sign-off.")
 
-HEADER = ('# DIGEST.md — rolling memory\n\n'
-          '_Working memory distilled from recent activity, injected into agent prompts alongside\n'
-          'SOUL.md. Refreshed when the app opens (once a day). Editable — but the next refresh\n'
-          'overwrites it. Durable rules belong in Agent memory (Settings) or SOUL.md itself._\n\n')
+HEADER = ('# DIGEST.md — your morning brief\n\n'
+          '_What is in flight, distilled from recent activity when the app opens (once a day).\n'
+          'For YOUR eyes - agents get their task\'s own context instead. Editable, but the next\n'
+          'refresh overwrites it; durable rules belong in Agent memory (Settings) or SOUL.md._\n\n')
 
 
 def gather(store, days: int = DAYS) -> str:

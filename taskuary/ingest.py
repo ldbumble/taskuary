@@ -64,7 +64,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 from .learn import injectable
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'),
                                          learned=injectable(store.doc('learned') or ''),
-                                         notes=notes_for(store, msg), images=msg.get('images'))
+                                         notes=notes_for(store, msg), images=msg.get('images'),
+                                         system=store.doc('triage'))
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic
                     mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})

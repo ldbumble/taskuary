@@ -179,7 +179,7 @@ class SQLiteStore:
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
             from pathlib import Path
-            for name in ('soul', 'coder', 'digest', 'learned'):
+            for name in ('soul', 'coder', 'digest', 'learned', 'triage'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',

@@ -214,13 +214,14 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
         if agent.get('Kind') == 'coding':
             cdoc = store.doc('coder')
             if cdoc: soul = f'{soul}\n\n{cdoc}' if soul else cdoc
-        # LEARNED.md's active sections (never its untested hypotheses) and the rolling DIGEST.md
-        # ride along: the profile says how the owner works, the digest what is in flight today
+        # LEARNED.md's active sections ride along (never its untested hypotheses): the profile
+        # says how the owner works. DIGEST.md deliberately does NOT - the task context below
+        # already tells the agent everything about ITS task, and cross-task in-flight status is
+        # the owner's morning read, not an agent's business.
         from .learn import injectable
-        lrn, dig = injectable(store.doc('learned') or ''), (store.doc('digest') or '').strip()
+        lrn = injectable(store.doc('learned') or '')
         prompt = ((f"Operator's document (authoritative rules):\n{soul}\n\n---\n\n" if soul else '')
                   + (f"Learned profile (distilled from the owner's verdicts):\n{lrn}\n\n---\n\n" if lrn else '')
-                  + (f'{dig}\n\n---\n\n' if dig else '')
                   + ctx + (f'\n\n{mem}' if mem else '') + f'\n\nInstruction: {instruction}')
         result, session_id, diff = run_cli(profile, prompt, _t)
         store.update_run(run_id, {'Status': 'done', 'Result': result, 'TraceJson': json.dumps(trace),

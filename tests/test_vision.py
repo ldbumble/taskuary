@@ -139,7 +139,8 @@ class ReportOutputApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn('Spend by vendor', r.text)                        # the AI's title, not the guess
         self.assertIn('amount by vendor', r.text)
-        self.assertIn('inline', r.headers.get('content-disposition', ''))
+        # SVG as a document on this origin is XSS; the panel still draws it via <img>
+        self.assertIn('attachment', r.headers.get('content-disposition', ''))
         # the spreadsheet is a download, and a real zip
         self.assertIn('attachment', self.c.get(sheet['url']).headers.get('content-disposition', ''))
         self.assertEqual(self.c.get(sheet['url']).content[:2], b'PK')

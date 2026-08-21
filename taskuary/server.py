@@ -362,6 +362,29 @@ def _att_row(a: dict) -> dict:
             'is_image': str(a['ContentType'] or '').startswith('image/'),
             'url': f"/api/attachments/{a['AttachmentId']}" if a['Path'] else None}
 
+# SVG/HTML as a navigable document on this origin runs script as Taskuary. PNG/JPEG
+# stay `inline` so the panel <img> can draw them; SVG still displays in <img> with
+# Content-Disposition: attachment (the tab-open case is what this blocks).
+_NOSCRIPT = ('image/svg+xml', 'image/svg', 'text/html', 'application/xhtml+xml',
+             'text/xml', 'application/xml', 'text/javascript', 'application/javascript')
+
+def _attachment_path(raw: str):
+    """The file on disk, if it is really one of ours. A Path column pointing outside
+    ~/.taskuary/attachments would turn GET /api/attachments/:id into a local file read."""
+    if not raw: return None
+    p, root = Path(raw).resolve(), (config.home() / 'attachments').resolve()
+    try:
+        if not p.is_relative_to(root) or not p.is_file(): return None
+    except (OSError, ValueError):
+        return None
+    return p
+
+def _att_filename(name: str) -> str:
+    """Content-Disposition cannot carry CR/LF or a path - take the first line, then
+    the basename. Mail names are mostly cleaned on save; this is the last gate."""
+    n = Path((str(name or 'attachment').splitlines() or ['attachment'])[0]).name[:120]
+    return n or 'attachment'
+
 @app.get('/api/messages/{mid}/attachments')
 def message_attachments(mid: int):
     if not store.get_message(mid): raise HTTPException(404, 'message not found')
@@ -370,14 +393,19 @@ def message_attachments(mid: int):
 @app.get('/api/attachments/{aid}')
 def attachment(aid: int, download: bool = False):
     """The bytes. Images are served inline so the panel can just draw them; everything else
-    downloads under its own name."""
+    downloads under its own name. Path is confined to the attachments dir; SVG/HTML never
+    render as a document on this origin."""
     a = store.get_attachment(aid)
     if not a: raise HTTPException(404, 'attachment not found')
-    if not a['Path'] or not Path(a['Path']).exists():
+    path = _attachment_path(a.get('Path'))
+    if not path:
         raise HTTPException(404, 'this one was never saved - open the original message for it')
-    disp = 'attachment' if (download or not str(a['ContentType'] or '').startswith('image/')) else 'inline'
-    return FileResponse(a['Path'], media_type=a['ContentType'] or 'application/octet-stream',
-                        filename=a['Name'], content_disposition_type=disp)
+    ct = (a.get('ContentType') or 'application/octet-stream').split(';')[0].strip() or 'application/octet-stream'
+    inline = (not download) and ct.lower().startswith('image/') and ct.lower() not in _NOSCRIPT
+    resp = FileResponse(path, media_type=ct, filename=_att_filename(a.get('Name')),
+                        content_disposition_type='inline' if inline else 'attachment')
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
 
 @app.post('/api/messages/{mid}/attachments/fetch')
 def fetch_attachments(mid: int):

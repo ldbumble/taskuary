@@ -41,5 +41,8 @@ notes below are what follows from it.
 
 - Give GitHub PATs the narrowest repository access and permission set that works.
 - Keep `~/.taskuary/` out of backups that sync somewhere you don't control.
+- Attachment URLs only serve files under `~/.taskuary/attachments/` — a `Path` that
+  escaped that folder is a 404. SVG/HTML always download; they are not rendered as a
+  document on the app origin.
 - Read `~/.taskuary/taskuary.log` and the in-app audit log (Settings → Audit integrity —
   it's a hash chain) if you want to know what ran and when.

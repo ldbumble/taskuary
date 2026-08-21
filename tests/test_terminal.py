@@ -24,10 +24,10 @@ def _wait(fn, secs=20):
 class InteractiveArgsTests(unittest.TestCase):
     def test_codex_full_auto_translates_to_interactive_auto(self):
         """--full-auto belongs to `codex exec`; the live TUI gets the same INTENT spelled its
-        way - workspace-write sandbox, approvals only on failure. Translating it to the sandbox
-        alone turned 'auto' sessions into approval-click marathons the owner never asked for."""
+        way - workspace-write sandbox, never ask (failures return to the model). NOT on-failure:
+        current codex builds dropped that value and died on boot with 'invalid value'."""
         self.assertEqual(terminal.interactive_args(['exec', '--full-auto', '--json']),
-                         ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-failure', '--json'])
+                         ['--sandbox', 'workspace-write', '--ask-for-approval', 'never', '--json'])
         # claude keeps its own auto flag; only the pipe flags are stripped
         self.assertEqual(terminal.interactive_args(['-p', '--output-format', 'stream-json',
                                                     '--dangerously-skip-permissions']),

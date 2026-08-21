@@ -259,11 +259,13 @@ PIPE_OPTS = {'--output-format', '--input-format'}
 # result out, and a session launched with it just runs headless and exits. Bare `codex` is
 # the TUI, so a leading exec is dropped the same way claude's -p is - and exec-only flags are
 # TRANSLATED: `--full-auto` becomes the TUI's own spelling of the same intent - workspace-write
-# sandbox, approvals only when a command fails. Translating it to sandbox-only looked safer,
-# but it turned "auto" sessions into approval-click marathons the owner never asked for; the
-# CLI's dangerous modes still only ever come from the profile the owner wrote.
+# sandbox, never ask (failures go straight back to the model). Translating it to sandbox-only
+# looked safer, but it turned "auto" sessions into approval-click marathons the owner never
+# asked for. 'never' and not 'on-failure' because current codex builds dropped on-failure
+# (verified against the CLI: possible values are untrusted, on-request, never) - and the truly
+# dangerous modes still only ever come from the profile the owner wrote.
 PIPE_SUBCOMMANDS = {'exec', 'e'}
-PIPE_TRANSLATE = {'--full-auto': ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-failure']}
+PIPE_TRANSLATE = {'--full-auto': ['--sandbox', 'workspace-write', '--ask-for-approval', 'never']}
 
 def interactive_args(args) -> list:
     out, skip = [], False

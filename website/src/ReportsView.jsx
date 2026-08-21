@@ -269,9 +269,17 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 230 }}
                     onChange={(e) => setCfg({ ...cfg, ai_brain: e.target.value })}>
                     <MenuItem value="" sx={{ fontSize: 12 }}>the triage brain (default)</MenuItem>
-                    {brains.filter((b) => b.value).map((b) => (
+                    {/* only brains that can actually answer: a connector with no key saved is
+                        not a choice, it is a trap. A saved pick that lost its key stays
+                        visible - disabled - instead of silently vanishing. */}
+                    {brains.filter((b) => b.value && b.ready).map((b) => (
                       <MenuItem key={b.value} value={b.value} sx={{ fontSize: 12 }}>{b.label}</MenuItem>
                     ))}
+                    {cfg.ai_brain && !brains.some((b) => b.value === cfg.ai_brain && b.ready) && (
+                      <MenuItem value={cfg.ai_brain} disabled sx={{ fontSize: 12 }}>
+                        {(brains.find((b) => b.value === cfg.ai_brain) || {}).label || cfg.ai_brain} — not connected
+                      </MenuItem>
+                    )}
                   </Select>
                   <TextField size="small" label="model override (optional)" value={cfg.ai_model || ""}
                     sx={{ bgcolor: "#fff", width: 210 }}

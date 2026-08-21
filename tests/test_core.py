@@ -718,7 +718,7 @@ class CoreTests(unittest.TestCase):
 
     def test_ask_lines_finds_two_asks_whether_they_are_two_lines_or_one(self):
         two = 'Please fix the PTO import mapping.\nAlso add the 112 active employees.'
-        one = 'Hi Uri,\nPlease fix the PTO import mapping. Also add the 112 active employees.\nThanks'
+        one = 'Hi Dana,\nPlease fix the PTO import mapping. Also add the 112 active employees.\nThanks'
         for body in (two, one):
             self.assertEqual(len(reshape.ask_lines(body)), 2, body)
         # one job described in two sentences is still one piece per line, and greetings never count

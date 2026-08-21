@@ -140,9 +140,9 @@ class OwnerTests(unittest.TestCase):
         self.assertEqual(s.owner()['owner_email'], '')
 
     def test_retoken_sweeps_a_drifted_doc_without_touching_prose(self):
-        drifted = ('You work for **Uri Nussbaum** (uri@x.net). Protect Uri\'s time.\n'
+        drifted = ('You work for **Dana Reyes** (dana@x.net). Protect Dana\'s time.\n'
                    'Sign as John Smith. Johnson Controls is a vendor. the owner decides.')
-        t = retoken_doc(drifted, 'Uri Nussbaum', 'uri@x.net')
+        t = retoken_doc(drifted, 'Dana Reyes', 'dana@x.net')
         t = retoken_doc(t, 'John Smith', 'john.smith@example.com')
         self.assertIn('**{{owner}}** ({{owner_email}})', t)
         self.assertIn("{{owner_first}}'s time", t)

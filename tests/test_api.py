@@ -467,6 +467,34 @@ class ApiTests(unittest.TestCase):
         from taskuary.learn import gather
         self.assertIn('DRAFT VERDICTS', gather(server.store, '2000-01-01'))
 
+    def test_a_failed_send_returns_the_review_to_the_queue(self):
+        """The Image-#5 bug: a Teams send died on permissions but the card read 'approved' and
+        the task closed - an answer that never left the machine, dressed as finished. Now the
+        review comes back pending wearing the error, and approving again retries the send."""
+        push = c.post('/api/ingest/push', json={'external_id': 'sendfail1', 'subject': 'security app help',
+                                                'body': 'can you check her accounts?', 'from_email': 'hr@work.example',
+                                                'channel': 'teams'}).json()
+        mid = push['message_id']
+        tid = c.post(f'/api/messages/{mid}/reply').json()['taskId']
+        rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+                   if r['MessageId'] == mid)
+        with mock.patch.object(server.outbound, 'reply_to_message',
+                               side_effect=RuntimeError('Teams: 403 - the app has no ChatMessage.Send permission')):
+            out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'All provisioned.'}).json()
+        self.assertEqual(out['status'], 'pending')
+        self.assertIn('no ChatMessage.Send', out['send_error'])
+        rv = server.store.get_review(rid)
+        self.assertEqual(rv['Status'], 'pending')                        # back in the queue...
+        self.assertIn('sending FAILED', rv['Reason'])                    # ...wearing the error
+        self.assertEqual(rv['DraftText'], 'All provisioned.')            # approve again = retry as-is
+        self.assertNotEqual((server.store.get_task(tid) or {}).get('Status'), 'done')   # nothing finished
+        # the channel fixed, the retry sends and closes for real
+        with mock.patch.object(server.outbound, 'reply_to_message',
+                               return_value={'channel': 'teams', 'to': ['hr@work.example']}):
+            out2 = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': None}).json()
+        self.assertEqual((out2['status'], out2['send_error']), ('approved', None))
+        self.assertEqual(server.store.get_review(rid)['Status'], 'approved')
+
     def test_done_and_doc_save_persist(self):
         # Save on a doc is a real write-read roundtrip
         was = c.get('/api/doc/coder').json()['content']

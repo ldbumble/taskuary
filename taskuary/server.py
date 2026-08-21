@@ -614,10 +614,16 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
             logger.warning(f'reply send failed for review {rid}: {send_err}')
             if rv.get('TaskId'):
                 store.add_comment(rv['TaskId'], ACTOR, 'human', f'NOT SENT - {send_err}. The approved text is above.')
+            # an approved reply that never LEFT is not done: the card read 'approved' while the
+            # Teams send had failed on permissions, and the answer sat on the machine looking
+            # finished. The review returns to the queue wearing the error, the approved text
+            # becomes the draft (approving again retries the send), and the task stays open.
+            store.update_review_draft(rid, final, rv.get('RunId'))
+            store.unhold_review(rid, f'approved, but sending FAILED: {send_err} - fix the channel and approve again')
     if verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
     # reply-only items are not real tasks: answering them IS the work, so close on decision -
     # and a coder-finished task waits on exactly this send, so sending it closes that too
-    if verb in ('approve', 'edit') and rv.get('TaskId'):
+    if verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:
         t = store.get_task(rv['TaskId'])
         if ((t or {}).get('Kind') == 'reply' or rv.get('Kind') == 'draft_reply') and t.get('Status') not in ('done', 'dropped'):
             store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
@@ -632,7 +638,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
         if verb == 'edit': ev += f"\nDRAFT:\n{(rv.get('DraftText') or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
         if background is not None: background.add_task(learn.learn_from, store, ev)
         else: learn.learn_from(store, ev)
-    return {'ok': True, 'status': verb2status[verb], 'sent': sent, 'send_error': send_err}
+    return {'ok': True, 'status': 'pending' if send_err else verb2status[verb], 'sent': sent, 'send_error': send_err}
 
 @app.post('/api/reviews/{rid}/release')
 def release_review(rid: int):

@@ -748,12 +748,17 @@ def tool_run(body: dict):
     the owner marked as a tool, and get the raw output back (no AI pass, no timeline row).
     Same executors the Reports tab uses, same saved credentials - so an agent working a
     task can look something up in SQL Server, run a script on a box, or call an MCP tool.
-    A connection without the 'tool' role refuses."""
+    Catalog cards exist from first launch (winrm/mssql already have the tool role in
+    DEFAULT_ROLES) even when the owner never connected them - off means off. A connection
+    without the 'tool' role also refuses."""
     t = (body or {}).get('type')
     if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
     conn = store.get_connector_by_type(t)
-    if conn and 'tool' not in store_mod.roles_of(conn):
-        raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connectors → {t} → Role)')
+    if conn:
+        if not conn.get('Active'):
+            raise HTTPException(403, f'the {t} connection is off - turn it on under Connectors')
+        if 'tool' not in store_mod.roles_of(conn):
+            raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connectors → {t} → Role)')
     try:
         head, out = REGISTRY[t](resolve_cfg(store, {**body, 'type': t}))
     except Exception as e:

@@ -27,7 +27,9 @@ notes below are what follows from it.
 - **The API executes things by design.** Reports run SQL and PowerShell, `/api/tools/run`
   runs a connector's query or script, agent dispatch runs your configured CLI, and the
   terminal opens a real shell — all with your credentials, on your machine. Anyone who
-  can reach the API can do those things.
+  can reach the API can do those things. `/api/tools/run` still refuses a catalog
+  connection that is off or not marked *tool* (cards are seeded on first launch, so
+  "never connected" is not the same as "no row").
 - **Credentials are stored locally in plaintext** in `~/.taskuary/taskuary.db` and
   `config.toml`. They are write-only through the UI (never returned to the browser), but
   the files themselves are only as protected as your user account and disk encryption.

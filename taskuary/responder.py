@@ -80,9 +80,13 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
     notes = notes_for(store, {'from_email': last.get('FromEmail')})
     chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
+    from .learn import injectable
+    lrn = injectable(store.doc('learned') or '')
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n'
               + (DONE if resolution else NOT_YET)
-              + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else ''))
+              + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else '')
+              + (f'\n\nLearned profile - how {owner} actually writes and works, distilled from '
+                 f'their own verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
     if notes:
         system += '\n\nStanding notes from the owner:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
     from .triage import strip_boilerplate
@@ -138,8 +142,12 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     soul = store.doc('soul') or ''
     owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
     chat = str(m.get('Channel') or '').lower() in CHAT_CHANNELS
+    from .learn import injectable
+    lrn = injectable(store.doc('learned') or '')
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
-              + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else ''))
+              + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else '')
+              + (f'\n\nLearned profile - how {owner} actually writes and works, distilled from '
+                 f'their own verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
     notes = notes_for(store, {'from_email': m.get('FromEmail')})
     if notes:
         system += '\n\nStanding notes from the owner:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]

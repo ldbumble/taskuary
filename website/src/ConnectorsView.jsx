@@ -109,6 +109,20 @@ const META = {
     howto: ["Azure Portal → your Azure OpenAI resource → Keys and Endpoint.",
       "Enter the endpoint (https://YOUR-RESOURCE.openai.azure.com), the deployment name, and optionally an api_version.",
       "Paste a key under Credentials. Test runs a real round trip through the deployment."] },
+  openrouter: { group: "AI — agents & models", channel: "ai", srcLabel: null,
+    fields: [["model (default openrouter/auto)", "model"]], secretLabel: "API key",
+    desc: "One key, the whole catalog — open-weights Llama / Qwen / Mistral and every closed model, through OpenRouter's OpenAI-compatible API.",
+    howto: ["Create a key at openrouter.ai → Keys.",
+      "Paste it under Credentials; optionally set a model from openrouter.ai/models (e.g. meta-llama/llama-3.3-70b-instruct). Empty = openrouter/auto picks per request.",
+      "Test runs a real round trip. Enable to wire it into triage, drafts, the digest and LEARNED.md — or pick it explicitly under Settings → Triage & routing."] },
+  ollama: { group: "AI — agents & models", channel: "ai", srcLabel: null,
+    fields: [["base_url (default http://127.0.0.1:11434)", "base_url"], ["model — required, e.g. llama3.2 / qwen2.5", "model"]],
+    secretLabel: "API key (optional — a local server rarely needs one)",
+    desc: "Open-source models on YOUR machine — Ollama out of the box, or any OpenAI-compatible server (LM Studio, llama.cpp, vLLM). Your mail never leaves the box.",
+    howto: ["Install Ollama (ollama.com) and pull a model: ollama pull llama3.2 — or point base_url at LM Studio (http://127.0.0.1:1234), llama.cpp or vLLM.",
+      "Enter the model name (ollama list shows what's installed). No key needed for a local server.",
+      "Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under Settings → Triage & routing.",
+      "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."] },
 };
 
 const PLANNED_AI = [
@@ -182,7 +196,8 @@ export default function ConnectorsView() {
     const roles = String(c.Roles || "").split(",").filter(Boolean);
     const status = `${c.Active ? "on" : "off"}`
       + (roles.length ? ` · ${roles.join(" + ")}` : "")
-      + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}` : c.HasSecret ? " · key saved" : " · no key yet")
+      + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
+        : c.HasSecret ? " · key saved" : c.Type === "ollama" ? " · local — no key needed" : " · no key yet")
       + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
     return { key: `c${c.ConnectorId}`, title: c.Name, desc: status, channel: m.channel || c.Type,
       haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`,
@@ -192,7 +207,7 @@ export default function ConnectorsView() {
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "claude / codex / gemini — bring your own coding CLI, resumable sessions",
         channel: "cli", haystack: "ai cli agents claude codex gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...["anthropic", "openai", "azure_openai"].filter((t) => byType[t]).map((t) => chanCard(byType[t])),
+      ...["anthropic", "openai", "azure_openai", "openrouter", "ollama"].filter((t) => byType[t]).map((t) => chanCard(byType[t])),
       ...PLANNED_AI.map((p) => ({ key: p.name, title: p.name, desc: p.desc, channel: "ai", haystack: `${p.name} ${p.desc}`, planned: true })),
     ]},
     { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },

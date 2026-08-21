@@ -145,7 +145,7 @@ def test_connector(store, cid: int) -> dict:
                                    + ' - if this is a box you RDP into, PS remoting may need enabling: '
                                      'run Enable-PSRemoting -Force on it once (elevated)')
             detail = f"remote run OK on {(p.stdout or '').strip() or host} (your Windows credentials)"
-        elif c['Type'] in ('anthropic', 'openai', 'azure_openai'):
+        elif c['Type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama'):
             from .llm import test_ai
             detail = test_ai(store, cid)
         else:

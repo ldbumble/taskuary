@@ -1,7 +1,9 @@
 """The triage brain -> one provider-agnostic llm(system, user) -> str callable, the shape
 triage.classify_intent expects. Which brain is the owner's choice (setting `triage_ai`):
 
-    ''                  first ACTIVE AI connector with a key (anthropic/openai/azure_openai)
+    ''                  first ACTIVE AI connector with a key (anthropic/openai/azure_openai/
+                        openrouter) - or keyless ollama, for a local model
+
     connector:<type>    that specific AI connector
     cli:<agent>         your CODING CLI does the triage too - one headless run per message,
                         same brain that works the tasks, no second API key to buy
@@ -12,7 +14,7 @@ everything on one model (and one bill). Configure it in Settings -> Triage & rou
 import base64, json, mimetypes, requests
 from pathlib import Path
 
-AI_TYPES = ('anthropic', 'openai', 'azure_openai')
+AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama')
 
 # What a vision model will look at. "See below." is half the mail this app reads, and below was
 # a screenshot - a text-only funnel filed the sentence and threw the actual ask away.
@@ -82,14 +84,16 @@ def build_llm(store):
     if pick.startswith('cli:'): return make_cli_llm(store, pick[4:])
     want = pick[10:] if pick.startswith('connector:') else None
     for c in store.list_connectors():
-        if c['Type'] in AI_TYPES and c['Active'] and c['HasSecret'] and (not want or c['Type'] == want):
+        # a local model server (ollama) is the one brain that needs no key to be real
+        ready = c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')
+        if c['Type'] in AI_TYPES and ready and (not want or c['Type'] == want):
             full = store.get_connector(c['ConnectorId'], with_secret=True)
             return make_llm(full['Type'], json.loads(full.get('ConfigJson') or '{}'), full.get('Secret'))
     return None
 
 
 def make_llm(t, cfg: dict, key: str):
-    if not key: raise RuntimeError('no API key saved - paste one under Credentials')
+    if not key and t != 'ollama': raise RuntimeError('no API key saved - paste one under Credentials')
     if t == 'anthropic':
         import anthropic
         cli = anthropic.Anthropic(api_key=key)
@@ -106,6 +110,21 @@ def make_llm(t, cfg: dict, key: str):
     if t == 'openai':
         urls = ['https://api.openai.com/v1/chat/completions']
         headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or 'gpt-4o-mini'
+    elif t == 'openrouter':
+        # one key, the whole catalog behind the OpenAI schema - open-weights models included.
+        # Model strings are OpenRouter's names ('meta-llama/llama-3.3-70b-instruct', ...);
+        # 'openrouter/auto' lets their router pick, so an empty model box still works.
+        urls = ['https://openrouter.ai/api/v1/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}', 'X-Title': 'Taskuary'}, cfg.get('model') or 'openrouter/auto'
+    elif t == 'ollama':
+        # a LOCAL server speaking the OpenAI surface. Ollama's port out of the box, but base_url
+        # reaches LM Studio (:1234), llama.cpp, vLLM - anything /v1-compatible - so open-source
+        # models triage your mail without a byte leaving the machine. No key unless the server
+        # demands one; the model must be named because only `ollama list` knows what's pulled.
+        base = (cfg.get('base_url') or 'http://127.0.0.1:11434').rstrip('/')
+        if not cfg.get('model'): raise RuntimeError('a local brain needs its model named - `ollama list` shows what is installed')
+        urls, model = [f'{base}/v1/chat/completions'], cfg['model']
+        headers = {'Authorization': f'Bearer {key}'} if key else {}
     elif t == 'azure_openai':
         ep = (cfg.get('endpoint') or '').rstrip('/')
         if not (ep and cfg.get('deployment')): raise RuntimeError('azure_openai needs endpoint + deployment')
@@ -130,7 +149,8 @@ def make_llm(t, cfg: dict, key: str):
             for tok_param in ('max_completion_tokens', 'max_tokens'):
                 body = {'messages': msgs, tok_param: max_tokens}
                 if model: body['model'] = model
-                r = requests.post(url, headers=headers, json=body, timeout=60)
+                # a local model may spend its first call loading weights off disk - give it room
+                r = requests.post(url, headers=headers, json=body, timeout=180 if t == 'ollama' else 60)
                 if r.status_code == 200:
                     return r.json()['choices'][0]['message']['content']
                 last = r

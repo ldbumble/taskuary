@@ -135,9 +135,22 @@ class Term:
         """Is the typed prompt actually ON the screen? A CLI that boots into a dialog - codex's
         first-run "do you trust this directory?" is the live example - silently eats whatever is
         typed at it, and pressing Enter blind would ANSWER that dialog, which is the owner's
-        security decision to make, not ours."""
-        head = ' '.join(self.seeded.split())[:40]
-        return len(head) > 10 and head in ' '.join(render(self.scrollback(), self.cols, self.rows).split())
+        security decision to make, not ours.
+
+        Claude Code (v2+) folds a burst-typed prompt into '[Pasted text #N]' chips - the words
+        themselves never render. The chip IS the echo: before it was recognized here, the seeder
+        read the missing words as "a dialog ate it", retyped once per retry (chips piling up on
+        screen) and never dared press Enter - a session that looked busy and started nothing.
+
+        And the words that DO render may be either end of the prompt: a long seed scrolls the
+        input box, so only its TAIL stays visible - the head check alone read a fully-typed
+        prompt as 'eaten' and retyped it on top of itself, three glued copies and no Enter.
+        All checks compare with ALL whitespace stripped, because the box wraps at the terminal
+        width and a chip or phrase broken across two lines is still the echo."""
+        scr = ''.join(render(self.scrollback(), self.cols, self.rows).split())
+        if '[Pastedtext' in scr: return True
+        flat = ''.join(self.seeded.split())
+        return len(flat) > 10 and (flat[:40] in scr or flat[-40:] in scr)
 
     def seed(self, text: str):
         """Type the first prompt in AND SEND IT. The owner asked for the work when they clicked

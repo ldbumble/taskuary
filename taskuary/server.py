@@ -20,7 +20,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
-from . import outbound, responder
+from . import learn, outbound, responder
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -184,6 +184,11 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
                     try: responder.write_draft(store, tid, r, actor='auto-draft')
                     except Exception as e: logger.warning(f'auto-draft failed for task {tid}: {e}')
                 background.add_task(_draft)
+        # a reclassification is a triage verdict the owner had to overturn - worth generalizing
+        if background is not None:
+            background.add_task(learn.learn_from, store,
+                                f"{task_ref(task_id)}: owner reclassified \"{(t.get('Title') or '')[:80]}\" from a "
+                                'coding task to a question needing only a reply - triage over-reached')
     return {'ok': True}
 
 @app.post('/api/tasks/{task_id}/code')
@@ -268,7 +273,7 @@ def set_task_repo(task_id: int, body: RepoBody):
 class NotATaskBody(BaseModel): learn: bool = True
 
 @app.post('/api/tasks/{task_id}/not-a-task')
-def not_a_task(task_id: int, body: NotATaskBody = None):
+def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
     """Owner verdict: never needed to be a task. Teaches (sender ignore policy + memory
     note), then deletes the task - its messages stay in the feed as 'filed'.
 
@@ -284,6 +289,12 @@ def not_a_task(task_id: int, body: NotATaskBody = None):
         mid = store.add_memory({'Scope': 'sender', 'ScopeKey': em, 'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
                                 'Note': f"Messages from {em} like '{(msgs[0].get('Subject') or '')[:80]}' are not tasks - do not open tasks or draft replies."})
         learned = {'policy': em, 'memory_id': mid}
+        # the sender note is durable already; the GENERAL lesson (what kinds of mail are not
+        # tasks for this owner) is LEARNED.md's to distill. learn=false teaches nothing, as asked.
+        if background is not None:
+            background.add_task(learn.learn_from, store,
+                                f"mem{mid}: owner said NOT A TASK: \"{(msgs[0].get('Subject') or '')[:80]}\" from {em} "
+                                'should never have opened a task')
     store.audit('task', task_id, 'not_a_task_delete', ACTOR)
     store.delete_task(task_id)
     return {'ok': True, 'learned': learned}
@@ -422,7 +433,7 @@ def _not_mine_note(m: dict) -> str:
             'file it, do not open a task or draft a reply.')
 
 @app.post('/api/messages/{mid}/not-mine')
-def not_mine(mid: int, body: NotMineBody):
+def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     """"Not our task." Two things happen: this item stops being work, and the reason is
     written to MEMORY - which triage reads on every future message from that sender (see
     ingest.notes_for), so the same verdict doesn't have to be given twice. Unlike "Skip this
@@ -443,6 +454,11 @@ def not_mine(mid: int, body: NotMineBody):
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, f'not ours - {note[:200]}', [], ACTOR)
     store.audit('memory', memid, 'create', ACTOR, detail={'scope': scope, 'key': key, 'from': em})
+    # "not ours" draws a responsibility boundary - the general shape of it belongs in LEARNED.md
+    if background is not None:
+        background.add_task(learn.learn_from, store,
+                            f"mem{memid}: owner said NOT OURS ({scope}): \"{(m.get('Subject') or '')[:80]}\" "
+                            f"from {em or '?'} - {note[:200]}")
     return {'ok': True, 'memoryId': memid, 'note': note, 'scope': scope, 'scopeKey': key,
             'taskDeleted': bool(tid)}
 
@@ -467,14 +483,24 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
+    _learn_promotion(m, background)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR)
     ses = start_session(store, tid, body.agent, body.model, body.instruction)
     return {'dispatch': 'session', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid), 'session': ses}
 
+def _learn_promotion(m: dict, background):
+    """A FILED message the owner promotes by hand is a triage miss in the other direction -
+    fyi was the wrong call. The under-reach lessons matter as much as the over-reach ones."""
+    if background is not None and not m.get('TaskId') and m.get('Status') == 'filed':
+        background.add_task(learn.learn_from, store,
+                            f"msg{m['MessageId']}: triage filed \"{(m.get('Subject') or '')[:80]}\" from "
+                            f"{m.get('FromEmail') or m.get('SourceName') or '?'} as fyi, but the owner made it a task - "
+                            'triage under-reached')
+
 class MineBody(BaseModel): kind: str = 'general'
 
 @app.post('/api/messages/{mid}/mine')
-def mine_message(mid: int, body: MineBody = None):
+def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = None):
     """"This one is mine": a real task, on my list, with no agent sent at it. A lot of mail is
     genuinely work and genuinely not an agent's - go into some web app, approve the thing - and
     filing it as "nothing to do" is a lie. It lands as a task assigned to you, which the feed
@@ -482,6 +508,7 @@ def mine_message(mid: int, body: MineBody = None):
     THIS is the queue it takes from."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
+    _learn_promotion(m, background)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'general', ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
@@ -595,6 +622,16 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
         if ((t or {}).get('Kind') == 'reply' or rv.get('Kind') == 'draft_reply') and t.get('Status') not in ('done', 'dropped'):
             store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
     store.audit('review', rid, verb, ACTOR, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
+    # the corrections are the curriculum: an edit shows how the owner writes, a reject what should
+    # never have been drafted. LEARNED.md is where those lessons generalize (an unedited approve
+    # teaches too, but as aggregate confirmation - the reflection pass counts those itself).
+    if verb in ('edit', 'reject', 'no_reply'):
+        m = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}
+        ev = (f"rv{rid}: owner verdict '{verb}' on a drafted reply to \"{(m.get('Subject') or rv.get('Kind') or '')[:80]}\" "
+              f"from {m.get('FromEmail') or '?'}" + (f"; their note: {body.note[:200]}" if body.note else ''))
+        if verb == 'edit': ev += f"\nDRAFT:\n{(rv.get('DraftText') or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
+        if background is not None: background.add_task(learn.learn_from, store, ev)
+        else: learn.learn_from(store, ev)
     return {'ok': True, 'status': verb2status[verb], 'sent': sent, 'send_error': send_err}
 
 @app.post('/api/reviews/{rid}/release')
@@ -691,7 +728,7 @@ def brains():
     # no steering: auto is one option among equals, and which brain triages is the owner's call
     out = [{'value': '', 'label': 'auto — first active AI connector', 'kind': 'auto', 'ready': True}]
     out += [{'value': f"connector:{c['Type']}", 'label': c['Name'], 'kind': 'api',
-             'ready': bool(c['Active'] and c['HasSecret'])}
+             'ready': bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))}   # local models carry no key
             for c in store.list_connectors() if c['Type'] in AI_TYPES]
     out += [{'value': f"cli:{a['Name']}", 'label': f"{a['Name']} (CLI agent — one-brain setup, slower per message)",
              'kind': 'cli', 'ready': True}
@@ -876,6 +913,15 @@ def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
+@app.post('/api/learn/reflect')
+def learn_reflect():
+    """Consolidate LEARNED.md now instead of waiting for the threshold - the Docs page's
+    'Reflect now'. False means there was no AI brain or nothing usable came back; the doc
+    is never replaced with a worse one."""
+    ok = learn.reflect(store)
+    if ok: store.audit('doc', 0, 'reflect', ACTOR)
+    return {'ok': True, 'reflected': ok}
+
 class OwnerBody(BaseModel): name: str; email: str | None = None
 
 @app.get('/api/owner')
@@ -894,7 +940,7 @@ def put_owner(body: OwnerBody):
     # 'the owner' is the fallback when no name is known, and real prose says those words -
     # retokenizing them would punch {{owner}} holes all over a doc that never had a name in it
     if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coder', 'digest'):
+    for doc in ('soul', 'coder', 'digest', 'learned'):
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
@@ -947,16 +993,15 @@ def toggle_memory(mid: int, body: MemoryToggle):
 @app.get('/api/audit/recent')
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
 
+_POLL_BUSY = threading.Lock()   # whether a poll runs IN THIS PROCESS; the DB flag is only for the UI
+
 def _poll_reports(backfill_days: int = 0, what: str = 'syncing'):
-    # one poll at a time: hitting Sync while the startup catch-up runs used to race two
-    # pollers over the same watermarks. A stale 'running' (a crash mid-poll) expires in 10min.
-    try: cur = json.loads(store.get_settings().get('ingest_status') or '{}')
-    except ValueError: cur = {}
-    if cur.get('state') == 'running':
-        try: started = datetime.fromisoformat(cur.get('at') or '')
-        except ValueError: started = None
-        if started and (datetime.now() - started).total_seconds() < 600:
-            logger.info('poll already running - skipped'); return
+    # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
+    # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
+    # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
+    # rewriting 'running', and the "catching up" banner never ended.
+    if not _POLL_BUSY.acquire(blocking=False):
+        logger.info('poll already running - skipped'); return
     store.set_setting('ingest_status', json.dumps(
         {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
     try:
@@ -964,7 +1009,8 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing'):
         from .channels import poll_channels
         poll_channels(store, backfill_days)
     finally:
-        store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+        try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+        finally: _POLL_BUSY.release()
 
 
 def catch_up_on_startup():
@@ -983,6 +1029,9 @@ def catch_up_on_startup():
         from .digest import refresh_if_stale
         try: refresh_if_stale(store)
         except Exception as e: logger.warning(f'digest refresh failed: {e}')
+        # ...and consolidate what the verdicts taught, on the same once-a-day rhythm
+        try: learn.reflect_if_due(store)
+        except Exception as e: logger.warning(f'reflection failed: {e}')
     threading.Thread(target=_catch_up, daemon=True).start()
 
 
@@ -1003,7 +1052,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'coder', 'digest'):
+        for doc in ('soul', 'coder', 'digest', 'learned'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')
@@ -1030,8 +1079,15 @@ def ingest_poll(background: BackgroundTasks):
 
 @app.get('/api/ingest/status')
 def ingest_status():
-    try: return {'status': json.loads(store.get_settings().get('ingest_status') or '{"state": "idle"}')}
-    except ValueError: return {'status': {'state': 'idle'}}
+    try: st = json.loads(store.get_settings().get('ingest_status') or '{"state": "idle"}')
+    except ValueError: st = {'state': 'idle'}
+    # a poll that died with the app leaves 'running' behind with nobody holding the lock - a
+    # ghost the timeline banner would show forever (the poll sets the flag only AFTER taking
+    # the lock, so running-but-unlocked is always a ghost). Heal it on read.
+    if st.get('state') == 'running' and not _POLL_BUSY.locked():
+        st = {'state': 'idle'}
+        store.set_setting('ingest_status', json.dumps(st), 'system')
+    return {'status': st}
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
 class TermBody(BaseModel):

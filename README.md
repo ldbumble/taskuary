@@ -127,35 +127,96 @@ day). Taskuary lets you split them or tier them:
 
 | setup | triage / drafts / summaries | coding sessions | when |
 |---|---|---|---|
-| **Two brains** (recommended) | a small cloud model — Anthropic / OpenAI / Azure OpenAI connector, fractions of a cent per message | your CLI agent, its full model | you have (or can get) one cheap API key |
+| **Two brains** (recommended) | a small cloud model — Anthropic / OpenAI / Azure OpenAI / OpenRouter connector, fractions of a cent per message | your CLI agent, its full model | you have (or can get) one cheap API key |
 | **One brain, two gears** | the same CLI, downshifted to its **light model** (set it on the agent: `haiku`, `gemini-2.5-flash`…) | the same CLI, its main model | one subscription, no API key — Claude Max, Codex |
 | **One brain, one gear** | the CLI at full model | the CLI at full model | works, but every newsletter costs a frontier-model run |
+| **Local brain** | an open-source model on your own machine — the Ollama connector, or any OpenAI-compatible server (LM Studio, llama.cpp, vLLM) | your CLI agent, or a CLI wrapping the same local model | no key, no cloud, no mail leaving the box |
 
 Suggested setup: connect an **Anthropic** key with `claude-haiku-4-5` as the triage brain
 (Settings → Triage & routing), keep `claude` as the coder with its default model — or, with
 no API key at all, set the coder's **light model** to `haiku` (Connectors → AI CLI agents →
 Edit) and point the triage brain at `cli: coder`. Either way the expensive model only ever
 runs when there is real work in a real repository, and the cheap one handles the reading:
-intent triage, reply drafts, report summaries, the morning digest.
+intent triage, reply drafts, report summaries, the morning digest, the lessons distilled
+into LEARNED.md.
 
-## Memory: it learns from your verdicts
+## It learns your job from your verdicts
 
-Taskuary ships with the batteries: the triage brain doesn't just classify, it **remembers
-what you decided last time**.
+Triage lives or dies on knowing *you*: what you're responsible for, who you answer to,
+how you write, what deserves a task. You can type all of that into `SOUL.md` — most people
+won't. So Taskuary learns it from use: **every correction you make teaches it**, and the
+lessons land where you can read, edit, or delete them.
 
-- **"Not our task"** on any timeline item writes a note — editable before it's saved, scoped
-  to that sender, their whole domain, or everyone — and every later message is classified
-  with that note in hand. The classic case: colleagues cc'ing you on a thread that is
-  theirs to handle. Say it once; triage stops opening tasks for it. Their mail keeps
-  arriving (that's what *Skip this sender* is for) — only the judgement is learned.
-- **Other verdicts teach too**: *No reply needed*, *Reject*, and your edits to a draft all
-  leave notes behind, and closing a task resolves its pending reviews.
-- **Notes are yours to read and revoke** — Settings → Agent memory lists every one with its
-  scope and source; toggle one off and it stops being injected, while staying on the record.
-- **Three layers, on purpose**: `SOUL.md` / `CODER.md` are the standing rules you write,
-  memory notes are the lessons learned from your decisions, and the nightly `DIGEST.md` is
-  the short-term working memory. All three are injected into agent runs; memory and SOUL
-  also go into every triage call.
+**The specific layer — standing notes.** **"Not our task"** on any timeline item writes a
+note — editable before it's saved, scoped to that sender, their whole domain, or everyone —
+and every later message is classified with that note in hand. The classic case: colleagues
+cc'ing you on a thread that is theirs to handle. Say it once; triage stops opening tasks
+for it. Their mail keeps arriving (that's what *Skip this sender* is for) — only the
+judgement is learned. Settings → Agent memory lists every note; toggle one off and it stops
+being injected, while staying on the record.
+
+**The general layer — `LEARNED.md`.** The same verdicts also teach in general. Editing a
+draft before sending says how you actually write; rejecting one says what should never have
+been drafted; reclassifying a task as a question, or promoting a message triage filed, says
+where triage misjudges *your* work. Each correction is distilled — on the cheap triage
+brain, seconds after the verdict — into a **hypothesis** in `LEARNED.md` (Docs tab), and a
+periodic **reflection pass** consolidates: patterns confirmed across separate episodes get
+promoted into the active profile, contradicted ones weaken and die. The active profile is
+injected into every triage call, reply draft, and agent run.
+
+The design borrows what the agent-memory literature agrees on (ExpeL, PRELUDE, Generative
+Agents' reflection):
+
+- **Strength + provenance on every learned line** — `[s:4 | ev: rv12,mem3 | seen: …]` says
+  how often a pattern held and which of your verdicts taught it, so a wrong inference is
+  traceable and one delete removes it. Lines *you* write carry no tag and are never touched.
+- **One episode is a guess, not a rule** — hypotheses are never injected; they graduate only
+  after holding across separate episodes from different people or threads.
+- **Rules that hide things need your yes** — anything whose effect is "treat as fyi, never a
+  task" waits under *Proposed rules* until you adopt it, because a wrong ignore-rule
+  silences the very corrections that would revoke it.
+- **You stay sovereign** — `LEARNED.md` is a plain markdown doc you can edit like the
+  others, `SOUL.md` always outranks it, and *Learn from your verdicts* (Settings) turns the
+  whole loop off.
+
+### The four documents, at a glance
+
+Two you write, two the system writes — and each feeds exactly the AI calls it belongs in.
+Triage runs thousands of times on the cheap model, so it reads only what changes a verdict
+(SOUL, LEARNED, the notes — never the digest); the expensive CLI runs get the full stack.
+
+```mermaid
+flowchart LR
+    subgraph yours["you write these"]
+        SOUL[SOUL.md<br/>the constitution]
+        CODER[CODER.md<br/>the coder's rules]
+    end
+    subgraph system["the system writes these — yours to edit"]
+        LEARNED[LEARNED.md<br/>your learned profile]
+        DIGEST[DIGEST.md<br/>rolling working memory]
+    end
+    TRIAGE([intent triage<br/>light model · every message])
+    DRAFT([reply drafts<br/>light model])
+    RUN([headless agent runs<br/>your CLI · full model])
+    LIVE([live sessions<br/>your CLI · full model])
+    SOUL --> TRIAGE & DRAFT & RUN
+    SOUL -. repo map picks the checkout .-> LIVE
+    LEARNED --> TRIAGE & DRAFT & RUN
+    DIGEST --> RUN
+    CODER --> RUN & LIVE
+    TRIAGE -. your verdicts teach .-> LEARNED
+    DRAFT -. your edits teach .-> LEARNED
+```
+
+| document | written by | read by | what it drives |
+|---|---|---|---|
+| `SOUL.md` | **you** (the connections block and repo map maintain themselves) | triage + drafts (light model) and agent runs (your CLI); its repo map routes live sessions | what counts as a task, voice, escalation rules, which repo owns what |
+| `CODER.md` | **you** | agent runs and live sessions (your CLI, full model) | how the coder works, closes out, and answers the sender |
+| `LEARNED.md` | **the system**, from your verdicts — hot lessons per correction, consolidated by reflection; yours to edit, `SOUL.md` outranks it | triage, drafts, agent runs (active sections only — hypotheses stay home) | your style, your responsibilities, what deserves a task for *you* |
+| `DIGEST.md` | **the system**, once a day (light model) | agent runs (your CLI) | what's in flight today, who waits on whom |
+
+Memory notes (Settings → Agent memory) ride alongside: sender-scoped verdicts injected into
+triage, drafts, and runs — the specific layer under LEARNED.md's general one.
 
 ## Bring your own agent — and pick its model
 
@@ -184,6 +245,8 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | `whatsapp` | ✅ | your own account, via a small Baileys bridge that runs beside the app (`cd taskuary/whatsapp && npm install && node bridge.mjs`, pair once by QR or code). The heavy dependency deliberately lives there, not in Taskuary — unofficial protocol, use a number you'd risk |
 | `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md; optional inbound trigger (new issues → Timeline → triage) |
 | `anthropic` / `openai` / `azure_openai` | ✅ | AI for triage + report summaries |
+| `openrouter` | ✅ | one key, the whole catalog — open-weights Llama / Qwen / Mistral and every closed model, as the triage brain |
+| `ollama` | ✅ | local open-source models, no key and no cloud — Ollama out of the box, `base_url` reaches LM Studio / llama.cpp / vLLM |
 | `mssql` | ✅ | connect once; build AI-summarized reports on the Reports tab |
 | `winrm` | ✅ | run PowerShell on any machine you can RDP into; output → Timeline |
 | `mcp` | ✅ | any MCP server's tool as a scheduled report |
@@ -229,6 +292,7 @@ Early (v0.2.0) and moving fast.
 - [x] Interactive agent terminal (pty + websocket + xterm.js) and hand-anything-to-an-agent
 - [x] Per-connection roles (trigger / report / tool), GitHub issues as an inbound trigger
 - [x] Configurable triage brain — a cloud key or your CLI agent — and `/api/tools/run`
+- [x] Self-learning triage: LEARNED.md distilled from your verdicts, with strength + evidence per line
 - [ ] Git worktree isolation per task attempt
 - [ ] More ingest channels and report connectors (table above)
 - [ ] Tray + notifications for the desktop shell

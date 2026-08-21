@@ -79,9 +79,9 @@ def route(msg, tasks, threshold=ATTACH_THRESHOLD):
                'subject/body similarity' + (' + known sender' if best['signals']['sender'] else ''))
         return {'decision':'attach', 'task_id':best['task_id'], 'score':best['score'],
                 'reason': f"attached: {why} (score {best['score']:.2f} >= {threshold})", 'candidates':cands[:5]}
-    top = f"; best candidate TQ-{best['task_id']:04d} scored {best['score']:.2f}" if best else ''
+    top = f" (closest open task: TQ-{best['task_id']:04d} at {best['score']:.2f}, attaching needs {threshold})" if best else ''
     return {'decision':'create', 'task_id':None, 'score':best['score'] if best else 0.0,
-            'reason': f"no open task above {threshold}{top} - creating a new task", 'candidates':cands[:5]}
+            'reason': f'new task - nothing similar already open{top}', 'candidates':cands[:5]}
 
 def draft_task_fields(msg):
     """Title/summary/kind/priority for a task created from a message (heuristic v1)."""

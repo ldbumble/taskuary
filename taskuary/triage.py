@@ -12,7 +12,8 @@ import re as _re
 # (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
-    '{"intent": "task|reply_only|fyi", "why": "<8 words max>"}.\n'
+    '{"intent": "task|reply_only|fyi", "why": "<one concrete sentence: what you saw in the message '
+    'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
     'task = someone must DO something beyond writing back: change a system, fix or build something, '
     'produce or chase something. This starts a coding agent on a repository, so choose it only when '
     'work has to happen.\n'
@@ -32,10 +33,12 @@ _FYI = re.compile(r'\b(fyi|for your (records|reference)|no action (needed|requir
 def heuristic_intent(msg: dict) -> dict:
     body = (msg.get('body') or '').strip()
     low = f"{msg.get('subject') or ''} {body[:600]}"
-    if _FYI.search(low) and not body.rstrip().endswith('?'): return {'intent': 'fyi', 'why': 'automated/informational'}
-    if _ACT.search(low): return {'intent': 'task', 'why': 'asks the owner to do something'}
-    if body.rstrip().endswith('?') or _ASK.search(low): return {'intent': 'reply_only', 'why': 'question needing only an answer'}
-    return {'intent': 'task', 'why': 'default'}
+    if _FYI.search(low) and not body.rstrip().endswith('?'):
+        return {'intent': 'fyi', 'why': 'carries automated/no-action markers and asks no question (keyword heuristic)'}
+    if _ACT.search(low): return {'intent': 'task', 'why': 'explicitly asks for something to be done (keyword heuristic)'}
+    if body.rstrip().endswith('?') or _ASK.search(low):
+        return {'intent': 'reply_only', 'why': 'reads as a question an answer settles (keyword heuristic)'}
+    return {'intent': 'task', 'why': 'no fyi markers and no plain question - assumed real work (keyword heuristic, no AI read this)'}
 
 
 # ── the message, minus the wrapper ──────────────────────────────────────────────────────
@@ -114,7 +117,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             out = llm(system, user, images=images) if images else llm(system, user)
             j = json.loads(re.sub(r'^```(json)?|```$', '', out.strip(), flags=re.M))
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
-                return {'intent': j['intent'], 'why': str(j.get('why') or '')[:200]}
+                return {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
         except Exception:
             pass
     return heuristic_intent(msg)

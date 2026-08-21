@@ -607,6 +607,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual((out2['status'], out2['send_error']), ('approved', None))
         self.assertEqual(server.store.get_review(rid)['Status'], 'approved')
 
+    def test_a_malformed_attachment_path_is_a_404_not_a_500(self):
+        # a stored Path with an embedded NUL made Path.resolve() raise OUTSIDE the try
+        mid = server.store.add_message({'ExternalId': 'graph:BADP', 'Channel': 'email',
+                                        'Subject': 'bad path', 'Status': 'filed'})
+        aid = server.store.add_attachment({'MessageId': mid, 'ExternalId': 'badp:1', 'Name': 'x.png',
+                                           'ContentType': 'image/png', 'Size': 1, 'Path': 'bad\x00path'})
+        self.assertEqual(c.get(f'/api/attachments/{aid}').status_code, 404)
+
     def test_done_and_doc_save_persist(self):
         # Save on a doc is a real write-read roundtrip
         was = c.get('/api/doc/coder').json()['content']

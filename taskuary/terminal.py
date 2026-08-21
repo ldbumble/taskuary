@@ -368,6 +368,13 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
     seed = ' '.join(seed_fn(cwd).split()) if (seed_fn and agent) else None
     extra = seed_argv(profile, seed) if seed else None
+    # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
+    # runs through `cmd /c`, and cmd.exe parses & | < > and stray quotes as ITS OWN syntax:
+    # the seed's `subject "T&E System"` was cut AT THE AMPERSAND and half a prompt was
+    # delivered as if it were whole. Shims take the verified typed road instead.
+    if extra and any(str(a).lower().endswith(('.cmd', '.bat')) or
+                     os.path.basename(str(a)).lower() in ('cmd', 'cmd.exe') for a in argv):
+        extra = None
     if extra: argv = list(argv) + extra
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t

@@ -12,7 +12,9 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![The Taskuary timeline: email, Telegram, Teams chats, WhatsApp, Slack and scheduled reports on one day-grouped rail, every row triaged and chipped — and the review panel open on one mail, showing why it became a task, its history, and the AI reply draft with Approve & send waiting on you](docs/screenshot-timeline.png)
+![Taskuary in use: the timeline of email, chats and scheduled reports; a mail opened to show why triage made it a task and the AI reply drafted for approval; a scheduled report landing with its bar chart and spreadsheet; the Reports pipeline list; and the agent board with live sessions and the note one agent left the next](docs/hero.gif)
+
+<sub>Real app, real data — a mail triaged and its reply drafted for your approval, then a scheduled SQL report landing on the same rail with its chart and spreadsheet. Nothing sends without you.</sub>
 
 > ⭐ **Useful to you? Star the repo.** Stars are how other people find Taskuary — and the
 > clearest signal of what to keep building.
@@ -278,6 +280,12 @@ cd website                  # the React UI (React 18 + MUI, Vite)
 npm install
 npm run dev                 # dev server, proxies /api to a running taskuary on :7787
 npm run build               # emits taskuary/web/ (committed - pip installs need no node)
+
+# the README hero: drive a seeded demo through the funnel, then assemble the GIF
+npm i --no-save puppeteer-core
+python seed_demo.py                            # with TASKUARY_HOME pointed at a scratch dir
+node hero_frames.mjs http://127.0.0.1:PORT     # frames + per-frame delays
+python hero_gif.py                             # -> docs/hero.gif (Pillow; no ffmpeg needed)
 
 pip install -e .[build]
 pyinstaller taskuary.spec   # dist/Taskuary.exe - single-file desktop build

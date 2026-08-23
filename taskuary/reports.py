@@ -182,6 +182,15 @@ def run_digest(cfg):
     return f'the last {days} days, distilled', gather(cfg['store'], days)
 
 
+def run_automate(cfg):
+    """{"days": 30} - Taskuary's own traffic as the data: what repeats often enough to
+    automate, and the concrete policy/report/switch that would kill it. Ships seeded as
+    the weekly 'Automation ideas' report; see toil.py. `store` arrives via resolve_cfg."""
+    from .toil import gather
+    days = int(cfg.get('days') or 30)
+    return f'the last {days} days of repeated toil', gather(cfg['store'], days)
+
+
 def _planned(name):
     def _fail(cfg): raise NotImplementedError(f"connector type '{name}' is on the roadmap - not implemented yet")
     return _fail
@@ -192,7 +201,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
-            'rss': run_rss, 'digest': run_digest, **{n: _planned(n) for n in PLANNED}}
+            'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
+            **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
@@ -263,7 +273,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 
 
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') == 'digest': return {**cfg, 'store': store}   # its data IS the store
+    if cfg.get('type') in ('digest', 'automate'): return {**cfg, 'store': store}   # their data IS the store
     conn = CONNECTION_OF.get(cfg.get('type'))
     if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg

@@ -160,7 +160,8 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
 DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
                  'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool',
                  'gmail': 'trigger,tool', 'imap': 'trigger,tool',
-                 'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool'}
+                 'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool',
+                 'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger'}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
@@ -188,7 +189,8 @@ class SQLiteStore:
                          ('ollama', 'Local models (Ollama)'), ('mssql', 'Microsoft SQL Server'),
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
                          ('gmail', 'Gmail / Google Workspace'), ('imap', 'Any mailbox (IMAP)'),
-                         ('winrm', 'Remote Windows (WinRM)')):
+                         ('winrm', 'Remote Windows (WinRM)'),
+                         ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed

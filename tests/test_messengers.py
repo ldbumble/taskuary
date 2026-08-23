@@ -20,10 +20,13 @@ def _tg_update(uid, cid=777, mid=1, text='fix the importer', first='Rita', photo
 class TelegramTests(unittest.TestCase):
     def _store(self):
         s = MemoryStore()
-        # the row is seeded at init (like every connector) - a test configures it, not creates it
+        # the row is seeded at init (like every connector) - a test configures it, not creates it.
+        # Chat 777 (the fixtures' chat) is switched ON: only approved chat ids ingest now -
+        # the '*' row is a listening marker, never a catch-all (test_pm covers the lockdown).
         cid = s.get_connector_by_type('telegram')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Secret': 'TOKEN', 'Active': 1}, 'o')
         s.save_source({'Channel': 'telegram', 'Address': '*', 'ConnectorId': cid, 'Active': 1}, 'o')
+        s.save_source({'Channel': 'telegram', 'Address': '777', 'ConnectorId': cid, 'Active': 1}, 'o')
         return s, s.get_connector_by_type('telegram', with_secret=True)
 
     def test_poll_ingests_keeps_the_cursor_and_never_rereads(self):
@@ -48,11 +51,12 @@ class TelegramTests(unittest.TestCase):
             self.assertEqual(messengers.poll_telegram(s, c2, s.list_sources(), llm=None), 0)
         self.assertEqual(calls['getUpdates']['offset'], 102)
 
-    def test_a_specific_chat_source_filters_and_star_takes_everything(self):
+    def test_only_switched_on_chats_ingest(self):
         s, c = self._store()
         s.save_source({'Channel': 'telegram', 'Address': '999', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+        off = next(x for x in s.list_sources(active_only=False) if x['Address'] == '777')
+        s.save_source({'SourceId': off['SourceId'], 'Active': 0}, 'o')     # known but OFF: stays out
         ups = [_tg_update(1, cid=777), _tg_update(2, cid=999, mid=9, text='mine')]
-        # a real chat id present -> '*' stops being a catch-all and the id is the filter
         srcs = [x for x in s.list_sources() if x['Channel'] == 'telegram']
         with mock.patch.object(messengers, 'tg', lambda t, m, **p: ups if m == 'getUpdates' else None):
             n = messengers.poll_telegram(s, c, srcs, llm=None)

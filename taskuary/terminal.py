@@ -619,6 +619,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                        f"subject \"{m.get('Subject') or ''}\": "
                        f"{strip_boilerplate(m.get('BodyText') or '')[:3000]}")
     elif t.get('Summary'): parts.append(f"ASK: {strip_boilerplate(str(t['Summary']))[:3000]}")
+    # the source's standing instruction: a PR is judged before it is worked, a Jira item may
+    # have its own house rules - configured per connector card, defaulted for GitHub
+    from .ingest import source_rules
+    sr = source_rules(store, m) if m else ''
+    if sr: parts.append(f'RULES FOR THIS SOURCE: {sr}')
     # the screenshot is often the whole ask ("see below"), and the file paths are local - the
     # session can open them itself instead of being told an image existed
     atts = [a for msg in msgs for a in store.list_attachments(msg['MessageId']) if a.get('Path')]

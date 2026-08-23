@@ -125,6 +125,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'whatsapp':
             from .messengers import wa_test
             detail = wa_test(store, store.get_connector(c['ConnectorId'], with_secret=True))
+        elif c['Type'] in ('jira', 'asana', 'monday'):
+            from . import pm
+            detail = pm.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
         elif c['Type'] == 'mssql':
             from .mssql import test as mssql_test
             conn_cfg = _cfg(c)
@@ -378,7 +381,8 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
 
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
-          'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email'}
+          'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email',
+          'jira': 'jira', 'asana': 'asana', 'monday': 'monday'}
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
@@ -520,6 +524,12 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                     if s['SourceId'] != mine[0]['SourceId']: continue
                     poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
                     n += poll(store, full, mine, llm, file_only)
+                elif c['Type'] in ('jira', 'asana', 'monday'):
+                    # one poll per connector (the source row just marks the site/workspace)
+                    from . import pm
+                    mine = [x for x in store.list_sources() if x['Channel'] == CH2SRC[c['Type']]]
+                    if s['SourceId'] != mine[0]['SourceId']: continue
+                    n += pm.poll(store, full, since, llm, file_only)
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)

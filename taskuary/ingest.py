@@ -5,12 +5,50 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
 answering is the responder's job (reply_only), doing is the coder's.
 """
-import re, threading
+import json, re, threading
 from loguru import logger
 from .routing import route, draft_task_fields
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref
+
+
+# What the agent is TOLD about work from each kind of source. An email needs nothing -
+# the mail is the prompt - but a pull request is a judgement call before it is a coding
+# task, and the judging instructions should not depend on whoever typed the dispatch.
+# Both are defaults: the GitHub card's prompt_pr / prompt_issue fields override them, and
+# any other trigger connector can set task_prompt for its own items.
+PR_RULES = (
+    'This task came from a PULL REQUEST, possibly by an outside contributor. Judge it before '
+    'touching anything: does it solve a real problem worth having? Is the change minimal, safe '
+    'and in keeping with the codebase - no license or dependency swaps, nothing touching CI, '
+    'release or security-sensitive files unless that is explicitly the point? Check out the PR '
+    'branch, read the WHOLE diff, run the tests. Do NOT merge, close or push anything: end with '
+    'a clear verdict - accept, request changes (say exactly which), or reject - and your reasons.')
+ISSUE_RULES = (
+    'This task came from a GITHUB ISSUE. Reproduce it first if you can. Judge whether it is a '
+    'real defect or a feature worth building; fix it when the fix is contained and safe, '
+    'otherwise report plainly what it would take and what the risks are.')
+
+
+def source_rules(store, msg: dict) -> str:
+    """The standing instruction for work from this message's source, if its connector has one.
+    Resolution: the message's own source row names its connector (an email can be Outlook OR
+    Gmail); otherwise the channel's type-named connector. GitHub picks PR vs issue rules off
+    the ingest header and falls back to the shipped defaults above."""
+    ch = (msg or {}).get('Channel')
+    if not ch or ch == 'report': return ''
+    src = next((s for s in store.list_sources(active_only=False)
+                if s.get('Channel') == ch and s.get('Address') == msg.get('SourceName')), None)
+    c = (store.get_connector(src['ConnectorId']) if src and src.get('ConnectorId') else None) \
+        or store.get_connector_by_type(ch) or {}
+    try: cfg = json.loads(c.get('ConfigJson') or '{}')
+    except ValueError: cfg = {}
+    if ch == 'github':
+        is_pr = '[pull request by' in str(msg.get('BodyText') or '')[:200]
+        own = str((cfg.get('prompt_pr') if is_pr else cfg.get('prompt_issue')) or '').strip()
+        return own or (PR_RULES if is_pr else ISSUE_RULES)
+    return str(cfg.get('task_prompt') or '').strip()
 
 
 def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only: bool = False) -> dict:

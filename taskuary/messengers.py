@@ -32,13 +32,16 @@ def tg(token: str, method: str, **params):
 
 def tg_test(store, c) -> str:
     """getMe proves the token; a '*' source is added so the poller has something to walk -
-    Telegram chats announce themselves in getUpdates, there is nothing to type in."""
+    it is a LISTENING marker only, never an admit-everything: a bot is public, and anyone
+    who finds it can message it. Chats announce themselves in getUpdates and are registered
+    OFF under Sources with their chat id; only the ones the owner flips on become work."""
     if not c.get('Secret'): raise RuntimeError('no bot token saved - paste the token @BotFather gave you under Credentials')
     me = tg(c['Secret'], 'getMe')
     if not any(s['Channel'] == 'telegram' for s in store.list_sources(active_only=False)):
         store.save_source({'Channel': 'telegram', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
-    return (f"authenticated as @{me.get('username')} - message the bot (or add it to a group) and its "
-            f"chats flow in on the next sync")
+    return (f"authenticated as @{me.get('username')} - message the bot (or add it to a group), Sync, "
+            f"and the chat appears under Sources with its chat id, OFF. Flip on the chats that are "
+            f"yours; every other chat stays out (a public bot can be messaged by anyone)")
 
 
 def _tg_photo(token: str, m: dict) -> list:
@@ -62,16 +65,23 @@ def _tg_photo(token: str, m: dict) -> list:
 
 def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     """getUpdates with the offset watermark kept on the connector - Telegram's own cursor, so a
-    restart never re-ingests. Sources with a real chat id filter; '*' takes everything."""
+    restart never re-ingests.
+
+    Only chats the owner switched ON become work. A bot is PUBLIC - anyone who finds it can
+    message it, and 'blank takes every chat' was an open door for spam-as-tasks. An unknown
+    chat is registered instead: it shows up under Sources with its chat id, off, and flipping
+    it on admits it from the next message onward. That registration is also how you FIND a
+    chat id - message the bot once and read it off the card."""
     from datetime import datetime
     from .channels import images_for_triage, save_attachments
     from .ingest import ingest_message
     tok, cfg = c['Secret'], _cfg(c)
     if not tok: return 0
-    # only telegram sources filter here: a report source in the same list (the seeded Morning
-    # digest) must never become a chat-id nothing can match
-    want = {s['Address'] for s in sources
-            if s.get('Channel', 'telegram') == 'telegram' and s['Address'] and s['Address'] != '*'}
+    # every telegram source ever seen, on or off - a report source in the same list (the
+    # seeded Morning digest) must never become a chat-id nothing can match
+    known = {s['Address']: s for s in store.list_sources(active_only=False)
+             if s.get('Channel') == 'telegram' and s.get('Address')}
+    want = {a for a, s in known.items() if a != '*' and s.get('Active')}
     ups = tg(tok, 'getUpdates', offset=int(cfg.get('tg_offset') or 0), limit=TG_LIMIT,
              allowed_updates=['message'])
     n = 0
@@ -79,7 +89,16 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         m = u.get('message') or {}
         chat, frm = m.get('chat') or {}, m.get('from') or {}
         cid = str(chat.get('id') or '')
-        if not cid or (want and cid not in want) or frm.get('is_bot'): continue
+        if not cid or frm.get('is_bot'): continue
+        if cid not in want:
+            if cid not in known:      # first sight of this chat: register it OFF, ingest nothing
+                title = chat.get('title') or ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) \
+                        or frm.get('username') or 'chat'
+                store.save_source({'Channel': 'telegram', 'Address': cid, 'ConnectorId': c['ConnectorId'],
+                                   'Active': 0, 'Owner': f'discovered: {title}'[:80]}, 'telegram-poll')
+                known[cid] = {'Address': cid, 'Active': 0}
+                logger.info(f'telegram: chat {cid} ({title}) discovered - registered OFF under Sources')
+            continue
         text = m.get('text') or m.get('caption') or ''
         atts = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else []
         if not text and not atts: continue

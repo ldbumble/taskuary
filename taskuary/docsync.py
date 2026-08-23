@@ -9,7 +9,9 @@ import json
 
 CONN_START, CONN_END = '<!-- connections:start -->', '<!-- connections:end -->'
 REPO_MAP_HEADER = '## Repository map'
-CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github'}
+CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
+          'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email',
+          'jira': 'jira', 'asana': 'asana', 'monday': 'monday'}
 
 
 # The tool blurb used to say "create/update things in it as the work needs" - and an agent

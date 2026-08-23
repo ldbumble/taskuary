@@ -221,11 +221,14 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
         from .learn import injectable
         lrn = injectable(store.doc('learned') or '')
         from .blackboard import briefing
+        from .ingest import source_rules
         aware = briefing(store, profile.get('cwd') or os.getcwd(), exclude_tid=task_id)
+        msgs = [x for x in store.list_messages(task_id) if x.get('Status') != 'context']
+        sr = source_rules(store, msgs[-1]) if msgs else ''
         prompt = ((f"Operator's document (authoritative rules):\n{soul}\n\n---\n\n" if soul else '')
                   + (f"Learned profile (distilled from the owner's verdicts):\n{lrn}\n\n---\n\n" if lrn else '')
-                  + ctx + (f'\n\n{mem}' if mem else '') + (f'\n\n{aware}' if aware else '')
-                  + f'\n\nInstruction: {instruction}')
+                  + ctx + (f'\n\n{mem}' if mem else '') + (f'\n\nRules for this source: {sr}' if sr else '')
+                  + (f'\n\n{aware}' if aware else '') + f'\n\nInstruction: {instruction}')
         result, session_id, diff = run_cli(profile, prompt, _t)
         store.update_run(run_id, {'Status': 'done', 'Result': result, 'TraceJson': json.dumps(trace),
                                   **({'SessionId': session_id} if session_id else {}),

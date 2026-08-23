@@ -39,10 +39,12 @@ const CATEGORIES = [
   { key: "messages", label: "messages", channels: ["email", "teams", "slack", "telegram", "whatsapp"],
     c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
   { key: "code", label: "code", channels: ["github"], c: { bg: "#eceef1", fg: "#1c2536", bd: "#d3d8e0" } },
+  { key: "pm", label: "boards", channels: ["jira", "asana", "monday"], c: { bg: "#eef0ff", fg: "#4338ca", bd: "#c9cff0" } },
   { key: "reports", label: "reports", channels: ["report"], c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
-  telegram: "Telegram chats", whatsapp: "WhatsApp chats", github: "Repositories", report: "Reports" };
+  telegram: "Telegram chats", whatsapp: "WhatsApp chats", github: "Repositories", report: "Reports",
+  jira: "Jira issues", asana: "Asana tasks", monday: "Monday items" };
 
 const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 

@@ -57,6 +57,20 @@ touched. Two more guardrails: a rule that would *hide* mail (never a task, auto-
 for your explicit OK instead of promoting itself, and `SOUL.md` — the rules you write —
 always outranks the learned file. One switch in Settings turns the whole loop off.
 
+**And it can learn the job you had *before* it.** Verdicts take weeks to accumulate; your
+mailbox already holds months of them. **Docs → TRIAGE.md or STYLE.md → Generate from
+history** reads your last three months of mail (sent + inbox, straight from the mailbox),
+pairs every inbound thread with whether *you answered it*, and writes the distilled
+guidance into a marked block of the doc — regenerate any time, your own lines outside the
+markers always survive. What each one feeds from then on:
+
+- `TRIAGE.md` + its history block → **every triage verdict**: what kinds of asks you
+  actually answer, which senders and domains matter (backed by a per-domain answer-rate
+  roll-up), what's reliably ignorable;
+- `STYLE.md` + its history block → **every reply draft**: your greeting and sign-off, tone
+  and length, characteristic phrasing, how you push back — distilled from the replies you
+  yourself sent.
+
 ## Get started
 
 ```bash
@@ -69,13 +83,15 @@ Python 3.10+ is all you need. Then, in **Connectors** — a minute or two each:
 1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI / OpenRouter key — or no key at
    all: the **Ollama** card runs triage on a local open-source model. Triage is now on.
    (A small, cheap model is the right pick here; the expensive one goes in step 3.)
-2. **A channel** — Outlook, Teams, or Slack. Mail starts landing on the Timeline.
+2. **A channel** — Outlook, Gmail/IMAP, Teams, Slack, Telegram, WhatsApp or Discord. Mail
+   starts landing on the Timeline — and Jira/Asana/Monday/Linear/Trello/GitLab/Azure DevOps
+   items assigned to you, Sentry errors and PagerDuty incidents ride the same funnel.
 3. **Your coding CLI** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot), Save,
    Test. Add a GitHub PAT and repos are discovered for you.
-4. **Reports** (optional) — point at SQL Server / MCP / SQLite / REST / RSS and schedule a
-   query with an AI prompt; the summary lands on your Timeline. One ships ready-made: the
-   **Morning digest**, a daily brief of your own funnel — edit its prompt to taste, or
-   delete it.
+4. **Reports** (optional) — point at SQL Server, any database by connection string, AWS,
+   Azure, Prometheus, Datadog, MCP, REST or RSS and schedule a query with an AI prompt; the
+   summary lands on your Timeline. One ships ready-made: the **Morning digest**, a daily
+   brief of your own funnel — edit its prompt to taste, or delete it.
 
 No cloud key at all? Set **Settings → Triage & routing → Triage brain** to your CLI agent
 and skip step 1 — one brain does everything, slower and pricier per message. See
@@ -178,16 +194,18 @@ runs when there is real work in a real repository, and the cheap one handles the
 intent triage, reply drafts, report summaries, the morning digest, the lessons distilled
 into LEARNED.md.
 
-## The five documents
+## The six documents
 
 Plain markdown, all on the Docs tab, all yours to edit. Three you write, two write
-themselves — and each feeds exactly the calls it belongs in.
+themselves, and two can **bootstrap themselves from your mail history** (`TRIAGE.md` and
+`STYLE.md` — the Generate from history button). Each feeds exactly the calls it belongs in.
 
 ![TRIAGE.md, SOUL.md and LEARNED.md feed triage and replies on the cheap model; SOUL.md, CODER.md and LEARNED.md feed coding agents on your CLI; DIGEST.md is your own morning read](docs/five-docs.svg)
 
 | document | what it is | who reads it |
 |---|---|---|
-| `TRIAGE.md` | the classifier's instructions — what makes a task, a question, or FYI; ships as a default, edit it to reshape every verdict | triage (cheap model) |
+| `TRIAGE.md` | the classifier's instructions — what makes a task, a question, or FYI; ships as a default, edit it to reshape every verdict — **Generate from history** adds what 3 months of your answered-vs-ignored mail says matters | triage (cheap model) |
+| `STYLE.md` | how you write replies — greeting, tone, length, phrasing; write it, or let **Generate from history** distill it from 3 months of your sent mail | reply drafts |
 | `SOUL.md` | the constitution: your rules, voice, escalation lines, the repo map | triage, replies, coding agents |
 | `CODER.md` | how the coding agent works and closes out | coding agents (your CLI) |
 | `LEARNED.md` | your profile, learned from your verdicts — `SOUL.md` outranks it | triage, replies, coding agents |
@@ -223,14 +241,23 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | `whatsapp` | ✅ | your own account, via a small Baileys bridge that runs beside the app (`cd taskuary/whatsapp && npm install && node bridge.mjs`, pair once by QR or code) — asks in through triage, approved answers back into the chat, *notify* role pushes pings out. The heavy dependency deliberately lives in the bridge, not Taskuary — unofficial protocol, use a number you'd risk |
 | `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md; optional inbound trigger (new issues/PRs → Timeline → triage). Tasks born from a PR or issue carry the card's editable standing prompt — the PR default says judge it (useful? safe? minimal?), run the tests, report a verdict, never merge |
 | `jira` / `asana` / `monday` | ✅ | items **assigned to you** land on the Timeline through triage, linking back — "assigned in Jira" and "asked by email" end up in the one funnel. Read-only; each card takes an optional standing agent prompt |
+| `gitlab` | ✅ | issues + merge requests **assigned to you** → Timeline through triage — gitlab.com or your own instance. Read-only |
+| `azdo` (Azure DevOps) | ✅ | work items **assigned to you** (WIQL `@Me`) → Timeline through triage. Read-only |
+| `linear` / `trello` / `notion` | ✅ | Linear issues and Trello cards assigned to you flow through triage; Notion pages shared with the integration surface as a feed when they change |
+| `discord` | ✅ | watch channels with a bot — messages in through triage, approved replies post back **into the channel** |
+| `sentry` / `pagerduty` | ✅ | new unresolved errors and open incidents land on the Timeline through triage — production breakage joins the same funnel as the mail about it |
 | `anthropic` / `openai` / `azure_openai` | ✅ | AI for triage + report summaries |
 | `openrouter` | ✅ | one key, the whole catalog — open-weights Llama / Qwen / Mistral and every closed model, as the triage brain |
 | `ollama` | ✅ | local open-source models, no key and no cloud — Ollama out of the box, `base_url` reaches LM Studio / llama.cpp / vLLM |
 | `mssql` | ✅ | connect once; build AI-summarized reports on the Reports tab |
+| `database` | ✅ | **any engine by connection string** — postgres / mysql / snowflake / oracle URLs via SQLAlchemy, raw ODBC strings via pyodbc; write `{password}` in the string and the real one stays write-only |
+| `aws` | ✅ | S3 objects, CloudWatch logs (`?ERROR` in the last 24h), or **any service call** — as scheduled reports and agent tools, with IAM keys or the server's own credential chain |
+| `azure` | ✅ | blob storage, Log Analytics (KQL), or **any ARM path** — reuses the Outlook card's app registration automatically; the app just needs RBAC roles |
+| `prometheus` / `datadog` | ✅ | PromQL instant queries (each series = a row of labels + value); Datadog monitor states, trouble sorted first — reports and agent tools |
 | `winrm` | ✅ | run PowerShell on any machine you can RDP into; output → Timeline |
 | `mcp` | ✅ | any MCP server's tool as a scheduled report |
 | `sqlite` / `rest` / `rss` | ✅ | scheduled reports, AI summaries optional |
-| `postgres` `mysql` `snowflake` `sharepoint_list` `google_sheets` `s3_object` `graphql` `smb_file` `prometheus` | 🗺 planned | one ~15-line executor away — PRs welcome |
+| `sharepoint_list` `google_sheets` `graphql` `smb_file` | 🗺 planned | one ~15-line executor away — PRs welcome |
 
 Anything can also **push** items in: `POST /api/ingest/push` with
 `{subject, body, from_email, channel}` — cron jobs, webhooks, other apps. The full API is
@@ -243,7 +270,7 @@ git clone https://github.com/ldbumble/taskuary && cd taskuary
 pip install -e .[dev,mssql,desktop]
 taskuary --debug            # verbose console; every run also logs to ~/.taskuary/taskuary.log
 
-pytest -q                   # 113 tests, ~20s, no network or credentials needed
+pytest -q                   # 300 tests, no network or credentials needed
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install
@@ -273,8 +300,11 @@ Early (v0.2.0) and moving fast.
 - [x] Per-connection roles (trigger / report / tool), GitHub issues as an inbound trigger
 - [x] Configurable triage brain — a cloud key or your CLI agent — and `/api/tools/run`
 - [x] Self-learning triage: LEARNED.md distilled from your verdicts, with strength + evidence per line
+- [x] Generate from history: TRIAGE.md and STYLE.md bootstrapped from 3 months of your own mailbox
+- [x] Data connections: any database by connection string, AWS, Azure, Prometheus, Datadog
+- [x] Developer inboxes: GitLab, Azure DevOps, Linear, Trello, Notion, Discord, Sentry, PagerDuty
 - [ ] Git worktree isolation per task attempt
-- [ ] More ingest channels and report connectors (table above)
+- [ ] Remaining report connectors (table above)
 - [ ] Tray + notifications for the desktop shell
 
 ## Contributing

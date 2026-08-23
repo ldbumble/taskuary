@@ -29,6 +29,22 @@ class ReviewVisibilityTests(unittest.TestCase):
         s.set_message_status(mid, 'routed')          # unskip: reversible, review returns
         self.assertEqual(len(self.pending(s)), 1)
 
+    def test_pending_review_agrees_with_the_queue(self):
+        """The reported divergence: the queue hid it, the funnel still handed it back - so the
+        same draft was both gone and live depending on who asked."""
+        s = MemoryStore(); tid, mid, _ = self.seed(s)
+        s.set_message_status(mid, 'skipped')
+        self.assertEqual((self.pending(s), s.pending_review(tid), s.pending_review(tid, 'draft')), ([], None, None))
+        s.set_message_status(mid, 'routed')          # unskip: both see it again
+        self.assertEqual((len(self.pending(s)), bool(s.pending_review(tid))), (1, True))
+
+    def test_a_closed_task_hides_a_later_pending_review_from_both(self):
+        s = MemoryStore(); tid, _, _ = self.seed(s)
+        s.update_task(tid, {'Status': 'done'}, 't')                  # supersedes the seeded one
+        rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending'})   # ...a late arrival
+        self.assertEqual((self.pending(s), s.pending_review(tid)), ([], None))
+        self.assertEqual((s.pending_review(tid, live_only=False) or {}).get('ReviewId'), rid)
+
     def test_decided_history_survives_done_tasks(self):
         s = MemoryStore(); tid, _, rid = self.seed(s)
         s.decide_review(rid, 'approved', 'final', 'me')

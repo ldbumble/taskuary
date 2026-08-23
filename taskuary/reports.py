@@ -11,8 +11,7 @@ import json, re, sqlite3
 from datetime import datetime, timedelta
 from loguru import logger
 
-PLANNED = ['postgres', 'mysql', 'snowflake', 'sharepoint_list', 'google_sheets', 's3_object',
-           'graphql', 'smb_file', 'prometheus', 'jira']
+PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file', 'prometheus']
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
@@ -93,6 +92,50 @@ def run_mcp(cfg):
     return run_report(cfg)
 
 
+def run_database(cfg):
+    """{"query"} - ANY database by connection string (postgres/mysql/snowflake/... URLs via
+    SQLAlchemy, raw ODBC strings via pyodbc). The string lives on the 'Any database'
+    connector card; see db.py."""
+    from .db import run_report
+    return run_report(cfg)
+
+
+def run_aws(cfg):
+    """{"service", "operation", "params", "path"} - any boto3 call with the AWS card's keys."""
+    from .aws import run_aws as _run
+    return _run(cfg)
+
+
+def run_s3(cfg):
+    """{"bucket", "key" | "prefix"} - read an S3 object, or list under a prefix. See aws.py."""
+    from .aws import run_s3_object
+    return run_s3_object(cfg)
+
+
+def run_cwlogs(cfg):
+    """{"log_group", "pattern", "hours"} - grep a CloudWatch log group. See aws.py."""
+    from .aws import run_cloudwatch_logs
+    return run_cloudwatch_logs(cfg)
+
+
+def run_azure(cfg):
+    """{"path", "api_version"} - GET any Azure Resource Manager object. See azure.py."""
+    from .azure import run_azure as _run
+    return _run(cfg)
+
+
+def run_azblob(cfg):
+    """{"account", "container", "blob" | "prefix"} - read or list Azure blob storage."""
+    from .azure import run_azure_blob
+    return run_azure_blob(cfg)
+
+
+def run_azlogs(cfg):
+    """{"workspace_id", "query", "hours"} - KQL against a Log Analytics workspace."""
+    from .azure import run_azure_logs
+    return run_azure_logs(cfg)
+
+
 def run_digest(cfg):
     """{"days": 3} - Taskuary's own activity as the data: open work, finished work, pending
     reviews, fresh verdicts, who wrote how often. The Morning digest ships as a report ON
@@ -109,8 +152,17 @@ def _planned(name):
     return _fail
 
 
-REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
+REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
+            'aws': run_aws, 's3_object': run_s3, 'cloudwatch_logs': run_cwlogs,
+            'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
+            'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'rss': run_rss, 'digest': run_digest, **{n: _planned(n) for n in PLANNED}}
+
+# Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
+# card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
+CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure'}
+
+def card_of(t): return CARD_OF.get(t, t)
 
 
 def mssql_connection(store) -> dict:
@@ -131,9 +183,41 @@ def winrm_connection(store) -> dict:
     return {k: v for k, v in cfg.items() if v}
 
 
+def _card(store, typ, secret_as):
+    c = store.get_connector_by_type(typ, with_secret=True)
+    if not c: return {}
+    cfg = json.loads(c.get('ConfigJson') or '{}')
+    if c.get('Secret'): cfg.setdefault(secret_as, c['Secret'])
+    return {k: v for k, v in cfg.items() if v}
+
+
+def database_connection(store) -> dict:
+    """The connection string lives on the 'Any database' card; its write-only secret fills
+    the string's {password} placeholder."""
+    return _card(store, 'database', 'password')
+
+
+def aws_connection(store) -> dict:
+    return _card(store, 'aws', 'secret_access_key')
+
+
+def azure_connection(store) -> dict:
+    """The Azure card's own app, else the Outlook connector's saved Graph app - one app
+    registration can hold Graph permissions AND Azure RBAC roles, so the borrow is real."""
+    cfg = _card(store, 'azure', 'client_secret')
+    if not (cfg.get('client_id') and cfg.get('client_secret')):
+        cfg = {**_card(store, 'outlook', 'client_secret'), **cfg}
+    return cfg
+
+
+CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
+                 'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
+                 'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection}
+
+
 def resolve_cfg(store, cfg: dict) -> dict:
     if cfg.get('type') == 'digest': return {**cfg, 'store': store}   # its data IS the store
-    conn = {'mssql': mssql_connection, 'winrm': winrm_connection}.get(cfg.get('type'))
+    conn = CONNECTION_OF.get(cfg.get('type'))
     if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg
 

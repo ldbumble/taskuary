@@ -24,6 +24,26 @@ const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize the census by facility. Flag anything under 70 and any day-over-day drop."];
 const FIELDS = {
   mssql: [["query", "query", "multiline", "SELECT TOP 20 * FROM ..."], AI_FIELD],
+  database: [["query", "query", "multiline", "SELECT ... (any SQL the connected engine speaks)"], AI_FIELD],
+  aws: [["service", "service", "text", "s3 · logs · ec2 · athena · dynamodb ..."],
+    ["operation", "operation", "text", "list_buckets · describe_instances · list_objects_v2 ..."],
+    ["params (JSON)", "params", "multiline", '{"Bucket": "my-bucket"}'],
+    ["path into the response", "path", "text", "Contents"], AI_FIELD],
+  s3_object: [["bucket", "bucket", "text", "my-bucket"],
+    ["key — read this object (blank = list instead)", "key", "text", "reports/latest.csv"],
+    ["prefix — list under this", "prefix", "text", "reports/"], AI_FIELD],
+  cloudwatch_logs: [["log group", "log_group", "text", "/aws/lambda/my-fn"],
+    ["filter pattern (optional)", "pattern", "text", "?ERROR ?Exception"],
+    ["hours back", "hours", "text", "24"], AI_FIELD],
+  azure: [["ARM path (or full URL)", "path", "multiline", "/subscriptions/<id>/resourceGroups/<rg>/providers/Microsoft.Web/sites"],
+    ["api-version", "api_version", "text", "2022-12-01"], AI_FIELD],
+  azure_blob: [["storage account", "account", "text", "mystorageacct"],
+    ["container", "container", "text", "reports"],
+    ["blob — read this one (blank = list instead)", "blob", "text", "latest.csv"],
+    ["prefix — list under this", "prefix", "text", ""], AI_FIELD],
+  azure_logs: [["workspace id", "workspace_id", "text", "the Log Analytics workspace GUID"],
+    ["KQL query", "query", "multiline", "AppExceptions | where TimeGenerated > ago(1d) | take 50"],
+    ["hours back", "hours", "text", "24"], AI_FIELD],
   winrm: [["PowerShell to run on the remote box", "script", "multiline",
     "Get-Content C:/logs/latest.csv -Tail 20"], AI_FIELD],
   mcp: [["command", "cmd", "text", "npx / uvx / path to the MCP server"], ["args (one per line)", "args", "multiline", ""],
@@ -34,14 +54,21 @@ const FIELDS = {
 };
 const TYPE_LABELS = {
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
+  database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
+  azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
 };
+// which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
+const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure" };
+const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const NL = String.fromCharCode(10);
 // Everything that belongs to ONE source card; the rest (title, prompt, schedule) is the
 // report itself. Splitting here is what lets old single-source configs load unchanged.
 const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args",
-  "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver"];
+  "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver",
+  "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
+  "api_version", "path_expr", "account", "container", "blob", "workspace_id"];
 
 const toSources = (cfg) => {
   if (Array.isArray(cfg.sources) && cfg.sources.length) return cfg.sources;
@@ -165,6 +192,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     const c = { ...src };
     if (typeof c.args === "string") c.args = c.args.split(NL).map((x) => x.trim()).filter(Boolean);
     if (typeof c.headers === "string" && c.headers.trim()) { try { c.headers = JSON.parse(c.headers); } catch { /* preview will complain */ } }
+    if (typeof c.params === "string" && c.params.trim()) { try { c.params = JSON.parse(c.params); } catch { /* preview will complain */ } }
     if (c.max_rows) c.max_rows = Number(c.max_rows);
     for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
     return c;
@@ -389,8 +417,9 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
 function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
                       onDropHere, onChange, onRetype, onCopy, onRemove }) {
   const fields = (FIELDS[src.type] || []).filter(([, key]) => key !== "ai_prompt");
-  const conn = connectors.find((c) => c.Type === src.type);
-  const needsConn = ["mssql", "winrm"].includes(src.type);
+  const cardType = CARD_OF[src.type] || src.type;
+  const conn = connectors.find((c) => c.Type === cardType);
+  const needsConn = ["mssql", "winrm", "database", "aws", "azure"].includes(cardType);
   const connOk = conn?.LastSyncAt && !conn?.LastError;
   return (
     <Box draggable onDragStart={onDragStart} onDragEnd={onDragEnd}
@@ -413,8 +442,8 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       </Select>
       {needsConn && (
         <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#15803d" : "#b45309" }}>
-          {connOk ? `✓ uses the ${TYPE_LABELS[src.type]} connection from Connectors`
-            : `⚠ set up Connectors → ${TYPE_LABELS[src.type]} first`}
+          {connOk ? `✓ uses the ${CARD_LABELS[cardType] || cardType} connection from Connectors`
+            : `⚠ set up Connectors → ${CARD_LABELS[cardType] || cardType} first`}
         </Typography>
       )}
       {count > 1 && (

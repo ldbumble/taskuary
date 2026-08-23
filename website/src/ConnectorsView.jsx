@@ -170,6 +170,39 @@ const MSSQL_HOWTO = [
   "Build the actual reports (query + AI summary + schedule) on the REPORTS tab.",
 ];
 
+/* ── data-connection cards that share one field-driven detail page (mssql keeps its
+   bespoke driver picker). Each is the CONNECTION only - reports live on the Reports tab. */
+const DATA_META = {
+  database: { title: "Any database (connection string)", types: ["database"],
+    fields: [["connection string", "conn_str",
+      "postgresql://user:{password}@host:5432/db   ·   mysql+pymysql://…   ·   DRIVER={…};SERVER=…"]],
+    secretLabel: "password for {password} (optional — write-only)",
+    desc: "Postgres, MySQL, Snowflake, Oracle, anything with a connection string — URLs run through SQLAlchemy, raw ODBC strings through pyodbc.",
+    howto: ["Paste the connection string: a URL (postgresql://…, mysql+pymysql://…, snowflake://…) or a raw ODBC string (DRIVER={…};SERVER=…;).",
+      "Keep the password OUT of the string: write {password} where it goes and paste the real one below (stored write-only, never shown again).",
+      "URL engines need their Python driver on the server: pip install taskuary[db] plus e.g. psycopg2-binary (postgres) or pymysql (mysql).",
+      "Test connects for real and runs a probe (SELECT 1 — engines that need FROM DUAL can set test_query in the config).",
+      "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."] },
+  aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"],
+    fields: [["access key id", "access_key_id"], ["region (e.g. us-east-2)", "region"]],
+    secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
+    desc: "S3 objects, CloudWatch logs — or ANY service call — as scheduled reports and agent tools, with your IAM keys.",
+    howto: ["Create an IAM user (or use an existing one) with read access to what you'll pull: AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess, etc.",
+      "Enter the access key id + region and paste the secret access key (write-only). Leave everything blank to use the server's own AWS credentials (env vars, ~/.aws, an instance role).",
+      "The server needs boto3: pip install taskuary[aws].",
+      "Test calls STS and reports which account/ARN you actually are.",
+      "Reports tab then offers: S3 object (read a file or list a prefix), CloudWatch logs (grep a log group — e.g. errors in the last 24h), and a generic AWS call (any service + operation, e.g. athena or ec2)."] },
+  azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"],
+    fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
+    secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
+    desc: "Blob storage, Log Analytics (KQL) — or ANY resource via ARM — as scheduled reports and agent tools, through an app registration.",
+    howto: ["Reuse the app you registered for Outlook (leave everything blank) or register a new one: Azure Portal → App registrations.",
+      "Grant the app RBAC roles on what you'll pull: Reader on a subscription/resource group (ARM reads), Storage Blob Data Reader (blobs), Log Analytics Reader (logs). These are IAM role assignments, not Graph API permissions.",
+      "No extra installs — tokens ride the same client-credentials road the Outlook connector uses.",
+      "Test authenticates and lists the subscriptions the app can actually see (a token with no roles is called out).",
+      "Reports tab then offers: Azure blob (read a file or list a container), Log Analytics (any KQL — app exceptions, sign-ins…), and a generic ARM read (any resource path)."] },
+};
+
 const WINRM_HOWTO = [
   "This card is the CONNECTION only - the machine name. Build the actual reports (script + AI summary + schedule) on the REPORTS tab.",
   "A box you can RDP into (like AZWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
@@ -220,6 +253,9 @@ export default function ConnectorsView() {
   if (open?.kind === "winrm") {
     return <WinrmDetail conn={byType.winrm} reload={load} onBack={() => setOpen(null)} />;
   }
+  if (open?.kind === "data") {
+    return <DataDetail conn={byType[open.type]} meta={DATA_META[open.type]} reload={load} onBack={() => setOpen(null)} />;
+  }
 
   /* ── landing: searchable grouped catalog ── */
   const chanCard = (c) => {
@@ -261,6 +297,13 @@ export default function ConnectorsView() {
         haystack: "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" "),
         go: () => setOpen({ kind: "winrm" }),
       }] : []),
+      ...Object.entries(DATA_META).filter(([t]) => byType[t]).map(([t, dm]) => ({
+        key: t, title: dm.title, channel: "report",
+        desc: (byType[t].LastError ? "connection failing" : byType[t].LastSyncAt ? "connection ✓" : "not set up")
+          + ` · ${reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length} reports (built on the Reports tab)`,
+        haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
+        go: () => setOpen({ kind: "data", type: t }),
+      })),
       ...types.filter((t) => t.status === "planned").map((t) => ({
         key: `p${t.type}`, title: t.type, desc: "planned", channel: "report", haystack: `${t.type} planned`, planned: true })),
     ]},
@@ -636,6 +679,69 @@ function WinrmDetail({ conn, reload, onBack }) {
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
             <Button variant="outlined" disabled={busy === "test" || !cfg.host} onClick={runTest}
+              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+            {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
+          </Box>
+          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
+            {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
+        </Box>
+      )}
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+    </Box>
+  );
+}
+
+/* ── shared detail for the DATA_META cards (database / aws / azure): fields + write-only
+   secret + live Test; the connection only - reports are built on the Reports tab. ── */
+function DataDetail({ conn, meta, reload, onBack }) {
+  const [tab, setTab] = useState("Connection");
+  const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
+  const [secret, setSecret] = useState("");
+  const [test, setTest] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  if (!conn) return null;
+
+  const save = async () => {
+    setBusy("save"); setMsg("");
+    try {
+      const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true };
+      if (secret) body.Secret = secret;
+      await api.post("/api/connectors", body);
+      setMsg("saved ✓"); setSecret(""); reload();
+    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
+    setBusy("");
+  };
+  const runTest = async () => {
+    setBusy("test");
+    try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
+    catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
+    setBusy(""); reload();
+  };
+
+  return (
+    <Box sx={{ maxWidth: 980 }}>
+      <Crumb section="Connectors" onBack={onBack} title={meta.title} />
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
+        {meta.desc} The connection only — build the scheduled reports on the Reports tab.
+      </Typography>
+      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      {tab === "Guide" && <Steps steps={meta.howto} />}
+      {tab === "Connection" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 560, mt: 1 }}>
+          {meta.fields.map(([label, key, ph]) => (
+            <TextField key={key} label={label} placeholder={ph} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
+              multiline={key === "conn_str"} minRows={key === "conn_str" ? 2 : undefined}
+              onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
+          ))}
+          <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
+            type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
+            helperText="Write-only: stored server-side, never returned to the browser." />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
+              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
+            <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
             {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
           </Box>

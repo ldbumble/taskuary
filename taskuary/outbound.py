@@ -83,6 +83,41 @@ def send_teams(store, chat_id: str, body: str) -> dict:
     return {'channel': 'teams', 'chat': chat_id}
 
 
+# Which channels Taskuary DRAFTS AND SENDS replies on. One answer, asked by everything:
+# triage (should this become a reply task?), the coder wrap-up (is there a reply to draft?),
+# and the Review buttons (can Approve actually send?). Before this, each decided for itself
+# and they disagreed - a github task with replies off closed with no draft while the UI
+# still promised one.
+#
+# 'report' and the read-only trackers can never carry a reply: nothing is written back to
+# Jira or Sentry by design. github is gated on its own card switch (a public comment is the
+# owner's call). Everything else is the owner's setting.
+SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'github')
+NEVER = {'report', 'jira', 'asana', 'monday', 'gitlab', 'azdo', 'linear', 'trello',
+         'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
+
+
+def reply_channels(store) -> set:
+    """The channels the owner has replies switched ON for (Settings → Replies)."""
+    raw = store.get_settings().get('reply_channels')
+    if raw is None: return set(SENDABLE)
+    return {c.strip() for c in str(raw).split(',') if c.strip()}
+
+
+def can_reply(store, channel) -> bool:
+    """May a reply be drafted and sent on this channel at all?
+
+    The setting is a switch over the channels it LISTS, not a whitelist over everything -
+    anything else (an item pushed in over /api/ingest/push, a channel added by a future
+    connector) stays replyable, because silently refusing to answer an unrecognised channel
+    is the worse failure. Only NEVER is absolute."""
+    ch = (channel or '').lower()
+    if not ch or ch in NEVER: return False
+    if ch in SENDABLE and ch not in reply_channels(store): return False
+    if ch == 'github': return store.github_replies_ok()
+    return True
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""

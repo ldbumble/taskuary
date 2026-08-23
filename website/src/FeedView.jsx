@@ -100,6 +100,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [cat, setCat] = useState("");                // "" everything | messages | code | reports
   const [pick, setPick] = useState("");              // "" all in category | "channel:x" | "src:channel:name"
   const [srcByChannel, setSrcByChannel] = useState({});   // channel -> connection names
+  const [srcQ, setSrcQ] = useState("");                    // the picker's own search box
   const [noMore, setNoMore] = useState(false);
   const [detail, setDetail] = useState(null);
   const [editText, setEditText] = useState(null);    // null = untouched; "" = deliberately cleared
@@ -318,6 +319,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <FilterPills options={CATEGORIES} value={cat} onChange={setCat} />
           {pickerChannels.length > 0 && (
             <Select size="small" value={pick} displayEmpty onChange={(e) => setPick(e.target.value)}
+              onClose={() => setSrcQ("")}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 440, maxWidth: 460 } } }}
               renderValue={(v) => (!v ? "all sources"
                 : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
                   : String(v.split(":").slice(2).join(":")).split("@")[0])}
@@ -325,19 +328,44 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 color: pick ? "#0F6CBD" : DIM, maxWidth: 210,
                 "& .MuiSelect-select": { py: 0.3, px: 1.25 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#c4dcf2" : BORDER } }}>
+              {/* 96 discovered buckets turned this into a page-long wall. It is a bounded,
+                  searchable list now: type to narrow, and each channel shows a few with a
+                  count for the rest rather than every object it has ever seen. */}
+              <Box sx={{ px: 1, pt: 0.5, pb: 0.75, position: "sticky", top: 0, bgcolor: PANEL, zIndex: 2 }}
+                onKeyDown={(e) => e.stopPropagation()}>
+                <TextField autoFocus fullWidth placeholder="search sources…" value={srcQ}
+                  onChange={(e) => setSrcQ(e.target.value)} sx={{ bgcolor: "#fff" }}
+                  inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
+              </Box>
               <MenuItem value="" sx={{ fontSize: 12 }}>all sources</MenuItem>
-              {pickerChannels.flatMap((ch) => [
-                <ListSubheader key={`h${ch}`} sx={{ fontSize: 10, lineHeight: 2, color: FAINT, letterSpacing: 1,
-                  textTransform: "uppercase", bgcolor: "transparent" }}>
-                  {CHANNEL_LABELS[ch] || ch}
-                </ListSubheader>,
-                <MenuItem key={`c${ch}`} value={`channel:${ch}`} sx={{ fontSize: 12 }}>
-                  all {(CHANNEL_LABELS[ch] || ch).toLowerCase()}
-                </MenuItem>,
-                ...(srcByChannel[ch] || []).map((n) => (
-                  <MenuItem key={`${ch}:${n}`} value={`src:${ch}:${n}`} sx={{ fontSize: 12, pl: 3 }}>{n}</MenuItem>
-                )),
-              ])}
+              {pickerChannels.flatMap((ch) => {
+                const q = srcQ.trim().toLowerCase();
+                const all = (srcByChannel[ch] || []).filter((n) => !q || String(n).toLowerCase().includes(q));
+                const label = CHANNEL_LABELS[ch] || ch;
+                // a channel whose name matches keeps its "all of them" row even when no
+                // individual source does; one that matches nothing at all drops out
+                if (q && !all.length && !label.toLowerCase().includes(q)) return [];
+                const shown = q ? all.slice(0, 12) : all.slice(0, 6);
+                return [
+                  <ListSubheader key={`h${ch}`} sx={{ fontSize: 9.5, lineHeight: 1.9, color: FAINT, letterSpacing: 1,
+                    textTransform: "uppercase", bgcolor: PANEL }}>
+                    {label}{all.length > shown.length ? ` · ${all.length}` : ""}
+                  </ListSubheader>,
+                  <MenuItem key={`c${ch}`} value={`channel:${ch}`} sx={{ fontSize: 12 }}>
+                    all {label.toLowerCase()}
+                  </MenuItem>,
+                  ...shown.map((n) => (
+                    <MenuItem key={`${ch}:${n}`} value={`src:${ch}:${n}`}
+                      sx={{ fontSize: 11.5, pl: 2.5, maxWidth: 420 }}>
+                      <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n}</Box>
+                    </MenuItem>
+                  )),
+                  ...(all.length > shown.length ? [
+                    <MenuItem key={`m${ch}`} disabled sx={{ fontSize: 10.5, pl: 2.5, color: FAINT, opacity: 1 }}>
+                      +{all.length - shown.length} more — type to find one
+                    </MenuItem>] : []),
+                ];
+              })}
             </Select>
           )}
         </Box>

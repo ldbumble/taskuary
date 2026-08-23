@@ -128,13 +128,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
             store.add_route(mid, None, 'file', None, f"triage: fyi - {intent.get('why') or 'informational'}", [], 'triage')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
-        if intent['intent'] == 'reply_only' and msg.get('channel') == 'github' and not store.github_replies_ok():
-            # a question on GitHub with replying switched off (the GitHub card's call): filing
-            # beats opening a reply task whose draft could never be sent anywhere
+        from .outbound import can_reply
+        if intent['intent'] == 'reply_only' and not can_reply(store, msg.get('channel')):
+            # a question on a channel replies are OFF for: filing beats opening a reply task
+            # whose draft could never be sent anywhere (see outbound.can_reply for who decides)
+            ch = msg.get('channel') or 'this channel'
+            why = ('GitHub replies are off (GitHub card)' if ch == 'github'
+                   else f'replies are off for {ch} (Settings → Replies)')
             mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
             store.add_route(mid, None, 'file', None,
-                            f"triage: reply_only - {intent.get('why') or 'a question'} · GitHub replies are "
-                            'off (GitHub card), so it is filed instead of drafted', [], 'triage')
+                            f"triage: reply_only - {intent.get('why') or 'a question'} · {why}, "
+                            'so it is filed instead of drafted', [], 'triage')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         f = draft_task_fields(msg)
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'

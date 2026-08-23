@@ -536,7 +536,9 @@ class CoreTests(unittest.TestCase):
         from taskuary.coder import finish
         s = MemoryStore()
         tid = s.create_task({'Title': 'importer is down', 'Kind': 'coding'}, 'o')
-        s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Subject': 'importer is down',
+        # a real ingest always stamps the channel (the push API defaults it to 'api'), and the
+        # reply road now asks which channel it is - a channel-less row cannot be answered at all
+        s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'importer is down',
                        'FromEmail': 'ap@client.com', 'SentAt': '2026-08-18 09:00', 'BodyText': 'nothing imported'})
         rep = {'determination': 'a bad date killed the batch', 'actions': 'fixed the date parse', 'summary': 'ran the import'}
         seen = {}

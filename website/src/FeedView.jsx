@@ -281,10 +281,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
   return (
     <Box sx={{ display: "grid", gap: 2, alignItems: "start",
-      // Timeline column is a HARD 860px in both states - it cannot shrink or grow when
-      // the panel opens; the panel takes exactly the leftover (minmax(0,1fr) = no spill).
+      // Timeline column tops out at 860px; with the panel open the PANEL keeps a 340px
+      // floor and the timeline yields below ~1240px - a hard 860 both ways squeezed the
+      // panel into a one-word-per-line sliver on narrow windows. At full width nothing
+      // moves when the panel opens.
       gridTemplateColumns: { xs: "minmax(0, 1fr)",
-        md: sel ? "min(860px, 100%) minmax(0, 1fr)" : "min(860px, 100%)" } }}>
+        md: sel ? "minmax(0, 860px) minmax(340px, 1fr)" : "min(860px, 100%)" } }}>
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
       <Box sx={{ minWidth: 0, maxWidth: 860 }}>

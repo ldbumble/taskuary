@@ -419,6 +419,12 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
           'jira': 'jira', 'asana': 'asana', 'monday': 'monday',
           'gitlab': 'gitlab', 'azdo': 'azdo', 'linear': 'linear', 'trello': 'trello',
           'notion': 'notion', 'discord': 'discord', 'sentry': 'sentry', 'pagerduty': 'pagerduty'}
+# Connections polled ONCE per connector: their cursor lives on the connector (telegram's
+# getUpdates offset, whatsapp's bridge seq) or their API is 'assigned to me' with no
+# per-source dimension at all. Their source row is a label, so the poll must not depend
+# on one existing - see poll_channels.
+PER_CONNECTOR = ('telegram', 'whatsapp', 'jira', 'asana', 'monday',
+                 'gitlab', 'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty')
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
@@ -509,6 +515,29 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                 tok = graph_token(gcfg, gsec)
             else:
                 tok = full.get('Secret')
+            # ── connections whose SOURCE ROW IS ONLY A MARKER poll once per connector, and
+            # they must poll even with NO source row at all. This used to live inside the
+            # per-source loop, so a Telegram card whose '*' marker was never created (Test
+            # skipped) or was deleted polled NOTHING: getUpdates never ran, so no chat could
+            # ever announce itself, and Sync now looked broken with no error anywhere.
+            if c['Type'] in PER_CONNECTOR:
+                mine = [x for x in store.list_sources()
+                        if x['Channel'] == CH2SRC[c['Type']]
+                        and (not x.get('ConnectorId') or x['ConnectorId'] == c['ConnectorId'])]
+                since = _since(mine[0] if mine else {}, backfill_days)
+                if c['Type'] in ('telegram', 'whatsapp'):
+                    from . import messengers
+                    poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
+                    n += poll(store, full, mine, llm, file_only)
+                elif c['Type'] in ('jira', 'asana', 'monday'):
+                    from . import pm
+                    n += pm.poll(store, full, since, llm, file_only)
+                else:
+                    from . import devtools
+                    n += devtools.poll(store, full, since, llm, file_only)
+                for s in mine: store.touch_source(s['SourceId'])
+                store.touch_connector(c['ConnectorId'])
+                continue
             for s in store.list_sources():
                 if s['Channel'] != CH2SRC[c['Type']]: continue
                 # a source belongs to ONE connector: outlook and an IMAP mailbox are both
@@ -552,30 +581,6 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                     from . import imapmail
                     if s['ConnectorId'] != c['ConnectorId']: continue
                     n += imapmail.poll_imap(store, full, [s], llm, file_only, backfill_days)
-                elif c['Type'] in ('telegram', 'whatsapp'):
-                    # one poll per CONNECTOR, not per source: both keep a cursor on the connector,
-                    # and the sources are just filters over what arrives (see messengers)
-                    from . import messengers
-                    mine = [x for x in store.list_sources() if x['Channel'] == CH2SRC[c['Type']]]
-                    if s['SourceId'] != mine[0]['SourceId']: continue
-                    poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
-                    n += poll(store, full, mine, llm, file_only)
-                elif c['Type'] in ('jira', 'asana', 'monday'):
-                    # one poll per connector (the source row just marks the site/workspace)
-                    from . import pm
-                    mine = [x for x in store.list_sources() if x['Channel'] == CH2SRC[c['Type']]]
-                    if s['SourceId'] != mine[0]['SourceId']: continue
-                    n += pm.poll(store, full, since, llm, file_only)
-                elif c['Type'] == 'discord':
-                    # per SOURCE, like slack: each watched channel id is its own source
-                    from . import devtools
-                    n += devtools.poll_discord(store, full, s, since, llm, file_only)
-                elif c['Type'] in ('gitlab', 'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty'):
-                    # one poll per connector, pm-style (the source marks the site/org/account)
-                    from . import devtools
-                    mine = [x for x in store.list_sources() if x['Channel'] == CH2SRC[c['Type']]]
-                    if s['SourceId'] != mine[0]['SourceId']: continue
-                    n += devtools.poll(store, full, since, llm, file_only)
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)

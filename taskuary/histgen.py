@@ -12,6 +12,16 @@ from loguru import logger
 
 HIST_START, HIST_END = '<!-- fromhistory:start -->', '<!-- fromhistory:end -->'
 DAYS = 90
+
+# Live progress + receipts for the Docs tab: the button polls this while a generation runs,
+# and afterwards `evidence` shows exactly what was read and what each line contributed -
+# the distillation is inspectable, not a vibe. One generation at a time (module-level).
+STATUS = {'state': 'idle', 'what': '', 'doc': '', 'evidence': []}
+
+def _status(state, what='', doc=None, evidence=None):
+    STATUS.update({'state': state, 'what': what})
+    if doc is not None: STATUS['doc'] = doc
+    if evidence is not None: STATUS['evidence'] = evidence
 SENT_CAP, INBOX_CAP = 300, 500            # per mailbox; enough signal, bounded Graph bill
 STYLE_SAMPLES, TRIAGE_LINES = 60, 240
 GUIDE_TOKENS = 1400
@@ -81,6 +91,7 @@ def _graph_mail(store, days):
     for s in store.list_sources():
         if s['Channel'] != 'email' or s.get('ConnectorId') != c['ConnectorId']: continue
         upn, n = s['Address'], n + 1
+        _status('running', f'reading {upn} — {len(sent)} sent / {len(inbox)} inbound so far…')
         common = {'$top': 50, '$orderby': 'receivedDateTime desc',
                   '$filter': f'receivedDateTime gt {since}'}
         try:
@@ -117,8 +128,17 @@ def gen_style(store, llm, days):
     if not samples:
         raise RuntimeError('no sent mail to learn from - connect the Outlook card (or approve a few drafts) first')
     step = max(1, len(samples) // STYLE_SAMPLES)          # spread across the window, not just last week
-    body = llm(STYLE_SYSTEM, 'SENT MAIL:\n\n' + '\n\n'.join(samples[::step][:STYLE_SAMPLES]), max_tokens=GUIDE_TOKENS)
-    return body, src
+    picked = samples[::step][:STYLE_SAMPLES]
+    # receipts: which replies the model actually saw - each one is a vote on greeting,
+    # tone, length and phrasing; a habit only becomes a rule when several agree
+    ev = [f'read {len(picked)} of your replies (every ~{step}th across the window, quoted threads cut). '
+          'Each is one vote on greeting, tone, length and phrasing - the guide keeps only habits '
+          'several replies agree on:']
+    ev += ['  ' + s.splitlines()[0].lstrip('- ') for s in picked[:40]]
+    if len(picked) > 40: ev.append(f'  … and {len(picked) - 40} more')
+    _status('running', f'distilling {len(picked)} replies into the style guide…')
+    body = llm(STYLE_SYSTEM, 'SENT MAIL:\n\n' + '\n\n'.join(picked), max_tokens=GUIDE_TOKENS)
+    return body, src, ev
 
 
 def gen_triage(store, llm, days):
@@ -148,9 +168,18 @@ def gen_triage(store, llm, days):
     no = [r for r in rows if not r[3]]
     no = no[::max(1, len(no) // (TRIAGE_LINES - len(yes)))][:TRIAGE_LINES - len(yes)]
     fmt = lambda r: f"  {r[1]} | {r[0]} | {'ANSWERED' if r[3] else 'no reply'} | {r[2]}"
+    # receipts: the exact table the model judged - ANSWERED lines vote for "this kind of
+    # mail matters", no-reply lines vote against, the roll-up weighs whole domains
+    ev = [f'paired {len(rows)} inbound mails with your sent folder: a thread you replied on is '
+          'ANSWERED (a vote for "this matters"), the rest vote against. The roll-up weighs whole domains:']
+    ev += roll[:15]
+    ev.append(f'what the model judged ({len(yes)} answered + {len(no)} sampled no-reply lines):')
+    ev += [fmt(r) for r in (yes + no)[:40]]
+    if len(yes) + len(no) > 40: ev.append(f'  … and {len(yes) + len(no) - 40} more')
+    _status('running', f'distilling {len(rows)} mails into triage guidance…')
     body = llm(TRIAGE_SYSTEM, 'DOMAIN ROLL-UP (total/answered):\n' + '\n'.join(roll)
                + '\n\nINBOUND MAIL:\n' + '\n'.join(fmt(r) for r in yes + no), max_tokens=GUIDE_TOKENS)
-    return body, src
+    return body, src, ev
 
 
 GENERATORS = {'style': gen_style, 'triage': gen_triage}
@@ -167,18 +196,25 @@ def _splice(doc, body, title):
 
 def generate(store, name: str, days: int = DAYS) -> str:
     """Run one doc's generator and splice the result into its marked block. Returns the
-    one-line provenance shown in the UI; raises with a plain reason when it cannot."""
+    one-line provenance shown in the UI; raises with a plain reason when it cannot.
+    Progress and receipts ride STATUS the whole way (GET /api/doc/generate/status)."""
     gen = GENERATORS.get(name)
     if not gen: raise ValueError(f"no history generator for doc '{name}'")
-    from .llm import build_llm
-    llm = build_llm(store)
-    if not llm: raise RuntimeError('no active AI connector - set one up under Connectors → AI')
-    body, src = gen(store, llm, days)
-    body = re.sub(r'^```\w*\s*$|^```\s*$', '', (body or '').strip(), flags=re.M).strip()
-    # a broken answer never lands in the doc - a marker inside it would corrupt the splice
-    if not body or '<!--' in body or len(body) < 100 or len(body) > 8000:
-        raise RuntimeError('the model returned nothing usable - try again, or a different triage brain')
-    stamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-    store.save_doc(name, _splice(store.get_doc(name) or '', f'_generated {stamp} — {src}_\n\n{body}', TITLES[name]), 'histgen')
-    logger.info(f'{name}.md generated from history: {src}')
-    return src
+    _status('running', 'connecting…', doc=name, evidence=[])
+    try:
+        from .llm import build_llm
+        llm = build_llm(store)
+        if not llm: raise RuntimeError('no active AI connector - set one up under Connectors → AI')
+        body, src, ev = gen(store, llm, days)
+        body = re.sub(r'^```\w*\s*$|^```\s*$', '', (body or '').strip(), flags=re.M).strip()
+        # a broken answer never lands in the doc - a marker inside it would corrupt the splice
+        if not body or '<!--' in body or len(body) < 100 or len(body) > 8000:
+            raise RuntimeError('the model returned nothing usable - try again, or a different triage brain')
+        stamp = datetime.now().strftime('%Y-%m-%d %H:%M')
+        store.save_doc(name, _splice(store.get_doc(name) or '', f'_generated {stamp} — {src}_\n\n{body}', TITLES[name]), 'histgen')
+        logger.info(f'{name}.md generated from history: {src}')
+        _status('done', src, evidence=ev)
+        return src
+    except Exception as e:
+        _status('failed', str(e)[:300])
+        raise

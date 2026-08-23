@@ -502,6 +502,10 @@ _CHROME = re.compile(r'esc to interrupt|\? for shortcuts|for agents|to manage|\b
 _WORDLESS = re.compile(r'^[^A-Za-z]*$')
 _HINT = re.compile(r'\bTip:\s+Use /')      # a slash-command hint, any length
 _SPIN = re.compile('[·✢✳✻✽✶✷✸✹✺⏺◐◓◑◒✦❯›]')       # the frames themselves
+# a spinner frame painted over a longer line leaves the OLD line's tail fused on (the macOS CI
+# runner is slow enough to catch one mid-animation): any line that OPENS as spinner chrome is
+# debris however long the residue makes it - the real text repeats on its own lines
+_SPINLINE = re.compile(r'^\s*[✢✳✻✽✶✷✸✹✺◐◓◑◒✦]\s.{0,80}\besc to interrupt\b', re.I)
 # A row of a drawn BOX - the welcome banner, the input frame - once a real emulator renders the
 # layout instead of deleting it. Only when the inside is mostly padding: a boxed line of actual
 # prose is content, a line of gutters and gaps is furniture.
@@ -536,6 +540,7 @@ def declutter(text: str) -> str:
             continue
         if _WORDLESS.match(l): continue                   # glyphs, rules, box art
         if _HINT.search(l) or (len(l) < 90 and _CHROME.search(l)): continue
+        if _SPINLINE.match(l): continue                   # spinner frame fused with repaint residue
         # a frame painted mid-line leaves fused debris ('✻an8', 'e69'): short, and barely letters
         if len(l) <= 12 and (_SPIN.search(l) or sum(c.isalpha() for c in l) <= 3): continue
         if out and out[-1] == l: continue                 # repaints of the same line

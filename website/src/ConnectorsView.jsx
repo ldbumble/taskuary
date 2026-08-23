@@ -435,10 +435,24 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
             issues for the tasks it works is the separate <b>Agent permissions</b> step below.
           </Typography>
         )}
-        {mine.map((s) => (
+        {conn.Type === "telegram" && (
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5, maxWidth: 560 }}>
+            No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>Sync now</b>, and the
+            chat appears below with its id — switched off. Flip on the chats that are yours; every other
+            chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
+            for an id you already know.
+          </Typography>
+        )}
+        {mine.filter((s) => !(conn.Type === "telegram" && s.Address === "*")).map((s) => (
           <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
             <StatusDot ok={!!s.Active} />
-            <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 13 }} noWrap>{s.Address}</Typography>
+            <Typography sx={{ ...mono, color: INK, fontSize: 13 }} noWrap>{s.Address}</Typography>
+            {String(s.Owner || "").startsWith("discovered:") && (
+              <Typography variant="caption" sx={{ color: FAINT }} noWrap>
+                {s.Owner.replace("discovered:", "").trim()}
+              </Typography>
+            )}
+            <Box sx={{ flex: 1 }} />
             {conn.Type === "github" && ["issues", "prs"].map((kind) => {
               const gc = parse(s.ConfigJson);
               return (

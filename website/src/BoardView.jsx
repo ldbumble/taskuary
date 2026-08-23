@@ -48,7 +48,7 @@ const FileChips = ({ files }) => (files || []).length === 0 ? null : (
   <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.5, mb: 0.5 }}>
     {files.slice(0, 4).map((f) => (
       <Tooltip key={f} title={f} arrow>
-        <Typography variant="caption" sx={{ ...mono, fontSize: 9, lineHeight: "14px", px: 0.55,
+        <Typography variant="caption" sx={{ ...mono, fontSize: 10, lineHeight: "16px", px: 0.6,
           color: CATPPUCCIN.green, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 0.75 }}>
           ✎ {basename(f)}
         </Typography>
@@ -56,7 +56,7 @@ const FileChips = ({ files }) => (files || []).length === 0 ? null : (
     ))}
     {files.length > 4 && (
       <Tooltip title={files.slice(4).map(basename).join(", ")} arrow>
-        <Typography variant="caption" sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.dim }}>+{files.length - 4}</Typography>
+        <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.dim }}>+{files.length - 4}</Typography>
       </Tooltip>
     )}
   </Box>
@@ -69,13 +69,13 @@ const LiveTail = ({ run }) => {
     <FileChips files={run.files} />
     {(run.tail || []).slice(-2).map((l, i, all) => (
       <Typography key={i} noWrap variant="caption"
-        sx={{ ...mono, display: "block", fontSize: 9.5, lineHeight: 1.55,
+        sx={{ ...mono, display: "block", fontSize: 10.5, lineHeight: 1.55,
           color: l.startsWith("→") ? CATPPUCCIN.blue : l.startsWith("✗") ? CATPPUCCIN.red : CATPPUCCIN.dim,
           opacity: i === all.length - 1 ? 1 : 0.55 }}>
         {l.replace(/\n/g, " ")}
       </Typography>
     ))}
-    <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
+    <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
       ...(waiting ? {} : { "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }) }}>
       {waiting ? `⏸ ${run.AgentName} is waiting on you — answer it in the task`
         : `▮ ${run.AgentName} working ${elapsed(run.StartedAt)} — click the card for the full session`}
@@ -198,7 +198,7 @@ export default function BoardView({ onOpenTask }) {
                 return (
                 <Box key={t.TaskId} draggable onDragStart={() => setDragId(t.TaskId)} onDragEnd={() => setDragId(null)}
                   onClick={() => onOpenTask(t.TaskId)}
-                  sx={{ ...card, ...hoverable, p: 1.25, mb: 1, cursor: "grab", "&:active": { cursor: "grabbing" },
+                  sx={{ ...card, ...hoverable, p: 1.5, mb: 1.25, cursor: "grab", "&:active": { cursor: "grabbing" },
                     position: "relative",
                     ...(badge ? { mt: 1.25, borderColor: `${badge.color}55` } : {}) }}>
                   {badge && (
@@ -210,7 +210,8 @@ export default function BoardView({ onOpenTask }) {
                     </Typography>
                   )}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                    <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{t.ref}</Typography>
+                    <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700,
+                      whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 13 }} />
                     {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />}
                     {t.RunStatus && (
@@ -223,34 +224,29 @@ export default function BoardView({ onOpenTask }) {
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(t.CreatedAt)}</Typography>
                   </Box>
-                  <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.35, mt: 0.5,
+                  <Typography variant="body2" sx={{ color: INK, fontWeight: 600, fontSize: 14.5, lineHeight: 1.35, mt: 0.5,
                     display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {t.Title}
                   </Typography>
+                  {/* a held-back dispatch says so ON the card - who it waits for and why, readable
+                      without hovering anything */}
+                  {t.Queued && (
+                    <Box sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: "#eef2ff", border: "1px solid #dfe3fb",
+                      borderLeft: "3px solid #7c6cf0", borderRadius: 1.25 }}>
+                      <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 700, display: "block",
+                        fontSize: 11.5, lineHeight: 1.4 }}>
+                        ⏳ {t.Queued.behind ? `Waiting on ${t.Queued.behind}` : "Waiting for a free agent slot"}
+                        {t.Queued.behindTitle ? ` — “${t.Queued.behindTitle}”` : ""}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "#5b5f97", display: "block", fontSize: 10.5,
+                        lineHeight: 1.45, mt: 0.25 }}>
+                        {t.Queued.reason ? `${t.Queued.reason} · ` : ""}starts by itself when it can
+                      </Typography>
+                    </Box>
+                  )}
                   {live[t.TaskId] && <LiveTail run={live[t.TaskId]} />}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75 }}>
-                    <Chip size="small" label={t.Kind} sx={{ height: 17, fontSize: 9.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
-                    {t.Queued && (
-                      <Tooltip arrow placement="bottom-start" title={
-                        <Box sx={{ p: 0.25, maxWidth: 250 }}>
-                          <Typography variant="caption" sx={{ fontWeight: 700, display: "block" }}>
-                            {t.Queued.behind ? `⏳ Waiting on ${t.Queued.behind}` : "⏳ Waiting for a free agent slot"}
-                          </Typography>
-                          {t.Queued.behindTitle && (
-                            <Typography variant="caption" sx={{ display: "block", opacity: 0.8 }}>“{t.Queued.behindTitle}”</Typography>
-                          )}
-                          {t.Queued.reason && (
-                            <Typography variant="caption" sx={{ display: "block", mt: 0.6 }}>{t.Queued.reason}</Typography>
-                          )}
-                          <Typography variant="caption" sx={{ display: "block", mt: 0.6, opacity: 0.65 }}>
-                            starts by itself when it can
-                          </Typography>
-                        </Box>}>
-                        <Chip size="small" label={t.Queued.behind ? `⏳ behind ${t.Queued.behind}` : "⏳ next free slot"}
-                          sx={{ height: 17, fontSize: 9.5, fontWeight: 700, bgcolor: "#eef2ff",
-                            color: "#4f46e5", border: "1px solid #c7d2fe" }} />
-                      </Tooltip>
-                    )}
+                    <Chip size="small" label={t.Kind} sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
                     <Box sx={{ flex: 1 }} />

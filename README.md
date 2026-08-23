@@ -134,7 +134,7 @@ with no AI connected messages file visibly instead of heuristics spraying tasks.
 
 ## Many agents, one repo — no stepping on each other
 
-![Two agents share one checkout: each working card shows the files ITS agent has modified (claude in the theme files, codex in the report code and its tests), and a third task waits in Queued with a "behind TQ-0009" chip — the hover explains that both would modify ReportsView.jsx, and that it starts by itself when it can](docs/screenshot-board.png)
+![Two agents share one checkout: each working card shows the files ITS agent has modified (claude in the theme files, codex in the report code and its tests), and a third task waits in Queued with the reason written on the card — waiting on TQ-0009, both would modify ReportsView.jsx, starts by itself when it can](docs/screenshot-board.png)
 
 Auto-dispatch can put several CLIs to work at once — and the board keeps them out of each
 other's way with three light moves. No locks, no worktrees, no manager agent:
@@ -156,33 +156,6 @@ other's way with three light moves. No locks, no worktrees, no manager agent:
   only what you yourself changed. Agents in *other* repos are deliberately never mentioned —
   awareness costs prompt tokens, so they are spent only where a collision is physically
   possible.
-
-## Telegram & WhatsApp — the funnel in your pocket
-
-![Left: the Taskuary bot pinging your own Telegram — a question arrived, a task was filed, the work is done and its reply waits in Review. Right: a WhatsApp ask, and the approved answer landing back in the same chat](docs/screenshot-phone.png)
-
-*The phone's side of it (the message text is exactly what Taskuary sends). What the same moment
-looks like inside the app: [the timeline view](docs/screenshot-messengers.png).*
-
-The personal messengers work both directions, and each direction is a role you switch on:
-
-- **In (trigger)** — message your Telegram bot, or anyone messages your WhatsApp, and it
-  lands on the Timeline through the same triage as mail: a question gets a drafted reply
-  (unsigned and short, because it is chat), a job becomes a task, a photo of the broken thing
-  reaches the vision triage and draws in the panel. Approving sends the answer back **into the
-  same chat**. Telegram is built in — a @BotFather token and nothing else. WhatsApp runs
-  through a small bridge beside the app (`cd taskuary/whatsapp && npm install && node
-  bridge.mjs`, pair once by QR or phone code) so the heavy unofficial-protocol dependency
-  never enters Taskuary itself.
-- **Out (notify)** — the Timeline pushed to you, instead of you polling the tab. Give the
-  connector the *notify* role, name the chat in its config, and Taskuary pings it: by default
-  (*needs_me*) only what is actually waiting on you — a question to answer, a task nobody was
-  dispatched at, and the one that matters most, *"the work is done, the reply is drafted and
-  waiting in Review"*. Set the level to *all* for every new item, *off* for silence. Events
-  that happened in the notify chat itself are never echoed back into it.
-
-One channel can wear both roles at once: ask for something from your phone, an agent works
-it, and the "done — approve the reply" ping arrives back on the same phone.
 
 ## One brain or two
 
@@ -246,8 +219,8 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 |------|--------|-------|
 | `outlook` / `teams` / `slack` | ✅ | inbound channels → Timeline through AI triage |
 | `gmail` / `imap` | ✅ | any mailbox that speaks IMAP — Gmail (App Password), a domain.com address, Yahoo, an ISP. In through triage, approved replies back over the provider's own SMTP, in-thread |
-| `telegram` | ✅ | a bot token from @BotFather and nothing else — chats in through triage, approved replies back into the chat, photos reach the vision triage. Chats are approve-first: a new chat registers OFF under Sources with its chat id, and only the ones you flip on become work (a public bot can be messaged by anyone) |
-| `whatsapp` | ✅ | your own account, via a small Baileys bridge that runs beside the app (`cd taskuary/whatsapp && npm install && node bridge.mjs`, pair once by QR or code). The heavy dependency deliberately lives there, not in Taskuary — unofficial protocol, use a number you'd risk |
+| `telegram` | ✅ | a bot token from @BotFather and nothing else — chats in through triage (photos reach the vision triage), approved replies back **into the same chat**. Approve-first: a new chat registers OFF under Sources with its chat id, and only the ones you flip on become work — a public bot can be messaged by anyone. With the *notify* role it also pings your phone with what's waiting on you ("the work is done, the reply is drafted in Review") |
+| `whatsapp` | ✅ | your own account, via a small Baileys bridge that runs beside the app (`cd taskuary/whatsapp && npm install && node bridge.mjs`, pair once by QR or code) — asks in through triage, approved answers back into the chat, *notify* role pushes pings out. The heavy dependency deliberately lives in the bridge, not Taskuary — unofficial protocol, use a number you'd risk |
 | `github` | ✅ | PAT → auto repo discovery, issue loop, repo map in SOUL.md; optional inbound trigger (new issues/PRs → Timeline → triage). Tasks born from a PR or issue carry the card's editable standing prompt — the PR default says judge it (useful? safe? minimal?), run the tests, report a verdict, never merge |
 | `jira` / `asana` / `monday` | ✅ | items **assigned to you** land on the Timeline through triage, linking back — "assigned in Jira" and "asked by email" end up in the one funnel. Read-only; each card takes an optional standing agent prompt |
 | `anthropic` / `openai` / `azure_openai` | ✅ | AI for triage + report summaries |

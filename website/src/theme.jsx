@@ -2,13 +2,16 @@
 // soft gray canvas, white cards, hairline borders, one indigo accent, small quiet type.
 import { createTheme } from "@mui/material/styles";
 
+// Contrast is the design: near-black ink, secondary text you can actually read, and the
+// gray reserved for what is truly tertiary. The old DIM/FAINT washed the review panel's
+// blurbs into fog at README scale - Scandinavian means quiet, not illegible.
 export const BG = "#f6f7f9";           // page canvas
 export const PANEL = "#ffffff";        // cards
-export const PANEL2 = "#f4f5f7";       // inset panels / code-ish blocks
+export const PANEL2 = "#f3f4f7";       // inset panels / code-ish blocks
 export const BORDER = "#e5e8ee";
-export const INK = "#1c2536";          // primary text
-export const DIM = "#697386";          // secondary text
-export const FAINT = "#98a1b3";        // tertiary (timestamps, rails)
+export const INK = "#141a26";          // primary text - near black
+export const DIM = "#414c60";          // secondary text - readable, not gray fog
+export const FAINT = "#778092";        // tertiary (timestamps, rails)
 export const ACCENT = "#4f46e5";       // indigo
 export const ACCENT2 = "#0e7490";      // deep teal (labels, links)
 export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7c6cf0)`;

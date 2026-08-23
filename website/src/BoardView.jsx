@@ -65,22 +65,77 @@ const FileChips = ({ files }) => (files || []).length === 0 ? null : (
 const LiveTail = ({ run }) => {
   const waiting = run.kind === "session" && run.idle >= IDLE_WAITING;
   return (
-  <Box sx={{ mt: 0.75, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 1, py: 0.6 }}>
+  <Box sx={{ mt: 0.6, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 0.85, py: 0.5 }}>
     <FileChips files={run.files} />
     {(run.tail || []).slice(-2).map((l, i, all) => (
       <Typography key={i} noWrap variant="caption"
-        sx={{ ...mono, display: "block", fontSize: 10.5, lineHeight: 1.55,
+        sx={{ ...mono, display: "block", fontSize: 9.5, lineHeight: 1.5,
           color: l.startsWith("→") ? CATPPUCCIN.blue : l.startsWith("✗") ? CATPPUCCIN.red : CATPPUCCIN.dim,
           opacity: i === all.length - 1 ? 1 : 0.55 }}>
         {l.replace(/\n/g, " ")}
       </Typography>
     ))}
-    <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
+    <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
       ...(waiting ? {} : { "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }) }}>
-      {waiting ? `⏸ ${run.AgentName} is waiting on you — answer it in the task`
-        : `▮ ${run.AgentName} working ${elapsed(run.StartedAt)} — click the card for the full session`}
+      {waiting ? `⏸ ${run.AgentName} is waiting on you — answer it`
+        : `▮ ${run.AgentName} working ${elapsed(run.StartedAt)}`}
     </Typography>
   </Box>
+  );
+};
+
+// What one agent left for the next. The note was already written and already re-seeded into
+// the next agent's prompt - the owner just could never SEE it, so the board could not answer
+// "what did the last one work out?". A chip on the card, the whole thing in a dialog.
+const NOTE_FIELDS = ["found", "did", "next"];
+const noteBody = (n) => String(n || "").replace(/^HANDOVER NOTE\s*/i, "").trim();
+
+const NoteChip = ({ onOpen }) => (
+  <Tooltip arrow title="what this agent left for whoever picks the task up next">
+    <Box onClick={(e) => { e.stopPropagation(); onOpen(); }}
+      sx={{ display: "inline-flex", alignItems: "center", gap: 0.3, px: 0.6, height: 16,
+        borderRadius: 0.75, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", cursor: "pointer",
+        "&:hover": { bgcolor: "#ede9fe" } }}>
+      <Typography sx={{ color: "#6b21a8", fontWeight: 800, fontSize: 8.5, letterSpacing: ".05em" }}>
+        ✎ NOTE
+      </Typography>
+    </Box>
+  </Tooltip>
+);
+
+// found / did / next as sections; anything the agent wrote outside that shape is shown as-is
+// rather than dropped, because a note we cannot parse is still the note it left.
+const NoteDialog = ({ open, task, onClose }) => {
+  const body = noteBody(task?.HandoverNote);
+  const secs = NOTE_FIELDS.map((k) => {
+    const m = body.match(new RegExp(`^\\s*${k}\\s*:\\s*([\\s\\S]*?)(?=^\\s*(?:${NOTE_FIELDS.join("|")})\\s*:|$)`, "im"));
+    return [k, (m?.[1] || "").trim()];
+  }).filter(([, v]) => v);
+  return (
+    <Dialog open={!!open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontSize: 14.5 }}>
+        {task?.ref} — what the last agent left
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400 }}>
+          Written when the session was paused, and handed to whoever picks this up — you are reading
+          the same text the next agent is seeded with.
+        </Typography>
+      </DialogTitle>
+      <DialogContent>
+        {!body && <Empty>No note on this task.</Empty>}
+        {secs.length ? secs.map(([k, v]) => (
+          <Box key={k} sx={{ mb: 1.25 }}>
+            <Typography variant="caption" sx={{ color: "#6b21a8", fontWeight: 800, fontSize: 9.5,
+              letterSpacing: ".08em", display: "block", mb: 0.25 }}>
+              {{ found: "WHAT IT WORKED OUT", did: "WHAT IT ALREADY CHANGED", next: "THE NEXT STEP" }[k]}
+            </Typography>
+            <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.5 }}>{v}</Typography>
+          </Box>
+        )) : body && (
+          <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5 }}>{body}</Typography>
+        )}
+      </DialogContent>
+      <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+    </Dialog>
   );
 };
 
@@ -117,6 +172,7 @@ export default function BoardView({ onOpenTask }) {
   const [err, setErr] = useState("");
   const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [noteFor, setNoteFor] = useState(null);   // the task whose handover note is open
   const [repos, setRepos] = useState([]);
   const { agents, models, cmds } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
@@ -169,9 +225,9 @@ export default function BoardView({ onOpenTask }) {
   return (
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <Box sx={{ display: "flex", alignItems: "center", mb: 2, gap: 1.5 }}>
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 17, flex: 1 }}>Agent board</Typography>
-        <Typography variant="caption" sx={{ color: FAINT }}>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 1.25, gap: 1.5 }}>
+        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1 }}>Agent board</Typography>
+        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
           Done shows today only — older finished work lives in Tasks, reopenable any time.
         </Typography>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
@@ -184,13 +240,18 @@ export default function BoardView({ onOpenTask }) {
           const cards = tasks.filter((t) => laneOf(t, live) === col.key
             && (col.key !== "done" || String(t.ClosedAt || t.UpdatedAt || "").startsWith(today)));
           return (
+            // the lanes run to the bottom of the window: four columns of different heights
+            // read as four unrelated boxes floating on the page, and a short lane gave a
+            // drop target the size of its one card
             <Box key={col.key} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(col)}
-              sx={{ bgcolor: "#f1f3f6", border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 1,
-                minHeight: 220, outline: dragId && col.key !== "waiting" ? "2px dashed #c9cff0" : "none", outlineOffset: -4 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 0.5, pb: 1 }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: col.dot }} />
-                <Typography variant="body2" sx={{ color: INK, fontWeight: 700, flex: 1 }}>{col.title}</Typography>
-                <Chip size="small" label={cards.length} sx={{ height: 18, fontSize: 10.5, bgcolor: PANEL, border: `1px solid ${BORDER}`, color: DIM }} />
+              sx={{ bgcolor: "#f1f3f6", border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 0.85,
+                minHeight: { xs: 200, md: "calc(100vh - 190px)" }, alignSelf: "stretch",
+                outline: dragId && col.key !== "waiting" ? "2px dashed #c9cff0" : "none", outlineOffset: -4 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.4, pb: 0.85 }}>
+                <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: col.dot }} />
+                <Typography variant="body2" sx={{ color: INK, fontWeight: 700, flex: 1, fontSize: 11.5 }}>{col.title}</Typography>
+                <Chip size="small" label={cards.length} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL,
+                  border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
               {!cards.length && <Empty>Nothing here.</Empty>}
               {cards.map((t) => {
@@ -198,9 +259,9 @@ export default function BoardView({ onOpenTask }) {
                 return (
                 <Box key={t.TaskId} draggable onDragStart={() => setDragId(t.TaskId)} onDragEnd={() => setDragId(null)}
                   onClick={() => onOpenTask(t.TaskId)}
-                  sx={{ ...card, ...hoverable, p: 1.5, mb: 1.25, cursor: "grab", "&:active": { cursor: "grabbing" },
+                  sx={{ ...card, ...hoverable, p: 1.1, mb: 0.9, cursor: "grab", "&:active": { cursor: "grabbing" },
                     position: "relative",
-                    ...(badge ? { mt: 1.25, borderColor: `${badge.color}55` } : {}) }}>
+                    ...(badge ? { mt: 1.1, borderColor: `${badge.color}55` } : {}) }}>
                   {badge && (
                     <Typography variant="caption" sx={{ ...mono, position: "absolute", top: -8, left: 10,
                       px: 0.6, fontSize: 9, fontWeight: 700, lineHeight: "13px", letterSpacing: ".06em",
@@ -209,22 +270,23 @@ export default function BoardView({ onOpenTask }) {
                       {badge.word}
                     </Typography>
                   )}
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                    <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700,
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
+                    <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700, fontSize: 10,
                       whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
-                    <ChannelIcon channel={t.Source} sx={{ fontSize: 13 }} />
-                    {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />}
+                    <ChannelIcon channel={t.Source} sx={{ fontSize: 12 }} />
+                    {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 12, color: "#7e22ce" }} />}
                     {t.RunStatus && (
                       <Chip size="small" label={`${cliName(t.RunAgent, cmds) || "agent"} · ${t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
-                        sx={{ height: 17, fontSize: 9.5, fontWeight: 700,
+                        sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
                           bgcolor: t.RunStatus === "running" ? "#fef4e6" : t.RunStatus === "error" ? "#fdecec" : "#e8f6ee",
                           color: t.RunStatus === "running" ? "#b45309" : t.RunStatus === "error" ? "#b91c1c" : "#15803d" }} />
                     )}
+                    {t.HandoverNote && <NoteChip onOpen={() => setNoteFor(t)} />}
                     <Box sx={{ flex: 1 }} />
-                    <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(t.CreatedAt)}</Typography>
+                    <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{timeAgo(t.CreatedAt)}</Typography>
                   </Box>
-                  <Typography variant="body2" sx={{ color: INK, fontWeight: 600, fontSize: 14.5, lineHeight: 1.35, mt: 0.5,
+                  <Typography variant="body2" sx={{ color: INK, fontWeight: 600, fontSize: 12, lineHeight: 1.35, mt: 0.4,
                     display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {t.Title}
                   </Typography>
@@ -234,23 +296,24 @@ export default function BoardView({ onOpenTask }) {
                     <Box sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: "#eef2ff", border: "1px solid #dfe3fb",
                       borderLeft: "3px solid #7c6cf0", borderRadius: 1.25 }}>
                       <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 700, display: "block",
-                        fontSize: 11.5, lineHeight: 1.4 }}>
+                        fontSize: 10, lineHeight: 1.4 }}>
                         ⏳ {t.Queued.behind ? `Waiting on ${t.Queued.behind}` : "Waiting for a free agent slot"}
                         {t.Queued.behindTitle ? ` — “${t.Queued.behindTitle}”` : ""}
                       </Typography>
-                      <Typography variant="caption" sx={{ color: "#5b5f97", display: "block", fontSize: 10.5,
-                        lineHeight: 1.45, mt: 0.25 }}>
+                      <Typography variant="caption" sx={{ color: "#5b5f97", display: "block", fontSize: 9.5,
+                        lineHeight: 1.45, mt: 0.2 }}>
                         {t.Queued.reason ? `${t.Queued.reason} · ` : ""}starts by itself when it can
                       </Typography>
                     </Box>
                   )}
                   {live[t.TaskId] && <LiveTail run={live[t.TaskId]} />}
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75 }}>
-                    <Chip size="small" label={t.Kind} sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mt: 0.6 }}>
+                    <Chip size="small" label={t.Kind} sx={{ height: 15, fontSize: 8.5, bgcolor: PANEL2,
+                      border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.7 } }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
                     <Box sx={{ flex: 1 }} />
-                    <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 10.5 }}>open →</Typography>
+                    <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
                   </Box>
                 </Box>
                 );
@@ -308,6 +371,8 @@ export default function BoardView({ onOpenTask }) {
           <Button variant="contained" disableElevation disabled={!nt.Title.trim()} onClick={create}>Create</Button>
         </DialogActions>
       </Dialog>
+
+      <NoteDialog open={!!noteFor} task={noteFor} onClose={() => setNoteFor(null)} />
     </Box>
   );
 }

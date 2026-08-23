@@ -140,4 +140,8 @@ s.enqueue_dispatch(tid11, tid9, 'claude', 'both would modify website/src/Reports
 s.add_comment(tid11, 'router', 'agent', 'Queued behind TQ-%04d "Report charts render blank in dark mode" - '
               'both would modify website/src/ReportsView.jsx. It starts by itself when that agent finishes.' % tid9)
 
+# every report source reads as freshly polled, or the server's STARTUP run files its own
+# rows on top of the fiction (a FAILED census, a raw digest) and they photobomb the shots
+s._exec("UPDATE source SET LastPolledAt=? WHERE Channel='report'", (t(0, 0),))
+
 print('demo data seeded')

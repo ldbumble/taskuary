@@ -200,7 +200,7 @@ Plain markdown, all on the Docs tab, all yours to edit. Three you write, two wri
 themselves, and two can **bootstrap themselves from your mail history** (`TRIAGE.md` and
 `STYLE.md` — the Generate from history button). Each feeds exactly the calls it belongs in.
 
-![TRIAGE.md, SOUL.md and LEARNED.md feed triage and replies on the cheap model; SOUL.md, CODER.md and LEARNED.md feed coding agents on your CLI; DIGEST.md is your own morning read](docs/five-docs.svg)
+![TRIAGE.md, STYLE.md, SOUL.md and LEARNED.md feed triage and replies on the cheap model; SOUL.md, CODER.md and LEARNED.md feed coding agents on your CLI; DIGEST.md is your own morning read — and TRIAGE.md and STYLE.md can be generated from three months of your own mail](docs/six-docs.svg)
 
 | document | what it is | who reads it |
 |---|---|---|

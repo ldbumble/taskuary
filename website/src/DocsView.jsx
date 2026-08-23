@@ -87,6 +87,20 @@ export default function DocsView() {
   const [err, setErr] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const [genMsg, setGenMsg] = useState("");   // provenance line, or the plain reason it couldn't
+  const [genWhat, setGenWhat] = useState(""); // live progress while it reads the mailbox
+  const [genEv, setGenEv] = useState(null);   // the receipts: what was read, line by line
+  // the generation is inspectable, not a vibe: poll its status while it runs so the button
+  // narrates ("reading you@... — 240 sent so far"), then show the exact evidence it judged
+  useEffect(() => {
+    if (!genBusy) return undefined;
+    const t = setInterval(async () => {
+      try {
+        const { data } = await api.get("/api/doc/generate/status");
+        setGenWhat(data.what || "");
+      } catch { /* status is a nicety, never an error */ }
+    }, 1200);
+    return () => clearInterval(t);
+  }, [genBusy]);
 
   const load = useCallback(async () => {
     try {
@@ -116,13 +130,14 @@ export default function DocsView() {
             <Button size="small" variant="outlined" disabled={genBusy} title={GEN[docName]}
               startIcon={genBusy ? <CircularProgress size={12} /> : null}
               onClick={async () => {
-                setGenBusy(true); setGenMsg("");
+                setGenBusy(true); setGenMsg(""); setGenEv(null); setGenWhat("starting…");
                 try {
                   const { data } = await api.post(`/api/doc/${docName}/generate`);
                   setGenMsg(`✓ ${data.detail}`); await load();
+                  try { setGenEv((await api.get("/api/doc/generate/status")).data.evidence || null); } catch { /* receipts optional */ }
                 } catch (e) { setGenMsg(e?.response?.data?.detail || "generation failed"); }
-                setGenBusy(false);
-              }}>{genBusy ? "Reading your mail…" : "Generate from history"}</Button>
+                setGenBusy(false); setGenWhat("");
+              }}>{genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}</Button>
           )}
           {docName === "learned" && (
             <Button size="small" variant="outlined" onClick={async () => {
@@ -137,6 +152,22 @@ export default function DocsView() {
         {genMsg && GEN[docName] && (
           <Typography variant="caption" sx={{ display: "block", mb: 1,
             color: genMsg.startsWith("✓") ? "#15803d" : "#b91c1c" }}>{genMsg}</Typography>
+        )}
+        {/* the receipts: exactly what the model read and what each line voted for - so the
+            block in the doc is traceable back to your own mail, not a vibe */}
+        {genEv?.length > 0 && GEN[docName] && (
+          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e3e6ec", borderRadius: 2 }}>
+            <Typography variant="caption" sx={{ color: "#0e7490", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.5 }}>
+              WHAT IT READ — AND WHAT EACH LINE DID
+            </Typography>
+            <Box sx={{ maxHeight: 260, overflowY: "auto" }}>
+              {genEv.map((l, i) => (
+                <Typography key={i} variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap",
+                  fontFamily: l.startsWith("  ") ? "'JetBrains Mono', Consolas, monospace" : "inherit",
+                  fontSize: l.startsWith("  ") ? 10.5 : 11.5, color: l.startsWith("  ") ? FAINT : INK }}>{l}</Typography>
+              ))}
+            </Box>
+          </Box>
         )}
         <TextField fullWidth multiline minRows={18} maxRows={32} value={docs[docName]}
           onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })} sx={{ bgcolor: "#fff" }}

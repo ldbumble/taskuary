@@ -967,6 +967,13 @@ def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
+@app.get('/api/doc/generate/status')
+def doc_generate_status():
+    """Live progress + receipts for a running (or the last) generate-from-history: what is
+    being read right now, and afterwards the exact evidence handed to the model."""
+    from .histgen import STATUS
+    return STATUS
+
 @app.post('/api/doc/{name}/generate')
 def doc_generate(name: str, days: int = 90):
     """The Docs tab's 'Generate from history': read the last N days of the mailbox itself

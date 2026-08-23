@@ -390,6 +390,13 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     await api.post("/api/sources", { Channel: m.channel, Address: newSrc.trim(), ConnectorId: conn.ConnectorId, Active: true });
     setNewSrc(""); reload();
   };
+  // the telegram flow says "hit Sync now" - so the button has to BE here, not on another tab
+  const [srcSync, setSrcSync] = useState(false);
+  const syncHere = async () => {
+    setSrcSync(true);
+    try { await api.post("/api/ingest/poll"); setTimeout(() => { setSrcSync(false); reload(); }, 3000); }
+    catch { setSrcSync(false); }
+  };
   const toggleSource = async (s) => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); reload(); };
   const setActive = async (on) => { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Active: on }); reload(); };
 
@@ -436,12 +443,18 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
           </Typography>
         )}
         {conn.Type === "telegram" && (
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5, maxWidth: 560 }}>
-            No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>Sync now</b>, and the
-            chat appears below with its id — switched off. Flip on the chats that are yours; every other
-            chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
-            for an id you already know.
-          </Typography>
+          <>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
+              No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>Sync now</b>, and the
+              chat appears below with its id — switched off. Flip on the chats that are yours; every other
+              chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
+              for an id you already know.
+            </Typography>
+            <Button size="small" variant="outlined" onClick={syncHere} disabled={srcSync} sx={{ mb: 1 }}
+              startIcon={srcSync ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
+              {srcSync ? "Syncing…" : "Sync now — pull in chats that messaged the bot"}
+            </Button>
+          </>
         )}
         {mine.filter((s) => !(conn.Type === "telegram" && s.Address === "*")).map((s) => (
           <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>

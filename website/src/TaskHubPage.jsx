@@ -64,7 +64,7 @@ export default function TaskHubPage() {
             <HubIcon sx={{ color: "#fff", fontSize: 17 }} />
           </Box>
           <Typography sx={{ fontWeight: 800, fontSize: 14.5, color: INK, letterSpacing: 0.2 }}>Taskuary</Typography>
-          <Typography variant="caption" sx={{ color: DIM, display: { xs: "none", md: "block" } }}>
+          <Typography variant="caption" noWrap sx={{ color: DIM, display: { xs: "none", lg: "block" } }}>
             everything in → one funnel → agents + you
           </Typography>
           <ServerVersion />

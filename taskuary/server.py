@@ -658,6 +658,32 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None))
 
+@app.get('/api/tasks/{tid}/proof')
+def task_proof(tid: int):
+    """The evidence behind a task: files git says moved, the test run the session actually
+    performed, CI on its pull request, attempts and timings - plus what is MISSING, said
+    plainly, so a thin card is never mistaken for a clean one."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    from . import proof
+    return proof.gather(store, tid)
+
+@app.post('/api/tasks/{tid}/pr')
+def task_pr(tid: int):
+    """Open (or find) the draft pull request for this task's branch. Never merges, and
+    refuses unless 'Agents may push / deploy' is on."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    from . import ci
+    try: return ci.open_for_task(store, tid, ACTOR)
+    except Exception as e: raise HTTPException(422, str(e)[:300])
+
+@app.post('/api/tasks/{tid}/ci')
+def task_ci(tid: int):
+    """Check this task's PR now: refresh the checks and, when red, hand the failure to the
+    agent that wrote the code."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    from . import ci
+    return ci.check_task(store, tid)
+
 @app.post('/api/tasks/{tid}/answer')
 def answer_to_agent(tid: int, body: dict):
     """Type an attached message's text into the task's live agent session - the person
@@ -1084,6 +1110,13 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         # before the catch-up it would summarize yesterday while today sat in the mailbox
         from .channels import poll_channels
         poll_channels(store, backfill_days)
+        # the git loop: a task's PR is watched here, and a red build goes back to the agent
+        # that wrote the code (ci.py) - off unless the owner turned ci_watch on
+        try:
+            from . import ci
+            ci.poll(store)
+        except Exception as e:
+            logger.warning(f'CI poll failed: {e}')
         run_due_reports(store, startup)
     finally:
         try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')

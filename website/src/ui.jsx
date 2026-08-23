@@ -79,6 +79,107 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou }) => {
       color: decided ? (reviewStatus === "no_reply" ? "#8a94a6" : "#15803d") : c.fg, height: 19, fontSize: 10.5 }} />;
 };
 
+/* ── Proof of work: the evidence behind a task, so approving is a judgement and not an act
+   of faith. Everything here is measured (git, the session's own test output, the checks
+   API) - and what is MISSING is stated, because a thin card must never read as a clean
+   one. Fetches itself; renders nothing at all for a task with no evidence yet. ── */
+const PILL = { ok: { bg: "#e8f6ee", fg: "#15803d" }, bad: { bg: "#fdecec", fg: "#b91c1c" },
+  wait: { bg: "#fef4e6", fg: "#b45309" }, none: { bg: "#eef0f3", fg: "#8a94a6" } };
+const Pill = ({ tone = "none", children }) => (
+  <Box component="span" sx={{ ...PILL[tone], px: 0.85, py: 0.2, borderRadius: 99, fontSize: 10.5, fontWeight: 700 }}>
+    {children}
+  </Box>
+);
+const mins = (s) => (s == null ? null : s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`);
+
+export const ProofCard = ({ taskId, onOpenTask }) => {
+  const [p, setP] = useState(null);
+  const [busy, setBusy] = useState("");
+  const load = React.useCallback(() => {
+    if (!taskId) return;
+    api.get(`/api/tasks/${taskId}/proof`).then(({ data }) => setP(data)).catch(() => setP(null));
+  }, [taskId]);
+  useEffect(() => { load(); }, [load]);
+  if (!p) return null;
+  const t = p.tests || {}, ci = p.ci, ds = p.diffstat || {};
+  const act = async (path) => {
+    setBusy(path);
+    try { await api.post(`/api/tasks/${taskId}/${path}`); load(); }
+    catch (e) { setP({ ...p, error: e?.response?.data?.detail || "that did not work" }); }
+    setBusy("");
+  };
+  return (
+    <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mb: 0.5 }}>
+        <Pill tone={ds.files ? "ok" : "none"}>
+          {ds.files ? `${ds.files} file${ds.files === 1 ? "" : "s"} · +${ds.added} −${ds.removed}` : "no file changes"}
+        </Pill>
+        <Pill tone={!t.ran ? "none" : t.failed ? "bad" : "ok"}>
+          {!t.ran ? "no tests detected" : t.failed ? `${t.failed} failing / ${t.passed} passed` : `${t.passed} tests passed`}
+        </Pill>
+        {ci && (
+          <Pill tone={ci.checks?.state === "failure" ? "bad" : ci.checks?.state === "pending" ? "wait"
+            : ci.checks?.state === "success" ? "ok" : "none"}>
+            {`PR #${ci.number} · CI ${ci.checks?.state || "unchecked"}`}
+          </Pill>
+        )}
+        {p.seconds != null && <Pill>{mins(p.seconds)} elapsed</Pill>}
+        {p.attempts?.length > 1 && <Pill tone="wait">{p.attempts.length} attempts</Pill>}
+      </Box>
+      {t.ran && t.line && (
+        <Typography variant="caption" sx={{ ...mono, color: DIM, display: "block", fontSize: 10.5 }}>{t.line}</Typography>
+      )}
+      {p.files?.length > 0 && (
+        <Box sx={{ mt: 0.5, maxHeight: 132, overflowY: "auto" }}>
+          {p.files.slice(0, 24).map((f) => (
+            <Box key={f.path} sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+              <Typography variant="caption" sx={{ ...mono, color: INK, fontSize: 10.5, flex: 1, minWidth: 0 }} noWrap>{f.path}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: "#15803d", fontSize: 10 }}>+{f.added}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: "#b91c1c", fontSize: 10 }}>−{f.removed}</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {ci?.checks?.failed?.length > 0 && (
+        <Box sx={{ mt: 0.5 }}>
+          {ci.checks.failed.map((f) => (
+            <Typography key={f.name} variant="caption" sx={{ color: "#b91c1c", display: "block", fontSize: 10.5 }}>
+              ✗ {f.name}{f.summary ? ` — ${f.summary}` : ""}
+            </Typography>
+          ))}
+        </Box>
+      )}
+      {p.gaps?.length > 0 && (
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+          Not evidenced: {p.gaps.join(" · ")}
+        </Typography>
+      )}
+      <Box sx={{ display: "flex", gap: 1.25, mt: 0.75, alignItems: "center", flexWrap: "wrap" }}>
+        {ci ? (
+          <>
+            <Box component="a" href={ci.url} target="_blank" rel="noreferrer"
+              sx={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", textDecoration: "none" }}>open PR ↗</Box>
+            <Box component="span" onClick={() => !busy && act("ci")}
+              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#4f46e5", cursor: "pointer" }}>
+              {busy === "ci" ? "checking…" : "re-check CI"}
+            </Box>
+          </>
+        ) : (
+          <Box component="span" onClick={() => !busy && act("pr")} title="opens a DRAFT pull request from this task's branch — never merges"
+            sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#4f46e5", cursor: "pointer" }}>
+            {busy === "pr" ? "opening…" : "open a draft PR"}
+          </Box>
+        )}
+        {onOpenTask && (
+          <Box component="span" onClick={() => onOpenTask(taskId)}
+            sx={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", cursor: "pointer" }}>the whole session</Box>
+        )}
+      </Box>
+      {p.error && <Typography variant="caption" sx={{ color: "#b91c1c", display: "block", mt: 0.5 }}>{p.error}</Typography>}
+    </Box>
+  );
+};
+
 export const StatusDot = ({ ok, warn }) => (
   <Box component="span" sx={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", mr: 1,
     bgcolor: ok ? "#22c55e" : warn ? "#f59e0b" : "#cbd2dd" }} />

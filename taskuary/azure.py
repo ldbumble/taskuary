@@ -94,7 +94,35 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
                            'Owner': 'discovered',
                            'ConfigJson': json.dumps({'mode': 'report', **cfgs.get(addr, {})})}, actor)
         added += 1
-    return {'found': len(found), 'added': added}
+    out = {'found': len(found), 'added': added}
+    if not found: out['hint'] = _why_empty(cfg, tok, subs)
+    return out
+
+
+def _why_empty(cfg, tok, subs) -> str:
+    """Nothing found is almost never 'nothing exists' - it is RBAC, and the shape of the
+    emptiness says WHICH gap. Azure hands out container reads and resource reads
+    separately, so an app can list 86 resource groups and still read nothing inside them."""
+    if not subs:
+        return ('the app has no role on any subscription - assign it Reader: Azure Portal → '
+                'Subscriptions → your subscription → Access control (IAM) → Add role assignment')
+    sid = subs[0]['subscriptionId']
+    try:
+        rgs = len(_get(f'{ARM}/subscriptions/{sid}/resourcegroups', tok,
+                       params={'api-version': '2021-04-01'}).json().get('value') or [])
+        res = len(_get(f'{ARM}/subscriptions/{sid}/resources', tok,
+                       params={'api-version': '2021-04-01', '$top': 1}).json().get('value') or [])
+    except Exception as e:
+        return f'could not tell why: {str(e)[:120]}'
+    if rgs and not res:
+        return (f'the app sees the subscription and its {rgs} resource groups but CANNOT READ THE '
+                'RESOURCES inside them - those are separate rights in Azure. Assign it Reader on '
+                'the subscription (or on the resource groups holding your storage accounts and '
+                'Log Analytics workspaces): Access control (IAM) → Add role assignment → Reader')
+    if not rgs:
+        return 'the app can see the subscription but none of its resource groups - it needs Reader on the subscription'
+    return ('the app can read resources, but this subscription holds no storage accounts and no Log '
+            'Analytics workspaces (a VM estate with no diagnostics storage looks exactly like this)')
 
 
 def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -> int:

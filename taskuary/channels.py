@@ -160,6 +160,9 @@ def test_connector(store, cid: int) -> dict:
             try:
                 d = mod.discover(store, conn_cfg, c['ConnectorId'], ACTOR_DISCOVER)
                 detail += f" · {d['found']} objects visible, {d['added']} new under Sources"
+                # "0 objects visible" alone reads as a broken feature; the hint says which
+                # permission is missing, because that is always what an empty result means
+                if d.get('hint'): detail += f" — {d['hint']}"
             except Exception as e:
                 detail += f' · discovery failed: {str(e)[:120]}'
         elif c['Type'] == 'prometheus':

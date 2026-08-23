@@ -218,6 +218,15 @@ class SQLiteStore:
                                  json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
+            # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
+            # current one (same deal the template docs get) - an owner-edited prompt is never touched
+            from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
+            for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
+                try: c = json.loads(cj or '{}')
+                except ValueError: continue
+                if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
+                    c['ai_prompt'] = DIGEST_PROMPT
+                    self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
             # data heal: timestamps stored as raw ISO/UTC ('...T18:44:00Z') sorted above later
             # local rows and lied about the hour - normalize the survivors once
             for mid, sent in self.cx.execute("SELECT MessageId, SentAt FROM message WHERE SentAt LIKE '%T%'").fetchall():

@@ -18,8 +18,10 @@ def is_url(cs: str) -> bool: return '://' in cs
 def _rows_sqlalchemy(cs, query, n):
     try: import sqlalchemy
     except ImportError:
-        raise RuntimeError('sqlalchemy not installed - pip install taskuary[db] plus the engine driver '
-                           '(e.g. psycopg2-binary for postgres, pymysql for mysql)')
+        # name the package, not the extra: `taskuary[db]` silently no-ops when the install's
+        # metadata predates the extra (see aws._boto3)
+        raise RuntimeError('sqlalchemy is not installed - run: pip install sqlalchemy, plus the engine '
+                           'driver (psycopg2-binary for postgres, pymysql for mysql, snowflake-sqlalchemy…)')
     eng = sqlalchemy.create_engine(cs, pool_pre_ping=True)
     try:
         with eng.connect() as cx:

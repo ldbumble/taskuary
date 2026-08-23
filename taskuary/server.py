@@ -896,7 +896,7 @@ def mssql_test(body: dict):
         from .mssql import test
         return test(resolve_cfg(store, {**body, 'type': 'mssql'}))
     except ImportError:
-        return {'ok': False, 'error': 'pyodbc not installed - pip install taskuary[mssql]'}
+        return {'ok': False, 'error': 'pyodbc is not installed - run: pip install pyodbc'}
 
 # Models each CLI can be pointed at. The agent profile's own `model` (Connectors → AI CLI
 # agents) always wins as the default; these are the quick picks the run dialogs offer.

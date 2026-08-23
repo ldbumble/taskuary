@@ -4,7 +4,7 @@
 // itself every 30s so new mail animates in while the tab is open.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, LinearProgress, ListSubheader, MenuItem, Select, TextField, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -343,11 +343,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
             was ("need me" filters), and the sync story rides the same line */}
         {rows && (
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
+            {/* one face for the whole line: the mono digits next to Inter labels read as two
+                different UIs stitched together - the numbers are just bolder Inter now */}
             {stats.map((s) => (
               <Box key={s.label} onClick={() => s.f && setView(s.f)}
                 sx={{ display: "flex", alignItems: "baseline", gap: 0.6, cursor: s.f ? "pointer" : "default",
                   ...(s.f ? { "&:hover .thubStatLbl": { color: "#4f46e5" } } : {}) }}>
-                <Typography sx={{ ...mono, fontWeight: 700, fontSize: 13,
+                <Typography sx={{ fontWeight: 800, fontSize: 12.5,
                   color: s.hot && s.n ? "#b45309" : s.n ? "#4f46e5" : INK }}>{s.n}</Typography>
                 <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
               </Box>
@@ -364,9 +366,17 @@ export default function FeedView({ onOpenTask, onChanged }) {
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
       <Box sx={{ minWidth: 0, maxWidth: 860 }}>
-        {(syncing || bgSync) && <LinearProgress sx={{ mb: 1, borderRadius: 1, height: 3 }} />}
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-        <Box sx={{ opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
+        {/* syncing = the TIMELINE is loading, so the timeline says so: rows dim and a
+            spinner sits on the list itself - the old 3px bar over just the left column
+            read as a broken artifact, not a state */}
+        <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
+          {syncing && (
+            <Box sx={{ position: "absolute", inset: 0, zIndex: 4, display: "flex",
+              alignItems: "flex-start", justifyContent: "center", pointerEvents: "none" }}>
+              <CircularProgress size={26} sx={{ mt: 14 }} />
+            </Box>
+          )}
           {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (
             <Empty>Nothing in the feed yet — activate a mailbox in Connectors or run an ingest.</Empty>
           ) : Object.entries(days).map(([day, items]) => (

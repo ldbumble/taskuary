@@ -341,7 +341,7 @@ regulars, not one-off drive-bys — though a single good PR is very welcome too.
   what broke, what felt wrong, or what you kept doing by hand anyway. That feedback shapes
   the roadmap more than feature requests do.
 
-Want a bigger piece? Say so in an issue — worktree isolation, a notifications/tray shell,
+Want a bigger piece? Say so in an issue — follow-up tracking, a notifications/tray shell,
 and a plugin API for connectors are all on the roadmap and all up for grabs. Interested in
 maintaining an area long-term? Open an issue titled `maintainer: <area>` and let's talk.
 

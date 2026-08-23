@@ -24,7 +24,7 @@ import { AgentsPage } from "./AgentsPanel.jsx";
 const META = {
   outlook: { group: "Messaging", channel: "email", srcLabel: "Mailboxes", srcPh: "someone@yourdomain.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
-      ["default agent prompt for tasks from here (optional — the mail itself is usually prompt enough)", "task_prompt"]],
+],
     secretLabel: "client secret",
     desc: "Ingest mailboxes through a Microsoft Graph app - mail lands on the Timeline through triage.",
     howto: ["Register (or reuse) an Azure app: Azure Portal → App registrations → New registration.",
@@ -34,7 +34,7 @@ const META = {
       "Test acquires a real Graph token and reports exactly what failed if anything. Enable, and mail flows through the same triage funnel as everything else."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
-      ["default agent prompt for tasks from here (optional)", "task_prompt"]],
+],
     secretLabel: "client secret",
     desc: "Ingest Teams chats via Graph. Leave credentials blank to reuse the Outlook connector's app.",
     howto: ["Credentials: leave everything blank and Teams automatically reuses the Outlook connector's saved Graph app (or the server's AZURE_* env vars). Only fill these to use a different app registration.",
@@ -43,7 +43,7 @@ const META = {
       "A specific chat id works too (Teams web: open the chat, the 19:...@thread.v2 part of the URL).",
       "Test probes an actual chat read for the first Teams source, not just the token."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
-    fields: [["default agent prompt for tasks from here (optional)", "task_prompt"]], secretLabel: "bot token (xoxb-…)",
+    fields: [], secretLabel: "bot token (xoxb-…)",
     desc: "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
     howto: ["Create a Slack app (api.slack.com/apps) → OAuth & Permissions → bot token scopes: channels:history, channels:read.",
       "Install the app to your workspace and invite the bot to the channels to ingest (/invite @yourbot).",
@@ -51,8 +51,7 @@ const META = {
       "Add each channel ID under Sources (channel → View details → ID at the bottom).",
       "Test authenticates and probes a real channel read."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
-    fields: [["notify chat id (only for the notify role — same id the chat's Source card shows)", "notify_chat"],
-      ["default agent prompt for tasks from here (optional)", "task_prompt"]],
+    fields: [["notify chat id (only for the notify role — same id the chat's Source card shows)", "notify_chat"]],
     secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
     howto: ["Message @BotFather in Telegram → /newbot → copy the token.",
@@ -62,8 +61,7 @@ const META = {
       "For a group: add the bot to it and disable its privacy mode (@BotFather → /setprivacy) so it sees messages."] },
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (optional — blank takes every chat)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
-      ["notify chat JID (only for the notify role, e.g. 15551234567@s.whatsapp.net)", "notify_chat"],
-      ["default agent prompt for tasks from here (optional)", "task_prompt"]],
+      ["notify chat JID (only for the notify role, e.g. 15551234567@s.whatsapp.net)", "notify_chat"]],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
     howto: ["The heavy dependency is deliberately NOT bundled: in the Taskuary folder run `cd taskuary/whatsapp && npm install && node bridge.mjs` (Node 18+).",
@@ -72,9 +70,7 @@ const META = {
       "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."] },
   gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
-    fields: [["mailbox address", "address"],
-      ["default agent prompt for tasks from here (optional)", "task_prompt"]],
-    secretLabel: "App Password (16 characters)",
+    fields: [["mailbox address", "address"]], secretLabel: "App Password (16 characters)",
     desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread.",
     howto: ["Turn on 2-Step Verification for the Google account (App Passwords require it).",
       "Create an App Password: myaccount.google.com -> Security -> App passwords -> app: Mail.",
@@ -83,8 +79,7 @@ const META = {
       "Replies you approve are sent from this same address over SMTP, threaded into the conversation."] },
   imap: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@yourdomain.com",
     fields: [["mailbox address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
-             ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"],
-             ["default agent prompt for tasks from here (optional)", "task_prompt"]],
+             ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"]],
     secretLabel: "mailbox password",
     desc: "Any mailbox that speaks IMAP - a domain.com address, Yahoo, an ISP, your webhost. In through triage, replies out over its SMTP.",
     howto: ["Find your provider's IMAP and SMTP hostnames (usually imap./smtp. + your domain; ports 993/587).",
@@ -92,20 +87,17 @@ const META = {
       "Paste the mailbox password (write-only). Providers with app passwords (Yahoo, iCloud) want those.",
       "Test logs in and adds the mailbox as a source; new mail flows in on the next sync."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
-    fields: [["PR agent prompt — what the agent is told when a task came from a pull request (blank = the built-in: judge it, run the tests, verdict only, never merge)", "prompt_pr"],
-      ["issue agent prompt — same for tasks that came from an issue (blank = the built-in: reproduce, fix if contained, otherwise report)", "prompt_issue"]],
-    secretLabel: "fine-grained PAT",
+    fields: [], secretLabel: "fine-grained PAT",
     desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
     howto: ["Create a fine-grained PAT: GitHub → Settings → Developer settings → Fine-grained tokens.",
       "Repository access: the repos the agent may touch. Permissions: Issues Read+Write, Pull requests Read+Write, Metadata Read.",
       "Paste the token under Credentials - that's ALL the config: on save Taskuary discovers every repo the token reaches, adds them under Sources, and writes the repository map into SOUL.md.",
-      "Per repo, pick what ISSUES and PRs do (needs the trigger role on this card): tasks = through triage, feed = timeline only, off = ignored. Triage sees each item's author and GitHub association, so a stranger's PR on a public repo files as FYI instead of becoming work — and github items never auto-start a coding agent; you promote the ones that deserve one.",
-      "When you DO send a PR or issue to the agent, its prompt carries this card's standing rules for that kind — the PR default says judge it (useful? safe? minimal?), run the tests, report a verdict, and never merge. Edit the two prompt fields to make those rules your own.",
+      "Everything inbound lives on ONE step — Inbound, what becomes work: the trigger/feed switch, a per-repo picker for what issues and PRs do (tasks = through triage, feed = timeline only, off = ignored), and the agent prompts. Triage sees each item's author and GitHub association, so a stranger's PR on a public repo files as FYI instead of becoming work — and github items never auto-start a coding agent; you promote the ones that deserve one.",
+      "When you DO send a PR or issue to the agent, its prompt carries the standing rules you set on that same Inbound step — the PR default says judge it (useful? safe? minimal?), run the tests, report a verdict, and never merge.",
       "Test re-runs discovery and reports who it's authenticated as.",
       "Coding tasks then open an issue first, the agent works it, and closing the task closes the issue."] },
   jira: { group: "Project management", channel: "jira", srcLabel: "Site", srcPh: "yourteam.atlassian.net",
-    fields: [["site URL (https://yourteam.atlassian.net)", "base_url"], ["account email (the one the token belongs to)", "email"],
-      ["default agent prompt for tasks from here (optional)", "task_prompt"]],
+    fields: [["site URL (https://yourteam.atlassian.net)", "base_url"], ["account email (the one the token belongs to)", "email"]],
     secretLabel: "API token",
     desc: "Jira issues ASSIGNED TO YOU land on the Timeline through triage — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
     howto: ["Create an API token: id.atlassian.com → Security → Create API token.",
@@ -114,7 +106,7 @@ const META = {
       "From then on every sync brings in issues assigned to you (updated since the last poll) — each shows its status, priority and reporter, and links back to Jira.",
       "Nothing is written back to Jira; Taskuary only reads."] },
   asana: { group: "Project management", channel: "asana", srcLabel: "Workspace", srcPh: "added by Test",
-    fields: [["default agent prompt for tasks from here (optional)", "task_prompt"]],
+    fields: [],
     secretLabel: "Personal Access Token",
     desc: "Asana tasks ASSIGNED TO YOU land on the Timeline through triage, linking back to Asana.",
     howto: ["Create a Personal Access Token: app.asana.com/0/my-apps → Create new token.",
@@ -123,8 +115,7 @@ const META = {
       "Every sync brings in open tasks assigned to you that changed since the last poll.",
       "Nothing is written back to Asana; Taskuary only reads."] },
   monday: { group: "Project management", channel: "monday", srcLabel: "Account", srcPh: "added by Test",
-    fields: [["board ids to watch, comma-separated (blank = your 25 most recently used boards)", "board_ids"],
-      ["default agent prompt for tasks from here (optional)", "task_prompt"]],
+    fields: [["board ids to watch, comma-separated (blank = your 25 most recently used boards)", "board_ids"]],
     secretLabel: "API token",
     desc: "Monday.com items ASSIGNED TO YOU (any People column naming you) land on the Timeline through triage.",
     howto: ["Get an API token: your avatar → Developers → My access tokens (admin tokens work too).",
@@ -434,12 +425,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
       <Box sx={{ mt: 1 }}>
         {conn.Type === "github" && (
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-            Per repo, per kind: <b>tasks</b> = through triage (never auto-dispatched — a public repo would start
-            an agent per drive-by PR; you promote what deserves work), <b>feed</b> = shown on the Timeline only,
-            <b> off</b> = ignored. Every item carries its author and GitHub's association flag, so triage weighs
-            who is asking. Picking a value saves instantly and is all it takes — no Save button, no role change:
-            the next sync pulls that repo. These pickers are INBOUND only — whether the coder opens or updates
-            issues for the tasks it works is the separate <b>Agent permissions</b> step below.
+            The repos this connection reaches — discovery fills the list from the PAT. What each
+            repo's issues and PRs <b>do</b> (become tasks, show as feed, stay ignored) is decided in
+            one place: the <b>Inbound — what becomes work</b> step below.
           </Typography>
         )}
         {conn.Type === "telegram" && (
@@ -466,22 +454,6 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
               </Typography>
             )}
             <Box sx={{ flex: 1 }} />
-            {conn.Type === "github" && ["issues", "prs"].map((kind) => {
-              const gc = parse(s.ConfigJson);
-              return (
-                <Select key={kind} size="small" value={gc[kind] || (kind === "prs" ? "off" : "tasks")}
-                  sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
-                  onChange={async (e) => {
-                    await api.post("/api/sources", { SourceId: s.SourceId,
-                      ConfigJson: JSON.stringify({ ...gc, [kind]: e.target.value }) });
-                    reload();
-                  }}>
-                  {["tasks", "feed", "off"].map((v) => (
-                    <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>{kind === "prs" ? "PRs" : "issues"}: {v}</MenuItem>
-                  ))}
-                </Select>
-              );
-            })}
             {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>polled {timeAgo(s.LastPolledAt)}</Typography>}
             <Switch checked={!!s.Active} onChange={() => toggleSource(s)} />
           </Box>
@@ -493,7 +465,12 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         </Box>
       </Box>
     )}] : []),
-    ...(isAI ? [] : [{ label: "Role", done: !!(conn.Roles || "").length, body: <RoleStep conn={conn} reload={reload} /> }]),
+    ...(isAI ? [] : [
+      { label: "Inbound — what becomes work", done: inboundDone(conn, mine),
+        body: <InboundStep conn={conn} m={m} mine={mine} reload={reload} /> },
+      { label: "More roles — reports, agents, notifications", done: true,
+        body: <RoleStep conn={conn} reload={reload} only={["report", "tool", "notify"]} /> },
+    ]),
     ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1 }}>
@@ -706,8 +683,7 @@ const GithubPerms = ({ conn, reload }) => {
     <Box sx={{ mt: 1, maxWidth: 620 }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
         OUTBOUND — what the coding agent may do <b>on GitHub</b> while it works your tasks. Unrelated
-        to the per-repo issues/PRs pickers under Repositories, which only control what comes
-        <b> in</b> to your timeline.
+        to the <b>Inbound</b> step above, which only controls what comes <b>in</b> to your timeline.
       </Typography>
       {GITHUB_PERMS.map(([key, label, desc]) => (
         <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
@@ -727,7 +703,7 @@ const GithubPerms = ({ conn, reload }) => {
   );
 };
 
-const RoleStep = ({ conn, reload }) => {
+const useRoles = (conn, reload) => {
   const roles = new Set(String(conn.Roles || "").split(",").filter(Boolean));
   const toggle = async (r) => {
     const next = new Set(roles);
@@ -739,22 +715,131 @@ const RoleStep = ({ conn, reload }) => {
     await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Roles: [...next].join(",") });
     reload();
   };
+  return [roles, toggle];
+};
+
+const RoleRow = ({ on, onToggle, label, desc }) => (
+  <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
+    <Switch checked={on} onChange={onToggle} sx={{ mt: -0.5 }} />
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
+      <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
+    </Box>
+  </Box>
+);
+
+const RoleStep = ({ conn, reload, only }) => {
+  const [roles, toggle] = useRoles(conn, reload);
+  const keys = only || Object.keys(ROLE_META);
   return (
     <Box sx={{ mt: 1, maxWidth: 620 }}>
-      {Object.entries(ROLE_META).map(([key, [label, desc]]) => (
-        <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
-          <Switch checked={roles.has(key)} onChange={() => toggle(key)} sx={{ mt: -0.5 }} />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{label}</Typography>
-            <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
+      {keys.map((key) => (
+        <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
+          label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
+      ))}
+    </Box>
+  );
+};
+
+/* ── the ONE inbound page: the switch, what each source's items do, and the agent prompt.
+   These three used to live on three different steps (Role, Repositories, Credentials) and
+   read as three unrelated settings - they are one decision: what from here becomes work,
+   and what the agent is told about it. ── */
+const GH_PROMPTS = [
+  ["prompt_pr", "When the task came from a PULL REQUEST",
+   "blank = the built-in: judge it — useful? safe? minimal? — check out the branch, run the tests, report a verdict; never merge"],
+  ["prompt_issue", "When the task came from an ISSUE",
+   "blank = the built-in: reproduce it, fix it when the fix is contained, otherwise report what it would take"],
+];
+const TASK_PROMPT = [["task_prompt", "For every task from this connection",
+  "optional — rides into the agent's instructions alongside the message itself; blank = nothing extra"]];
+const PROMPTABLE = new Set(["outlook", "teams", "slack", "telegram", "whatsapp", "gmail", "imap",
+  "jira", "asana", "monday"]);
+const promptsFor = (t) => (t === "github" ? GH_PROMPTS : PROMPTABLE.has(t) ? TASK_PROMPT : []);
+
+const ghInboundExplicit = (mine) => mine.some((s) => {
+  const c = parse(s.ConfigJson);
+  return ["tasks", "feed"].includes(c.issues) || ["tasks", "feed"].includes(c.prs);
+});
+const inboundDone = (conn, mine) => {
+  const roles = new Set(String(conn.Roles || "").split(",").filter(Boolean));
+  return roles.has("trigger") || roles.has("feed") || (conn.Type === "github" && ghInboundExplicit(mine));
+};
+
+const InboundStep = ({ conn, m, mine, reload }) => {
+  const [roles, toggle] = useRoles(conn, reload);
+  const [cfg, setCfg] = useState(parse(conn.ConfigJson));
+  const [saved, setSaved] = useState("");
+  useEffect(() => { setCfg(parse(conn.ConfigJson)); }, [conn.ConfigJson]);
+  const gh = conn.Type === "github";
+  const on = roles.has("trigger") || roles.has("feed") || (gh && ghInboundExplicit(mine));
+  const prompts = promptsFor(conn.Type);
+  const savePrompts = async () => {
+    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg) });
+    setSaved("saved ✓"); setTimeout(() => setSaved(""), 2500); reload();
+  };
+  return (
+    <Box sx={{ mt: 1, maxWidth: 640 }}>
+      {/* 1 — the switch: does this connection create work at all */}
+      <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
+        1 · DOES IT CREATE WORK
+      </Typography>
+      {["trigger", "feed"].map((key) => (
+        <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
+          label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
+      ))}
+      {/* 2 — github only: what each repo's items do, overriding the switch per repo */}
+      {gh && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
+            2 · PER REPO — WHAT ISSUES AND PRS DO
+          </Typography>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.5 }}>
+            <b>tasks</b> = through triage (never auto-dispatched — you promote what deserves work),
+            <b> feed</b> = shown on the Timeline only, <b>off</b> = ignored. A picker set here pulls
+            that repo whatever the switches above say; picking saves instantly.
+          </Typography>
+          {mine.filter((s) => s.Active).map((s) => {
+            const gc = parse(s.ConfigJson);
+            return (
+              <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+                <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 13 }} noWrap>{s.Address}</Typography>
+                {["issues", "prs"].map((kind) => (
+                  <Select key={kind} size="small" value={gc[kind] || (kind === "prs" ? "off" : "tasks")}
+                    sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
+                    onChange={async (e) => {
+                      await api.post("/api/sources", { SourceId: s.SourceId,
+                        ConfigJson: JSON.stringify({ ...gc, [kind]: e.target.value }) });
+                      reload();
+                    }}>
+                    {["tasks", "feed", "off"].map((v) => (
+                      <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>{kind === "prs" ? "PRs" : "issues"}: {v}</MenuItem>
+                    ))}
+                  </Select>
+                ))}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+      {/* 3 — the standing prompt, right where inbound is decided */}
+      {prompts.length > 0 && (
+        <Box sx={{ mt: 2, opacity: on ? 1 : 0.5 }}>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
+            {gh ? "3" : "2"} · WHAT THE AGENT IS TOLD ABOUT WORK FROM HERE
+            {on ? "" : " — turn inbound on above first"}
+          </Typography>
+          {prompts.map(([key, label, hint]) => (
+            <TextField key={key} fullWidth multiline minRows={2} label={label} helperText={hint}
+              value={cfg[key] || ""} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })}
+              sx={{ bgcolor: "#fff", mt: 1.5 }} />
+          ))}
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
+            <Button size="small" variant="contained" disableElevation onClick={savePrompts}>Save prompts</Button>
+            {saved && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{saved}</Typography>}
           </Box>
         </Box>
-      ))}
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-        {roles.has("trigger") ? "Trigger is on: new items become tasks, replies and reviews."
-          : roles.has("feed") ? "Feed only: new items appear on the Timeline as information — nothing becomes work."
-            : "Neither: nothing here is polled at all — it stays available to the agents and to reports."}
-      </Typography>
+      )}
     </Box>
   );
 };

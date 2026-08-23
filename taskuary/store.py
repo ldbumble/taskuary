@@ -237,6 +237,15 @@ class SQLiteStore:
                                  json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
+            # ...and its sibling: the weekly 'what should you automate next' brief (toil.py) -
+            # same deal: a real report, prompt on the Reports tab, deleting it turns it off
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='automate_report_seeded'").fetchone():
+                from .toil import PROMPT as AUTOMATE_PROMPT
+                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
+                                ('report', 'Automation ideas', 'template', 1,
+                                 json.dumps({'type': 'automate', 'title': 'Automation ideas', 'days': 30,
+                                             'cron': '0 8 * * 1', 'ai_prompt': AUTOMATE_PROMPT})))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('automate_report_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT

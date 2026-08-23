@@ -134,14 +134,16 @@ class DigestReportTests(unittest.TestCase):
         from taskuary.store import SQLiteStore
         p = os.path.join(tempfile.mkdtemp(), 'd.db')
         s = SQLiteStore(p)
-        src = next(x for x in s.list_sources() if x['Channel'] == 'report')
+        digest_of = lambda st: [x for x in st.list_sources(active_only=False)
+                                if x['Channel'] == 'report' and json.loads(x['ConfigJson']).get('type') == 'digest']
+        src = digest_of(s)[0]                     # Automation ideas ships seeded too - filter to the digest
         cfg = json.loads(src['ConfigJson'])
         self.assertEqual((cfg['type'], cfg['title']), ('digest', 'Morning digest'))
         self.assertIn('TQ-refs', cfg['ai_prompt'])           # the editable ask, on the Reports tab
         s.delete_source(src['SourceId'])
         s.cx.close()
         s2 = SQLiteStore(p)
-        self.assertEqual([x for x in s2.list_sources(active_only=False) if x['Channel'] == 'report'], [])
+        self.assertEqual(digest_of(s2), [])
         s2.cx.close()
 
     def test_digest_report_lands_on_the_timeline_and_keeps_the_doc(self):

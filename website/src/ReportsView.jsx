@@ -44,6 +44,7 @@ const FIELDS = {
   azure_logs: [["workspace id", "workspace_id", "text", "the Log Analytics workspace GUID"],
     ["KQL query", "query", "multiline", "AppExceptions | where TimeGenerated > ago(1d) | take 50"],
     ["hours back", "hours", "text", "24"], AI_FIELD],
+  automate: [["days back", "days", "text", "30"], AI_FIELD],
   prometheus: [["PromQL query", "query", "multiline", 'up == 0   ·   sum(rate(http_requests_total[5m])) by (service)'], AI_FIELD],
   datadog: [["monitor name filter (blank = all monitors, trouble first)", "name", "text", "prod"], AI_FIELD],
   winrm: [["PowerShell to run on the remote box", "script", "multiline",
@@ -59,6 +60,7 @@ const TYPE_LABELS = {
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
   prometheus: "Prometheus", datadog: "Datadog monitors",
+  digest: "Taskuary digest", automate: "Automation ideas (own data)",
 };
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure" };

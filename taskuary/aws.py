@@ -64,7 +64,12 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
         store.save_source({'Channel': 'aws', 'Address': addr, 'ConnectorId': connector_id, 'Active': 1,
                            'Owner': 'discovered', 'ConfigJson': json.dumps({'mode': 'report'})}, actor)
         added += 1
-    return {'found': len(found), 'added': added}
+    out = {'found': len(found), 'added': added}
+    if not found:
+        out['hint'] = ('the keys authenticate but list nothing - they need s3:ListAllMyBuckets and '
+                       'logs:DescribeLogGroups (AmazonS3ReadOnlyAccess + CloudWatchLogsReadOnlyAccess '
+                       'cover both). The log above says which call failed.')
+    return out
 
 
 def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -> int:

@@ -16,6 +16,21 @@ SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJs
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
 
+# ── is this review live? one answer, two queries ─────────────────────────────────────────
+# LEFT JOIN: a reply opened on a FILED message carries no task at all - the inner join made
+# those reviews invisible everywhere, including the pending queue.
+# A PENDING review must also point at work you can still SEE: a task folded away
+# (dropped/done) or a message a skip policy hid would otherwise keep the badge at 1 with
+# nothing on the timeline to answer - the queue self-heals instead. Decided reviews keep
+# their history whatever happened to the task since.
+# Both list_reviews (the queue) and pending_review (the funnel's "is a draft already
+# waiting?") read these, so a review cannot be gone from one and live to the other.
+_REVIEW_FROM = ('FROM review rv LEFT JOIN task t ON t.TaskId=rv.TaskId '
+                'LEFT JOIN message m ON m.MessageId=rv.MessageId')
+_NOT_ORPHAN = '(rv.TaskId IS NULL OR t.TaskId IS NOT NULL)'
+_VISIBLE_PENDING = ("NOT (rv.Status='pending' AND (IFNULL(t.Status,'') IN ('dropped','done') "
+                    "OR IFNULL(m.Status,'') IN ('context','skipped','ignored')))")
+
 # ── one owner, one place ─────────────────────────────────────────────────────────────────
 # The operator documents talk ABOUT the owner constantly ("protect John's time", "ask John in
 # the session", "Sign as John Smith"). Typed literally, changing your name means finding nine
@@ -325,7 +340,12 @@ class SQLiteStore:
         q = '''SELECT t.*, (SELECT Status FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
                       (SELECT Kind FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewKind,
                       (SELECT Status FROM run r2 WHERE r2.TaskId=t.TaskId ORDER BY RunId DESC LIMIT 1) RunStatus,
-                      (SELECT AgentName FROM run r2 WHERE r2.TaskId=t.TaskId ORDER BY RunId DESC LIMIT 1) RunAgent FROM task t'''
+                      (SELECT AgentName FROM run r2 WHERE r2.TaskId=t.TaskId ORDER BY RunId DESC LIMIT 1) RunAgent,
+                      -- the handover note a paused agent left for whoever picks this up. It was
+                      -- only ever read back INTO the next agent's prompt, so the owner could not
+                      -- see the one thing the board is for: what the last agent knew.
+                      (SELECT Body FROM comment c WHERE c.TaskId=t.TaskId AND c.Body LIKE 'HANDOVER NOTE%'
+                        ORDER BY CommentId DESC LIMIT 1) HandoverNote FROM task t'''
         return self._rows(q + (' WHERE Status=?' if status else '') + ' ORDER BY TaskId DESC', (status,) if status else ())
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
@@ -434,24 +454,20 @@ class SQLiteStore:
     def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def list_reviews(self, status=None):
-        # LEFT JOIN: a reply opened on a FILED message carries no task at all - the inner join
-        # made those reviews invisible everywhere, including the pending queue.
-        # A PENDING review must also point at work you can still SEE: a task folded away
-        # (dropped/merged/done) or a message a skip policy hid would otherwise keep the
-        # badge at 1 with nothing on the timeline to answer - the queue self-heals instead.
-        # Decided reviews keep their history whatever happened to the task since.
-        q = '''SELECT rv.*, t.Title, m.Subject, m.FromEmail, m.Channel FROM review rv
-               LEFT JOIN task t ON t.TaskId=rv.TaskId LEFT JOIN message m ON m.MessageId=rv.MessageId
-               WHERE (rv.TaskId IS NULL OR t.TaskId IS NOT NULL)
-                 AND NOT (rv.Status='pending' AND (IFNULL(t.Status,'') IN ('dropped','done')
-                                                   OR IFNULL(m.Status,'') IN ('context','skipped','ignored')))'''
+        q = f'''SELECT rv.*, t.Title, m.Subject, m.FromEmail, m.Channel {_REVIEW_FROM}
+                WHERE {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'''
         return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
     def decide_review(self, rid, status, final, by, note=None):
         self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',
                    (status, final, by, _now(), note, rid))
-    def pending_review(self, task_id, kind=None):
-        q = "SELECT * FROM review WHERE TaskId=? AND Status='pending'" + (" AND Kind=?" if kind else "") + " ORDER BY ReviewId DESC LIMIT 1"
-        return self._one(q, (task_id, kind) if kind else (task_id,))
+    def pending_review(self, task_id, kind=None, live_only=True):
+        """The task's live pending review, by the SAME visibility rule the queue uses: a draft the
+        owner can no longer see is not one to re-draft into or treat as already-answered. Pass
+        live_only=False only to reach a row deliberately - housekeeping, not the funnel."""
+        q = f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending'"
+        if kind:      q += ' AND rv.Kind=?'
+        if live_only: q += f' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'
+        return self._one(q + ' ORDER BY rv.ReviewId DESC LIMIT 1', (task_id, kind) if kind else (task_id,))
     def hold_reviews(self, task_id, reason=None):
         """Park this task's pending reply drafts while an agent works it. A draft written from the
         mail alone promises what the session has not found yet - and it sat in Review as if it

@@ -98,21 +98,27 @@ def gather(store, task_id: int) -> dict:
         'seconds': _secs(t.get('CreatedAt'), t.get('ClosedAt') or t.get('UpdatedAt')),
         'reported': bool(rep),
         'ci': ci_state(store, task_id),
+        # the card's button has to say what it will actually DO, and that is the owner's setting
+        'flow': store.get_settings().get('git_flow', 'pr'),
         # said plainly so a thin card cannot be mistaken for a clean one
         'gaps': [g for g in (
             'no file changes recorded - the agent may not have committed, or only read'
             if not files else None,
             'no test run detected in the session' if not tests_from(transcript).get('ran') else None,
-            'no CI checked (no pull request linked)' if not ci_state(store, task_id) else None,
+            'not landed anywhere yet - no pull request and nothing pushed'
+            if not ci_state(store, task_id) else None,
         ) if g],
     }
 
 
 def ci_state(store, task_id: int):
-    """The PR and its checks for this task, if one was opened - see ci.py. None when the
-    task has no pull request, which is not a failure, just an absence."""
-    from .ci import pr_of
-    pr = pr_of(store, task_id)
-    if not pr: return None
-    return {'repo': pr.get('repo'), 'number': pr.get('number'), 'url': pr.get('url'),
-            'state': pr.get('state'), 'checks': pr.get('checks'), 'checkedAt': pr.get('checked_at')}
+    """Where this task's work landed and what CI made of it - a pull request or a direct
+    push onto the default branch (see ci.py). None when it has not landed anywhere, which
+    is an absence, not a failure."""
+    from .ci import landing_of
+    at = landing_of(store, task_id)
+    if not at: return None
+    return {'kind': at.get('kind'), 'repo': at.get('repo'), 'number': at.get('number'),
+            'branch': at.get('branch'), 'sha': (at.get('sha') or '')[:7], 'commits': at.get('commits'),
+            'url': at.get('url'), 'state': at.get('state'), 'checks': at.get('checks'),
+            'checkedAt': at.get('checked_at')}

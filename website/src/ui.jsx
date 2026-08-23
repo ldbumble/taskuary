@@ -120,7 +120,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
         {ci && (
           <Pill tone={ci.checks?.state === "failure" ? "bad" : ci.checks?.state === "pending" ? "wait"
             : ci.checks?.state === "success" ? "ok" : "none"}>
-            {`PR #${ci.number} · CI ${ci.checks?.state || "unchecked"}`}
+            {`${ci.kind === "pr" ? `PR #${ci.number}` : `${ci.branch} @ ${ci.sha}`} · CI ${ci.checks?.state || "unchecked"}`}
           </Pill>
         )}
         {p.seconds != null && <Pill>{mins(p.seconds)} elapsed</Pill>}
@@ -158,17 +158,30 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
         {ci ? (
           <>
             <Box component="a" href={ci.url} target="_blank" rel="noreferrer"
-              sx={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", textDecoration: "none" }}>open PR ↗</Box>
+              sx={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", textDecoration: "none" }}>
+              {ci.kind === "pr" ? "open PR ↗" : "the commit ↗"}
+            </Box>
             <Box component="span" onClick={() => !busy && act("ci")}
               sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#4f46e5", cursor: "pointer" }}>
               {busy === "ci" ? "checking…" : "re-check CI"}
             </Box>
           </>
         ) : (
-          <Box component="span" onClick={() => !busy && act("pr")} title="opens a DRAFT pull request from this task's branch — never merges"
-            sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#4f46e5", cursor: "pointer" }}>
-            {busy === "pr" ? "opening…" : "open a draft PR"}
-          </Box>
+          // the button says what it will actually DO, per Settings → How finished work lands;
+          // the other road stays one click away rather than buried in Settings
+          <>
+            <Box component="span" onClick={() => !busy && act("land")}
+              title={p.flow === "direct" ? "pushes the commits already in the checkout straight onto the default branch"
+                : "opens a DRAFT pull request from this task's branch — never merges"}
+              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#4f46e5", cursor: "pointer" }}>
+              {busy === "land" ? "landing…" : p.flow === "direct" ? "push straight to the branch" : "open a draft PR"}
+            </Box>
+            <Box component="span" onClick={() => !busy && act(`land?flow=${p.flow === "direct" ? "pr" : "direct"}`)}
+              title="just this once, the other way"
+              sx={{ fontSize: 11, color: busy ? FAINT : FAINT, cursor: "pointer", "&:hover": { color: "#4f46e5" } }}>
+              {p.flow === "direct" ? "or a draft PR" : "or push direct"}
+            </Box>
+          </>
         )}
         {onOpenTask && (
           <Box component="span" onClick={() => onOpenTask(taskId)}

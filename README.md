@@ -308,7 +308,7 @@ Early (v0.2.0) and moving fast.
 - [x] The round trip: answers typed into the working agent's session; reviews decided from your phone
 - [x] Automation ideas: a weekly report mining your own funnel for the next thing worth automating
 - [x] Proof of work on every review: files changed, the tests that actually ran, CI, attempts — and what is *not* evidenced
-- [x] Closed git loop: draft PRs, CI watched, a red build handed back to the agent that wrote the code
+- [x] Closed git loop: a draft PR **or a direct push to the default branch** (your call), CI watched either way, a red build handed back to the agent that wrote the code
 - [x] Safe outputs: agents *propose* high-impact actions (PR, public comment, close, tool run); code validates, you approve
 - [ ] Follow-ups — track what YOU are owed: a sent reply or hand-off that asked a question starts a quiet timer; no answer in N days surfaces a "nudge?" with the follow-up drafted
 - [ ] Earned autonomy — auto-answer offered per pattern once your unedited approvals prove the draft (with the receipts, revocable per rule); today auto_answer is a policy you write by hand

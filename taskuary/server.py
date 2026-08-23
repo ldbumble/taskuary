@@ -667,14 +667,19 @@ def task_proof(tid: int):
     from . import proof
     return proof.gather(store, tid)
 
-@app.post('/api/tasks/{tid}/pr')
-def task_pr(tid: int):
-    """Open (or find) the draft pull request for this task's branch. Never merges, and
-    refuses unless 'Agents may push / deploy' is on."""
+@app.post('/api/tasks/{tid}/land')
+def task_land(tid: int, flow: str = None):
+    """Publish this task's work the way Settings says: a DRAFT pull request, or the commits
+    pushed straight onto the default branch. `flow` overrides for this one task. Never
+    merges, never force-pushes, and refuses unless 'Agents may push / deploy' is on."""
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     from . import ci
-    try: return ci.open_for_task(store, tid, ACTOR)
-    except Exception as e: raise HTTPException(422, str(e)[:300])
+    try:
+        if flow == 'direct': return ci.push_direct(store, tid, ACTOR)
+        if flow == 'pr': return ci.open_for_task(store, tid, ACTOR)
+        return ci.land(store, tid, ACTOR)
+    except Exception as e:
+        raise HTTPException(422, str(e)[:300])
 
 @app.post('/api/tasks/{tid}/ci')
 def task_ci(tid: int):

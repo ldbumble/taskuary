@@ -997,6 +997,20 @@ def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
+@app.post('/api/doc/{name}/generate')
+def doc_generate(name: str, days: int = 90):
+    """The Docs tab's 'Generate from history': read the last N days of the mailbox itself
+    (sent + inbox over Graph; Taskuary's own record when no Graph mailbox is connected),
+    distill it, and fill the doc's marked block. Slow by nature - one or two Graph sweeps
+    plus an AI pass - the button shows it working."""
+    from . import histgen
+    try:
+        detail = histgen.generate(store, name, days)
+    except Exception as e:
+        raise HTTPException(400, str(e)[:400])
+    store.audit('doc', 0, 'generate_from_history', ACTOR, detail={'doc': name, 'source': detail})
+    return {'ok': True, 'detail': detail}
+
 @app.post('/api/learn/reflect')
 def learn_reflect():
     """Consolidate LEARNED.md now instead of waiting for the threshold - the Docs page's
@@ -1024,7 +1038,7 @@ def put_owner(body: OwnerBody):
     # 'the owner' is the fallback when no name is known, and real prose says those words -
     # retokenizing them would punch {{owner}} holes all over a doc that never had a name in it
     if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coder', 'digest', 'learned', 'triage'):
+    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
@@ -1148,7 +1162,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'coder', 'digest', 'learned', 'triage'):
+        for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')

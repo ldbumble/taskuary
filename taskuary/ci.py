@@ -15,8 +15,10 @@ from datetime import datetime
 from loguru import logger
 
 PR_MARK = 'PULL REQUEST'          # comment marker: 'PULL REQUEST {json}'
+PUSH_MARK = 'PUSHED'              # the same, for work landed straight on the default branch
 CI_MARK = 'CI FEEDBACK'           # what we have already handed back, so it goes back ONCE
 BRANCH_SAFE = re.compile(r'[^a-zA-Z0-9._/-]+')
+TOKEN_URL = re.compile(r'https://[^@/]*@')     # never let a PAT reach a log line or a comment
 
 
 def _conn(store):
@@ -41,8 +43,31 @@ def pr_of(store, task_id: int):
     return None
 
 
+def landing_of(store, task_id: int):
+    """Where this task's work actually WENT - a pull request or a direct push, whichever
+    happened last. Both are the same question to everything downstream (what commit do I
+    check CI on?), so both answer it the same way: {kind, repo, sha, url, ...}."""
+    for c in reversed(store.list_comments(task_id)):
+        body = str(c.get('Body') or '')
+        for mark, kind in ((PR_MARK, 'pr'), (PUSH_MARK, 'push')):
+            if body.startswith(mark):
+                try: return {**json.loads(body[len(mark):].strip()), 'kind': kind}
+                except ValueError: return None
+    return None
+
+
 def _save_pr(store, task_id: int, pr: dict, actor='ci'):
     store.add_comment(task_id, actor, 'agent', f'{PR_MARK} {json.dumps(pr)}')
+
+
+def _save_push(store, task_id: int, info: dict, actor='ci'):
+    store.add_comment(task_id, actor, 'agent', f'{PUSH_MARK} {json.dumps(info)}')
+
+
+def flow(store) -> str:
+    """'pr' (a draft pull request) or 'direct' (straight onto the default branch). The
+    owner's call: on your own repo the PR is ceremony, on a shared one it is the review."""
+    return store.get_settings().get('git_flow', 'pr')
 
 
 def branch_for(store, task_id: int, cwd: str) -> str:
@@ -84,6 +109,66 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     return pr
 
 
+def _where(store, task_id: int):
+    """(cwd, repo, base, branch) for a task with a session - everything the two landing
+    roads both need, and the same refusals for both."""
+    from . import terminal as hub_term
+    ses = hub_term.session_for(task_id)
+    cwd = getattr(ses, 'cwd', None)
+    if not cwd: raise RuntimeError('no session on this task to read a checkout from')
+    repo, _ = hub_term.guess_repo(store, task_id, {})
+    repo = repo or _cfg(store).get('default_repo')
+    if not repo: raise RuntimeError('no repository known for this task')
+    base = _cfg(store).get('default_base') or 'master'
+    return cwd, repo, base, branch_for(store, task_id, cwd)
+
+
+def push_direct(store, task_id: int, actor='owner') -> dict:
+    """Land the work straight on the default branch - no pull request. What the owner of
+    their own repo usually wants, and never the default.
+
+    Deliberately narrow: it pushes COMMITS THAT ALREADY EXIST. A dirty tree is refused
+    rather than committed on the agent's behalf (a generated commit message over changes
+    nobody read is exactly the step this product does not take), and nothing ahead of the
+    remote is 'nothing to do', not an error. Force is never passed: a rejected push means
+    the branch moved underneath you, and the answer is to pull, not to overwrite."""
+    from .agents import _git
+    from .store import task_ref
+    if store.get_settings().get('agent_push_enabled') != '1':
+        raise RuntimeError("pushing is off - flip 'Agents may push / deploy' on the GitHub card first")
+    cwd, repo, base, branch = _where(store, task_id)
+    if _git(cwd, 'status', '--porcelain').strip():
+        raise RuntimeError('the checkout has uncommitted changes - the agent should commit them first '
+                           '(Taskuary will not write a commit message for work nobody has read)')
+    _git(cwd, 'fetch', 'origin', base)
+    ahead = (_git(cwd, 'rev-list', '--count', f'origin/{base}..HEAD') or '0').strip()
+    if ahead in ('', '0'):
+        raise RuntimeError(f'nothing to push - HEAD is not ahead of origin/{base}')
+    sha = (_git(cwd, 'rev-parse', 'HEAD') or '').strip()
+    out = _git(cwd, 'push', 'origin', f'HEAD:{base}')
+    # git says nothing useful on success; a rejection is what we must not swallow
+    if re.search(r'rejected|error:|fatal:', out or '', re.I):
+        raise RuntimeError('git refused the push: ' + TOKEN_URL.sub('https://', out)[:300]
+                           + ' - pull and rebase, then push again (Taskuary never force-pushes)')
+    info = {'repo': repo, 'branch': base, 'from': branch, 'sha': sha, 'commits': int(ahead),
+            'url': f'https://github.com/{repo}/commit/{sha}', 'state': 'pushed',
+            'checks': None, 'checked_at': None}
+    _save_push(store, task_id, info, actor)
+    store.add_comment(task_id, actor, 'human',
+                      f"Pushed {ahead} commit(s) straight to {base} ({sha[:7]}) - no pull request.")
+    store.audit('task', task_id, 'pushed_direct', actor,
+                detail={'repo': repo, 'base': base, 'sha': sha, 'commits': int(ahead)})
+    logger.info(f'task {task_id}: {ahead} commit(s) pushed to {repo} {base} ({sha[:7]})')
+    return info
+
+
+def land(store, task_id: int, actor='owner') -> dict:
+    """Publish this task's work the way the owner configured it: a draft pull request, or
+    straight onto the default branch. One door, so the button, the endpoint and an approved
+    proposal cannot disagree about which flow is in force."""
+    return (push_direct if flow(store) == 'direct' else open_for_task)(store, task_id, actor)
+
+
 def _already_fed(store, task_id: int) -> set:
     """Which failures this task has already been told about - a red build must reach the
     agent once, not on every poll until it is fixed."""
@@ -95,46 +180,58 @@ def _already_fed(store, task_id: int) -> set:
 
 
 def check_task(store, task_id: int, llm=None) -> dict:
-    """Poll one task's PR: refresh its checks, and when they are RED hand the failure back
-    to the live session (or file it on the task when nothing is running). Returns what it
-    did, and never raises into the poller."""
+    """Poll where this task's work landed - a PR or a direct push - refresh its checks, and
+    when they are RED hand the failure back to the live session (or put the task back on
+    the owner when nothing is running). Never raises into the poller."""
     from . import github, terminal as hub_term
-    pr = pr_of(store, task_id)
-    if not pr: return {'state': 'no-pr'}
+    at = landing_of(store, task_id)
+    if not at: return {'state': 'not-landed'}
     try:
         c = _conn(store)
-        fresh = github.pr(c['Secret'], pr['repo'], pr['number'])
-        ck = github.checks(c['Secret'], pr['repo'], fresh['sha'])
+        if at['kind'] == 'pr':
+            fresh = github.pr(c['Secret'], at['repo'], at['number'])
+            at = {**at, **fresh}
+        ck = github.checks(c['Secret'], at['repo'], at['sha'])
     except Exception as e:
         logger.warning(f'ci check failed for task {task_id}: {e}')
         return {'state': 'error', 'error': str(e)[:200]}
-    pr = {**pr, **fresh, 'checks': ck, 'checked_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-    _save_pr(store, task_id, pr)
-    if ck['state'] != 'failure': return {'state': ck['state'], 'pr': pr['number']}
-    key = f"{fresh['sha'][:10]}:{','.join(sorted(f['name'] or '?' for f in ck['failed']))}"
-    if key in _already_fed(store, task_id): return {'state': 'failure', 'fed': False, 'pr': pr['number']}
+    at = {**at, 'checks': ck, 'checked_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    where = f"the pull request for this task (#{at['number']}" if at['kind'] == 'pr' \
+        else f"{at['branch']} (the commit this task pushed"
+    (_save_pr if at['kind'] == 'pr' else _save_push)(store, task_id, {k: v for k, v in at.items() if k != 'kind'})
+    ref = at.get('number') if at['kind'] == 'pr' else at['sha'][:7]
+    if ck['state'] != 'failure': return {'state': ck['state'], 'at': ref, 'kind': at['kind']}
+    key = f"{at['sha'][:10]}:{','.join(sorted(f['name'] or '?' for f in ck['failed']))}"
+    if key in _already_fed(store, task_id): return {'state': 'failure', 'fed': False, 'at': ref}
     named = '\n'.join(f"- {f['name']}: {f['summary'] or 'see the run log'}" for f in ck['failed'])
-    text = (f"CI is failing on the pull request for this task (#{pr['number']}, commit {fresh['sha'][:7]}). "
-            f"The failing checks are:\n{named}\nFix the cause and push again; do not merge.")
+    # direct mode has no PR to hold the change back, so the instruction changes with it:
+    # the broken commit is ALREADY on the branch, and that is the thing to say out loud
+    tail = ('Fix the cause and push again; do not merge.' if at['kind'] == 'pr'
+            else 'This commit is ALREADY on the branch - fix it forward and push again.')
+    text = (f"CI is failing on {where}, commit {at['sha'][:7]}). "
+            f"The failing checks are:\n{named}\n{tail}")
     store.add_comment(task_id, 'ci', 'agent', f'{CI_MARK} {key}\n{text}')
     handed = hub_term.say_to_task(store, task_id, {'FromName': 'CI', 'Channel': 'github', 'BodyText': text}, 'ci')
     if not handed:
         # nobody is at the keyboard: it becomes work waiting on the owner, not a silent red
         store.update_task(task_id, {'Status': 'open'}, 'ci')
-    store.audit('task', task_id, 'ci_failure', 'ci', detail={'pr': pr['number'], 'checks': [f['name'] for f in ck['failed']],
+    store.audit('task', task_id, 'ci_failure', 'ci', detail={'at': ref, 'kind': at['kind'],
+                                                             'checks': [f['name'] for f in ck['failed']],
                                                              'handed_to_agent': handed})
-    return {'state': 'failure', 'fed': True, 'handed': handed, 'pr': pr['number']}
+    return {'state': 'failure', 'fed': True, 'handed': handed, 'at': ref, 'kind': at['kind']}
 
 
 def poll(store, llm=None) -> int:
-    """Every task with an open PR, checked once. Called from the same sync as everything
-    else; off unless the owner turned ci_watch on."""
+    """Every task whose work has landed - PR or direct push - checked once. Called from the
+    same sync as everything else; off unless the owner turned ci_watch on."""
     if store.get_settings().get('ci_watch', 'off') == 'off': return 0
     n = 0
     for t in store.list_tasks():
         if t['Status'] in ('done', 'dropped'): continue
-        pr = pr_of(store, t['TaskId'])
-        if not pr or pr.get('state') == 'closed': continue
+        at = landing_of(store, t['TaskId'])
+        # a merged/closed PR is finished business; a direct push is only ever checked while
+        # its checks could still be running, which the state below settles
+        if not at or at.get('state') == 'closed': continue
         out = check_task(store, t['TaskId'], llm)
         n += 1 if out.get('fed') else 0
     return n

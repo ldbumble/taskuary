@@ -50,7 +50,7 @@ class ProofTests(unittest.TestCase):
             p = proof.gather(s, tid)
         self.assertEqual(p['diffstat']['files'], 2)
         self.assertTrue(p['tests']['ran'])
-        self.assertIn('no CI checked (no pull request linked)', p['gaps'])
+        self.assertIn('not landed anywhere yet - no pull request and nothing pushed', p['gaps'])
 
     def test_gather_is_honest_when_empty(self):
         s = MemoryStore()
@@ -143,6 +143,96 @@ class CiLoopTests(unittest.TestCase):
         tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'open'}, 't')
         with self.assertRaises(RuntimeError) as e: ci.open_for_task(s, tid)
         self.assertIn('pushing is off', str(e.exception))
+
+
+class FakeSession:
+    def __init__(self, cwd='C:/repo'): self.cwd, self.alive, self.task_id, self.n = cwd, True, 1, 0
+
+
+def git_says(**answers):
+    """Fake taskuary.agents._git: keyed on the first arg of the git command."""
+    def _g(cwd, *args):
+        return answers.get(args[0], '')
+    return mock.patch('taskuary.agents._git', _g)
+
+
+class DirectPushTests(unittest.TestCase):
+    """git_flow=direct: the commits already in the checkout go straight onto the default
+    branch. Deliberately narrow, and every refusal is one the owner can act on."""
+    def _armed(self):
+        s = armed(MemoryStore())
+        cid = s.get_connector_by_type('github')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'default_repo': 'o/r', 'default_base': 'main'})}, 't')
+        s.set_setting('git_flow', 'direct', 't')
+        tid = s.create_task({'Title': 'fix the importer', 'Kind': 'coding', 'Status': 'waiting'}, 't')
+        return s, tid
+
+    def test_pushes_and_records_where_it_went(self):
+        s, tid = self._armed()
+        with mock.patch.object(terminal, 'session_for', return_value=FakeSession()), \
+             mock.patch.object(terminal, 'guess_repo', return_value=('o/r', '')), \
+             git_says(**{'status': '', 'rev-list': '2', 'rev-parse': 'abc1234def567', 'push': 'Everything up-to-date', 'fetch': ''}):
+            out = ci.push_direct(s, tid)
+        self.assertEqual((out['branch'], out['commits'], out['sha'][:7]), ('main', 2, 'abc1234'))
+        at = ci.landing_of(s, tid)
+        self.assertEqual((at['kind'], at['branch']), ('push', 'main'))
+        self.assertTrue(any('straight to main' in c['Body'] for c in s.list_comments(tid)))
+
+    def test_dirty_checkout_is_refused_not_committed(self):
+        s, tid = self._armed()
+        with mock.patch.object(terminal, 'session_for', return_value=FakeSession()), \
+             mock.patch.object(terminal, 'guess_repo', return_value=('o/r', '')), \
+             git_says(**{'status': ' M taskuary/x.py', 'rev-list': '1'}):
+            with self.assertRaises(RuntimeError) as e: ci.push_direct(s, tid)
+        self.assertIn('uncommitted changes', str(e.exception))
+
+    def test_nothing_ahead_is_nothing_to_do(self):
+        s, tid = self._armed()
+        with mock.patch.object(terminal, 'session_for', return_value=FakeSession()), \
+             mock.patch.object(terminal, 'guess_repo', return_value=('o/r', '')), \
+             git_says(**{'status': '', 'rev-list': '0', 'fetch': ''}):
+            with self.assertRaises(RuntimeError) as e: ci.push_direct(s, tid)
+        self.assertIn('nothing to push', str(e.exception))
+
+    def test_rejected_push_is_never_forced(self):
+        s, tid = self._armed()
+        with mock.patch.object(terminal, 'session_for', return_value=FakeSession()), \
+             mock.patch.object(terminal, 'guess_repo', return_value=('o/r', '')), \
+             git_says(**{'status': '', 'rev-list': '1', 'rev-parse': 'z', 'fetch': '',
+                         'push': '! [rejected] main -> main (fetch first)'}):
+            with self.assertRaises(RuntimeError) as e: ci.push_direct(s, tid)
+        self.assertIn('never force-pushes', str(e.exception))
+
+    def test_push_still_needs_the_switch(self):
+        s, tid = self._armed()
+        s.set_setting('agent_push_enabled', '0', 't')
+        with self.assertRaises(RuntimeError) as e: ci.push_direct(s, tid)
+        self.assertIn('pushing is off', str(e.exception))
+
+    def test_land_follows_the_setting(self):
+        s, tid = self._armed()
+        with mock.patch.object(ci, 'push_direct', return_value={'sha': 'x'}) as direct, \
+             mock.patch.object(ci, 'open_for_task') as pr:
+            ci.land(s, tid)
+        direct.assert_called_once(); pr.assert_not_called()
+        s.set_setting('git_flow', 'pr', 't')
+        with mock.patch.object(ci, 'push_direct') as direct2, \
+             mock.patch.object(ci, 'open_for_task', return_value={'number': 1}) as pr2:
+            ci.land(s, tid)
+        pr2.assert_called_once(); direct2.assert_not_called()
+
+    def test_ci_feedback_on_a_direct_push_says_it_is_already_on_the_branch(self):
+        s, tid = self._armed()
+        ci._save_push(s, tid, {'repo': 'o/r', 'branch': 'main', 'sha': 'abc1234def', 'state': 'pushed'})
+        ck = {'state': 'failure', 'total': 1, 'pending': 0,
+              'failed': [{'name': 'ci / test', 'url': 'u', 'summary': '1 failed'}]}
+        with mock.patch.object(github, 'checks', return_value=ck), \
+             mock.patch.object(terminal, 'say_to_task', return_value=True) as say:
+            out = ci.check_task(s, tid)
+        self.assertEqual((out['state'], out['kind']), ('failure', 'push'))
+        told = say.call_args[0][2]['BodyText']
+        self.assertIn('ALREADY on the branch', told)
+        self.assertNotIn('do not merge', told)          # there is no PR to hold anything back
 
 
 class ProposalTests(unittest.TestCase):

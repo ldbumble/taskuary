@@ -26,7 +26,14 @@ MAX = 5                      # per transcript: a loop proposing 200 pushes is a 
 # action -> (what it does in words, required keys, the switch that must be ON for it to be
 # proposable at all). Nothing here executes without an approved review.
 ACTIONS = {
+    # 'land' does whatever the owner's git_flow says (a draft PR, or straight onto the
+    # default branch) - the agent asks to PUBLISH, the owner decides what publishing means.
+    # open_pr / push_direct force one road for an agent that means one specifically.
+    'land': ('publish this work (a draft pull request, or straight to the default branch - your setting)',
+             (), 'agent_push_enabled'),
     'open_pr': ('open a DRAFT pull request for this task', (), 'agent_push_enabled'),
+    'push_direct': ('push these commits STRAIGHT onto the default branch - no pull request',
+                    (), 'agent_push_enabled'),
     'comment_issue': ('post a PUBLIC comment on the linked issue/PR', ('body',), 'github_reply'),
     'close_issue': ('close the linked GitHub issue', (), 'use_as_tracker'),
     'run_tool': ('run one query/script through a tool connection', ('type',), None),
@@ -95,10 +102,13 @@ def execute(store, rv: dict, actor='owner') -> dict:
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
-    if a == 'open_pr':
-        from .ci import open_for_task
-        pr = open_for_task(store, tid, actor)
-        out = {'pr': pr['number'], 'url': pr['url']}
+    if a in ('land', 'open_pr', 'push_direct'):
+        from . import ci
+        fn = {'land': ci.land, 'open_pr': ci.open_for_task, 'push_direct': ci.push_direct}[a]
+        r = fn(store, tid, actor)
+        out = {'pr': r.get('number'), 'branch': r.get('branch'), 'sha': (r.get('sha') or '')[:7],
+               'url': r.get('url')}
+        out = {k: v for k, v in out.items() if v}
     elif a in ('comment_issue', 'close_issue'):
         from . import github
         from .ci import _conn

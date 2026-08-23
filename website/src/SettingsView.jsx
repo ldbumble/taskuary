@@ -18,7 +18,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
-import { Empty, Crumb as CrumbBase, UnderTabs, LandingCard } from "./ui.jsx";
+import { ChannelIcon, Empty, Crumb as CrumbBase, UnderTabs, LandingCard } from "./ui.jsx";
 
 const Crumb = (props) => <CrumbBase section="Settings" {...props} />;
 
@@ -47,6 +47,10 @@ const KNOB_META = {
     help: "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Docs tab): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected." },
 
   // ── Replies: the drafts you approve ──
+  reply_channels: { group: "Replies", label: "Draft replies on", type: "channels",
+    options: ["email", "teams", "slack", "telegram", "whatsapp", "discord", "github"],
+    desc: "Which channels get a drafted reply at all. Switch one off and its questions just file.",
+    help: "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the Review buttons use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them." },
   auto_draft_enabled: { group: "Replies", label: "Draft replies automatically", type: "switch",
     desc: "Questions get their AI draft the moment they arrive, waiting in Review.",
     help: "On: a message triaged as a question lands in Review with the reply already written — you edit or just Approve & send. Off: questions still queue in Review, but empty; you click 'Draft with AI' per item.\n\nNothing sends itself either way — approving is always yours. Turning this off is also the cheapest way to pause AI spending." },
@@ -200,6 +204,28 @@ export default function SettingsView() {
         ))}
       </Select>
     );
+    // a csv of channels: chips you toggle, which is what "which of these" actually is -
+    // a comma-separated text field asked the owner to spell channel names correctly
+    if (m.type === "channels") {
+      const on = new Set(String(s.Value || "").split(",").map((x) => x.trim()).filter(Boolean));
+      const toggle = (ch) => {
+        on.has(ch) ? on.delete(ch) : on.add(ch);
+        saveSetting(s.Name, m.options.filter((o) => on.has(o)).join(","));
+      };
+      return (
+        <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 340 }}>
+          {m.options.map((ch) => (
+            <Box key={ch} onClick={() => toggle(ch)}
+              sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.9, py: 0.35, borderRadius: 99,
+                cursor: "pointer", fontSize: 11.5, fontWeight: on.has(ch) ? 700 : 500, userSelect: "none",
+                bgcolor: on.has(ch) ? "#eef0ff" : "#f1f3f6", color: on.has(ch) ? "#4f46e5" : DIM,
+                border: `1px solid ${on.has(ch) ? "#c9cff0" : BORDER}`, "&:hover": { borderColor: "#c9cff0" } }}>
+              <ChannelIcon channel={ch} sx={{ fontSize: 12 }} />{ch}
+            </Box>
+          ))}
+        </Box>
+      );
+    }
     if (m.type === "select") return (
       <Select size="small" value={s.Value} onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
         {m.options.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>{o.replace("_", " ")}</MenuItem>)}

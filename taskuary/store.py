@@ -162,6 +162,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'answer_to_agent': 'ask',
                     # replies in the notify chat decide pinged reviews (approve/reject/your text)
                     'phone_approvals': '0',
+                    # which channels Taskuary drafts and sends replies on (csv). github also
+                    # needs its card's 'Reply to issue/PR authors'; the read-only trackers
+                    # can never carry one - see outbound.can_reply
+                    'reply_channels': 'email,teams,slack,telegram,whatsapp,discord,github',
                     # watch the CI of a task's pull request and hand red builds back to the
                     # agent that wrote the code: off | watch (status only) | feedback
                     'ci_watch': 'off',

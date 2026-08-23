@@ -125,19 +125,12 @@ _started = datetime.now().isoformat(sep=' ', timespec='seconds')
 @app.get('/api/version')
 def version(): return {'version': _ver, 'started': _started}
 
-# Channels Taskuary only READS: nothing is written back, so a drafted reply has nowhere to
-# go - the UI shows 'No response required' instead of a send that bounces.
-READ_ONLY_CHANNELS = {'report', 'jira', 'asana', 'monday', 'gitlab', 'azdo', 'linear',
-                      'trello', 'notion', 'sentry', 'pagerduty'}
-
 def _can_send(channel, has_message=True, gh_ok=None) -> bool:
-    """Can an approved reply actually LEAVE on this channel? github only with the card's
-    'Reply to issue/PR authors' on; reports, read-only channels and message-less reviews
-    never. The UI turns an unsendable draft's Approve into 'No response required'."""
-    if not has_message or not channel or channel in READ_ONLY_CHANNELS: return False
-    if channel == 'github':
-        return store.github_replies_ok() if gh_ok is None else gh_ok
-    return True
+    """Can an approved reply actually LEAVE on this channel? One answer for the whole app -
+    outbound.can_reply - so the Approve button, triage and the coder wrap-up cannot
+    disagree. The UI turns an unsendable draft's Approve into 'No response required'."""
+    if not has_message: return False
+    return outbound.can_reply(store, channel)
 
 
 @app.get('/api/feed')
@@ -1298,11 +1291,15 @@ def _wrap_task(tid: int, close: bool, sid: str = None):
             proposed = proposals.collect(store, tid, text, agent)
         except Exception as e:
             logger.warning(f'proposal collection failed for task {tid}: {e}')
+    # 'drafting' must be what finish() ACTUALLY did, not a second guess at it: recomputing it
+    # from reply_target alone skipped the can-this-channel-even-reply rule, so a GitHub task
+    # with replies off closed with no draft while the card still promised one in Review.
+    fin = {}
     if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-        coder_finish(store, tid, rep, None, agent)
+        fin = coder_finish(store, tid, rep, None, agent) or {}
     store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid or found, 'close': close})
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
-            'drafting': bool(close and coder_reply_target(store, tid))}
+            'drafting': bool(fin.get('drafting'))}
 
 
 def _pause_task(tid: int, sid: str = None):

@@ -103,35 +103,81 @@ const NoteChip = ({ onOpen }) => (
   </Tooltip>
 );
 
-// found / did / next as sections; anything the agent wrote outside that shape is shown as-is
-// rather than dropped, because a note we cannot parse is still the note it left.
+// found / did / next as sections, each with its own colour and icon so the eye can jump
+// straight to "the next step" - plus the files git says that agent actually touched, which
+// is the other half of the handover (the note tells you the thinking, the files tell you
+// the blast radius). Anything the agent wrote outside the found/did/next shape is shown
+// verbatim rather than dropped: a note we cannot parse is still the note it left.
+const SECTION = {
+  found: { title: "WHAT IT WORKED OUT", icon: "🔍", fg: "#0e7490", bg: "#e6f7fb", bd: "#c2e7f0" },
+  did: { title: "WHAT IT ALREADY CHANGED", icon: "✓", fg: "#15803d", bg: "#e8f6ee", bd: "#cdeeda" },
+  next: { title: "THE NEXT STEP", icon: "→", fg: "#b45309", bg: "#fef4e6", bd: "#f3ddb8" },
+};
+
 const NoteDialog = ({ open, task, onClose }) => {
   const body = noteBody(task?.HandoverNote);
+  const [proof, setProof] = useState(null);
+  useEffect(() => {
+    setProof(null);
+    if (!open || !task?.TaskId) return;
+    api.get(`/api/tasks/${task.TaskId}/proof`).then(({ data }) => setProof(data)).catch(() => {});
+  }, [open, task?.TaskId]);
   const secs = NOTE_FIELDS.map((k) => {
     const m = body.match(new RegExp(`^\\s*${k}\\s*:\\s*([\\s\\S]*?)(?=^\\s*(?:${NOTE_FIELDS.join("|")})\\s*:|$)`, "im"));
     return [k, (m?.[1] || "").trim()];
   }).filter(([, v]) => v);
+  const files = proof?.files || [];
   return (
-    <Dialog open={!!open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontSize: 14.5 }}>
-        {task?.ref} — what the last agent left
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400 }}>
-          Written when the session was paused, and handed to whoever picks this up — you are reading
-          the same text the next agent is seeded with.
+    <Dialog open={!!open} onClose={onClose} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ fontSize: 14.5, pb: 0.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography sx={{ ...mono, color: "#4f46e5", fontWeight: 700, fontSize: 12 }}>{task?.ref}</Typography>
+          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14 }}>the handover note</Typography>
+        </Box>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
+          Written when this session paused — and this is the same text the next agent is seeded
+          with, so what you read here is what it will know.
         </Typography>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ pb: 1 }}>
         {!body && <Empty>No note on this task.</Empty>}
         {secs.length ? secs.map(([k, v]) => (
-          <Box key={k} sx={{ mb: 1.25 }}>
-            <Typography variant="caption" sx={{ color: "#6b21a8", fontWeight: 800, fontSize: 9.5,
-              letterSpacing: ".08em", display: "block", mb: 0.25 }}>
-              {{ found: "WHAT IT WORKED OUT", did: "WHAT IT ALREADY CHANGED", next: "THE NEXT STEP" }[k]}
+          <Box key={k} sx={{ mb: 1, px: 1.25, py: 0.9, bgcolor: SECTION[k].bg,
+            border: `1px solid ${SECTION[k].bd}`, borderRadius: 2 }}>
+            <Typography variant="caption" sx={{ color: SECTION[k].fg, fontWeight: 800, fontSize: 9.5,
+              letterSpacing: ".08em", display: "block", mb: 0.35 }}>
+              {SECTION[k].icon} {SECTION[k].title}
             </Typography>
-            <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.5 }}>{v}</Typography>
+            <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.55 }}>{v}</Typography>
           </Box>
         )) : body && (
           <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5 }}>{body}</Typography>
+        )}
+        {/* the note is the agent's account of itself; this is git's */}
+        {files.length > 0 && (
+          <Box sx={{ mt: 1.5 }}>
+            <Typography variant="caption" sx={{ color: "#6b21a8", fontWeight: 800, fontSize: 9.5,
+              letterSpacing: ".08em", display: "block", mb: 0.5 }}>
+              ✎ FILES IT TOUCHED — {files.length}, per git
+            </Typography>
+            <Box sx={{ maxHeight: 168, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 2 }}>
+              {files.map((f, i) => (
+                <Box key={f.path} sx={{ display: "flex", gap: 1, alignItems: "baseline", px: 1, py: 0.45,
+                  borderTop: i ? `1px solid ${BORDER}` : "none" }}>
+                  <Typography sx={{ ...mono, color: INK, fontSize: 10.5, flex: 1, minWidth: 0 }} noWrap
+                    title={f.path}>{f.path}</Typography>
+                  <Typography sx={{ ...mono, color: "#15803d", fontSize: 10 }}>+{f.added}</Typography>
+                  <Typography sx={{ ...mono, color: "#b91c1c", fontSize: 10 }}>−{f.removed}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+        {proof && !files.length && (
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
+            No file changes recorded yet — the agent may have only read, or not committed.
+          </Typography>
         )}
       </DialogContent>
       <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>

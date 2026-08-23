@@ -280,83 +280,84 @@ export default function FeedView({ onOpenTask, onChanged }) {
   ];
 
   return (
-    <Box sx={{ display: "grid", gap: 2, alignItems: "start",
-      // Timeline column tops out at 860px; with the panel open the PANEL keeps a 340px
-      // floor and the timeline yields below ~1240px - a hard 860 both ways squeezed the
-      // panel into a one-word-per-line sliver on narrow windows. At full width nothing
-      // moves when the panel opens.
-      gridTemplateColumns: { xs: "minmax(0, 1fr)",
-        md: sel ? "minmax(0, 860px) minmax(400px, 1fr)" : "min(860px, 100%)" } }}>
+    // rowGap is tighter than columnGap on purpose: the stats caption already pads the
+    // header's bottom edge, and a full 16px under it left the timeline floating loose
+    <Box sx={{ display: "grid", columnGap: 2, rowGap: 0.75, alignItems: "start",
+      // Timeline column tops out at 860px and stays LEFT; the second track always exists
+      // (panel or empty space) so the dock header - which spans both - centers over the
+      // PAGE, not over the timeline column. Panel keeps its 400px floor when open.
+      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 860px) minmax(400px, 1fr)" } }}>
+      {/* floating dock: one detached pill with Sync now DEAD-CENTER between the two filter
+          groups, and the stats as a quiet caption line beneath. The old two-row toolbar
+          card boxed the controls into the timeline column; the dock frees them to belong
+          to the whole page. */}
+      <Box sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center",
+          bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 99, px: 1.5, py: 0.6,
+          boxShadow: "0 8px 28px rgba(16,24,40,.10)" }}>
+          <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
+          <Box sx={{ width: "1px", height: 20, bgcolor: BORDER, flexShrink: 0 }} />
+          {/* the label stays SHORT while it works: the "catching up on…" story lives in the
+              caption line below, which exists for exactly that */}
+          <Button size="small" variant="contained" disableElevation disabled={syncing || bgSync} onClick={() => syncNow(false)}
+            title={syncing || bgSync ? syncWhat : undefined}
+            startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
+            sx={{ py: 0.4, fontSize: 11.5, whiteSpace: "nowrap", borderRadius: 99,
+              background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
+          <Box sx={{ width: "1px", height: 20, bgcolor: BORDER, flexShrink: 0 }} />
+          <FilterPills options={CATEGORIES} value={cat} onChange={setCat} />
+          {pickerChannels.length > 0 && (
+            <Select size="small" value={pick} displayEmpty onChange={(e) => setPick(e.target.value)}
+              renderValue={(v) => (!v ? "any connection"
+                : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
+                  : String(v.split(":").slice(2).join(":")).split("@")[0])}
+              sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: pick ? "#e8f1fa" : "#fff", height: 26,
+                color: pick ? "#0F6CBD" : DIM, maxWidth: 210,
+                "& .MuiSelect-select": { py: 0.3, px: 1.25 },
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#c4dcf2" : BORDER } }}>
+              <MenuItem value="" sx={{ fontSize: 12 }}>any connection</MenuItem>
+              {pickerChannels.flatMap((ch) => [
+                <ListSubheader key={`h${ch}`} sx={{ fontSize: 10, lineHeight: 2, color: FAINT, letterSpacing: 1,
+                  textTransform: "uppercase", bgcolor: "transparent" }}>
+                  {CHANNEL_LABELS[ch] || ch}
+                </ListSubheader>,
+                <MenuItem key={`c${ch}`} value={`channel:${ch}`} sx={{ fontSize: 12 }}>
+                  all {(CHANNEL_LABELS[ch] || ch).toLowerCase()}
+                </MenuItem>,
+                ...(srcByChannel[ch] || []).map((n) => (
+                  <MenuItem key={`${ch}:${n}`} value={`src:${ch}:${n}`} sx={{ fontSize: 12, pl: 3 }}>{n}</MenuItem>
+                )),
+              ])}
+            </Select>
+          )}
+        </Box>
+        {/* the stats, demoted from tiles to a caption line - still clickable where a tile
+            was ("need me" filters), and the sync story rides the same line */}
+        {rows && (
+          <Box sx={{ display: "flex", alignItems: "baseline", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
+            {stats.map((s) => (
+              <Box key={s.label} onClick={() => s.f && setView(s.f)}
+                sx={{ display: "flex", alignItems: "baseline", gap: 0.6, cursor: s.f ? "pointer" : "default",
+                  ...(s.f ? { "&:hover .thubStatLbl": { color: "#4f46e5" } } : {}) }}>
+                <Typography sx={{ ...mono, fontWeight: 700, fontSize: 13,
+                  color: s.hot && s.n ? "#b45309" : s.n ? "#4f46e5" : INK }}>{s.n}</Typography>
+                <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
+              </Box>
+            ))}
+            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? "#4f46e5" : FAINT }}>
+              {syncing || bgSync ? `· ${syncWhat || "syncing…"}`
+                : lastSync
+                  ? `· last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+                  : "· auto-syncs every 10 min"}
+            </Typography>
+          </Box>
+        )}
+      </Box>
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
       <Box sx={{ minWidth: 0, maxWidth: 860 }}>
-        {/* contained toolbar, two deliberate rows: controls (filters left, sync anchored
-            right) over a full-width stats strip - nothing floats in dead space */}
-        <Box sx={{ ...card, p: 0, overflow: "hidden" }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.5, py: 1, flexWrap: "wrap" }}>
-            <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
-            <FilterPills options={CATEGORIES} value={cat} onChange={setCat} />
-            {pickerChannels.length > 0 && (
-              <Select size="small" value={pick} displayEmpty onChange={(e) => setPick(e.target.value)}
-                renderValue={(v) => (!v ? "any connection"
-                  : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
-                    : String(v.split(":").slice(2).join(":")).split("@")[0])}
-                sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: pick ? "#e8f1fa" : "#fff", height: 26,
-                  color: pick ? "#0F6CBD" : DIM, maxWidth: 210,
-                  "& .MuiSelect-select": { py: 0.3, px: 1.25 },
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#c4dcf2" : BORDER } }}>
-                <MenuItem value="" sx={{ fontSize: 12 }}>any connection</MenuItem>
-                {pickerChannels.flatMap((ch) => [
-                  <ListSubheader key={`h${ch}`} sx={{ fontSize: 10, lineHeight: 2, color: FAINT, letterSpacing: 1,
-                    textTransform: "uppercase", bgcolor: "transparent" }}>
-                    {CHANNEL_LABELS[ch] || ch}
-                  </ListSubheader>,
-                  <MenuItem key={`c${ch}`} value={`channel:${ch}`} sx={{ fontSize: 12 }}>
-                    all {(CHANNEL_LABELS[ch] || ch).toLowerCase()}
-                  </MenuItem>,
-                  ...(srcByChannel[ch] || []).map((n) => (
-                    <MenuItem key={`${ch}:${n}`} value={`src:${ch}:${n}`} sx={{ fontSize: 12, pl: 3 }}>{n}</MenuItem>
-                  )),
-                ])}
-              </Select>
-            )}
-            <Box sx={{ flex: 1, minWidth: 8 }} />
-            {/* the label stays SHORT while it works: the long "catching up on…" text made the
-                button outgrow the wrapping controls row and drop onto its own line - the story
-                lives in the stats-strip caption below, which exists for exactly that */}
-            <Button size="small" variant="contained" disableElevation disabled={syncing || bgSync} onClick={() => syncNow(false)}
-              title={syncing || bgSync ? syncWhat : undefined}
-              startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ py: 0.4, fontSize: 11.5, whiteSpace: "nowrap", ml: "auto",   // right-anchored even when the row wraps
-                background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
-          </Box>
-          {/* stats strip - and the sync caption lives here, so the controls row above keeps
-              its budget whether or not the mailbox picker is showing */}
-          {rows && (
-            <Box sx={{ display: "flex", alignItems: "center", borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
-              {stats.map((s, i) => (
-                <Box key={s.label} onClick={() => s.f && setView(s.f)}
-                  sx={{ flex: 1, display: "flex", alignItems: "baseline", gap: 0.6, px: 1.5, py: 0.7,
-                    borderLeft: i ? `1px solid ${BORDER}` : "none", transition: "background .15s",
-                    cursor: s.f ? "pointer" : "default",
-                    ...(s.f ? { "&:hover": { bgcolor: "#eef0ff" }, "&:hover .thubStatLbl": { color: "#4f46e5" } } : {}) }}>
-                  <Typography sx={{ ...mono, fontWeight: 700, fontSize: 15,
-                    color: s.hot && s.n ? "#b45309" : s.n ? "#4f46e5" : INK }}>{s.n}</Typography>
-                  <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
-                </Box>
-              ))}
-              <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? "#4f46e5" : FAINT,
-                px: 1.5, py: 0.7, flexShrink: 0, borderLeft: `1px solid ${BORDER}` }}>
-                {syncing || bgSync ? (syncWhat || "syncing…")
-                  : lastSync
-                    ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-                    : "auto-syncs every 10 min"}
-              </Typography>
-            </Box>
-          )}
-        </Box>
-        {(syncing || bgSync) && <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />}
-        {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mt: 1.5 }}>{err}</Alert>}
+        {(syncing || bgSync) && <LinearProgress sx={{ mb: 1, borderRadius: 1, height: 3 }} />}
+        {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
         <Box sx={{ opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
           {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (
             <Empty>Nothing in the feed yet — activate a mailbox in Connectors or run an ingest.</Empty>
@@ -446,7 +447,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
           MUST stretch the full grid height - sticky needs that track to slide in (a
           content-height column leaves sticky stranded at the page top). ── */}
       {sel && (
-        <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch" }}>
+        // pushed DOWN so the panel's top edge lines up with the first timeline card (past
+        // the day-group margin + day header + row margin ≈ 44px), instead of floating
+        // above the list it annotates. Sticky still takes over once you scroll.
+        <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch", mt: "44px" }}>
           <Box sx={{ position: "sticky", top: 60 }}>
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
               decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}

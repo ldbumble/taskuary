@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { launch } from "./browser.mjs";
 const b = await launch();
 const p = await b.newPage();
-await p.setViewport({ width: 1280, height: 900, deviceScaleFactor: 2 });
+await p.setViewport({ width: 1120, height: 900, deviceScaleFactor: 2 });
 await p.goto(process.argv[2], { waitUntil: "networkidle0" });
 await p.evaluate(() => [...document.querySelectorAll("div")].find((d) => d.childElementCount === 0 && d.textContent === "Timeline")?.click());
 await new Promise((r) => setTimeout(r, 1500));
@@ -22,12 +22,12 @@ await new Promise((r) => setTimeout(r, 1500));
 await p.evaluate(() => {
   [...document.querySelectorAll("div")]
     .filter((d) => d.scrollHeight > d.clientHeight + 20 && d.clientHeight > 250 && d.getBoundingClientRect().left > 600)
-    .forEach((d) => { d.scrollTop = 208; });
+    .forEach((d) => { d.scrollTop = 262; });
 });
 await new Promise((r) => setTimeout(r, 400));
 // a plain path, not a URL object: puppeteer sniffs the type off the extension with
 // lastIndexOf, which a URL does not have
 await p.screenshot({ path: fileURLToPath(new URL("../docs/screenshot-timeline.png", import.meta.url)),
-                    clip: { x: 0, y: 0, width: 1280, height: 850 } });
+                    clip: { x: 0, y: 0, width: 1120, height: 762 } });
 await b.close();
 console.log("timeline shot ok");

@@ -266,9 +266,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
     return acc;
   }, {});
 
-  // only offer channels that actually have a connection behind them
+  // only offer channels that actually have a connection behind them. With no category
+  // picked, EVERY connected channel is offered - a hardcoded five-channel list here
+  // silently hid telegram/whatsapp/jira/... sources from the picker as connectors grew
   const pickerChannels = ((CATEGORIES.find((x) => x.key === cat) || {}).channels
-    || ["email", "teams", "slack", "github", "report"]).filter((ch) => (srcByChannel[ch] || []).length);
+    || [...new Set([...CATEGORIES.flatMap((c) => c.channels || []), ...Object.keys(srcByChannel)])])
+    .filter((ch) => (srcByChannel[ch] || []).length);
 
   const today = new Date().toLocaleDateString("sv-SE");
   const todays = (rows || []).filter((r) => localDay(r.SentAt) === today);
@@ -308,14 +311,14 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <FilterPills options={CATEGORIES} value={cat} onChange={setCat} />
           {pickerChannels.length > 0 && (
             <Select size="small" value={pick} displayEmpty onChange={(e) => setPick(e.target.value)}
-              renderValue={(v) => (!v ? "any connection"
+              renderValue={(v) => (!v ? "all sources"
                 : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
                   : String(v.split(":").slice(2).join(":")).split("@")[0])}
               sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: pick ? "#e8f1fa" : "#fff", height: 26,
                 color: pick ? "#0F6CBD" : DIM, maxWidth: 210,
                 "& .MuiSelect-select": { py: 0.3, px: 1.25 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#c4dcf2" : BORDER } }}>
-              <MenuItem value="" sx={{ fontSize: 12 }}>any connection</MenuItem>
+              <MenuItem value="" sx={{ fontSize: 12 }}>all sources</MenuItem>
               {pickerChannels.flatMap((ch) => [
                 <ListSubheader key={`h${ch}`} sx={{ fontSize: 10, lineHeight: 2, color: FAINT, letterSpacing: 1,
                   textTransform: "uppercase", bgcolor: "transparent" }}>

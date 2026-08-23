@@ -136,9 +136,10 @@ One tab per question, two lines each; the details live in the app's own help tex
 - **Connectors** — a catalog with a wizard per card. Every connection has **roles** you
   choose: *trigger* (inbound work), *feed* (shown, never triaged), *report*, *tool* (agents
   may use it), *notify* (Taskuary pushes pings TO it). Nothing is polled without a role.
-- **Docs** — the five plain-markdown documents that steer everything (see
-  [The five documents](#the-five-documents)); they maintain themselves as connectors and
-  repos appear. Your name lives in ONE field here and fills every `{{owner}}` mention.
+- **Docs** — the six plain-markdown documents that steer everything (see
+  [The six documents](#the-six-documents)); they maintain themselves as connectors and
+  repos appear, and two can generate themselves from your mail history. Your name lives
+  in ONE field here and fills every `{{owner}}` mention.
 - **Settings** — triage knobs with plain-English help, deterministic routing policies that
   no model confidence can override, the learned memory, notification level, and one-click
   audit-chain verification.
@@ -303,7 +304,11 @@ Early (v0.2.0) and moving fast.
 - [x] Generate from history: TRIAGE.md and STYLE.md bootstrapped from 3 months of your own mailbox
 - [x] Data connections: any database by connection string, AWS, Azure, Prometheus, Datadog
 - [x] Developer inboxes: GitLab, Azure DevOps, Linear, Trello, Notion, Discord, Sentry, PagerDuty
-- [ ] Git worktree isolation per task attempt
+- [x] The round trip: answers typed into the working agent's session; reviews decided from your phone
+- [x] Automation ideas: a weekly report mining your own funnel for the next thing worth automating
+- [ ] Follow-ups — track what YOU are owed: a sent reply or hand-off that asked a question starts a quiet timer; no answer in N days surfaces a "nudge?" with the follow-up drafted
+- [ ] Earned autonomy — auto-answer offered per pattern once your unedited approvals prove the draft (with the receipts, revocable per rule); today auto_answer is a policy you write by hand
+- [ ] Teams as a phone-approvals channel (Telegram and WhatsApp carry it today)
 - [ ] Remaining report connectors (table above)
 - [ ] Tray + notifications for the desktop shell
 

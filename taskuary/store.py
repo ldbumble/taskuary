@@ -166,8 +166,11 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool',
                  'gmail': 'trigger,tool', 'imap': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool',
-                 'database': 'report,tool', 'aws': 'report,tool', 'azure': 'report,tool',
+                 'database': 'report,tool',
                  'prometheus': 'report,tool', 'datadog': 'report,tool',
+                 # aws/azure: the per-OBJECT picker carries the intent (report by default,
+                 # which polls nothing) - the card itself is just a connection and a tool
+                 'aws': 'report,tool', 'azure': 'report,tool',
                  'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger',
                  'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
                  # notion edits are information, not assignments; discord is a chat channel

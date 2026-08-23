@@ -6,6 +6,8 @@ container, 'azure_logs' runs KQL against a Log Analytics workspace. The app need
 on the target: Reader for ARM, Storage Blob Data Reader, Log Analytics Reader.
 """
 import json, os, re, requests
+from datetime import datetime
+from loguru import logger
 
 ARM = 'https://management.azure.com'
 STORAGE_VER = '2021-08-06'
@@ -46,6 +48,96 @@ def test(cfg: dict) -> dict:
         return {'ok': True, 'detail': f'authenticated · {len(subs)} subscription(s): {names}'}
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
+
+
+def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
+    """What can this app SEE? ARM enumerates the storage accounts (then their containers,
+    with the storage token) and Log Analytics workspaces across every visible subscription;
+    each is registered as a source with the same mode picker as AWS - report (default,
+    nothing polled), feed, tasks, or off. RBAC decides what enumerates; partial failures
+    register what did."""
+    known = {s['Address'] for s in store.list_sources(active_only=False) if s['Channel'] == 'azure'}
+    found, cfgs = [], {}
+    tok = token(cfg, f'{ARM}/.default')
+    subs = _get(f'{ARM}/subscriptions', tok, params={'api-version': '2022-12-01'}).json().get('value') or []
+    stok = None
+    for sub in subs[:5]:
+        sid = sub['subscriptionId']
+        try:
+            for sa in _get(f'{ARM}/subscriptions/{sid}/providers/Microsoft.Storage/storageAccounts',
+                           tok, params={'api-version': '2023-01-01'}).json().get('value') or []:
+                acct = sa['name']
+                try:
+                    stok = stok or token(cfg, 'https://storage.azure.com/.default')
+                    xml = _get(f'https://{acct}.blob.core.windows.net/', stok, params={'comp': 'list'}).text
+                    for cont in re.findall(r'<Name>(.*?)</Name>', xml)[:20]:
+                        found.append(f'blob://{acct}/{cont}')
+                except Exception as e:
+                    logger.warning(f'azure discovery: containers of {acct} failed: {e}')
+                    found.append(f'blob://{acct}')          # the account still shows; add /container by hand
+        except Exception as e:
+            logger.warning(f'azure discovery: storage accounts in {sid} failed: {e}')
+        try:
+            for ws in _get(f'{ARM}/subscriptions/{sid}/providers/Microsoft.OperationalInsights/workspaces',
+                           tok, params={'api-version': '2022-10-01'}).json().get('value') or []:
+                wid = (ws.get('properties') or {}).get('customerId')
+                if not wid: continue
+                addr = f"law://{ws['name']}"
+                found.append(addr)
+                cfgs[addr] = {'workspace_id': wid}
+        except Exception as e:
+            logger.warning(f'azure discovery: workspaces in {sid} failed: {e}')
+    added = 0
+    for addr in found:
+        if addr in known: continue
+        store.save_source({'Channel': 'azure', 'Address': addr, 'ConnectorId': connector_id, 'Active': 1,
+                           'Owner': 'discovered',
+                           'ConfigJson': json.dumps({'mode': 'report', **cfgs.get(addr, {})})}, actor)
+        added += 1
+    return {'found': len(found), 'added': added}
+
+
+def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -> int:
+    """One discovered object in tasks/feed mode. blob://account/container -> a Timeline
+    item per NEW blob; law://workspace -> ONE batched item of new exception rows (the
+    source's own 'query' overrides the default KQL)."""
+    from .ingest import ingest_message
+    scfg = json.loads(src.get('ConfigJson') or '{}')
+    addr, floor, n = src['Address'], since.strftime('%Y-%m-%d %H:%M:%S'), 0
+    if addr.startswith('blob://') and '/' in addr[7:]:
+        acct, cont = addr[7:].split('/', 1)
+        tok = token(cfg, 'https://storage.azure.com/.default')
+        xml = _get(f'https://{acct}.blob.core.windows.net/{cont}', tok,
+                   params={'restype': 'container', 'comp': 'list'}).text
+        for name, mod in re.findall(r'<Name>(.*?)</Name>.*?<Last-Modified>(.*?)</Last-Modified>', xml, re.S)[:200]:
+            try: stamp = datetime.strptime(mod, '%a, %d %b %Y %H:%M:%S GMT').astimezone().strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError: continue
+            if stamp < floor: continue
+            out = ingest_message(store, file_only=file_only, msg={
+                'external_id': f'azblob:{acct}/{cont}/{name}:{stamp[:16]}', 'channel': 'azure',
+                'subject': f'New in {addr}: {name}',
+                'body': f'[blob landed]\nhttps://{acct}.blob.core.windows.net/{cont}/{name}',
+                'from_name': addr, 'conversation_id': f'azure:{addr}', 'sent_at': stamp,
+                'source_name': addr}, llm=llm)
+            n += out['status'] != 'duplicate'
+    elif addr.startswith('law://') and scfg.get('workspace_id'):
+        hours = max(0.2, (datetime.now() - since.replace(tzinfo=None)).total_seconds() / 3600)
+        q = scfg.get('query') or 'AppExceptions | project TimeGenerated, ProblemId, OuterMessage | take 50'
+        try:
+            head, body = run_azure_logs({**cfg, 'workspace_id': scfg['workspace_id'], 'query': q,
+                                         'hours': hours, 'max_rows': 50})
+        except Exception as e:
+            raise RuntimeError(f'{addr}: {e}') from e
+        if body.strip() and not head.startswith('0 '):
+            stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            out = ingest_message(store, file_only=file_only, msg={
+                'external_id': f'azlaw:{addr}:{stamp[:16]}', 'channel': 'azure',
+                'subject': f'{head} from {addr}',
+                'body': f'[Log Analytics - {q[:100]}]\n{body[:8000]}',
+                'from_name': addr, 'conversation_id': f'azure:{addr}', 'sent_at': stamp,
+                'source_name': addr}, llm=llm)
+            n += out['status'] != 'duplicate'
+    return n
 
 
 def run_azure(cfg: dict):

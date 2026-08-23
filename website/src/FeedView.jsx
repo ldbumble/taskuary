@@ -42,6 +42,7 @@ const CATEGORIES = [
   { key: "pm", label: "boards", channels: ["jira", "asana", "monday", "linear", "trello", "notion", "azdo"],
     c: { bg: "#eef0ff", fg: "#4338ca", bd: "#c9cff0" } },
   { key: "alerts", label: "alerts", channels: ["sentry", "pagerduty"], c: { bg: "#fdecec", fg: "#b91c1c", bd: "#f3c8c8" } },
+  { key: "cloud", label: "cloud", channels: ["aws", "azure"], c: { bg: "#fff4e6", fg: "#b45309", bd: "#f3ddb8" } },
   { key: "reports", label: "reports", channels: ["report"], c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
@@ -49,7 +50,8 @@ const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack
   github: "Repositories", gitlab: "GitLab instances", report: "Reports",
   jira: "Jira issues", asana: "Asana tasks", monday: "Monday items", linear: "Linear issues",
   trello: "Trello cards", notion: "Notion pages", azdo: "Azure DevOps items",
-  sentry: "Sentry errors", pagerduty: "PagerDuty incidents" };
+  sentry: "Sentry errors", pagerduty: "PagerDuty incidents",
+  aws: "AWS buckets & log groups", azure: "Azure containers & workspaces" };
 
 const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 

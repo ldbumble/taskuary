@@ -252,15 +252,16 @@ const DATA_META = {
       "URL engines need their Python driver on the server: pip install taskuary[db] plus e.g. psycopg2-binary (postgres) or pymysql (mysql).",
       "Test connects for real and runs a probe (SELECT 1 — engines that need FROM DUAL can set test_query in the config).",
       "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."] },
-  aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"],
+  aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"], discovers: true,
     fields: [["access key id", "access_key_id"], ["region (e.g. us-east-2)", "region"]],
     secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
-    desc: "S3 objects, CloudWatch logs — or ANY service call — as scheduled reports and agent tools, with your IAM keys.",
+    desc: "S3 objects, CloudWatch logs — or ANY service call — as scheduled reports, Timeline feeds and agent tools, with your IAM keys.",
     howto: ["Create an IAM user (or use an existing one) with read access to what you'll pull: AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess, etc.",
       "Enter the access key id + region and paste the secret access key (write-only). Leave everything blank to use the server's own AWS credentials (env vars, ~/.aws, an instance role).",
       "The server needs boto3: pip install taskuary[aws].",
-      "Test calls STS and reports which account/ARN you actually are.",
-      "Reports tab then offers: S3 object (read a file or list a prefix), CloudWatch logs (grep a log group — e.g. errors in the last 24h), and a generic AWS call (any service + operation, e.g. athena or ec2)."] },
+      "Test & discover calls STS (reporting which account/ARN you are) and then asks the keys what they can SEE: every S3 bucket and CloudWatch log group is listed under 'What you have access to'.",
+      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines appear on the Timeline), tasks (they go through triage), or off.",
+      "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."] },
   prometheus: { title: "Prometheus", types: ["prometheus"],
     fields: [["base URL", "base_url", "http://prometheus.yourcompany.local:9090"]],
     secretLabel: "bearer token (optional — most Prometheus servers need none)",
@@ -278,15 +279,16 @@ const DATA_META = {
       "Enter the site if not US1 (datadoghq.eu, us3.datadoghq.com, …), the application key, and paste the API key (write-only).",
       "Test validates the key pair for real.",
       "Build the reports on the REPORTS tab: all monitors, or filtered by name — Alert and Warn states sort to the top."] },
-  azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"],
+  azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"], discovers: true,
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
     secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
-    desc: "Blob storage, Log Analytics (KQL) — or ANY resource via ARM — as scheduled reports and agent tools, through an app registration.",
+    desc: "Blob storage, Log Analytics (KQL) — or ANY resource via ARM — as scheduled reports, Timeline feeds and agent tools, through an app registration.",
     howto: ["Reuse the app you registered for Outlook (leave everything blank) or register a new one: Azure Portal → App registrations.",
       "Grant the app RBAC roles on what you'll pull: Reader on a subscription/resource group (ARM reads), Storage Blob Data Reader (blobs), Log Analytics Reader (logs). These are IAM role assignments, not Graph API permissions.",
       "No extra installs — tokens ride the same client-credentials road the Outlook connector uses.",
-      "Test authenticates and lists the subscriptions the app can actually see (a token with no roles is called out).",
-      "Reports tab then offers: Azure blob (read a file or list a container), Log Analytics (any KQL — app exceptions, sign-ins…), and a generic ARM read (any resource path)."] },
+      "Test & discover authenticates (naming the subscriptions the app can see — a token with no roles is called out) and then enumerates what those roles reach: every blob container and Log Analytics workspace is listed under 'What you have access to'.",
+      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new blobs / new query rows appear on the Timeline), tasks (they go through triage), or off.",
+      "Reports tab then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."] },
 };
 
 const WINRM_HOWTO = [
@@ -340,7 +342,8 @@ export default function ConnectorsView() {
     return <WinrmDetail conn={byType.winrm} reload={load} onBack={() => setOpen(null)} />;
   }
   if (open?.kind === "data") {
-    return <DataDetail conn={byType[open.type]} meta={DATA_META[open.type]} reload={load} onBack={() => setOpen(null)} />;
+    return <DataDetail conn={byType[open.type]} meta={DATA_META[open.type]} sources={sources}
+      reload={load} onBack={() => setOpen(null)} />;
   }
 
   /* ── landing: searchable grouped catalog ── */
@@ -778,9 +781,80 @@ function WinrmDetail({ conn, reload, onBack }) {
   );
 }
 
+/* ── What each DISCOVERED cloud object does. Same shape as the GitHub card's per-repo
+   pickers, and the same reason: one bucket is a report source, the next should put every
+   new file on the Timeline - that is a per-OBJECT decision, not a per-connection one.
+   'report' is the default and polls nothing: the object is simply available on the
+   Reports tab. Picking saves instantly. ── */
+const CLOUD_MODES = [
+  ["report", "report only — selectable on the Reports tab, never polled"],
+  ["feed", "feed — new items appear on the Timeline, never become work"],
+  ["tasks", "tasks — new items go through triage and can become work"],
+  ["off", "off — ignored entirely"],
+];
+const OBJ_KIND = (addr) => (addr.startsWith("s3://") ? "S3 bucket"
+  : addr.startsWith("logs://") ? "CloudWatch log group"
+    : addr.startsWith("blob://") ? "blob container"
+      : addr.startsWith("law://") ? "Log Analytics workspace" : "object");
+
+function CloudObjects({ conn, meta, objects, reload }) {
+  const [busy, setBusy] = useState(false);
+  const setMode = async (s, mode) => {
+    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode }) });
+    reload();
+  };
+  const rediscover = async () => {
+    setBusy(true);
+    try { await api.post(`/api/connectors/${conn.ConnectorId}/test`); } catch { /* the card shows the error */ }
+    setBusy(false); reload();
+  };
+  return (
+    <Box sx={{ mt: 3, maxWidth: 720 }}>
+      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
+        What you have access to — and what each one does
+      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 1 }}>
+        Discovery asks your {meta.title.includes("Azure") ? "app registration" : "keys"} what they can see and lists
+        it here. Everything arrives as <b>report only</b>: available to the Reports tab, nothing polled. Switch one
+        to <b>feed</b> or <b>tasks</b> and Taskuary starts watching it on every sync.
+      </Typography>
+      <Button size="small" variant="outlined" onClick={rediscover} disabled={busy} sx={{ mb: 1.5 }}
+        startIcon={busy ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
+        {busy ? "Discovering…" : objects.length ? "Re-run discovery" : "Discover what I can access"}
+      </Button>
+      {!objects.length ? (
+        <Empty>Nothing discovered yet — save the credentials above and press Discover.</Empty>
+      ) : objects.map((s) => {
+        const mode = parse(s.ConfigJson).mode || "report";
+        return (
+          <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography sx={{ ...mono, color: INK, fontSize: 12.5 }} noWrap>{s.Address}</Typography>
+              <Typography variant="caption" sx={{ color: FAINT }}>
+                {OBJ_KIND(s.Address)}{s.LastPolledAt ? ` · polled ${timeAgo(s.LastPolledAt)}` : ""}
+              </Typography>
+            </Box>
+            <Select size="small" value={mode} onChange={(e) => setMode(s, e.target.value)}
+              sx={{ fontSize: 11.5, height: 26, minWidth: 108, ".MuiSelect-select": { py: 0.4 } }}>
+              {CLOUD_MODES.map(([v, label]) => (
+                <MenuItem key={v} value={v} sx={{ fontSize: 12 }} title={label}>{v}</MenuItem>
+              ))}
+            </Select>
+          </Box>
+        );
+      })}
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
+        <b>feed</b> and <b>tasks</b> watch for what is NEW since the last sync: a bucket reports each new object, a
+        log group batches the matching lines into one item, a workspace runs its saved query. An object nothing
+        discovered can still be typed in by hand as a report source on the Reports tab.
+      </Typography>
+    </Box>
+  );
+}
+
 /* ── shared detail for the DATA_META cards (database / aws / azure): fields + write-only
    secret + live Test; the connection only - reports are built on the Reports tab. ── */
-function DataDetail({ conn, meta, reload, onBack }) {
+function DataDetail({ conn, meta, sources, reload, onBack }) {
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [secret, setSecret] = useState("");
@@ -788,6 +862,7 @@ function DataDetail({ conn, meta, reload, onBack }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   if (!conn) return null;
+  const objects = (sources || []).filter((s) => s.Channel === conn.Type);
 
   const save = async () => {
     setBusy("save"); setMsg("");
@@ -828,13 +903,17 @@ function DataDetail({ conn, meta, reload, onBack }) {
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
             <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
-              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
+              {meta.discovers ? "Test & discover" : "Test"}</Button>
             {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
           {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
         </Box>
+      )}
+      {tab === "Connection" && meta.discovers && (
+        <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>

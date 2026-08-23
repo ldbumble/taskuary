@@ -78,6 +78,9 @@ def _slack(tok, method, **params):
     return j
 
 
+ACTOR_DISCOVER = 'connector-test'
+
+
 def test_connector(store, cid: int) -> dict:
     """Live credential + access probe; the result (or failure) lands on the connector row."""
     c = store.get_connector(cid, with_secret=True)
@@ -144,18 +147,21 @@ def test_connector(store, cid: int) -> dict:
             r = db_test(database_connection(store))
             if not r['ok']: raise RuntimeError(r['error'])
             detail = r['detail']
-        elif c['Type'] == 'aws':
-            from .aws import test as aws_test
-            from .reports import aws_connection
-            r = aws_test(aws_connection(store))
+        elif c['Type'] in ('aws', 'azure'):
+            # Test also DISCOVERS: the keys/app are asked what they can see, and every
+            # bucket, log group, container and workspace lands under Sources with its own
+            # mode picker (report by default - nothing is polled until you say so)
+            from .reports import aws_connection, azure_connection
+            mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
+            conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store)
+            r = mod.test(conn_cfg)
             if not r['ok']: raise RuntimeError(r['error'])
             detail = r['detail']
-        elif c['Type'] == 'azure':
-            from .azure import test as az_test
-            from .reports import azure_connection
-            r = az_test(azure_connection(store))
-            if not r['ok']: raise RuntimeError(r['error'])
-            detail = r['detail']
+            try:
+                d = mod.discover(store, conn_cfg, c['ConnectorId'], ACTOR_DISCOVER)
+                detail += f" · {d['found']} objects visible, {d['added']} new under Sources"
+            except Exception as e:
+                detail += f' · discovery failed: {str(e)[:120]}'
         elif c['Type'] == 'prometheus':
             from .reports import run_prometheus, prometheus_connection
             head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})
@@ -418,13 +424,25 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
           'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email',
           'jira': 'jira', 'asana': 'asana', 'monday': 'monday',
           'gitlab': 'gitlab', 'azdo': 'azdo', 'linear': 'linear', 'trello': 'trello',
-          'notion': 'notion', 'discord': 'discord', 'sentry': 'sentry', 'pagerduty': 'pagerduty'}
+          'notion': 'notion', 'discord': 'discord', 'sentry': 'sentry', 'pagerduty': 'pagerduty',
+          # cloud objects are DISCOVERED sources: each carries its own mode (report/feed/tasks/off)
+          'aws': 'aws', 'azure': 'azure'}
+# A cloud object's mode lives on the SOURCE, not the connector - one bucket can feed the
+# Timeline while the next is only a report. 'report' (the default) polls nothing at all.
+CLOUD = ('aws', 'azure')
 # Connections polled ONCE per connector: their cursor lives on the connector (telegram's
 # getUpdates offset, whatsapp's bridge seq) or their API is 'assigned to me' with no
 # per-source dimension at all. Their source row is a label, so the poll must not depend
 # on one existing - see poll_channels.
 PER_CONNECTOR = ('telegram', 'whatsapp', 'jira', 'asana', 'monday',
                  'gitlab', 'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty')
+
+def _cloud_explicit(store, channel) -> bool:
+    """Any discovered object set to feed or tasks? Then the connector is polled even
+    without a trigger/feed role - the per-object picker carries the intent, the same deal
+    github's per-repo pickers get."""
+    return any(json.loads(s.get('ConfigJson') or '{}').get('mode') in ('feed', 'tasks')
+               for s in store.list_sources() if s['Channel'] == channel)
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
@@ -506,7 +524,8 @@ def poll_channels(store, backfill_days: int = 0) -> int:
         # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two
         # switches where one reads as enough was a trap (a repo set to "PRs: tasks" on a
         # tool-only card, a Sync that pulled nothing, and no error anywhere).
-        if not roles & {'trigger', 'feed'} and not (c['Type'] == 'github' and _gh_explicit(store)): continue
+        if (not roles & {'trigger', 'feed'} and not (c['Type'] == 'github' and _gh_explicit(store))
+                and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue
         file_only = 'trigger' not in roles
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:
@@ -581,6 +600,21 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                     from . import imapmail
                     if s['ConnectorId'] != c['ConnectorId']: continue
                     n += imapmail.poll_imap(store, full, [s], llm, file_only, backfill_days)
+                elif c['Type'] in CLOUD:
+                    # per SOURCE: each discovered object carries its own mode, and 'report'
+                    # (the default) means the Reports tab may use it but nothing is polled.
+                    # The picker OUTRANKS the card's role, like github's per-repo pickers:
+                    # 'tasks' on a tool-only card means tasks, not a filed feed row.
+                    mode = json.loads(s.get('ConfigJson') or '{}').get('mode') or 'report'
+                    if mode not in ('feed', 'tasks'): continue
+                    from .reports import aws_connection, azure_connection
+                    mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
+                    conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store)
+                    n += mod.poll_source(store, conn_cfg, s, since, llm, mode == 'feed')
+                elif c['Type'] == 'discord':
+                    # per SOURCE, like slack: each watched channel id is its own source
+                    from . import devtools
+                    n += devtools.poll_discord(store, full, s, since, llm, file_only)
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)

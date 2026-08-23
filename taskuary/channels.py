@@ -459,6 +459,17 @@ def _cloud_explicit(store, channel) -> bool:
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
+def gh_modes(src: dict, file_only: bool) -> tuple:
+    """(issues_mode, prs_mode) for a repo. An EXPLICIT picker beats the connector's role -
+    'issues: tasks' means tasks even on a tool-only card; unconfigured kinds follow the role,
+    and PRs default off. One place, because the poller needs the same answer as the ingest
+    to know whether this source was even looked at."""
+    try: modes = json.loads(src.get('ConfigJson') or '{}')
+    except ValueError: modes = {}
+    default_mode = 'feed' if file_only else 'tasks'
+    return (modes.get('issues') or default_mode, modes.get('prs') or 'off')
+
+
 def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=False) -> int:
     """GitHub as an INBOUND channel: new issues - and, per repo, pull requests - land on the
     Timeline and go through the same triage as mail. What each KIND does is the source's own
@@ -469,13 +480,7 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
     would otherwise start an agent per drive-by PR. Issues Taskuary opened for its own tasks
     are skipped, otherwise the coder would file work against itself forever."""
     repo = src['Address']
-    try: modes = json.loads(src.get('ConfigJson') or '{}')
-    except ValueError: modes = {}
-    # an EXPLICIT picker beats the connector's role: "issues: tasks" means tasks even on a
-    # feed-only card. Unconfigured kinds follow the role (default_mode); PRs default off.
-    default_mode = 'feed' if file_only else 'tasks'
-    issues_mode = modes.get('issues') or default_mode
-    prs_mode = modes.get('prs') or 'off'
+    issues_mode, prs_mode = gh_modes(src, file_only)
     if issues_mode == 'off' and prs_mode == 'off': return 0
     n = 0
     from .github import list_items
@@ -607,6 +612,10 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                 elif c['Type'] == 'teams':
                     n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only)
                 elif c['Type'] == 'github':
+                    # a repo with BOTH kinds off was not read, so its watermark must not
+                    # move: advancing it would step over the issues sitting there, and
+                    # switching the repo on later would only ever see what came next
+                    if set(gh_modes(s, file_only)) == {'off'}: continue
                     n += ingest_github_issues(store, s, tok, since, llm, file_only)
                 elif c['Type'] in ('gmail', 'imap'):
                     # one poll per connector (the UID watermark lives there); its own source only

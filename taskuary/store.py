@@ -492,6 +492,12 @@ class SQLiteStore:
             return sid
         return self._insert('source', fields, SOURCE_COLS)
     def touch_source(self, sid): self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+    def rewind_source(self, sid):
+        """Forget this source's watermark, so the next poll reaches back over history instead
+        of only forward. What a source that was OFF needs the moment it is switched on: the
+        watermark kept marching while nothing was being read, and without this the items
+        that existed before the switch are invisible forever."""
+        self._exec('UPDATE source SET LastPolledAt=NULL WHERE SourceId=?', (sid,))
     def get_source(self, sid): return self._one('SELECT * FROM source WHERE SourceId=?', (sid,))
     def delete_source(self, sid): self._exec('DELETE FROM source WHERE SourceId=?', (sid,))
     def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))

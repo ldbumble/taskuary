@@ -755,10 +755,34 @@ def sources():
 def save_source(body: SourceBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
     fields.setdefault('Owner', ACTOR)
+    was = store.get_source(fields['SourceId']) if fields.get('SourceId') else None
     sid = store.save_source(fields, ACTOR)
+    # SWITCHING SOMETHING ON MUST LOOK BACK. The watermark advances on every poll, including
+    # polls that deliberately read nothing from this source (a repo whose issues were 'off',
+    # a chat not yet approved) - so flipping it on would otherwise only ever catch what
+    # happens NEXT, and everything already sitting there would be invisible forever.
+    if was and _woke_up(was, store.get_source(sid)):
+        store.rewind_source(sid)
+        store.audit('source', sid, 'rewind', ACTOR, detail={'why': 'switched on - the next poll reaches back'})
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
     return {'sourceId': sid}
+
+
+def _live(src) -> set:
+    """What this source is actually set to READ right now: the Active flag plus whichever
+    per-kind pickers it carries (github issues/prs, a cloud object's mode)."""
+    try: cfg = json.loads(src.get('ConfigJson') or '{}')
+    except ValueError: cfg = {}
+    if not src.get('Active'): return set()
+    return {f'{k}:{cfg[k]}' for k in ('issues', 'prs', 'mode')
+            if cfg.get(k) in ('tasks', 'feed')} or ({'active'} if not cfg else set())
+
+
+def _woke_up(before, after) -> bool:
+    """Did this save turn something ON that was off? (Never the reverse - switching a repo
+    off must not rewind anything.)"""
+    return bool(_live(after) - _live(before))
 
 @app.delete('/api/sources/{sid}')
 def delete_source(sid: int):

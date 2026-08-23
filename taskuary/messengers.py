@@ -90,6 +90,13 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         chat, frm = m.get('chat') or {}, m.get('from') or {}
         cid = str(chat.get('id') or '')
         if not cid or frm.get('is_bot'): continue
+        # a reply in the NOTIFY chat may be a verdict on a pinged review ("approve") - it is
+        # handled before the approve-first filter, so the notify chat never needs a source
+        # row and the owner's verdicts never become work (see phone.py)
+        from . import phone
+        if phone.intercept(store, 'telegram', cid, m.get('text') or m.get('caption') or '',
+                           (m.get('reply_to_message') or {}).get('text')):
+            continue
         if cid not in want:
             if cid not in known:      # first sight of this chat: register it OFF, ingest nothing
                 title = chat.get('title') or ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) \
@@ -161,9 +168,16 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             if s.get('Channel', 'whatsapp') == 'whatsapp' and s['Address'] and s['Address'] != '*'}
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n = 0
+    from . import phone
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
-        if not jid or m.get('fromMe') or (want and jid not in want): continue
+        if not jid: continue
+        # the WhatsApp bridge is the owner's OWN account, so a verdict they type in the
+        # notify chat arrives as fromMe - intercept runs before that filter (phone.py also
+        # recognizes and swallows our own pings echoing back through the bridge)
+        if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text']):
+            continue
+        if m.get('fromMe') or (want and jid not in want): continue
         if not (m.get('text') or '').strip(): continue
         r = ingest_message(store, file_only=file_only, msg={
             'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp',

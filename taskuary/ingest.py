@@ -72,10 +72,21 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         return {'status': pol['action'] + ('ped' if pol['action'] == 'skip' else 'd'), 'task_id': None, 'message_id': mid}
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
+    new_rid = None                       # set when a fresh reply task opens a review below
     if r['decision'] == 'attach':
         tid = r['task_id']
         mid = store.add_message(_fields(msg, tid))
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
+        # the classic round trip: the agent asked something, the hub asked the person, and
+        # THIS is their answer arriving on the same thread. With answer_to_agent=auto it is
+        # typed straight into the live session; 'ask' leaves the one-click offer in the
+        # panel; 'off' does neither. A dead session just means False - nothing breaks.
+        if cfg.get('answer_to_agent', 'ask') == 'auto':
+            try:
+                from . import terminal
+                terminal.say_to_task(store, tid, msg, actor)
+            except Exception as e:
+                logger.warning(f'answer_to_agent failed for task {tid}: {e}')
     else:
         # AI-gated triage: without an active AI connector, nothing becomes a task on its
         # own - messages FILE onto the timeline (visible, promotable by hand) instead of
@@ -137,8 +148,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         #   additionally has the responder write the draft in the background
         # - real tasks auto-dispatch to the coder when coder_auto_enabled is on
         if f['kind'] == 'reply':
-            rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
-                                    'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
+            new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                              'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
             if cfg.get('auto_draft_enabled') == '1':
                 _spawn(_auto_draft, store, tid, rid)
         elif cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
@@ -168,12 +179,14 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     dispatched = kind != 'reply' and cfg.get('coder_auto_enabled') == '1'
     if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
         _notify_new(store, msg, tid, mid,
-                    'a question for you' if kind == 'reply' else 'new task on your list')
+                    'a question for you' if kind == 'reply' else 'new task on your list', rid=new_rid)
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
 
 
-def _notify_new(store, msg: dict, tid, mid, why: str):
-    """One short line to the notify channels. Failure is a log line, never a broken ingest."""
+def _notify_new(store, msg: dict, tid, mid, why: str, rid=None):
+    """One short line to the notify channels. With phone approvals on, a question's ping
+    also carries the [rvN] tag so replying in the chat decides it (phone.py). Failure is a
+    log line, never a broken ingest."""
     from .outbound import notify
     from .store import task_ref
     try:
@@ -181,6 +194,9 @@ def _notify_new(store, msg: dict, tid, mid, why: str):
         body_head = str(msg.get('body') or '').strip().splitlines()
         head = msg.get('subject') or (body_head[0][:80] if body_head else '(no subject)')
         line = f"{task_ref(tid)} - {why}\n{head}\nfrom {who} on {msg.get('channel') or 'api'}"
+        if rid:
+            from .phone import ping_tail
+            line += ping_tail(store, rid, (store.get_review(rid) or {}).get('DraftText'))
         notify(store, line, about={'Channel': msg.get('channel'), 'ConversationId': msg.get('conversation_id')})
     except Exception as e:
         logger.warning(f'notify failed for message {mid}: {e}')

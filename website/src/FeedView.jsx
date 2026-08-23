@@ -547,7 +547,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // the same realisation - "this is not one job" - usually arrives while reading the mail,
   // so the fix is offered here too; the form itself is a drawer, since this panel is narrow
   const [reshape, setReshape] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); setOpened(null); setOpening(false); }, [sel.MessageId]);
+  // "type their answer into the working session" - the round trip's last leg (answer_to_agent=ask)
+  const [handed, setHanded] = useState(false);
+  const handToAgent = async () => {
+    try { await api.post(`/api/tasks/${sel.TaskId}/answer`, { message_id: sel.MessageId }); setHanded(true); }
+    catch { /* session gone between render and click: the row's hint still points at the task */ }
+  };
+  useEffect(() => { setHandoff(false); setReshape(false); setOpened(null); setOpening(false); setHanded(false); }, [sel.MessageId]);
   const skipSender = async () => {
     const { data } = await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
       Action: "skip", Reason: "flood sender — skipped from the timeline", SortOrder: 10, Active: true });
@@ -682,6 +688,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   hint={onIt.waiting ? "open the task and answer it in the session" : "open the task to watch it live"} />
               ) : (
                 <SendToAgent row first messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+              )}
+              {/* the agent asked, the person answered on the thread - one click puts the
+                  answer in front of the agent (Settings → answer_to_agent; auto skips the click) */}
+              {onIt && sel.MessageId && (
+                <ChoiceRow tint="#f5f3ff" busy={handed} onClick={handToAgent}
+                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#7e22ce" }} />}
+                  label={handed ? "Answer typed into the session" : `Type this into ${onIt.agent}'s session`}
+                  hint={handed ? "the agent has it — watch it continue on the task" : "their message is typed into the live session, as if you relayed it"} />
               )}
               {sel.TaskId ? (
                 <ChoiceRow tint="#eef0ff" onClick={() => onOpenTask(sel.TaskId)}

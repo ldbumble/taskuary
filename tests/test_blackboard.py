@@ -37,10 +37,13 @@ class BlackboardTests(unittest.TestCase):
 
     # ── who is a peer, and what the newcomer is told ──────────────────────────
     def test_peers_and_briefing_are_same_checkout_only(self):
+        import os
         t1, t2, t3 = self.task('One'), self.task('Two'), self.task('Elsewhere')
         term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo', files=['taskuary/reports.py'])
         term.SESSIONS['b'] = fake_session(t3, r'C:\code\other')
-        ps = bb.peers(self.s, r'C:\code\REPO')                 # normcase: same checkout
+        # case-folding is normcase's call, which is per-PLATFORM: Windows folds, POSIX must not
+        probe = r'C:\code\REPO' if os.name == 'nt' else r'C:\code\repo'
+        ps = bb.peers(self.s, probe)
         self.assertEqual([p['tid'] for p in ps], [t1])
         text = bb.briefing(self.s, r'C:\code\repo', exclude_tid=t2)
         self.assertIn(task_ref(t1), text)

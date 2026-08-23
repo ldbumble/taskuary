@@ -422,7 +422,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual((r['ok'], r['headline'], r['summary']), (True, 'head', 'sum'))
         finally:
             REGISTRY.pop('_p')
-        r = c.post('/api/reports/preview', json={'type': 'prometheus'}).json()
+        r = c.post('/api/reports/preview', json={'type': 'graphql'}).json()
         self.assertFalse(r['ok']); self.assertIn('roadmap', r['error'])
 
     def test_report_types(self):
@@ -430,9 +430,10 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(d['mssql'], 'builtin'); self.assertEqual(d['mcp'], 'builtin')
         # postgres/mysql/snowflake left the roadmap: 'database' covers any connection string,
         # and the aws/azure cards cover s3_object and friends
-        for t in ('database', 'aws', 's3_object', 'cloudwatch_logs', 'azure', 'azure_blob', 'azure_logs'):
+        for t in ('database', 'aws', 's3_object', 'cloudwatch_logs', 'azure', 'azure_blob', 'azure_logs',
+                  'prometheus', 'datadog'):
             self.assertEqual(d[t], 'builtin')
-        self.assertEqual(d['prometheus'], 'planned')
+        self.assertEqual(d['graphql'], 'planned')
 
     def test_channel_connectors_seeded_and_secret_writeonly(self):
         rows = {x['Type']: x for x in c.get('/api/connectors').json()['data']}

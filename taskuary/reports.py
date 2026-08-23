@@ -11,7 +11,7 @@ import json, re, sqlite3
 from datetime import datetime, timedelta
 from loguru import logger
 
-PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file', 'prometheus']
+PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file']
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
@@ -136,6 +136,41 @@ def run_azlogs(cfg):
     return run_azure_logs(cfg)
 
 
+def run_prometheus(cfg):
+    """{"query" (PromQL)} - an instant query; each series is a row of its labels + value.
+    The base URL (and an optional bearer token) live on the Prometheus card."""
+    import requests
+    base = (cfg.get('base_url') or '').strip().rstrip('/')
+    if not base: raise RuntimeError('no Prometheus base URL set - Connectors → Prometheus')
+    hdr = {'Authorization': f"Bearer {cfg['token']}"} if cfg.get('token') else {}
+    r = requests.get(f'{base}/api/v1/query', params={'query': cfg['query']}, headers=hdr, timeout=30)
+    r.raise_for_status()
+    j = r.json()
+    if j.get('status') != 'success': raise RuntimeError(f"prometheus: {j.get('error') or j}")
+    rows = [{**(s.get('metric') or {}), 'value': (s.get('value') or [None, None])[1]}
+            for s in (j.get('data') or {}).get('result') or []]
+    lim, mine = row_limit(cfg)
+    return rows_out(rows, lim, unit='series', mine=mine)
+
+
+def run_datadog(cfg):
+    """{"name" (optional filter)} - your monitors and their states, the at-a-glance health
+    board. Keys live on the Datadog card (api key write-only + application key)."""
+    import requests
+    site = (cfg.get('site') or 'datadoghq.com').strip()
+    params = {'name': cfg['name']} if cfg.get('name') else {}
+    r = requests.get(f'https://api.{site}/api/v1/monitor', params=params, timeout=30,
+                     headers={'DD-API-KEY': cfg.get('api_key') or '', 'DD-APPLICATION-KEY': cfg.get('app_key') or ''})
+    if r.status_code in (401, 403): raise RuntimeError(f'Datadog said {r.status_code} - check the API key + application key')
+    r.raise_for_status()
+    rows = [{'name': m.get('name'), 'state': m.get('overall_state'), 'type': m.get('type'),
+             'muted': bool((m.get('options') or {}).get('silenced')), 'modified': m.get('modified')}
+            for m in r.json()]
+    rows.sort(key=lambda m: {'Alert': 0, 'Warn': 1, 'No Data': 2}.get(m['state'], 3))   # trouble first
+    lim, mine = row_limit(cfg)
+    return rows_out(rows, lim, unit='monitors', mine=mine)
+
+
 def run_digest(cfg):
     """{"days": 3} - Taskuary's own activity as the data: open work, finished work, pending
     reviews, fresh verdicts, who wrote how often. The Morning digest ships as a report ON
@@ -155,6 +190,7 @@ def _planned(name):
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'aws': run_aws, 's3_object': run_s3, 'cloudwatch_logs': run_cwlogs,
             'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
+            'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'rss': run_rss, 'digest': run_digest, **{n: _planned(n) for n in PLANNED}}
 
@@ -210,9 +246,20 @@ def azure_connection(store) -> dict:
     return cfg
 
 
+def prometheus_connection(store) -> dict:
+    """base_url (+ optional bearer token as the write-only secret) lives on the card."""
+    return _card(store, 'prometheus', 'token')
+
+
+def datadog_connection(store) -> dict:
+    """site + application key on the card; the API key is the write-only secret."""
+    return _card(store, 'datadog', 'api_key')
+
+
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
-                 'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection}
+                 'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
+                 'prometheus': prometheus_connection, 'datadog': datadog_connection}
 
 
 def resolve_cfg(store, cfg: dict) -> dict:

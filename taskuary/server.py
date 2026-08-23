@@ -125,11 +125,16 @@ _started = datetime.now().isoformat(sep=' ', timespec='seconds')
 @app.get('/api/version')
 def version(): return {'version': _ver, 'started': _started}
 
+# Channels Taskuary only READS: nothing is written back, so a drafted reply has nowhere to
+# go - the UI shows 'No response required' instead of a send that bounces.
+READ_ONLY_CHANNELS = {'report', 'jira', 'asana', 'monday', 'gitlab', 'azdo', 'linear',
+                      'trello', 'notion', 'sentry', 'pagerduty'}
+
 def _can_send(channel, has_message=True, gh_ok=None) -> bool:
     """Can an approved reply actually LEAVE on this channel? github only with the card's
-    'Reply to issue/PR authors' on; reports and message-less reviews never. The UI turns an
-    unsendable draft's Approve into 'No response required' instead of a send that bounces."""
-    if not has_message or channel in (None, '', 'report'): return False
+    'Reply to issue/PR authors' on; reports, read-only channels and message-less reviews
+    never. The UI turns an unsendable draft's Approve into 'No response required'."""
+    if not has_message or not channel or channel in READ_ONLY_CHANNELS: return False
     if channel == 'github':
         return store.github_replies_ok() if gh_ok is None else gh_ok
     return True

@@ -162,7 +162,12 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'gmail': 'trigger,tool', 'imap': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool',
                  'database': 'report,tool', 'aws': 'report,tool', 'azure': 'report,tool',
-                 'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger'}
+                 'prometheus': 'report,tool', 'datadog': 'report,tool',
+                 'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger',
+                 'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
+                 # notion edits are information, not assignments; discord is a chat channel
+                 'notion': 'feed', 'discord': 'trigger,tool',
+                 'sentry': 'trigger', 'pagerduty': 'trigger'}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
@@ -193,7 +198,11 @@ class SQLiteStore:
                          ('winrm', 'Remote Windows (WinRM)'),
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
-                         ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com')):
+                         ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
+                         ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),
+                         ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
+                         ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
+                         ('prometheus', 'Prometheus'), ('datadog', 'Datadog')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed

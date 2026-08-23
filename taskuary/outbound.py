@@ -109,6 +109,11 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'telegram:<id>' / 'whatsapp:<jid>'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
         return (messengers.tg_send if ch == 'telegram' else messengers.wa_send)(store, chat, body)
+    if ch == 'discord':
+        from .devtools import discord_send
+        chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'discord:<channel_id>'
+        if not chat: raise RuntimeError('this chat message has no channel id to answer in')
+        return discord_send(store, chat, body)
     if ch == 'github':
         # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's
         # explicit say-so (the GitHub card's 'Reply to issue/PR authors' switch)

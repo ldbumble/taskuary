@@ -57,7 +57,8 @@ def sync_connections(store, actor='system'):
         srv = config.load().get('server') or {}
         auth = ' (header X-Taskuary-Token)' if srv.get('token') else ''
         lines.append(f"- To USE one of the systems above, POST http://{srv.get('host', '127.0.0.1')}:{srv.get('port', 7787)}"
-                     '/api/tools/run{auth} with {"type": "mssql|winrm|mcp|rest|sqlite|rss", ...} — '
+                     '/api/tools/run{auth} with {"type": "mssql|database|aws|s3_object|cloudwatch_logs|'
+                     'azure|azure_blob|azure_logs|winrm|mcp|rest|sqlite|rss", ...} — '
                      'saved credentials are filled in for you; the raw output comes back.'.replace('{auth}', auth))
     block = '\n'.join(lines) or '_(no connections yet — add them in the Connectors tab)_'
     head, rest = doc.split(CONN_START, 1)

@@ -135,6 +135,24 @@ def test_connector(store, cid: int) -> dict:
             r = mssql_test(conn_cfg)
             if not r['ok']: raise RuntimeError(r['error'])
             detail = f"connected · {r['version']} · db {r['database']}"
+        elif c['Type'] == 'database':
+            from .db import test as db_test
+            from .reports import database_connection
+            r = db_test(database_connection(store))
+            if not r['ok']: raise RuntimeError(r['error'])
+            detail = r['detail']
+        elif c['Type'] == 'aws':
+            from .aws import test as aws_test
+            from .reports import aws_connection
+            r = aws_test(aws_connection(store))
+            if not r['ok']: raise RuntimeError(r['error'])
+            detail = r['detail']
+        elif c['Type'] == 'azure':
+            from .azure import test as az_test
+            from .reports import azure_connection
+            r = az_test(azure_connection(store))
+            if not r['ok']: raise RuntimeError(r['error'])
+            detail = r['detail']
         elif c['Type'] == 'winrm':
             import subprocess
             host = cfg.get('host')

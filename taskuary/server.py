@@ -868,7 +868,8 @@ def tool_run(body: dict):
     without the 'tool' role also refuses."""
     t = (body or {}).get('type')
     if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
-    conn = store.get_connector_by_type(t)
+    from .reports import card_of
+    conn = store.get_connector_by_type(card_of(t))    # s3_object runs on the aws card's roles
     if conn:
         if not conn.get('Active'):
             raise HTTPException(403, f'the {t} connection is off - turn it on under Connectors')

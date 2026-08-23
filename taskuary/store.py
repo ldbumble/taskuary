@@ -161,6 +161,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool',
                  'gmail': 'trigger,tool', 'imap': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool',
+                 'database': 'report,tool', 'aws': 'report,tool', 'azure': 'report,tool',
                  'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger'}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
@@ -190,6 +191,8 @@ class SQLiteStore:
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
                          ('gmail', 'Gmail / Google Workspace'), ('imap', 'Any mailbox (IMAP)'),
                          ('winrm', 'Remote Windows (WinRM)'),
+                         ('database', 'Any database (connection string)'),
+                         ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))

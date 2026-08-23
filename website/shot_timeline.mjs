@@ -22,7 +22,7 @@ await new Promise((r) => setTimeout(r, 1500));
 await p.evaluate(() => {
   [...document.querySelectorAll("div")]
     .filter((d) => d.scrollHeight > d.clientHeight + 20 && d.clientHeight > 250 && d.getBoundingClientRect().left > 600)
-    .forEach((d) => { d.scrollTop = 262; });
+    .forEach((d) => { d.scrollTop = 318; });
 });
 await new Promise((r) => setTimeout(r, 400));
 // a plain path, not a URL object: puppeteer sniffs the type off the extension with

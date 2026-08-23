@@ -286,7 +286,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       // panel into a one-word-per-line sliver on narrow windows. At full width nothing
       // moves when the panel opens.
       gridTemplateColumns: { xs: "minmax(0, 1fr)",
-        md: sel ? "minmax(0, 860px) minmax(340px, 1fr)" : "min(860px, 100%)" } }}>
+        md: sel ? "minmax(0, 860px) minmax(400px, 1fr)" : "min(860px, 100%)" } }}>
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
       <Box sx={{ minWidth: 0, maxWidth: 860 }}>
@@ -327,7 +327,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <Button size="small" variant="contained" disableElevation disabled={syncing || bgSync} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : undefined}
               startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ py: 0.4, fontSize: 11.5, whiteSpace: "nowrap", background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
+              sx={{ py: 0.4, fontSize: 11.5, whiteSpace: "nowrap", ml: "auto",   // right-anchored even when the row wraps
+                background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
           </Box>
           {/* stats strip - and the sync caption lives here, so the controls row above keeps
               its budget whether or not the mailbox picker is showing */}

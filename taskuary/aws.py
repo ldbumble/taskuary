@@ -10,7 +10,13 @@ from loguru import logger
 
 def _boto3():
     try: import boto3
-    except ImportError: raise RuntimeError('boto3 not installed - pip install taskuary[aws]')
+    except ImportError:
+        # `pip install taskuary[aws]` is a TRAP on an install whose metadata predates the
+        # extra (an editable install pins its dist-info at install time): pip prints
+        # "does not provide the extra 'aws'", says everything is already satisfied, and
+        # installs nothing. Naming the package itself always works.
+        raise RuntimeError('boto3 is not installed - run: pip install boto3 '
+                           '(or re-run pip install -e .[aws] from the repo)')
     return boto3
 
 
@@ -42,8 +48,14 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
     except Exception as e:
         logger.warning(f'aws discovery: s3 list failed: {e}')
     try:
-        found += [f"logs://{g['logGroupName']}" for g in
-                  client(cfg, 'logs').describe_log_groups(limit=50).get('logGroups') or []]
+        # describe_log_groups caps at 50 PER CALL, so a single call silently truncates an
+        # account with hundreds of lambdas - page until the token runs out (bounded).
+        logs, tok, pages = client(cfg, 'logs'), None, 0
+        while pages < 8:
+            r = logs.describe_log_groups(limit=50, **({'nextToken': tok} if tok else {}))
+            found += [f"logs://{g['logGroupName']}" for g in r.get('logGroups') or []]
+            tok, pages = r.get('nextToken'), pages + 1
+            if not tok: break
     except Exception as e:
         logger.warning(f'aws discovery: log groups failed: {e}')
     added = 0

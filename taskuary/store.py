@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Descripti
 CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
   Source TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS doc (Name TEXT PRIMARY KEY, Content TEXT, UpdatedBy TEXT, UpdatedAt TEXT);
+CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, BehindTaskId INTEGER,
+  Agent TEXT, Reason TEXT, CreatedAt TEXT);
 """
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -368,6 +370,15 @@ class SQLiteStore:
     def running_runs(self):
         return self._rows("SELECT * FROM run WHERE Status='running' ORDER BY RunId DESC")
     def list_runs(self, task_id): return self._rows('SELECT * FROM run WHERE TaskId=? ORDER BY RunId DESC', (task_id,))
+
+    # the dispatch queue: tasks held back from auto-start because a running agent's work would
+    # likely collide (BehindTaskId) or every session slot is busy (NULL) - see blackboard.drain
+    def enqueue_dispatch(self, task_id, behind, agent, reason):
+        if self._one('SELECT 1 x FROM dispatchq WHERE TaskId=?', (task_id,)): return None
+        return self._exec('INSERT INTO dispatchq (TaskId,BehindTaskId,Agent,Reason,CreatedAt) VALUES (?,?,?,?,?)',
+                          (task_id, behind, agent, reason, _now()))
+    def queued_dispatches(self): return self._rows('SELECT * FROM dispatchq ORDER BY QId')
+    def clear_dispatch(self, task_id): self._exec('DELETE FROM dispatchq WHERE TaskId=?', (task_id,))
 
     # reviews (orphans - reviews whose task is gone - never surface)
     def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})

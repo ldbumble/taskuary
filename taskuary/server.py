@@ -15,6 +15,7 @@ from .store import SQLiteStore, task_ref
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
 from . import agents as hub_agents
+from . import blackboard
 from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
@@ -143,11 +144,21 @@ def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel:
     return {'data': rows}
 
 
+def _queued_info(q):
+    """The card's hover text for a held-back dispatch: what it waits for, and why."""
+    if not q: return None
+    b = q.get('BehindTaskId')
+    return {'behind': task_ref(b) if b else None,
+            'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
+            'reason': q.get('Reason'), 'since': q.get('CreatedAt')}
+
 @app.get('/api/tasks')
 def tasks(status: str = None):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
     live CLI on it reads as 'queued' while the agent sits there asking a question."""
-    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId'])}
+    qs = {q['TaskId']: q for q in store.queued_dispatches()}
+    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId']),
+                      'Queued': _queued_info(qs.get(t['TaskId']))}
                      for t in store.list_tasks(status)]}
 
 @app.post('/api/tasks')
@@ -607,14 +618,15 @@ def live_runs(lines: int = 3):
         try: evs = [e for e in json.loads(r.get('TraceJson') or '[]') if e.get('kind') == 'live']
         except ValueError: evs = []                    # mid-write JSON: next poll fixes it
         out.append({'RunId': r['RunId'], 'TaskId': r['TaskId'], 'AgentName': r['AgentName'], 'kind': 'run',
-                    'StartedAt': r['StartedAt'], 'idle': 0,
+                    'StartedAt': r['StartedAt'], 'idle': 0, 'files': blackboard.trace_files(r.get('TraceJson')),
                     'tail': [e['detail'] for e in evs[-max(1, min(lines, 10)):]]})
     # live pty sessions count as work in progress too - and their idle time is what says
     # whether the agent is thinking or parked at a question waiting for the owner
     for t in hub_term.live_sessions(tail=max(1, min(lines, 10))):
         if t.get('taskId'):
             out.append({'RunId': None, 'TaskId': t['taskId'], 'AgentName': t['agent'] or t['label'],
-                        'kind': 'session', 'StartedAt': t['started'], 'idle': t['idle'], 'tail': t.get('tail') or []})
+                        'kind': 'session', 'StartedAt': t['started'], 'idle': t['idle'],
+                        'files': t.get('files') or [], 'tail': t.get('tail') or []})
     return {'data': out}
 
 @app.get('/api/runs/{run_id}')

@@ -99,4 +99,45 @@ m11 = s.add_message({'TaskId': tid8, 'ExternalId': 'demo11', 'ConversationId': '
     'SentAt': t(2, 5), 'BodyText': 'the mailroom scanner is jamming on every third page again, same as March. can someone look before the 3pm batch?', 'Status': 'routed'})
 s.add_route(m11, tid8, 'create', None, 'asks the owner to do something', [], 'router')
 
+# 7. the collaboration scene: two agents in the SAME checkout - each card shows the files
+# ITS agent has modified (the other agent is told the same list) - and a third task queued
+# behind the one whose files it would touch (affinity routing).
+import json as _json
+tid9 = s.create_task({'Title': 'Report charts render blank in dark mode', 'Kind': 'coding', 'Status': 'in_progress',
+                      'Source': 'email', 'Assignee': 'agent:claude'}, 'router')
+m12 = s.add_message({'TaskId': tid9, 'ExternalId': 'demo12', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
+    'Subject': 'Dark mode charts are blank', 'FromName': 'Amir Solomon', 'FromEmail': 'amir.solomon@example.com',
+    'SentAt': t(0, 40), 'BodyText': 'Since the theme update, every report chart renders blank when the app is in dark mode.', 'Status': 'routed'})
+s.add_route(m12, tid9, 'create', None, 'asks the owner to do something', [], 'router')
+r9 = s.start_run(tid9, 'claude', 'Work this coding task end to end.', 'router')
+s.update_run(r9, {'TraceJson': _json.dumps([
+    {'at': t(0, 4), 'kind': 'live', 'name': 'claude', 'detail': '→ Edit: website/src/ReportsView.jsx'},
+    {'at': t(0, 3), 'kind': 'live', 'name': 'claude', 'detail': '→ Edit: website/src/theme.jsx'},
+    {'at': t(0, 2), 'kind': 'live', 'name': 'claude', 'detail': '· chart palette now reads the theme tokens, not hex constants'},
+    {'at': t(0, 1), 'kind': 'live', 'name': 'claude', 'detail': '→ Bash: npm run build'}])})
+s._exec('UPDATE run SET StartedAt=? WHERE RunId=?', (t(0, 18), r9))
+
+tid10 = s.create_task({'Title': 'Weekly census report misses one facility', 'Kind': 'coding', 'Status': 'in_progress',
+                       'Source': 'teams', 'Assignee': 'agent:codex'}, 'router')
+m13 = s.add_message({'TaskId': tid10, 'ExternalId': 'demo13', 'Channel': 'teams', 'SourceName': 'Ops chat',
+    'Subject': 'Rina Katz in Ops chat', 'FromName': 'Rina Katz', 'FromEmail': 'rina.katz@example.com',
+    'SentAt': t(1, 10), 'BodyText': 'The weekly census report skips Summit - looks like the new facility never made it into the query.', 'Status': 'routed'})
+s.add_route(m13, tid10, 'create', None, 'asks the owner to do something', [], 'router')
+r10 = s.start_run(tid10, 'codex', 'Work this coding task end to end.', 'router')
+s.update_run(r10, {'TraceJson': _json.dumps([
+    {'at': t(0, 6), 'kind': 'live', 'name': 'codex', 'detail': '→ Edit: taskuary/reports.py'},
+    {'at': t(0, 5), 'kind': 'live', 'name': 'codex', 'detail': '→ Write: tests/test_reports.py'},
+    {'at': t(0, 1), 'kind': 'live', 'name': 'codex', 'detail': '· 14 passed in 2.1s'}])})
+s._exec('UPDATE run SET StartedAt=? WHERE RunId=?', (t(0, 9), r10))
+
+tid11 = s.create_task({'Title': 'Add CSV export to the reports page', 'Kind': 'coding', 'Status': 'open',
+                       'Source': 'email'}, 'router')
+m14 = s.add_message({'TaskId': tid11, 'ExternalId': 'demo14', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
+    'Subject': 'CSV export for reports?', 'FromName': 'Sarah Chen', 'FromEmail': 'sarah.chen@example.com',
+    'SentAt': t(0, 12), 'BodyText': 'Could the reports page get a download-as-CSV button? Finance keeps retyping the numbers.', 'Status': 'routed'})
+s.add_route(m14, tid11, 'create', None, 'asks the owner to do something', [], 'router')
+s.enqueue_dispatch(tid11, tid9, 'claude', 'both would modify website/src/ReportsView.jsx')
+s.add_comment(tid11, 'router', 'agent', 'Queued behind TQ-%04d "Report charts render blank in dark mode" - '
+              'both would modify website/src/ReportsView.jsx. It starts by itself when that agent finishes.' % tid9)
+
 print('demo data seeded')

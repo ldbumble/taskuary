@@ -317,9 +317,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
               </Select>
             )}
             <Box sx={{ flex: 1, minWidth: 8 }} />
+            {/* the label stays SHORT while it works: the long "catching up on…" text made the
+                button outgrow the wrapping controls row and drop onto its own line - the story
+                lives in the stats-strip caption below, which exists for exactly that */}
             <Button size="small" variant="contained" disableElevation disabled={syncing || bgSync} onClick={() => syncNow(false)}
+              title={syncing || bgSync ? syncWhat : undefined}
               startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ py: 0.4, fontSize: 11.5, background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? (syncWhat || "Updating…") : "Sync now"}</Button>
+              sx={{ py: 0.4, fontSize: 11.5, whiteSpace: "nowrap", background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
           </Box>
           {/* stats strip - and the sync caption lives here, so the controls row above keeps
               its budget whether or not the mailbox picker is showing */}
@@ -336,11 +340,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
                   <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
                 </Box>
               ))}
-              <Typography variant="caption" noWrap sx={{ color: FAINT, px: 1.5, py: 0.7, flexShrink: 0,
-                borderLeft: `1px solid ${BORDER}` }}>
-                {lastSync
-                  ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-                  : "auto-syncs every 10 min"}
+              <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? "#4f46e5" : FAINT,
+                px: 1.5, py: 0.7, flexShrink: 0, borderLeft: `1px solid ${BORDER}` }}>
+                {syncing || bgSync ? (syncWhat || "syncing…")
+                  : lastSync
+                    ? `last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+                    : "auto-syncs every 10 min"}
               </Typography>
             </Box>
           )}

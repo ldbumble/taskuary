@@ -17,7 +17,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, LandingCard, Empty } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, LandingCard, Empty, FilterPills } from "./ui.jsx";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
 
@@ -796,15 +796,28 @@ const CLOUD_MODES = [
   ["tasks", "tasks — new items go through triage and can become work"],
   ["off", "off — ignored entirely"],
 ];
-const OBJ_KIND = (addr) => (addr.startsWith("s3://") ? "S3 bucket"
-  : addr.startsWith("logs://") ? "CloudWatch log group"
-    : addr.startsWith("blob://") ? "blob container"
-      : addr.startsWith("law://") ? "Log Analytics workspace" : "object");
+// prefix -> (short type label, filter pill label). The prefix IS the type, so one place
+// turns s3://… into "S3 bucket" for the row and "S3 buckets" for the pill.
+const OBJ_TYPES = {
+  "s3://": ["S3 bucket", "S3 buckets"],
+  "logs://": ["CloudWatch log group", "log groups"],
+  "blob://": ["blob container", "blob containers"],
+  "law://": ["Log Analytics workspace", "workspaces"],
+};
+const objType = (addr) => Object.keys(OBJ_TYPES).find((p) => addr.startsWith(p)) || "";
+const OBJ_KIND = (addr) => (OBJ_TYPES[objType(addr)] || ["object"])[0];
+const objName = (addr) => addr.slice(objType(addr).length) || addr;
+const PAGE_OBJ = 40;   // a 100-row wall is not a list; the rest is one click away
 
 function CloudObjects({ conn, meta, objects, reload }) {
   const [busy, setBusy] = useState(false);
-  const setMode = async (s, mode) => {
-    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode }) });
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState("");     // "" = every type
+  const [mode, setMode] = useState("");     // "" = every mode
+  const [limit, setLimit] = useState(PAGE_OBJ);
+  const [bulk, setBulk] = useState("");
+  const setOne = async (s, m) => {
+    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode: m }) });
     reload();
   };
   const rediscover = async () => {
@@ -812,8 +825,24 @@ function CloudObjects({ conn, meta, objects, reload }) {
     try { await api.post(`/api/connectors/${conn.ConnectorId}/test`); } catch { /* the card shows the error */ }
     setBusy(false); reload();
   };
+  const modeOf = (s) => parse(s.ConfigJson).mode || "report";
+  const needle = q.trim().toLowerCase();
+  const shown = objects.filter((s) => (!kind || objType(s.Address) === kind)
+    && (!mode || modeOf(s) === mode)
+    && (!needle || s.Address.toLowerCase().includes(needle)));
+  // the type pills only offer types this connection actually discovered
+  const kinds = Object.keys(OBJ_TYPES).filter((p) => objects.some((s) => objType(s.Address) === p));
+  // one decision for a whole filtered set: 46 buckets where 40 are amplify noise is a
+  // search for "amplify" and one click, not 40 dropdowns
+  const setAllShown = async (m) => {
+    setBulk(m);
+    for (const s of shown) {
+      await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...parse(s.ConfigJson), mode: m }) });
+    }
+    setBulk(""); reload();
+  };
   return (
-    <Box sx={{ mt: 3, maxWidth: 720 }}>
+    <Box sx={{ mt: 3, maxWidth: 760 }}>
       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
         What you have access to — and what each one does
       </Typography>
@@ -828,25 +857,66 @@ function CloudObjects({ conn, meta, objects, reload }) {
       </Button>
       {!objects.length ? (
         <Empty>Nothing discovered yet — save the credentials above and press Discover.</Empty>
-      ) : objects.map((s) => {
-        const mode = parse(s.ConfigJson).mode || "report";
-        return (
-          <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography sx={{ ...mono, color: INK, fontSize: 12.5 }} noWrap>{s.Address}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT }}>
-                {OBJ_KIND(s.Address)}{s.LastPolledAt ? ` · polled ${timeAgo(s.LastPolledAt)}` : ""}
-              </Typography>
-            </Box>
-            <Select size="small" value={mode} onChange={(e) => setMode(s, e.target.value)}
-              sx={{ fontSize: 11.5, height: 26, minWidth: 108, ".MuiSelect-select": { py: 0.4 } }}>
-              {CLOUD_MODES.map(([v, label]) => (
-                <MenuItem key={v} value={v} sx={{ fontSize: 12 }} title={label}>{v}</MenuItem>
-              ))}
-            </Select>
+      ) : (
+        <>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1 }}>
+            <TextField size="small" placeholder="search by name…" value={q}
+              onChange={(e) => { setQ(e.target.value); setLimit(PAGE_OBJ); }}
+              sx={{ bgcolor: "#fff", width: 230 }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: FAINT }} /></InputAdornment> }} />
+            {kinds.length > 1 && (
+              <FilterPills value={kind} onChange={(v) => { setKind(v); setLimit(PAGE_OBJ); }}
+                options={[{ key: "", label: `all ${objects.length}` },
+                  ...kinds.map((p) => ({ key: p, label: `${OBJ_TYPES[p][1]} ${objects.filter((s) => objType(s.Address) === p).length}` }))]} />
+            )}
+            <FilterPills value={mode} onChange={(v) => { setMode(v); setLimit(PAGE_OBJ); }}
+              options={[{ key: "", label: "any mode" },
+                ...CLOUD_MODES.map(([v]) => ({ key: v, label: v }))
+                  .filter((o) => objects.some((s) => modeOf(s) === o.key))]} />
           </Box>
-        );
-      })}
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 0.5 }}>
+            <Typography variant="caption" sx={{ color: FAINT }}>
+              {shown.length === objects.length ? `${objects.length} objects`
+                : `${shown.length} of ${objects.length} shown`}
+            </Typography>
+            {shown.length > 0 && shown.length < objects.length && (
+              <>
+                <Typography variant="caption" sx={{ color: FAINT }}>· set all {shown.length} shown to</Typography>
+                {CLOUD_MODES.map(([v, label]) => (
+                  <Box key={v} component="span" title={label}
+                    onClick={() => !bulk && setAllShown(v)}
+                    sx={{ fontSize: 11, fontWeight: 700, color: bulk ? FAINT : "#4f46e5", cursor: bulk ? "default" : "pointer",
+                      "&:hover": { textDecoration: bulk ? "none" : "underline" } }}>
+                    {bulk === v ? `${v}…` : v}
+                  </Box>
+                ))}
+              </>
+            )}
+          </Box>
+          {!shown.length && <Empty>Nothing matches that search.</Empty>}
+          {shown.slice(0, limit).map((s) => (
+            <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography sx={{ ...mono, color: INK, fontSize: 12.5 }} noWrap title={s.Address}>{objName(s.Address)}</Typography>
+                <Typography variant="caption" sx={{ color: FAINT }}>
+                  {OBJ_KIND(s.Address)}{s.LastPolledAt ? ` · polled ${timeAgo(s.LastPolledAt)}` : ""}
+                </Typography>
+              </Box>
+              <Select size="small" value={modeOf(s)} onChange={(e) => setOne(s, e.target.value)}
+                sx={{ fontSize: 11.5, height: 26, minWidth: 108, ".MuiSelect-select": { py: 0.4 } }}>
+                {CLOUD_MODES.map(([v, label]) => (
+                  <MenuItem key={v} value={v} sx={{ fontSize: 12 }} title={label}>{v}</MenuItem>
+                ))}
+              </Select>
+            </Box>
+          ))}
+          {shown.length > limit && (
+            <Button size="small" onClick={() => setLimit(limit + PAGE_OBJ * 2)} sx={{ mt: 1 }}>
+              show {Math.min(PAGE_OBJ * 2, shown.length - limit)} more of {shown.length - limit}
+            </Button>
+          )}
+        </>
+      )}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
         <b>feed</b> and <b>tasks</b> watch for what is NEW since the last sync: a bucket reports each new object, a
         log group batches the matching lines into one item, a workspace runs its saved query. An object nothing

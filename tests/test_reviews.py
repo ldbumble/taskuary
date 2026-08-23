@@ -1,0 +1,40 @@
+"""Review-queue visibility: a pending review must point at work you can still SEE - a
+dropped/done task or a skip-hidden message must not keep the badge at 1 (the reported
+bug: a task removed from the Timeline left its review, with '1' on the tab, forever).
+"""
+import unittest
+from taskuary.store import MemoryStore
+
+
+class ReviewVisibilityTests(unittest.TestCase):
+    def seed(self, s):
+        tid = s.create_task({'Title': 't', 'Kind': 'reply', 'Status': 'open'}, 't')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': f'x{tid}', 'Channel': 'email',
+                             'Subject': 's', 'SentAt': '2026-08-23 10:00:00', 'Status': 'routed'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
+        return tid, mid, rid
+
+    def pending(self, s): return s.list_reviews('pending')
+
+    def test_dropped_task_leaves_the_queue(self):
+        s = MemoryStore(); tid, _, _ = self.seed(s)
+        self.assertEqual(len(self.pending(s)), 1)
+        s.update_task(tid, {'Status': 'dropped'}, 't')
+        self.assertEqual(self.pending(s), [])
+
+    def test_skipped_message_leaves_the_queue_and_comes_back(self):
+        s = MemoryStore(); _, mid, _ = self.seed(s)
+        s.set_message_status(mid, 'skipped')
+        self.assertEqual(self.pending(s), [])
+        s.set_message_status(mid, 'routed')          # unskip: reversible, review returns
+        self.assertEqual(len(self.pending(s)), 1)
+
+    def test_decided_history_survives_done_tasks(self):
+        s = MemoryStore(); tid, _, rid = self.seed(s)
+        s.decide_review(rid, 'approved', 'final', 'me')
+        s.update_task(tid, {'Status': 'done'}, 't')
+        self.assertEqual(len(s.list_reviews('approved')), 1)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -450,7 +450,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <Box sx={{ position: "sticky", top: 60 }}>
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
               decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
-              onSkipped={() => { setSel(null); load(); }} onRefresh={() => load()}
+              onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
               sendErr={sendErr} clearSendErr={() => setSendErr("")} />
           </Box>
         </Box>

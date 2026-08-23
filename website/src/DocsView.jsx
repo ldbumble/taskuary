@@ -7,6 +7,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import RateReviewIcon from "@mui/icons-material/RateReview";
 import api from "./api";
 import { FAINT, INK } from "./theme.jsx";
 import { Crumb, UnderTabs, LandingCard } from "./ui.jsx";
@@ -16,6 +17,8 @@ const DOCS = {
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
   triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
+  style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+    blurb: "How you write replies — greeting, tone, length, phrasing — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
@@ -24,6 +27,14 @@ const DOCS = {
     blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
 };
 const NAMES = Object.keys(DOCS);
+
+// Docs that can bootstrap themselves from the mailbox's own past: the button reads ~3
+// months of mail server-side and fills the doc's marked block - hand-written lines
+// outside the markers always survive.
+const GEN = {
+  triage: "reads 3 months of your mailbox — what you answered vs let sit — and writes what matters into the marked block",
+  style: "reads 3 months of your sent mail and distills how you write into the marked block",
+};
 
 // Your name, in one place. The documents refer to the owner nine times between them; typed
 // literally, changing it meant finding every one - so they carry {{owner}} tokens and this is
@@ -70,10 +81,12 @@ const OwnerCard = () => {
 
 export default function DocsView() {
   const [docName, setDocName] = useState(null);   // null = landing
-  const [docs, setDocs] = useState({ soul: "", triage: "", coder: "", digest: "", learned: "" });
-  const [saved, setSaved] = useState({ soul: "", triage: "", coder: "", digest: "", learned: "" });
+  const [docs, setDocs] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
+  const [saved, setSaved] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
+  const [genBusy, setGenBusy] = useState(false);
+  const [genMsg, setGenMsg] = useState("");   // provenance line, or the plain reason it couldn't
 
   const load = useCallback(async () => {
     try {
@@ -96,9 +109,21 @@ export default function DocsView() {
       <Box sx={{ maxWidth: 1100 }}>
         <Crumb section="Docs" onBack={() => setDocName(null)} title={DOCS[docName].label} />
         <UnderTabs tabs={NAMES.map((n) => DOCS[n].label)} value={DOCS[docName].label}
-          onChange={(label) => setDocName(NAMES.find((n) => DOCS[n].label === label))} />
+          onChange={(label) => { setGenMsg(""); setDocName(NAMES.find((n) => DOCS[n].label === label)); }} />
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5 }}>
           <Typography variant="body2" sx={{ color: FAINT, flex: 1 }}>{DOCS[docName].blurb}</Typography>
+          {GEN[docName] && (
+            <Button size="small" variant="outlined" disabled={genBusy} title={GEN[docName]}
+              startIcon={genBusy ? <CircularProgress size={12} /> : null}
+              onClick={async () => {
+                setGenBusy(true); setGenMsg("");
+                try {
+                  const { data } = await api.post(`/api/doc/${docName}/generate`);
+                  setGenMsg(`✓ ${data.detail}`); await load();
+                } catch (e) { setGenMsg(e?.response?.data?.detail || "generation failed"); }
+                setGenBusy(false);
+              }}>{genBusy ? "Reading your mail…" : "Generate from history"}</Button>
+          )}
           {docName === "learned" && (
             <Button size="small" variant="outlined" onClick={async () => {
               // consolidate now instead of waiting for the threshold; reload to show the rewrite
@@ -109,6 +134,10 @@ export default function DocsView() {
             {docs[docName] === saved[docName] ? "Saved" : "Save"}
           </Button>
         </Box>
+        {genMsg && GEN[docName] && (
+          <Typography variant="caption" sx={{ display: "block", mb: 1,
+            color: genMsg.startsWith("✓") ? "#15803d" : "#b91c1c" }}>{genMsg}</Typography>
+        )}
         <TextField fullWidth multiline minRows={18} maxRows={32} value={docs[docName]}
           onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })} sx={{ bgcolor: "#fff" }}
           inputProps={{ style: { fontFamily: "'JetBrains Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.55, color: INK } }} />

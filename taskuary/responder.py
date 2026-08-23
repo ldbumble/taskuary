@@ -52,6 +52,17 @@ REPLY_TOKENS = 300          # a ceiling as well as an instruction: 800 invited a
 # SOUL.md tells the model how to sign off, and it obeys - in a chat window too, where it reads
 # like a form letter. Belt and braces: the prompt says not to, and this takes it off anyway.
 _SIGNOFF = re.compile(r'^(best|thanks|thank you|regards|cheers|kind regards|best regards|sincerely)[\s,!.]*$', re.I)
+_COMMENT = re.compile(r'<!--.*?-->', re.S)
+_TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
+
+def style_doc(store) -> str:
+    """STYLE.md as prompts read it: comments and template placeholders stripped, owner tokens
+    rendered - and empty until the doc says something REAL (headers alone are not a style),
+    so the untouched template never rides into a prompt as noise. The doc is the owner's
+    voice distilled from their own sent mail (Docs → STYLE.md → Generate from history)."""
+    t = _TEMPLATE_LINES.sub('', _COMMENT.sub('', store.doc('style') or ''))
+    meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
+    return t.strip() if len(meat) > 40 else ''
 
 def strip_signoff(text: str) -> str:
     lines = [l for l in (text or '').rstrip().splitlines()]
@@ -82,9 +93,11 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
     from .learn import injectable
     lrn = injectable(store.doc('learned') or '')
+    sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n'
               + (DONE if resolution else NOT_YET)
               + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else '')
+              + (f'\n\nReply style guide - how {owner} writes, from their own sent mail (follow it):\n{sty[:2500]}' if sty else '')
               + (f'\n\nLearned profile - how {owner} actually writes and works, distilled from '
                  f'their own verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
     if notes:
@@ -144,8 +157,10 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     chat = str(m.get('Channel') or '').lower() in CHAT_CHANNELS
     from .learn import injectable
     lrn = injectable(store.doc('learned') or '')
+    sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
               + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else '')
+              + (f'\n\nReply style guide - how {owner} writes, from their own sent mail (follow it):\n{sty[:2500]}' if sty else '')
               + (f'\n\nLearned profile - how {owner} actually writes and works, distilled from '
                  f'their own verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
     notes = notes_for(store, {'from_email': m.get('FromEmail')})

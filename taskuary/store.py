@@ -201,7 +201,7 @@ class SQLiteStore:
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
             from pathlib import Path
-            for name in ('soul', 'coder', 'digest', 'learned', 'triage'):
+            for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     txt = f.read_text(encoding='utf-8')
@@ -315,7 +315,7 @@ class SQLiteStore:
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""
-        return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, substr(BodyText, 1, 2000) BodyText '
+        return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, SentAt, substr(BodyText, 1, 2000) BodyText '
                           'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
     def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
     def attach_message(self, mid, task_id):

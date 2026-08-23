@@ -396,10 +396,16 @@ class SQLiteStore:
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def list_reviews(self, status=None):
         # LEFT JOIN: a reply opened on a FILED message carries no task at all - the inner join
-        # made those reviews invisible everywhere, including the pending queue
+        # made those reviews invisible everywhere, including the pending queue.
+        # A PENDING review must also point at work you can still SEE: a task folded away
+        # (dropped/merged/done) or a message a skip policy hid would otherwise keep the
+        # badge at 1 with nothing on the timeline to answer - the queue self-heals instead.
+        # Decided reviews keep their history whatever happened to the task since.
         q = '''SELECT rv.*, t.Title, m.Subject, m.FromEmail, m.Channel FROM review rv
                LEFT JOIN task t ON t.TaskId=rv.TaskId LEFT JOIN message m ON m.MessageId=rv.MessageId
-               WHERE (rv.TaskId IS NULL OR t.TaskId IS NOT NULL)'''
+               WHERE (rv.TaskId IS NULL OR t.TaskId IS NOT NULL)
+                 AND NOT (rv.Status='pending' AND (IFNULL(t.Status,'') IN ('dropped','done')
+                                                   OR IFNULL(m.Status,'') IN ('context','skipped','ignored')))'''
         return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
     def decide_review(self, rid, status, final, by, note=None):
         self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',

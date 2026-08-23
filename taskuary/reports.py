@@ -136,6 +136,30 @@ def run_azlogs(cfg):
     return run_azure_logs(cfg)
 
 
+def run_entra_users(cfg):
+    """{"filter", "select"} - Entra ID people, over Graph on the Azure card's app. See azure.py."""
+    from .azure import run_entra_users as _run
+    return _run(cfg)
+
+
+def run_entra_groups(cfg):
+    """{"group"} - a group's transitive members, or every group when blank."""
+    from .azure import run_entra_groups as _run
+    return _run(cfg)
+
+
+def run_entra_signins(cfg):
+    """{"hours", "failed_only"} - Entra sign-in activity (needs P1/P2 + AuditLog.Read.All)."""
+    from .azure import run_entra_signins as _run
+    return _run(cfg)
+
+
+def run_entra_licenses(cfg):
+    """Licence SKUs with seats consumed vs spare - the unused-seat report."""
+    from .azure import run_entra_licenses as _run
+    return _run(cfg)
+
+
 def run_prometheus(cfg):
     """{"query" (PromQL)} - an instant query; each series is a row of its labels + value.
     The base URL (and an optional bearer token) live on the Prometheus card."""
@@ -199,6 +223,8 @@ def _planned(name):
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'aws': run_aws, 's3_object': run_s3, 'cloudwatch_logs': run_cwlogs,
             'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
+            'entra_users': run_entra_users, 'entra_groups': run_entra_groups,
+            'entra_signins': run_entra_signins, 'entra_licenses': run_entra_licenses,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
@@ -206,7 +232,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
-CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure'}
+CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure',
+           'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure'}
 
 def card_of(t): return CARD_OF.get(t, t)
 
@@ -269,6 +296,8 @@ def datadog_connection(store) -> dict:
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
+                 'entra_users': azure_connection, 'entra_groups': azure_connection,
+                 'entra_signins': azure_connection, 'entra_licenses': azure_connection,
                  'prometheus': prometheus_connection, 'datadog': datadog_connection}
 
 

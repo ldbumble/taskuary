@@ -252,8 +252,8 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | `ollama` | ✅ | local open-source models, no key and no cloud — Ollama out of the box, `base_url` reaches LM Studio / llama.cpp / vLLM |
 | `mssql` | ✅ | connect once; build AI-summarized reports on the Reports tab |
 | `database` | ✅ | **any engine by connection string** — postgres / mysql / snowflake / oracle URLs via SQLAlchemy, raw ODBC strings via pyodbc; write `{password}` in the string and the real one stays write-only |
-| `aws` | ✅ | S3 objects, CloudWatch logs (`?ERROR` in the last 24h), or **any service call** — as scheduled reports and agent tools, with IAM keys or the server's own credential chain |
-| `azure` | ✅ | blob storage, Log Analytics (KQL), or **any ARM path** — reuses the Outlook card's app registration automatically; the app just needs RBAC roles |
+| `aws` | ✅ | **Test & discover lists what your keys can reach** — every S3 bucket and CloudWatch log group — and each object picks its own job: *report* (default, nothing polled), *feed*, *tasks*, or *off*. Plus **any service call** as a report or agent tool. IAM keys or the server's own credential chain |
+| `azure` | ✅ | same discovery for blob containers and Log Analytics workspaces across the subscriptions your app can see, each with its own report/feed/tasks picker — plus **any ARM path**. Reuses the Outlook card's app registration automatically; it just needs RBAC roles |
 | `prometheus` / `datadog` | ✅ | PromQL instant queries (each series = a row of labels + value); Datadog monitor states, trouble sorted first — reports and agent tools |
 | `winrm` | ✅ | run PowerShell on any machine you can RDP into; output → Timeline |
 | `mcp` | ✅ | any MCP server's tool as a scheduled report |

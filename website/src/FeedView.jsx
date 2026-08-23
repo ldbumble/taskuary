@@ -378,7 +378,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
             </Box>
           )}
           {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (
-            <Empty>Nothing in the feed yet — activate a mailbox in Connectors or run an ingest.</Empty>
+            // the empty line has to know WHY it is empty: "activate a mailbox" under the
+            // code filter told someone with three mailboxes to add a fourth
+            <Empty>{view || cat || pick
+              ? "Nothing here matches this filter — try “everything”, or widen the Timeline lookback in Settings."
+              : "Nothing in the feed yet — connect a source in Connectors (a mailbox, a chat, a repo, a board…) and hit Sync now."}</Empty>
           ) : Object.entries(days).map(([day, items]) => (
             <Box key={day} sx={{ mt: 1 }}>
               <DayHeader label={fmtDay(day)} />

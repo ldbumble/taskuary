@@ -44,6 +44,8 @@ const FIELDS = {
   azure_logs: [["workspace id", "workspace_id", "text", "the Log Analytics workspace GUID"],
     ["KQL query", "query", "multiline", "AppExceptions | where TimeGenerated > ago(1d) | take 50"],
     ["hours back", "hours", "text", "24"], AI_FIELD],
+  prometheus: [["PromQL query", "query", "multiline", 'up == 0   ·   sum(rate(http_requests_total[5m])) by (service)'], AI_FIELD],
+  datadog: [["monitor name filter (blank = all monitors, trouble first)", "name", "text", "prod"], AI_FIELD],
   winrm: [["PowerShell to run on the remote box", "script", "multiline",
     "Get-Content C:/logs/latest.csv -Tail 20"], AI_FIELD],
   mcp: [["command", "cmd", "text", "npx / uvx / path to the MCP server"], ["args (one per line)", "args", "multiline", ""],
@@ -56,10 +58,12 @@ const TYPE_LABELS = {
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
+  prometheus: "Prometheus", datadog: "Datadog monitors",
 };
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure" };
-const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure" };
+const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
+  prometheus: "Prometheus", datadog: "Datadog" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const NL = String.fromCharCode(10);
@@ -419,7 +423,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
   const fields = (FIELDS[src.type] || []).filter(([, key]) => key !== "ai_prompt");
   const cardType = CARD_OF[src.type] || src.type;
   const conn = connectors.find((c) => c.Type === cardType);
-  const needsConn = ["mssql", "winrm", "database", "aws", "azure"].includes(cardType);
+  const needsConn = ["mssql", "winrm", "database", "aws", "azure", "prometheus", "datadog"].includes(cardType);
   const connOk = conn?.LastSyncAt && !conn?.LastError;
   return (
     <Box draggable onDragStart={onDragStart} onDragEnd={onDragEnd}

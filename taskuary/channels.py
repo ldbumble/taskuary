@@ -128,6 +128,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] in ('jira', 'asana', 'monday'):
             from . import pm
             detail = pm.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
+        elif c['Type'] in ('gitlab', 'azdo', 'linear', 'trello', 'notion', 'discord', 'sentry', 'pagerduty'):
+            from . import devtools
+            detail = devtools.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
         elif c['Type'] == 'mssql':
             from .mssql import test as mssql_test
             conn_cfg = _cfg(c)
@@ -153,6 +156,19 @@ def test_connector(store, cid: int) -> dict:
             r = az_test(azure_connection(store))
             if not r['ok']: raise RuntimeError(r['error'])
             detail = r['detail']
+        elif c['Type'] == 'prometheus':
+            from .reports import run_prometheus, prometheus_connection
+            head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})
+            detail = f'query OK ({head}) - build the reports on the Reports tab'
+        elif c['Type'] == 'datadog':
+            from .reports import datadog_connection
+            dd = datadog_connection(store)
+            site = (dd.get('site') or 'datadoghq.com').strip()
+            r = requests.get(f'https://api.{site}/api/v1/validate', timeout=20,
+                             headers={'DD-API-KEY': dd.get('api_key') or ''})
+            if r.status_code != 200 or not r.json().get('valid'):
+                raise RuntimeError(f'Datadog rejected the API key ({r.status_code})')
+            detail = f'API key valid on {site}' + ('' if dd.get('app_key') else ' - add the application key for monitor reads')
         elif c['Type'] == 'winrm':
             import subprocess
             host = cfg.get('host')
@@ -400,7 +416,9 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
           'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email',
-          'jira': 'jira', 'asana': 'asana', 'monday': 'monday'}
+          'jira': 'jira', 'asana': 'asana', 'monday': 'monday',
+          'gitlab': 'gitlab', 'azdo': 'azdo', 'linear': 'linear', 'trello': 'trello',
+          'notion': 'notion', 'discord': 'discord', 'sentry': 'sentry', 'pagerduty': 'pagerduty'}
 TQ_ISSUE = re.compile(r'^\[TQ-\d{4}\]')      # issues the coder itself opened - never ingest those back
 
 
@@ -548,6 +566,16 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                     mine = [x for x in store.list_sources() if x['Channel'] == CH2SRC[c['Type']]]
                     if s['SourceId'] != mine[0]['SourceId']: continue
                     n += pm.poll(store, full, since, llm, file_only)
+                elif c['Type'] == 'discord':
+                    # per SOURCE, like slack: each watched channel id is its own source
+                    from . import devtools
+                    n += devtools.poll_discord(store, full, s, since, llm, file_only)
+                elif c['Type'] in ('gitlab', 'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty'):
+                    # one poll per connector, pm-style (the source marks the site/org/account)
+                    from . import devtools
+                    mine = [x for x in store.list_sources() if x['Channel'] == CH2SRC[c['Type']]]
+                    if s['SourceId'] != mine[0]['SourceId']: continue
+                    n += devtools.poll(store, full, since, llm, file_only)
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)

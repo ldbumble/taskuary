@@ -5,6 +5,7 @@ operation, 's3_object' reads or lists a bucket, 'cloudwatch_logs' greps a log gr
 """
 import json
 from datetime import datetime, timedelta
+from loguru import logger
 
 
 def _boto3():
@@ -27,6 +28,71 @@ def test(cfg: dict) -> dict:
         return {'ok': True, 'detail': f"authenticated · account {who['Account']} · {who['Arn']}"}
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
+
+
+def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
+    """What can these keys SEE? Every S3 bucket and CloudWatch log group is registered as
+    a source with its own mode picker - report (default: selectable on the Reports tab,
+    nothing polled), feed (new items shown on the Timeline), tasks (through triage), or
+    off. A list that partially fails still registers what it found."""
+    known = {s['Address'] for s in store.list_sources(active_only=False) if s['Channel'] == 'aws'}
+    found = []
+    try:
+        found += [f"s3://{b['Name']}" for b in client(cfg, 's3').list_buckets().get('Buckets') or []]
+    except Exception as e:
+        logger.warning(f'aws discovery: s3 list failed: {e}')
+    try:
+        found += [f"logs://{g['logGroupName']}" for g in
+                  client(cfg, 'logs').describe_log_groups(limit=50).get('logGroups') or []]
+    except Exception as e:
+        logger.warning(f'aws discovery: log groups failed: {e}')
+    added = 0
+    for addr in found:
+        if addr in known: continue
+        store.save_source({'Channel': 'aws', 'Address': addr, 'ConnectorId': connector_id, 'Active': 1,
+                           'Owner': 'discovered', 'ConfigJson': json.dumps({'mode': 'report'})}, actor)
+        added += 1
+    return {'found': len(found), 'added': added}
+
+
+def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -> int:
+    """One discovered object in tasks/feed mode. s3://bucket -> a Timeline item per NEW
+    object; logs://group -> ONE batched item of the new matching events (default pattern:
+    errors - one row per log line would flood the funnel it feeds)."""
+    from .ingest import ingest_message
+    scfg = json.loads(src.get('ConfigJson') or '{}')
+    addr, floor, n = src['Address'], since.strftime('%Y-%m-%d %H:%M:%S'), 0
+    if addr.startswith('s3://'):
+        bucket = addr[5:]
+        r = client(cfg, 's3').list_objects_v2(Bucket=bucket, MaxKeys=200)
+        for o in r.get('Contents') or []:
+            at = o.get('LastModified')
+            stamp = at.astimezone().strftime('%Y-%m-%d %H:%M:%S') if hasattr(at, 'astimezone') else str(at)
+            if stamp < floor: continue
+            out = ingest_message(store, file_only=file_only, msg={
+                'external_id': f"aws:{bucket}:{o['Key']}:{stamp[:16]}", 'channel': 'aws',
+                'subject': f"New in {addr}: {o['Key']}",
+                'body': f"[S3 object landed - {o.get('Size')} bytes]\ns3://{bucket}/{o['Key']}",
+                'from_name': addr, 'conversation_id': f'aws:{addr}', 'sent_at': stamp,
+                'source_name': addr}, llm=llm)
+            n += out['status'] != 'duplicate'
+    elif addr.startswith('logs://'):
+        group = addr[7:]
+        pat = scfg.get('pattern') or '?ERROR ?Exception ?FATAL'
+        ev = client(cfg, 'logs').filter_log_events(logGroupName=group, filterPattern=pat, limit=100,
+                                                   startTime=int(since.timestamp() * 1000)).get('events') or []
+        if ev:
+            lines = '\n'.join(f"{datetime.fromtimestamp(e['timestamp'] / 1000).strftime('%H:%M:%S')} "
+                              f"{(e.get('message') or '').strip()[:300]}" for e in ev[:50])
+            stamp = datetime.fromtimestamp(ev[-1]['timestamp'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
+            out = ingest_message(store, file_only=file_only, msg={
+                'external_id': f"awslogs:{group}:{ev[-1].get('eventId') or stamp}", 'channel': 'aws',
+                'subject': f"{len(ev)} matching log events in {group}",
+                'body': f"[CloudWatch {group} - pattern {pat}]\n{lines}",
+                'from_name': addr, 'conversation_id': f'aws:{addr}', 'sent_at': stamp,
+                'source_name': addr}, llm=llm)
+            n += out['status'] != 'duplicate'
+    return n
 
 
 def dot_path(data, path):

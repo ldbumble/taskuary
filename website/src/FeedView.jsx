@@ -494,7 +494,8 @@ const historyOf = (sel, detail) => {
 };
 
 const PanelLabel = ({ children }) => (
-  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 9.5, display: "block", mt: 1.5 }}>
+  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.8, fontSize: 10, fontWeight: 700,
+    display: "block", mt: 1.75, mb: 0.25 }}>
     {children}
   </Typography>
 );

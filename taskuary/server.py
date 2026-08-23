@@ -649,60 +649,25 @@ def reviews(status: str = None):
 
 @app.post('/api/reviews/{rid}/decide')
 def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
+    """The verdict itself lives in verdicts.decide - ONE door, shared with the phone road
+    (a 'approve' typed in the notify chat lands the same way this button does)."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
-    verb2status = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
-    if body.verb not in verb2status: raise HTTPException(422, 'bad verb')
-    # ONE approve. Approving sends whatever is in the box, so making the owner choose between
-    # "approve" and "approve my edit" asked them to declare something we can just look at: if the
-    # text differs from the draft, it was edited. Both verbs still land, for older callers.
-    if body.verb in ('approve', 'edit'):
-        final = body.final_text if (body.final_text or '').strip() else rv.get('DraftText')
-        verb = 'edit' if (final or '').strip() != (rv.get('DraftText') or '').strip() else 'approve'
-    else:
-        final, verb = None, body.verb
-    store.decide_review(rid, verb2status[verb], final, ACTOR, body.note)
-    if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f'Reviewed draft ({verb}):\n{final}')
-    # APPROVING IS SENDING. A verdict that never leaves the machine is half a funnel: the
-    # answer goes back on the channel the request arrived on, in its own thread.
-    sent, send_err = None, None
-    if final and rv.get('MessageId'):
-        msg = store.get_message(rv['MessageId'])
-        try:
-            sent = outbound.reply_to_message(store, msg, final)
-            if rv.get('TaskId'):
-                store.add_comment(rv['TaskId'], ACTOR, 'human',
-                                  f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}.")
-        except Exception as e:
-            send_err = str(e)[:300]
-            logger.warning(f'reply send failed for review {rid}: {send_err}')
-            if rv.get('TaskId'):
-                store.add_comment(rv['TaskId'], ACTOR, 'human', f'NOT SENT - {send_err}. The approved text is above.')
-            # an approved reply that never LEFT is not done: the card read 'approved' while the
-            # Teams send had failed on permissions, and the answer sat on the machine looking
-            # finished. The review returns to the queue wearing the error, the approved text
-            # becomes the draft (approving again retries the send), and the task stays open.
-            store.update_review_draft(rid, final, rv.get('RunId'))
-            store.unhold_review(rid, f'approved, but sending FAILED: {send_err} - fix the channel and approve again')
-    if verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
-    # reply-only items are not real tasks: answering them IS the work, so close on decision -
-    # and a coder-finished task waits on exactly this send, so sending it closes that too
-    if verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:
-        t = store.get_task(rv['TaskId'])
-        if ((t or {}).get('Kind') == 'reply' or rv.get('Kind') == 'draft_reply') and t.get('Status') not in ('done', 'dropped'):
-            store.update_task(rv['TaskId'], {'Status': 'done'}, ACTOR)
-    store.audit('review', rid, verb, ACTOR, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
-    # the corrections are the curriculum: an edit shows how the owner writes, a reject what should
-    # never have been drafted. LEARNED.md is where those lessons generalize (an unedited approve
-    # teaches too, but as aggregate confirmation - the reflection pass counts those itself).
-    if verb in ('edit', 'reject', 'no_reply'):
-        m = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}
-        ev = (f"rv{rid}: owner verdict '{verb}' on a drafted reply to \"{(m.get('Subject') or rv.get('Kind') or '')[:80]}\" "
-              f"from {m.get('FromEmail') or '?'}" + (f"; their note: {body.note[:200]}" if body.note else ''))
-        if verb == 'edit': ev += f"\nDRAFT:\n{(rv.get('DraftText') or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
-        if background is not None: background.add_task(learn.learn_from, store, ev)
-        else: learn.learn_from(store, ev)
-    return {'ok': True, 'status': 'pending' if send_err else verb2status[verb], 'sent': sent, 'send_error': send_err}
+    from .verdicts import VERB2STATUS, decide as land
+    if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
+                learn_async=(background.add_task if background is not None else None))
+
+@app.post('/api/tasks/{tid}/answer')
+def answer_to_agent(tid: int, body: dict):
+    """Type an attached message's text into the task's live agent session - the person
+    answered the very question the agent is waiting on. The 'ask' mode's one click."""
+    m = store.get_message(int((body or {}).get('message_id') or 0))
+    if not m or m.get('TaskId') != tid: raise HTTPException(404, 'that message is not on this task')
+    from . import terminal
+    if not terminal.say_to_task(store, tid, m, ACTOR):
+        raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
+    return {'ok': True}
 
 @app.post('/api/reviews/{rid}/release')
 def release_review(rid: int):

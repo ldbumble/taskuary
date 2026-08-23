@@ -61,6 +61,10 @@ const KNOB_META = {
   default_agent: { group: "Coder agent", label: "Default agent", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
     help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Connectors → AI CLI agents, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
+  answer_to_agent: { group: "Coder agent", label: "Hand answers to the working agent", type: "select",
+    options: ["ask", "auto", "off"],
+    desc: "When someone answers a question on a task an agent is sitting on, their answer can go straight into the live session.",
+    help: "The classic round trip: the agent asks something mid-task, the hub asks the person, the person replies by mail or chat — and the reply attaches to the same task.\n\nask (default) = the review panel offers one click: 'Type this into the agent's session'. auto = the answer is typed into the live session the moment it arrives, as if you relayed it. off = it just lands on the task; you paste it yourself.\n\nOnly a LIVE session is ever typed into — if the agent already exited, nothing happens and the thread simply waits on the task." },
   coder_auto_enabled: { group: "Coder agent", label: "Auto-dispatch new tasks", type: "switch",
     desc: "Every new real task immediately opens a live agent session in its repo.",
     help: "On: the moment triage says 'this is work', your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded — visible on the Board, watchable, interruptible. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nRequires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way." },
@@ -69,6 +73,10 @@ const KNOB_META = {
   notify_level: { group: "Notifications", label: "Push to your chat", type: "select", options: ["needs_me", "all", "off"],
     desc: "Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.",
     help: "Give a chat connector the NOTIFY role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds_me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting in Review'. all = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output." },
+
+  phone_approvals: { group: "Notifications", label: "Approve from your phone", type: "switch",
+    desc: "Reply to a ping in the notify chat to decide the review — approve, reject, or type the reply yourself.",
+    help: "On: every ping about a pending reply carries the DRAFT and an [rvN] tag. Reply in that same chat: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft — exactly like editing in Review. A confirmation comes back into the chat, including when a send fails (the review returns to the queue wearing the error).\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Verdicts typed in the notify chat are intercepted before triage: they never become work, and the chat needs no source row flipped on.\n\nOff (default): pings stay read-only." },
 
   // ── Attachments & images ──
   vision_enabled: { group: "Attachments & images", label: "AI reads attached images", type: "switch",
@@ -94,7 +102,8 @@ const KNOB_META = {
 const GROUPS = ["Triage & routing", "Replies", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
 // internal state and settings that moved onto their connector - never shown as knobs
 const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_enabled",
-                        "owner_name", "owner_email"]);   // the owner lives on the Docs page
+                        "owner_name", "owner_email",     // the owner lives on the Docs page
+                        "last_pinged_review"]);          // phone-approvals bookkeeping, not a knob
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
 const SECTION_HELP = {

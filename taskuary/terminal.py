@@ -823,6 +823,34 @@ def for_task(task_id, tail=0):
     return t.info(tail) if t else None
 
 
+def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
+    """Type an inbound answer INTO the task's live session. The agent asked a question, the
+    hub asked the person, the person answered - the answer belongs in front of the agent,
+    not on a timeline it cannot read. Fed in seed()-sized bites (a one-shot paste drops
+    bytes mid-stream), then Enter until it lands. False = no live session to tell.
+    Accepts a message as a DB row (BodyText/FromName) or an ingest dict (body/from_name)."""
+    t = next((x for x in SESSIONS.values() if x.task_id == task_id and x.alive), None)
+    if not t: return False
+    who = msg.get('FromName') or msg.get('from_name') or msg.get('FromEmail') or msg.get('from_email') or 'the sender'
+    body = str(msg.get('BodyText') or msg.get('body') or '').strip()
+    if not body: return False
+    text = ' '.join(f'{who} answered (by {msg.get("Channel") or msg.get("channel") or "mail"}): {body}'.split())[:4000]
+    def go():
+        for i in range(0, len(text), SEED_CHUNK):
+            t.write(text[i:i + SEED_CHUNK])
+            time.sleep(SEED_CHUNK_GAP)
+        time.sleep(.5)
+        for key in ('\r', '\r', '\n'):
+            was = t.n
+            t.write(key)
+            time.sleep(SEED_ENTER)
+            if t.n > was: return
+    threading.Thread(target=go, daemon=True).start()
+    store.add_comment(task_id, actor, 'agent', f"{who}'s answer was typed into the live session.")
+    store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who})
+    return True
+
+
 def session_for(task_id):
     """This task's session OBJECT - the live one if there is one, else the most recent that has
     not been reaped yet. Unlike for_task, an exited session counts: its scrollback is exactly

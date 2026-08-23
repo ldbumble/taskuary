@@ -118,9 +118,13 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
     # the ping that matters most: work FINISHED and its reply is sitting in Review on you
     if (store.get_settings().get('notify_level') or 'needs_me') != 'off':
         from .outbound import notify
+        from .phone import ping_tail
         from .store import task_ref
         t = store.get_task(task_id) or {}
         head = (t.get('Title') or '')[:100]
+        # with phone approvals on, the ping carries the draft and the [rvN] tag - replying
+        # 'approve' in the chat sends it (phone.py), so 'done' really can mean done
+        tail = ping_tail(store, rid, (store.get_review(rid) or {}).get('DraftText'))
         try: notify(store, f'{task_ref(task_id)} is done - the reply is drafted and waiting on '
-                           f'your approval in Review.\n{head}')
+                           f'your approval in Review.\n{head}{tail}')
         except Exception as e: logger.warning(f'notify failed for task {task_id}: {e}')

@@ -142,6 +142,11 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # LEARNED.md: distill the owner's verdicts (edited drafts, rejections,
                     # reclassifications) into a general style/responsibility profile - see learn.py
                     'learn_enabled': '1',
+                    # when an inbound answer ATTACHES to a task whose agent session is live:
+                    # ask = a one-click offer in the panel; auto = typed straight in; off = neither
+                    'answer_to_agent': 'ask',
+                    # replies in the notify chat decide pinged reviews (approve/reject/your text)
+                    'phone_approvals': '0',
                     # the zone timestamps are stamped in (blank = this machine's local). Setting
                     # it makes every displayed time wear its label (2:44 PM EDT) and keeps a
                     # browser in another zone reading the stamps correctly.

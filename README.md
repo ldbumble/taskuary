@@ -254,6 +254,7 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | `database` | ✅ | **any engine by connection string** — postgres / mysql / snowflake / oracle URLs via SQLAlchemy, raw ODBC strings via pyodbc; write `{password}` in the string and the real one stays write-only |
 | `aws` | ✅ | **Test & discover lists what your keys can reach** — every S3 bucket and CloudWatch log group — and each object picks its own job: *report* (default, nothing polled), *feed*, *tasks*, or *off*. Plus **any service call** as a report or agent tool. IAM keys or the server's own credential chain |
 | `azure` | ✅ | same discovery for blob containers and Log Analytics workspaces across the subscriptions your app can see, each with its own report/feed/tasks picker — plus **any ARM path**. Reuses the Outlook card's app registration automatically; it just needs RBAC roles |
+| `entra_*` | ✅ | **Entra ID on the same app registration**: people (with `accountEnabled`, so a disabled account never reads as active), a group's *transitive* members, sign-in activity, and licence SKUs with seats consumed vs spare — the unused-seat report. Test names which of these the app is actually permitted |
 | `prometheus` / `datadog` | ✅ | PromQL instant queries (each series = a row of labels + value); Datadog monitor states, trouble sorted first — reports and agent tools |
 | `winrm` | ✅ | run PowerShell on any machine you can RDP into; output → Timeline |
 | `mcp` | ✅ | any MCP server's tool as a scheduled report |
@@ -306,6 +307,9 @@ Early (v0.2.0) and moving fast.
 - [x] Developer inboxes: GitLab, Azure DevOps, Linear, Trello, Notion, Discord, Sentry, PagerDuty
 - [x] The round trip: answers typed into the working agent's session; reviews decided from your phone
 - [x] Automation ideas: a weekly report mining your own funnel for the next thing worth automating
+- [x] Proof of work on every review: files changed, the tests that actually ran, CI, attempts — and what is *not* evidenced
+- [x] Closed git loop: draft PRs, CI watched, a red build handed back to the agent that wrote the code
+- [x] Safe outputs: agents *propose* high-impact actions (PR, public comment, close, tool run); code validates, you approve
 - [ ] Follow-ups — track what YOU are owed: a sent reply or hand-off that asked a question starts a quiet timer; no answer in N days surfaces a "nudge?" with the follow-up drafted
 - [ ] Earned autonomy — auto-answer offered per pattern once your unedited approvals prove the draft (with the receipts, revocable per rule); today auto_answer is a policy you write by hand
 - [ ] Teams as a phone-approvals channel (Telegram and WhatsApp carry it today)

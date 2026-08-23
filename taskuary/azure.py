@@ -168,6 +168,119 @@ def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -
     return n
 
 
+# ── Entra ID (the directory, over Graph) ────────────────────────────────────────────────
+# The SAME app registration - one client-credentials token, a different scope. An app that
+# reads mail for the Outlook card can read the directory too once it has the Graph
+# APPLICATION permissions (User.Read.All, Group.Read.All, AuditLog.Read.All,
+# Organization.Read.All); admin consent is what turns each one on.
+GRAPH = 'https://graph.microsoft.com/v1.0'
+GRAPH_PAGES = 12                      # $top=999 a page; a 10k-user tenant stops being a report
+
+def graph_get(cfg: dict, path: str, **params) -> list:
+    """Every page of a Graph collection, following @odata.nextLink. Advanced queries
+    ($filter on any(), $count) need the eventual-consistency header, so it always rides."""
+    tok = token(cfg, 'https://graph.microsoft.com/.default')
+    url, out, pages = f'{GRAPH}{path}', [], 0
+    while url and pages < GRAPH_PAGES:
+        r = requests.get(url, headers={'Authorization': f'Bearer {tok}', 'ConsistencyLevel': 'eventual'},
+                         params=params or None, timeout=45)
+        if r.status_code >= 400: raise RuntimeError(f'graph {path} said {r.status_code}: {r.text[:300]}')
+        j = r.json()
+        out += j.get('value') or []
+        url, params, pages = j.get('@odata.nextLink'), None, pages + 1
+    return out
+
+
+def run_entra_users(cfg: dict):
+    """{"filter": "...", "select": "..."} - the directory's people. accountEnabled is NOT in
+    Graph's default user payload, so it is selected explicitly: without it every disabled
+    account reads as active, which is the one thing an access review must not get wrong."""
+    from .reports import row_limit, rows_out
+    sel = cfg.get('select') or 'displayName,userPrincipalName,accountEnabled,jobTitle,department,createdDateTime'
+    rows = graph_get(cfg, '/users', **{'$select': sel, '$top': 999,
+                                       **({'$filter': cfg['filter']} if cfg.get('filter') else {})})
+    lim, mine = row_limit(cfg)
+    return rows_out(rows, lim, unit='users', mine=mine)
+
+
+def run_entra_groups(cfg: dict):
+    """{"group": "<name or id>"} lists that group's TRANSITIVE members (nested groups
+    included - what a login actually inherits); blank lists the groups themselves."""
+    from .reports import row_limit, rows_out
+    lim, mine = row_limit(cfg)
+    g = (cfg.get('group') or '').strip()
+    if not g:
+        rows = graph_get(cfg, '/groups', **{'$select': 'displayName,id,mail,description', '$top': 999})
+        return rows_out(rows, lim, unit='groups', mine=mine)
+    gid = g
+    if not re.fullmatch(r'[0-9a-fA-F-]{36}', g):
+        hit = graph_get(cfg, '/groups', **{'$filter': f"displayName eq '{g}'", '$select': 'id,displayName'})
+        if not hit: raise RuntimeError(f'no group named {g!r}')
+        gid = hit[0]['id']
+    rows = graph_get(cfg, f'/groups/{gid}/transitiveMembers',
+                     **{'$select': 'displayName,userPrincipalName,accountEnabled', '$top': 999})
+    # $select drops @odata.type, so a user is 'the thing with a UPN' - nested groups and
+    # devices come back through the same collection
+    rows = [r for r in rows if r.get('userPrincipalName')]
+    return rows_out(rows, lim, unit='members', mine=mine)
+
+
+def run_entra_signins(cfg: dict):
+    """{"hours": 24, "failed_only": true} - sign-in activity. Needs AuditLog.Read.All AND
+    an Entra ID P1/P2 tenant; without the licence Graph answers 403 and says so."""
+    from .reports import row_limit, rows_out
+    from datetime import timedelta
+    since = (datetime.utcnow() - timedelta(hours=float(cfg.get('hours') or 24))).strftime('%Y-%m-%dT%H:%M:%SZ')
+    flt = f'createdDateTime ge {since}'
+    if cfg.get('failed_only'): flt += ' and status/errorCode ne 0'
+    rows = graph_get(cfg, '/auditLogs/signIns', **{'$filter': flt, '$top': 999})
+    out = [{'at': r.get('createdDateTime'), 'user': r.get('userPrincipalName'), 'app': r.get('appDisplayName'),
+            'ip': r.get('ipAddress'), 'city': ((r.get('location') or {}).get('city')),
+            'error': ((r.get('status') or {}).get('errorCode')),
+            'reason': ((r.get('status') or {}).get('failureReason') or '')[:120]} for r in rows]
+    lim, mine = row_limit(cfg)
+    return rows_out(out, lim, unit='sign-ins', mine=mine)
+
+
+def run_entra_licenses(cfg: dict):
+    """The tenant's licence SKUs and how many seats are actually consumed - the report that
+    finds the seats nobody is using. Needs Organization.Read.All."""
+    from .reports import row_limit, rows_out
+    rows = graph_get(cfg, '/subscribedSkus')
+    out = []
+    for s in rows:
+        p = s.get('prepaidUnits') or {}
+        enabled, used = int(p.get('enabled') or 0), int(s.get('consumedUnits') or 0)
+        out.append({'sku': s.get('skuPartNumber'), 'enabled': enabled, 'consumed': used,
+                    'spare': enabled - used, 'warning': int(p.get('warning') or 0),
+                    'suspended': int(p.get('suspended') or 0)})
+    out.sort(key=lambda x: -x['spare'])
+    lim, mine = row_limit(cfg)
+    return rows_out(out, lim, unit='SKUs', mine=mine)
+
+
+def test_entra(cfg: dict) -> dict:
+    """Which directory reads this app actually has - each permission probed separately, so
+    the answer names the ones missing instead of failing on the first."""
+    out, ok = {}, []
+    for label, path, params in (('users', '/users', {'$top': 1, '$select': 'displayName'}),
+                                ('groups', '/groups', {'$top': 1, '$select': 'displayName'}),
+                                ('licences', '/subscribedSkus', {}),
+                                ('sign-in logs', '/auditLogs/signIns', {'$top': 1})):
+        try:
+            graph_get(cfg, path, **params)
+            out[label] = 'ok'; ok.append(label)
+        except Exception as e:
+            out[label] = 'no' if '403' in str(e) or '401' in str(e) else str(e)[:80]
+    if not ok:
+        return {'ok': False, 'error': 'the app has no directory permissions - grant Graph APPLICATION '
+                                      'permissions (User.Read.All, Group.Read.All, Organization.Read.All, '
+                                      'AuditLog.Read.All) and click Grant admin consent'}
+    missing = [k for k, v in out.items() if v != 'ok']
+    return {'ok': True, 'detail': 'Entra reads available: ' + ', '.join(ok)
+                                  + (f" · not permitted: {', '.join(missing)}" if missing else '')}
+
+
 def run_azure(cfg: dict):
     """{"path": "/subscriptions/<id>/..." (or a full https URL), "api_version",
     "path_expr": "a.b"} - GET any ARM object with the app's token. An ARM list (a 'value'

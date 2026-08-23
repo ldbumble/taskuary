@@ -157,6 +157,16 @@ def test_connector(store, cid: int) -> dict:
             r = mod.test(conn_cfg)
             if not r['ok']: raise RuntimeError(r['error'])
             detail = r['detail']
+            # the same app registration usually reaches the DIRECTORY too, and that is a
+            # whole family of reports (people, groups, licences, sign-ins) the card would
+            # otherwise never mention - so Test says which of them this app can do
+            if c['Type'] == 'azure':
+                try:
+                    from .azure import test_entra
+                    e = test_entra(conn_cfg)
+                    detail += ' · ' + (e['detail'] if e['ok'] else f"Entra: {e['error']}")
+                except Exception as e:
+                    detail += f' · Entra probe failed: {str(e)[:100]}'
             try:
                 d = mod.discover(store, conn_cfg, c['ConnectorId'], ACTOR_DISCOVER)
                 detail += f" · {d['found']} objects visible, {d['added']} new under Sources"

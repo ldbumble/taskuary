@@ -44,6 +44,12 @@ const FIELDS = {
   azure_logs: [["workspace id", "workspace_id", "text", "the Log Analytics workspace GUID"],
     ["KQL query", "query", "multiline", "AppExceptions | where TimeGenerated > ago(1d) | take 50"],
     ["hours back", "hours", "text", "24"], AI_FIELD],
+  entra_users: [["OData filter (optional)", "filter", "text", "accountEnabled eq false"],
+    ["properties to select (optional)", "select", "text", "displayName,userPrincipalName,accountEnabled,department"], AI_FIELD],
+  entra_groups: [["group name or id (blank = list every group)", "group", "text", "All Staff"], AI_FIELD],
+  entra_signins: [["hours back", "hours", "text", "24"],
+    ["failed only (1 = just the failures)", "failed_only", "text", "1"], AI_FIELD],
+  entra_licenses: [AI_FIELD],
   automate: [["days back", "days", "text", "30"], AI_FIELD],
   prometheus: [["PromQL query", "query", "multiline", 'up == 0   ·   sum(rate(http_requests_total[5m])) by (service)'], AI_FIELD],
   datadog: [["monitor name filter (blank = all monitors, trouble first)", "name", "text", "prod"], AI_FIELD],
@@ -59,11 +65,14 @@ const TYPE_LABELS = {
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
+  entra_users: "Entra ID — people", entra_groups: "Entra ID — group members",
+  entra_signins: "Entra ID — sign-ins", entra_licenses: "Entra ID — licence seats",
   prometheus: "Prometheus", datadog: "Datadog monitors",
   digest: "Taskuary digest", automate: "Automation ideas (own data)",
 };
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
-const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure" };
+const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
+  entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
   prometheus: "Prometheus", datadog: "Datadog" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
@@ -74,7 +83,8 @@ const NL = String.fromCharCode(10);
 const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args",
   "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver",
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
-  "api_version", "path_expr", "account", "container", "blob", "workspace_id"];
+  "api_version", "path_expr", "account", "container", "blob", "workspace_id",
+  "filter", "select", "group", "failed_only", "days"];
 
 const toSources = (cfg) => {
   if (Array.isArray(cfg.sources) && cfg.sources.length) return cfg.sources;

@@ -757,6 +757,21 @@ const DayHeader = ({ label }) => {
   );
 };
 
+// A report that writes in sections (the Morning digest's prompt asks for emoji headers)
+// renders AS sections: the emoji-led line becomes a real header, its bullets hang under it.
+// Report bodies only - an email that happens to start a line with 🎉 is not a document.
+const HDR = /^\s*\p{Extended_Pictographic}/u;
+const SectionedText = ({ text }) => (
+  <Box sx={{ textAlign: "left" }}>
+    {text.split("\n").map((l, i) => (HDR.test(l)
+      ? <Typography key={i} variant="body2" sx={{ fontWeight: 700, color: INK, mt: i ? 1.1 : 0,
+          pb: 0.35, mb: 0.35, borderBottom: `1px solid ${BORDER}` }}>{l.trim()}</Typography>
+      : l.trim()
+        ? <Typography key={i} variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, lineHeight: 1.55 }}>{l}</Typography>
+        : null))}
+  </Box>
+);
+
 // A chain can hold several emails (the inbound thread + your replies). One clean strip
 // of pills above the body flips between them - the clicked timeline row is preselected,
 // "↩ you" marks your own replies. Keyed by focusId so a new selection resets the pick.
@@ -812,9 +827,10 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
             {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
           </Box>
         )}
-        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
-          {text}
-        </Typography>
+        {cur?.Channel === "report" ? <SectionedText text={text} />
+          : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
+              {text}
+            </Typography>}
         {raw && (
           <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
             <Typography variant="caption" onClick={() => setShowRaw(!showRaw)}

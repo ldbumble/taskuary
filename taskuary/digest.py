@@ -13,12 +13,26 @@ DAYS = 3                 # the window the synthesis reads - matches the startup 
 # The seeded report's editable instruction - "configure what goes in there" IS this text,
 # on the Reports tab. reports.AI_SYSTEM wraps it; this is only the ask.
 PROMPT = (
+    'Write what the owner, half awake, should hold in mind TODAY, under 350 words, grouped into '
+    'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
+    '(one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these '
+    'sections in this order, and OMIT any with nothing to say:\n'
+    '\U0001f680 In flight — what is being worked and who is waiting on whom\n'
+    '⏳ Waiting on you — questions still unanswered, replies still unapproved\n'
+    '\U0001f4cc Keep honoring — verdicts you gave recently that should keep applying\n'
+    '\U0001f4c8 Patterns — heads-ups (a sender getting louder, the same system failing twice)\n'
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
+
+# every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
+# from "the owner wrote this" (never touch) - same deal the template docs get
+OLD_PROMPTS = (
     'Write what the owner, half awake, should hold in mind TODAY, in plain bullets under 350 words:\n'
     '- what is in flight and who is waiting on whom (name tasks by their TQ-refs)\n'
     '- questions still unanswered, replies still unapproved\n'
     '- verdicts the owner gave recently that should keep being honored\n'
     '- patterns worth a heads-up (a sender getting louder, the same system failing twice)\n'
-    'Never invent facts; omit sections with nothing to say; no preamble, no sign-off.')
+    'Never invent facts; omit sections with nothing to say; no preamble, no sign-off.',
+)
 
 HEADER = ('# DIGEST.md — your morning brief\n\n'
           '_Written by the Morning digest report (Reports tab - its prompt decides what goes in\n'

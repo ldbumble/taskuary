@@ -231,8 +231,21 @@ export default function BoardView({ onOpenTask }) {
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75 }}>
                     <Chip size="small" label={t.Kind} sx={{ height: 17, fontSize: 9.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
                     {t.Queued && (
-                      <Tooltip arrow placement="right" title={`${t.Queued.reason || "held back"}${t.Queued.behind
-                          ? ` — waiting on ${t.Queued.behind} "${t.Queued.behindTitle || ""}"` : ""}. Starts by itself when it can.`}>
+                      <Tooltip arrow placement="bottom-start" title={
+                        <Box sx={{ p: 0.25, maxWidth: 250 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 700, display: "block" }}>
+                            {t.Queued.behind ? `⏳ Waiting on ${t.Queued.behind}` : "⏳ Waiting for a free agent slot"}
+                          </Typography>
+                          {t.Queued.behindTitle && (
+                            <Typography variant="caption" sx={{ display: "block", opacity: 0.8 }}>“{t.Queued.behindTitle}”</Typography>
+                          )}
+                          {t.Queued.reason && (
+                            <Typography variant="caption" sx={{ display: "block", mt: 0.6 }}>{t.Queued.reason}</Typography>
+                          )}
+                          <Typography variant="caption" sx={{ display: "block", mt: 0.6, opacity: 0.65 }}>
+                            starts by itself when it can
+                          </Typography>
+                        </Box>}>
                         <Chip size="small" label={t.Queued.behind ? `⏳ behind ${t.Queued.behind}` : "⏳ next free slot"}
                           sx={{ height: 17, fontSize: 9.5, fontWeight: 700, bgcolor: "#eef2ff",
                             color: "#4f46e5", border: "1px solid #c7d2fe" }} />

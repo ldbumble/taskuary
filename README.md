@@ -12,7 +12,7 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![The Taskuary timeline, full of triaged work: the Morning digest report on top, mail and chats filed or turned into tasks with needs-you chips, and the open panel explaining exactly why the selected mail became a task - triage verdict, routing, and the reply draft waiting for approval](docs/screenshot-timeline.png)
+![The Taskuary timeline, full of triaged work: mail, chats and reports filed or turned into tasks with needs-you chips, and the open panel on one mail showing its history (opened, routed) and the AI reply draft waiting for your approval](docs/screenshot-timeline.png)
 
 > ⭐ **Useful to you? Star the repo.** Stars are how other people find Taskuary — and the
 > clearest signal of what to keep building.

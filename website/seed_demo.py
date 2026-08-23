@@ -140,6 +140,24 @@ s.enqueue_dispatch(tid11, tid9, 'claude', 'both would modify website/src/Reports
 s.add_comment(tid11, 'router', 'agent', 'Queued behind TQ-%04d "Report charts render blank in dark mode" - '
               'both would modify website/src/ReportsView.jsx. It starts by itself when that agent finishes.' % tid9)
 
+# 8. the Morning digest, sectioned - the panel renders the emoji headers as real headings,
+# and the digest screenshot is cropped off this row's open panel
+m15 = s.add_message({'ExternalId': 'demodigest', 'Channel': 'report', 'SourceName': 'Morning digest',
+    'Subject': 'Morning digest — the last 3 days, distilled', 'FromName': 'Morning digest',
+    'SentAt': t(0, 5), 'Status': 'filed', 'BodyText': (
+        '\U0001f680 In flight\n'
+        '- TQ-0009 “Report charts render blank in dark mode” — claude is on it; the theme tokens were the culprit.\n'
+        '- TQ-0010 “Weekly census report misses one facility” — codex is on it; tests already pass.\n\n'
+        '⏳ Waiting on you\n'
+        '- TQ-0001 Sarah Chen wants the Q3 vendor spend report — the reply is drafted, one click to send.\n'
+        '- TQ-0004 PTO import for the 7/26-8/8 payroll period — confirm before it writes payroll data.\n\n'
+        '\U0001f4cc Keep honoring\n'
+        '- Vendor newsletters stay filed — you ruled the last three FYI, and triage remembers.\n\n'
+        '\U0001f4c8 Patterns\n'
+        '- Sarah Chen wrote twice in a day about Q3 numbers — the board call is Thursday.\n'
+        '- The nightly export failed twice this week before the fix that closed TQ-0002.')})
+s.add_route(m15, None, 'file', None, 'scheduled report - informational, never a task', [], 'report')
+
 # every report source reads as freshly polled, or the server's STARTUP run files its own
 # rows on top of the fiction (a FAILED census, a raw digest) and they photobomb the shots
 s._exec("UPDATE source SET LastPolledAt=? WHERE Channel='report'", (t(0, 0),))

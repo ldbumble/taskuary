@@ -21,7 +21,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
+import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -621,6 +621,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   <Box sx={{ bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
                     <CoderReport body={rep.Body} />
                   </Box>
+                </>
+              )}
+              {/* the report above is the agent's CLAIM; this is the evidence - files git
+                  says moved, the tests the session ran, CI on the PR, and what is missing */}
+              {sel.TaskId && (rep || diffRun) && (
+                <>
+                  <PanelLabel>Proof of work</PanelLabel>
+                  <ProofCard taskId={sel.TaskId} onOpenTask={onOpenTask} />
                 </>
               )}
 

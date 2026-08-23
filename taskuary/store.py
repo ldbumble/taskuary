@@ -147,6 +147,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'answer_to_agent': 'ask',
                     # replies in the notify chat decide pinged reviews (approve/reject/your text)
                     'phone_approvals': '0',
+                    # watch the CI of a task's pull request and hand red builds back to the
+                    # agent that wrote the code: off | watch (status only) | feedback
+                    'ci_watch': 'off',
                     # the zone timestamps are stamped in (blank = this machine's local). Setting
                     # it makes every displayed time wear its label (2:44 PM EDT) and keeps a
                     # browser in another zone reading the stamps correctly.

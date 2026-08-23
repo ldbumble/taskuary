@@ -22,6 +22,8 @@ import ArticleIcon from "@mui/icons-material/Article";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
+import StorageIcon from "@mui/icons-material/Storage";
+import { Logo, hasLogo } from "./logos.jsx";
 import { ACTION_COLORS, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
@@ -31,14 +33,17 @@ export const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c
   jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF",
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
-  aws: "#ff9900", azure: "#0078d4" };
+  aws: "#ff9900", azure: "#0078d4", database: "#475569", smb_file: "#475569" };
 const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon,
   ai: AutoAwesomeIcon, jira: BugReportIcon, asana: ChecklistIcon, monday: ViewKanbanIcon,
   gitlab: MergeTypeIcon, azdo: ViewKanbanIcon, linear: ChecklistIcon, trello: ViewKanbanIcon,
   notion: ArticleIcon, discord: TagIcon, sentry: ErrorOutlineIcon, pagerduty: NotificationsActiveIcon,
-  aws: CloudQueueIcon, azure: CloudQueueIcon };
+  aws: CloudQueueIcon, azure: CloudQueueIcon, database: StorageIcon, smb_file: StorageIcon };
+// A product named on a card wears its OWN logo where we have one (logos.jsx, self-colored);
+// everything else falls back to a Material glyph tinted with the channel's brand color.
 export const ChannelIcon = ({ channel, sx }) => {
+  if (hasLogo(channel)) return <Logo name={channel} sx={sx} />;
   const Icon = CHANNEL_ICONS[channel] || TerminalIcon;
   return <Icon sx={{ fontSize: 15, color: CHANNEL_COLORS[channel] || "#98a1b3", ...sx }} />;
 };

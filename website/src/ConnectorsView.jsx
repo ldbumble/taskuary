@@ -18,6 +18,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, LandingCard, Empty } from "./ui.jsx";
+import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
 
 /* ── connector metadata: channel + AI connectors (rows in the connector table) ── */
@@ -357,7 +358,10 @@ export default function ConnectorsView() {
       + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
         : c.HasSecret ? " · key saved" : c.Type === "ollama" ? " · local — no key needed" : " · no key yet")
       + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
-    return { key: `c${c.ConnectorId}`, title: c.Name, desc: status, channel: m.channel || c.Type,
+    // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
+    // or Jira and Linear both wearing 'boards', tells you nothing about which is which
+    return { key: `c${c.ConnectorId}`, title: c.Name, desc: status,
+      channel: hasLogo(c.Type) ? c.Type : (m.channel || c.Type),
       haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`,
       go: () => setOpen({ kind: "channel", id: c.ConnectorId }) };
   };
@@ -373,7 +377,7 @@ export default function ConnectorsView() {
     { title: "Project management", cards: ["jira", "asana", "monday", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Data connections", cards: [
       {
-        key: "mssql", title: "Microsoft SQL Server", channel: "report",
+        key: "mssql", title: "Microsoft SQL Server", channel: "mssql",
         desc: (byType.mssql?.LastError ? "connection failing" : byType.mssql?.LastSyncAt ? "connection ✓" : "not set up")
           + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === "mssql").length} reports (built on the Reports tab)`,
         haystack: "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" "),
@@ -387,14 +391,14 @@ export default function ConnectorsView() {
         go: () => setOpen({ kind: "winrm" }),
       }] : []),
       ...Object.entries(DATA_META).filter(([t]) => byType[t]).map(([t, dm]) => ({
-        key: t, title: dm.title, channel: "report",
+        key: t, title: dm.title, channel: t,
         desc: (byType[t].LastError ? "connection failing" : byType[t].LastSyncAt ? "connection ✓" : "not set up")
           + ` · ${reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length} reports (built on the Reports tab)`,
         haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
         go: () => setOpen({ kind: "data", type: t }),
       })),
       ...types.filter((t) => t.status === "planned").map((t) => ({
-        key: `p${t.type}`, title: t.type, desc: "planned", channel: "report", haystack: `${t.type} planned`, planned: true })),
+        key: `p${t.type}`, title: t.type, desc: "planned", channel: t.type, haystack: `${t.type} planned`, planned: true })),
     ]},
   ];
   const hits = q ? groups.flatMap((g) => g.cards.filter((c) => !c.planned && c.haystack.toLowerCase().includes(q.toLowerCase()))

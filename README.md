@@ -12,12 +12,7 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![The Taskuary timeline: email, Telegram, Teams chats, WhatsApp, Slack and scheduled reports on one day-grouped rail — every row triaged, chipped with its task ref and what happened to it (needs you, task created, completed, filed)](docs/screenshot-timeline.png)
-
-*Everything lands on one timeline, triaged — and the Morning digest report opens into the
-panel as your daily brief:*
-
-![The review panel open on the Morning digest: an AI-written brief in sections — In flight (what agents are working), Waiting on you (a drafted reply one click from sending), Keep honoring (your standing verdicts), Patterns (heads-ups) — with the what-should-happen actions below](docs/screenshot-digest.png)
+![The Taskuary timeline: email, Telegram, Teams chats, WhatsApp, Slack and scheduled reports on one day-grouped rail, every row triaged and chipped — and the review panel open on one mail, showing why it became a task, its history, and the AI reply draft with Approve & send waiting on you](docs/screenshot-timeline.png)
 
 > ⭐ **Useful to you? Star the repo.** Stars are how other people find Taskuary — and the
 > clearest signal of what to keep building.

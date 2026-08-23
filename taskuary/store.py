@@ -150,6 +150,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # watch the CI of a task's pull request and hand red builds back to the
                     # agent that wrote the code: off | watch (status only) | feedback
                     'ci_watch': 'off',
+                    # an agent may PROPOSE high-impact actions (open a PR, comment publicly,
+                    # close an issue, run a tool); each lands in Review for approval
+                    'proposals_enabled': '1',
                     # the zone timestamps are stamped in (blank = this machine's local). Setting
                     # it makes every displayed time wear its label (2:44 PM EDT) and keeps a
                     # browser in another zone reading the stamps correctly.

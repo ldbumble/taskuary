@@ -21,6 +21,22 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         verb = 'edit' if (final or '').strip() != (rv.get('DraftText') or '').strip() else 'approve'
     else:
         final, verb = None, verb_in
+    # a PROPOSAL is not a draft reply: approving it RUNS the action the agent asked for
+    # (proposals.execute re-validates - the approval never grants the permission), and
+    # nothing is ever sent to a sender for it
+    if rv.get('Kind') == 'action':
+        from . import proposals
+        if verb in ('approve', 'edit'):
+            try:
+                out = proposals.execute(store, rv, actor)
+            except Exception as e:
+                store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
+                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
+            store.decide_review(rid, VERB2STATUS['approve'], rv.get('DraftText'), actor, note)
+            return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
+        store.decide_review(rid, VERB2STATUS[verb], None, actor, note)
+        store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')
+        return {'ok': True, 'status': VERB2STATUS[verb], 'sent': None, 'send_error': None}
     store.decide_review(rid, VERB2STATUS[verb], final, actor, note)
     if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f'Reviewed draft ({verb}):\n{final}')
     sent, send_err = None, None

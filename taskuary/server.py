@@ -1260,10 +1260,19 @@ def _wrap_task(tid: int, close: bool, sid: str = None):
     report = resolution_text(rep)
     store.add_comment(tid, ACTOR, 'human', 'Closed the session - wrapped up from what was on screen.')
     store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}')
+    # anything the agent PROPOSED becomes a pending review here, at the one moment its whole
+    # transcript is in hand - and refusals are recorded rather than dropped (proposals.py)
+    proposed = []
+    if store.get_settings().get('proposals_enabled', '1') == '1':
+        try:
+            from . import proposals
+            proposed = proposals.collect(store, tid, text, agent)
+        except Exception as e:
+            logger.warning(f'proposal collection failed for task {tid}: {e}')
     if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
         coder_finish(store, tid, rep, None, agent)
     store.audit('terminal', tid, 'wrap', ACTOR, detail={'sid': sid or found, 'close': close})
-    return {'wrap': 'done', 'taskId': tid, 'report': report,
+    return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(close and coder_reply_target(store, tid))}
 
 

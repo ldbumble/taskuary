@@ -223,18 +223,37 @@ AUTO_SESSIONS = 4      # unattended sessions to keep alive at once; past this it
 
 def _auto_code(store, tid):
     """Auto-dispatch puts the CLI on the task in a REAL session - the same one you see when
-    you open the task. Nothing runs where you cannot watch it, interrupt it or answer it."""
-    from . import terminal as term
+    you open the task. Nothing runs where you cannot watch it, interrupt it or answer it.
+
+    A task LIKELY to collide with one already being worked in the same checkout queues behind
+    it instead of racing it (affinity routing - the first agent in has control), and a full
+    house queues for the next free slot. Both drain automatically as sessions end - the card
+    on the board says what it is waiting for."""
+    from . import terminal as term, blackboard as bb
+    agent = store.get_settings().get('default_agent') or 'coder'
     # the note belongs INSIDE the worker: written before the thread started, a task could
     # claim "auto-dispatched" with no session behind it whenever the process died first
     if len([t for t in term.SESSIONS.values() if t.alive]) >= AUTO_SESSIONS:
+        store.enqueue_dispatch(tid, None, agent, f'{AUTO_SESSIONS} agent sessions are already live')
         store.add_comment(tid, 'router', 'agent',
-                          f'Not auto-started: {AUTO_SESSIONS} agent sessions are already live. '
-                          'Open the task and start it when you are ready.')
+                          f'Queued: {AUTO_SESSIONS} agent sessions are already live - '
+                          'it starts by itself when one ends.')
         return
     try:
-        term.start_on_task(store, tid, store.get_settings().get('default_agent') or 'coder', actor='router')
-        store.add_comment(tid, 'router', 'agent', 'auto-started a live coder session (coder_auto_enabled)')
+        cwd = bb.target_cwd(store, tid, agent)
+        ps = bb.peers(store, cwd, exclude_tid=tid) if cwd else []
+        if ps:
+            hit, why = bb.likely_overlap(store, tid, ps)
+            if hit:
+                store.enqueue_dispatch(tid, hit['tid'], agent, why or 'likely to touch the same files')
+                store.add_comment(tid, 'router', 'agent',
+                                  f"Queued behind {hit['ref']} \"{hit['title'][:80]}\" - "
+                                  f"{why or 'likely to touch the same files'}. It starts by itself "
+                                  'when that agent finishes.')
+                return
+        term.start_on_task(store, tid, agent, actor='router')
+        store.add_comment(tid, 'router', 'agent', 'auto-started a live coder session (coder_auto_enabled)'
+                          + (f' - told it about the {len(ps)} agent(s) already in the checkout' if ps else ''))
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f'Auto-start failed: {str(e)[:200]}')

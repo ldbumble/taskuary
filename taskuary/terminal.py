@@ -103,6 +103,11 @@ class Term:
         self.store = store                                # so the pty can file its own transcript when it ends
         self.subs = []                                    # (loop, asyncio.Queue)
         self.taps = []                                    # plain callables, for server-side readers
+        # what was already unclean in the checkout is NOT this session's doing - the snapshot is
+        # what lets files() attribute later dirt to this agent (see blackboard.py)
+        from . import blackboard as _bb
+        self.dirty0 = _bb.dirty(cwd) if task_id else set()
+        self._files = ([], 0.0)
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols)
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
@@ -130,6 +135,9 @@ class Term:
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self.keep()                                       # the transcript must outlive the pty
         self._emit(None)
+        if self.store and self.task_id:                   # whoever queued behind this session gets its turn
+            from . import blackboard
+            blackboard.drain_later(self.store)
 
     def keep(self):
         """File this session's readable transcript on its task. A pty is not storage: sessions are
@@ -265,10 +273,21 @@ class Term:
         lines = [l for l in plain(''.join(self.buf)[-6000:]).splitlines() if l.strip()]
         return lines[-n:]
 
+    def files(self) -> list:
+        """What THIS session has modified so far: dirty now minus dirty at open. Cached a few
+        seconds - the board polls, and a git status per poll per session adds up."""
+        got, at = self._files
+        if time.time() - at < 4 or not (self.task_id and self.alive): return got
+        from . import blackboard as bb
+        try: got = sorted(bb.dirty(self.cwd) - self.dirty0)[:20]
+        except Exception: got = []
+        self._files = (got, time.time())
+        return got
+
     def info(self, tail=0):
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'cmd': ' '.join(self.argv),
+                'idle': self.idle(), 'cmd': ' '.join(self.argv), 'files': self.files(),
                 **({'tail': self.tail(tail)} if tail else {})}
 
 
@@ -588,6 +607,12 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     m = msgs[-1] if msgs else None
     parts = [f"TASK {task_ref(tid)} - {t.get('Title') or ''}."]
     if repo or cwd: parts.append(f"REPO: {repo or cwd} - you are already in it; work only here.")
+    # the blackboard: agents sharing THIS checkout, told to a newcomer once, up front. Another
+    # repo's agents are deliberately absent - awareness costs prompt tokens, so it is spent
+    # only where a collision is physically possible.
+    from . import blackboard as bb
+    aware = bb.briefing(store, cwd, exclude_tid=tid) if cwd else ''
+    if aware: parts.append(aware)
     if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
     from .triage import strip_boilerplate
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
@@ -765,6 +790,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
     term = open_session(store, agent, tid, repo, None, 32, 110, actor, model,
                         seed_fn=lambda cwd: seed_text(store, tid, instruction, repo, cwd))
+    store.clear_dispatch(tid)          # started (by whatever road): it is no longer waiting
     if repo and why != 'tagged on the task':
         store.add_comment(tid, actor, 'human', f'Session opened in {repo} - {why}.')
     store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',

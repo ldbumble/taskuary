@@ -96,7 +96,9 @@ One tab per question, two lines each; the details live in the app's own help tex
   merge, "not our task" (which teaches triage for next time).
 - **Board** — the agent kanban: Queued / Working / Waiting on you / Done, by what is TRUE
   right now — a live session counts as working, and a session gone quiet moves its card to
-  *waiting on you* with the question showing. Cards working now show a live peephole.
+  *waiting on you* with the question showing. Cards working now show a live peephole and
+  the files their agent has modified so far; a queued card says whom it waits behind (see
+  [Many agents, one repo](#many-agents-one-repo--no-stepping-on-each-other)).
 - **Tasks** — **the page is a terminal**: your CLI in the task's repo, prompt typed in and
   sent, and you keep talking. Taskuary picks the checkout from the SOUL.md repo map (one
   click to override); the prompt carries the ask, the mail, the files and the rules, so the
@@ -129,6 +131,31 @@ Two principles hold everywhere: **nothing sends or ships without your approval**
 **agents work where you can watch** — a real terminal, never a hidden run. Out of the box
 it works the mail (auto-dispatch + auto-draft, both switchable); triage is AI-gated, so
 with no AI connected messages file visibly instead of heuristics spraying tasks.
+
+## Many agents, one repo — no stepping on each other
+
+![Two agents share one checkout: each working card shows the files ITS agent has modified (claude in the theme files, codex in the report code and its tests), and a third task waits in Queued with a "behind TQ-0009" chip — the hover explains that both would modify ReportsView.jsx, and that it starts by itself when it can](docs/screenshot-board.png)
+
+Auto-dispatch can put several CLIs to work at once — and the board keeps them out of each
+other's way with three light moves. No locks, no worktrees, no manager agent:
+
+- **Affinity routing** — before a task auto-starts, Taskuary asks the triage brain one cheap
+  question: would it likely modify the same files as something already running in that
+  checkout? Likely yes → the task **queues behind** the running one — the ⏳ chip on the card
+  says behind whom and why (hover it) — and starts by itself the moment that agent finishes.
+  A full house (every session slot busy) queues the same way. Wrong guesses are cheap by
+  design: a wrong *yes* waits some minutes, a wrong *no* is caught by the next move.
+- **The blackboard** — the board itself is what agents know about each other. Every working
+  card shows the files its agent has **actually modified so far** — read off git (dirty
+  files minus what was already dirty when the session opened) and the run trace, never off
+  a plan, because agents predicting their own scope get it wrong and their tracks do not.
+  An agent starting in the same checkout gets exactly that picture in its opening prompt:
+  who else is here, on which task, in which files.
+- **First in has control** — and the newcomer is told so, plainly: those files are the other
+  agent's; never edit, revert, stash or commit them; no `git add -A` / `commit -a`; stage
+  only what you yourself changed. Agents in *other* repos are deliberately never mentioned —
+  awareness costs prompt tokens, so they are spent only where a collision is physically
+  possible.
 
 ## Telegram & WhatsApp — the funnel in your pocket
 

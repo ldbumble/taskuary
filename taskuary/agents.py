@@ -220,9 +220,12 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
         # the owner's morning read, not an agent's business.
         from .learn import injectable
         lrn = injectable(store.doc('learned') or '')
+        from .blackboard import briefing
+        aware = briefing(store, profile.get('cwd') or os.getcwd(), exclude_tid=task_id)
         prompt = ((f"Operator's document (authoritative rules):\n{soul}\n\n---\n\n" if soul else '')
                   + (f"Learned profile (distilled from the owner's verdicts):\n{lrn}\n\n---\n\n" if lrn else '')
-                  + ctx + (f'\n\n{mem}' if mem else '') + f'\n\nInstruction: {instruction}')
+                  + ctx + (f'\n\n{mem}' if mem else '') + (f'\n\n{aware}' if aware else '')
+                  + f'\n\nInstruction: {instruction}')
         result, session_id, diff = run_cli(profile, prompt, _t)
         store.update_run(run_id, {'Status': 'done', 'Result': result, 'TraceJson': json.dumps(trace),
                                   **({'SessionId': session_id} if session_id else {}),
@@ -235,3 +238,6 @@ def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str 
         store.update_run(run_id, {'Status': 'error', 'LastError': str(e)[:2000], 'TraceJson': json.dumps(trace)}, finished=True)
         store.audit('run', run_id, 'error', agent_name, 'agent', str(e)[:2000], run_id)
         return {'run_id': run_id, 'status': 'error', 'result': None}
+    finally:
+        from .blackboard import drain_later
+        drain_later(store)                 # whoever queued behind this run gets its turn

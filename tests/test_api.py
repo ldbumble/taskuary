@@ -858,6 +858,7 @@ class ApiTests(unittest.TestCase):
             def __init__(self): self.last = _t.time()
             idle = term.Term.idle
             tail = lambda self, n=3: ['Christina needs an AD account created. How do you want it done?']
+            files = lambda self: ['taskuary/ad.py']
             info = term.Term.info
 
         term.SESSIONS['sid1'] = FakeTerm()

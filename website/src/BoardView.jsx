@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
-  DialogTitle, MenuItem, Select, TextField, Typography,
+  DialogTitle, MenuItem, Select, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -40,12 +40,33 @@ const agentBadge = (name, runStatus, isLive, cmds = {}) => {
   return { word: hit[0], color: hit[1] };
 };
 
-// A card's peephole into the running agent: the last couple of console lines, live.
-// Click the card for the whole terminal (task page).
+// A card's peephole into the running agent: the last couple of console lines, live - and the
+// blackboard line above them: the files THIS agent has modified so far (git-attributed, so it
+// is true even when the agent never says so). Every other agent is told the same list.
+const basename = (f) => String(f).split(/[\\/]/).pop();
+const FileChips = ({ files }) => (files || []).length === 0 ? null : (
+  <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.5, mb: 0.5 }}>
+    {files.slice(0, 4).map((f) => (
+      <Tooltip key={f} title={f} arrow>
+        <Typography variant="caption" sx={{ ...mono, fontSize: 9, lineHeight: "14px", px: 0.55,
+          color: CATPPUCCIN.green, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 0.75 }}>
+          ✎ {basename(f)}
+        </Typography>
+      </Tooltip>
+    ))}
+    {files.length > 4 && (
+      <Tooltip title={files.slice(4).map(basename).join(", ")} arrow>
+        <Typography variant="caption" sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.dim }}>+{files.length - 4}</Typography>
+      </Tooltip>
+    )}
+  </Box>
+);
+
 const LiveTail = ({ run }) => {
   const waiting = run.kind === "session" && run.idle >= IDLE_WAITING;
   return (
   <Box sx={{ mt: 0.75, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 1, py: 0.6 }}>
+    <FileChips files={run.files} />
     {(run.tail || []).slice(-2).map((l, i, all) => (
       <Typography key={i} noWrap variant="caption"
         sx={{ ...mono, display: "block", fontSize: 9.5, lineHeight: 1.55,
@@ -209,6 +230,14 @@ export default function BoardView({ onOpenTask }) {
                   {live[t.TaskId] && <LiveTail run={live[t.TaskId]} />}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75 }}>
                     <Chip size="small" label={t.Kind} sx={{ height: 17, fontSize: 9.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
+                    {t.Queued && (
+                      <Tooltip arrow placement="right" title={`${t.Queued.reason || "held back"}${t.Queued.behind
+                          ? ` — waiting on ${t.Queued.behind} "${t.Queued.behindTitle || ""}"` : ""}. Starts by itself when it can.`}>
+                        <Chip size="small" label={t.Queued.behind ? `⏳ behind ${t.Queued.behind}` : "⏳ next free slot"}
+                          sx={{ height: 17, fontSize: 9.5, fontWeight: 700, bgcolor: "#eef2ff",
+                            color: "#4f46e5", border: "1px solid #c7d2fe" }} />
+                      </Tooltip>
+                    )}
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
                     <Box sx={{ flex: 1 }} />

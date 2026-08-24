@@ -4,7 +4,8 @@ live probe (token/chat-read/repo-discovery); poll_channels is the scheduled inge
 funnels mail and chats through the same triage as everything else. Credentials left blank
 fall back to AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET env vars.
 """
-import json, os, re, time
+import base64, hashlib, json, os, re, time
+from html import unescape
 from datetime import datetime, timedelta
 import requests
 from loguru import logger
@@ -402,6 +403,32 @@ def _graph_user(tok, oid, cache):
     return who
 
 
+# A picture in a Teams message is not an attachment. Graph reports attachments: [] and puts
+# the image in the BODY as <img src=".../hostedContents/{id}/$value">, which _clean strips
+# along with every other tag - so "the screenshot IS the ask" worked for mail and silently
+# lost the picture on chat. Same shape as a Graph fileAttachment coming out, so the existing
+# pipeline (images_for_triage before the row exists, save_attachments after) is reused whole.
+_HOSTED = re.compile(r'<img[^>]+src="([^"]*?/hostedContents/[^"]*?)"', re.I)
+
+
+def hosted_images(tok: str, html: str, cap: int = 4) -> list:
+    out = []
+    for i, url in enumerate(dict.fromkeys(_HOSTED.findall(html or '')).keys()):
+        if i >= cap: break
+        try:
+            r = requests.get(unescape(url), headers={'Authorization': f'Bearer {tok}'}, timeout=30)
+            r.raise_for_status()
+        except Exception as e:
+            logger.warning(f'teams hosted image fetch failed: {e}')
+            continue
+        ct = (r.headers.get('Content-Type') or 'image/png').split(';')[0].strip()
+        out.append({'id': hashlib.sha1(url.encode()).hexdigest()[:16],
+                    'name': f"image-{i + 1}.{(ct.split('/')[-1] or 'png').replace('jpeg', 'jpg')}",
+                    'contentType': ct, 'size': len(r.content), 'isInline': True,
+                    'contentBytes': base64.b64encode(r.content).decode()})
+    return out
+
+
 def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
@@ -423,17 +450,33 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         topic, kind = _chat_meta(tok, cid, chats) if cid else ('', 'chat')
         name, addr = _graph_user(tok, user['id'], users)
         name = user.get('displayName') or name
+        # fetched BEFORE triage, like the mail path: the classifier has to see the screenshot
+        # to judge it, and afterwards is too late
+        raw_html = (m.get('body') or {}).get('content') or ''
+        atts = hosted_images(tok, raw_html)
+        # a picture we could not FETCH must not vanish silently the way it used to. Graph
+        # refuses hostedContents unless the app registration carries ChatMessage.Read.All, and
+        # "the screenshot was the whole ask" is exactly the message you cannot afford to read
+        # as an empty sentence - so the row says what is missing and why.
+        missed = len(set(_HOSTED.findall(raw_html))) - len(atts)
+        if missed > 0:
+            body += ('\n\n[' + f"{missed} image{'s' if missed > 1 else ''} in this message could not be read - "
+                     'Graph refused the download. The Teams app registration needs the '
+                     'ChatMessage.Read.All application permission (admin consent) for chat images.]')
         common = {'external_id': f'teams:{cid}:{m["id"]}', 'channel': 'teams',
                   'subject': topic or (f'Teams chat with {name}' if kind == 'oneOnOne' else f'Teams {kind}'),
                   'body': body[:20000], 'conversation_id': f'teams:{cid}',
                   'sent_at': _local(m.get('createdDateTime') or ''), 'source_link': m.get('webUrl'),
-                  'source_name': upn}
+                  'source_name': upn, 'images': images_for_triage(store, atts)}
         if user['id'] == me:                       # your own chat lines are context, never work
             n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
                                     'your message in this chat - kept for context')
             continue
         out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'
+        if atts and out.get('message_id') and out['status'] != 'duplicate':
+            try: save_attachments(store, out['message_id'], atts, f'teams:{m["id"]}')
+            except Exception as e: logger.warning(f'saving teams images for {m["id"]} failed: {e}')
         if cid: touched.add(cid)
     for cid in touched if read_it else ():
         mark_chat_read(tok, upn, cid, me)

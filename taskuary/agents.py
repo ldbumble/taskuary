@@ -4,7 +4,7 @@ over STDIN (argv length limits are real on Windows), JSON output parsed when ava
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
 """
-import json, os, re, subprocess, threading, time
+import json, os, re, shutil, subprocess, threading, time
 from datetime import datetime
 from loguru import logger
 
@@ -47,15 +47,39 @@ def _fresh_path() -> str:
     return os.pathsep.join(p for p in parts if p)
 
 
+def _shim_target(path: str) -> list:
+    """What an npm .CMD shim actually runs. The shim is four lines of batch around one real
+    program - claude.CMD ends with "%dp0%\node_modules\@anthropic-ai\claude-code\bin\claude.exe" %* -
+    and going through cmd /c to reach it is what costs us the prompt: cmd.exe owns & | < > and
+    stray quotes, so the first prompt cannot be passed as an ARGUMENT and has to be TYPED into
+    the TUI instead, in 160-char bites that a busy input loop drops. Spawn the target directly
+    and the prompt travels as argv - atomically, or not at all. [] = could not tell, use cmd."""
+    try: txt = open(path, encoding='utf-8', errors='replace').read()
+    except OSError: return []
+    here = os.path.dirname(path)
+    found = []
+    for tok in re.findall(r'"([^"]+)"', txt):
+        real = os.path.normpath(tok.replace('%dp0%', here).replace('%~dp0', here))
+        if os.path.isfile(real) and real.lower().endswith(('.exe', '.js')): found.append(real)
+    exe = next((f for f in found if f.lower().endswith('.exe')), None)
+    js = next((f for f in found if f.lower().endswith('.js')), None)
+    if exe and js: return [exe, js]          # node.exe + the cli script
+    if exe: return [exe]
+    if js:
+        node = shutil.which('node')
+        return [node, js] if node else []
+    return []
+
+
 def _resolve_cmd(name: str) -> list:
-    """Windows can't CreateProcess a bare 'claude': npm installs it as claude.cmd, which
-    only PATH-resolves via which() and only executes through cmd /c."""
-    import shutil
+    """Windows can't CreateProcess a bare 'claude': npm installs it as claude.cmd, which only
+    PATH-resolves via which(). Reaching THROUGH the shim beats running it under cmd /c - see
+    _shim_target for why that difference decides whether a prompt arrives whole."""
     path = shutil.which(name) or shutil.which(name, path=_fresh_path())
     if not path:
         raise FileNotFoundError(f"'{name}' not found on PATH - is the CLI installed?")
     if os.name == 'nt' and path.lower().endswith(('.cmd', '.bat')):
-        return ['cmd', '/c', path]
+        return _shim_target(path) or ['cmd', '/c', path]
     return [path]
 
 

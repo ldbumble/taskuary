@@ -182,65 +182,13 @@ def memory_block(store, messages: list) -> str:
     return ('Standing notes (learned from the owner - FOLLOW these):\n' + '\n'.join(hits)) if hits else ''
 
 
-def dispatch(store, task_id: int, agent_name: str, instruction: str, actor: str = 'system',
-             profile_override: dict = None) -> dict:
-    """One open->close agent run on a task; the run row is the live progress channel."""
-    agent = store.get_agent(agent_name)
-    if not agent: raise ValueError(f'unknown agent: {agent_name}')
-    profile = {**json.loads(agent.get('Config') or '{}'), **(profile_override or {})}
-    run_id = store.start_run(task_id, agent_name, instruction, actor)
-    store.audit('run', run_id, 'dispatch', actor, 'human', {'agent': agent_name, 'task': task_ref(task_id)}, run_id)
-    store.update_task(task_id, {'Status': 'in_progress', 'Assignee': f'agent:{agent_name}'}, actor)
-    trace = []
-    wrote = {'at': 0.0}
-    def _t(kind, name, detail):
-        cap = 12000 if kind == 'prompt' else 2000
-        detail = str(detail)[:cap]
-        if kind == 'live' and trace and trace[-1]['kind'] == 'live' and trace[-1]['detail'] == detail: return
-        trace.append({'at': datetime.now().isoformat(sep=' ', timespec='seconds'), 'kind': kind,
-                      'name': name, 'detail': detail})
-        # long streams: drop the oldest live line past 260 events, and flush live lines to
-        # the DB at most ~1/s (everything else lands immediately; final flush is guaranteed)
-        if len(trace) > 260:
-            i = next((k for k, e in enumerate(trace) if e['kind'] == 'live'), None)
-            if i is not None: trace.pop(i)
-        if kind != 'live' or time.time() - wrote['at'] > 1.0:
-            wrote['at'] = time.time()
-            store.update_run(run_id, {'TraceJson': json.dumps(trace)})
-    try:
-        ctx = task_context(store, task_id)
-        mem = memory_block(store, store.list_messages(task_id))
-        soul = store.doc('soul')
-        if agent.get('Kind') == 'coding':
-            cdoc = store.doc('coder')
-            if cdoc: soul = f'{soul}\n\n{cdoc}' if soul else cdoc
-        # LEARNED.md's active sections ride along (never its untested hypotheses): the profile
-        # says how the owner works. DIGEST.md deliberately does NOT - the task context below
-        # already tells the agent everything about ITS task, and cross-task in-flight status is
-        # the owner's morning read, not an agent's business.
-        from .learn import injectable
-        lrn = injectable(store.doc('learned') or '')
-        from .blackboard import briefing
-        from .ingest import source_rules
-        aware = briefing(store, profile.get('cwd') or os.getcwd(), exclude_tid=task_id)
-        msgs = [x for x in store.list_messages(task_id) if x.get('Status') != 'context']
-        sr = source_rules(store, msgs[-1]) if msgs else ''
-        prompt = ((f"Operator's document (authoritative rules):\n{soul}\n\n---\n\n" if soul else '')
-                  + (f"Learned profile (distilled from the owner's verdicts):\n{lrn}\n\n---\n\n" if lrn else '')
-                  + ctx + (f'\n\n{mem}' if mem else '') + (f'\n\nRules for this source: {sr}' if sr else '')
-                  + (f'\n\n{aware}' if aware else '') + f'\n\nInstruction: {instruction}')
-        result, session_id, diff = run_cli(profile, prompt, _t)
-        store.update_run(run_id, {'Status': 'done', 'Result': result, 'TraceJson': json.dumps(trace),
-                                  **({'SessionId': session_id} if session_id else {}),
-                                  **({'DiffText': diff} if diff else {})}, finished=True)
-        store.add_comment(task_id, agent_name, 'agent', result)
-        store.audit('run', run_id, 'finish', agent_name, 'agent', {'trace_events': len(trace)}, run_id)
-        return {'run_id': run_id, 'status': 'done', 'result': result}
-    except Exception as e:
-        logger.exception(f'taskuary dispatch failed (run {run_id})')
-        store.update_run(run_id, {'Status': 'error', 'LastError': str(e)[:2000], 'TraceJson': json.dumps(trace)}, finished=True)
-        store.audit('run', run_id, 'error', agent_name, 'agent', str(e)[:2000], run_id)
-        return {'run_id': run_id, 'status': 'error', 'result': None}
-    finally:
-        from .blackboard import drain_later
-        drain_later(store)                 # whoever queued behind this run gets its turn
+# dispatch() lived here: one open->close HEADLESS run on a task, the CLI working and closing
+# where nobody could watch it, interrupt it or answer it. That is precisely the thing this app
+# exists to replace, and every road that used it now opens a REAL session instead
+# (terminal.start_on_task) or, for a two-sentence reply, asks the main AI directly
+# (responder.write_draft). It is deleted rather than left dormant: a headless runner sitting
+# in the module is a headless runner somebody wires back up.
+#
+# run_cli above STAYS, and is not the same thing: it is a one-shot "ask this CLI a question"
+# used as a cheap BRAIN (llm.make_cli_llm - triage, drafts, summaries on an agent's light
+# model) and by the connector test. No task, no run row, no work performed.

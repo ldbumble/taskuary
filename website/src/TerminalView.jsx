@@ -53,9 +53,20 @@ const savedTheme = () => {
 // between watching a diff go past and reading it.
 const SIZES = [7, 8, 9, 10, 11, 12, 12.5, 14];
 const DEFAULT_SIZE = 10;
+// Changing DEFAULT_SIZE moves nobody who has already used the app: their old choice is in
+// localStorage and wins forever. Bumping this rev re-defaults every browser ONCE, then their
+// next A-/A+ sticks as usual - the only way a new default reaches people who are already here.
+const SIZE_REV = "2";
 const savedSize = () => {
-  try { const n = parseFloat(localStorage.getItem("tq-term-size")); return SIZES.includes(n) ? n : DEFAULT_SIZE; }
-  catch { return DEFAULT_SIZE; }
+  try {
+    if (localStorage.getItem("tq-term-size-rev") !== SIZE_REV) {
+      localStorage.setItem("tq-term-size-rev", SIZE_REV);
+      localStorage.setItem("tq-term-size", String(DEFAULT_SIZE));
+      return DEFAULT_SIZE;
+    }
+    const n = parseFloat(localStorage.getItem("tq-term-size"));
+    return SIZES.includes(n) ? n : DEFAULT_SIZE;
+  } catch { return DEFAULT_SIZE; }          // private mode: the default every time, which is fine
 };
 // Leading has to come down WITH the size or the gain is thrown away: 1.15 line-height on 7px
 // text spends a fifth of the pane on whitespace between lines nobody is reading closely.

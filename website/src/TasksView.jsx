@@ -222,7 +222,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
       {/* ── list: one anchored panel - filter header on top, rows scroll inside ── */}
-      <Box sx={{ width: 340, flexShrink: 0 }}>
+      {/* 372, not 340: the header ran ~6px over - "done 30" lost its last digit, and a count
+          you cannot read is worse than no count. The extra room buys the row titles a few
+          characters too, which is where taskuary#18 [Containerization]... was being cut. */}
+      <Box sx={{ width: 372, flexShrink: 0 }}>
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
         <Box sx={{ ...card, p: 0, overflow: "hidden", display: "flex", flexDirection: "column",
           height: "calc(100vh - 118px)", minHeight: 420 }}>
@@ -231,13 +234,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             {/* each pill says how many live behind it - a filter you cannot size up is a guess.
                 The pills give way, never the New button: four-digit counts must not be able to
                 push it off the edge of a 340px panel again. */}
-            <Box sx={{ minWidth: 0, overflowX: "auto", "&::-webkit-scrollbar": { display: "none" },
+            <Box sx={{ flex: 1, minWidth: 0, overflowX: "auto", "&::-webkit-scrollbar": { display: "none" },
               scrollbarWidth: "none" }}>
               <FilterPills value={filter} onChange={setFilter}
                 options={STATE_FILTERS.map((f) => ({ ...f,
                   n: !tasks ? null : f.key ? tasks.filter((x) => inBucket(x, f.key)).length : tasks.length }))} />
             </Box>
-            <Box sx={{ flex: 1, minWidth: 4 }} />
             {/* flexShrink: the pills would otherwise squeeze this until only half the + was
                 left on screen, and a clipped button reads as a rendering fault */}
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}

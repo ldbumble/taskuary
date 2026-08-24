@@ -1,7 +1,8 @@
 """Real terminals, in the app: a CLI agent (or a plain shell) spawned under a pseudo-tty,
-its bytes streamed to the browser over a WebSocket and rendered by xterm.js. Unlike the
-headless runs (agents.run_cli - pipes, one prompt in, one result out) this is INTERACTIVE:
-the agent's own TUI, its approval prompts, and your typing all go through it.
+its bytes streamed to the browser over a WebSocket and rendered by xterm.js. This is the ONLY
+way an agent works here: headless runs are gone (see the note at the foot of agents.py), so
+every piece of work happens somewhere you can watch it, interrupt it and answer it - the
+agent's own TUI, its approval prompts and your typing all go through this.
 
 Windows uses ConPTY via pywinpty; POSIX uses the stdlib pty module.
 """
@@ -24,6 +25,8 @@ SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate th
 # live testing (Ink's long-paste dropping). Chunks with a breath between give it frames.
 SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
+SOUL_CHARS = 1200                   # ...and of SOUL.md: context, not the operative ruleset,
+                                    # and every char is another char to type into a TUI
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
 # to boot dialogs eating keystrokes (codex's update chooser once swallowed half a toe and the
@@ -226,6 +229,21 @@ class Term:
                     time.sleep(SEED_CHUNK_GAP)
                 time.sleep(.5)                            # let the box finish laying the paste out
                 if not self.alive: return
+                # The toe proved the box was LISTENING. Nothing proved the PAYLOAD arrived - and
+                # _echoed(), written for exactly this question, was never called. A TUI that
+                # drops a bite mid-paste leaves a SPLICE, and a splice submits happily: TQ-0038's
+                # "Fix employee id's" ran straight into the flattened CODER.md behind it and the
+                # agent spent ten minutes working "fix emd for every coder run" - a sentence
+                # nobody wrote, in a repo the eaten REPO: line never named. A prompt that did not
+                # go in is recoverable; a garbled one that did is not.
+                end = time.time() + 8
+                while self.alive and not self._echoed() and time.time() < end: time.sleep(.25)
+                if self.alive and not self._echoed():
+                    logger.warning(f'terminal {self.sid}: the prompt landed incomplete - clearing and retyping')
+                    self.write('\x15')                    # kill-line: a retype must not glue onto the wreckage
+                    time.sleep(.4)
+                    if not self.settle(SEED_SETTLE): return
+                    continue
                 for key in ('\r', '\r', '\n'):
                     was = self.n
                     self.write(key)
@@ -640,6 +658,15 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                  if str(c.get('Body') or '').startswith(PAUSE_MARKER)), None)
     if note: parts.append('HANDOVER: an earlier session on this task was paused and left this - '
                           f'continue from it, do not start over: {note[:3000]}')
+    # SOUL.md rides in WITH the coder rules, because the coder rules refer to it: CODER.md says
+    # "work only in the repository the task names (see the repository map in SOUL.md)" and
+    # claims it is "stacked on top of SOUL.md for every coder run" - and for a live session it
+    # never was. A coder found this itself, went looking for SOUL.md on disk, found three
+    # unrelated copies in Downloads and concluded it had been told to consult a document it is
+    # structurally incapable of seeing. It was right. These docs live in Taskuary's database;
+    # if the prompt does not carry them, nothing does.
+    soul = ' '.join(str(store.doc('soul') or '').split())[:SOUL_CHARS]
+    if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {soul}')
     rules = rules_text(store)
     if rules: parts.append(f'RULES: {rules}')
     # The job, spelled out. An agent handed a bare task description went looking for the ticket

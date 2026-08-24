@@ -456,9 +456,9 @@ class TerminalTests(unittest.TestCase):
         # fake_tui reads stdin in CANONICAL mode: macOS caps a line at 1024 bytes and drops the
         # overflow at the tty layer. Real TUIs are raw-mode (no cap) - so trim what only bloats
         # this test's prompt, and assert it fits, or the failure mode is invisible.
-        saved_coder = server.store.get_doc('coder')
-        server.store.save_doc('coder', '', 'test')
-        self.addCleanup(lambda: server.store.save_doc('coder', saved_coder or '', 'test'))
+        saved = {n: server.store.get_doc(n) for n in ('coder', 'soul')}
+        for n in saved: server.store.save_doc(n, '', 'test')
+        self.addCleanup(lambda: [server.store.save_doc(n, v or '', 'test') for n, v in saved.items()])
         tid = c.post('/api/tasks', json={'Title': 'payroll adjustments post to the wrong month',
                                          'Kind': 'coding'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:E2E', 'Channel': 'email',

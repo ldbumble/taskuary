@@ -152,17 +152,13 @@ def resolution_of(store, task_id: int):
 
 
 def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None) -> str:
-    """The one door every reply comes through. A CLI agent named `responder` takes over only
-    if the owner deliberately configured one; otherwise the main AI writes it."""
-    from . import agents as hub_agents
-    resolution = resolution or resolution_of(store, task_id)
-    if store.get_agent('responder'):
-        ask = 'Draft the reply this message needs.' + (
-            f'\nThe work is already done - report it, do not promise it:\n{resolution}' if resolution else '')
-        out = hub_agents.dispatch(store, task_id, 'responder', ask, actor)
-        if out['status'] != 'done': raise RuntimeError('the responder agent failed - see the run log')
-        store.update_review_draft(review_id, out['result'], out['run_id'])
-        return out['result']
+    """The one door every reply comes through - and there is only one road behind it now.
+
+    An agent named `responder` used to take this over and run HEADLESS: a CLI opened, worked
+    and closed where nobody could watch it, interrupt it or answer it. That is the thing this
+    app exists to replace, so it is gone. Coding work goes to a real session you can see
+    (terminal.start_on_task); a reply is two sentences and belongs to the main AI, which
+    writes it here in under a second and parks it for approval."""
     return draft_for_review(store, task_id, review_id, llm, resolution)
 
 

@@ -466,8 +466,9 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         missed = len(set(_HOSTED.findall(raw_html))) - len(atts)
         if missed > 0:
             body += ('\n\n[' + f"{missed} image{'s' if missed > 1 else ''} in this message could not be read: "
-                     'Microsoft refuses image downloads to an app-only Teams connection '
-                     '(403 AclCheckFailed) however the app is consented. Open it in Teams to see it.]')
+                     'Microsoft refused the download for THIS chat (403) - it happens on group '
+                     'threads with external participants, whatever the app is consented for. '
+                     'Images in your other chats come through normally. Open it in Teams to see it.]')
         common = {'external_id': f'teams:{cid}:{m["id"]}', 'channel': 'teams',
                   'subject': topic or (f'Teams chat with {name}' if kind == 'oneOnOne' else f'Teams {kind}'),
                   'body': body[:20000], 'conversation_id': f'teams:{cid}',

@@ -688,12 +688,20 @@ export const FilterPills = ({ options, value, onChange }) => (
       return (
         <Box key={key} onClick={() => onChange(key)}
           sx={{ px: 1.25, py: 0.45, borderRadius: 1.75, cursor: "pointer", fontSize: 11.5,
+            display: "inline-flex", alignItems: "center", gap: 0.55,
             fontWeight: on ? 700 : 500, lineHeight: 1.4, userSelect: "none", whiteSpace: "nowrap",
             bgcolor: on ? c.bg : "transparent", color: on ? c.fg : DIM,
             border: `1px solid ${on ? c.bd : "transparent"}`,
             boxShadow: on ? "0 1px 2px rgba(16,24,40,.08)" : "none",
             transition: "all .15s", "&:hover": on ? {} : { bgcolor: "#e9ecf1", color: "#1c2536" } }}>
           {o.label ?? (o || "all")}
+          {/* the count is a BADGE, not the last word of the label - glued on with a space,
+              "needs you 2" reads as one phrase and the number disappears into the name */}
+          {o.n != null && (
+            <Box component="span" sx={{ px: 0.55, py: 0.05, borderRadius: 99, fontSize: 10, fontWeight: 700,
+              fontVariantNumeric: "tabular-nums", lineHeight: 1.5,
+              bgcolor: on ? "rgba(255,255,255,.7)" : "#e3e7ee", color: on ? c.fg : "#8a94a6" }}>{o.n}</Box>
+          )}
         </Box>
       );
     })}

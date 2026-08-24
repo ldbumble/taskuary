@@ -610,7 +610,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <IconButton size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
-          {detail?.ref} · uncommitted work in this checkout — what a push would carry
+          {detail?.ref} · everything a push would carry
+          {/* an agent told to "commit locally and stop" leaves a CLEAN tree - saying only
+              "uncommitted work" over a finished job read as "it did nothing" */}
+          {diff?.ahead ? ` — ${diff.ahead} commit${diff.ahead === 1 ? "" : "s"} ahead of ${diff.upstream}, plus anything uncommitted`
+                       : diff?.upstream ? ` — measured against ${diff.upstream}` : ""}
         </Typography>
         {!diff ? <CircularProgress size={20} sx={{ m: 2 }} />
           : diff.why ? <Empty>{diff.why}</Empty>

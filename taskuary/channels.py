@@ -629,7 +629,7 @@ def _since(s, backfill_days: int = 0):
     return min(last, datetime.now() - timedelta(days=backfill_days)) if backfill_days else last
 
 
-def poll_channels(store, backfill_days: int = 0) -> int:
+def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
     """Ingest new items for every connection the owner marked as a TRIGGER, through the
     same triage funnel (incl. the configured AI, if any). A connection without the trigger
     role is still usable by agents and reports - it just never creates work on its own.
@@ -651,6 +651,11 @@ def poll_channels(store, backfill_days: int = 0) -> int:
         if (not roles & {'trigger', 'feed'} and not (c['Type'] == 'github' and _gh_explicit(store))
                 and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue
         file_only = 'trigger' not in roles
+        # said as it happens, not at the end: the timeline is refreshing while this runs, so
+        # "reading Outlook" beside rows that are already arriving beats a spinner and a wait
+        if progress:
+            try: progress(c['Type'], n)
+            except Exception: pass
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:
             if c['Type'] in ('outlook', 'teams'):

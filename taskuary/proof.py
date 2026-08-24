@@ -96,14 +96,30 @@ def _git(cwd, *args, ok=(0,)):
         return ''
 
 
+def push_base(cwd: str) -> tuple:
+    """What a push would measure against, and how many commits are already stacked on it.
+
+    HEAD was the wrong answer and the panel proved it: an agent that finishes its work with
+    `git commit` - which is what CODER.md tells it to do, commit locally and stop - left the
+    reviewer saying "the working tree is clean" over a completed job. Committed-but-unpushed
+    IS what a push carries. So the base is the upstream branch when the checkout tracks one,
+    and only a checkout with nowhere to push falls back to HEAD.
+    """
+    up = _git(cwd, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}').strip()
+    if not up: return 'HEAD', 0, ''
+    ahead = _git(cwd, 'rev-list', '--count', f'{up}..HEAD').strip()
+    return up, int(ahead or 0), up
+
+
 def working_diff(cwd: str) -> str:
-    """What the agent has done to this checkout and not committed - and it is TWO questions,
-    because `git diff` shows edits to files git already knows and says nothing at all about
-    the files the agent just created. A review that silently omits every new file is not a
-    review, so the untracked ones are diffed against nothing and appended."""
+    """Everything a push would carry: commits made and not pushed, edits not committed, and
+    files the agent created that git has never seen. Three questions, because `git diff HEAD`
+    answers only the middle one - it goes quiet the moment work is committed, and says nothing
+    ever about an untracked file."""
     import os
     if not cwd or not os.path.isdir(cwd): return ''
-    out = [_git(cwd, 'diff', 'HEAD')]                          # staged and unstaged alike
+    base, _ahead, _ = push_base(cwd)
+    out = [_git(cwd, 'diff', base)]                            # committed, staged and unstaged
     status = _git(cwd, 'status', '--porcelain', '-uall')       # -uall: a new FOLDER lists its files
     for line in status.splitlines():
         if not line.startswith('??'): continue
@@ -129,8 +145,11 @@ def review(store, task_id: int) -> dict:
     files = split_files(working_diff(cwd))
     for f in files:
         if len(f['patch']) > MAX_PATCH: f['patch'], f['truncated'] = '', True
+    base, ahead, upstream = push_base(cwd)
     return {'cwd': cwd, 'repo': repo, 'branch': _git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
-            'files': files,
+            # what the diff is measured AGAINST, said out loud: "3 commits ahead of origin/main"
+            # is the difference between a clean tree and a finished job nobody has pushed
+            'ahead': ahead, 'upstream': upstream, 'files': files,
             'added': sum(f['added'] for f in files), 'removed': sum(f['removed'] for f in files)}
 
 

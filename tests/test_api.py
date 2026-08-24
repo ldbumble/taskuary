@@ -674,7 +674,7 @@ class ApiTests(unittest.TestCase):
         started, release, calls = threading.Event(), threading.Event(), []
         def slow_reports(s, startup=False): calls.append(1); started.set(); release.wait(10)
         with mock.patch.object(server, 'run_due_reports', slow_reports), \
-             mock.patch('taskuary.channels.poll_channels', lambda s, d: None):
+             mock.patch('taskuary.channels.poll_channels', lambda s, d, progress=None: None):
             t = threading.Thread(target=server._poll_reports, kwargs={'what': 'catching up'}, daemon=True)
             t.start()
             self.assertTrue(started.wait(10))
@@ -683,6 +683,8 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(calls, [1])                        # skipped, not raced
             self.assertEqual(json.loads(server.store.get_settings()['ingest_status'])['what'],
                              'catching up')                     # and it did not rewrite the banner
+            # (progress from the RUNNING poll appends to that text rather than replacing it -
+            #  see _poll_reports._say; the skipped second poll writes nothing at all)
             release.set(); t.join(10)
         self.assertEqual(c.get('/api/ingest/status').json()['status']['state'], 'idle')
 

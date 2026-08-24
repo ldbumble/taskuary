@@ -284,7 +284,7 @@ export const DiffBlock = ({ text }) => {
 export const DiffFiles = ({ files, cwd, branch }) => {
   const [open, setOpen] = React.useState(() => new Set(files.length === 1 ? [0] : []));
   const flip = (i) => setOpen((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
-  if (!files.length) return <Empty>Nothing changed in this checkout yet — the working tree is clean.</Empty>;
+  if (!files.length) return <Empty>Nothing to push — no commits waiting, and the working tree is clean.</Empty>;
   return (
     <Box>
       <Typography variant="caption" sx={{ ...mono, color: FAINT, display: "block", mb: 0.75, wordBreak: "break-all" }}>

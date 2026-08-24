@@ -99,6 +99,9 @@ const KNOB_META = {
     help: "A report's rows always come back as an .xlsx; with this on they also become an .svg bar chart drawn in the panel — and the summarizing model, which just read every row, picks which column to plot (better than a heuristic grabbing the id column). Off: spreadsheet only." },
 
   // ── Sync & startup ──
+  poll_minutes: { group: "Sync & startup", label: "Background sync (minutes)", type: "number",
+    desc: "How often the app checks your connections while it is open. 0 turns it off.",
+    help: "The server keeps this clock, so it runs whichever tab you are on and whether or not you are looking at the app - it is also what makes a SCHEDULED REPORT fire on time, since reports are checked on the same pass.\n\nIt used to live in the Timeline tab instead: the countdown died the moment you opened Board or Tasks, restarted itself every time you changed a filter, and with the window closed nothing polled at all - so a report set for 8am Monday only ran if somebody happened to be sitting on the Timeline at 8am on Monday.\n\n10 is the default. Lower it if you want mail sooner and do not mind the API calls; 0 turns background polling off entirely and leaves Sync now as the only road." },
   startup_sync_days: { group: "Sync & startup", label: "Catch-up window (days)", type: "number",
     desc: "How far back the app reaches when it opens, for what arrived while it was closed.",
     help: "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup." },

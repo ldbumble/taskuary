@@ -141,6 +141,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
                     'triage_ai': '',      # '' = first active AI connector | connector:<type> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
+                    # minutes between background polls while the app is OPEN. The Timeline said
+                    # "auto-syncs every 10 min" for a long time while the only clock was a
+                    # setInterval inside its own tab - see server.poll_forever. 0 = off.
+                    'poll_minutes': '10',
                     'vision_enabled': '1',          # send attached images to the AI, when the model can see
                     'report_images_enabled': '1',   # reports hand back a chart, and draw it in the body
                     # the ONE copy of your name. The docs say {{owner}} / {{owner_first}} /

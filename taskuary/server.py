@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, re, threading
+import asyncio, json, re, threading, time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +36,7 @@ async def _lifespan(_app):
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     _heal_owner_docs()
     _refresh_soul_connections()
+    threading.Thread(target=poll_forever, daemon=True).start()
     yield
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
@@ -1183,6 +1184,28 @@ def toggle_memory(mid: int, body: MemoryToggle):
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
 
 _POLL_BUSY = threading.Lock()   # whether a poll runs IN THIS PROCESS; the DB flag is only for the UI
+_LAST_POLL = [time.time()]      # startup's own catch-up counts as the first one
+POLL_TICK = 30                  # how often the loop wakes to look at the clock
+
+
+def poll_forever():
+    """The ten-minute sync the Timeline has always PROMISED - made by the server, at last.
+
+    It used to be the BROWSER'S: a setInterval living inside the Timeline tab. So it stopped
+    the moment you opened Board or Tasks, because that tab unmounts; it restarted its ten-minute
+    countdown every time a filter changed the effect's dependencies; and with no window open
+    nothing polled at all - which also meant a report scheduled for 8am Monday only ran if
+    somebody happened to have the Timeline on screen at 8am on Monday. The mailbox does not care
+    which tab is open, so the clock does not live there any more."""
+    while True:
+        try:
+            try: mins = int(store.get_settings().get('poll_minutes') or 0)
+            except (TypeError, ValueError): mins = 10
+            if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
+                _poll_reports(0, what='syncing')
+        except Exception as e:
+            logger.warning(f'scheduled poll failed: {e}')      # a bad cycle must not end the loop
+        time.sleep(POLL_TICK)
 
 def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False):
     # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
@@ -1191,6 +1214,8 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
     # rewriting 'running', and the "catching up" banner never ended.
     if not _POLL_BUSY.acquire(blocking=False):
         logger.info('poll already running - skipped'); return
+    _LAST_POLL[0] = time.time()      # a manual Sync now resets the clock too, so the timer
+                                     # does not fire again moments later over the same watermarks
     store.set_setting('ingest_status', json.dumps(
         {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
     try:
@@ -1295,7 +1320,11 @@ def ingest_status():
     if st.get('state') == 'running' and not _POLL_BUSY.locked():
         st = {'state': 'idle'}
         store.set_setting('ingest_status', json.dumps(st), 'system')
-    return {'status': st}
+    # the cadence rides along so the timeline's caption can state the truth instead of a
+    # hardcoded "every 10 min" that stayed on screen after somebody set the interval to 0
+    try: every = int(store.get_settings().get('poll_minutes') or 0)
+    except (TypeError, ValueError): every = 10
+    return {'status': st, 'everyMinutes': every}
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
 class TermBody(BaseModel):

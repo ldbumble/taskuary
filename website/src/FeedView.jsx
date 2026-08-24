@@ -175,6 +175,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [bgSync, setBgSync] = useState(false);     // the startup catch-up - rows stay readable
   const [syncWhat, setSyncWhat] = useState("");
   const [lastSync, setLastSync] = useState(null);
+  const [every, setEvery] = useState(10);            // the server's cadence, not a guess
   const syncNow = useCallback(async (silent) => {
     if (!silent) setSyncing(true);
     try { await api.post("/api/ingest/poll"); } catch { /* poll failures surface in Connectors */ }
@@ -201,6 +202,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       try {
         const { data } = await api.get("/api/ingest/status");
         if (!alive) return;
+        if (data.everyMinutes != null) setEvery(data.everyMinutes);
         if (data.status?.state === "running") {
           sawRunning = true;
           // background catch-up: say so and keep polling, but never dim rows that are already
@@ -221,10 +223,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
     setRows(null); rowsLen.current = 0; setNoMore(false);
     setSel(null); setEditText("");   // filter switch: never leave a stale review panel up
     load();
-    const t = setInterval(() => load(rowsLen.current), 30000);       // cheap row refresh
-    const s = setInterval(() => syncNow(true), 600000);              // real ingest poll every 10 min
-    return () => { clearInterval(t); clearInterval(s); };
-  }, [load, syncNow]);
+    // Rows only. The INGEST clock moved to the server (server.poll_forever): living here it
+    // died the moment you opened another tab, and restarted its ten minutes every time a
+    // filter changed this effect's dependencies - so "auto-syncs every 10 min" was a promise
+    // kept only by someone sitting on the Timeline, and never when the window was closed.
+    const t = setInterval(() => load(rowsLen.current), 30000);
+    return () => clearInterval(t);
+  }, [load]);
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => e.isIntersecting && loadMore());
     if (endRef.current) obs.observe(endRef.current);
@@ -389,7 +394,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
               {syncing || bgSync ? `· ${syncWhat || "syncing…"}`
                 : lastSync
                   ? `· last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-                  : "· auto-syncs every 10 min"}
+                  : every ? `· auto-syncs every ${every} min` : "· background sync is off (Settings)"}
             </Typography>
           </Box>
         )}

@@ -9,13 +9,15 @@ import CloseIcon from "@mui/icons-material/Close";
 import BlockIcon from "@mui/icons-material/Block";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
+import DifferenceIcon from "@mui/icons-material/Difference";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
@@ -60,6 +62,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [comment, setComment] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
+  const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
+  const [diff, setDiff] = useState(null);
   const pollRef = useRef(null);
 
   // fetch everything once and filter on the derived state - the server only knows raw
@@ -150,7 +154,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [reshape, setReshape] = useState(false);
   const [repoPick, setRepoPick] = useState(false);
   const [menuEl, setMenuEl] = useState(null);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setDiffOpen(false); }, [selected]);
+  // asked when the drawer opens, and only then: shelling out to git on every task poll would
+  // spend a subprocess a second on an answer nobody is looking at
+  const loadDiff = useCallback(async (id) => {
+    setDiff(null);
+    try { setDiff((await api.get(`/api/tasks/${id}/diff`)).data); }
+    catch (e) { setDiff({ files: [], why: e?.response?.data?.detail || "Could not read the checkout" }); }
+  }, []);
+  useEffect(() => { if (diffOpen && selected) loadDiff(selected); }, [diffOpen, selected, loadDiff]);
   // A fold DROPS the task you were looking at, so follow the work to the survivor - staying
   // put would leave the detail pane on a task that no longer holds anything.
   const reshaped = (r) => {
@@ -407,6 +419,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         <Chip size="small" label="exited — its output is still here"
                           sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
                       )}
+                      {/* the look you take BEFORE wrapping up - it sits next to Done on purpose,
+                          because that is the moment the decision gets made */}
+                      <Button size="small" startIcon={<DifferenceIcon sx={{ fontSize: 15 }} />}
+                        sx={{ fontSize: 11, color: DIM }} onClick={() => setDiffOpen(true)}
+                        title="What has it actually changed in this checkout, per file — before anything is pushed">
+                        Review changes
+                      </Button>
                       <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
                         startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
                           : <DoneAllIcon sx={{ fontSize: 15 }} />}
@@ -567,6 +586,34 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           )}
         </Box>
       </Box>
+
+      {/* ── review the change: the widest drawer of the three, because code needs the room.
+             Read-only by construction - it runs git diff and git status and nothing else, so
+             opening it can never disturb what the agent is in the middle of. ── */}
+      <Drawer anchor="right" open={!!diffOpen && !!t} onClose={() => setDiffOpen(false)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 760 }, p: 2, bgcolor: PANEL2 } }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+          <DifferenceIcon sx={{ fontSize: 18, color: "#7e22ce" }} />
+          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>What has it changed?</Typography>
+          {diff && !!diff.files?.length && (
+            <Typography sx={{ ...mono, fontSize: 11.5, color: DIM }}>
+              {diff.files.length} file{diff.files.length === 1 ? "" : "s"}
+              <Box component="span" sx={{ color: "#15803d", ml: 1 }}>+{diff.added}</Box>
+              <Box component="span" sx={{ color: "#b91c1c", ml: 0.75 }}>−{diff.removed}</Box>
+            </Typography>
+          )}
+          <Tooltip title="Ask git again — the agent may have written more since you opened this">
+            <IconButton size="small" onClick={() => loadDiff(selected)}><RefreshIcon sx={{ fontSize: 16 }} /></IconButton>
+          </Tooltip>
+          <IconButton size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+        </Box>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
+          {detail?.ref} · uncommitted work in this checkout — what a push would carry
+        </Typography>
+        {!diff ? <CircularProgress size={20} sx={{ m: 2 }} />
+          : diff.why ? <Empty>{diff.why}</Empty>
+            : <DiffFiles files={diff.files} cwd={diff.cwd} branch={diff.branch} />}
+      </Drawer>
 
       {/* ── hand off: a right-hand drawer, so it cannot hide above a tall terminal ── */}
       <Drawer anchor="right" open={!!handoff && !!t} onClose={() => setHandoff(false)}

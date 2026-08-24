@@ -732,6 +732,19 @@ def find_checkout(repo: str, profile: dict, budget: int = 4000, seconds: float =
     return None
 
 
+def path_for_repo(store, repo: str):
+    """Where a repo lives, WITHOUT opening a session on it - the read-only half of what
+    open_session does before it starts anything. Any agent that has been there knows the
+    way, so the maps are asked in turn before the disk is searched."""
+    import json
+    if not repo: return None
+    for a in store.list_agents():
+        p = (json.loads(a.get('Config') or '{}').get('cwd_map') or {}).get(repo)
+        if p and os.path.isdir(p): return p
+    found = find_checkout(repo, {'cwd_map': {}})
+    return found if found and os.path.isdir(found) else None
+
+
 def remember_path(store, agent: str, repo: str, path: str):
     """A found checkout is worth keeping: onto the agent row AND config.toml, so the search
     runs once per repo, not once per session."""

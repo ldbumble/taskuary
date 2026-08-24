@@ -1,6 +1,6 @@
 // Task Hub shell - clean light enterprise workspace, compact: slim top bar, pill tabs,
 // content underneath. Five spaces: Timeline, Tasks, Review, Connectors, Settings.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge, Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import HubIcon from "@mui/icons-material/Hub";
@@ -37,6 +37,29 @@ export default function TaskHubPage() {
   const [pending, setPending] = useState(0);
   const [tick, setTick] = useState(0);
 
+  // Leaving a tab and coming back used to land you at the TOP of it. Nothing scrolled the
+  // page: the tall tab unmounted, the document shrank to the short one, and the browser
+  // clamped scrollY to 0 - by the time the tall tab came back there was no position left to
+  // return to. So each tab remembers where it was, and gets it back on the way in. (The
+  // second pass covers a tab that fetches its list on mount: on the switching frame it has
+  // no height yet, so the first scrollTo has nothing to scroll to.)
+  const scrollAt = useRef({});
+  const go = (t) => { scrollAt.current[tab] = window.scrollY; setTab(t); };
+  useLayoutEffect(() => {
+    const y = scrollAt.current[tab] || 0;
+    if (!y) return;
+    window.scrollTo(0, y);
+    const id = requestAnimationFrame(() => window.scrollTo(0, y));
+    return () => cancelAnimationFrame(id);
+  }, [tab]);
+
+  // ...and Tasks, once opened, stays MOUNTED behind the other tabs. It is the one space
+  // holding a live pty: unmounting it dropped the websocket, so every trip to the Board and
+  // back rebuilt the pane and redrew the CLI's screen from the top of its scrollback. Hidden
+  // is enough - fit() reads a display:none pane as NaN and skips, then refits on the way back.
+  const [everTasks, setEverTasks] = useState(false);
+  useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
+
   const refreshPending = useCallback(async () => {
     try { setPending(((await api.get("/api/reviews", { params: { status: "pending" } })).data.data || []).length); }
     catch { /* badge is optional */ }
@@ -47,7 +70,7 @@ export default function TaskHubPage() {
   // Opening a task with start=true means "and put your CLI on it now".
   const [autostart, setAutostart] = useState(null);
   const openTask = (taskId, opts) => {
-    setSelectedTask(taskId); setTab("Tasks");
+    setSelectedTask(taskId); go("Tasks");
     setAutostart(opts?.start ? { taskId, agent: opts.agent, model: opts.model } : null);
   };
 
@@ -73,7 +96,7 @@ export default function TaskHubPage() {
             {TABS.map((t) => (
               <Badge key={t} color="warning" badgeContent={t === "Review" ? pending : 0} max={99}
                 sx={{ "& .MuiBadge-badge": { fontSize: 9.5, height: 15, minWidth: 15 } }}>
-                <Box onClick={() => setTab(t)}
+                <Box onClick={() => go(t)}
                   sx={{ px: 1.5, py: 0.5, borderRadius: 99, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
                     color: tab === t ? "#4f46e5" : DIM, bgcolor: tab === t ? "#eef0ff" : "transparent",
                     border: `1px solid ${tab === t ? "#c9cff0" : "transparent"}`,
@@ -92,9 +115,13 @@ export default function TaskHubPage() {
         <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
           {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
-          {tab === "Tasks" && <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask}
-            onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
-            onGoReview={() => { refreshPending(); setTab("Review"); }} />}
+          {everTasks && (
+            <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
+              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask}
+                onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
+                onGoReview={() => { refreshPending(); go("Review"); }} />
+            </Box>
+          )}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
           {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}

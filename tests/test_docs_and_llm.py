@@ -165,6 +165,36 @@ class DigestReportTests(unittest.TestCase):
         self.assertEqual(digest_of(s2), [])
         s2.cx.close()
 
+    def test_an_empty_block_says_so_instead_of_leaving_a_bare_header(self):
+        """The reported bug: with no pending reviews at all, 'WAITING ON THE OWNER' was a
+        header with nothing under it, so the verdict lines below read as if they belonged to
+        it - and the brief announced a pending draft, under a real TQ-ref, for mail the owner
+        had already filed as not-our-task."""
+        from taskuary.digest import gather
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        s.add_memory({'Scope': 'sender', 'ScopeKey': 'tonya@lillington.example', 'CreatedBy': 'o',
+                      'Note': 'Mail like "Re: Resident Refund Request - Foote" is other people\'s work - file it'})
+        data = gather(s, 3)
+        pend = data.split('WAITING ON THE OWNER', 1)[1].split('\n')[1]
+        self.assertEqual(pend.strip(), '(none)')
+        self.assertNotIn('Resident Refund', data.split('WAITING ON THE OWNER', 1)[1].split('VERDICTS')[0])
+        self.assertIn('NOT open work', data)                  # the verdicts block says what it is
+
+    def test_a_pending_review_carries_its_task_title_not_just_a_subject(self):
+        """A ref and a mail subject on the same line, with no title between them, let the two
+        drift apart - a brief that renames a task is worse than one that skips it."""
+        from taskuary.digest import gather
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Add docker support', 'Kind': 'coding'}, 'o')
+        mid = s.add_message({'Channel': 'email', 'Subject': 'Re: Resident Refund Request',
+                              'FromEmail': 'tonya@lillington.example', 'ExternalId': 'x1'})
+        s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'DraftText': 'hi', 'Status': 'pending'})
+        line = next(l for l in gather(s, 3).split('\n') if l.startswith(f'  TQ-{tid:04d}') and 'draft_reply' in l)
+        self.assertIn('Add docker support', line)             # the ref arrives wearing its own title
+        self.assertIn('Resident Refund', line)
+
     def test_digest_report_lands_on_the_timeline_and_keeps_the_doc(self):
         from taskuary.store import MemoryStore
         from taskuary.reports import run_report_source

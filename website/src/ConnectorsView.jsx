@@ -273,11 +273,12 @@ const DATA_META = {
       "Test connects for real and runs a probe (SELECT 1 — engines that need FROM DUAL can set test_query in the config).",
       "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."] },
   aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"], discovers: true,
-    fields: [["access key id", "access_key_id"], ["region (e.g. us-east-2)", "region"]],
+    fields: [["access key id", "access_key_id"], ["region(s), comma-separated (e.g. us-east-2, us-east-1)", "region"]],
     secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
     desc: "S3 objects, CloudWatch logs — or ANY service call — as scheduled reports, Timeline feeds and agent tools, with your IAM keys.",
     howto: ["Create an IAM user (or use an existing one) with read access to what you'll pull: AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess, etc.",
       "Enter the access key id + region and paste the secret access key (write-only). Leave everything blank to use the server's own AWS credentials (env vars, ~/.aws, an instance role).",
+      "Several regions? List them comma-separated. CloudWatch log groups exist PER REGION - the same account shows a completely different set in us-east-1 and us-east-2 - so discovery sweeps each one and every object remembers where it was found. S3 is one global namespace, listed once, and each bucket is asked for its own region so reads go to the right endpoint.",
       "The server needs boto3: pip install taskuary[aws].",
       "Test & discover calls STS (reporting which account/ARN you are) and then asks the keys what they can SEE: every S3 bucket and CloudWatch log group is listed under 'What you have access to'.",
       "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines appear on the Timeline), tasks (they go through triage), or off.",
@@ -824,6 +825,7 @@ const OBJ_TYPES = {
   "law://": ["Log Analytics workspace", "workspaces"],
 };
 const objType = (addr) => Object.keys(OBJ_TYPES).find((p) => addr.startsWith(p)) || "";
+const regionOf = (s) => { try { return JSON.parse(s.ConfigJson || "{}").region || ""; } catch { return ""; } };
 const OBJ_KIND = (addr) => (OBJ_TYPES[objType(addr)] || ["object"])[0];
 const objName = (addr) => addr.slice(objType(addr).length) || addr;
 const PAGE_OBJ = 40;   // a 100-row wall is not a list; the rest is one click away
@@ -919,7 +921,11 @@ function CloudObjects({ conn, meta, objects, reload }) {
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography sx={{ ...mono, color: INK, fontSize: 12.5 }} noWrap title={s.Address}>{objName(s.Address)}</Typography>
                 <Typography variant="caption" sx={{ color: FAINT }}>
-                  {OBJ_KIND(s.Address)}{s.LastPolledAt ? ` · polled ${timeAgo(s.LastPolledAt)}` : ""}
+                  {OBJ_KIND(s.Address)}
+                  {/* two regions can hold log groups with the SAME name - without this they are
+                      two identical rows and no way to tell which one you just switched on */}
+                  {regionOf(s) ? ` · ${regionOf(s)}` : ""}
+                  {s.LastPolledAt ? ` · polled ${timeAgo(s.LastPolledAt)}` : ""}
                 </Typography>
               </Box>
               <Select size="small" value={modeOf(s)} onChange={(e) => setOne(s, e.target.value)}

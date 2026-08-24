@@ -20,8 +20,21 @@ def _boto3():
     return boto3
 
 
-def client(cfg: dict, service: str):
-    kw = {k: v for k, v in {'region_name': cfg.get('region'),
+# One card, many regions. CloudWatch log groups exist PER REGION - the same account shows a
+# completely different set in us-east-1 and us-east-2 - so a single region field meant half an
+# account was invisible with no sign that anything was missing. The field takes a list now
+# ("us-east-2, us-east-1"); one value still behaves exactly as it did.
+def regions(cfg: dict) -> list:
+    """The regions to sweep, in order. [None] = no region set, so boto3's own default chain
+    decides (env, ~/.aws/config, an instance role) - which is what a blank field always meant."""
+    out = [r.strip() for r in str(cfg.get('region') or '').replace(';', ',').replace(' ', ',').split(',') if r.strip()]
+    return list(dict.fromkeys(out)) or [None]
+
+
+def client(cfg: dict, service: str, region: str = None):
+    """`region` overrides the card - what a per-object call uses, because a discovered object
+    knows which region it was found in and the card's FIRST region is only a default."""
+    kw = {k: v for k, v in {'region_name': region or regions(cfg)[0],
                             'aws_access_key_id': cfg.get('access_key_id'),
                             'aws_secret_access_key': cfg.get('secret_access_key')}.items() if v}
     return _boto3().client(service, **kw)
@@ -41,30 +54,48 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
     a source with its own mode picker - report (default: selectable on the Reports tab,
     nothing polled), feed (new items shown on the Timeline), tasks (through triage), or
     off. A list that partially fails still registers what it found."""
-    known = {s['Address'] for s in store.list_sources(active_only=False) if s['Channel'] == 'aws'}
-    found = []
+    # (address, region) is the identity, not the address alone: /aws/lambda/ingest in us-east-1
+    # and the one in us-east-2 are different log groups that happen to share a name, and keying
+    # on the name would register whichever came first and silently drop the other.
+    known = {(s['Address'], json.loads(s.get('ConfigJson') or '{}').get('region'))
+             for s in store.list_sources(active_only=False) if s['Channel'] == 'aws'}
+    regs = regions(cfg)
+    found = []                                     # [(address, region)]
+    # S3 is one global namespace - listing it once per region would return the same buckets
+    # every time. Each bucket's OWN region is asked for separately, because a client pointed at
+    # the wrong one gets a 301 the moment it tries to read the objects.
     try:
-        found += [f"s3://{b['Name']}" for b in client(cfg, 's3').list_buckets().get('Buckets') or []]
+        for b in client(cfg, 's3').list_buckets().get('Buckets') or []:
+            try:
+                loc = client(cfg, 's3').get_bucket_location(Bucket=b['Name']).get('LocationConstraint')
+                where = loc or 'us-east-1'         # the API answers None for us-east-1, historically
+            except Exception:
+                where = regs[0]                    # no permission to ask: the card's first region
+            found.append((f"s3://{b['Name']}", where))
     except Exception as e:
         logger.warning(f'aws discovery: s3 list failed: {e}')
-    try:
-        # describe_log_groups caps at 50 PER CALL, so a single call silently truncates an
-        # account with hundreds of lambdas - page until the token runs out (bounded).
-        logs, tok, pages = client(cfg, 'logs'), None, 0
-        while pages < 8:
-            r = logs.describe_log_groups(limit=50, **({'nextToken': tok} if tok else {}))
-            found += [f"logs://{g['logGroupName']}" for g in r.get('logGroups') or []]
-            tok, pages = r.get('nextToken'), pages + 1
-            if not tok: break
-    except Exception as e:
-        logger.warning(f'aws discovery: log groups failed: {e}')
+    for reg in regs:
+        try:
+            # describe_log_groups caps at 50 PER CALL, so a single call silently truncates an
+            # account with hundreds of lambdas - page until the token runs out (bounded).
+            logs, tok, pages = client(cfg, 'logs', reg), None, 0
+            while pages < 8:
+                r = logs.describe_log_groups(limit=50, **({'nextToken': tok} if tok else {}))
+                found += [(f"logs://{g['logGroupName']}", reg) for g in r.get('logGroups') or []]
+                tok, pages = r.get('nextToken'), pages + 1
+                if not tok: break
+        except Exception as e:
+            # one bad region must not cost the others: a key without permission in eu-west-1 is
+            # a reason to skip eu-west-1, not to discover nothing
+            logger.warning(f'aws discovery: log groups failed in {reg or "the default region"}: {e}')
     added = 0
-    for addr in found:
-        if addr in known: continue
+    for addr, reg in found:
+        if (addr, reg) in known: continue
         store.save_source({'Channel': 'aws', 'Address': addr, 'ConnectorId': connector_id, 'Active': 1,
-                           'Owner': 'discovered', 'ConfigJson': json.dumps({'mode': 'report'})}, actor)
+                           'Owner': 'discovered', 'ConfigJson': json.dumps({'mode': 'report', 'region': reg})}, actor)
+        known.add((addr, reg))
         added += 1
-    out = {'found': len(found), 'added': added}
+    out = {'found': len(found), 'added': added, 'regions': [r for r in regs if r]}
     if not found:
         out['hint'] = ('the keys authenticate but list nothing - they need s3:ListAllMyBuckets and '
                        'logs:DescribeLogGroups (AmazonS3ReadOnlyAccess + CloudWatchLogsReadOnlyAccess '
@@ -78,17 +109,20 @@ def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -
     errors - one row per log line would flood the funnel it feeds)."""
     from .ingest import ingest_message
     scfg = json.loads(src.get('ConfigJson') or '{}')
+    # the object's OWN region, stamped on it at discovery. Sources found before the card took
+    # a list have none, and the card's first region is exactly what they were found with.
+    reg = scfg.get('region')
     addr, floor, n = src['Address'], since.strftime('%Y-%m-%d %H:%M:%S'), 0
     if addr.startswith('s3://'):
         bucket = addr[5:]
-        r = client(cfg, 's3').list_objects_v2(Bucket=bucket, MaxKeys=200)
+        r = client(cfg, 's3', reg).list_objects_v2(Bucket=bucket, MaxKeys=200)
         for o in r.get('Contents') or []:
             at = o.get('LastModified')
             stamp = at.astimezone().strftime('%Y-%m-%d %H:%M:%S') if hasattr(at, 'astimezone') else str(at)
             if stamp < floor: continue
             out = ingest_message(store, file_only=file_only, msg={
-                'external_id': f"aws:{bucket}:{o['Key']}:{stamp[:16]}", 'channel': 'aws',
-                'subject': f"New in {addr}: {o['Key']}",
+                'external_id': f"aws:{reg or '-'}:{bucket}:{o['Key']}:{stamp[:16]}", 'channel': 'aws',
+                'subject': f"New in {addr}: {o['Key']}" + (f' ({reg})' if reg else ''),
                 'body': f"[S3 object landed - {o.get('Size')} bytes]\ns3://{bucket}/{o['Key']}",
                 'from_name': addr, 'conversation_id': f'aws:{addr}', 'sent_at': stamp,
                 'source_name': addr}, llm=llm)
@@ -96,15 +130,15 @@ def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -
     elif addr.startswith('logs://'):
         group = addr[7:]
         pat = scfg.get('pattern') or '?ERROR ?Exception ?FATAL'
-        ev = client(cfg, 'logs').filter_log_events(logGroupName=group, filterPattern=pat, limit=100,
-                                                   startTime=int(since.timestamp() * 1000)).get('events') or []
+        ev = client(cfg, 'logs', reg).filter_log_events(logGroupName=group, filterPattern=pat, limit=100,
+                                                        startTime=int(since.timestamp() * 1000)).get('events') or []
         if ev:
             lines = '\n'.join(f"{datetime.fromtimestamp(e['timestamp'] / 1000).strftime('%H:%M:%S')} "
                               f"{(e.get('message') or '').strip()[:300]}" for e in ev[:50])
             stamp = datetime.fromtimestamp(ev[-1]['timestamp'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
             out = ingest_message(store, file_only=file_only, msg={
-                'external_id': f"awslogs:{group}:{ev[-1].get('eventId') or stamp}", 'channel': 'aws',
-                'subject': f"{len(ev)} matching log events in {group}",
+                'external_id': f"awslogs:{reg or '-'}:{group}:{ev[-1].get('eventId') or stamp}", 'channel': 'aws',
+                'subject': f"{len(ev)} matching log events in {group}" + (f' ({reg})' if reg else ''),
                 'body': f"[CloudWatch {group} - pattern {pat}]\n{lines}",
                 'from_name': addr, 'conversation_id': f'aws:{addr}', 'sent_at': stamp,
                 'source_name': addr}, llm=llm)

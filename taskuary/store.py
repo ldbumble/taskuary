@@ -297,6 +297,11 @@ class SQLiteStore:
                 if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
                     c['ai_prompt'] = DIGEST_PROMPT
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
+            # data heal: 'triage' was a fourth Kind the pickers never offered, so those tasks
+            # showed a kind the dropdown could not represent - and every one of them had a
+            # coding agent dispatched at it, because the gate was "not a reply" and not the
+            # kind itself. They are plain tasks on the owner's list: 'general'.
+            self.cx.execute("UPDATE task SET Kind='general' WHERE Kind='triage'")
             # data heal: timestamps stored as raw ISO/UTC ('...T18:44:00Z') sorted above later
             # local rows and lied about the hour - normalize the survivors once
             for mid, sent in self.cx.execute("SELECT MessageId, SentAt FROM message WHERE SentAt LIKE '%T%'").fetchall():

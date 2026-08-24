@@ -62,6 +62,9 @@ class CoreTests(unittest.TestCase):
         self.assertEqual((pending[0]['TaskId'], pending[0]['Kind']), (out['task_id'], 'draft'))
 
     def test_coder_auto_dispatch_when_enabled(self):
+        """Auto-dispatch is for CODING tasks: _auto_code opens a CLI session in a repository,
+        so it only makes sense where there is a repository to work in. The body here carries a
+        real code signal; see test_non_code_work_waits_for_you for the other half."""
         from unittest import mock
         import taskuary.ingest as ing
 
@@ -74,10 +77,24 @@ class CoreTests(unittest.TestCase):
         # auto-dispatch starts a live session, like every other way work starts here
         with mock.patch.object(ing, 'threading') as th,              mock.patch('taskuary.terminal.start_on_task') as start:
             th.Thread = InlineThread
-            out = ingest_message(s, self.msg(external_id='ac1'), llm=TASK_LLM)
+            out = ingest_message(s, self.msg(external_id='ac1', body='the importer throws an exception, see jobs/import.py'), llm=TASK_LLM)
         start.assert_called_once()
         self.assertEqual(start.call_args.args[1], out['task_id'])
         self.assertTrue(any('auto-started a live coder session' in c['Body'] for c in s.list_comments(out['task_id'])))
+
+    def test_non_code_work_waits_for_you_instead_of_opening_a_session(self):
+        """"Add the new user to the system" is real work with no repository in it. It used to
+        open a coding session anyway - the gate asked "is this a reply?" and dispatched
+        everything else - so an agent landed in whatever folder was default and worked a task
+        that had no code to change. It is a task on your list now, one click from an agent."""
+        from unittest import mock
+        s = MemoryStore()
+        s.set_setting('coder_auto_enabled', '1', 't')
+        with mock.patch('taskuary.terminal.start_on_task') as start:
+            out = ingest_message(s, self.msg(external_id='ac3'), llm=TASK_LLM)
+        start.assert_not_called()
+        t = s.get_task(out['task_id'])
+        self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))     # real work, still yours
 
     def test_no_auto_dispatch_when_disabled(self):
         """Dispatching is ON by default now, so this asserts the SWITCH works - turned off,

@@ -144,9 +144,11 @@ class GithubIngestTests(unittest.TestCase):
             ingest_message(s, {'external_id': 'gh1', 'channel': 'github', 'subject': 'org/app#9 docs 404',
                                'body': '[issue by x - association: NONE]\nthe docs page 404s for new users',
                                'from_email': 'x@users.noreply.github.com', 'no_auto': True}, llm=task_llm)
+            # a CODING task, so this one is eligible to dispatch at all - the point being
+            # tested is no_auto, not the kind gate (see test_not_coding.py for that)
             ingest_message(s, {'external_id': 'm1', 'channel': 'email', 'subject': 'payroll import',
-                               'body': 'please rerun the payroll import for August', 'from_email': 'boss@work.example'},
-                           llm=task_llm)
+                               'body': 'the payroll import throws an exception - see jobs/payroll.py',
+                               'from_email': 'boss@work.example'}, llm=task_llm)
         self.assertEqual(spawned, ['_auto_code'])                        # the mail dispatched; github queued
 
 

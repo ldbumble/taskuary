@@ -150,13 +150,18 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # the agents actually pick work up here:
         # - reply tasks ALWAYS enter the review queue ("needs me"); auto_draft_enabled
         #   additionally has the responder write the draft in the background
-        # - real tasks auto-dispatch to the coder when coder_auto_enabled is on
+        # - CODING tasks auto-dispatch to the coder when coder_auto_enabled is on
+        # - anything else that is real work queues as needs-you, for you to route
         if f['kind'] == 'reply':
             new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                               'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
             if cfg.get('auto_draft_enabled') == '1':
                 _spawn(_auto_draft, store, tid, rid)
-        elif cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
+        # KIND is the gate, not "anything that is not a reply". This used to dispatch a coding
+        # agent at every non-reply task, so a Teams message about someone's job scope - real
+        # work, no repository anywhere in it - opened a CLI session on a checkout and started
+        # editing code. A coding agent belongs on a coding task; the rest is yours to place.
+        elif f['kind'] == 'coding' and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you
             _spawn(_auto_code, store, tid)
@@ -168,6 +173,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     if r['decision'] != 'attach':
         act = ('a reply draft goes to Review for you' if f['kind'] == 'reply'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
+               # said per KIND, because the line is read as a promise about what just happened
+               else 'no code in it - it waits on your list, no agent dispatched' if f['kind'] != 'coding'
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
                else 'auto-dispatch is off (Settings) - start the session from the task')
         reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')

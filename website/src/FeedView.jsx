@@ -617,6 +617,10 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const onIt = ses ? { agent: ses.agent || ses.label, waiting: ses.idle >= IDLE_WAITING }
     : run ? { agent: run.AgentName, waiting: false } : null;
   const loading = sel.TaskId && !detail;
+  // triage's OWN verdict, read off the route line it already wrote. reply_only and fyi both
+  // mean "no work to do here" - so a coding agent is not the answer, and offering it first
+  // made the panel argue with the reason printed at the top of the very same panel.
+  const codeless = /triage:\s*(reply_only|fyi)/.test(String(sel.RouteReason || "")) && !sel.TaskId;
   const history = historyOf(sel, detail);
   return (
     <Box key={sel.MessageId} sx={{ ...frame, textAlign: "left",
@@ -741,9 +745,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   icon={<SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#b45309" : "#7e22ce" }} />}
                   label={onIt.waiting ? `${onIt.agent} is waiting for your answer` : `${onIt.agent} is working this now`}
                   hint={onIt.waiting ? "open the task and answer it in the session" : "open the task to watch it live"} />
-              ) : (
+              ) : !codeless ? (
                 <SendToAgent row first messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
-              )}
+              ) : null}
               {/* the agent asked, the person answered on the thread - one click puts the
                   answer in front of the agent (Settings → answer_to_agent; auto skips the click) */}
               {onIt && sel.MessageId && (
@@ -771,19 +775,27 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   label="Two jobs in here, or a duplicate?"
                   hint={`break ${ref(sel.TaskId)} in two, or fold it into the task it repeats`} />
               )}
-              {/* not ours -> the reason goes to memory, and triage reads it next time */}
-              <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
-              {/* ...and the lighter verdict: THIS one is just chatter (someone said "yes"),
-                  nothing to learn about the sender - the task goes, their mail keeps flowing */}
-              {sel.TaskId && (
-                <ChoiceRow tint="#f4f5f7" onClick={async () => {
-                    await api.post(`/api/tasks/${sel.TaskId}/not-a-task`, { learn: false });
-                    onSkipped?.();
-                  }}
-                  icon={<CloseIcon sx={{ fontSize: 14, color: "#697386" }} />}
-                  label="Not a task — just conversation"
-                  hint={`delete ${ref(sel.TaskId)}, learn nothing; the messages stay on the timeline`} />
+              {/* a chat about someone's job is not a coding job. Triage already said so, and
+                  leading with "send it to a coding agent" argued with its own verdict - the
+                  offer stays available, it just stops being the first thing you reach for */}
+              {codeless && !onIt && (
+                <SendToAgent row messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
               )}
+              {/* THE HARMLESS EXIT, and it used to be missing whenever there was no task: the
+                  only way off the timeline was "Not our task", which writes a verdict against
+                  the sender - or against EVERY sender on a channel with no address, like Teams.
+                  One wrong click there teaches the funnel to stop listening to a colleague. */}
+              <ChoiceRow tint="#f4f5f7" onClick={async () => {
+                  await api.post(`/api/messages/${sel.MessageId}/file`);
+                  onSkipped?.();
+                }}
+                icon={<CloseIcon sx={{ fontSize: 14, color: "#697386" }} />}
+                label={sel.TaskId ? "Not a task — just conversation" : "Nothing to do here"}
+                hint={sel.TaskId ? `delete ${ref(sel.TaskId)}, learn nothing; the messages stay on the timeline`
+                                 : "file it and move on — nothing is learned, their next message arrives as usual"} />
+              {/* not ours -> the reason goes to memory, and triage reads it next time. Below the
+                  harmless one on purpose: this is the durable verdict, not the tidy-up. */}
+              <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
               {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
                 <ChoiceRow tint="#e8f6ee" busy
                   icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}

@@ -48,13 +48,18 @@ const savedTheme = () => {
 
 // How much of the run fits on screen. A coding CLI writes far more than it asks, so the
 // useful size here is smaller than a font you would READ prose at - most of these lines are
-// scanned, not read, and every point of size costs you rows of context.
-const SIZES = [9, 10, 11, 12, 12.5, 14];
-const DEFAULT_SIZE = 11;
+// scanned, not read, and every point of size costs you rows of context. 7 and 8 exist for
+// exactly that: at 7px a 700px pane holds ~90 rows instead of ~50, which is the difference
+// between watching a diff go past and reading it.
+const SIZES = [7, 8, 9, 10, 11, 12, 12.5, 14];
+const DEFAULT_SIZE = 10;
 const savedSize = () => {
   try { const n = parseFloat(localStorage.getItem("tq-term-size")); return SIZES.includes(n) ? n : DEFAULT_SIZE; }
   catch { return DEFAULT_SIZE; }
 };
+// Leading has to come down WITH the size or the gain is thrown away: 1.15 line-height on 7px
+// text spends a fifth of the pane on whitespace between lines nobody is reading closely.
+const leading = (n) => (n <= 8 ? 1.0 : n <= 10 ? 1.08 : 1.15);
 
 const wsUrl = (sid) => {
   const t = localStorage.getItem("taskuary_token");
@@ -89,6 +94,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     try { localStorage.setItem("tq-term-size", String(size)); } catch { /* private mode */ }
     if (!termRef.current) return;
     termRef.current.options.fontSize = size;
+    termRef.current.options.lineHeight = leading(size);
     // one frame late on purpose: fit() divides the pane by the CHARACTER size, and xterm has
     // not remeasured the glyph yet on this tick - refitting now just recomputes the old rows
     const id = requestAnimationFrame(() => refit.current?.());
@@ -97,7 +103,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   useEffect(() => {
     const term = new Terminal({ fontSize: savedSize(), fontFamily: TERM_FONT, fontWeightBold: 600,
       theme: THEMES[savedTheme()], cursorBlink: true, cursorStyle: "bar", scrollback: 10000,
-      allowProposedApi: true, drawBoldTextInBrightColors: false, letterSpacing: 0, lineHeight: 1.15 });
+      allowProposedApi: true, drawBoldTextInBrightColors: false, letterSpacing: 0, lineHeight: leading(savedSize()) });
     termRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -160,7 +166,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           run fits in it. Both restyle ANY CLI in the pane - codex and claude included - and
           both stick per browser. */}
       <Box sx={{ position: "absolute", top: 5, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
-        opacity: 0.45, "&:hover": { opacity: 1 }, transition: "opacity .15s" }}>
+        opacity: 0.62, "&:hover": { opacity: 1 }, transition: "opacity .15s" }}>
         {/* one step smaller is a couple more rows of the run without touching the layout -
             far cheaper than scrolling back for what just went past */}
         <Box component="button" onClick={() => setSize((n) => SIZES[Math.max(0, SIZES.indexOf(n) - 1)])}
@@ -168,6 +174,10 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           sx={{ ...mono, fontSize: 11, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8a94a6",
             border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
             "&:hover:not(:disabled)": { color: "#e5e8ee" } }}>A−</Box>
+        {/* the number, so the range is DISCOVERABLE: two unlabelled letters gave no way to
+            tell whether you were already at the smallest or had five steps left */}
+        <Typography sx={{ ...mono, fontSize: 9.5, color: "#8a94a6", minWidth: 16, textAlign: "center",
+          fontVariantNumeric: "tabular-nums" }}>{size}</Typography>
         <Box component="button" onClick={() => setSize((n) => SIZES[Math.min(SIZES.length - 1, SIZES.indexOf(n) + 1)])}
           disabled={size === SIZES[SIZES.length - 1]} title="bigger text"
           sx={{ ...mono, fontSize: 13, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8a94a6",
@@ -226,8 +236,9 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
 // behind their back.
 export const ThemeHint = () => (
   <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
-    The session's top-right corner holds both knobs: A− / A+ set the text size (smaller means
-    more of the run on screen and less scrolling back), and the picker switches the terminal
+    The session's top-right corner holds both knobs: A− / A+ set the text size, 7px to 14px with
+    the current one shown between them (7 fits roughly twice the run on screen — the leading
+    tightens with it, so the rows are gained rather than spent on whitespace), and the picker switches the terminal
     palette (Catppuccin, Dracula, Tokyo Night, Gruvbox, One Dark) — that restyles codex and any
     other CLI, since a TUI paints with the terminal's colors. To match Catppuccin inside Claude
     Code itself, run{" "}

@@ -29,19 +29,26 @@ import { TerminalPane } from "./TerminalView.jsx";
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
 const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
-// the filters ARE the states now - no more guessing how Status and ReviewStatus combine
+// CATEGORY is where a task is; the chip on the row says what it needs. Filtering by "needs
+// you" and "working" separately made those two look like opposites, so a task whose agent
+// picked it up vanished out of the bucket you were watching - and a task sitting in "needs
+// you" WITH an agent thinking on it read as a contradiction, because it was one. One
+// in-progress bucket holds everything still open; the label inside it is what changes.
 const STATE_FILTERS = [
   { key: "", label: "all" },
-  { key: "needs_you", label: "needs you", c: PILL_COLORS.amber },
-  { key: "working", label: "working", c: PILL_COLORS.purple },
+  { key: "live", label: "in progress", c: PILL_COLORS.amber },
   { key: "done", label: "done", c: PILL_COLORS.green },
 ];
+// everything still on somebody's plate - yours or an agent's. Dropped is neither, and only
+// ever shows under "all".
+const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key)
+                                             : stateOf(t).key === key);
 const PRIORITIES = ["low", "normal", "high", "urgent"];
 // what a task IS decides which machinery works it: coding gets a repo session, a reply
 // gets the responder and the Review queue, general is your own list
 const KINDS = ["general", "coding", "reply"];
 
-export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReview }) {
+export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReview, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [filter, setFilter] = useState("");            // "" = all; the rest are derived states
   const [detail, setDetail] = useState(null);
@@ -69,18 +76,32 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       setDetail(data);
       // opened a task the current filter hides (e.g. from the Board)? widen to "all" so
       // the list and the detail never contradict each other
-      setFilter((f) => (f && stateOf({ ...data.task, ReviewStatus: (data.reviews || [])[0]?.Status }).key !== f ? "" : f));
+      setFilter((f) => (f && !inBucket({ ...data.task, Session: data.session,
+                                         ReviewStatus: (data.reviews || [])[0]?.Status }, f) ? "" : f));
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load task"); }
   }, []);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
+  // ...and keep it honest. The list was fetched ONCE, so a task whose agent picked it up
+  // kept wearing "needs you" - and the pill counts kept agreeing with it - until something
+  // else happened to reload. "Agent working" is a fact with a 45-second shelf life (a live
+  // session that goes quiet is waiting on you); a row that states it has to be re-asked.
+  // Only while this tab is the one on screen: it stays mounted behind the others.
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(loadTasks, 5000);
+    return () => clearInterval(id);
+  }, [active, loadTasks]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
     if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0] }));
   }, [agents, run.agent]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
   useEffect(() => {
-    const running = (detail?.runs || []).some((r) => r.Status === "running");
+    // a LIVE SESSION counts as much as a headless run here: the header chip is derived from
+    // how long the pty has been quiet, so without re-asking it froze on whatever it said
+    // when the task was opened - "needs you" over an agent that was mid-thought
+    const running = (detail?.runs || []).some((r) => r.Status === "running") || detail?.session?.alive;
     clearInterval(pollRef.current);
     if ((running || wrapping) && selected) pollRef.current = setInterval(() => loadDetail(selected), 3000);
     return () => clearInterval(pollRef.current);
@@ -180,7 +201,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
 
   const t = detail?.task;
-  const shown = (tasks || []).filter((x) => !filter || stateOf(x).key === filter);
+  const shown = (tasks || []).filter((x) => !filter || inBucket(x, filter));
   const report = [...(detail?.comments || [])].reverse().find(
     (c) => c.ActorType === "agent" && String(c.Body || "").replace("CODER REPORT", "").trim()
       && String(c.Body || "").startsWith("CODER REPORT"));
@@ -195,13 +216,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           height: "calc(100vh - 118px)", minHeight: 420 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.75,
             borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
-            {/* each pill says how many live behind it - a filter you cannot size up is a guess */}
-            <FilterPills value={filter} onChange={setFilter}
-              options={STATE_FILTERS.map((f) => ({ ...f,
-                label: tasks ? (f.key ? f.label + " " + tasks.filter((x) => stateOf(x).key === f.key).length
-                                      : f.label + " " + tasks.length) : f.label }))} />
-            <Box sx={{ flex: 1 }} />
-            <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}>New</Button>
+            {/* each pill says how many live behind it - a filter you cannot size up is a guess.
+                The pills give way, never the New button: four-digit counts must not be able to
+                push it off the edge of a 340px panel again. */}
+            <Box sx={{ minWidth: 0, overflowX: "auto", "&::-webkit-scrollbar": { display: "none" },
+              scrollbarWidth: "none" }}>
+              <FilterPills value={filter} onChange={setFilter}
+                options={STATE_FILTERS.map((f) => ({ ...f,
+                  n: !tasks ? null : f.key ? tasks.filter((x) => inBucket(x, f.key)).length : tasks.length }))} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 4 }} />
+            {/* flexShrink: the pills would otherwise squeeze this until only half the + was
+                left on screen, and a clipped button reads as a rendering fault */}
+            <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}
+              sx={{ flexShrink: 0, minWidth: "auto", px: 1 }}>New</Button>
           </Box>
           {/* rows as separated cards on a soft ground - air between tasks instead of a ruled
               ledger, selection said with the border alone. Scandinavian: fewer lines, calmer. */}
@@ -245,7 +273,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     {t.Title}
                   </Typography>
                   <StateChip task={{ ...t, ReviewStatus: (detail.reviews || [])[0]?.Status,
-                    RunStatus: (detail.runs || [])[0]?.Status }} />
+                    RunStatus: (detail.runs || [])[0]?.Status, Session: detail.session }} />
                   {t.Status !== "done" && (
                     <Tooltip title="I took care of it — close the task and wrap anything running">
                       <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}

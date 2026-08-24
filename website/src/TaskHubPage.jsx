@@ -117,7 +117,7 @@ export default function TaskHubPage() {
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
           {everTasks && (
             <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
-              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask}
+              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask} active={tab === "Tasks"}
                 onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
                 onGoReview={() => { refreshPending(); go("Review"); }} />
             </Box>

@@ -885,8 +885,9 @@ function CloudObjects({ conn, meta, objects, reload }) {
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: FAINT }} /></InputAdornment> }} />
             {kinds.length > 1 && (
               <FilterPills value={kind} onChange={(v) => { setKind(v); setLimit(PAGE_OBJ); }}
-                options={[{ key: "", label: `all ${objects.length}` },
-                  ...kinds.map((p) => ({ key: p, label: `${OBJ_TYPES[p][1]} ${objects.filter((s) => objType(s.Address) === p).length}` }))]} />
+                options={[{ key: "", label: "all", n: objects.length },
+                  ...kinds.map((p) => ({ key: p, label: OBJ_TYPES[p][1],
+                    n: objects.filter((s) => objType(s.Address) === p).length }))]} />
             )}
             <FilterPills value={mode} onChange={(v) => { setMode(v); setLimit(PAGE_OBJ); }}
               options={[{ key: "", label: "any mode" },

@@ -46,6 +46,16 @@ const savedTheme = () => {
   catch { return "Catppuccin Mocha"; }
 };
 
+// How much of the run fits on screen. A coding CLI writes far more than it asks, so the
+// useful size here is smaller than a font you would READ prose at - most of these lines are
+// scanned, not read, and every point of size costs you rows of context.
+const SIZES = [9, 10, 11, 12, 12.5, 14];
+const DEFAULT_SIZE = 11;
+const savedSize = () => {
+  try { const n = parseFloat(localStorage.getItem("tq-term-size")); return SIZES.includes(n) ? n : DEFAULT_SIZE; }
+  catch { return DEFAULT_SIZE; }
+};
+
 const wsUrl = (sid) => {
   const t = localStorage.getItem("taskuary_token");
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminals/${sid}/ws${t ? `?token=${encodeURIComponent(t)}` : ""}`;
@@ -66,13 +76,26 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   // up (see the 'ready' frame); nobody needs to watch their own history rewind.
   const [restoring, setRestoring] = useState(false);
   const [themeName, setThemeName] = useState(savedTheme);
+  const [size, setSize] = useState(savedSize);
   const termRef = useRef(null);
+  const refit = useRef(null);                        // set at mount: refit + tell the pty
   useEffect(() => {                                  // live restyle, no reconnect
     try { localStorage.setItem("tq-term-theme", themeName); } catch { /* private mode */ }
     if (termRef.current) termRef.current.options.theme = THEMES[themeName];
   }, [themeName]);
+  // resizing the FONT resizes the terminal: same pane, more rows. The pty has to be told, or
+  // the CLI keeps painting for the old window and its TUI wraps against nothing.
   useEffect(() => {
-    const term = new Terminal({ fontSize: 12.5, fontFamily: TERM_FONT, fontWeightBold: 600,
+    try { localStorage.setItem("tq-term-size", String(size)); } catch { /* private mode */ }
+    if (!termRef.current) return;
+    termRef.current.options.fontSize = size;
+    // one frame late on purpose: fit() divides the pane by the CHARACTER size, and xterm has
+    // not remeasured the glyph yet on this tick - refitting now just recomputes the old rows
+    const id = requestAnimationFrame(() => refit.current?.());
+    return () => cancelAnimationFrame(id);
+  }, [size]);
+  useEffect(() => {
+    const term = new Terminal({ fontSize: savedSize(), fontFamily: TERM_FONT, fontWeightBold: 600,
       theme: THEMES[savedTheme()], cursorBlink: true, cursorStyle: "bar", scrollback: 10000,
       allowProposedApi: true, drawBoldTextInBrightColors: false, letterSpacing: 0, lineHeight: 1.15 });
     termRef.current = term;
@@ -106,6 +129,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
     term.onData((d) => send({ type: "in", data: d }));
     const onResize = () => { fit.fit(); send({ type: "resize", rows: term.rows, cols: term.cols }); };
+    refit.current = onResize;                       // the size picker drives the same path
     window.addEventListener("resize", onResize);
     const ro = new ResizeObserver(onResize);
     ro.observe(host.current);
@@ -132,13 +156,29 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   return (
     <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden",
       bgcolor: THEMES[themeName].background }}>
-      {/* palette picker: discreet until hovered - restyles ANY CLI in the pane, codex included */}
-      <Box component="select" value={themeName} onChange={(e) => setThemeName(e.target.value)}
-        title="terminal palette"
-        sx={{ ...mono, position: "absolute", top: 5, right: 10, zIndex: 2, fontSize: 10,
-          bgcolor: "transparent", color: "#8a94a6", border: "none", outline: "none",
-          opacity: 0.45, "&:hover": { opacity: 1 }, cursor: "pointer" }}>
-        {Object.keys(THEMES).map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
+      {/* the pane's two knobs, discreet until hovered: how it is painted, and how much of the
+          run fits in it. Both restyle ANY CLI in the pane - codex and claude included - and
+          both stick per browser. */}
+      <Box sx={{ position: "absolute", top: 5, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
+        opacity: 0.45, "&:hover": { opacity: 1 }, transition: "opacity .15s" }}>
+        {/* one step smaller is a couple more rows of the run without touching the layout -
+            far cheaper than scrolling back for what just went past */}
+        <Box component="button" onClick={() => setSize((n) => SIZES[Math.max(0, SIZES.indexOf(n) - 1)])}
+          disabled={size === SIZES[0]} title="smaller text — more of the run on screen"
+          sx={{ ...mono, fontSize: 11, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8a94a6",
+            border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
+            "&:hover:not(:disabled)": { color: "#e5e8ee" } }}>A−</Box>
+        <Box component="button" onClick={() => setSize((n) => SIZES[Math.min(SIZES.length - 1, SIZES.indexOf(n) + 1)])}
+          disabled={size === SIZES[SIZES.length - 1]} title="bigger text"
+          sx={{ ...mono, fontSize: 13, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8a94a6",
+            border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
+            "&:hover:not(:disabled)": { color: "#e5e8ee" } }}>A+</Box>
+        <Box component="select" value={themeName} onChange={(e) => setThemeName(e.target.value)}
+          title="terminal palette"
+          sx={{ ...mono, fontSize: 10, bgcolor: "transparent", color: "#8a94a6", border: "none",
+            outline: "none", cursor: "pointer" }}>
+          {Object.keys(THEMES).map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
+        </Box>
       </Box>
       {/* A scrollbar on the session itself, the way a console has one.
           xterm 6 does not use a native scrollbar: it embeds VS Code's scrollable element, which
@@ -186,9 +226,11 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
 // behind their back.
 export const ThemeHint = () => (
   <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
-    The picker on the session's top-right corner switches the terminal palette (Catppuccin,
-    Dracula, Tokyo Night, Gruvbox, One Dark) — that restyles codex and any other CLI, since a
-    TUI paints with the terminal's colors. To match Catppuccin inside Claude Code itself, run{" "}
+    The session's top-right corner holds both knobs: A− / A+ set the text size (smaller means
+    more of the run on screen and less scrolling back), and the picker switches the terminal
+    palette (Catppuccin, Dracula, Tokyo Night, Gruvbox, One Dark) — that restyles codex and any
+    other CLI, since a TUI paints with the terminal's colors. To match Catppuccin inside Claude
+    Code itself, run{" "}
     <Box component="code" sx={{ ...mono, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 1,
       px: 0.75, py: 0.25, fontSize: 11, cursor: "pointer" }}
       title="click to copy"

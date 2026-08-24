@@ -636,6 +636,18 @@ def _cut(text: str, n: int, what: str = 'message') -> str:
             'Ask the owner for the rest before assuming anything past this point.]')
 
 
+# An agent working a repository has no use for anybody's email address, and every prompt is
+# a copy handed to a third-party CLI, written into its transcript and its own logs. So the
+# addresses come out of everything we inject: SOUL.md carries the owner's, the coder rules and
+# handover notes quote correspondents, and none of it changes a line of code. The NAME stays -
+# "Sign as Uri J Nussbaum" still means something without the mailbox next to it.
+_EMAIL = re.compile(r'\b[\w.+-]+@[\w-]+\.[\w.-]+')
+
+
+def no_emails(text: str) -> str:
+    return _EMAIL.sub('[email removed]', text or '')
+
+
 def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None) -> str:
     """What gets typed into a fresh session, and the ONLY context it should need: the ask, the
     mail behind it, which checkout to work in, and the coder rules. One line - a newline
@@ -676,7 +688,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     note = next((c['Body'] for c in reversed(store.list_comments(tid))
                  if str(c.get('Body') or '').startswith(PAUSE_MARKER)), None)
     if note: parts.append('HANDOVER: an earlier session on this task was paused and left this - '
-                          f'continue from it, do not start over: {_cut(note, 3000, "handover note")}')
+                          f'continue from it, do not start over: {no_emails(_cut(note, 3000, "handover note"))}')
     # SOUL.md rides in WITH the coder rules, because the coder rules refer to it: CODER.md says
     # "work only in the repository the task names (see the repository map in SOUL.md)" and
     # claims it is "stacked on top of SOUL.md for every coder run" - and for a live session it
@@ -685,9 +697,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # structurally incapable of seeing. It was right. These docs live in Taskuary's database;
     # if the prompt does not carry them, nothing does.
     soul = ' '.join(str(store.doc('soul') or '').split())[:SOUL_CHARS]
-    if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {soul}')
+    if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {no_emails(soul)}')
     rules = rules_text(store)
-    if rules: parts.append(f'RULES: {rules}')
+    if rules: parts.append(f'RULES: {no_emails(rules)}')
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.

@@ -13,7 +13,7 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![Taskuary in use: the timeline of email, chats and scheduled reports; a mail opened to show why triage made it a task and the AI reply drafted for approval; a scheduled report landing with its bar chart and spreadsheet; the Reports pipeline list; and the agent board with live sessions and the note one agent left the next](docs/hero.gif)
+![Taskuary in use: the timeline of email, chats and scheduled reports; a mail opened to show why triage made it a task and the AI reply drafted for approval; a scheduled report landing with its bar chart and spreadsheet; the Reports pipeline list; and the agent board with live sessions and the note one agent left the next](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
 
 <sub>Real app, real data — a mail triaged and its reply drafted for your approval, then a scheduled SQL report landing on the same rail with its chart and spreadsheet. Nothing sends without you.</sub>
 
@@ -45,7 +45,7 @@ sender (yours to review under Settings → Agent memory).
 
 The general lessons take a stricter road, so one odd Tuesday never becomes a rule:
 
-![Your verdicts become a hypothesis with score s:2; agreeing verdicts add a point and contradictions remove one; at s:4 with proof from two or more people it is promoted into LEARNED.md, which then rides into every triage, draft and agent run](docs/learning-loop.svg)
+![Your verdicts become a hypothesis with score s:2; agreeing verdicts add a point and contradictions remove one; at s:4 with proof from two or more people it is promoted into LEARNED.md, which then rides into every triage, draft and agent run](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/learning-loop.svg)
 
 **How the memory works, concretely.** Each lesson is one line in `LEARNED.md` (Docs tab) —
 a guess with a score. Say you strip the greeting off three drafts this week; the file soon
@@ -168,7 +168,7 @@ with no AI connected messages file visibly instead of heuristics spraying tasks.
 
 ## Many agents, one repo — no stepping on each other
 
-![Two agents share one checkout: each working card shows the files ITS agent has modified (claude in the theme files, codex in the report code and its tests), and a third task waits in Queued with the reason written on the card — waiting on TQ-0009, both would modify ReportsView.jsx, starts by itself when it can](docs/screenshot-board.png)
+![Two agents share one checkout: each working card shows the files ITS agent has modified (claude in the theme files, codex in the report code and its tests), and a third task waits in Queued with the reason written on the card — waiting on TQ-0009, both would modify ReportsView.jsx, starts by itself when it can](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-board.png)
 
 Auto-dispatch can put several CLIs to work at once — and the board keeps them out of each
 other's way with three light moves. No locks, no worktrees, no manager agent:
@@ -218,7 +218,7 @@ Plain markdown, all on the Docs tab, all yours to edit. Three you write, two wri
 themselves, and two can **bootstrap themselves from your mail history** (`TRIAGE.md` and
 `STYLE.md` — the Generate from history button). Each feeds exactly the calls it belongs in.
 
-![TRIAGE.md, STYLE.md, SOUL.md and LEARNED.md feed triage and replies on the cheap model; SOUL.md, CODER.md and LEARNED.md feed coding agents on your CLI; DIGEST.md is your own morning read — and TRIAGE.md and STYLE.md can be generated from three months of your own mail](docs/six-docs.svg)
+![TRIAGE.md, STYLE.md, SOUL.md and LEARNED.md feed triage and replies on the cheap model; SOUL.md, CODER.md and LEARNED.md feed coding agents on your CLI; DIGEST.md is your own morning read — and TRIAGE.md and STYLE.md can be generated from three months of your own mail](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/six-docs.svg)
 
 | document | what it is | who reads it |
 |---|---|---|

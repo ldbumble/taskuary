@@ -1,0 +1,24 @@
+# Taskuary — docker compose up, then http://127.0.0.1:7787
+#
+# Data persists in the taskuary-data volume. Coding CLIs (Claude Code, Codex, …)
+# and the WhatsApp bridge are host programs; they are not in this image.
+# Publish past localhost only with TASKUARY_TOKEN set:
+#   TASKUARY_TOKEN=... docker compose up
+services:
+  taskuary:
+    build: .
+    image: taskuary:local
+    init: true
+    ports:
+      - "127.0.0.1:7787:7787"
+    volumes:
+      - taskuary-data:/data
+    environment:
+      TASKUARY_HOST: "0.0.0.0"
+      TASKUARY_TOKEN: ${TASKUARY_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  taskuary-data:

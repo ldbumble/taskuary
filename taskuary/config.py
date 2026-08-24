@@ -2,7 +2,8 @@
 
 [server] port/host/token; [agents.<name>] cmd/args/resume_args/timeout/cwd/cwd_map;
 [github] token/default_repo. Everything is optional: `taskuary` runs with no config at all
-(SQLite store, stub agent, localhost server).
+(SQLite store, stub agent, localhost server). TASKUARY_HOST / TASKUARY_PORT / TASKUARY_TOKEN
+override [server] so a container can bind 0.0.0.0 without rewriting the data-volume config.
 """
 import json, os
 try: import tomllib
@@ -31,6 +32,10 @@ def load() -> dict:
                                                  '--output-format', 'stream-json', '--verbose'],
                                         'resume_args': ['--resume'], 'timeout': 1500}})
     cfg.setdefault('github', {})
+    # process env wins so Docker (and systemd) can bind without editing config.toml
+    if os.getenv('TASKUARY_HOST'): cfg['server']['host'] = os.environ['TASKUARY_HOST']
+    if os.getenv('TASKUARY_PORT'): cfg['server']['port'] = int(os.environ['TASKUARY_PORT'])
+    if 'TASKUARY_TOKEN' in os.environ: cfg['server']['token'] = os.environ['TASKUARY_TOKEN'] or None
     return cfg
 
 def db_path() -> str:

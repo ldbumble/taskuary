@@ -31,6 +31,13 @@ def regions(cfg: dict) -> list:
     return list(dict.fromkeys(out)) or [None]
 
 
+def _key(addr: str, region):
+    """What makes this object itself. A bucket is global - its name IS its identity, and the
+    region only says which endpoint to read it from. A log group is regional, so its name means
+    nothing without one."""
+    return addr if addr.startswith('s3://') else (addr, region)
+
+
 def client(cfg: dict, service: str, region: str = None):
     """`region` overrides the card - what a per-object call uses, because a discovered object
     knows which region it was found in and the card's FIRST region is only a default."""
@@ -54,11 +61,17 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
     a source with its own mode picker - report (default: selectable on the Reports tab,
     nothing polled), feed (new items shown on the Timeline), tasks (through triage), or
     off. A list that partially fails still registers what it found."""
-    # (address, region) is the identity, not the address alone: /aws/lambda/ingest in us-east-1
-    # and the one in us-east-2 are different log groups that happen to share a name, and keying
-    # on the name would register whichever came first and silently drop the other.
-    known = {(s['Address'], json.loads(s.get('ConfigJson') or '{}').get('region'))
-             for s in store.list_sources(active_only=False) if s['Channel'] == 'aws'}
+    # WHAT MAKES AN OBJECT ITSELF differs by service, and getting this wrong loses rows either
+    # way. A log group is (name, region): /aws/lambda/ingest in us-east-1 and the one in
+    # us-east-2 are unrelated groups that happen to share a name, and keying on the name alone
+    # registers whichever came first and drops the other. A BUCKET is its name and nothing
+    # else - S3 is one global namespace - so keying a bucket on (name, region) would file the
+    # same bucket twice the moment get_bucket_location answered differently than last time
+    # (a permission removed, a fallback taken), splitting its mode across two rows.
+    known = {}
+    for row in store.list_sources(active_only=False):
+        if row['Channel'] != 'aws': continue
+        known[_key(row['Address'], json.loads(row.get('ConfigJson') or '{}').get('region'))] = row
     regs = regions(cfg)
     found = []                                     # [(address, region)]
     # S3 is one global namespace - listing it once per region would return the same buckets
@@ -88,14 +101,27 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
             # one bad region must not cost the others: a key without permission in eu-west-1 is
             # a reason to skip eu-west-1, not to discover nothing
             logger.warning(f'aws discovery: log groups failed in {reg or "the default region"}: {e}')
-    added = 0
+    added, stamped = 0, 0
     for addr, reg in found:
-        if (addr, reg) in known: continue
+        # a row discovered before the card knew about regions carries none. It is the SAME
+        # object, so it is adopted and stamped - not replaced by a second copy that would take
+        # the polling while the owner's mode pick sat on the row above it.
+        row = known.get(_key(addr, reg)) or known.get(_key(addr, None))
+        if row:
+            scfg = json.loads(row.get('ConfigJson') or '{}')
+            if not scfg.get('region') and reg:
+                store.save_source({'SourceId': row['SourceId'],
+                                   'ConfigJson': json.dumps({**scfg, 'region': reg})}, actor)
+                known.pop(_key(addr, None), None)
+                known[_key(addr, reg)] = {**row, 'ConfigJson': json.dumps({**scfg, 'region': reg})}
+                stamped += 1
+            continue
         store.save_source({'Channel': 'aws', 'Address': addr, 'ConnectorId': connector_id, 'Active': 1,
                            'Owner': 'discovered', 'ConfigJson': json.dumps({'mode': 'report', 'region': reg})}, actor)
-        known.add((addr, reg))
+        known[_key(addr, reg)] = {'SourceId': None, 'Address': addr,
+                                  'ConfigJson': json.dumps({'mode': 'report', 'region': reg})}
         added += 1
-    out = {'found': len(found), 'added': added, 'regions': [r for r in regs if r]}
+    out = {'found': len(found), 'added': added, 'stamped': stamped, 'regions': [r for r in regs if r]}
     if not found:
         out['hint'] = ('the keys authenticate but list nothing - they need s3:ListAllMyBuckets and '
                        'logs:DescribeLogGroups (AmazonS3ReadOnlyAccess + CloudWatchLogsReadOnlyAccess '

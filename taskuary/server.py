@@ -661,6 +661,15 @@ def task_proof(tid: int):
     from . import proof
     return proof.gather(store, tid)
 
+@app.get('/api/tasks/{tid}/diff')
+def task_diff(tid: int):
+    """What the agent has changed in this checkout and not committed - per file, so the look
+    you take before anything is pushed is a review and not a wall of text. Read-only by
+    construction: it runs `git diff` and `git status`, never `add`, never `stash`."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    from . import proof
+    return proof.review(store, tid)
+
 @app.post('/api/tasks/{tid}/land')
 def task_land(tid: int, flow: str = None):
     """Publish this task's work the way Settings says: a DRAFT pull request, or the commits

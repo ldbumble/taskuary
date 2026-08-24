@@ -53,15 +53,85 @@ def tests_from(text: str) -> dict:
 def files_from(diff: str) -> list:
     """[{path, added, removed}] straight out of a unified diff - what MOVED, per git, not
     per the agent's account of itself."""
+    return [{k: f[k] for k in ('path', 'added', 'removed')} for f in split_files(diff)]
+
+
+def split_files(diff: str) -> list:
+    """The same walk, keeping each file's own PATCH: a five-file change reviews as five
+    things you open one at a time, not one wall you scroll past. Everything before the first
+    'diff --git' (git prints nothing there, but a --no-index run can) is dropped."""
     out, cur = [], None
     for l in (diff or '').splitlines():
         if l.startswith('diff --git'):
-            p = l.split(' b/')[-1].strip()
-            cur = {'path': p, 'added': 0, 'removed': 0}
+            cur = {'path': l.split(' b/')[-1].strip(), 'added': 0, 'removed': 0, 'lines': []}
             out.append(cur)
-        elif cur and l.startswith('+') and not l.startswith('+++'): cur['added'] += 1
-        elif cur and l.startswith('-') and not l.startswith('---'): cur['removed'] += 1
+        if cur is None: continue
+        cur['lines'].append(l)
+        if l.startswith('+') and not l.startswith('+++'): cur['added'] += 1
+        elif l.startswith('-') and not l.startswith('---'): cur['removed'] += 1
+    for f in out:
+        f['patch'] = '\n'.join(f.pop('lines'))
+        # git says "Binary files a/x and b/x differ" and stops - there is no patch to read,
+        # and a row that opens onto nothing is worse than one that says why
+        f['binary'] = not f['added'] and not f['removed'] and 'Binary files' in f['patch']
     return out
+
+
+# A generated bundle is not a review. Past this the file is listed with its counts and the
+# patch is withheld, because nobody reads a 200k-character diff and pretending otherwise
+# just makes the panel unusable for the files that DO matter.
+MAX_PATCH = 200_000
+
+
+def _git(cwd, *args, ok=(0,)):
+    """git, tolerating the exit codes that are not failures: `diff --no-index` returns 1 when
+    the files DIFFER, which is the entire question we are asking it."""
+    import subprocess
+    try:
+        p = subprocess.run(['git', '-C', cwd, *args], capture_output=True, text=True,
+                           encoding='utf-8', errors='replace', timeout=30)
+        return p.stdout if p.returncode in ok else ''
+    except Exception as e:
+        logger.warning(f'git {" ".join(args)} in {cwd} failed: {e}')
+        return ''
+
+
+def working_diff(cwd: str) -> str:
+    """What the agent has done to this checkout and not committed - and it is TWO questions,
+    because `git diff` shows edits to files git already knows and says nothing at all about
+    the files the agent just created. A review that silently omits every new file is not a
+    review, so the untracked ones are diffed against nothing and appended."""
+    import os
+    if not cwd or not os.path.isdir(cwd): return ''
+    out = [_git(cwd, 'diff', 'HEAD')]                          # staged and unstaged alike
+    status = _git(cwd, 'status', '--porcelain', '-uall')       # -uall: a new FOLDER lists its files
+    for line in status.splitlines():
+        if not line.startswith('??'): continue
+        path = line[3:].strip().strip('"')
+        # '/dev/null' is git's own spelling for the empty side, understood on Windows too
+        out.append(_git(cwd, 'diff', '--no-index', '--', '/dev/null', path, ok=(0, 1)))
+    return '\n'.join(x for x in out if x.strip())
+
+
+def review(store, task_id: int) -> dict:
+    """The uncommitted change on a task's checkout, per file, for the look you take before
+    anything is pushed. The live session's OWN cwd is the truth when there is one - it is
+    where the agent is actually typing, and it beats any tag or map."""
+    from . import terminal as hub_term
+    t = store.get_task(task_id) or {}
+    repo = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
+    sess = hub_term.for_task(task_id)
+    cwd = (sess or {}).get('cwd') or (hub_term.path_for_repo(store, repo) if repo else None)
+    if not cwd:
+        return {'cwd': None, 'repo': repo, 'files': [],
+                'why': 'no checkout for this task yet - start a session, or pick the repository '
+                       'from the task menu, and the changes show up here'}
+    files = split_files(working_diff(cwd))
+    for f in files:
+        if len(f['patch']) > MAX_PATCH: f['patch'], f['truncated'] = '', True
+    return {'cwd': cwd, 'repo': repo, 'branch': _git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
+            'files': files,
+            'added': sum(f['added'] for f in files), 'removed': sum(f['removed'] for f in files)}
 
 
 def _secs(a, b):

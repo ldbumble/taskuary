@@ -278,6 +278,44 @@ export const DiffBlock = ({ text }) => {
   );
 };
 
+/* The same diff, per FILE. One 360px box holding a five-file change is not a review - you
+   scroll it once and approve on vibes. A row per file with its own counts is a list you can
+   work through, and the first file opens because a one-file change should need no clicks. */
+export const DiffFiles = ({ files, cwd, branch }) => {
+  const [open, setOpen] = React.useState(() => new Set(files.length === 1 ? [0] : []));
+  const flip = (i) => setOpen((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  if (!files.length) return <Empty>Nothing changed in this checkout yet — the working tree is clean.</Empty>;
+  return (
+    <Box>
+      <Typography variant="caption" sx={{ ...mono, color: FAINT, display: "block", mb: 0.75, wordBreak: "break-all" }}>
+        {cwd}{branch ? ` · ${branch}` : ""}
+      </Typography>
+      {files.map((f, i) => (
+        <Box key={f.path} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, mb: 0.75, overflow: "hidden", bgcolor: "#fff" }}>
+          <Box onClick={() => flip(i)}
+            sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.7, cursor: "pointer",
+              bgcolor: "#f7f8fa", "&:hover": { bgcolor: "#f1f3f6" } }}>
+            <ChevronRightIcon sx={{ fontSize: 16, color: FAINT, flexShrink: 0,
+              transform: open.has(i) ? "rotate(90deg)" : "none", transition: "transform .12s" }} />
+            <Typography sx={{ ...mono, fontSize: 11.5, color: INK, flex: 1, minWidth: 0,
+              overflow: "hidden", textOverflow: "ellipsis", direction: "rtl", textAlign: "left" }}>
+              {f.path}
+            </Typography>
+            {/* the two numbers people actually scan a file list for */}
+            <Typography sx={{ ...mono, fontSize: 11, color: "#15803d", fontVariantNumeric: "tabular-nums" }}>+{f.added}</Typography>
+            <Typography sx={{ ...mono, fontSize: 11, color: "#b91c1c", fontVariantNumeric: "tabular-nums" }}>−{f.removed}</Typography>
+          </Box>
+          {open.has(i) && (f.binary
+            ? <Typography variant="caption" sx={{ color: FAINT, display: "block", px: 1.5, py: 1 }}>Binary file — git reports it changed, there is no text to show.</Typography>
+            : f.truncated
+              ? <Typography variant="caption" sx={{ color: FAINT, display: "block", px: 1.5, py: 1 }}>Too large to render here — open it in your editor.</Typography>
+              : <DiffBlock text={f.patch} />)}
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
 // The coder's report, parsed into labeled sections instead of a wall of text.
 const REPORT_COLORS = { Triage: "#0e7490", Determination: "#7e22ce", Actions: "#b45309", Summary: "#15803d",
   Found: "#0e7490", Did: "#b45309", Next: "#7e22ce" };

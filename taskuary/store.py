@@ -81,7 +81,14 @@ def norm_stamp(s) -> str:
     local rows ('T' > ' ' at position 10) while displaying as the local afternoon - a
     timeline visibly out of order. Anything unparseable passes through untouched."""
     if not s: return _now()
-    try: d = datetime.fromisoformat(str(s).replace('Z', '+00:00'))
+    t = str(s).strip().replace('Z', '+00:00')
+    # py3.10's fromisoformat accepts exactly 3 or 6 fractional digits and Graph sends TWO
+    # ('...:37.94Z'), so this raised, the value was handed back untouched, and the heal below
+    # has been a no-op since the day it was written. Those rows kept sorting above every later
+    # message ('T' > ' ' at position 10) - which is how list_messages hands an agent a
+    # three-day-old message as "the ask" and the real one never reaches it.
+    t = re.sub(r'\.(\d{1,6})(?=[+-]|$)', lambda m: '.' + m.group(1).ljust(6, '0'), t)
+    try: d = datetime.fromisoformat(t)
     except ValueError: return str(s)
     if d.tzinfo: d = d.astimezone()
     return d.replace(tzinfo=None).isoformat(sep=' ', timespec='seconds')
@@ -408,7 +415,11 @@ class SQLiteStore:
     # messages / routes / comments
     def message_exists(self, external_id):
         return self._one('SELECT 1 x FROM message WHERE ExternalId=?', (external_id,)) is not None
-    def add_message(self, fields): return self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
+    def add_message(self, fields):
+        # normalized on the way IN, not only by a heal on the way past: one clock for the
+        # timeline, and no row that can sort above its own future
+        if fields.get('SentAt'): fields = {**fields, 'SentAt': norm_stamp(fields['SentAt'])}
+        return self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
     def scan_messages(self, limit=20000):

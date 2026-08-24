@@ -457,12 +457,17 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         # a picture we could not FETCH must not vanish silently the way it used to. Graph
         # refuses hostedContents unless the app registration carries ChatMessage.Read.All, and
         # "the screenshot was the whole ask" is exactly the message you cannot afford to read
-        # as an empty sentence - so the row says what is missing and why.
+        # as a sentence with a hole in it, so the row says what is missing.
+        #
+        # And it is NOT a missing consent, which is what this comment used to claim: the token
+        # carries ChatMessage.Read.All and hostedContents still answers 403 AclCheckFailed -
+        # a MEMBERSHIP check on the chat, not a scope check. An app-only connection is not in
+        # the chat, so no permission grant fixes it; that would take delegated auth.
         missed = len(set(_HOSTED.findall(raw_html))) - len(atts)
         if missed > 0:
-            body += ('\n\n[' + f"{missed} image{'s' if missed > 1 else ''} in this message could not be read - "
-                     'Graph refused the download. The Teams app registration needs the '
-                     'ChatMessage.Read.All application permission (admin consent) for chat images.]')
+            body += ('\n\n[' + f"{missed} image{'s' if missed > 1 else ''} in this message could not be read: "
+                     'Microsoft refuses image downloads to an app-only Teams connection '
+                     '(403 AclCheckFailed) however the app is consented. Open it in Teams to see it.]')
         common = {'external_id': f'teams:{cid}:{m["id"]}', 'channel': 'teams',
                   'subject': topic or (f'Teams chat with {name}' if kind == 'oneOnOne' else f'Teams {kind}'),
                   'body': body[:20000], 'conversation_id': f'teams:{cid}',

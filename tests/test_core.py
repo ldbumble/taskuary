@@ -796,3 +796,44 @@ class CoreTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class StampTests(unittest.TestCase):
+    """One clock for the timeline. A row that sorts above its own future is not a display
+    nit: list_messages orders by SentAt, so the LAST row is what seed_text hands an agent as
+    "the ask" - and a three-day-old message sorting last is a wrong instruction, delivered
+    with total confidence."""
+
+    def test_graphs_two_digit_fraction_normalizes(self):
+        """py3.10's fromisoformat accepts exactly 3 or 6 fractional digits. Graph sends TWO
+        ('...:37.94Z'), so this raised, the value was handed back untouched, and the heal that
+        exists to fix these rows did nothing at all from the day it was written."""
+        self.assertEqual(store_mod.norm_stamp('2026-08-21T18:44:37.94Z')[:10], '2026-08-21')
+        self.assertNotIn('T', store_mod.norm_stamp('2026-08-21T18:44:37.94Z'))
+
+    def test_every_fraction_width_and_none_at_all(self):
+        for v in ('2026-08-21T18:44:37Z', '2026-08-21T18:44:37.9Z', '2026-08-21T18:44:37.94Z',
+                  '2026-08-21T18:44:37.943Z', '2026-08-21T18:44:37.943512Z'):
+            self.assertNotIn('T', store_mod.norm_stamp(v), v)
+
+    def test_a_local_stamp_is_left_exactly_as_it_is(self):
+        self.assertEqual(store_mod.norm_stamp('2026-08-24 15:29:11'), '2026-08-24 15:29:11')
+
+    def test_something_unparseable_passes_through_rather_than_becoming_now(self):
+        self.assertEqual(store_mod.norm_stamp('garbage'), 'garbage')
+
+    def test_a_raw_iso_stamp_can_never_be_STORED_again(self):
+        s = MemoryStore()
+        mid = s.add_message({'Channel': 'teams', 'ExternalId': 'st1', 'SentAt': '2026-08-21T18:44:37.94Z'})
+        self.assertNotIn('T', s.get_message(mid)['SentAt'])
+
+    def test_the_newest_message_really_is_last(self):
+        """The failure in one line: the older message sorted last, so it was the one handed
+        over as the ask."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 't'}, 'o')
+        s.add_message({'TaskId': tid, 'ExternalId': 'a', 'SentAt': '2026-08-21T18:44:37.94Z',
+                       'BodyText': 'three days ago'})
+        s.add_message({'TaskId': tid, 'ExternalId': 'b', 'SentAt': '2026-08-24 15:29:11',
+                       'BodyText': 'the actual ask'})
+        self.assertEqual(s.list_messages(tid)[-1]['BodyText'], 'the actual ask')

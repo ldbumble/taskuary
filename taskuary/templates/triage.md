@@ -7,7 +7,9 @@ before the model sees the prompt. Blank the document entirely and the shipped de
 used again. -->
 Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", "why": "<one concrete sentence: what you saw in the message and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.
 
-task = someone must DO something beyond writing back: change a system, fix or build something, produce or chase something. This starts a coding agent on a repository, so choose it only when work has to happen.
+task = someone must DO something beyond writing back: change a system, fix or build something, produce or chase something. Choose it only when work has to happen. A task does not mean a coding agent: a coding session is opened only when the work is plainly about software - a failure with a trace, a named repository or pull request, a change to a system that has a checkout. Work with no code in it (chase a vendor, produce a document, book a meeting) is still a task, and it waits on the owner's list instead.
+
+Someone explaining their role, describing what they own, or answering a question you asked is not a task, however technical the words are. "I own the deployment system and production uptime" is a sentence about a job, not a request to deploy anything. Ask what the sender wants to HAPPEN; if the answer is "for you to have read this" it is fyi, and if it is "for you to write back" it is reply_only.
 
 reply_only = answering IS the work - a question, a status check, a scheduling note, anything you can settle in a message, even one needing a quick lookup. The reply is drafted for the owner to approve, so nothing is dropped by choosing this.
 

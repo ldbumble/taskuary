@@ -515,6 +515,24 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     return {'ok': True, 'memoryId': memid, 'note': note, 'scope': scope, 'scopeKey': key,
             'taskDeleted': bool(tid)}
 
+@app.post('/api/messages/{mid}/file')
+def file_message(mid: int):
+    """"Nothing to do here" - the harmless exit, and the one that was MISSING. A message
+    triage filed with no task offered only "Not our task", which writes a durable verdict
+    against the sender (and against EVERY sender when the channel has no address to key on,
+    like Teams) - so getting one chat off the timeline could quietly teach the funnel to stop
+    listening to a colleague. This teaches nothing: the item stops being work, its task goes
+    if it had one, and their next message arrives exactly as before."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    tid = m.get('TaskId')
+    if tid and store.get_task(tid):
+        store.audit('task', tid, 'filed_not_work', ACTOR, detail={'message_id': mid})
+        store.delete_task(tid)                       # its messages revert to 'filed'
+    store.set_message_status(mid, 'ignored')
+    store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], ACTOR)
+    return {'ok': True, 'taskDeleted': bool(tid)}
+
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int):
     """The note we'd save, so the panel can show it for editing before it's committed."""

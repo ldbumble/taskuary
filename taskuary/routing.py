@@ -83,12 +83,33 @@ def route(msg, tasks, threshold=ATTACH_THRESHOLD):
     return {'decision':'create', 'task_id':None, 'score':best['score'] if best else 0.0,
             'reason': f'new task - nothing similar already open{top}', 'candidates':cands[:5]}
 
+# KIND decides who works the task, and 'coding' is the one that starts an agent on a
+# checkout - so it has to mean "there is software in here", not "a word appeared". A single
+# keyword in flowing prose used to be enough: a Teams message about someone's job scope
+# ("I own the deployment system, production/uptime, and support") hit 'deploy' and became a
+# CODING task with a CLI session opened on a repository. Prose is not a bug report.
+#
+# HARD = something only a real technical report contains. Any one of these is enough.
+_CODE_HARD = re.compile(
+    r'traceback \(most recent call last\)|stack ?trace|^\s+at [\w$.]+\(|'          # a trace
+    r'\b[\w./-]+\.(py|js|jsx|ts|tsx|java|cs|go|rs|rb|php|sql|ya?ml|sh|ps1|css|html)\b|'   # a source file
+    r'(github|gitlab|bitbucket)\.com/|\bpull request\b|\bmerge request\b|\bPR ?#\d+|'     # a repo
+    r'\bhttp \d{3}\b|\b[45]\d{2} (error|response|status)\b|```', re.I | re.M)
+# SOFT = words that DO show up in ordinary prose. Two of them together is a signal; one is
+# somebody talking about their week.
+_CODE_SOFT = ('bug', 'error', 'exception', 'crash', 'broken', 'regression', 'timeout',
+              'deploy', 'endpoint', 'fix the', 'not working', 'fails', 'failing')
+_ASKS = ('can you', 'could you', 'please send', 'let me know', 'would you mind', 'any chance')
+
+
 def draft_task_fields(msg):
-    """Title/summary/kind/priority for a task created from a message (heuristic v1)."""
+    """Title/summary/kind/priority for a task created from a message. `kind` routes the work:
+    coding = an agent on a checkout, reply = the responder and Review, general = your list."""
     subj = norm_subject(msg.get('subject')) or (msg.get('body') or '')[:80] or 'untitled'
     body = (msg.get('body') or '').strip()
-    low = (subj + ' ' + body[:500]).lower()
-    kind = ('coding' if any(w in low for w in ('bug','error','stack trace','exception','deploy','endpoint','fix the','broken')) else
-            'reply' if body.rstrip().endswith('?') or any(w in low for w in ('can you','could you','please send','let me know')) else 'triage')
+    head = subj + '\n' + body[:2000]           # a trace usually sits below the pleasantries
+    low = head.lower()
+    kind = ('coding' if _CODE_HARD.search(head) or sum(w in low for w in _CODE_SOFT) >= 2 else
+            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'general')
     pri = 'urgent' if any(w in low for w in ('urgent','asap','immediately','outage','down')) else 'normal'
     return {'title': subj[:300].capitalize(), 'summary': body[:1000], 'kind': kind, 'priority': pri}

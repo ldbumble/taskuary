@@ -185,10 +185,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
       try {
         const { data } = await api.get("/api/ingest/status");
         if (data.status?.state === "running" && Date.now() - t0 < 180000) {
-          setSyncWhat(data.status.what || ""); setTimeout(check, 2000); return;
+          setSyncWhat(data.status.what || "");
+          // stop DIMMING the moment there is something real to look at: rows land oldest
+          // first, one at a time, and a half-faded list behind a spinner hides exactly the
+          // thing you pressed the button to watch
+          setSyncing(false); setBgSync(true);
+          await load(rowsLen.current);
+          setTimeout(check, 2000); return;
         }
       } catch { /* fall through and settle */ }
-      setSyncWhat(""); settle();
+      setSyncWhat(""); setBgSync(false); settle();
     };
     setTimeout(check, 1500);
   }, [load]);
@@ -208,6 +214,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
           // background catch-up: say so and keep polling, but never dim rows that are already
           // real - a readable timeline behind a working banner, not a page that looks loading
           setBgSync(true); setSyncWhat(data.status.what || "");
+          // ...and SHOW what has landed so far. Ingest writes each message the moment it has
+          // it, oldest first, so the rows were already arriving one at a time - the timeline
+          // just was not asking until the whole poll finished. A three-day catch-up sat behind
+          // a spinner for minutes with a database filling up behind it.
+          load(rowsLen.current);
           setTimeout(watch, 2000);
         } else if (sawRunning) {
           setBgSync(false); setSyncWhat(""); setLastSync(new Date()); load(rowsLen.current);

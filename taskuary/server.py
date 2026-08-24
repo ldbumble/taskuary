@@ -1222,7 +1222,14 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         # channels FIRST: the Morning digest is a report over Taskuary's own data, and run
         # before the catch-up it would summarize yesterday while today sat in the mailbox
         from .channels import poll_channels
-        poll_channels(store, backfill_days)
+        def _say(kind, so_far):
+            # the ORIGINAL what is kept and appended to: "catching up on the last 3 day(s)" is
+            # the context, "reading outlook · 12 in so far" is the progress, and replacing the
+            # first with the second loses why the poll is running at all
+            store.set_setting('ingest_status', json.dumps(
+                {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
+                 'what': f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else '')}), 'system')
+        poll_channels(store, backfill_days, progress=_say)
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         try:

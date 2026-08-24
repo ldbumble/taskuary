@@ -1,6 +1,7 @@
 """The look you take before anything is pushed. git does the diffing - we only ask it the
-right two questions (what changed, and what is NEW, which `git diff` alone never says) and
-cut the answer into one entry per file. Read-only by construction: `diff` and `status`, never
+right three questions (what is committed and not pushed, what is changed and not committed,
+and what is NEW, which `git diff` never mentions at all) and cut the answer into one entry
+per file. Read-only by construction: `diff` and `status`, never
 `add`, never `stash` - reviewing must not disturb what the agent is in the middle of.
 """
 import os, subprocess, tempfile, unittest
@@ -117,6 +118,71 @@ class ReviewTests(unittest.TestCase):
         self.assertTrue(f['truncated'])
         self.assertEqual(f['patch'], '')
         self.assertEqual(f['added'], 200_000)          # the COUNT still tells you what happened
+
+
+
+
+class PushBaseTests(unittest.TestCase):
+    """"What a push would carry" has to mean it. CODER.md tells agents to commit locally and
+    stop, so the finished state of a task is a CLEAN working tree with commits waiting - and
+    a reviewer measuring against HEAD called that "nothing changed"."""
+
+    def _tracked(self):
+        """A repo with an upstream, the way a real checkout has one."""
+        origin = _repo()
+        _run(origin, 'config', 'receive.denyCurrentBranch', 'ignore')
+        d = tempfile.mkdtemp()
+        subprocess.run(['git', 'clone', '-q', origin, d], capture_output=True, check=True)
+        _run(d, 'config', 'user.email', 'a@b.c'); _run(d, 'config', 'user.name', 'T')
+        return d
+
+    def test_a_committed_but_unpushed_change_is_still_a_change(self):
+        d = self._tracked()
+        open(os.path.join(d, 'app.py'), 'w').write('def go():\n    return 42\n')
+        _run(d, 'commit', '-aqm', 'fix it')
+        base, ahead, up = proof.push_base(d)
+        self.assertEqual(ahead, 1)
+        self.assertTrue(up.endswith('main'))
+        files = proof.split_files(proof.working_diff(d))
+        self.assertEqual([f['path'] for f in files], ['app.py'])   # HEAD said nothing at all
+        self.assertIn('+    return 42', files[0]['patch'])
+
+    def test_committed_and_uncommitted_arrive_together(self):
+        d = self._tracked()
+        open(os.path.join(d, 'app.py'), 'w').write('def go():\n    return 42\n')
+        _run(d, 'commit', '-aqm', 'fix it')
+        open(os.path.join(d, 'notes.txt'), 'w').write('still working\n')      # untracked
+        open(os.path.join(d, 'app.py'), 'a').write('# and one more edit\n')   # uncommitted
+        paths = {f['path'] for f in proof.split_files(proof.working_diff(d))}
+        self.assertEqual(paths, {'app.py', 'notes.txt'})
+
+    def test_a_pushed_checkout_shows_nothing_to_push(self):
+        d = self._tracked()
+        open(os.path.join(d, 'app.py'), 'w').write('def go():\n    return 42\n')
+        _run(d, 'commit', '-aqm', 'fix it')
+        _run(d, 'push', '-q')
+        self.assertEqual(proof.push_base(d)[1], 0)
+        self.assertEqual(proof.split_files(proof.working_diff(d)), [])
+
+    def test_a_checkout_with_nowhere_to_push_falls_back_to_HEAD(self):
+        """A plain `git init` has no upstream; the reviewer still has to work."""
+        d = _repo()
+        base, ahead, up = proof.push_base(d)
+        self.assertEqual((base, ahead, up), ('HEAD', 0, ''))
+        open(os.path.join(d, 'app.py'), 'w').write('changed\n')
+        self.assertEqual([f['path'] for f in proof.split_files(proof.working_diff(d))], ['app.py'])
+
+    def test_the_review_reports_how_far_ahead_it_is(self):
+        from unittest import mock
+        d = self._tracked()
+        open(os.path.join(d, 'app.py'), 'w').write('one\n'); _run(d, 'commit', '-aqm', 'a')
+        open(os.path.join(d, 'app.py'), 'w').write('two\n'); _run(d, 'commit', '-aqm', 'b')
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'work', 'Kind': 'coding'}, 'o')
+        with mock.patch('taskuary.terminal.for_task', return_value={'cwd': d, 'alive': True}):
+            out = proof.review(s, tid)
+        self.assertEqual(out['ahead'], 2)
+        self.assertTrue(out['upstream'].endswith('main'))
 
 
 if __name__ == '__main__':

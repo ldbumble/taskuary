@@ -167,7 +167,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     want = {s['Address'] for s in sources
             if s.get('Channel', 'whatsapp') == 'whatsapp' and s['Address'] and s['Address'] != '*'}
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
-    n = 0
+    n, took = 0, []
     from . import phone
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
@@ -186,6 +186,13 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp'}, llm=llm)
         n += r['status'] != 'duplicate'
+        took.append(m.get('id'))
+    # blue ticks on what the funnel took, when the owner asked for it - best effort, and
+    # never at the cost of the poll: an unpaired or restarted bridge just does not mark
+    from .channels import wants_read
+    if took and wants_read(store):
+        try: _wa(c, '/read', {'ids': [i for i in took if i]})
+        except Exception as e: logger.warning(f'marking whatsapp read failed: {e}')
     if out.get('seq') is not None:
         store.set_connector_config(c['ConnectorId'], {**cfg, 'wa_seq': out['seq']})
     return n

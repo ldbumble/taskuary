@@ -105,6 +105,10 @@ const KNOB_META = {
     desc: "How far back the app reaches when it opens, for what arrived while it was closed.",
     help: "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup." },
 
+  mark_read_enabled: { group: "Sync & startup", label: "Mark items read at the source", type: "switch",
+    desc: "Once the funnel has taken a message in, mark it read where it came from — the mail seen, the chat read.",
+    help: "Off (default): Taskuary is a pure reader — your inbox still shows every message bold, so nothing about your mailbox changes because you connected it. On: anything the funnel ingests is marked read at the source, so the bold rows left over are exactly the ones the hub never saw.\n\nWHERE IT APPLIES: Outlook mail (needs the Mail.ReadWrite consent), Gmail/IMAP mailboxes (the \\Seen flag), Slack channels (the read cursor moves to the newest line taken), Teams (Graph marks the whole CHAT read — there is no per-message read state there) and WhatsApp (blue ticks, via the bridge).\n\nWHERE IT CANNOT: Telegram and Discord bots have no read state to set, and the trackers — Jira, Linear, GitHub, Sentry and friends — have nothing to mark. The switch is simply a no-op for them.\n\nMarking always runs AFTER the message is safely stored and is best-effort: a refused permission is logged and never costs you the ingest." },
+
   // ── Display ──
   timezone: { group: "Display", label: "Timezone", type: "timezone",
     desc: "The zone the app's clock speaks. Blank = this machine's local time.",

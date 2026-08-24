@@ -13,7 +13,7 @@ from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
-MAIL_SELECT = 'id,subject,from,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments'
+MAIL_SELECT = 'id,subject,from,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments,isRead'
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -69,9 +69,12 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     return {'login': u.json().get('login'), 'repos': len(repos), 'added': added}
 
 
-def _slack(tok, method, **params):
-    r = requests.get(f'https://slack.com/api/{method}', params=params, timeout=20,
-                     headers={'Authorization': f'Bearer {tok}'})
+def _slack(tok, method, post=False, **params):
+    url = f'https://slack.com/api/{method}'
+    hdr = {'Authorization': f'Bearer {tok}'}
+    # write methods (conversations.mark) are POST-only; the read ones are happy either way
+    r = requests.post(url, data=params, timeout=20, headers=hdr) if post \
+        else requests.get(url, params=params, timeout=20, headers=hdr)
     r.raise_for_status()
     j = r.json()
     if not j.get('ok'): raise RuntimeError(f"slack {method}: {j.get('error')}")
@@ -399,11 +402,12 @@ def _graph_user(tok, oid, cache):
     return who
 
 
-def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False) -> int:
+def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
     call-started events, deletions and empty bodies are not messages anybody has to act on."""
     since_iso, users, chats, n = _utc(since), {}, {}, 0
+    touched = set()                                # chats to mark read once, not per message
     me = ''
     try:
         r = requests.get(f'{GRAPH}/users/{upn}', headers={'Authorization': f'Bearer {tok}'},
@@ -430,6 +434,9 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
             continue
         out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'
+        if cid: touched.add(cid)
+    for cid in touched if read_it else ():
+        mark_chat_read(tok, upn, cid, me)
     return n
 
 
@@ -516,6 +523,40 @@ def _gh_explicit(store) -> bool:
     return False
 
 
+# ── "the hub has read this" ─────────────────────────────────────────────────────────────
+# One switch (Settings > Sync & startup) decides whether reading an item here also marks it
+# read THERE, so the mailbox and the chat list stop showing work the funnel already took.
+# Every marker is best-effort by design: a missing consent (Graph wants Mail.ReadWrite,
+# Slack conversations.mark) must never cost the ingest that already succeeded, so failures
+# are logged once and swallowed. Protocols with no read state for a bot - Telegram, Discord,
+# the trackers - simply have no marker, and the switch is a no-op for them.
+def wants_read(store) -> bool:
+    try: return str(store.get_settings().get('mark_read_enabled') or '0') == '1'
+    except Exception: return False
+
+
+def mark_mail_read(tok: str, upn: str, graph_id: str):
+    try:
+        requests.patch(f'{GRAPH}/users/{upn}/messages/{graph_id}', timeout=20,
+                       headers={'Authorization': f'Bearer {tok}'}, json={'isRead': True}).raise_for_status()
+    except Exception as e: logger.warning(f'marking mail {graph_id} read failed: {e}')
+
+
+def mark_chat_read(tok: str, upn: str, chat_id: str, user_id: str = ''):
+    """Teams reads a CHAT, not a message - Graph offers no per-message read state. The body
+    wants the directory OBJECT ID, which the poller already looked up for 'is this me'."""
+    try:
+        requests.post(f'{GRAPH}/users/{upn}/chats/{chat_id}/markChatReadForUser', timeout=20,
+                      headers={'Authorization': f'Bearer {tok}'},
+                      json={'user': {'id': user_id or upn}}).raise_for_status()
+    except Exception as e: logger.warning(f'marking chat {chat_id} read failed: {e}')
+
+
+def mark_slack_read(tok: str, channel: str, ts: str):
+    try: _slack(tok, 'conversations.mark', post=True, channel=channel, ts=ts)
+    except Exception as e: logger.warning(f'marking slack {channel} read failed: {e}')
+
+
 def _since(s, backfill_days: int = 0):
     """How far back to ask this source for. `backfill_days` WIDENS the window without moving the
     watermark - what the app does on startup, because whatever arrived while it was shut down was
@@ -535,6 +576,7 @@ def poll_channels(store, backfill_days: int = 0) -> int:
     from .store import roles_of
     try: llm = build_llm(store)
     except Exception: llm = None
+    read_it = wants_read(store)   # asked once per run, not once per message
     n = 0
     for c in store.list_connectors():
         if not c['Active'] or c['Type'] not in CH2SRC: continue
@@ -610,8 +652,11 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
                             except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")
+                        # a duplicate is still mail the hub has read - the flag may just be
+                        # older than the switch, and skipping it would strand those bold rows
+                        if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
                 elif c['Type'] == 'teams':
-                    n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only)
+                    n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)
                 elif c['Type'] == 'github':
                     # a repo with BOTH kinds off was not read, so its watermark must not
                     # move: advancing it would step over the issues sitting there, and
@@ -641,8 +686,10 @@ def poll_channels(store, backfill_days: int = 0) -> int:
                 elif c['Type'] == 'slack':
                     hist = _slack(tok, 'conversations.history', channel=s['Address'],
                                   oldest=since.timestamp(), limit=25)
-                    for m in reversed(hist.get('messages', [])):
-                        if m.get('subtype'): continue   # joins/leaves/bots noise
+                    msgs = [m for m in reversed(hist.get('messages', [])) if not m.get('subtype')]
+                    # the channel's read cursor is ONE timestamp - the newest line we took
+                    if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))
+                    for m in msgs:
                         out = ingest_message(store, file_only=file_only, msg={
                             'external_id': f"slack:{s['Address']}:{m.get('ts')}", 'channel': 'slack',
                             'subject': None, 'body': m.get('text'), 'from_name': m.get('user'),

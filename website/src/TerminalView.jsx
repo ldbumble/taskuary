@@ -3,7 +3,7 @@
 // session belongs to the task it is working. The pty lives server-side, so leaving the task
 // (or reloading) never kills it - reopening the task re-attaches to the running session.
 import React, { useEffect, useRef, useState } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, CircularProgress, Typography } from "@mui/material";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -60,6 +60,11 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   const exit = useRef(onExit);
   exit.current = onExit;
   const [state, setState] = useState("connecting");
+  // Reopening a task replays the whole scrollback in one write, and xterm parses it with the
+  // viewport following along - so you watched the session scroll from its first line down to
+  // the bottom, every time. The pane stays curtained until the server says the live screen is
+  // up (see the 'ready' frame); nobody needs to watch their own history rewind.
+  const [restoring, setRestoring] = useState(false);
   const [themeName, setThemeName] = useState(savedTheme);
   const termRef = useRef(null);
   useEffect(() => {                                  // live restyle, no reconnect
@@ -85,10 +90,18 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     const ws = new WebSocket(wsUrl(sid));
     const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
     ws.onopen = () => { setState("live"); send({ type: "resize", rows: term.rows, cols: term.cols }); };
+    // a server that never sends 'ready' (older build, a child that dies mid-redraw) must not
+    // leave the curtain down over a working session - the pane opens anyway
+    let bail = null;
+    const lift = () => { clearTimeout(bail); term.scrollToBottom(); setRestoring(false); };
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
-      if (m.type === "out") term.write(m.data);
-      else if (m.type === "exit") { setState("exited"); term.write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); }
+      if (m.type === "out") {
+        if (m.replay) { setRestoring(true); bail = setTimeout(lift, 4000); }
+        term.write(m.data, m.replay ? () => term.scrollToBottom() : undefined);
+      }
+      else if (m.type === "ready") lift();
+      else if (m.type === "exit") { setState("exited"); term.write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); lift(); }
     };
     ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
     term.onData((d) => send({ type: "in", data: d }));
@@ -113,7 +126,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     term.focus();
-    return () => { window.removeEventListener("resize", onResize); ro.disconnect();
+    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail);
       el.removeEventListener("wheel", trap); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid]);
   return (
@@ -145,6 +158,17 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
         "& .xterm-scrollable-element > .scrollbar.vertical > .slider": {
           borderRadius: 99, width: "8px !important", marginLeft: "3px", transition: "background .15s" },
         "& .xterm-scrollable-element > .scrollbar.vertical:hover > .slider": { width: "11px !important" } }} />
+      {/* the curtain: the pane's own background, so a reopened session looks like it was
+          simply already there - and it lifts on the live screen, scrolled to the bottom */}
+      {restoring && (
+        <Box sx={{ position: "absolute", inset: 0, zIndex: 1, display: "flex", alignItems: "center",
+          justifyContent: "center", gap: 1, bgcolor: THEMES[themeName].background }}>
+          <CircularProgress size={13} sx={{ color: CATPPUCCIN.yellow }} />
+          <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.yellow }}>
+            restoring the session…
+          </Typography>
+        </Box>
+      )}
       {state !== "live" && (
         <Typography variant="caption" sx={{ ...mono, position: "absolute", top: 6, right: 130, fontSize: 10,
           color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>

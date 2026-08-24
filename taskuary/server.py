@@ -1393,7 +1393,11 @@ async def terminal_ws(ws: WebSocket, sid: str):
     try:
         # scrubbed: a replayed scrollback that still contains the TUI's terminal queries makes
         # xterm answer them AGAIN, and the answers land in the CLI as typed junk - see terminal.py
-        if t.scrollback(): await ws.send_json({'type': 'out', 'data': hub_term.scrub_queries(t.scrollback())})
+        # flagged as a REPLAY so the browser can hold the curtain over it: writing a long
+        # scrollback runs the viewport from the top of the session down to the bottom, and
+        # watching a week of coding scroll past every time you reopen a task is not a feature
+        if t.scrollback():
+            await ws.send_json({'type': 'out', 'replay': True, 'data': hub_term.scrub_queries(t.scrollback())})
         first_resize = True
         while True:
             m = await ws.receive_json()
@@ -1405,11 +1409,15 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 # nothing repaints until the CHILD is told to. A one-column wiggle on the
                 # first resize makes ConPTY signal a window change: a full redraw, the live
                 # screen instead of the replay's debris.
+                wiggled = first_resize
                 if first_resize:
                     first_resize = False
                     t.resize(rows, max(2, cols - 1))
                     await asyncio.sleep(0.05)
                 t.resize(rows, cols)
+                # the replay is debris until that redraw lands - THIS is the moment the pane
+                # is showing the live screen, and the only honest time to lift the curtain
+                if wiggled: await ws.send_json({'type': 'ready'})
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:

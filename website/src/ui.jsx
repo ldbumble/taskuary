@@ -30,13 +30,14 @@ import { ACTION_COLORS, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT
 // teal for scheduled reports.
 export const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#0e7490",
   slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", ai: "#b45309",
-  jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF",
+  jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF", clickup: "#7b68ee", todoist: "#e44332",
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
   aws: "#ff9900", azure: "#0078d4", database: "#475569", smb_file: "#475569" };
 const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon,
   ai: AutoAwesomeIcon, jira: BugReportIcon, asana: ChecklistIcon, monday: ViewKanbanIcon,
+  clickup: ViewKanbanIcon, todoist: ChecklistIcon,
   gitlab: MergeTypeIcon, azdo: ViewKanbanIcon, linear: ChecklistIcon, trello: ViewKanbanIcon,
   notion: ArticleIcon, discord: TagIcon, sentry: ErrorOutlineIcon, pagerduty: NotificationsActiveIcon,
   aws: CloudQueueIcon, azure: CloudQueueIcon, database: StorageIcon, smb_file: StorageIcon };

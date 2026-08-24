@@ -99,6 +99,7 @@ class ConnectorBody(BaseModel):
     ConnectorId: int | None = None; Type: str | None = None; Name: str | None = None
     ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
     Roles: str | None = None                       # csv of trigger,report,tool - see store.ROLES
+    Scope: str | None = None                       # read | write | admin - see scopes.SCOPES
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -800,8 +801,21 @@ def report_types():
 
 @app.get('/api/connectors')
 def connectors():
-    """Channel connector cards (outlook / teams / github). Secrets are write-only."""
-    return {'data': store.list_connectors()}
+    """Channel connector cards (outlook / teams / github). Secrets are write-only.
+    ScopeDefault rides along so the card can show what an unset Authority actually means -
+    which is per type (winrm starts at admin, a tracker at read), not one global floor."""
+    from . import scopes
+    return {'data': [c | {'ScopeDefault': scopes.default_scope(c['Type'])} for c in store.list_connectors()]}
+
+@app.get('/api/scopes')
+def scope_catalog():
+    """The Authority dropdown: the three levels, and for each the actions it unlocks - so the
+    card can say what changes when you move it instead of leaving the owner to guess."""
+    from . import scopes
+    return {'data': [{'value': s, 'actions': scopes.actions_at(s),
+                      'gains': sorted(a for a, need in scopes.ACTIONS.items() if need == s)}
+                     for s in scopes.SCOPES],
+            'defaults': scopes.DEFAULT_SCOPE}
 
 @app.get('/api/brains')
 def brains():
@@ -837,6 +851,10 @@ def save_connector(body: ConnectorBody):
     if fields.get('Roles') is not None:
         bad = {r for r in fields['Roles'].split(',') if r} - set(store_mod.ROLES)
         if bad: raise HTTPException(422, f"unknown role(s): {', '.join(sorted(bad))}")
+    if fields.get('Scope') is not None:
+        from . import scopes
+        if fields['Scope'] not in scopes.SCOPES:
+            raise HTTPException(422, f"unknown authority: {fields['Scope']} - one of {', '.join(scopes.SCOPES)}")
     if not fields.get('ConnectorId') and not (fields.get('Type') and fields.get('Name')):
         raise HTTPException(422, 'new connectors need Type and Name')
     cid = store.save_connector(fields, ACTOR)
@@ -883,16 +901,23 @@ def tool_run(body: dict):
     task can look something up in SQL Server, run a script on a box, or call an MCP tool.
     Catalog cards exist from first launch (winrm/mssql already have the tool role in
     DEFAULT_ROLES) even when the owner never connected them - off means off. A connection
-    without the 'tool' role also refuses."""
+    without the 'tool' role also refuses, and so does one whose Authority sits below what
+    the executor needs - running PowerShell on a box is 'admin', reading a table is 'read'."""
     t = (body or {}).get('type')
     if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
     from .reports import card_of
+    from . import scopes
     conn = store.get_connector_by_type(card_of(t))    # s3_object runs on the aws card's roles
     if conn:
         if not conn.get('Active'):
             raise HTTPException(403, f'the {t} connection is off - turn it on under Connectors')
         if 'tool' not in store_mod.roles_of(conn):
             raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connectors → {t} → Role)')
+        try:
+            scopes.require(conn, t)
+        except PermissionError as e:
+            store.audit('tool', conn['ConnectorId'], 'run_refused', ACTOR, detail={'type': t, 'scope': scopes.scope_of(conn)})
+            raise HTTPException(403, str(e))
     try:
         head, out = REGISTRY[t](resolve_cfg(store, {**body, 'type': t}))
     except Exception as e:

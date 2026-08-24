@@ -9,9 +9,11 @@ import json
 
 CONN_START, CONN_END = '<!-- connections:start -->', '<!-- connections:end -->'
 REPO_MAP_HEADER = '## Repository map'
-CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
-          'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email',
-          'jira': 'jira', 'asana': 'asana', 'monday': 'monday'}
+# The poller's own map, not a second copy of it. This used to be a hand-kept duplicate that
+# stopped at monday, so every connector added after it (gitlab, azdo, linear, trello, notion,
+# sentry, pagerduty, aws, azure, and now clickup/todoist) was invisible to the agents: their
+# sources never made it into the SOUL.md 'Connected systems' block.
+from .channels import CH2SRC
 
 
 # The tool blurb used to say "create/update things in it as the work needs" - and an agent

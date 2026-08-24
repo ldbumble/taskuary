@@ -1,4 +1,5 @@
-"""Telegram chat approval, per-source agent prompts, and the PM connectors (Jira/Asana/Monday)."""
+"""Telegram chat approval, per-source agent prompts, and the PM connectors
+(Jira/Asana/Monday/ClickUp/Todoist)."""
 import json, unittest
 from datetime import datetime, timedelta
 
@@ -117,6 +118,110 @@ class PmPollTests(unittest.TestCase):
         finally: pm._monday = real
         self.assertEqual(n, 1)
         self.assertEqual(s.feed()[0]['Subject'], 'Mine')
+
+
+class ClickUpTests(unittest.TestCase):
+    TASK = {'id': '9hz', 'custom_id': 'ABC-1', 'name': 'Fix login', 'description': 'it 500s',
+            'status': {'status': 'in progress'}, 'priority': {'priority': 'urgent'},
+            'date_updated': '1756000000000', 'due_date': '1756100000000',
+            'creator': {'username': 'Rina', 'email': 'rina@x.com'},
+            'url': 'https://app.clickup.com/t/9hz', 'list': {'name': 'Sprint 4'}}
+
+    def test_assigned_task_lands_once_and_carries_the_list(self):
+        s = MemoryStore()
+        c = conn(s, 'clickup', {'user_id': '183', 'team_id': '512'})
+        real, pm._clickup = pm._clickup, lambda c_, p, **kw: {'tasks': [self.TASK]}
+        try:
+            n1 = pm.poll_clickup(s, c, datetime.now() - timedelta(hours=1))
+            n2 = pm.poll_clickup(s, c, datetime.now() - timedelta(hours=1))
+        finally: pm._clickup = real
+        self.assertEqual((n1, n2), (1, 0))                    # dedupe by task id
+        row = s.feed()[0]
+        self.assertEqual((row['Channel'], row['SourceName']), ('clickup', 'Sprint 4'))
+        self.assertEqual(row['Subject'], 'ABC-1 Fix login')
+        self.assertIn('in progress', row['Preview'])
+        self.assertIn('urgent', row['Preview'])
+
+    def test_poll_refuses_before_test_has_learned_the_workspace(self):
+        s = MemoryStore()
+        with self.assertRaises(RuntimeError) as e:
+            pm.poll_clickup(s, conn(s, 'clickup'), datetime.now())
+        self.assertIn('run Test', str(e.exception))
+
+    def test_test_remembers_who_me_is_and_which_workspace(self):
+        s = MemoryStore()
+        c = conn(s, 'clickup')
+        routes = {'/user': {'user': {'id': 183, 'username': 'Uri', 'email': 'u@x.com'}},
+                  '/team': {'teams': [{'id': '512', 'name': 'Acme'}]}}
+        real, pm._clickup = pm._clickup, lambda c_, p, **kw: routes[p]
+        try: detail = pm.test_clickup(s, c)
+        finally: pm._clickup = real
+        cfg = json.loads(s.get_connector_by_type('clickup')['ConfigJson'])
+        self.assertEqual((cfg['user_id'], cfg['team_id']), ('183', '512'))
+        self.assertIn('Uri', detail)
+        self.assertTrue(any(x['Channel'] == 'clickup' for x in s.list_sources(active_only=False)))
+
+    def test_token_goes_in_raw_without_bearer(self):
+        """ClickUp is the one API here that rejects an Authorization: Bearer prefix."""
+        seen = {}
+        class R:
+            status_code = 200
+            def json(self): return {'user': {'id': 1}}
+            def raise_for_status(self): pass
+        class FakeReq:
+            @staticmethod
+            def get(url, params=None, timeout=None, headers=None):
+                seen.update(headers or {}); return R()
+        s = MemoryStore()
+        real, pm.requests = pm.requests, FakeReq
+        try: pm._clickup(conn(s, 'clickup'), '/user')
+        finally: pm.requests = real
+        self.assertEqual(seen['Authorization'], 'tok')
+
+    def test_priority_survives_both_shapes(self):
+        self.assertEqual(pm._cu_priority({'priority': 'high'}), 'high')
+        self.assertEqual(pm._cu_priority(1), 'urgent')
+        self.assertIsNone(pm._cu_priority(None))
+
+
+class TodoistTests(unittest.TestCase):
+    TASK = {'id': '6XG', 'content': 'Buy milk', 'description': 'organic', 'priority': 4,
+            'due': {'date': '2026-08-24'}, 'updated_at': '2026-08-23T09:00:00Z'}
+
+    def test_filtered_task_lands_once_with_a_built_url(self):
+        s = MemoryStore()
+        c = conn(s, 'todoist')
+        real, pm._todoist = pm._todoist, lambda c_, p, **kw: {'results': [self.TASK]}
+        try:
+            n1 = pm.poll_todoist(s, c, datetime.now() - timedelta(hours=1))
+            n2 = pm.poll_todoist(s, c, datetime.now() - timedelta(hours=1))
+        finally: pm._todoist = real
+        self.assertEqual((n1, n2), (1, 0))
+        row = s.feed()[0]
+        self.assertEqual((row['Channel'], row['Subject']), ('todoist', 'Buy milk'))
+        # v1 dropped the task's url field - we build the deep link ourselves
+        self.assertEqual(row['SourceLink'], 'https://app.todoist.com/app/task/6XG')
+        self.assertIn('urgent', row['Preview'])
+        self.assertIn('2026-08-24', row['Preview'])
+
+    def test_owner_filter_overrides_the_default_query(self):
+        s = MemoryStore()
+        c = conn(s, 'todoist', {'filter': 'assigned to: me'})
+        asked = {}
+        def fake(c_, p, **kw): asked.update(kw); return {'results': []}
+        real, pm._todoist = pm._todoist, fake
+        try: pm.poll_todoist(s, c, datetime.now())
+        finally: pm._todoist = real
+        self.assertEqual(asked['query'], 'assigned to: me')
+
+    def test_default_query_is_what_todoist_says_is_live(self):
+        s = MemoryStore()
+        asked = {}
+        def fake(c_, p, **kw): asked.update(kw); return {'results': []}
+        real, pm._todoist = pm._todoist, fake
+        try: pm.poll_todoist(s, conn(s, 'todoist'), datetime.now())
+        finally: pm._todoist = real
+        self.assertEqual(asked['query'], pm.TODOIST_FILTER)
 
 
 if __name__ == '__main__':

@@ -39,7 +39,7 @@ const CATEGORIES = [
   { key: "messages", label: "messages", channels: ["email", "teams", "slack", "telegram", "whatsapp", "discord"],
     c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
   { key: "code", label: "code", channels: ["github", "gitlab"], c: { bg: "#eceef1", fg: "#1c2536", bd: "#d3d8e0" } },
-  { key: "pm", label: "boards", channels: ["jira", "asana", "monday", "linear", "trello", "notion", "azdo"],
+  { key: "pm", label: "boards", channels: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion", "azdo"],
     c: { bg: "#eef0ff", fg: "#4338ca", bd: "#c9cff0" } },
   { key: "alerts", label: "alerts", channels: ["sentry", "pagerduty"], c: { bg: "#fdecec", fg: "#b91c1c", bd: "#f3c8c8" } },
   { key: "cloud", label: "cloud", channels: ["aws", "azure"], c: { bg: "#fff4e6", fg: "#b45309", bd: "#f3ddb8" } },
@@ -49,6 +49,7 @@ const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack
   telegram: "Telegram chats", whatsapp: "WhatsApp chats", discord: "Discord channels",
   github: "Repositories", gitlab: "GitLab instances", report: "Reports",
   jira: "Jira issues", asana: "Asana tasks", monday: "Monday items", linear: "Linear issues",
+  clickup: "ClickUp tasks", todoist: "Todoist tasks",
   trello: "Trello cards", notion: "Notion pages", azdo: "Azure DevOps items",
   sentry: "Sentry errors", pagerduty: "PagerDuty incidents",
   aws: "AWS buckets & log groups", azure: "Azure containers & workspaces" };

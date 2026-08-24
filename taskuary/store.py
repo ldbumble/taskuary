@@ -124,7 +124,8 @@ CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
   Owner TEXT, ConnectorId INTEGER, Active INTEGER DEFAULT 1, ConfigJson TEXT, LastPolledAt TEXT);
 CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT UNIQUE, Name TEXT,
-  ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, Roles TEXT);
+  ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, Roles TEXT,
+  Scope TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
   Source TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT);
@@ -201,6 +202,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
                  'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger',
+                 'clickup': 'trigger', 'todoist': 'trigger',
                  'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
                  # notion edits are information, not assignments; discord is a chat channel
                  'notion': 'feed', 'discord': 'trigger,tool',
@@ -223,6 +225,9 @@ class SQLiteStore:
             # existing db, so widen it here (cheap, idempotent)
             have = {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}
             if 'Roles' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Roles TEXT')
+            # left NULL on purpose: scopes.scope_of falls back to the type's default, so an
+            # existing db keeps exactly the authority it had before the column existed
+            if 'Scope' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Scope TEXT')
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
@@ -236,6 +241,7 @@ class SQLiteStore:
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
+                         ('clickup', 'ClickUp'), ('todoist', 'Todoist'),
                          ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),
                          ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
@@ -523,7 +529,7 @@ class SQLiteStore:
     def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))
 
     # channel connectors (secrets are write-only: list/get never return them)
-    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, LastSyncAt, LastError, (Secret IS NOT NULL AND Secret != '') HasSecret"
+    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, (Secret IS NOT NULL AND Secret != '') HasSecret"
     def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
     def get_connector(self, cid, with_secret=False):
         return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
@@ -531,14 +537,14 @@ class SQLiteStore:
         return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE Type=?", (ctype,))
     def save_connector(self, fields, actor):
         cid = fields.get('ConnectorId')
-        cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles') if c in fields and fields[c] is not None]
+        cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope') if c in fields and fields[c] is not None]
         if cid:
             self._exec(f"UPDATE connector SET {','.join(f'{c}=?' for c in cols)} WHERE ConnectorId=?", [fields[c] for c in cols] + [cid])
             return cid
-        return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles'))
+        return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope'))
     def reset_connector(self, cid):
         """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
-        self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL WHERE ConnectorId=?', (cid,))
+        self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL, Scope=NULL WHERE ConnectorId=?', (cid,))
         self._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))
     def set_connector_config(self, cid, cfg: dict):
         """Just the config JSON - how the pollers keep their watermark (Telegram's update

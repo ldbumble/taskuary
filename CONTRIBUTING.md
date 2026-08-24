@@ -38,6 +38,7 @@ somewhere else on your machine, edit the `executablePath` at the top of the scri
 | `taskuary/reports.py` | scheduled report executors (**start here** — see below) |
 | `taskuary/llm.py` | AI connectors (Anthropic / OpenAI / Azure) → one `llm(system, user)` callable |
 | `taskuary/server.py` | the FastAPI API |
+| `Dockerfile` / `docker-compose.yml` | the no-Python-on-the-host path |
 | `website/src/` | React 18 + MUI 6 UI (Vite) |
 | `tests/` | offline unit tests — no network, no credentials |
 
@@ -72,10 +73,11 @@ Reports wizard, scheduling, AI summaries, and the Timeline all work automaticall
 - **UI changes**: run `render_check.mjs` and include a screenshot in the PR.
 - **Update the README** when behavior users can see changes.
 - CI runs the suite on Ubuntu/Windows/macOS × Python 3.10/3.12 on every push and
-  pull request (the web build too; the exe is push-to-master only). Green CI is
-  required to merge. A **first pull request from a fork** sits on *Waiting for
-  approval* until a maintainer clicks **Approve and run workflows** — that is
-  GitHub's default for outside collaborators, not a missing `pull_request` trigger.
+  pull request (the web build and Docker image smoke too; the exe is
+  push-to-master only). Green CI is required to merge. A **first pull request
+  from a fork** sits on *Waiting for approval* until a maintainer clicks
+  **Approve and run workflows** — that is GitHub's default for outside
+  collaborators, not a missing `pull_request` trigger.
 
 ## Reporting bugs & proposing features
 

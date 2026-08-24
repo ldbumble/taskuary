@@ -893,8 +893,14 @@ class ApiTests(unittest.TestCase):
         try:
             self.assertEqual(c.get('/api/settings').status_code, 401)
             self.assertEqual(c.get('/api/settings', headers={'X-Taskuary-Token': 'secret'}).status_code, 200)
+            # Docker HEALTHCHECK has no header to send - the pulse stays open
+            self.assertEqual(c.get('/api/health').status_code, 200)
+            self.assertEqual(c.get('/api/health').json(), {'ok': True})
         finally:
             server.cfg['server'].pop('token')
+
+    def test_health_is_open_without_a_token(self):
+        self.assertEqual(c.get('/api/health').json(), {'ok': True})
 
 
     def test_reclassifying_to_reply_routes_the_task_into_review(self):

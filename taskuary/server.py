@@ -59,6 +59,9 @@ async def request_log(request: Request, call_next):
 
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
+    # /api/health is the Docker / load-balancer pulse - it must work without the LAN token
+    if request.url.path == '/api/health':
+        return await call_next(request)
     tok = cfg['server'].get('token')
     if tok and request.url.path.startswith('/api') and request.headers.get('X-Taskuary-Token') != tok:
         # an <img src> cannot carry a header, so attachment READS take the token in the query
@@ -1389,6 +1392,11 @@ async def terminal_ws(ws: WebSocket, sid: str):
         pass
     finally:
         t.unsubscribe(q); pump.cancel()
+
+@app.get('/api/health')
+def health():
+    """Unauthenticated on purpose: a container HEALTHCHECK needs a pulse without the LAN token."""
+    return {'ok': True}
 
 @app.get('/api/settings')
 def settings():

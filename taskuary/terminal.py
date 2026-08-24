@@ -617,6 +617,25 @@ def rules_text(store, chars: int = DOC_CHARS) -> str:
     return ' '.join(' '.join(keep).split())[:chars]
 
 
+# The ask travels as ONE command-line argument now (see agents._shim_target), so the old
+# 3000-char squeeze on the message body has no delivery reason left - and it was never
+# harmless: a 12,000-character mail reached the agent as its first quarter, unmarked, under an
+# instruction that says "work it from THIS message alone". It read a fragment and believed it
+# had the whole thing. Windows takes 32767 characters of command line; ASK_CHARS spends a
+# useful slice of that on the thing the task is actually about.
+ASK_CHARS = 12000
+SEED_CEILING = 24000        # the whole prompt, leaving room for the exe path and its flags
+
+
+def _cut(text: str, n: int, what: str = 'message') -> str:
+    """Truncate, and SAY SO. Silence here is the expensive kind: an agent cannot ask for the
+    rest of something it does not know was cut."""
+    text = text or ''
+    if len(text) <= n: return text
+    return (text[:n] + f' …[{what} truncated here: {n:,} of {len(text):,} characters. '
+            'Ask the owner for the rest before assuming anything past this point.]')
+
+
 def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None) -> str:
     """What gets typed into a fresh session, and the ONLY context it should need: the ask, the
     mail behind it, which checkout to work in, and the coder rules. One line - a newline
@@ -640,8 +659,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from .triage import strip_boilerplate
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
                        f"subject \"{m.get('Subject') or ''}\": "
-                       f"{strip_boilerplate(m.get('BodyText') or '')[:3000]}")
-    elif t.get('Summary'): parts.append(f"ASK: {strip_boilerplate(str(t['Summary']))[:3000]}")
+                       f"{_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS)}")
+    elif t.get('Summary'): parts.append(f"ASK: {_cut(strip_boilerplate(str(t['Summary'])), ASK_CHARS)}")
     # the source's standing instruction: a PR is judged before it is worked, a Jira item may
     # have its own house rules - configured per connector card, defaulted for GitHub
     from .ingest import source_rules
@@ -657,7 +676,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     note = next((c['Body'] for c in reversed(store.list_comments(tid))
                  if str(c.get('Body') or '').startswith(PAUSE_MARKER)), None)
     if note: parts.append('HANDOVER: an earlier session on this task was paused and left this - '
-                          f'continue from it, do not start over: {note[:3000]}')
+                          f'continue from it, do not start over: {_cut(note, 3000, "handover note")}')
     # SOUL.md rides in WITH the coder rules, because the coder rules refer to it: CODER.md says
     # "work only in the repository the task names (see the repository map in SOUL.md)" and
     # claims it is "stacked on top of SOUL.md for every coder run" - and for a live session it
@@ -687,7 +706,19 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                     'Do NOT push, deploy, publish or release anything - commit locally and stop; '
                     'the owner reviews and pushes. Only when this message explicitly says to. ')
                  + 'Ask the owner here in the session if something is genuinely missing.')
-    return ' '.join(' '.join(parts).split())
+    out = ' '.join(' '.join(parts).split())
+    # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses
+    # or clips. If we are over, the ASK is what gives, never the rules that keep an agent
+    # inside its checkout, and it gives out loud.
+    if len(out) > SEED_CEILING:
+        over = len(out) - SEED_CEILING
+        head, sep, tail = out.partition('FROM ')
+        if sep and len(tail) > over + 400:
+            out = head + sep + _cut(tail, len(tail) - over - 200, 'message')
+        else:
+            out = _cut(out, SEED_CEILING, 'prompt')
+        logger.warning(f'seed for task {tid} trimmed to fit the command line ({len(out)} chars)')
+    return out
 
 
 _REPO_LINE = re.compile(r'^-\s+\*\*([^*]+)\*\*:\s*(.*)$', re.M)

@@ -798,3 +798,63 @@ class FindCheckoutTests(unittest.TestCase):
             self.assertEqual(prof['cwd_map']['acme/widget'], str(co))   # ...and it is remembered
         finally:
             terminal.SESSIONS.pop('x', None)     # the mock must not haunt later live_sessions() calls
+
+
+class SeedCompletenessTests(unittest.TestCase):
+    """What actually reaches the agent. Three separate ways the ask used to arrive short, and
+    the worst of them was silent: the prompt says "work it from THIS message alone" while
+    handing over a quarter of it."""
+
+    def _task(self, body, title='long ask'):
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        tid = s.create_task({'Title': title, 'Kind': 'coding'}, 'o')
+        s.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': 'b1', 'FromName': 'Dana',
+                       'FromEmail': 'd@x.example', 'Subject': 'Importer',
+                       'SentAt': '2026-08-24 16:00:00', 'BodyText': body})
+        return s, tid
+
+    def test_a_long_message_is_not_quietly_quartered(self):
+        body = 'x' * 11000
+        s, tid = self._task(body)
+        seed = terminal.seed_text(s, tid)
+        self.assertIn('x' * 10900, seed)              # 3000 used to be the whole allowance
+
+    def test_when_it_does_cut_it_says_so_and_says_how_much(self):
+        s, tid = self._task('y' * 40000)
+        seed = terminal.seed_text(s, tid)
+        self.assertIn('truncated here', seed)
+        self.assertIn('40,000 characters', seed)
+        self.assertIn('Ask the owner for the rest', seed)
+
+    def test_the_whole_prompt_stays_inside_a_command_line(self):
+        """It travels as one argv element now; Windows refuses past 32767 without a word."""
+        s, tid = self._task('z' * 200000)
+        self.assertLessEqual(len(terminal.seed_text(s, tid)), terminal.SEED_CEILING + 500)
+
+    def test_the_rules_survive_the_trim_and_the_ask_is_what_gives(self):
+        """An agent that loses "work only in this repository" is more dangerous than one that
+        loses the tail of a paragraph."""
+        s, tid = self._task('z' * 200000)
+        seed = terminal.seed_text(s, tid)
+        for must in ('WHAT TO DO', 'Do NOT push', 'RULES:'):
+            self.assertIn(must, seed, must)
+
+    def test_the_NEWEST_message_is_the_ask(self):
+        """Ordering decided this, and a stale stamp format used to put a three-day-old line
+        last - so that was the one handed over. See StampTests in test_core."""
+        s, tid = self._task('the older one')                    # stored 2026-08-24 16:00 local
+        # the NEXT day in UTC, so it is later once converted in every timezone CI might run in
+        # - and in the raw Graph shape, two-digit fraction and all, which is the exact string
+        # that used to defeat normalization and sort this message to the top instead
+        s.add_message({'TaskId': tid, 'Channel': 'teams', 'ExternalId': 'b2', 'FromName': 'Rich',
+                       'SentAt': '2026-08-25T21:30:11.94Z', 'BodyText': 'the actual ask'})
+        rows = s.list_messages(tid)
+        self.assertEqual(rows[-1]['BodyText'], 'the actual ask')   # ordering, not luck
+        self.assertIn('the actual ask', terminal.seed_text(s, tid))
+
+    def test_a_short_message_is_passed_through_untouched(self):
+        s, tid = self._task('the importer fails on Tuesdays')
+        seed = terminal.seed_text(s, tid)
+        self.assertIn('the importer fails on Tuesdays', seed)
+        self.assertNotIn('truncated here', seed)

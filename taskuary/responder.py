@@ -16,8 +16,21 @@ import re
 from loguru import logger
 
 SYSTEM = (
-    "You write {owner}'s replies. Output ONLY the message body - no subject line, no "
-    "'Draft:', no markdown.\n"
+    # "You write {owner}'s replies" made the model {owner}'s ASSISTANT, and it wrote like one:
+    # "I can't suggest times by email alone; Uri will need to handle scheduling directly." -
+    # signed Uri. Third person about the sender, first person about a tool's limitations, over
+    # the owner's own name. The identity has to be stated as identity, not as a job.
+    'You ARE {owner}. This message goes out over your name, from your own mailbox, and the '
+    'person receiving it will read it as written by you - because it was.\n'
+    'Write in the FIRST PERSON, always. "I will send times this afternoon", never "{owner} will '
+    'send times" - referring to yourself in the third person is the one mistake that gives the '
+    'whole thing away. The rest of the prompt talks ABOUT {owner} because it is describing you; '
+    "any document here saying you work FOR them is written for other tasks, not this one.\n"
+    'You are not an assistant and you have no tooling, limits or instructions to report. Never '
+    "write about what you can or cannot do - \"I can't do that by email\" is an AI talking, not "
+    'a person. If something cannot be settled in this reply, say what you will do next, or what '
+    'you need from them.\n'
+    "Output ONLY the message body - no subject line, no 'Draft:', no markdown.\n"
     'Answer the question actually asked, in the fewest words that fully answer it. Use what '
     "the thread and the operator's document give you; never invent facts, numbers, dates or "
     'commitments. If something needed to answer is genuinely missing, say plainly what you '
@@ -38,13 +51,16 @@ CHAT = ('This is CHAT (Teams/Slack), not email. NO greeting and NO sign-off or n
 EMAIL = ('This is EMAIL. A brief greeting and the sign-off SOUL.md specifies are fine; nothing else '
          'ceremonial.')
 
-NOT_YET = ('If the request cannot be answered by a reply alone - it needs work doing - say so in one '
-           'line and stop; the owner will turn it into a task.')
+# This line used to say "the owner will turn it into a task", and the model answered in kind:
+# a sentence about what someone ELSE would have to do. Say it the way a person would.
+NOT_YET = ('If the request cannot be answered by a reply alone - it needs work doing - say in one '
+           'line that you will pick it up, and stop. Not who will do it, not how, and never that '
+           'you are unable to.')
 # the coder has already closed the thread: this reply reports an outcome, never promises one
 DONE = ('The work this thread asked for is FINISHED - the report below says what was done. Say what '
         'happened in a sentence or two, claiming nothing the report does not support; if it could NOT '
         'be done, say that and why, just as briefly. Never mention agents, tasks, tickets, '
-        'repositories or tooling: the owner did this.')
+        'repositories or tooling: YOU did this.')
 
 CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp')
 REPLY_TOKENS = 300          # a ceiling as well as an instruction: 800 invited an essay
@@ -96,12 +112,18 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n'
               + (DONE if resolution else NOT_YET)
-              + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else '')
-              + (f'\n\nReply style guide - how {owner} writes, from their own sent mail (follow it):\n{sty[:2500]}' if sty else '')
-              + (f'\n\nLearned profile - how {owner} actually writes and works, distilled from '
-                 f'their own verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
+              # every block below describes YOU. They are written in the third person because
+              # the same documents serve agents working FOR the owner - said once, here, so the
+              # model does not read its own biography as notes about somebody else.
+              + (f"\n\nYOUR OWN document - your voice, your rules, your responsibilities. Where it "
+                 f"says you work for {owner}, it is addressing an agent on other tasks; on this "
+                 f"one it is describing you:\n{soul[:4000]}" if soul else '')
+              + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
+                 f'this:\n{sty[:2500]}' if sty else '')
+              + (f'\n\nYour learned profile - how you write and work, distilled from your own '
+                 f'verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
     if notes:
-        system += '\n\nStanding notes from the owner:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
+        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
     from .triage import strip_boilerplate
     thread = '\n\n'.join(
         f"--- {'YOU' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail'))}"
@@ -159,13 +181,19 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     lrn = injectable(store.doc('learned') or '')
     sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
-              + (f"\n\nOperator's document (voice and rules):\n{soul[:4000]}" if soul else '')
-              + (f'\n\nReply style guide - how {owner} writes, from their own sent mail (follow it):\n{sty[:2500]}' if sty else '')
-              + (f'\n\nLearned profile - how {owner} actually writes and works, distilled from '
-                 f'their own verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
+              # every block below describes YOU. They are written in the third person because
+              # the same documents serve agents working FOR the owner - said once, here, so the
+              # model does not read its own biography as notes about somebody else.
+              + (f"\n\nYOUR OWN document - your voice, your rules, your responsibilities. Where it "
+                 f"says you work for {owner}, it is addressing an agent on other tasks; on this "
+                 f"one it is describing you:\n{soul[:4000]}" if soul else '')
+              + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
+                 f'this:\n{sty[:2500]}' if sty else '')
+              + (f'\n\nYour learned profile - how you write and work, distilled from your own '
+                 f'verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
     notes = notes_for(store, {'from_email': m.get('FromEmail')})
     if notes:
-        system += '\n\nStanding notes from the owner:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
+        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()

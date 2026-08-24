@@ -342,7 +342,26 @@ class SQLiteStore:
 
     # tasks
     def create_task(self, fields, actor):
-        return self._insert('task', fields, TASK_COLS, {'CreatedBy': actor, 'CreatedAt': _now()})
+        # TaskId is a rowid, and SQLite hands a DELETED one straight back to the next insert.
+        # TQ-0034 was three different tasks in one morning: a refund thread at 08:19 (with a
+        # live agent on it), deleted at 10:11, the id reused twice more by lunchtime - and the
+        # orphaned session, still holding task_id 34, showed up as the agent working a report
+        # it had never been given. A TQ-ref is an identity: it goes in prompts, in transcripts,
+        # in pull requests. It must never name two different pieces of work.
+        return self._insert('task', {**fields, 'TaskId': self._next_task_id()},
+                            TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
+
+    def _next_task_id(self) -> int:
+        """One past the highest id ever ISSUED - not the highest still present. The audit log
+        is the record of what was issued (its rows outlive the task, by design), so the two
+        together survive a deleted tail that the table alone forgets."""
+        live = self._one('SELECT MAX(TaskId) m FROM task')['m'] or 0
+        ever = self._one("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task'")['m'] or 0
+        mark = int(self.get_settings().get('task_id_mark') or 0)
+        nxt = max(live, ever, mark) + 1
+        self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) '
+                   'ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value', ('task_id_mark', str(nxt), 'store'))
+        return nxt
     def update_task(self, task_id, fields, actor):
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return

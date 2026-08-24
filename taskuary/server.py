@@ -319,7 +319,7 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
                                 f"mem{mid}: owner said NOT A TASK: \"{(msgs[0].get('Subject') or '')[:80]}\" from {em} "
                                 'should never have opened a task')
     store.audit('task', task_id, 'not_a_task_delete', ACTOR)
-    store.delete_task(task_id)
+    _drop_task(task_id)
     return {'ok': True, 'learned': learned}
 
 class SplitHalf(BaseModel): title: str | None = None; summary: str | None = None
@@ -368,8 +368,22 @@ def purge_dropped():
     victims = [t['TaskId'] for t in store.list_tasks('dropped')]
     for tid in victims:
         store.audit('task', tid, 'purge_dropped', ACTOR)
-        store.delete_task(tid)
+        _drop_task(tid)
     return {'ok': True, 'deleted': len(victims)}
+
+def _drop_task(tid: int):
+    """Deleting a task must also stop the agent working it. "Not a task" read as a kill - it
+    was not: the pty kept running, kept editing files, and kept holding the task id, so when
+    SQLite handed that id to the NEXT task the orphan showed up as the agent working it. A
+    task that no longer exists has nobody working it, by definition."""
+    try:
+        live = hub_term.for_task(tid)
+        if live:
+            hub_term.close(live['sid'])
+            logger.info(f'closed the session on task {tid} - the task was deleted')
+    except Exception as e:
+        logger.warning(f'could not close the session on deleted task {tid}: {e}')
+    store.delete_task(tid)
 
 @app.get('/api/messages/{mid}')
 def get_message(mid: int):
@@ -503,7 +517,7 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     tid = m.get('TaskId')
     if tid and store.get_task(tid):
         store.audit('task', tid, 'not_mine_delete', ACTOR, detail={'message_id': mid, 'memory_id': memid})
-        store.delete_task(tid)                       # its messages revert to 'filed'
+        _drop_task(tid)                              # its messages revert to 'filed'
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, f'not ours - {note[:200]}', [], ACTOR)
     store.audit('memory', memid, 'create', ACTOR, detail={'scope': scope, 'key': key, 'from': em})
@@ -528,7 +542,7 @@ def file_message(mid: int):
     tid = m.get('TaskId')
     if tid and store.get_task(tid):
         store.audit('task', tid, 'filed_not_work', ACTOR, detail={'message_id': mid})
-        store.delete_task(tid)                       # its messages revert to 'filed'
+        _drop_task(tid)                              # its messages revert to 'filed'
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], ACTOR)
     return {'ok': True, 'taskDeleted': bool(tid)}

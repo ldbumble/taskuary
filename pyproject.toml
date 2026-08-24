@@ -58,4 +58,6 @@ include = ["taskuary*"]
 # templates/ ships too: the operator documents (SOUL.md / CODER.md / DIGEST.md) seed the
 # database on first run, so a wheel without them starts every install with empty docs.
 [tool.setuptools.package-data]
-taskuary = ["web/*", "web/assets/*", "templates/*.md"]
+# whatsapp/ too: the bridge error tells you to run `node bridge.mjs` out of the package, and
+# a pip install without it is an instruction pointing at a directory that does not exist.
+taskuary = ["web/*", "web/assets/*", "templates/*.md", "whatsapp/*"]

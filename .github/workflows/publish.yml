@@ -1,0 +1,80 @@
+# Publish to PyPI on a version tag. Trusted Publishing, so there is no API token anywhere -
+# not in a secret, not in a clipboard, not in this file. PyPI verifies the workflow identity
+# itself; configure it once at pypi.org/manage/account/publishing (see RELEASING.md).
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:        # a dry run to TestPyPI without cutting a tag
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      # The UI is committed, but a release must never ship a stale bundle: build it from the
+      # source in THIS tag rather than trusting whatever was last committed.
+      - name: Build the web UI
+        run: npm ci && npm run build
+        working-directory: website
+
+      - name: Build sdist and wheel
+        run: pipx run build
+
+      # The wheel is the product: a package whose UI is missing installs fine and then serves
+      # a blank page, which is a far worse first impression than no package at all.
+      - name: Check the artifacts carry the app
+        run: |
+          pipx run twine check dist/*
+          python - <<'PY'
+          import glob, zipfile, sys
+          whl = glob.glob('dist/*.whl')[0]
+          names = zipfile.ZipFile(whl).namelist()
+          need = {'index.html': any(n.endswith('web/index.html') for n in names),
+                  'js bundle': any('/web/assets/' in n and n.endswith('.js') for n in names),
+                  'css bundle': any('/web/assets/' in n and n.endswith('.css') for n in names),
+                  'operator templates': sum(n.startswith('taskuary/templates/') for n in names) >= 5,
+                  'whatsapp bridge': any(n.endswith('whatsapp/bridge.mjs') for n in names)}
+          for k, ok in need.items(): print(f"{'OK  ' if ok else 'MISS'} {k}")
+          sys.exit(0 if all(need.values()) else 1)
+          PY
+
+      - name: Install the wheel in a clean venv and start it
+        run: |
+          python -m venv /tmp/v
+          /tmp/v/bin/pip install --quiet dist/*.whl
+          /tmp/v/bin/python -c "import taskuary.server; print('imports clean')"
+          /tmp/v/bin/taskuary --help
+
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist/ }
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi
+    permissions: { id-token: write }        # this is what Trusted Publishing signs with
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment: testpypi
+    permissions: { id-token: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

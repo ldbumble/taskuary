@@ -16,6 +16,11 @@ you already use does it; you approve the result. Runs entirely on your machine.
 
 <sub>Real app, real data — a mail triaged and its reply drafted for your approval, then a scheduled SQL report landing on the same rail with its chart and spreadsheet. Nothing sends without you.</sub>
 
+**Where it is:** early — **v0.2.0**, and moving fast. The funnel, the review queue, the agent
+sessions and the reports pipeline are all real and in daily use on my own inbox; the edges are
+still being knocked off, and breaking changes are possible before 1.0. Issues get answered.
+[Full status and roadmap ↓](#status--roadmap)
+
 > ⭐ **Useful to you? Star the repo.** Stars are how other people find Taskuary — and the
 > clearest signal of what to keep building.
 
@@ -80,7 +85,15 @@ pip install git+https://github.com/ldbumble/taskuary
 taskuary        # opens http://127.0.0.1:7787
 ```
 
-Python 3.10+ is all you need. Then, in **Connectors** — a minute or two each:
+Python 3.10+ is all you need.
+
+> **Which OS?** CI runs the full test matrix on Windows, Linux and macOS, and the app runs on
+> all three — but it is *developed* on Windows, so that is where the terminal, the desktop
+> shell and the agent presets get the most real use. On macOS and Linux expect the core to
+> work and the occasional rough edge; [open an issue](https://github.com/ldbumble/taskuary/issues)
+> and it gets fixed. The single-file prebuilt `.exe` is Windows-only.
+
+Then, in **Connectors** — a minute or two each:
 
 1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI / OpenRouter key — or no key at
    all: the **Ollama** card runs triage on a local open-source model. Triage is now on.
@@ -300,7 +313,8 @@ exe is built on push to master.
 
 ## Status / roadmap
 
-Early (v0.2.0) and moving fast.
+Early (v0.2.0) and moving fast — said up top too, because it should not be something you find
+out at the bottom.
 
 - [x] AI-gated triage, review queue, resumable agent sessions, hash-chained audit
 - [x] Reports tab: source → query → AI summary → Timeline pipelines
@@ -346,8 +360,8 @@ regulars, not one-off drive-bys — though a single good PR is very welcome too.
 
 - **Connectors** — every row marked 🗺 in the table above, plus whatever system runs *your*
   day. One executor function and you own that integration.
-- **Non-Windows polish** — the terminal, desktop shell, and agent presets get the most
-  testing on Windows. macOS and Linux users who hit rough edges (and fix them) are gold.
+- **Non-Windows polish** — see the note by the install instructions: development happens on
+  Windows. macOS and Linux users who hit rough edges (and fix them) are gold.
 - **Agent CLIs beyond the presets** — if your CLI needs different flags to run headless,
   that's a preset PR and a paragraph in the README.
 - **Design and UX** — this was built by one person with strong opinions and no designer.

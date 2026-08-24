@@ -8,10 +8,17 @@ whole thing off - and the same run keeps DIGEST.md fresh for the Docs tab.
 """
 from datetime import datetime, timedelta
 
-DAYS = 3                 # the window the synthesis reads - matches the startup catch-up                 # the window the synthesis reads - matches the startup catch-up
+DAYS = 3                 # the window the synthesis reads - matches the startup catch-up
 
 # The seeded report's editable instruction - "configure what goes in there" IS this text,
 # on the Reports tab. reports.AI_SYSTEM wraps it; this is only the ask.
+#
+# The two rules at the end are not decoration. A digest once announced "TQ-0032 pending
+# review: approve/send draft 'Re: Resident Refund Request'" when TQ-0032 was a Docker issue
+# and NOTHING was pending: it took a mail subject out of the verdicts block (a "not our
+# task" the owner had already given) and pinned it to a TQ-ref from the open-work list.
+# A brief that invents work waiting on you is worse than no brief, so a ref must arrive
+# wearing the title the data gave it, and an empty section must stay empty.
 PROMPT = (
     'Write what the owner, half awake, should hold in mind TODAY, under 350 words, grouped into '
     'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
@@ -21,6 +28,10 @@ PROMPT = (
     '⏳ Waiting on you — questions still unanswered, replies still unapproved\n'
     '\U0001f4cc Keep honoring — verdicts you gave recently that should keep applying\n'
     '\U0001f4c8 Patterns — heads-ups (a sender getting louder, the same system failing twice)\n'
+    'Every TQ-ref you write must appear in the data, described with the SAME title it has there - '
+    'never restate a task under another subject, and never carry a subject across from one block '
+    'to another. A block whose data reads "(none)" has nothing to say: omit its section entirely '
+    'rather than filling it.\n'
     'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
 
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
@@ -32,6 +43,16 @@ OLD_PROMPTS = (
     '- verdicts the owner gave recently that should keep being honored\n'
     '- patterns worth a heads-up (a sender getting louder, the same system failing twice)\n'
     'Never invent facts; omit sections with nothing to say; no preamble, no sign-off.',
+
+    'Write what the owner, half awake, should hold in mind TODAY, under 350 words, grouped into '
+    'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
+    '(one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these '
+    'sections in this order, and OMIT any with nothing to say:\n'
+    '\U0001f680 In flight — what is being worked and who is waiting on whom\n'
+    '⏳ Waiting on you — questions still unanswered, replies still unapproved\n'
+    '\U0001f4cc Keep honoring — verdicts you gave recently that should keep applying\n'
+    '\U0001f4c8 Patterns — heads-ups (a sender getting louder, the same system failing twice)\n'
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.',
 )
 
 HEADER = ('# DIGEST.md — your morning brief\n\n'
@@ -40,33 +61,41 @@ HEADER = ('# DIGEST.md — your morning brief\n\n'
           'context instead. Durable rules belong in Agent memory (Settings) or SOUL.md._\n\n')
 
 
+def _block(out, head, lines):
+    """A header with NOTHING under it is an invitation to fill the silence - the model reads
+    the next block's lines as if they belonged to this one. Say "(none)" out loud instead."""
+    out.append(head)
+    out += list(lines) or ['  (none)']
+
+
 def gather(store, days: int = DAYS) -> str:
     """The raw material, compact enough to hand an AI whole."""
     since = (datetime.now() - timedelta(days=days)).isoformat(sep=' ', timespec='seconds')
     out = []
     tasks = store.list_tasks()
     live = [t for t in tasks if t.get('Status') in ('open', 'in_progress', 'waiting')]
-    out.append('OPEN WORK:')
-    for t in live[:25]:
-        out.append(f"  TQ-{t['TaskId']:04d} [{t['Status']}] {t.get('Title') or ''} "
-                   f"(kind {t.get('Kind')}, created {t.get('CreatedAt')})")
+    _block(out, 'OPEN WORK:', (f"  TQ-{t['TaskId']:04d} [{t['Status']}] {t.get('Title') or ''} "
+                               f"(kind {t.get('Kind')}, created {t.get('CreatedAt')})" for t in live[:25]))
     done = [t for t in tasks if t.get('Status') == 'done' and str(t.get('UpdatedAt') or '') >= since]
-    out.append('FINISHED THIS WINDOW:')
-    out += [f"  TQ-{t['TaskId']:04d} {t.get('Title') or ''}" for t in done[:20]]
-    pend = store.list_reviews('pending')
-    out.append('WAITING ON THE OWNER (pending reviews):')
-    out += [f"  TQ-{r['TaskId']:04d} {r.get('Kind')}: {(r.get('Subject') or r.get('Title') or '')[:90]}" for r in pend[:15]]
+    _block(out, 'FINISHED THIS WINDOW:', (f"  TQ-{t['TaskId']:04d} {t.get('Title') or ''}" for t in done[:20]))
+    # the ref carries its task's TITLE here too (list_reviews already joins it): a line
+    # holding only the attached MAIL SUBJECT let the subject and the ref drift apart, and a
+    # brief that renames a task is a lie in the one place the owner trusts by default
+    _block(out, 'WAITING ON THE OWNER (pending reviews):',
+           (f"  TQ-{r['TaskId']:04d} ({(r.get('Title') or '?')[:60]}) {r.get('Kind')} "
+            f"on mail: {(r.get('Subject') or '(no subject)')[:90]}" for r in store.list_reviews('pending')[:15]))
     notes = [m for m in store.list_memories() if str(m.get('CreatedAt') or '') >= since]
-    out.append('VERDICTS GIVEN THIS WINDOW (already durable in memory):')
-    out += [f"  [{m.get('Scope')}:{m.get('ScopeKey') or '*'}] {(m.get('Note') or '')[:110]}" for m in notes[:12]]
-    msgs = store.feed(limit=120, days=days)
+    # these quote mail subjects, which is exactly what got recycled into a fake pending
+    # review once - the header says plainly that nothing here is live work
+    _block(out, 'VERDICTS GIVEN THIS WINDOW (already durable in memory - standing rules, NOT open work,\n'
+                'and the mail they quote is already decided):',
+           (f"  [{m.get('Scope')}:{m.get('ScopeKey') or '*'}] {(m.get('Note') or '')[:110]}" for m in notes[:12]))
     senders = {}
-    for m in msgs:
+    for m in store.feed(limit=120, days=days):
         who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or '?'
         senders[who] = senders.get(who, 0) + 1
     loud = sorted(senders.items(), key=lambda kv: -kv[1])[:8]
-    out.append('WHO WROTE, HOW OFTEN:')
-    out += [f'  {who}: {n}' for who, n in loud]
+    _block(out, 'WHO WROTE, HOW OFTEN:', (f'  {who}: {n}' for who, n in loud))
     return '\n'.join(out)
 
 

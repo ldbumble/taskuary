@@ -79,7 +79,11 @@ class StartupSyncTests(unittest.TestCase):
         while the app was closed was polled by nobody."""
         from datetime import datetime, timedelta
         src = {'LastPolledAt': (datetime.now() - timedelta(minutes=5)).isoformat(sep=' ', timespec='seconds')}
-        self.assertLess((datetime.now() - channels._since(src)).total_seconds(), 400)
+        # minutes, not days - the incremental window is the watermark plus POLL_OVERLAP, which
+        # reaches back past it on purpose (see test_poll_overlap.py: an API that indexes late
+        # otherwise loses anything that arrived just before a poll)
+        self.assertLess((datetime.now() - channels._since(src)).total_seconds(),
+                        400 + channels.POLL_OVERLAP.total_seconds())
         wide = channels._since(src, 3)
         self.assertGreater((datetime.now() - wide).total_seconds(), 2.9 * 86400)
         self.assertLess((datetime.now() - wide).total_seconds(), 3.1 * 86400)

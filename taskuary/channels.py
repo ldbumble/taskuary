@@ -557,12 +557,26 @@ def mark_slack_read(tok: str, channel: str, ts: str):
     except Exception as e: logger.warning(f'marking slack {channel} read failed: {e}')
 
 
+# Every poll reaches back a little PAST its own watermark, and this is not belt-and-braces -
+# without it a message that arrives moments before a poll is lost for good. Graph's
+# getAllMessages/delta is eventually consistent: a Teams message sent at 15:29:11 was not yet
+# in the delta when the 15:29:19 poll asked for it, so that poll saw nothing and moved the
+# watermark to 15:29:19 anyway - eight seconds PAST the message. Every later poll asked for
+# "newer than 15:29:19" and the message was permanently on the wrong side of the line. Nobody
+# would ever have found it by re-syncing, because re-syncing is what buried it.
+#
+# Every channel here works the same way (a watermark that jumps to now), so every channel had
+# the same hole. Re-reading a few minutes is free: ingest_message dedupes on external_id in its
+# FIRST line, before policies and before any AI call.
+POLL_OVERLAP = timedelta(minutes=5)
+
+
 def _since(s, backfill_days: int = 0):
     """How far back to ask this source for. `backfill_days` WIDENS the window without moving the
     watermark - what the app does on startup, because whatever arrived while it was shut down was
     never polled by anyone, and 'since I last ran' is the wrong question after a weekend off."""
-    last = (datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T')) if s.get('LastPolledAt')
-            else datetime.now() - timedelta(days=1))
+    last = (datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T')) - POLL_OVERLAP
+            if s.get('LastPolledAt') else datetime.now() - timedelta(days=1))
     return min(last, datetime.now() - timedelta(days=backfill_days)) if backfill_days else last
 
 

@@ -3,6 +3,7 @@
 [![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
+[![PyPI](https://img.shields.io/pypi/v/taskuary.svg)](https://pypi.org/project/taskuary/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![GitHub stars](https://img.shields.io/github/stars/ldbumble/taskuary?style=social)](https://github.com/ldbumble/taskuary/stargazers)
 
@@ -81,7 +82,7 @@ markers always survive. What each one feeds from then on:
 ## Get started
 
 ```bash
-pip install git+https://github.com/ldbumble/taskuary
+pip install taskuary
 taskuary        # opens http://127.0.0.1:7787
 ```
 
@@ -113,7 +114,7 @@ No cloud key at all? Set **Settings → Triage & routing → Triage brain** to y
 and skip step 1 — one brain does everything, slower and pricier per message. See
 [One brain or two](#one-brain-or-two).
 
-Prefer a desktop app? `pip install "taskuary[desktop] @ git+https://github.com/ldbumble/taskuary"`
+Prefer a desktop app? `pip install "taskuary[desktop]"`
 then `taskuary-desktop` — the same UI in a native window. A prebuilt single-file
 `Taskuary.exe` is attached to every CI run.
 

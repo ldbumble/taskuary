@@ -59,7 +59,10 @@ def _shim_target(path: str) -> list:
     here = os.path.dirname(path)
     found = []
     for tok in re.findall(r'"([^"]+)"', txt):
-        real = os.path.normpath(tok.replace('%dp0%', here).replace('%~dp0', here))
+        # a batch file always writes \ - a separator on Windows, an ordinary character
+        # everywhere else. Translating it means this parser can be exercised by CI on
+        # Linux and macOS too, rather than only on the platform that has the bug.
+        real = os.path.normpath(tok.replace('%dp0%', here).replace('%~dp0', here).replace(chr(92), os.sep))
         if os.path.isfile(real) and real.lower().endswith(('.exe', '.js')): found.append(real)
     exe = next((f for f in found if f.lower().endswith('.exe')), None)
     js = next((f for f in found if f.lower().endswith('.js')), None)

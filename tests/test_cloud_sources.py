@@ -30,6 +30,9 @@ class FakeS3:
     def list_objects_v2(self, **kw):
         return {'Contents': [{'Key': 'daily/2026-08-23.csv', 'Size': 812, 'LastModified': FRESH}]}
 
+class Relocated(FakeS3):
+    def get_bucket_location(self, Bucket=None): return {'LocationConstraint': 'eu-west-1'}
+
 class FakeLogs:
     def __init__(self, region=None): self.region = region
     def describe_log_groups(self, **kw):
@@ -74,6 +77,36 @@ class AwsRegionTests(unittest.TestCase):
             aws.discover(s, {'region': 'us-east-2, us-east-1, eu-west-1'}, c['ConnectorId'])
         buckets = [x for x in s.list_sources() if x['Address'].startswith('s3://')]
         self.assertEqual(len(buckets), 2)
+
+    def test_a_bucket_is_its_NAME_not_its_name_and_region(self):
+        """S3 is one global namespace, so the region on a bucket only says which endpoint to
+        read it from. Keyed on (name, region), the same bucket files itself a second time the
+        moment get_bucket_location answers differently than last time - a permission removed, a
+        fallback taken - and the owner's mode pick is left on the row above the one now polling."""
+        s = MemoryStore(); c = arm(s, 'aws')
+        with mock.patch.object(aws, 'client', fake_client):
+            aws.discover(s, {'region': 'us-east-2'}, c['ConnectorId'])
+        moved = lambda cfg, service, region=None: (Relocated() if service == 's3' else FakeLogs(region))
+        with mock.patch.object(aws, 'client', moved):
+            out = aws.discover(s, {'region': 'us-east-2'}, c['ConnectorId'])
+        self.assertEqual(len([x for x in s.list_sources() if x['Address'] == 's3://reports-prod']), 1)
+        self.assertEqual(out['added'], 0)
+
+    def test_objects_found_before_regions_existed_are_stamped_not_duplicated(self):
+        """Every install has these: rows discovered when the card held one region and wrote none
+        onto the object. They are the SAME objects - adopting them keeps the modes their owner
+        already picked, where re-registering would have silently split every one in two."""
+        s = MemoryStore(); c = arm(s, 'aws')
+        for addr in ('s3://reports-prod', 'logs:///aws/lambda/importer-us-east-2'):
+            s.save_source({'Channel': 'aws', 'Address': addr, 'ConnectorId': c['ConnectorId'],
+                           'Active': 1, 'ConfigJson': json.dumps({'mode': 'feed'})}, 'o')   # no region
+        with mock.patch.object(aws, 'client', fake_client):
+            out = aws.discover(s, {'region': 'us-east-2'}, c['ConnectorId'])
+        rows = {x['Address']: json.loads(x['ConfigJson']) for x in s.list_sources() if x['Channel'] == 'aws'}
+        self.assertEqual(len([x for x in s.list_sources() if x['Address'] == 's3://reports-prod']), 1)
+        self.assertEqual(rows['s3://reports-prod'], {'mode': 'feed', 'region': 'us-east-2'})
+        self.assertEqual(rows['logs:///aws/lambda/importer-us-east-2']['mode'], 'feed')      # pick kept
+        self.assertEqual(out['stamped'], 2)
 
     def test_two_regions_holding_the_same_name_are_two_different_objects(self):
         """/aws/lambda/ingest in us-east-1 and in us-east-2 are unrelated log groups. Keyed on

@@ -177,6 +177,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # an agent may PROPOSE high-impact actions (open a PR, comment publicly,
                     # close an issue, run a tool); each lands in Review for approval
                     'proposals_enabled': '1',
+                    # once the hub has READ something, say so at the source: mark the mail
+                    # seen, the chat read. Off by default - the funnel is a reader, and a
+                    # mailbox that empties its own bold rows surprises people. See mark_read()
+                    'mark_read_enabled': '0',
                     # the zone timestamps are stamped in (blank = this machine's local). Setting
                     # it makes every displayed time wear its label (2:44 PM EDT) and keeps a
                     # browser in another zone reading the stamps correctly.

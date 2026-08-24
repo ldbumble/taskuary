@@ -21,14 +21,19 @@ def _mime(frm='Rita Vole <rita@partner.example>', subj='the export is broken', b
 
 
 class FakeImap:
-    def __init__(self, msgs): self.msgs = msgs      # {uid: bytes}
+    def __init__(self, msgs): self.msgs, self.readonly, self.flagged = msgs, None, []
     def login(self, u, p): return 'OK', []
-    def select(self, box, readonly=False): return 'OK', [str(len(self.msgs)).encode()]
+    def select(self, box, readonly=False):
+        self.readonly = readonly
+        return 'OK', [str(len(self.msgs)).encode()]
     def uid(self, cmd, *a):
         if cmd == 'search': return 'OK', [' '.join(str(u) for u in sorted(self.msgs)).encode()]
         if cmd == 'fetch':
             u = int(a[0])
             return 'OK', [(f'{u} (RFC822)'.encode(), self.msgs[u])]
+        if cmd == 'store':
+            self.flagged.append((int(a[0]), a[1], a[2]))
+            return 'OK', []
     def logout(self): return 'BYE', []
 
 
@@ -56,6 +61,32 @@ class ImapTests(unittest.TestCase):
         self.assertEqual(json.loads(c2['ConfigJson'])['imap_uid'], 102)
         with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
             self.assertEqual(imapmail.poll_imap(s, c2, [], llm=None), 0)          # watermark holds
+
+    def test_the_mailbox_is_left_untouched_unless_the_switch_is_on(self):
+        s, c = self._store()
+        fake = FakeImap({101: _mime()})
+        with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
+            imapmail.poll_imap(s, c, [], llm=None)
+        self.assertTrue(fake.readonly)          # readonly is what stops RFC822 setting \Seen
+        self.assertEqual(fake.flagged, [])
+
+    def test_mark_read_flags_seen_on_what_it_took(self):
+        s, c = self._store()
+        s.set_setting('mark_read_enabled', '1', 'o')
+        fake = FakeImap({101: _mime(), 102: _mime(frm='Me <me@myco.example>')})
+        with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
+            imapmail.poll_imap(s, c, [], llm=None)
+        self.assertFalse(fake.readonly)         # the box has to be writable to flag anything
+        self.assertEqual(fake.flagged, [(101, '+FLAGS', r'(\Seen)')])   # my own mail is skipped whole
+
+    def test_a_refused_flag_never_costs_the_ingest(self):
+        s, c = self._store()
+        s.set_setting('mark_read_enabled', '1', 'o')
+        fake = FakeImap({101: _mime()})
+        fake.uid = lambda cmd, *a: (_ for _ in ()).throw(OSError('read-only mailbox'))             if cmd == 'store' else FakeImap.uid(fake, cmd, *a)
+        with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
+            self.assertEqual(imapmail.poll_imap(s, c, [], llm=None), 1)
+        self.assertEqual(len(s._rows("SELECT * FROM message WHERE Channel='email'")), 1)
 
     def test_my_own_mail_is_never_inbound_work(self):
         s, c = self._store()

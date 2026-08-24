@@ -57,7 +57,7 @@ async function connect() {
       if (!body && !m.message) continue;
       messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid, group: m.key.remoteJid?.endsWith("@g.us"),
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
-        fromMe: !!m.key.fromMe });
+        fromMe: !!m.key.fromMe, key: m.key });   // the whole key: read receipts need participant too
       while (messages.length > MAX_KEPT) messages.shift();
     }
   });
@@ -73,6 +73,18 @@ http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/messages") {
       const after = Number(url.searchParams.get("after") || 0);
       return json(res, 200, { seq, messages: messages.filter((m) => m.seq > after) });
+    }
+    // blue ticks for what the hub has already taken in - ids come back from /messages, and
+    // the key we kept with them is what Baileys needs. Unknown ids (rotated out of the
+    // kept window) are simply skipped: a missed receipt is never worth a failed poll.
+    if (req.method === "POST" && url.pathname === "/read") {
+      const chunks = []; for await (const c of req) chunks.push(c);
+      const { ids } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      if (!connected) return json(res, 503, { error: "not connected to WhatsApp" });
+      const want = new Set(ids || []);
+      const keys = messages.filter((m) => want.has(m.id) && m.key).map((m) => m.key);
+      if (keys.length) await sock.readMessages(keys);
+      return json(res, 200, { ok: true, marked: keys.length });
     }
     if (req.method === "POST" && url.pathname === "/send") {
       const chunks = []; for await (const c of req) chunks.push(c);

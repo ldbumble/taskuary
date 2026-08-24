@@ -86,12 +86,16 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
     """UIDs are IMAP's own cursor: strictly increasing per mailbox, so the watermark on the
     connector never re-ingests - and a backfill just lowers the SINCE date, with dedupe
     catching anything already seen."""
-    from .channels import images_for_triage, save_attachments
+    from .channels import images_for_triage, save_attachments, wants_read
     from .ingest import ingest_message
     M, user = _login(c)
     n = 0
     try:
-        M.select('INBOX', readonly=True)
+        # readonly is what has always kept the funnel invisible in the mailbox: an ordinary
+        # RFC822 fetch sets \Seen by itself. Only the mark-read switch opens the box for
+        # writing, and then the flag is set explicitly, per message, after it is safely in.
+        read_it = wants_read(store)
+        M.select('INBOX', readonly=not read_it)
         _imap_h, _smtp_h, cfg = _hosts(c)
         last_uid = int(cfg.get('imap_uid') or 0)
         since = (datetime.now() - timedelta(days=max(backfill_days, 1))).strftime('%d-%b-%Y')
@@ -119,6 +123,9 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             if atts and out.get('message_id') and out['status'] != 'duplicate':
                 try: save_attachments(store, out['message_id'], atts, f'imap:{user}:{uid}')
                 except Exception as e: logger.warning(f'imap attachments failed: {e}')
+            if read_it:
+                try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
+                except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
         if new:
             store.set_connector_config(c['ConnectorId'], {**cfg, 'imap_uid': max(new)})
     finally:

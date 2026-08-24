@@ -29,7 +29,7 @@ const META = {
     secretLabel: "client secret",
     desc: "Ingest mailboxes through a Microsoft Graph app - mail lands on the Timeline through triage.",
     howto: ["Register (or reuse) an Azure app: Azure Portal → App registrations → New registration.",
-      "API permissions → add the APPLICATION permission Mail.Read (Microsoft Graph) → Grant admin consent.",
+      "API permissions → add the APPLICATION permission Mail.Read (Microsoft Graph) → Grant admin consent. Mail.ReadWrite instead if you want Outlook drafts on approve, or 'Mark items read at the source' (Settings → Sync & startup) — both write back to the mailbox.",
       "Enter tenant_id + client_id and paste the app's client secret (write-only). Blank = the server's AZURE_* env vars.",
       "Add each mailbox to read as a UPN under Sources and flip it on.",
       "Test acquires a real Graph token and reports exactly what failed if anything. Enable, and mail flows through the same triage funnel as everything else."] },

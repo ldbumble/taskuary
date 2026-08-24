@@ -5,7 +5,7 @@
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Box, Button, CircularProgress, InputAdornment, MenuItem, Select, Step, StepButton,
+  Alert, Box, Button, CircularProgress, InputAdornment, MenuItem, Radio, Select, Step, StepButton,
   StepContent, Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -124,6 +124,25 @@ const META = {
       "Monday has no assigned-to-me API, so the poll walks boards and keeps items whose People column names you — blank config walks your 25 most recently used boards; list board ids to pin it down (the number in the board's URL).",
       "Every sync brings in your items that changed since the last poll, linking back to the board.",
       "Nothing is written back to Monday; Taskuary only reads."] },
+  clickup: { group: "Project management", channel: "clickup", srcLabel: "Workspace", srcPh: "added by Test",
+    fields: [],
+    secretLabel: "API token (starts pk_)",
+    desc: "ClickUp tasks ASSIGNED TO YOU land on the Timeline through triage, with their list, status and priority.",
+    howto: ["Get a personal API token: Settings → Apps → API Token → Generate. It starts pk_ and does not expire.",
+      "Paste it under Credentials (write-only). ClickUp wants the token raw, so don't add 'Bearer' — Taskuary handles the header.",
+      "Test authenticates, remembers who 'you' are and which Workspace to walk, and adds it under Sources.",
+      "Every sync brings in tasks assigned to you that changed since the last poll, linking back to ClickUp.",
+      "Nothing is written back to ClickUp; Taskuary only reads."] },
+  todoist: { group: "Project management", channel: "todoist", srcLabel: "Account", srcPh: "added by Test",
+    fields: [["filter query (blank = (today | overdue))", "filter"]],
+    secretLabel: "API token",
+    desc: "The Todoist tasks a filter says are live — due today and overdue by default — land on the Timeline through triage.",
+    howto: ["Get your API token: avatar → Settings → Integrations → Developer → copy the API token.",
+      "Paste it under Credentials (write-only).",
+      "Todoist is a personal list, so most tasks have no assignee and 'assigned to me' would match only shared projects. The poll asks a FILTER QUERY instead — what Todoist itself says is live.",
+      "Blank means (today | overdue). Write any Todoist filter to change it: 'assigned to: me' for shared projects, '@work & 7 days', 'p1', and so on.",
+      "Each task files once — Todoist has no updated-since filter, so re-runs dedupe by task id rather than re-filing edits.",
+      "Nothing is written back to Todoist; Taskuary only reads."] },
   gitlab: { group: "Developer", channel: "gitlab", srcLabel: "Instance", srcPh: "added by Test",
     fields: [["instance URL (blank = https://gitlab.com)", "base_url"]],
     secretLabel: "Personal Access Token (scope: read_api)",
@@ -374,7 +393,7 @@ export default function ConnectorsView() {
     ]},
     { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Developer", cards: ["github", "gitlab", "azdo", "sentry", "pagerduty"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Project management", cards: ["jira", "asana", "monday", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    { title: "Project management", cards: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Data connections", cards: [
       {
         key: "mssql", title: "Microsoft SQL Server", channel: "mssql",
@@ -1073,6 +1092,48 @@ const RoleRow = ({ on, onToggle, label, desc }) => (
   </Box>
 );
 
+/* Authority: the ceiling on what an agent may do THROUGH this connection, once it is a tool.
+   The role says the agents may use Jira; this says whether they may close a ticket in it.
+   Read is the safe floor and the default for every tracker - a connection only gains a verb
+   when the owner hands it over. */
+const SCOPE_META = {
+  read: ["Read only", "Look, never touch: list, fetch, search, query. Nothing upstream changes. The safe default."],
+  write: ["Read and write", "The everyday work as well: create, update, comment, assign, complete, send. No deleting, no closing, no running code."],
+  admin: ["Full authority", "Everything, including the destructive and the structural: delete, close, archive, manage access, run scripts on a box. Hand this over deliberately."],
+};
+const SCOPE_KEYS = ["read", "write", "admin"];
+
+const AuthorityRow = ({ conn, reload }) => {
+  const fallback = String(conn.ScopeDefault || "read").toLowerCase();
+  const current = String(conn.Scope || "").toLowerCase();
+  const [busy, setBusy] = useState(false);
+  const set = async (s) => {
+    setBusy(true);
+    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Scope: s }); reload(); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Box sx={{ pt: 1.5 }}>
+      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>Authority — how far the agents may reach</Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
+        Only bites when this is an agent tool. An action nobody has classified counts as write,
+        so a read-only connection stays read-only even for a verb we have never seen.
+      </Typography>
+      {SCOPE_KEYS.map((s) => (
+        <Box key={s} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+          <Radio checked={(current || fallback) === s} disabled={busy} onChange={() => set(s)} sx={{ mt: -0.75 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>
+              {SCOPE_META[s][0]}{!current && fallback === s ? " — default" : ""}
+            </Typography>
+            <Typography variant="body2" sx={{ color: DIM }}>{SCOPE_META[s][1]}</Typography>
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
 const RoleStep = ({ conn, reload, only }) => {
   const [roles, toggle] = useRoles(conn, reload);
   const keys = only || Object.keys(ROLE_META);
@@ -1082,6 +1143,7 @@ const RoleStep = ({ conn, reload, only }) => {
         <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
       ))}
+      {keys.includes("tool") && <AuthorityRow conn={conn} reload={reload} />}
     </Box>
   );
 };

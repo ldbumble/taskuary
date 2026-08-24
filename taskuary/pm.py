@@ -1,7 +1,12 @@
-"""Project-management inboxes: Jira, Asana and Monday.com as trigger channels. The item that
-matters from these systems is the one ASSIGNED TO YOU - it lands on the Timeline and goes
-through the same triage as mail, so "assigned in Jira" and "asked by email" end up in the
-one funnel. Each connector polls its own API with the owner's token; nothing is written back.
+"""Project-management inboxes: Jira, Asana, Monday.com, ClickUp and Todoist as trigger
+channels. The item that matters from these systems is the one ASSIGNED TO YOU - it lands on
+the Timeline and goes through the same triage as mail, so "assigned in Jira" and "asked by
+email" end up in the one funnel. Each connector polls its own API with the owner's token;
+nothing is written back.
+
+Todoist is the odd one: it is a personal list, so most tasks have no assignee at all and
+"assigned to me" would match only shared projects. Its poll asks what Todoist itself says
+is due instead - a filter query the owner can rewrite on the card.
 """
 import json
 from datetime import datetime
@@ -175,8 +180,126 @@ def poll_monday(store, c, since, llm=None, file_only=False) -> int:
     return n
 
 
-TESTS = {'jira': test_jira, 'asana': test_asana, 'monday': test_monday}
-POLLS = {'jira': poll_jira, 'asana': poll_asana, 'monday': poll_monday}
+# ── ClickUp ──────────────────────────────────────────────────────────────────────────────
+def _clickup(c, path, **params):
+    # the personal token goes in raw - ClickUp is the one API here that does NOT want 'Bearer'
+    r = requests.get(f'https://api.clickup.com/api/v2{path}', params=params, timeout=30,
+                     headers={'Authorization': c.get('Secret') or ''})
+    if r.status_code in (401, 403):
+        raise RuntimeError(f'ClickUp said {r.status_code} - check the personal API token (Settings → Apps → API Token)')
+    if r.status_code == 429: raise RuntimeError('ClickUp rate-limited the poll (100 requests/minute on the free plans) - it will catch up next sync')
+    r.raise_for_status()
+    return r.json()
+
+
+def _cu_priority(p):
+    """ClickUp returns priority as an object on tasks and a bare int on some payloads."""
+    if isinstance(p, dict): return p.get('priority')
+    return {1: 'urgent', 2: 'high', 3: 'normal', 4: 'low'}.get(p)
+
+
+def _cu_ms(ms) -> str:
+    """ClickUp's unix milliseconds (as a string) into a local wall-clock stamp."""
+    try: return datetime.fromtimestamp(int(ms) / 1000).strftime('%Y-%m-%d %H:%M:%S')
+    except (TypeError, ValueError): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def test_clickup(store, c) -> str:
+    if not c.get('Secret'): raise RuntimeError('no API token saved - ClickUp: Settings → Apps → API Token → Generate (it starts pk_)')
+    me = _clickup(c, '/user').get('user') or {}
+    teams = _clickup(c, '/team').get('teams') or []
+    if not teams: raise RuntimeError('the token reaches no Workspace')
+    cfg = _cfg(c)
+    # remembered so the poller never guesses who "me" is or which Workspace to walk
+    if str(cfg.get('user_id') or '') != str(me.get('id')) or not cfg.get('team_id'):
+        store.set_connector_config(c['ConnectorId'], {**cfg, 'user_id': str(me.get('id')), 'team_id': str(teams[0]['id'])})
+    _seed_source(store, c, teams[0].get('name') or 'ClickUp')
+    return (f"authenticated as {me.get('username') or me.get('email')} in {teams[0].get('name')} - "
+            'tasks assigned to you flow in on the next sync')
+
+
+def poll_clickup(store, c, since, llm=None, file_only=False) -> int:
+    from .ingest import ingest_message
+    cfg = _cfg(c)
+    uid, tid = cfg.get('user_id'), cfg.get('team_id')
+    if not (uid and tid): raise RuntimeError('no Workspace known yet - run Test on the ClickUp card once')
+    j = _clickup(c, f'/team/{tid}/task', **{'assignees[]': uid, 'date_updated_gt': int(since.timestamp() * 1000),
+                                            'order_by': 'updated', 'reverse': 'true',
+                                            'subtasks': 'true', 'include_closed': 'false', 'page': 0})
+    n = 0
+    for t in (j.get('tasks') or [])[:CAP]:
+        lst = ((t.get('list') or {}).get('name')) or 'ClickUp'
+        pri = _cu_priority(t.get('priority'))
+        due = t.get('due_date')
+        head = (f"[ClickUp task in {lst} - status {((t.get('status') or {}).get('status') or '?')}"
+                f"{f' · priority {pri}' if pri else ''}{f' · due {_cu_ms(due)[:10]}' if due else ''} · assigned to you]")
+        title = ' '.join(x for x in (t.get('custom_id'), t.get('name')) if x).strip()
+        out = ingest_message(store, file_only=file_only, msg={
+            'external_id': f"clickup:{t['id']}", 'channel': 'clickup',
+            'subject': title or 'ClickUp task',
+            'body': f"{head}\n{str(t.get('description') or t.get('text_content') or '(no description)')[:20000]}",
+            'from_name': ((t.get('creator') or {}).get('username')) or 'ClickUp',
+            'from_email': ((t.get('creator') or {}).get('email')),
+            'conversation_id': f"clickup:{t['id']}", 'sent_at': _cu_ms(t.get('date_updated')),
+            'source_link': t.get('url'), 'source_name': lst}, llm=llm)
+        n += out['status'] != 'duplicate'
+    return n
+
+
+# ── Todoist ──────────────────────────────────────────────────────────────────────────────
+# Todoist has no "updated since" filter on tasks, and no assignee on a personal list. So the
+# poll asks a FILTER QUERY instead - what Todoist itself considers live - and lets ingest's
+# external_id dedupe decide what is new. Default: due today or already overdue.
+TODOIST_FILTER = '(today | overdue)'
+_TD_PRIORITY = {4: 'urgent', 3: 'high', 2: 'medium', 1: None}      # 4 is p1 in the UI, 1 is p4
+
+
+def _todoist(c, path, **params):
+    r = requests.get(f'https://api.todoist.com/api/v1{path}', params=params, timeout=30,
+                     headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+    if r.status_code in (401, 403):
+        raise RuntimeError(f'Todoist said {r.status_code} - check the API token (avatar → Settings → Integrations → Developer)')
+    if r.status_code == 429: raise RuntimeError('Todoist rate-limited the poll - it will catch up next sync')
+    r.raise_for_status()
+    return r.json()
+
+
+def test_todoist(store, c) -> str:
+    if not c.get('Secret'): raise RuntimeError('no API token saved - Todoist: avatar → Settings → Integrations → Developer → API token')
+    me = _todoist(c, '/user')
+    _seed_source(store, c, me.get('full_name') or me.get('email') or 'Todoist')
+    q = _cfg(c).get('filter') or TODOIST_FILTER
+    return f"authenticated as {me.get('full_name') or me.get('email')} - tasks matching {q} flow in on the next sync"
+
+
+def poll_todoist(store, c, since, llm=None, file_only=False) -> int:
+    from .ingest import ingest_message
+    q = (_cfg(c).get('filter') or TODOIST_FILTER).strip()
+    j = _todoist(c, '/tasks/filter', query=q, limit=CAP)
+    n = 0
+    for t in (j.get('results') or [])[:CAP]:
+        due = t.get('due') or {}
+        when = due.get('date') or due.get('string')
+        pri = _TD_PRIORITY.get(t.get('priority'))
+        head = (f"[Todoist task{f' · priority {pri}' if pri else ''}"
+                f"{f' · due {when}' if when else ''} · matched {q}]")
+        out = ingest_message(store, file_only=file_only, msg={
+            'external_id': f"todoist:{t['id']}", 'channel': 'todoist',
+            'subject': (t.get('content') or '').strip() or 'Todoist task',
+            'body': f"{head}\n{str(t.get('description') or '(no description)')[:20000]}",
+            'from_name': 'Todoist', 'conversation_id': f"todoist:{t['id']}",
+            'sent_at': _stamp(t.get('updated_at') or t.get('added_at')),
+            # v1 dropped the task's own url field; this is the documented deep link
+            'source_link': f"https://app.todoist.com/app/task/{t['id']}",
+            'source_name': 'Todoist'}, llm=llm)
+        n += out['status'] != 'duplicate'
+    return n
+
+
+TESTS = {'jira': test_jira, 'asana': test_asana, 'monday': test_monday,
+         'clickup': test_clickup, 'todoist': test_todoist}
+POLLS = {'jira': poll_jira, 'asana': poll_asana, 'monday': poll_monday,
+         'clickup': poll_clickup, 'todoist': poll_todoist}
 
 def test(store, c) -> str: return TESTS[c['Type']](store, c)
 

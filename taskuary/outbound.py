@@ -93,8 +93,8 @@ def send_teams(store, chat_id: str, body: str) -> dict:
 # Jira or Sentry by design. github is gated on its own card switch (a public comment is the
 # owner's call). Everything else is the owner's setting.
 SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'github')
-NEVER = {'report', 'jira', 'asana', 'monday', 'gitlab', 'azdo', 'linear', 'trello',
-         'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
+NEVER = {'report', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab', 'azdo',
+         'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
 
 
 def reply_channels(store) -> set:

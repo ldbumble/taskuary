@@ -391,6 +391,33 @@ class ApiTests(unittest.TestCase):
         finally:
             REGISTRY.pop('_t')
 
+    def test_tool_run_obeys_the_connections_authority(self):
+        """Authority is the second gate, under the tool role: winrm runs PowerShell on a box,
+        so it needs admin. Drop the card to read and the same call is refused - with a message
+        that names the level it wanted - then raising it back lets the call through."""
+        cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'winrm')
+        c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report,tool', 'Active': True})
+        REGISTRY['winrm'], real = lambda cfg: ('ran', 'output'), REGISTRY['winrm']
+        try:
+            self.assertTrue(c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'}).json()['ok'])
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Scope': 'read'})
+            r = c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'})
+            self.assertEqual(r.status_code, 403)
+            self.assertIn('admin', r.json()['detail'])
+            self.assertEqual(c.post('/api/connectors', json={'ConnectorId': cid, 'Scope': 'nonsense'}).status_code, 422)
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Scope': 'admin'})
+            self.assertTrue(c.post('/api/tools/run', json={'type': 'winrm', 'script': 'hostname'}).json()['ok'])
+        finally:
+            REGISTRY['winrm'] = real
+            c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'report,tool', 'Active': False, 'Scope': 'admin'})
+
+    def test_scope_catalog_lists_levels_and_defaults(self):
+        j = c.get('/api/scopes').json()
+        self.assertEqual([d['value'] for d in j['data']], ['read', 'write', 'admin'])
+        self.assertIn('winrm', j['data'][2]['gains'])          # remote code shows up under admin
+        self.assertEqual(j['defaults']['winrm'], 'admin')
+        self.assertEqual(j['defaults']['clickup'], 'read')
+
     def test_tool_run_needs_the_tool_role(self):
         """An agent using a connected system: allowed for tool-role connections that are ON,
         refused otherwise, and errors come back as data instead of a 500. Catalog cards are

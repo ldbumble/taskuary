@@ -86,8 +86,9 @@ Python 3.10+ is all you need. Then, in **Connectors** — a minute or two each:
    all: the **Ollama** card runs triage on a local open-source model. Triage is now on.
    (A small, cheap model is the right pick here; the expensive one goes in step 3.)
 2. **A channel** — Outlook, Gmail/IMAP, Teams, Slack, Telegram, WhatsApp or Discord. Mail
-   starts landing on the Timeline — and Jira/Asana/Monday/Linear/Trello/GitLab/Azure DevOps
-   items assigned to you, Sentry errors and PagerDuty incidents ride the same funnel.
+   starts landing on the Timeline — and Jira/Asana/Monday/ClickUp/Todoist/Linear/Trello/
+   GitLab/Azure DevOps items assigned to you, Sentry errors and PagerDuty incidents ride
+   the same funnel.
 3. **Your coding CLI** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot), Save,
    Test. Add a GitHub PAT and repos are discovered for you.
 4. **Reports** (optional) — point at SQL Server, any database by connection string, AWS,
@@ -307,12 +308,14 @@ Early (v0.2.0) and moving fast.
 - [x] Agent presets (Claude Code, Codex, Gemini, Cursor, Copilot) with one-click Test
 - [x] Desktop app + single-file Windows exe
 - [x] Interactive agent terminal (pty + websocket + xterm.js) and hand-anything-to-an-agent
-- [x] Per-connection roles (trigger / report / tool), GitHub issues as an inbound trigger
+- [x] Per-connection roles (trigger / report / tool) and **authority** (read / write / admin) over what agents may do through one
+- [x] GitHub issues as an inbound trigger
 - [x] Configurable triage brain — a cloud key or your CLI agent — and `/api/tools/run`
 - [x] Self-learning triage: LEARNED.md distilled from your verdicts, with strength + evidence per line
 - [x] Generate from history: TRIAGE.md and STYLE.md bootstrapped from 3 months of your own mailbox
 - [x] Data connections: any database by connection string, AWS, Azure, Prometheus, Datadog
 - [x] Developer inboxes: GitLab, Azure DevOps, Linear, Trello, Notion, Discord, Sentry, PagerDuty
+- [x] Board inboxes: Jira, Asana, Monday.com, ClickUp, Todoist
 - [x] The round trip: answers typed into the working agent's session; reviews decided from your phone
 - [x] Automation ideas: a weekly report mining your own funnel for the next thing worth automating
 - [x] Proof of work on every review: files changed, the tests that actually ran, CI, attempts — and what is *not* evidenced

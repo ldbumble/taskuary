@@ -99,6 +99,25 @@ class DocSyncTests(unittest.TestCase):
         # prose outside the markers untouched
         self.assertIn('John Smith', soul)
 
+    def test_every_pollable_connector_reaches_the_block_with_its_sources(self):
+        """docsync used to keep its OWN copy of the poller's channel map, frozen at monday.
+        A connector added after that lost its sources (trigger/tool/report ones showed a bare
+        name) or vanished entirely (feed-only ones like Notion produced no line at all). The
+        map is now imported from channels, so this can only rot if the poller itself does."""
+        from taskuary.channels import CH2SRC
+        self.assertIs(docsync.CH2SRC, CH2SRC)
+        s = MemoryStore()
+        for t, addr in (('clickup', 'Acme workspace'), ('todoist', 'me@x.com'),
+                        ('notion', 'Eng wiki'), ('gitlab', 'gitlab.com'), ('sentry', 'acme')):
+            c = s.get_connector_by_type(t)
+            s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+            s.save_source({'Channel': t, 'Address': addr, 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+        docsync.sync_connections(s)
+        soul = s.get_doc('soul')
+        for name, addr in (('ClickUp', 'Acme workspace'), ('Todoist', 'me@x.com'),
+                           ('Notion', 'Eng wiki'), ('GitLab', 'gitlab.com'), ('Sentry', 'acme')):
+            self.assertIn(f'{name}: {addr}', soul)
+
     def test_update_repo_map_preserves_notes(self):
         s = MemoryStore()
         docsync.update_repo_map(s, [{'full_name': 'o/one', 'description': 'the app', 'archived': False}])

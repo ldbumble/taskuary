@@ -549,6 +549,54 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(terminal.agent_argv({'cmd': 'codex', 'interactive_args': ['tui']}), ['claude', 'tui'])
 
 
+class ShimResolutionTests(unittest.TestCase):
+    """An npm .CMD shim is four lines of batch around one real program. Reaching THROUGH it
+    instead of running it under cmd /c is what decides whether the first prompt can be passed
+    as an argument at all - and a prompt passed as argv arrives whole or not at all, where a
+    typed one arrives in 160-char bites that a busy TUI input loop drops."""
+    B = chr(92)
+
+    def _shim(self, tail):
+        import tempfile
+        d = tempfile.mkdtemp()
+        binp = os.path.join(d, 'node_modules', 'pkg', 'bin')
+        os.makedirs(binp)
+        for f in ('tool.exe', 'cli.js'):
+            open(os.path.join(binp, f), 'w').write('x')
+        cmd = os.path.join(d, 'tool.cmd')
+        open(cmd, 'w').write('@ECHO off' + chr(10) + 'SET dp0=%~dp0' + chr(10) + tail + chr(10))
+        return cmd, os.path.join(binp, 'tool.exe'), os.path.join(binp, 'cli.js')
+
+    def _q(self, name):
+        return '"%dp0%' + self.B + 'node_modules' + self.B + 'pkg' + self.B + 'bin' + self.B + name + '"'
+
+    def test_a_shim_wrapping_an_exe_resolves_to_the_exe(self):
+        from taskuary.agents import _shim_target
+        cmd, exe, _ = self._shim(self._q('tool.exe') + '   %*')
+        self.assertEqual(_shim_target(cmd), [exe])
+
+    def test_a_shim_wrapping_node_plus_a_script_resolves_to_both(self):
+        from taskuary.agents import _shim_target
+        cmd, exe, js = self._shim(self._q('tool.exe') + ' ' + self._q('cli.js') + ' %*')
+        self.assertEqual(_shim_target(cmd), [exe, js])
+
+    def test_a_shim_it_cannot_read_falls_back_rather_than_failing(self):
+        """cmd /c still works - it just costs the argv prompt. Guessing wrong must not stop a
+        session from starting at all."""
+        from taskuary.agents import _shim_target
+        cmd, _, _ = self._shim('something::unparseable %*')
+        self.assertEqual(_shim_target(cmd), [])
+
+    def test_resolving_past_the_shim_is_what_lets_the_prompt_ride_argv(self):
+        """open_session strips the argv prompt the moment cmd.exe is in the command - which on
+        Windows was ALWAYS, so every prompt was typed, in bites, unverified."""
+        blocked = lambda argv: any(str(a).lower().endswith(('.cmd', '.bat')) or
+                                   os.path.basename(str(a)).lower() in ('cmd', 'cmd.exe') for a in argv)
+        self.assertTrue(blocked(['cmd', '/c', 'C:' + self.B + 'npm' + self.B + 'claude.CMD']))
+        self.assertFalse(blocked(['C:' + self.B + 'npm' + self.B + 'bin' + self.B + 'claude.exe']))
+        self.assertEqual(terminal.seed_argv({'cmd': 'claude'}, 'the ask'), ['the ask'])
+
+
 if __name__ == '__main__':
     unittest.main()
 

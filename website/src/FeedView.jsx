@@ -393,11 +393,23 @@ export default function FeedView({ onOpenTask, onChanged }) {
             </Typography>
           </Box>
         )}
+        {/* the failure belongs to the dock, not the timeline column: a full-width slab
+            left of a centered header read as a stray banner. Shrink-to-fit pill, same
+            radius/shadow as the dock above it, and it OFFERS the retry instead of
+            leaving a dead spinner spinning underneath. */}
+        {err && (
+          <Alert severity="error" variant="outlined" onClose={() => setErr("")}
+            action={<Button size="small" color="error" onClick={() => { setErr(""); setRows(null); load(rowsLen.current); }}
+              sx={{ fontSize: 11.5, borderRadius: 99 }}>Retry</Button>}
+            sx={{ py: 0.1, borderRadius: 99, bgcolor: PANEL, alignItems: "center", boxShadow: "0 8px 28px rgba(16,24,40,.10)",
+              "& .MuiAlert-message": { fontSize: 12.5, py: 0.75 }, "& .MuiAlert-action": { pt: 0, alignItems: "center" } }}>
+            {err}
+          </Alert>
+        )}
       </Box>
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
       <Box sx={{ minWidth: 0, maxWidth: 860 }}>
-        {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
         {/* syncing = the TIMELINE is loading, so the timeline says so: rows dim and a
             spinner sits on the list itself - the old 3px bar over just the left column
             read as a broken artifact, not a state */}
@@ -408,7 +420,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
               <CircularProgress size={26} sx={{ mt: 14 }} />
             </Box>
           )}
-          {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (
+          {!rows ? (err ? null : <CircularProgress size={22} sx={{ m: 4 }} />) : !rows.length ? (
             // the empty line has to know WHY it is empty: "activate a mailbox" under the
             // code filter told someone with three mailboxes to add a fourth
             <Empty>{view || cat || pick

@@ -33,9 +33,13 @@ const FIELDS = {
     ["params (JSON)", "params", "multiline", '{"Bucket": "my-bucket"}'],
     ["path into the response", "path", "text", "Contents"], AI_FIELD],
   s3_object: [["bucket", "bucket", "aws_bucket", "pick a discovered bucket"],
+    ["region", "region", "text", "us-east-1"],
     ["key — read this object (blank = list instead)", "key", "text", "reports/latest.csv"],
     ["prefix — list under this", "prefix", "text", "reports/"], AI_FIELD],
   cloudwatch_logs: [["log group", "log_group", "aws_log_group", "pick a discovered log group"],
+    // a log group is (name, region). Picking one fills this in; it is here so a hand-typed name
+    // can still be pointed at the right region instead of failing with "does not exist".
+    ["region", "region", "text", "us-east-1"],
     ["filter pattern (optional)", "pattern", "text", "?ERROR ?Exception"],
     ["hours back", "hours", "text", "24"], AI_FIELD],
   azure: [["ARM path (or full URL)", "path", "multiline", "/subscriptions/<id>/resourceGroups/<rg>/providers/Microsoft.Web/sites"],
@@ -105,7 +109,7 @@ const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; 
 const NL = String.fromCharCode(10);
 // Everything that belongs to ONE source card; the rest (title, prompt, schedule) is the
 // report itself. Splitting here is what lets old single-source configs load unchanged.
-const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick",
+const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick", "region",
   "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver",
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
   "api_version", "path_expr", "account", "container", "blob", "workspace_id",
@@ -459,30 +463,43 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
    `seen` are the services discovery actually found objects for in THIS account, and they are
    pinned to the top of a 430-name alphabetical list, because the list is otherwise a haystack.
    freeSolo stays on: a service too new for the installed botocore must still be typeable. */
+/* `objects: true` means the options are {name, region} rather than bare strings, and choosing
+   one sets the REGION as well as the name. That is not a nicety: a log group belongs to ONE
+   region, so a name picked from a list and run against the card's first region answers "The
+   specified log group does not exist" - true, and completely misleading. */
 const PICKS = {
   aws_service: { list: (d) => d.services, top: (d) => d.seen, label: "your keys already see these", rest: "everything botocore knows" },
   aws_operation: { list: (d) => d.operations, top: (d) => d.read, label: "reads only — safe for a report", rest: "everything else this service does" },
-  aws_log_group: { list: (d) => d.log_groups, top: (d) => d.log_groups, label: "found in your account", rest: "" },
-  aws_bucket: { list: (d) => d.buckets, top: (d) => d.buckets, label: "found in your account", rest: "" },
+  aws_log_group: { list: (d) => d.log_groups, objects: true, group: (o) => `in ${o.region || "the default region"}` },
+  aws_bucket: { list: (d) => d.buckets, objects: true, group: (o) => `in ${o.region || "the default region"}` },
 };
 
 function AwsPicker({ label, which, value, placeholder, service, onChange }) {
   const [cat, setCat] = useState(null);
+  const spec = PICKS[which];
   useEffect(() => {
     // operations depend on the service; everything else is one fetch
     if (which === "aws_operation" && !service) { setCat({ options: [], top: [] }); return; }
     const q = which === "aws_operation" ? `?service=${encodeURIComponent(service)}` : "";
     api.get(`/api/aws/catalog${q}`)
-      .then(({ data }) => setCat({ options: PICKS[which].list(data) || [], top: PICKS[which].top(data) || [], error: data.error }))
+      .then(({ data }) => setCat({ options: spec.list(data) || [], top: (spec.top?.(data)) || [], error: data.error }))
       .catch(() => setCat({ options: [], top: [] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [which, service]);
   const top = new Set(cat?.top || []);
-  const sorted = [...(cat?.options || [])].sort((a, b) => (top.has(b) ? 1 : 0) - (top.has(a) ? 1 : 0));
+  const opts = cat?.options || [];
+  const sorted = spec.objects ? opts : [...opts].sort((a, b) => (top.has(b) ? 1 : 0) - (top.has(a) ? 1 : 0));
   const empty = cat && !sorted.length;
+  // the region of whatever is currently typed in, when we can recognise it
+  const hit = spec.objects ? opts.find((o) => o.name === value) : null;
   return (
-    <Autocomplete freeSolo autoHighlight options={sorted} value={value ?? ""} size="small" fullWidth
-      onChange={(_e, v) => onChange(v ?? "")} onInputChange={(_e, v, reason) => reason === "input" && onChange(v)}
-      groupBy={PICKS[which].rest ? (o) => (top.has(o) ? PICKS[which].label : PICKS[which].rest) : undefined}
+    <Autocomplete freeSolo autoHighlight options={sorted} size="small" fullWidth
+      value={value ?? ""}
+      getOptionLabel={(o) => (typeof o === "string" ? o : o?.name ?? "")}
+      isOptionEqualToValue={(o, v) => (typeof o === "string" ? o : o.name) === (typeof v === "string" ? v : v?.name)}
+      onChange={(_e, v) => onChange(typeof v === "string" || !v ? { value: v ?? "" } : { value: v.name, region: v.region })}
+      onInputChange={(_e, v, reason) => reason === "input" && onChange({ value: v })}
+      groupBy={spec.objects ? spec.group : (spec.rest ? (o) => (top.has(o) ? spec.label : spec.rest) : undefined)}
       renderInput={(params) => (
         <TextField {...params} label={label} sx={{ bgcolor: "#fff" }}
           // the placeholder used to show s3 examples whatever the service was, which reads as a
@@ -490,7 +507,10 @@ function AwsPicker({ label, which, value, placeholder, service, onChange }) {
           placeholder={which === "aws_operation" ? (service ? `an operation on ${service}` : "") : placeholder}
           helperText={which === "aws_operation" && !service ? "pick a service first"
             : cat?.error ? cat.error
-              : empty ? "nothing discovered yet — run Discover on the AWS card" : undefined} />
+              : empty ? "nothing discovered yet — run Discover on the AWS card"
+                : hit ? `in ${hit.region || "the default region"}`
+                  : value && spec.objects ? "typed by hand — set the region below if it is not the card's first"
+                    : undefined} />
       )} />
   );
 }
@@ -627,7 +647,8 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         }
         if (PICKS[kind]) {
           return <AwsPicker key={key} label={label} which={kind} value={shown} placeholder={ph}
-            service={src.service} onChange={(x) => onChange({ [key]: x })} />;
+            service={src.service}
+            onChange={(x) => onChange({ [key]: x.value, ...(x.region !== undefined ? { region: x.region } : {}) })} />;
         }
         return <TextField key={key} size="small" label={label} placeholder={ph} value={shown} sx={{ bgcolor: "#fff" }}
           multiline={kind === "multiline"} minRows={kind === "multiline" ? 3 : undefined}

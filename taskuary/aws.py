@@ -142,12 +142,17 @@ def catalog(store, service: str = None) -> dict:
     import botocore.session
     from botocore import xform_name
     sess = botocore.session.get_session()
-    # the objects discovery actually found, so a log group or a bucket is PICKED. Typing
-    # "/aws/lambda/whatever" from memory is the same trap as typing a boto3 operation name, and
-    # a log group that does not exist answers with an empty report rather than an error.
-    objs = [(s['Address'] or '') for s in store.list_sources(active_only=False) if s['Channel'] == 'aws']
-    groups = sorted(a[len('logs://'):] for a in objs if a.startswith('logs://'))
-    buckets = sorted(a[len('s3://'):] for a in objs if a.startswith('s3://'))
+    # the objects discovery actually found, each WITH THE REGION it was found in. Handing back a
+    # bare name was a real bug: a log group is (name, region) - /aws/lambda/x in us-east-2 and the
+    # one in us-east-1 are unrelated groups - so a name picked from a list and run against the
+    # card's FIRST region answers "The specified log group does not exist", which is true and
+    # completely misleading. The region travels with the pick now.
+    objs = [(s['Address'] or '', json.loads(s.get('ConfigJson') or '{}').get('region') or '')
+            for s in store.list_sources(active_only=False) if s['Channel'] == 'aws']
+    groups = sorted(({'name': a[len('logs://'):], 'region': r} for a, r in objs if a.startswith('logs://')),
+                    key=lambda g: (g['region'], g['name']))
+    buckets = sorted(({'name': a[len('s3://'):], 'region': r} for a, r in objs if a.startswith('s3://')),
+                     key=lambda b: b['name'])
     seen = sorted({'logs' for _ in groups[:1]} | {'s3' for _ in buckets[:1]})
     out = {'seen': seen, 'services': sorted(sess.get_available_services()),
            'log_groups': groups, 'buckets': buckets}
@@ -253,7 +258,18 @@ def run_cloudwatch_logs(cfg: dict):
     start = int((datetime.now() - timedelta(hours=float(cfg.get('hours') or 24))).timestamp() * 1000)
     kw = {'logGroupName': cfg['log_group'], 'startTime': start, 'limit': min(lim + 1, 10000)}
     if cfg.get('pattern'): kw['filterPattern'] = cfg['pattern']
-    ev = client(cfg, 'logs').filter_log_events(**kw).get('events') or []
+    where = regions(cfg)[0]
+    try:
+        ev = client(cfg, 'logs', where).filter_log_events(**kw).get('events') or []
+    except Exception as e:
+        # "The specified log group does not exist" is true and useless: it does exist, in another
+        # region. AWS cannot say that because it only knows the region it was asked about - but we
+        # know which one we asked, so we say it.
+        if 'ResourceNotFoundException' not in type(e).__name__ and 'does not exist' not in str(e): raise
+        raise RuntimeError(f"no log group {cfg['log_group']} in {where or 'the default region'} - a log "
+                           'group belongs to ONE region, so the same name in another region is a '
+                           'different group. Pick it from the list again (each entry says its region), '
+                           "or set this source's region to the one it lives in.") from None
     rows = [{'at': datetime.fromtimestamp(e['timestamp'] / 1000).strftime('%Y-%m-%d %H:%M:%S'),
              'stream': e.get('logStreamName'), 'message': (e.get('message') or '').strip()[:500]} for e in ev]
     return rows_out(rows, lim, unit='events', mine=mine)

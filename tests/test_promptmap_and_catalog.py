@@ -104,8 +104,10 @@ class AwsCatalogTests(unittest.TestCase):
             server.store.save_source({'Channel': 'aws', 'Address': addr, 'Active': 1,
                                       'ConfigJson': '{"mode": "report", "region": "us-east-1"}'}, 'test')
         d = c.get('/api/aws/catalog').json()
-        self.assertIn('/aws/lambda/ingest', d['log_groups'])       # the scheme prefix is stripped
-        self.assertIn('reports-bucket', d['buckets'])
+        # each entry carries its REGION, because a log group's name means nothing without one -
+        # see test_aws_region.py for what a bare name cost
+        self.assertIn({'name': '/aws/lambda/ingest', 'region': 'us-east-1'}, d['log_groups'])
+        self.assertIn({'name': 'reports-bucket', 'region': 'us-east-1'}, d['buckets'])
 
     def test_a_bad_service_name_answers_instead_of_exploding(self):
         d = c.get('/api/aws/catalog', params={'service': 'nonsense'}).json()

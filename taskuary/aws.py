@@ -142,10 +142,15 @@ def catalog(store, service: str = None) -> dict:
     import botocore.session
     from botocore import xform_name
     sess = botocore.session.get_session()
-    seen = sorted({'s3' if (s['Address'] or '').startswith('s3://') else 'logs'
-                   for s in store.list_sources(active_only=False)
-                   if s['Channel'] == 'aws' and (s['Address'] or '').startswith(('s3://', 'logs://'))})
-    out = {'seen': seen, 'services': sorted(sess.get_available_services())}
+    # the objects discovery actually found, so a log group or a bucket is PICKED. Typing
+    # "/aws/lambda/whatever" from memory is the same trap as typing a boto3 operation name, and
+    # a log group that does not exist answers with an empty report rather than an error.
+    objs = [(s['Address'] or '') for s in store.list_sources(active_only=False) if s['Channel'] == 'aws']
+    groups = sorted(a[len('logs://'):] for a in objs if a.startswith('logs://'))
+    buckets = sorted(a[len('s3://'):] for a in objs if a.startswith('s3://'))
+    seen = sorted({'logs' for _ in groups[:1]} | {'s3' for _ in buckets[:1]})
+    out = {'seen': seen, 'services': sorted(sess.get_available_services()),
+           'log_groups': groups, 'buckets': buckets}
     if service:
         try:
             names = [xform_name(o) for o in sess.get_service_model(service).operation_names]

@@ -19,7 +19,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     """(label, source, text) for every part of the triage prompt, in prompt order."""
     from .ingest import owner_addresses, relevant_notes
     from .learn import injectable
-    from .triage import ADDRESSING_RULE, INTENT_SYSTEM, addressed_to_you, strip_boilerplate
+    from .triage import INTENT_SYSTEM, addressed_to_you, strip_boilerplate
     m = {'from_email': msg.get('FromEmail'), 'subject': msg.get('Subject'), 'body': msg.get('BodyText'),
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
@@ -31,9 +31,6 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     mine = owner_addresses(store)
     how = addressed_to_you(m, mine)
     out = [('the classifier instructions', 'TRIAGE.md' if doc.strip() else 'triage.INTENT_SYSTEM (the doc is blank)', base)]
-    if how and 'addressed_to_you' not in base:
-        out.append(('how to read the To/Cc lines', 'triage.ADDRESSING_RULE (code - appended because '
-                                                   'TRIAGE.md does not mention the field)', ADDRESSING_RULE))
     if soul: out.append(("the operator's document", 'SOUL.md', soul[:2500]))
     if learned: out.append(('the learned profile', 'LEARNED.md (active sections only - hypotheses are gated out)', learned[:1500]))
     if notes:

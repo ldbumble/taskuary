@@ -14,7 +14,7 @@ def _version() -> str:
     # through every later pull, which is the exact confusion this whole function exists to end.
     try:
         for line in (Path(__file__).parent.parent / 'pyproject.toml').read_text(encoding='utf-8').splitlines():
-            if line.startswith('version'): return line.split('=', 1)[1].strip().strip('"\'') + '+src'
+            if line.startswith('version'): return line.split('=', 1)[1].strip().strip('"\'')
     except OSError: pass
     try:                                  # a real wheel: no pyproject beside it, metadata is the truth
         from importlib.metadata import PackageNotFoundError, version

@@ -10,17 +10,6 @@ import re as _re
 # "task" turned questions into background work nobody asked for.
 # This text also ships as templates/triage.md - the editable TRIAGE.md doc that overrides it
 # (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
-# Being COPIED on somebody else's thread is not an assignment, and until to/cc were collected
-# no classifier could tell the difference. Kept apart from INTENT_SYSTEM because classify_intent
-# also appends it to a TRIAGE.md that was written before the field existed.
-ADDRESSING_RULE = (
-    '\naddressed_to_you says how the owner sits on this message: "to" = it was aimed at them; "cc" = '
-    "they were COPIED on somebody else's thread, which is not an assignment - a cc carrying no ask "
-    'directed at the owner is fyi, a question inside one is at most reply_only, and only an ask pointed '
-    'squarely at them makes a cc a task; "not named" = it reached them through a group alias. recipients '
-    'counts everyone on the mail - a note to thirty people is a broadcast, not a job. Both fields are '
-    'absent on channels that have no recipient lines at all.\n')
-
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "why": "<one concrete sentence: what you saw in the message '
@@ -33,7 +22,7 @@ INTENT_SYSTEM = (
     'approve, so nothing is dropped by choosing this.\n'
     'fyi = informational only: automated notices, reports, newsletters, thanks, threads the owner is '
     'merely copied on.\n'
-    + ADDRESSING_RULE +
+    'addressed_to_you and recipients are SIGNALS to weigh, never rules to obey. "to" = the mail was aimed at the owner; "cc" = they were copied, which OFTEN means somebody else owns the work; "not named" = it arrived through a group alias. But a cc can absolutely be theirs: one that names them, asks them something directly, or that only they can answer is their work, and being on the cc line counts for nothing against that. recipients counts everyone on the mail - a note to thirty people is more likely a broadcast than a job. Weigh these with everything else in the message; never decide on them alone. Both fields are absent on channels with no recipient lines.\n'
     'Torn between task and reply_only? Choose reply_only. The owner can turn a reply into a task in '
     'one click, and a wrongly-started agent costs far more than a draft.')
 
@@ -67,13 +56,12 @@ def heuristic_intent(msg: dict, mine=()) -> dict:
     if _ACT.search(low): return {'intent': 'task', 'why': 'explicitly asks for something to be done (keyword heuristic)'}
     if body.rstrip().endswith('?') or _ASK.search(low):
         return {'intent': 'reply_only', 'why': 'reads as a question an answer settles (keyword heuristic)'}
-    # Nothing above matched: no fyi marker, nobody asking for anything, no question. "Assume
-    # real work" is the wrong guess for mail the owner was merely COPIED on - that is exactly
-    # the thread you are kept informed of, and it used to open a task every time. A cc that DOES
-    # ask (_ACT, _ASK, a question mark) never reaches this line, and one carrying a screenshot
-    # still goes to the AI, because the picture can hold the whole ask.
-    if addressed_to_you(msg, mine) == 'cc' and not msg.get('images'):
-        return {'intent': 'fyi', 'why': 'you are only in cc and nothing in it asks for anything (keyword heuristic)'}
+    # A cc used to be FILED here, by keyword, before any model saw it - which is the one thing
+    # the To/Cc signal must not do. Plenty of cc'd mail is genuinely yours: the sender put the
+    # owner in cc and addressed them in the body, or they are the only person who can answer.
+    # Deciding that from the header alone is a guess wearing a rule's clothing, so the fields
+    # are handed to the classifier as evidence and the classifier decides. It costs one AI call
+    # on quiet cc mail that this used to settle for free; being right is worth more.
     return {'intent': 'task', 'why': 'no fyi markers and no plain question - assumed real work (keyword heuristic, no AI read this)'}
 
 
@@ -150,13 +138,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit. '
                               'Say so in your reason if the verdict feels underdetermined - do not claim '
                               'nothing is on file.)' if notes_left else ''))
+            # No rule about the To/Cc lines is appended here any more. The code's job is to
+            # SUPPLY the signal; how much it counts for is a judgement, and judgement belongs in
+            # TRIAGE.md where the owner can argue with it. An untouched document tracks the
+            # shipped template, so the paragraph reaches existing installs that way.
             how = addressed_to_you(msg, mine)
-            # the code supplies the field, so the code explains it - a TRIAGE.md written before
-            # addressing existed (every doc already on disk: templates seed first-run only and
-            # the owner's edits are never overwritten) would otherwise get the fact with no rule
-            # for reading it. A doc that names the field itself keeps the last word.
-            if how and 'addressed_to_you' not in base:
-                system += ADDRESSING_RULE
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),

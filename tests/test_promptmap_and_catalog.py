@@ -63,6 +63,15 @@ class PromptMapTests(unittest.TestCase):
         self.assertIn('sync first', out)
 
 
+def _has_botocore():
+    try:
+        import botocore.session          # noqa: F401 - boto3 is an optional extra ([aws])
+        return True
+    except ImportError:
+        return False
+
+
+@unittest.skipUnless(_has_botocore(), 'boto3/botocore is an optional extra - not installed here')
 class AwsCatalogTests(unittest.TestCase):
     """The service and operation fields were free text with an example in the placeholder, so a
     wrong name was only discovered when a scheduled report failed."""
@@ -86,6 +95,17 @@ class AwsCatalogTests(unittest.TestCase):
         server.store.save_source({'Channel': 'aws', 'Address': 's3://some-bucket', 'Active': 1,
                                   'ConfigJson': '{"mode": "report", "region": "us-east-1"}'}, 'test')
         self.assertIn('s3', c.get('/api/aws/catalog').json()['seen'])
+
+    def test_the_discovered_log_groups_and_buckets_come_back_to_be_picked(self):
+        """"Don't you have to choose which log?" - yes, and typing "/aws/lambda/whatever" from
+        memory is the same trap as typing an operation name: a log group that does not exist
+        answers with an empty report rather than an error."""
+        for addr in ('logs:///aws/lambda/ingest', 's3://reports-bucket'):
+            server.store.save_source({'Channel': 'aws', 'Address': addr, 'Active': 1,
+                                      'ConfigJson': '{"mode": "report", "region": "us-east-1"}'}, 'test')
+        d = c.get('/api/aws/catalog').json()
+        self.assertIn('/aws/lambda/ingest', d['log_groups'])       # the scheme prefix is stripped
+        self.assertIn('reports-bucket', d['buckets'])
 
     def test_a_bad_service_name_answers_instead_of_exploding(self):
         d = c.get('/api/aws/catalog', params={'service': 'nonsense'}).json()

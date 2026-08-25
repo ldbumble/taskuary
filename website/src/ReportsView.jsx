@@ -31,10 +31,10 @@ const FIELDS = {
     ["operation", "operation", "aws_operation", "list_buckets · describe_instances ..."],
     ["params (JSON)", "params", "multiline", '{"Bucket": "my-bucket"}'],
     ["path into the response", "path", "text", "Contents"], AI_FIELD],
-  s3_object: [["bucket", "bucket", "text", "my-bucket"],
+  s3_object: [["bucket", "bucket", "aws_bucket", "pick a discovered bucket"],
     ["key — read this object (blank = list instead)", "key", "text", "reports/latest.csv"],
     ["prefix — list under this", "prefix", "text", "reports/"], AI_FIELD],
-  cloudwatch_logs: [["log group", "log_group", "text", "/aws/lambda/my-fn"],
+  cloudwatch_logs: [["log group", "log_group", "aws_log_group", "pick a discovered log group"],
     ["filter pattern (optional)", "pattern", "text", "?ERROR ?Exception"],
     ["hours back", "hours", "text", "24"], AI_FIELD],
   azure: [["ARM path (or full URL)", "path", "multiline", "/subscriptions/<id>/resourceGroups/<rg>/providers/Microsoft.Web/sites"],
@@ -436,33 +436,38 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
    `seen` are the services discovery actually found objects for in THIS account, and they are
    pinned to the top of a 430-name alphabetical list, because the list is otherwise a haystack.
    freeSolo stays on: a service too new for the installed botocore must still be typeable. */
+const PICKS = {
+  aws_service: { list: (d) => d.services, top: (d) => d.seen, label: "your keys already see these", rest: "everything botocore knows" },
+  aws_operation: { list: (d) => d.operations, top: (d) => d.read, label: "reads only — safe for a report", rest: "everything else this service does" },
+  aws_log_group: { list: (d) => d.log_groups, top: (d) => d.log_groups, label: "found in your account", rest: "" },
+  aws_bucket: { list: (d) => d.buckets, top: (d) => d.buckets, label: "found in your account", rest: "" },
+};
+
 function AwsPicker({ label, which, value, placeholder, service, onChange }) {
   const [cat, setCat] = useState(null);
   useEffect(() => {
-    const q = which === "aws_operation" ? (service ? `?service=${encodeURIComponent(service)}` : null) : "";
-    if (q === null) { setCat({ options: [], seen: [] }); return; }
+    // operations depend on the service; everything else is one fetch
+    if (which === "aws_operation" && !service) { setCat({ options: [], top: [] }); return; }
+    const q = which === "aws_operation" ? `?service=${encodeURIComponent(service)}` : "";
     api.get(`/api/aws/catalog${q}`)
-      .then(({ data }) => setCat({
-        options: which === "aws_operation" ? (data.operations || []) : (data.services || []),
-        seen: which === "aws_operation" ? (data.read || []) : (data.seen || []),
-        error: data.error,
-      }))
-      .catch(() => setCat({ options: [], seen: [] }));
+      .then(({ data }) => setCat({ options: PICKS[which].list(data) || [], top: PICKS[which].top(data) || [], error: data.error }))
+      .catch(() => setCat({ options: [], top: [] }));
   }, [which, service]);
-  const opts = cat?.options || [];
-  const seen = new Set(cat?.seen || []);
-  // the ones this account demonstrably uses (or the read-only operations) sort first
-  const sorted = [...opts].sort((a, b) => (seen.has(b) ? 1 : 0) - (seen.has(a) ? 1 : 0));
+  const top = new Set(cat?.top || []);
+  const sorted = [...(cat?.options || [])].sort((a, b) => (top.has(b) ? 1 : 0) - (top.has(a) ? 1 : 0));
+  const empty = cat && !sorted.length;
   return (
-    <Autocomplete freeSolo autoHighlight options={sorted} value={value ?? ""} size="small"
+    <Autocomplete freeSolo autoHighlight options={sorted} value={value ?? ""} size="small" fullWidth
       onChange={(_e, v) => onChange(v ?? "")} onInputChange={(_e, v, reason) => reason === "input" && onChange(v)}
-      groupBy={(o) => (seen.has(o)
-        ? (which === "aws_operation" ? "reads only — safe for a report" : "your keys already see these")
-        : (which === "aws_operation" ? "everything else this service does" : "everything botocore knows"))}
+      groupBy={PICKS[which].rest ? (o) => (top.has(o) ? PICKS[which].label : PICKS[which].rest) : undefined}
       renderInput={(params) => (
-        <TextField {...params} label={label} placeholder={placeholder} sx={{ bgcolor: "#fff" }}
+        <TextField {...params} label={label} sx={{ bgcolor: "#fff" }}
+          // the placeholder used to show s3 examples whatever the service was, which reads as a
+          // suggestion rather than as an example and is wrong for every other service
+          placeholder={which === "aws_operation" ? (service ? `an operation on ${service}` : "") : placeholder}
           helperText={which === "aws_operation" && !service ? "pick a service first"
-            : cat?.error ? cat.error : undefined} />
+            : cat?.error ? cat.error
+              : empty ? "nothing discovered yet — run Discover on the AWS card" : undefined} />
       )} />
   );
 }
@@ -549,10 +554,21 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "#fff" }}
           placeholder="cash balances" onChange={(e) => onChange({ label: e.target.value })} />
       )}
+      {/* "I just want log history" should not require knowing a boto3 operation name. The generic
+          AWS call is the escape hatch for anything unusual; there is a purpose-built type for the
+          two things people actually ask AWS for, and it takes a log group and a number of hours. */}
+      {src.type === "aws" && ["logs", "s3"].includes(src.service) && (
+        <Alert severity="info" sx={{ fontSize: 11.5, py: 0, "& .MuiAlert-message": { py: 0.75 } }}
+          action={<Button size="small" sx={{ fontSize: 11 }}
+            onClick={() => onRetype(src.service === "logs" ? "cloudwatch_logs" : "s3_object")}>switch</Button>}>
+          {src.service === "logs" ? "For log history there is a simpler source: pick a log group and hours back."
+            : "For reading or listing a bucket there is a simpler source: pick the bucket."}
+        </Alert>
+      )}
       {fields.map(([label, key, kind, ph]) => {
         const v = src[key];
         const shown = Array.isArray(v) ? v.join(NL) : typeof v === "object" && v ? JSON.stringify(v) : (v ?? "");
-        if (kind === "aws_service" || kind === "aws_operation") {
+        if (PICKS[kind]) {
           return <AwsPicker key={key} label={label} which={kind} value={shown} placeholder={ph}
             service={src.service} onChange={(x) => onChange({ [key]: x })} />;
         }
@@ -567,9 +583,12 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           the timeline's "capped at 200" points at a setting you never made. It applies whenever
           the call comes back as a LIST (list_buckets, describe_instances, a SQL result) and does
           nothing at all when it comes back as one object - which the Test below makes obvious. */}
+      {/* width:300 on a 300-wide card with padding on both sides: it hung out over the edge.
+          Full width of whatever the card gives it, and a one-line hint instead of three. */}
       <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
-        helperText="blank = 200. Only bites when the result is a list — Test shows which you have."
-        sx={{ bgcolor: "#fff", width: 300 }} onChange={(e) => onChange({ max_rows: e.target.value })} />
+        helperText="blank = 200, and only for list results"
+        FormHelperTextProps={{ sx: { fontSize: 10.5, mx: 0 } }}
+        sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />
       <SourceTest src={src} />
     </Box>
   );

@@ -21,8 +21,18 @@ INBOUND = ('outlook', 'teams', 'slack', 'gmail', 'imap', 'telegram', 'whatsapp',
 
 
 def _ai(store) -> dict:
-    """The first AI connection that could actually answer a prompt. Ollama is the exception that
-    matters: a local model carries no key, so 'has a secret' is the wrong test for it."""
+    """Anything that could actually answer a prompt, in the order build_llm would pick it.
+
+    A CLI agent counts. Most people arriving here already pay for Claude Code or Codex and have
+    no separate API key at all, so treating "a key exists" as the only definition of a brain told
+    them they had none while the thing was sitting on their PATH.
+
+    Ollama is the other exception: a local model carries no key, so 'has a secret' is the wrong
+    test for it too."""
+    pick = str(store.get_settings().get('triage_ai') or '')
+    if pick.startswith('cli:'):
+        row = store.get_agent(pick[4:])
+        if row: return {'Name': f'{row["Name"]} (CLI)', 'Type': 'cli'}
     for c in store.list_connectors():
         if c['Type'] in AI_TYPES and c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'):
             return c
@@ -67,7 +77,8 @@ def state(store) -> dict:
         {'key': 'ai', 'title': 'Connect an AI brain',
          'why': 'This is what reads each message and decides whether it is work, a question, or '
                 'noise. Until it exists every message just files itself onto the Timeline, '
-                'untriaged - the app runs, and does nothing for you.',
+                'untriaged - the app runs, and does nothing for you. A coding CLI you already '
+                'pay for will do it; so will an API key.',
          'done': bool(ai), 'detail': ai.get('Name') or '', 'where': 'Connectors'},
         {'key': 'inbound', 'title': 'Connect where work arrives',
          'why': 'A mailbox, a chat, a tracker - anything that brings work in. Without one the '

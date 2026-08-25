@@ -17,8 +17,6 @@ import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 
-const PAGE_MAX = 1160;      // the widest page column; the bar matches it
-
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
 
 function ServerVersion() {
@@ -99,12 +97,12 @@ export default function TaskHubPage() {
       {/* textAlign left kills the CRA-default .App { text-align: center } leaking in */}
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
         {/* ── slim top bar ───────────────────────────────────────────── */}
-        {/* The BAR spans the window (it is a background and a border); its CONTENTS sit on the
-            same centred column as the page below, so the logo and the tabs line up with the
-            content instead of hugging the left edge of a wide monitor. */}
-        <Box sx={{ bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 10 }}>
+        {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
+            until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to
+            drag to reach Settings - and pushed the whole page into horizontal scroll with it. A
+            nav bar is chrome; it spans. */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2.5, py: 1,
-          maxWidth: PAGE_MAX, mx: "auto" }}>
+          bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 10 }}>
           <Box sx={{ width: 26, height: 26, borderRadius: 1.5, background: GRADIENT, display: "flex",
             alignItems: "center", justifyContent: "center" }}>
             <HubIcon sx={{ color: "#fff", fontSize: 17 }} />
@@ -114,7 +112,6 @@ export default function TaskHubPage() {
             everything in → one funnel → agents + you
           </Typography>
           <ServerVersion />
-          <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />
 
           <Box sx={{ display: "flex", gap: 0.5, ml: 3, minWidth: 0, overflowX: "auto" }}>
             {TABS.map((t) => {
@@ -140,10 +137,10 @@ export default function TaskHubPage() {
             })}
           </Box>
           <Box sx={{ flex: 1 }} />
+          <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
-        </Box>
         </Box>
 
         <SetupPanel open={setupOpen} state={setup} onClose={() => { setSetupOpen(false); reloadSetup(); }}

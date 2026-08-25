@@ -1066,6 +1066,13 @@ def report_preview(body: dict):
 
 class SetupBody(BaseModel): dismissed: bool
 
+@app.get('/api/cli/detect')
+def cli_detect():
+    """The AI CLIs on this machine. Most people already pay for one and have no separate API key,
+    so the wizard offers what they have before it asks for a key."""
+    from . import clis
+    return {'data': clis.detect(store)}
+
 @app.get('/api/setup')
 def setup_state():
     """What still stands between this install and a working funnel, read off real state - so a

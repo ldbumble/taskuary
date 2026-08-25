@@ -145,6 +145,51 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         self.assertFalse(_step(setup.state(s), 'ai')['done'])
 
 
+class ACliCountsAsABrainTests(unittest.TestCase):
+    """Most people arriving here already pay for Claude Code or Codex and have no separate API
+    key. Treating "a key exists" as the only definition of a brain told them they had none while
+    the thing sat on their PATH - and sent them to Settings to fix it."""
+    def test_an_agent_alone_is_not_the_brain_until_triage_points_at_it(self):
+        s = _fresh()
+        s.upsert_agent('claude', 'coding', 'cli', '{"cmd": "claude"}')
+        self.assertFalse(_step(setup.state(s), 'ai')['done'])
+        s.set_setting('triage_ai', 'cli:claude', 't')
+        st = _step(setup.state(s), 'ai')
+        self.assertTrue(st['done'])
+        self.assertIn('CLI', st['detail'])          # says WHICH kind of brain it is
+
+    def test_pointing_at_an_agent_that_is_gone_is_not_a_brain(self):
+        s = _fresh()
+        s.set_setting('triage_ai', 'cli:vanished', 't')
+        self.assertFalse(_step(setup.state(s), 'ai')['done'])
+
+    def test_a_key_still_counts_when_no_cli_is_chosen(self):
+        s = _fresh()
+        _with_ai(s)
+        self.assertTrue(_step(setup.state(s), 'ai')['done'])
+
+    def test_detection_finds_what_is_on_PATH_and_what_is_configured(self):
+        from taskuary import clis
+        s = _fresh()
+        s.upsert_agent('my-own-cli', 'coding', 'cli', '{"cmd": "whatever"}')
+        found = {x['name']: x for x in clis.detect(s)}
+        self.assertIn('my-own-cli', found)                       # configured here, so offered
+        self.assertTrue(found['my-own-cli']['configured'])
+        for x in found.values():
+            self.assertIn('installed', x)
+        # the flags are not decoration: a headless claude without them blocks on an approval
+        # nobody can click, so an agent added from here would hang on first use
+        claude = next(k for k in clis.KNOWN if k['name'] == 'claude')
+        self.assertIn('--dangerously-skip-permissions', claude['args'])
+
+    def test_the_endpoint_answers_without_a_store_full_of_agents(self):
+        d = c.get('/api/cli/detect').json()
+        self.assertIn('data', d)
+        for x in d['data']:
+            for k in ('name', 'label', 'installed', 'configured'):
+                self.assertIn(k, x)
+
+
 class PuttingItAwayTests(unittest.TestCase):
     def test_dismissing_sticks_and_can_be_undone(self):
         """A checklist you cannot hide is nagging; one you cannot get back is worse."""

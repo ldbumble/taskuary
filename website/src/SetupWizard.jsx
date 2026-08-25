@@ -127,6 +127,64 @@ const OwnerForm = ({ onDone }) => {
   );
 };
 
+/* Add a CLI agent and prove it runs, in one button. `asBrain` also points triage at it.
+   The test is a real one-line run through the CLI, which is the only thing that distinguishes
+   "installed" from "works": a headless agent missing its permission flag looks fine and then
+   hangs forever on an approval nobody can click. */
+const CliPicker = ({ asBrain, onDone }) => {
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
+  }, []);
+  const use = async (cli) => {
+    setBusy(cli.name); setMsg(null);
+    try {
+      if (cli.cmd) await api.put(`/api/agents/${encodeURIComponent(cli.name)}`,
+        { cmd: cli.cmd, args: cli.args, ...(cli.resume_args ? { resume_args: cli.resume_args } : {}), timeout: cli.timeout || 1500 });
+      const { data } = await api.post(`/api/agents/${encodeURIComponent(cli.name)}/test`, {});
+      if (!data.ok) { setMsg({ bad: true, text: data.error || "the CLI did not answer" }); setBusy(""); return; }
+      if (asBrain) await api.patch("/api/settings", { name: "triage_ai", value: `cli:${cli.name}` });
+      setMsg({ text: `${cli.label} answered — ${asBrain ? "it is your triage brain now" : "ready for coding tasks"}` });
+      await onDone();
+    } catch (e) {
+      setMsg({ bad: true, text: e?.response?.data?.detail || e?.message || "that did not work" });
+    }
+    setBusy("");
+  };
+  if (list === null) return <Typography variant="caption" sx={{ color: FAINT }}>looking for CLIs on your PATH…</Typography>;
+  return (
+    <Box>
+      {list.length === 0 ? (
+        <Typography variant="caption" sx={{ color: FAINT }}>
+          No AI CLI found on your PATH. Claude Code, Codex, Gemini CLI and OpenCode are all detected automatically once installed.
+        </Typography>
+      ) : list.map((cli) => (
+        <Box key={cli.name} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{cli.label}</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, wordBreak: "break-all" }}>
+              {cli.path || (cli.configured ? "already configured here" : cli.cmd)}
+            </Typography>
+          </Box>
+          <Button size="small" variant="outlined" disabled={!!busy} onClick={() => use(cli)}
+            sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+            {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
+          </Button>
+        </Box>
+      ))}
+      {msg && <Alert severity={msg.bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{msg.text}</Alert>}
+    </Box>
+  );
+};
+
+const AgentForm = ({ onDone }) => (
+  <Box sx={{ mt: 1 }}>
+    <CliPicker onDone={onDone} />
+  </Box>
+);
+
 const BrainForm = ({ onDone, onGo }) => {
   const [type, setType] = useState("anthropic");
   const [key, setKey] = useState("");
@@ -134,6 +192,15 @@ const BrainForm = ({ onDone, onGo }) => {
   const brain = BRAINS.find((b) => b.type === type);
   return (
     <Box sx={{ mt: 1 }}>
+      {/* the CLI first: most people arriving here already pay for one and have no separate key,
+          and asking them for a key they do not have was the wrong first question */}
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>
+        Use a coding CLI you already have
+      </Typography>
+      <CliPicker asBrain onDone={onDone} />
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5, mb: 0.5, fontWeight: 700 }}>
+        …or paste an API key
+      </Typography>
       <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
         {BRAINS.map((b) => (
           <Chip key={b.type} label={b.label} size="small" onClick={() => setType(b.type)}
@@ -239,7 +306,7 @@ const SyncForm = ({ onDone }) => {
   );
 };
 
-const FORMS = { owner: OwnerForm, ai: BrainForm, inbound: MailboxForm, sync: SyncForm };
+const FORMS = { owner: OwnerForm, ai: BrainForm, inbound: MailboxForm, agent: AgentForm, sync: SyncForm };
 
 const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
   const Form = FORMS[s.key];

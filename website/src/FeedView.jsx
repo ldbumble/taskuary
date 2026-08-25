@@ -22,6 +22,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
+import { subjectOf, sourceOf } from "./feedText.js";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -68,24 +69,6 @@ const actionOf = (r) => (r.Channel === "report" ? "report"
 // NeedsYou comes from the server and means one thing: nobody else is moving this. It
 // outranks the verdict chip, because "what happened to it" matters less than "is it mine".
 const needsYou = (r) => !!r.NeedsYou && r.TaskStatus !== "done";
-
-// Teams chats get a synthesized "<sender> in <source>" subject - redundant next to the
-// sender + source we already show, so drop it. Reports stamp the title as from, source
-// AND the start of the subject, which used to read "Morning digest · Morning digest — Morning digest — …".
-const subjectOf = (r) => {
-  let s = r.Subject || "";
-  if (s === `${r.FromName} in ${r.SourceName}`) return "";
-  const who = String(r.FromName || "").trim();
-  if (who && s.toLowerCase().startsWith(who.toLowerCase())) {
-    s = s.slice(who.length).replace(/^\s*[—\-–:]+\s*/, "");
-  }
-  return s;
-};
-const sourceOf = (r) => {
-  const src = r.SourceName || "";
-  const who = r.FromName || r.FromEmail || "";
-  return src && src !== who ? src : "";
-};
 
 // One plain-English sentence: what the hub did + where it stands.
 const blurb = (r) => {

@@ -18,6 +18,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, LandingCard, Empty, FilterPills } from "./ui.jsx";
+import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
 
@@ -1031,8 +1032,6 @@ const ROLE_META = {
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
   notify: ["Notifications", "The outbound direction: Taskuary pushes a ping into this chat when something needs you. Name the chat in Credentials; what qualifies is Settings → Notifications."],
 };
-
-const CAN_NOTIFY = new Set(["telegram", "whatsapp", "teams"]);
 
 // The GitHub DECISIONS live on the GitHub card: is GitHub the issue tracker for tasks (agents
 // open/update issues as the team expects) and may agents push/deploy on their own. These were

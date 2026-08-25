@@ -19,6 +19,7 @@ import { AgentsPage } from "./AgentsPanel.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, Empty, Crumb as CrumbBase, UnderTabs, LandingCard } from "./ui.jsx";
+import { notifyState } from "./notify.js";
 
 const Crumb = (props) => <CrumbBase section="Settings" {...props} />;
 
@@ -488,41 +489,18 @@ const HelpDialog = ({ help, onClose }) => (
   </Dialog>
 );
 
-const parseCfg = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
-
 // The two knobs above are mute until a chat is actually named. Say so here, rather
 // than leaving the page looking like a finished setup that silently goes nowhere.
 const NotifyStatus = ({ connectors, settings }) => {
-  const level = (settings.find((s) => s.Name === "notify_level") || {}).Value || "needs_me";
-  const phones = (settings.find((s) => s.Name === "phone_approvals") || {}).Value === "1";
-  const named = (connectors || []).filter((c) => {
-    if (!c.Active) return false;
-    if (!String(c.Roles || "").split(",").includes("notify")) return false;
-    return !!String(parseCfg(c.ConfigJson).notify_chat || "").trim();
-  });
-  const armed = (connectors || []).filter((c) => String(c.Roles || "").split(",").includes("notify"));
-  let text, color = DIM;
-  if (level === "off") {
-    text = "Pushes are off — nothing is sent, even if a chat is named.";
-  } else if (named.length) {
-    const bits = named.map((c) => `${c.Name} · ${parseCfg(c.ConfigJson).notify_chat}`);
-    text = `Pinging ${bits.join(" · ")}${phones ? " — reply in that chat to approve" : ""}`;
-    color = "#15803d";
-  } else if (armed.length) {
-    const names = armed.map((c) => c.Name).join(", ");
-    text = `${names} ${armed.length === 1 ? "has" : "have"} the Notifications role, but no chat is named yet — set it under Connectors → Credentials.`;
-    color = "#b45309";
-  } else {
-    text = "No notify chat yet — on a Telegram, WhatsApp or Teams card, add the Notifications role and name the chat in Credentials.";
-  }
-  const empty = !named.length && !armed.length && level !== "off";
+  const val = (n, d) => (settings.find((s) => s.Name === n) || {}).Value ?? d;
+  const st = notifyState(connectors, val("notify_level", "needs_me"), val("phone_approvals") === "1");
+  const good = st.kind === "pinging", warn = st.kind === "none" || st.kind === "unnamed" || st.kind === "inactive";
   return (
-    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5,
-      px: 1.25, py: 0.85,
-      bgcolor: named.length ? "#e8f6ee" : empty ? "#fef4e6" : "#f7f8fa",
-      border: `1px solid ${named.length ? "#cbe8d6" : empty ? "#f3ddb8" : BORDER}`, borderRadius: 1.5 }}>
-      {named[0] && <ChannelIcon channel={named[0].Type} sx={{ fontSize: 15, mt: 0.15 }} />}
-      <Typography variant="caption" sx={{ color, lineHeight: 1.45 }}>{text}</Typography>
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5, px: 1.25, py: 0.85,
+      bgcolor: good ? "#e8f6ee" : warn ? "#fef4e6" : "#f7f8fa",
+      border: `1px solid ${good ? "#cbe8d6" : warn ? "#f3ddb8" : BORDER}`, borderRadius: 1.5 }}>
+      {st.targets[0] && <ChannelIcon channel={st.targets[0].Type} sx={{ fontSize: 15, mt: 0.15 }} />}
+      <Typography variant="caption" sx={{ color: good ? "#15803d" : warn ? "#b45309" : DIM, lineHeight: 1.45 }}>{st.text}</Typography>
     </Box>
   );
 };

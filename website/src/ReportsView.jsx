@@ -275,14 +275,27 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     catch (e) { setPreview({ ok: false, error: e?.response?.data?.detail || "preview failed" }); }
     setBusy("");
   };
+  /* "Save report is not working" - it was refusing, correctly, and saying so into a state that
+     is only rendered on step TWO. The button is on step three. So an empty title produced a
+     click that did nothing, explained nothing, and never reached the server. Three things wrong
+     at once: the message had nowhere to appear, the button did not know it could not work, and a
+     POST that failed for any other reason threw into a void with no catch anywhere. */
+  const [saveErr, setSaveErr] = useState("");
+  const [savedMsg, setSavedMsg] = useState("");
   const save = async () => {
+    setSaveErr(""); setSavedMsg("");
     const c = bodyCfg();
-    if (!c.title) { setTest({ ok: false, detail: "title is required" }); return; }
+    if (!c.title) { setSaveErr("Give the report a title first — it is the headline on the Timeline (step 1)."); return; }
     const body = { Channel: "report", Address: c.title, ConfigJson: JSON.stringify(c), Active: true };
     if (cur) body.SourceId = cur.SourceId;
-    const { data } = await api.post("/api/sources", body);
-    await reload(); onSaved(data.sourceId);
-    setTest({ ok: true, detail: "saved ✓ — enabled and scheduled" });
+    try {
+      const { data } = await api.post("/api/sources", body);
+      await reload();
+      setSavedMsg("saved — enabled and scheduled");
+      onSaved?.(data.sourceId);
+    } catch (e) {
+      setSaveErr(e?.response?.data?.detail || e?.message || "the server refused to save it");
+    }
   };
 
   const typeOptions = types.filter((t) => t.status === "builtin");
@@ -298,7 +311,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               connection twice with different queries is fine, and every source's rows reach the
               summary together.
             </Typography>
-            <TextField label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 560, mb: 2 }}
+            <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 560, mb: 2 }}
               fullWidth onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
 
             {/* ── the funnel: source cards, draggable, converging on the prompt ── */}
@@ -438,12 +451,20 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     ...(e.target.checked ? { every_minutes: "", daily_at: "", cron: "" } : {}) })} />
                 <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
               </Box>
-              <Button variant="contained" disableElevation onClick={save}>Save report</Button>
+              <Button variant="contained" disableElevation onClick={save} disabled={!cfg.title}
+                title={cfg.title ? "" : "the report needs a title - step 1"}>Save report</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
               Pick one. Everything blank = once a day, whenever the app is open.
             </Typography>
-            {test?.detail?.includes("saved") && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#15803d" }}>✓ {test.detail}</Typography>}
+            {!cfg.title && (
+              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#b45309", fontWeight: 600 }}>
+                No title yet — <Box component="span" sx={{ textDecoration: "underline", cursor: "pointer" }}
+                  onClick={() => setStep(0)}>add one in step 1</Box> and this button wakes up.
+              </Typography>
+            )}
+            {saveErr && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{saveErr}</Alert>}
+            {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#15803d" }}>✓ {savedMsg}</Typography>}
             {cur && (
               <Box sx={{ display: "flex", gap: 1, mt: 1.5, alignItems: "center" }}>
                 <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}

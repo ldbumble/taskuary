@@ -495,24 +495,58 @@ def open_reply(mid: int, body: OpenReplyBody = None):
 
 class NotMineBody(BaseModel): note: str | None = None; scope: str = 'sender'
 
-def _not_mine_note(m: dict) -> str:
+NOT_MINE_SCOPES = ('subject', 'sender', 'sender_domain', 'global')
+
+def _topic_key(m: dict) -> str:
+    """The subject a topic verdict keys on, minus the Re:/Fwd: - empty when there is not enough
+    of one to match on, which is when the verdict has to be about the sender instead."""
+    from .routing import norm_subject, tokens
+    subj = norm_subject(m.get('Subject') or '')
+    return subj[:200] if len(tokens(subj)) >= 2 else ''
+
+def _suggest_scope(m: dict) -> str:
+    """Which scope this verdict most likely means. It defaulted to 'sender', and that is the
+    wrong guess for what people actually write: "resident refunds are not our task" is about a
+    KIND OF WORK, and filed under one colleague on a seventeen-person thread it never fired
+    again. A subject to key on means the topic is the better bet; the owner still chooses."""
+    return 'subject' if _topic_key(m) else 'sender'
+
+def _not_mine_note(m: dict, scope: str = None) -> str:
+    """The note we would write, phrased for the scope it will be saved under - the text and the
+    dropdown have to agree, or the saved verdict says something the owner did not choose."""
     who = m.get('FromEmail') or m.get('FromName') or 'this sender'
-    return (f"Mail like \"{(m.get('Subject') or '')[:90]}\" from {who} is other people's work - "
-            'file it, do not open a task or draft a reply.')
+    subj = (m.get('Subject') or '')[:90]
+    tail = 'is other people\'s work - file it, do not open a task or draft a reply.'
+    scope = scope or _suggest_scope(m)
+    if scope == 'subject': return f'Mail about "{_topic_key(m) or subj}" {tail}'
+    if scope == 'sender_domain': return f'Mail like "{subj}" from anyone at {who.rsplit("@", 1)[-1]} {tail}'
+    if scope == 'global': return f'Mail like "{subj}", whoever sends it, {tail}'
+    return f'Mail like "{subj}" from {who} {tail}'
 
 @app.post('/api/messages/{mid}/not-mine')
 def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
-    """"Not our task." Two things happen: this item stops being work, and the reason is
-    written to MEMORY - which triage reads on every future message from that sender (see
-    ingest.notes_for), so the same verdict doesn't have to be given twice. Unlike "Skip this
-    sender", their mail keeps arriving; only the judgement is learned."""
+    """"Not our task." Two things happen: this item stops being work, and the reason is written
+    to MEMORY - which the funnel reads on every later message it applies to (ingest.notes_for
+    for the classifier, ingest.veto before a message joins an existing task), so the same
+    verdict doesn't have to be given twice. Unlike "Skip this sender", their mail keeps
+    arriving; only the judgement is learned.
+
+    SCOPE is the whole game, and 'sender' was the wrong default: most verdicts are about a kind
+    of work, not a person, and a topic rule keyed to one colleague on a long thread never fires
+    again. 'subject' keys on the topic and matches by overlap, so the next resident, invoice or
+    ticket number in the subject line does not slip past it."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     em = (m.get('FromEmail') or '').lower()
-    if body.scope not in ('sender', 'sender_domain', 'global'): raise HTTPException(422, 'bad scope')
-    scope = body.scope if (em or body.scope == 'global') else 'global'
-    key = None if scope == 'global' else (em.rsplit('@', 1)[-1] if scope == 'sender_domain' else em)
-    note = (body.note or '').strip() or _not_mine_note(m)
+    if body.scope not in NOT_MINE_SCOPES: raise HTTPException(422, 'bad scope')
+    scope = body.scope
+    # a scope with nothing to key on would save a verdict that can never match: fall back to the
+    # widest thing this message CAN be keyed on rather than writing a note that does nothing
+    if scope == 'subject' and not _topic_key(m): scope = 'sender' if em else 'global'
+    if scope in ('sender', 'sender_domain') and not em: scope = 'global'
+    key = (_topic_key(m) if scope == 'subject' else None if scope == 'global'
+           else em.rsplit('@', 1)[-1] if scope == 'sender_domain' else em)
+    note = (body.note or '').strip() or _not_mine_note(m, scope)
     memid = store.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note[:1000],
                               'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR})
     tid = m.get('TaskId')
@@ -528,7 +562,23 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
                             f"mem{memid}: owner said NOT OURS ({scope}): \"{(m.get('Subject') or '')[:80]}\" "
                             f"from {em or '?'} - {note[:200]}")
     return {'ok': True, 'memoryId': memid, 'note': note, 'scope': scope, 'scopeKey': key,
-            'taskDeleted': bool(tid)}
+            'taskDeleted': bool(tid), 'alsoCovered': _also_covered(scope, key, tid)}
+
+def _also_covered(scope: str, key: str, dropped_tid) -> list:
+    """Other OPEN tasks this new verdict now covers - REPORTED, never deleted. One click that
+    silently removes five tasks is not a verdict, it is a surprise. But saying nothing is how
+    "the system is not learning it" happens: the verdict works from now on while yesterday's
+    tasks sit there looking like proof that it did not."""
+    from .ingest import topic_hit
+    if scope == 'global' or not key: return []
+    out = []
+    for t in store.snapshots():
+        if t['task_id'] == dropped_tid: continue
+        hit = (any(topic_hit(key, s) for s in t['subjects']) if scope == 'subject'
+               else any((e or '').lower().endswith('@' + key) for e in t['senders']) if scope == 'sender_domain'
+               else key in {(e or '').lower() for e in t['senders']})
+        if hit: out.append({'taskId': t['task_id'], 'title': t['title']})
+    return out[:20]
 
 @app.post('/api/messages/{mid}/file')
 def file_message(mid: int):
@@ -549,11 +599,15 @@ def file_message(mid: int):
     return {'ok': True, 'taskDeleted': bool(tid)}
 
 @app.get('/api/messages/{mid}/not-mine/suggest')
-def not_mine_suggest(mid: int):
-    """The note we'd save, so the panel can show it for editing before it's committed."""
+def not_mine_suggest(mid: int, scope: str = None):
+    """The note we'd save, so the panel can show it for editing before it's committed - phrased
+    for `scope`, or for the scope this message most likely calls for when none is given."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    return {'note': _not_mine_note(m), 'from': m.get('FromEmail')}
+    if scope and scope not in NOT_MINE_SCOPES: raise HTTPException(422, 'bad scope')
+    scope = scope or _suggest_scope(m)
+    return {'note': _not_mine_note(m, scope), 'from': m.get('FromEmail'), 'scope': scope,
+            'topic': _topic_key(m)}
 
 def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
     try:

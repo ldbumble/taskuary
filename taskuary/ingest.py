@@ -82,6 +82,18 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 '(the rest did not fit)' if notes_left else '')
     if r['decision'] == 'attach':
         tid = r['task_id']
+        # ...unless the owner has already ruled on this kind of mail. A live agent session is
+        # the one exception: it asked a question on this thread and the answer is arriving, so
+        # the round trip outranks a standing verdict about the topic.
+        busy = any(x['Status'] == 'running' for x in store.list_runs(tid))
+        vetoed = '' if busy else veto(store, msg)
+        if vetoed:
+            mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+            store.add_route(mid, None, 'file', None,
+                            f'your standing verdict says this is not ours, so it did not join '
+                            f'{task_ref(tid)}: "{vetoed[:200]}"', [], 'memory')
+            logger.info(f'ingest: filed by your own verdict instead of attaching to {task_ref(tid)}')
+            return {'status': 'filed', 'task_id': None, 'message_id': mid}
         mid = store.add_message(_fields(msg, tid))
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
         # the classic round trip: the agent asked something, the hub asked the person, and
@@ -238,6 +250,24 @@ def _notify_new(store, msg: dict, tid, mid, why: str, rid=None):
 NOTE_CAP = 20            # how many notes one prompt carries...
 NOTE_BUDGET = 2000       # ...and how many characters, whichever runs out first
 
+# A verdict is usually about a KIND OF WORK, not about a person. "Resident refunds are not our
+# task" is the shape of nearly every one of them - and there was nowhere to put it. The scopes
+# on offer were this sender, their whole domain, or everybody, so a topic rule got filed under
+# whichever colleague happened to be on screen and never fired again: a 17-person thread has 17
+# senders, and the next mail arrives from the sixteenth.
+#
+# 'subject' scope keys on the subject the verdict was given on and matches by OVERLAP, because
+# the varying part is exactly what you must ignore - "Resident Refund Request - Doe" and
+# "Resident Refund Request - PAYNE" are the same standing decision with a different resident.
+TOPIC_MATCH = 0.5        # this fraction of the remembered subject's words present = the same topic
+
+
+def topic_hit(key: str, subject: str, text: str = '') -> bool:
+    kt = set(tokens(key))
+    if not kt: return False
+    hay = set(tokens(subject or text))
+    return len(kt & hay) / len(kt) >= TOPIC_MATCH
+
 
 def _note_score(n: dict, words: set) -> float:
     """How likely this note is to change the verdict on the message in hand. Three signals, and
@@ -247,20 +277,30 @@ def _note_score(n: dict, words: set) -> float:
     breaks the ties, so a later verdict outranks the one it supersedes."""
     nw = set(tokens(n.get('Note')))
     overlap = len(nw & words) / len(nw) if nw else 0.0
-    return (4 * overlap + {'sender': 3.0, 'sender_domain': 1.5}.get(n['Scope'], 0.0)
+    # 'subject' ranks with 'sender': a topic note is only a candidate because it already matched
+    # the topic, which is as pointed as knowing the person
+    return (4 * overlap + {'sender': 3.0, 'subject': 3.0, 'sender_domain': 1.5}.get(n['Scope'], 0.0)
             + (1.0 if n.get('Source') == 'verdict' else 0.0) + n['MemoryId'] / 1e6)
 
 
-def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> tuple:
+def applicable_notes(store, senders, subject: str = '', text: str = '') -> list:
+    """Every ACTIVE note that bears on this message - by sender, by their domain, by the topic
+    it is about, or globally. A switched-off note is silent."""
+    who = {(s or '').lower() for s in senders if s}
+    doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
+    return [n for n in store.list_memories()
+            if n['Scope'] == 'global'
+            or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
+            or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)
+            or (n['Scope'] == 'subject' and topic_hit(n.get('ScopeKey') or '', subject, text))]
+
+
+def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET,
+                   subject: str = '') -> tuple:
     """(the notes to put in a prompt, most pointed first; how many matched but were left out).
 
     `senders` is every address on the thread - one message's sender, or a whole chain's."""
-    who = {s.lower() for s in senders if s}
-    doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
-    hits = [n for n in store.list_memories()          # active only - a switched-off note is silent
-            if n['Scope'] == 'global'
-            or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
-            or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)]
+    hits = applicable_notes(store, senders, subject, text)
     words = set(tokens(text))
     hits.sort(key=lambda n: _note_score(n, words), reverse=True)
     out, used = [], 0
@@ -272,13 +312,31 @@ def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int =
     return out, len(hits) - len(out)
 
 
+def veto(store, msg: dict) -> str:
+    """The owner's own verdict that this message is not work, if they have given one - the note
+    itself, so the timeline can quote what decided it.
+
+    Only Source='verdict' counts: that is written when the owner presses "Not our task" or "Not
+    a task", and nothing else writes it. A pattern LEARNED.md distilled is a hint for the
+    classifier, never a standing refusal.
+
+    This exists because ATTACHING skipped every judgement. A thread with a task already open
+    absorbed each new message straight onto it - no triage, no notes, no AI call - so the task
+    stayed 'needs you' no matter how many times the owner said the topic was not theirs. The
+    verdict was unreachable by design, and giving it again could not help."""
+    hits = applicable_notes(store, [msg.get('from_email') or ''], msg.get('subject') or '',
+                            f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000])
+    return next((n['Note'] for n in hits if n.get('Source') == 'verdict'), '')
+
+
 def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:
     """The owner's standing notes that apply to this message - global ones plus anything
     learned about this sender or their domain, ranked against what the message actually says.
     Triage reads them, so a verdict given once ("this kind of mail is not ours") applies to
     every message like it afterwards."""
     return relevant_notes(store, [msg.get('from_email') or ''],
-                          f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000], cap, budget)[0]
+                          f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000], cap, budget,
+                          subject=msg.get('subject') or '')[0]
 
 
 def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding', assignee: str = None) -> int:

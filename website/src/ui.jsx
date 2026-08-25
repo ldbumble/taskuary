@@ -430,20 +430,30 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
 export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
-  const [scope, setScope] = useState("sender");
+  // no default here on purpose: the server picks the scope this message calls for (a topic when
+  // there is a subject to key on) and the panel shows what it picked. "this sender" as a fixed
+  // default is what filed "resident refunds are not our task" under one colleague of seventeen.
+  const [scope, setScope] = useState("");
+  const [topic, setTopic] = useState("");
+  const [edited, setEdited] = useState(false);
   const [saved, setSaved] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   useEffect(() => { onLock?.(open && !saved); }, [open, saved, onLock]);
   useEffect(() => () => onLock?.(false), [onLock]);      // unmounted anyway: never leave it locked
+  // the suggested wording follows the scope, so the sentence and the dropdown never disagree -
+  // but an EDITED note is the owner's own words and is never overwritten
   useEffect(() => {
-    if (!open || note) return;
-    api.get(`/api/messages/${messageId}/not-mine/suggest`).then(({ data }) => setNote(data.note)).catch(() => {});
-  }, [open, messageId, note]);
+    if (!open) return;
+    api.get(`/api/messages/${messageId}/not-mine/suggest`, { params: scope ? { scope } : {} })
+      .then(({ data }) => { setScope((c) => c || data.scope); setTopic(data.topic || ""); if (!edited) setNote(data.note); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, messageId, scope]);
   const save = async () => {
     setBusy(true); setErr("");
     try {
-      const { data } = await api.post(`/api/messages/${messageId}/not-mine`, { note: note.trim() || null, scope });
+      const { data } = await api.post(`/api/messages/${messageId}/not-mine`, { note: note.trim() || null, scope: scope || "sender" });
       setSaved(data);
       setTimeout(() => onDone?.(), 1400);
     } catch (e) {
@@ -452,14 +462,27 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
     setBusy(false);
   };
   if (saved) return (
-    <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>
-      ✓ noted — triage will apply this to {saved.scope === "global" ? "every sender" : saved.scopeKey} from now on
-    </Typography>
+    <Box>
+      <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600, display: "block" }}>
+        ✓ noted — triage will apply this to{" "}
+        {saved.scope === "global" ? "every sender" : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey}
+        {" "}from now on
+      </Typography>
+      {/* the verdict works from here on; tasks opened BEFORE it are still sitting there, and
+          saying nothing about them is how a fix reads as "still not learning" */}
+      {!!saved.alsoCovered?.length && (
+        <Typography variant="caption" sx={{ color: "#b45309", display: "block", mt: 0.25 }}>
+          {saved.alsoCovered.length} open task{saved.alsoCovered.length === 1 ? "" : "s"} already match it
+          ({saved.alsoCovered.slice(0, 4).map((t) => `TQ-${String(t.taskId).padStart(4, "0")}`).join(", ")}
+          {saved.alsoCovered.length > 4 ? ", …" : ""}) — close them the same way if they are not yours either.
+        </Typography>
+      )}
+    </Box>
   );
   if (!open) return row ? (
     <ChoiceRow first={first} tint="#eef0f3" onClick={() => setOpen(true)}
       icon={<BlockIcon sx={{ fontSize: 15, color: "#8a94a6" }} />}
-      label="Not our task" hint="say why once and triage remembers it for this sender" />
+      label="Not our task" hint="say why once — triage remembers it for this topic, or this sender" />
   ) : (
     <Button size="small" sx={{ color: "#8a94a6", fontSize: 11 }} onClick={() => setOpen(true)}
       title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
@@ -470,16 +493,21 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
         Not our task — what should triage remember?
       </Typography>
       <TextField fullWidth multiline minRows={2} size="small" value={note} sx={{ bgcolor: "#fff" }}
-        onChange={(e) => setNote(e.target.value)} />
+        onChange={(e) => { setEdited(true); setNote(e.target.value); }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
-        <Select size="small" value={scope} onChange={(e) => setScope(e.target.value)}
+        <Select size="small" value={scope || "sender"} onChange={(e) => setScope(e.target.value)}
           sx={{ fontSize: 11.5, height: 26, bgcolor: "#fff" }}>
+          {/* the topic first, because a verdict is usually about a KIND OF WORK and whoever
+              happens to send it next is not the point */}
+          {topic && <MenuItem value="subject" sx={{ fontSize: 12 }}>any mail about this</MenuItem>}
           <MenuItem value="sender" sx={{ fontSize: 12 }}>this sender</MenuItem>
           <MenuItem value="sender_domain" sx={{ fontSize: 12 }}>everyone at their domain</MenuItem>
           <MenuItem value="global" sx={{ fontSize: 12 }}>every sender</MenuItem>
         </Select>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 120 }}>
-          Their mail keeps arriving — only the verdict is learned.
+          {scope === "subject" && topic
+            ? `Matches any mail about “${topic}”, whoever sends it — the changing part of the subject is ignored.`
+            : "Their mail keeps arriving — only the verdict is learned."}
         </Typography>
         <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>cancel</Button>
         <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={save}

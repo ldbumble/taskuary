@@ -604,7 +604,12 @@ class ApiTests(unittest.TestCase):
             'from_email': 'michelle.soto@example.org', 'channel': 'email'}).json()
         first = push(1)
         mid = first['message_id']
-        suggested = c.get(f'/api/messages/{mid}/not-mine/suggest').json()['note']
+        # the SUGGESTION now leads with the topic, not the sender - this exact scenario is why:
+        # a refund thread has a different resident in every subject and a different colleague
+        # sending each one, so a sender-keyed verdict fires once and never again. The sender
+        # scope is still there, and asking for it still phrases the note that way.
+        self.assertEqual(c.get(f'/api/messages/{mid}/not-mine/suggest').json()['scope'], 'subject')
+        suggested = c.get(f'/api/messages/{mid}/not-mine/suggest?scope=sender').json()['note']
         self.assertIn('michelle.soto@example.org', suggested)
         out = c.post(f'/api/messages/{mid}/not-mine', json={'note': None, 'scope': 'sender'}).json()
         self.assertEqual((out['ok'], out['scope'], out['scopeKey']), (True, 'sender', 'michelle.soto@example.org'))

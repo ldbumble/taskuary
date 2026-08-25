@@ -46,8 +46,15 @@ def state(store) -> dict:
     """The wizard's whole model: ordered steps, each with what it is for and whether it is done."""
     who = (store.owner() or {}).get('owner') or ''
     ai, inbound = _ai(store), _inbound(store)
-    agents = [a['Name'] for a in store.list_agents()]
-    msgs = store.feed(limit=1, days=3650)
+    # Both of these read as DONE on a brand-new install unless you are careful, which is worse
+    # than useless: a checklist that ticks itself teaches you not to read it.
+    #
+    # 'coder' is a SHIPPED default (config.py seeds it, assuming the claude CLI is on your PATH),
+    # so "an agent row exists" proves nothing about this machine. A finished RUN does.
+    ran = [r for t in store.list_tasks() for r in store.list_runs(t['TaskId']) if r.get('FinishedAt')]
+    # and the two seeded reports file their own rows on first start, so "something is in the
+    # timeline" was true before a single message had ever been read
+    inbox = [m for m in store.feed(limit=5, days=3650) if m.get('Channel') != 'report']
     steps = [
         {'key': 'owner', 'title': 'Say who you are',
          'why': 'Your name signs every reply, and the operator documents fill it in wherever they '
@@ -66,14 +73,19 @@ def state(store) -> dict:
          'why': 'A mailbox, a chat, a tracker - anything that brings work in. Without one the '
                 'Timeline is empty because nothing is being read, not because nothing happened.',
          'done': bool(inbound), 'detail': ', '.join(inbound[:3]), 'where': 'Connectors'},
-        {'key': 'agent', 'title': 'Add a coding agent', 'optional': True,
-         'why': 'Only for work that means changing code. Everything else - triage, replies, '
-                'reports - works without one.',
-         'done': bool(agents), 'detail': ', '.join(agents[:3]), 'where': 'Settings'},
+        {'key': 'agent', 'title': 'Put a coding agent to work', 'optional': True,
+         'why': 'Only for work that means changing code - everything else, triage, replies and '
+                'reports, works without one. Ticked once an agent has actually finished a run '
+                'here: Taskuary ships a default pointed at the claude CLI, and a default that '
+                'has never run is not proof that anything is installed.',
+         'done': bool(ran), 'detail': f'{len(ran)} run{"s" if len(ran) != 1 else ""} finished' if ran else '',
+         'where': 'Settings'},
         {'key': 'sync', 'title': 'Read your first messages', 'optional': True,
          'why': 'With the three above in place, one sync pulls your mail in and the AI triages it. '
                 'This is the first time you see the funnel actually work.',
-         'done': bool(msgs), 'detail': f'{len(msgs)} in the timeline' if msgs else '',
+         # no count: this samples the feed, so any number it printed would be the sample size
+         # rather than the truth ("2 read" on an install holding thousands)
+         'done': bool(inbox), 'detail': 'messages are arriving' if inbox else '',
          'where': 'Timeline'},
     ]
     required = [s for s in steps if not s.get('optional')]

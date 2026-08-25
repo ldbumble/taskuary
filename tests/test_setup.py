@@ -92,6 +92,40 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s.save_source({'Channel': 'aws', 'Address': 's3://b', 'ConnectorId': cid, 'Active': 1}, 't')
         self.assertFalse(_step(setup.state(s), 'inbound')['done'])
 
+    def test_the_shipped_default_agent_does_not_tick_its_own_box(self):
+        """Found by RUNNING it, not by testing it: a fresh install seeds an agent called 'coder'
+        pointed at the claude CLI, so "an agent row exists" ticked on a machine where nothing was
+        installed. MemoryStore seeds none, which is exactly why the tests missed it."""
+        s = _fresh()
+        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
+        self.assertFalse(_step(setup.state(s), 'agent')['done'])
+        tid = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual'}, 't')
+        rid = s.start_run(tid, 'coder', 'go', 't')
+        self.assertFalse(_step(setup.state(s), 'agent')['done'])      # started is not finished
+        s.update_run(rid, {'Status': 'done'}, finished=True)
+        self.assertTrue(_step(setup.state(s), 'agent')['done'])
+
+    def test_the_seeded_reports_are_not_your_first_messages(self):
+        """Also found by running it: the Morning digest and Automation ideas file their own rows
+        on first start, so "something is in the timeline" was true before a single message had
+        ever been read."""
+        s = _fresh()
+        s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'Subject': 'Morning digest',
+                       'BodyText': 'x', 'Status': 'report'})
+        self.assertFalse(_step(setup.state(s), 'sync')['done'])
+        s.add_message({'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'a real one',
+                       'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
+        self.assertTrue(_step(setup.state(s), 'sync')['done'])
+
+    def test_no_step_shows_a_number_it_cannot_make_true(self):
+        """The sync step samples the feed, so any count it printed would be the sample size:
+        "2 read" on an install holding thousands."""
+        s = _fresh()
+        for i in range(9):
+            s.add_message({'ExternalId': f'm{i}', 'Channel': 'email', 'Subject': 's',
+                           'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
+        self.assertEqual(_step(setup.state(s), 'sync')['detail'], 'messages are arriving')
+
     def test_three_of_three_is_ready_and_the_rest_stay_optional(self):
         s = _fresh()
         s.set_setting('owner_name', 'Dana Example', 't')

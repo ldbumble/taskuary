@@ -378,6 +378,31 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn('uitest', config.load().get('agents', {}))
         self.assertEqual(c.delete('/api/agents/uitest').status_code, 404)
 
+    def test_put_agent_does_not_persist_env_server(self):
+        """The Docker overlay lives on the shared cfg object that put_agent save()s — disk [server] must survive."""
+        try: import tomllib
+        except ImportError: import tomli as tomllib
+        path = config.home() / 'config.toml'
+        previous = path.read_text(encoding='utf-8') if path.exists() else None
+        stored = {'host': '127.0.0.1', 'port': 7787, 'token': 'stored-secret'}
+        path.write_text('[server]\nhost = "127.0.0.1"\nport = 7787\ntoken = "stored-secret"\n', encoding='utf-8')
+        old_server = dict(server.cfg.get('server') or {})
+        try:
+            with mock.patch.dict('os.environ', {'TASKUARY_HOST': '0.0.0.0', 'TASKUARY_TOKEN': 'from-env'}):
+                server.cfg['server'] = dict(config.load()['server'])
+                self.assertEqual(c.put('/api/agents/overlay-api', json={'cmd': 'echo', 'timeout': 5},
+                                       headers={'X-Taskuary-Token': 'from-env'}).status_code, 200)
+                self.assertEqual((server.cfg['server']['host'], server.cfg['server']['token']),
+                                 ('0.0.0.0', 'from-env'))
+            disk = tomllib.loads(path.read_text(encoding='utf-8'))
+            self.assertEqual(disk['server'], stored)
+            self.assertEqual(disk['agents']['overlay-api']['cmd'], 'echo')
+        finally:
+            server.cfg['server'] = old_server
+            (server.cfg.get('agents') or {}).pop('overlay-api', None)
+            if previous is None: path.unlink(missing_ok=True)
+            else: path.write_text(previous, encoding='utf-8')
+
     def test_sources_crud_run_and_delete(self):
         REGISTRY['_t'] = lambda cfg: ('2 rows', 'x\ny')
         try:

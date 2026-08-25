@@ -305,8 +305,8 @@ pyinstaller taskuary.spec   # dist/Taskuary.exe - single-file desktop build
 
 Data lives in `~/.taskuary/` (override with `TASKUARY_HOME`): `taskuary.db` (SQLite),
 `config.toml`, `taskuary.log`. Docker uses `/data` inside the container for the same
-files (`TASKUARY_HOST` / `TASKUARY_PORT` / `TASKUARY_TOKEN` override `[server]` so the
-image can bind `0.0.0.0` without rewriting that config). For LAN use set
+files (`TASKUARY_HOST` / `TASKUARY_PORT` / `TASKUARY_TOKEN` overlay `[server]` at
+runtime only — they are never written back). For LAN use set
 `[server].token` in config (or `TASKUARY_TOKEN`) and send it as the `X-Taskuary-Token`
 header. CI runs the test matrix on Windows / Linux / macOS × py3.10 / 3.12 on every
 push and pull request, plus the web build and a Docker image smoke. The single-file

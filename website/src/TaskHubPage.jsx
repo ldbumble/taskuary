@@ -113,7 +113,15 @@ export default function TaskHubPage() {
           </Typography>
           <ServerVersion />
 
-          <Box sx={{ display: "flex", gap: 0.5, ml: 3, minWidth: 0, overflowX: "auto" }}>
+          {/* Centred on the WINDOW, not in the space left over. Two flex spacers would centre it
+              between the tagline and the counter, which lands well right of true centre because
+              those two blocks are nothing like the same width. Absolute is the only thing that
+              actually centres - and it can overlap, so it only applies above xl (1536px), where
+              there is provably room for the tagline on one side and the tabs in the middle.
+              Below that the old flow returns, which is what narrow windows always had. */}
+          <Box sx={{ display: "flex", gap: 0.5, minWidth: 0, overflowX: "auto",
+            position: { xs: "static", xl: "absolute" },
+            left: { xl: "50%" }, transform: { xl: "translateX(-50%)" }, ml: { xs: 3, xl: 0 } }}>
             {TABS.map((t) => {
               const pill = (
                 <Box onClick={() => go(t)}

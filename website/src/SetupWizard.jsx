@@ -308,29 +308,42 @@ const SyncForm = ({ onDone }) => {
 
 const FORMS = { owner: OwnerForm, ai: BrainForm, inbound: MailboxForm, agent: AgentForm, sync: SyncForm };
 
+/* A done step collapses to ONE line. Its reason mattered while you were deciding whether to do
+   it; afterwards it is six lines of history pushing the thing you are actually working on below
+   the fold. Only the open step carries its full text, and only one is ever open - so the panel
+   is the size of the work left rather than the size of the whole list. */
 const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
   const Form = FORMS[s.key];
+  const active = open && !s.done;
   return (
-    <Box sx={{ py: 1.5, borderTop: n ? `1px solid ${BORDER}` : "none" }}>
-      <Box sx={{ display: "flex", gap: 1.5 }}>
-        <Box sx={{ pt: 0.25 }}>
+    <Box sx={{ borderTop: n ? `1px solid ${BORDER}` : "none",
+      // the open step is lifted out of the list rather than merely indented
+      bgcolor: active ? "#fff" : "transparent",
+      boxShadow: active ? "inset 3px 0 0 #4f46e5" : "none",
+      px: active ? 1.5 : 0, py: s.done ? 1 : 1.5,
+      transition: "background-color .15s" }}>
+      <Box sx={{ display: "flex", gap: 1.5, alignItems: s.done ? "center" : "flex-start" }}>
+        <Box sx={{ pt: s.done ? 0 : 0.25, display: "flex" }}>
           {s.done
-            ? <CheckCircleIcon sx={{ fontSize: 20, color: "#15803d" }} />
+            ? <CheckCircleIcon sx={{ fontSize: 18, color: "#15803d" }} />
             : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: s.optional ? "#c2c9d6" : "#b45309" }} />}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
-            <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: s.done ? DIM : INK }}>{s.title}</Typography>
-            {s.optional && <Typography variant="caption" sx={{ color: FAINT }}>optional</Typography>}
+            <Typography sx={{ fontWeight: s.done ? 600 : 700, fontSize: s.done ? 12.5 : 13.5,
+              color: s.done ? DIM : INK }}>{s.title}</Typography>
+            {s.optional && !s.done && <Typography variant="caption" sx={{ color: FAINT }}>optional</Typography>}
             {s.done && s.detail && (
               <Typography variant="caption" sx={{ color: "#15803d", fontWeight: 600 }}>{s.detail}</Typography>
             )}
           </Box>
-          {/* WHY before HOW: the reason a step exists is what makes it worth doing */}
-          <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25, lineHeight: 1.55 }}>
-            {s.why}
-          </Typography>
-          {open && Form && <Form onDone={onDone} onGo={onGo} />}
+          {/* WHY before HOW, while it is still a decision */}
+          {!s.done && (
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25, lineHeight: 1.55 }}>
+              {s.why}
+            </Typography>
+          )}
+          {active && Form && <Form onDone={onDone} onGo={onGo} />}
         </Box>
         {!s.done && !open && Form && (
           <Button size="small" variant="outlined" onClick={onOpen}
@@ -342,6 +355,14 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
           <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.where)}
             sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.where}</Button>
         )}
+        {/* a finished step can still be reopened - "done" is not "never again" */}
+        {s.done && Form && !open && (
+          <Typography variant="caption" onClick={onOpen}
+            sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#4f46e5" } }}>
+            change
+          </Typography>
+        )}
+        {s.done && open && Form && <Box sx={{ width: "100%" }}><Form onDone={onDone} onGo={onGo} /></Box>}
       </Box>
     </Box>
   );
@@ -377,11 +398,14 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
   // a list of buttons
   useEffect(() => {
     if (!open || !steps.length) return;
+    // whatever is left, in order - so a completed step advances to the next one by itself
     setOpenKey((k) => k || (steps.find((s) => !s.done && FORMS[s.key]) || {}).key || null);
   }, [open, steps]);
   if (!state) return null;
   const left = state.total - state.done;
-  const done = async () => { await onRefresh(); setOpenKey(null); };
+  // finishing hands you the next thing to do: closing to nothing makes you hunt for the button
+  // you were always going to press
+  const done = async () => { setOpenKey(null); await onRefresh(); };
   return (
     <Dialog open={!!open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogContent sx={{ p: 3 }}>

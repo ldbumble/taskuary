@@ -27,7 +27,15 @@ const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_send
 // skip = never shows on the timeline at all (flood senders); ignore = shows, no task
 const ACTIONS = ["skip", "ignore", "escalate", "auto_answer", "draft", "task_only"];
 const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "draft", Reason: "", SortOrder: 100, Active: true };
-const SCOPES = ["global", "sender", "sender_domain", "source"];
+// what a note can be ABOUT. "subject" leads because most verdicts are about a kind of work
+// rather than a person - and it was missing here, so a topic rule could only be created by
+// pressing "Not our task" on a message, never written by hand.
+const SCOPES = ["subject", "sender", "sender_domain", "source", "global"];
+const SCOPE_LABEL = { subject: "any mail about a topic", sender: "one sender",
+  sender_domain: "everyone at a domain", source: "one connection (mailbox, repo)",
+  global: "every message" };
+const SCOPE_KEY_LABEL = { subject: "the topic, e.g. resident refund request", sender: "their address",
+  sender_domain: "the domain, e.g. vendor.com", source: "the mailbox or repo it arrives on" };
 
 const KNOB_META = {
   // ── Triage & routing: what happens to a message the moment it arrives ──
@@ -393,15 +401,19 @@ export default function SettingsView() {
               multiline value={newNote.note} onChange={(e) => setNewNote({ ...newNote, note: e.target.value })} />
             <Box sx={{ display: "flex", gap: 1 }}>
               <Select fullWidth value={newNote.scope} onChange={(e) => setNewNote({ ...newNote, scope: e.target.value })}>
-                {SCOPES.map((s) => <MenuItem key={s} value={s}>{s.replace("_", " ")}</MenuItem>)}
+                {SCOPES.map((s) => <MenuItem key={s} value={s}>{SCOPE_LABEL[s] || s.replace("_", " ")}</MenuItem>)}
               </Select>
               {newNote.scope !== "global" && (
-                <TextField fullWidth label="address / domain / source" value={newNote.scope_key}
+                // a keyed scope with no key matches nothing, ever - the server refuses it now,
+                // so the button does too rather than posting a note that could never fire
+                <TextField fullWidth label={SCOPE_KEY_LABEL[newNote.scope] || "what to match on"}
+                  value={newNote.scope_key}
                   onChange={(e) => setNewNote({ ...newNote, scope_key: e.target.value })} />
               )}
             </Box>
             <Box sx={{ display: "flex", gap: 0.75 }}>
-              <Button size="small" variant="contained" disabled={!newNote.note.trim()} onClick={addNote}>Save</Button>
+              <Button size="small" variant="contained" onClick={addNote}
+                disabled={!newNote.note.trim() || (newNote.scope !== "global" && !(newNote.scope_key || "").trim())}>Save</Button>
               <Button size="small" onClick={() => setNewNote(null)}>Cancel</Button>
             </Box>
           </Box>

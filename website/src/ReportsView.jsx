@@ -4,8 +4,8 @@
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, CircularProgress, MenuItem, Select, Step, StepButton,
-  StepContent, Stepper, Switch, TextField, Typography,
+  Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle,
+  MenuItem, Select, Step, StepButton, StepContent, Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -25,8 +25,10 @@ const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
 const FIELDS = {
   mssql: [["query", "query", "multiline", "SELECT TOP 20 * FROM ..."], AI_FIELD],
   database: [["query", "query", "multiline", "SELECT ... (any SQL the connected engine speaks)"], AI_FIELD],
-  aws: [["service", "service", "text", "s3 · logs · ec2 · athena · dynamodb ..."],
-    ["operation", "operation", "text", "list_buckets · describe_instances · list_objects_v2 ..."],
+  // service and operation are PICKED, not typed - see AwsPicker. botocore ships both lists
+  // locally, so getting a name wrong no longer waits until a scheduled run fails to tell you.
+  aws: [["service", "service", "aws_service", "s3 · logs · ec2 · athena · dynamodb ..."],
+    ["operation", "operation", "aws_operation", "list_buckets · describe_instances ..."],
     ["params (JSON)", "params", "multiline", '{"Bucket": "my-bucket"}'],
     ["path into the response", "path", "text", "Contents"], AI_FIELD],
   s3_object: [["bucket", "bucket", "text", "my-bucket"],
@@ -428,6 +430,87 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   );
 }
 
+/* AWS service and operation, picked from botocore's own models - fetched once per card, and
+   again per service for its operations. No AWS call is made to build either list.
+
+   `seen` are the services discovery actually found objects for in THIS account, and they are
+   pinned to the top of a 430-name alphabetical list, because the list is otherwise a haystack.
+   freeSolo stays on: a service too new for the installed botocore must still be typeable. */
+function AwsPicker({ label, which, value, placeholder, service, onChange }) {
+  const [cat, setCat] = useState(null);
+  useEffect(() => {
+    const q = which === "aws_operation" ? (service ? `?service=${encodeURIComponent(service)}` : null) : "";
+    if (q === null) { setCat({ options: [], seen: [] }); return; }
+    api.get(`/api/aws/catalog${q}`)
+      .then(({ data }) => setCat({
+        options: which === "aws_operation" ? (data.operations || []) : (data.services || []),
+        seen: which === "aws_operation" ? (data.read || []) : (data.seen || []),
+        error: data.error,
+      }))
+      .catch(() => setCat({ options: [], seen: [] }));
+  }, [which, service]);
+  const opts = cat?.options || [];
+  const seen = new Set(cat?.seen || []);
+  // the ones this account demonstrably uses (or the read-only operations) sort first
+  const sorted = [...opts].sort((a, b) => (seen.has(b) ? 1 : 0) - (seen.has(a) ? 1 : 0));
+  return (
+    <Autocomplete freeSolo autoHighlight options={sorted} value={value ?? ""} size="small"
+      onChange={(_e, v) => onChange(v ?? "")} onInputChange={(_e, v, reason) => reason === "input" && onChange(v)}
+      groupBy={(o) => (seen.has(o)
+        ? (which === "aws_operation" ? "reads only — safe for a report" : "your keys already see these")
+        : (which === "aws_operation" ? "everything else this service does" : "everything botocore knows"))}
+      renderInput={(params) => (
+        <TextField {...params} label={label} placeholder={placeholder} sx={{ bgcolor: "#fff" }}
+          helperText={which === "aws_operation" && !service ? "pick a service first"
+            : cat?.error ? cat.error : undefined} />
+      )} />
+  );
+}
+
+/* "What does this actually return?" - answerable on the card now, before the whole pipeline is
+   assembled and without the AI pass in the way. The wizard's own Test showed the HEADLINE only
+   ("12 items"), which is the one thing you can already guess; the rows are the question. */
+function SourceTest({ src }) {
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    const c = { ...src, title: "test" };
+    if (typeof c.params === "string" && c.params.trim()) { try { c.params = JSON.parse(c.params); } catch { /* the server says so */ } }
+    if (c.max_rows) c.max_rows = Number(c.max_rows);
+    for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
+    try {
+      const { data } = await api.post("/api/reports/preview", { ...c, ai_prompt: undefined });
+      setOut(data);
+    } catch (e) { setOut({ ok: false, error: e?.response?.data?.detail || "the call failed" }); }
+    setBusy(false);
+  };
+  return (
+    <>
+      <Button size="small" onClick={run} disabled={busy} startIcon={busy ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
+        sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>{busy ? "calling…" : "Test — show me the data"}</Button>
+      <Dialog open={!!out} onClose={() => setOut(null)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>
+          {out?.ok ? out.headline || "it returned nothing" : "that call did not work"}
+        </DialogTitle>
+        <DialogContent>
+          {out?.ok ? (
+            <>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
+                exactly what a scheduled run would hand the prompt{out.rows ? ` — ${out.rows} rows` : ""}
+              </Typography>
+              <Box component="pre" sx={{ ...mono, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1, p: 1, m: 0, maxHeight: 460, overflow: "auto" }}>
+                {out.summary || "(the call succeeded and returned no rows)"}
+              </Box>
+            </>
+          ) : <Alert severity="error" sx={{ fontSize: 12.5 }}>{out?.error}</Alert>}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /* One input to the funnel: what it is, what to ask it, and (optionally) a label so the
    AI can tell two queries against the same database apart. Drag to reorder. */
 function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
@@ -469,6 +552,10 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       {fields.map(([label, key, kind, ph]) => {
         const v = src[key];
         const shown = Array.isArray(v) ? v.join(NL) : typeof v === "object" && v ? JSON.stringify(v) : (v ?? "");
+        if (kind === "aws_service" || kind === "aws_operation") {
+          return <AwsPicker key={key} label={label} which={kind} value={shown} placeholder={ph}
+            service={src.service} onChange={(x) => onChange({ [key]: x })} />;
+        }
         return <TextField key={key} size="small" label={label} placeholder={ph} value={shown} sx={{ bgcolor: "#fff" }}
           multiline={kind === "multiline"} minRows={kind === "multiline" ? 3 : undefined}
           inputProps={kind === "multiline" ? { style: { fontFamily: "Consolas, monospace", fontSize: 11.5 } } : undefined}
@@ -476,9 +563,14 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       })}
       {/* blank is not "no cap" - it is the 200-row default, and the field has to say so or
           the timeline's "capped at 200" points at a setting you never made */}
+      {/* blank is not "no cap" - it is the 200-row default, and the field has to say so or
+          the timeline's "capped at 200" points at a setting you never made. It applies whenever
+          the call comes back as a LIST (list_buckets, describe_instances, a SQL result) and does
+          nothing at all when it comes back as one object - which the Test below makes obvious. */}
       <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
-        helperText="blank = 200 (the default). Raise it to send more rows to the prompt."
+        helperText="blank = 200. Only bites when the result is a list — Test shows which you have."
         sx={{ bgcolor: "#fff", width: 300 }} onChange={(e) => onChange({ max_rows: e.target.value })} />
+      <SourceTest src={src} />
     </Box>
   );
 }

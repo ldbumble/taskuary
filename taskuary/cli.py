@@ -21,7 +21,24 @@ def main():
     ap.add_argument('--no-browser', action='store_true')
     ap.add_argument('--debug', action='store_true', help='verbose console logging (requests, report runs, errors)')
     ap.add_argument('--version', action='version', version=f'taskuary {__version__}')
+    # "what is actually in the prompt?" had no answer short of reading the code that builds it,
+    # which is not a reasonable thing to ask of the person whose judgement is being automated
+    ap.add_argument('--prompts', nargs='?', const='', metavar='MESSAGE_ID',
+                    help='print the triage, reply and coding-agent prompts for a real item on '
+                         'this machine - every block labelled with the document or table it '
+                         'came from - then exit. Optionally for one message id.')
     args = ap.parse_args()
+    if args.prompts is not None:
+        import sys
+        from .promptmap import render
+        from .store import SQLiteStore
+        # the Windows console is cp1252 and the operator documents are full of em dashes, so this
+        # would die on the owner's OWN text before it printed a line of it
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        mid = int(args.prompts) if str(args.prompts).strip().isdigit() else None
+        print(render(SQLiteStore(config.db_path()), message_id=mid))
+        return
     from .logs import setup as setup_logs
     setup_logs(args.debug)
     cfg = config.load()

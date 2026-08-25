@@ -1055,6 +1055,17 @@ def report_preview(body: dict):
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
 
+@app.get('/api/aws/catalog')
+def aws_catalog(service: str = None):
+    """The services and operations a report source can name, read off botocore's own models -
+    so the two fields that used to be free text with an example in the placeholder can be
+    picked from instead of remembered."""
+    try:
+        from .aws import catalog
+        return catalog(store, service)
+    except Exception as e:
+        return {'seen': [], 'services': [], 'operations': [], 'error': str(e)[:300]}
+
 @app.get('/api/mssql/drivers')
 def mssql_drivers():
     try:

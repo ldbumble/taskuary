@@ -129,6 +129,34 @@ def discover(store, cfg: dict, connector_id: int, actor: str = 'owner') -> dict:
     return out
 
 
+def catalog(store, service: str = None) -> dict:
+    """What is callable here, WITHOUT calling AWS: botocore ships the service and operation
+    models on disk, so both lists are local metadata - no credentials, no region, no request.
+
+    Typing `service` and `operation` by hand meant knowing boto3's naming from memory and
+    finding out you had it wrong only when a scheduled report failed. `seen` is what discovery
+    actually found in this account, first in the list, because 400-odd alphabetical service
+    names is a haystack rather than a choice. `read` marks the operations that only look:
+    a report is a thing you read, and describe_/list_/get_ is nearly always what you want.
+    """
+    import botocore.session
+    from botocore import xform_name
+    sess = botocore.session.get_session()
+    seen = sorted({'s3' if (s['Address'] or '').startswith('s3://') else 'logs'
+                   for s in store.list_sources(active_only=False)
+                   if s['Channel'] == 'aws' and (s['Address'] or '').startswith(('s3://', 'logs://'))})
+    out = {'seen': seen, 'services': sorted(sess.get_available_services())}
+    if service:
+        try:
+            names = [xform_name(o) for o in sess.get_service_model(service).operation_names]
+        except Exception as e:
+            return {**out, 'service': service, 'operations': [], 'error': str(e)[:200]}
+        read = [n for n in names if n.startswith(('list_', 'describe_', 'get_', 'head_', 'query', 'scan', 'select_'))]
+        out.update({'service': service, 'operations': sorted(read) + sorted(set(names) - set(read)),
+                    'read': sorted(read)})
+    return out
+
+
 def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -> int:
     """One discovered object in tasks/feed mode. s3://bucket -> a Timeline item per NEW
     object; logs://group -> ONE batched item of the new matching events (default pattern:

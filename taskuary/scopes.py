@@ -29,6 +29,7 @@ ACTIONS = {
     # ── read: the connection is a window, nothing upstream moves ──────────────────────
     'poll': 'read', 'fetch': 'read', 'search': 'read', 'list': 'read', 'discover': 'read',
     'sqlite': 'read', 'mssql': 'read', 'database': 'read',
+    'local_file': 'read',    # a path on this machine, opened read-only - like the sqlite above it
     'aws': 'read', 's3_object': 'read', 'cloudwatch_logs': 'read',
     'azure': 'read', 'azure_blob': 'read', 'azure_logs': 'read',
     'entra_users': 'read', 'entra_groups': 'read', 'entra_signins': 'read', 'entra_licenses': 'read',

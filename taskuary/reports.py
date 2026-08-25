@@ -7,11 +7,12 @@ REGISTRY: type -> executor(config) -> (headline, summary). Implemented: sqlite, 
 timeline instead of silently absent. Adding a type = one ~15-line function + a REGISTRY
 entry - PRs welcome.
 """
-import json, re, sqlite3
+import io, json, re, sqlite3
 from datetime import datetime, timedelta
 from loguru import logger
 
-PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file']
+PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file']   # smb_file is a NETWORK
+# share and still planned; a path on this machine is local_file and works now
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
@@ -220,7 +221,95 @@ def _planned(name):
     return _fail
 
 
+def _newest(path: str, by: str = 'newest'):
+    """The file a scheduled report should read. A glob is the point, not a convenience: an export
+    that lands as sales-2026-08-25.csv has a different name every morning, so a report naming one
+    file exactly is a report that works for a day. The NEWEST match is what "the latest export"
+    means. Also accepts a folder, and a plain path unchanged."""
+    from glob import glob
+    from pathlib import Path
+    p = Path(path).expanduser()
+    if any(ch in str(p) for ch in '*?['):
+        files = [h for h in (Path(x) for x in glob(str(p))) if h.is_file()]
+        if not files: raise RuntimeError(f'nothing matches {path} - no file to read')
+        # mtime is what "the export that just arrived" means, and it is the right default. But a
+        # file NAMED by its date is the case where mtime lies: re-copy last month's archive and it
+        # becomes the newest file on disk while sales-2026-08-01.csv is plainly not the latest
+        # sales. pick='name' takes the highest-sorting name instead, which for an ISO date IS the
+        # latest. The headline always says which file was read, so a wrong guess is visible.
+        if str(by or 'newest').lower() == 'name': return sorted(files)[-1]
+        return max(files, key=lambda h: h.stat().st_mtime)
+    if not p.exists(): raise RuntimeError(f'{p} does not exist on this machine')
+    return p
+
+
+def _rows_from_text(text: str, delim: str = None) -> list:
+    """A delimited file as dicts, sniffing the separator when it is not given: exports arrive as
+    csv, tsv and semicolon-separated depending on who produced them and in what locale."""
+    import csv
+    sample = text[:4000]
+    if not delim:
+        try: delim = csv.Sniffer().sniff(sample, delimiters=',;\t|').delimiter
+        except csv.Error: delim = ','
+    return [dict(r) for r in csv.DictReader(io.StringIO(text), delimiter=delim)]
+
+
+def run_local_file(cfg):
+    """{"path": "C:/exports/*.csv", "tail": 50, "sheet": "Sheet1"} - a file, folder or glob on
+    THIS machine. Taskuary already runs on the owner's own computer, so the spreadsheet somebody
+    drops in a folder every morning is a report source like any other - and the alternative was
+    a WinRM script or nothing.
+
+    csv/tsv/json/jsonl come back as rows; xlsx too where openpyxl is installed. Anything else is
+    read as text and the LAST `tail` lines are shown, because a log's news is at the bottom.
+    A folder lists what is in it, newest first, which answers "did today's export arrive?"."""
+    import json as _json
+    p = _newest(cfg['path'], cfg.get('pick'))
+    lim, mine = row_limit(cfg)
+    if p.is_dir():
+        rows = sorted(({'name': f.name, 'bytes': f.stat().st_size,
+                        'modified': datetime.fromtimestamp(f.stat().st_mtime).strftime('%Y-%m-%d %H:%M')}
+                       for f in p.iterdir() if f.is_file()),
+                      key=lambda r: r['modified'], reverse=True)
+        return rows_out(rows, lim, unit=f'files in {p.name}', mine=mine)
+    suffix = p.suffix.lower()
+    if suffix == '.xlsx':
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            raise RuntimeError('reading .xlsx needs openpyxl - run: pip install openpyxl '
+                               '(csv, tsv, json and text need nothing)')
+        wb = load_workbook(p, read_only=True, data_only=True)      # data_only: values, not formulae
+        ws = wb[cfg['sheet']] if cfg.get('sheet') else wb.active
+        it = ws.iter_rows(values_only=True)
+        head = [str(h) if h is not None else f'col{i}' for i, h in enumerate(next(it, []) or [])]
+        rows = [dict(zip(head, [('' if v is None else v) for v in r])) for r in it]
+        wb.close()
+        return rows_out(rows, lim, unit=f'rows from {p.name}', mine=mine)
+    text = p.read_text(encoding='utf-8', errors='replace')
+    if suffix in ('.csv', '.tsv'):
+        return rows_out(_rows_from_text(text, '\t' if suffix == '.tsv' else cfg.get('delimiter')),
+                        lim, unit=f'rows from {p.name}', mine=mine)
+    if suffix == '.jsonl':
+        rows = [_json.loads(l) for l in text.splitlines() if l.strip()]
+        return rows_out(rows, lim, unit=f'records from {p.name}', mine=mine)
+    if suffix == '.json':
+        data = _json.loads(text or 'null')
+        if cfg.get('path_expr'):
+            for k in str(cfg['path_expr']).split('.'):
+                if k: data = data[int(k)] if isinstance(data, list) else (data or {}).get(k)
+        if isinstance(data, list): return rows_out(data, lim, unit=f'records from {p.name}', mine=mine)
+        return f'{p.name}', _json.dumps(data, indent=1, default=str)[:BODY_CHARS]
+    lines = text.splitlines()
+    try: tail = max(1, int(cfg.get('tail') or 50))
+    except (TypeError, ValueError): tail = 50
+    shown = lines[-tail:]
+    head = f'{p.name} - last {len(shown)} of {len(lines)} lines'
+    return head, '\n'.join(shown)[:BODY_CHARS]
+
+
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
+            'local_file': run_local_file,
             'aws': run_aws, 's3_object': run_s3, 'cloudwatch_logs': run_cwlogs,
             'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
             'entra_users': run_entra_users, 'entra_groups': run_entra_groups,

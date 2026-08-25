@@ -5,7 +5,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle,
-  MenuItem, Select, Step, StepButton, StepContent, Stepper, Switch, TextField, Typography,
+  ListSubheader, MenuItem, Select, Step, StepButton, StepContent, Stepper, Switch, TextField,
+  Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -60,6 +61,11 @@ const FIELDS = {
   mcp: [["command", "cmd", "text", "npx / uvx / path to the MCP server"], ["args (one per line)", "args", "multiline", ""],
     ["tool", "tool", "text", "query"], ["tool args (JSON)", "tool_args", "multiline", '{"sql": "SELECT ..."}'], AI_FIELD],
   sqlite: [["db path", "db", "text", "C:/data/app.db"], ["query", "query", "multiline", "SELECT ..."], AI_FIELD],
+  local_file: [["file, folder, or a pattern", "path", "text", "C:/exports/sales-*.csv"],
+    ["which one, when the pattern matches several", "pick", "pick_file", ""],
+    ["last N lines (text and log files only)", "tail", "text", "50"],
+    ["sheet name (xlsx only, blank = the first)", "sheet", "text", ""],
+    ["path into the JSON (json only)", "path_expr", "text", "items"], AI_FIELD],
   rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
   rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],
 };
@@ -71,7 +77,24 @@ const TYPE_LABELS = {
   entra_signins: "Entra ID — sign-ins", entra_licenses: "Entra ID — licence seats",
   prometheus: "Prometheus", datadog: "Datadog monitors",
   digest: "Taskuary digest", automate: "Automation ideas (own data)",
+  local_file: "File on this computer",
 };
+
+/* The picker was 21 flat entries in the order the registry happens to list them, which is not a
+   list anybody reads - it is a list you scroll while hoping. Grouped by where the data LIVES,
+   because that is what you know when you arrive: on this machine, in a database, at AWS, in
+   Microsoft, somewhere on the web. Anything new falls into "Other" rather than vanishing. */
+const TYPE_GROUPS = [
+  ["This computer", ["local_file", "sqlite", "mcp"]],
+  ["Databases", ["mssql", "database"]],
+  ["AWS", ["aws", "s3_object", "cloudwatch_logs"]],
+  ["Azure", ["azure", "azure_blob", "azure_logs"]],
+  ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
+  ["Monitoring", ["prometheus", "datadog"]],
+  ["The web", ["rest", "rss"]],
+  ["Windows", ["winrm"]],
+  ["Taskuary's own data", ["digest", "automate"]],
+];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure" };
@@ -82,7 +105,7 @@ const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; 
 const NL = String.fromCharCode(10);
 // Everything that belongs to ONE source card; the rest (title, prompt, schedule) is the
 // report itself. Splitting here is what lets old single-source configs load unchanged.
-const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args",
+const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick",
   "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver",
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
   "api_version", "path_expr", "account", "container", "blob", "workspace_id",
@@ -518,9 +541,24 @@ function SourceTest({ src }) {
 
 /* One input to the funnel: what it is, what to ask it, and (optionally) a label so the
    AI can tell two queries against the same database apart. Drag to reorder. */
+/* Five fields where four never apply: a csv has no sheet, a log has no JSON path, and a plain
+   path matches one file so there is nothing to pick between. The suffix already says which. */
+const FILE_FIELD_FOR = { tail: ['', '.log', '.txt', '.md', '.out', '.err'], sheet: ['.xlsx'],
+  path_expr: ['.json'] };
+
 function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
                       onDropHere, onChange, onRetype, onCopy, onRemove }) {
-  const fields = (FIELDS[src.type] || []).filter(([, key]) => key !== "ai_prompt");
+  const fields = (FIELDS[src.type] || []).filter(([, key]) => {
+    if (key === "ai_prompt") return false;
+    if (src.type !== "local_file") return true;
+    const path = String(src.path || "");
+    if (key === "pick") return /[*?[]/.test(path);
+    const only = FILE_FIELD_FOR[key];
+    if (!only) return true;
+    const dot = path.lastIndexOf(".");
+    const suffix = dot > path.lastIndexOf("/") && dot > path.lastIndexOf("\\") ? path.slice(dot).toLowerCase() : "";
+    return only.includes(suffix);
+  });
   const cardType = CARD_OF[src.type] || src.type;
   const conn = connectors.find((c) => c.Type === cardType);
   const needsConn = ["mssql", "winrm", "database", "aws", "azure", "prometheus", "datadog"].includes(cardType);
@@ -540,9 +578,19 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       </Box>
       <Select size="small" value={src.type || "mssql"} onChange={(e) => onRetype(e.target.value)}
         sx={{ fontSize: 12.5, bgcolor: "#fff" }}>
-        {typeOptions.map((t) => (
-          <MenuItem key={t.type} value={t.type} sx={{ fontSize: 12.5 }}>{TYPE_LABELS[t.type] || t.type}</MenuItem>
-        ))}
+        {(() => {
+          const have = new Set(typeOptions.map((t) => t.type));
+          const grouped = TYPE_GROUPS.map(([g, ts]) => [g, ts.filter((t) => have.has(t))]).filter(([, ts]) => ts.length);
+          const spoken = new Set(grouped.flatMap(([, ts]) => ts));
+          const rest = [...have].filter((t) => !spoken.has(t));
+          return [...grouped, ...(rest.length ? [["Other", rest]] : [])].flatMap(([g, ts]) => [
+            <ListSubheader key={`h-${g}`} sx={{ fontSize: 10, lineHeight: 2.2, letterSpacing: 0.8,
+              textTransform: "uppercase", color: FAINT, bgcolor: "#fff" }}>{g}</ListSubheader>,
+            ...ts.map((t) => (
+              <MenuItem key={t} value={t} sx={{ fontSize: 12.5, pl: 2.5 }}>{TYPE_LABELS[t] || t}</MenuItem>
+            )),
+          ]);
+        })()}
       </Select>
       {needsConn && (
         <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#15803d" : "#b45309" }}>
@@ -568,6 +616,15 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       {fields.map(([label, key, kind, ph]) => {
         const v = src[key];
         const shown = Array.isArray(v) ? v.join(NL) : typeof v === "object" && v ? JSON.stringify(v) : (v ?? "");
+        if (kind === "pick_file") {
+          return (
+            <Select key={key} size="small" value={src.pick || "newest"} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
+              onChange={(e) => onChange({ pick: e.target.value })}>
+              <MenuItem value="newest" sx={{ fontSize: 12 }}>the one that changed most recently</MenuItem>
+              <MenuItem value="name" sx={{ fontSize: 12 }}>the highest name (sales-2026-08-25 beats -08-01)</MenuItem>
+            </Select>
+          );
+        }
         if (PICKS[kind]) {
           return <AwsPicker key={key} label={label} which={kind} value={shown} placeholder={ph}
             service={src.service} onChange={(x) => onChange({ [key]: x })} />;

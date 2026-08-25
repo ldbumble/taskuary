@@ -3,7 +3,9 @@
 [server] port/host/token; [agents.<name>] cmd/args/resume_args/timeout/cwd/cwd_map;
 [github] token/default_repo. Everything is optional: `taskuary` runs with no config at all
 (SQLite store, stub agent, localhost server). TASKUARY_HOST / TASKUARY_PORT / TASKUARY_TOKEN
-override [server] so a container can bind 0.0.0.0 without rewriting the data-volume config.
+are runtime overlays on [server] (a container binds 0.0.0.0 this way) and are never written
+back — save() keeps the on-disk [server] block. Empty env is unset, so compose cannot wipe
+a token stored on the volume.
 """
 import json, os
 try: import tomllib
@@ -18,9 +20,21 @@ def home() -> Path:
     p.mkdir(parents=True, exist_ok=True)
     return p
 
-def load() -> dict:
+def _read() -> dict:
     f = home() / 'config.toml'
-    cfg = tomllib.loads(f.read_text(encoding='utf-8')) if f.exists() else {}
+    return tomllib.loads(f.read_text(encoding='utf-8')) if f.exists() else {}
+
+def _env_server() -> dict:
+    """Non-empty TASKUARY_* overlays. Empty is unset — an injected '' must not disable a stored token."""
+    out = {}
+    h, p, t = os.getenv('TASKUARY_HOST'), os.getenv('TASKUARY_PORT'), os.getenv('TASKUARY_TOKEN')
+    if h: out['host'] = h
+    if p: out['port'] = int(p)
+    if t: out['token'] = t
+    return out
+
+def load() -> dict:
+    cfg = _read()
     cfg.setdefault('server', {})
     cfg['server'].setdefault('host', '127.0.0.1')
     cfg['server'].setdefault('port', 7787)
@@ -32,10 +46,7 @@ def load() -> dict:
                                                  '--output-format', 'stream-json', '--verbose'],
                                         'resume_args': ['--resume'], 'timeout': 1500}})
     cfg.setdefault('github', {})
-    # process env wins so Docker (and systemd) can bind without editing config.toml
-    if os.getenv('TASKUARY_HOST'): cfg['server']['host'] = os.environ['TASKUARY_HOST']
-    if os.getenv('TASKUARY_PORT'): cfg['server']['port'] = int(os.environ['TASKUARY_PORT'])
-    if 'TASKUARY_TOKEN' in os.environ: cfg['server']['token'] = os.environ['TASKUARY_TOKEN'] or None
+    cfg['server'].update(_env_server())
     return cfg
 
 def db_path() -> str:
@@ -50,11 +61,13 @@ def _tval(v):
 
 def dumps_toml(d: dict, prefix='') -> str:
     """Minimal TOML writer for our config shapes (scalars, string lists, nested tables).
-    tomllib is stdlib-read-only; this keeps the UI able to persist config with no new deps."""
+    tomllib is stdlib-read-only; this keeps the UI able to persist config with no new deps.
+    None is omitted: json.dumps(str(None)) would persist the literal string "None"."""
     lines, tables = [], []
     for k, v in d.items():
         key = k if k.replace('_', '').replace('-', '').isalnum() else json.dumps(k)
         if isinstance(v, dict): tables.append((key, v))
+        elif v is None: continue
         else: lines.append(f'{key} = {_tval(v)}')
     out = (f'[{prefix}]\n' if prefix and lines else '') + '\n'.join(lines)
     for key, v in tables:
@@ -63,5 +76,14 @@ def dumps_toml(d: dict, prefix='') -> str:
     return out
 
 def save(cfg: dict):
-    """Persist config to ~/.taskuary/config.toml (round-trips through tomllib in tests)."""
-    (home() / 'config.toml').write_text(dumps_toml(cfg) + '\n', encoding='utf-8')
+    """Persist cfg to ~/.taskuary/config.toml. [server] on disk is the source of truth —
+    env overlays (and None) stay runtime-only, so an agent/cwd_map save cannot leak
+    0.0.0.0 or a container token into the volume. Does not mutate cfg."""
+    disk, env = _read(), _env_server()
+    out = {k: v for k, v in cfg.items() if k != 'server'}
+    if 'server' in disk:
+        out['server'] = disk['server']
+    else:
+        srv = {k: v for k, v in (cfg.get('server') or {}).items() if v is not None and k not in env}
+        if srv: out['server'] = srv
+    (home() / 'config.toml').write_text(dumps_toml(out) + '\n', encoding='utf-8')

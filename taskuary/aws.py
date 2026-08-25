@@ -250,17 +250,33 @@ def run_s3_object(cfg: dict):
     return rows_out(rows, lim, unit='objects', mine=mine)
 
 
+LOG_PAGE_CAP = 12        # one report is worth this many FilterLogEvents calls, not unbounded
+
+
 def run_cloudwatch_logs(cfg: dict):
     """{"log_group", "pattern", "hours": 24} - recent events from a CloudWatch log group.
     Pattern uses CloudWatch filter syntax: '?ERROR ?Exception' means any of these words."""
     from .reports import row_limit, rows_out
     lim, mine = row_limit(cfg)
     start = int((datetime.now() - timedelta(hours=float(cfg.get('hours') or 24))).timestamp() * 1000)
-    kw = {'logGroupName': cfg['log_group'], 'startTime': start, 'limit': min(lim + 1, 10000)}
+    hours = float(cfg.get('hours') or 24)
+    kw = {'logGroupName': cfg['log_group'], 'startTime': start, 'limit': min(max(lim + 1, 1000), 10000)}
     if cfg.get('pattern'): kw['filterPattern'] = cfg['pattern']
     where = regions(cfg)[0]
     try:
-        ev = client(cfg, 'logs', where).filter_log_events(**kw).get('events') or []
+        cl = client(cfg, 'logs', where)
+        # FilterLogEvents PAGES, and its pages are not full ones. It scans log streams and hands
+        # back whatever that pass found, with a nextToken - so a lambda (one stream per
+        # invocation) answered a single call with nine events while the rest of the day sat behind
+        # the token. "9 events" then read as "a quiet day", which for a report asked to find
+        # ERRORS is the worst way to be wrong. Page until the cap is covered or the token runs
+        # out; PAGE_CAP stops a busy group from turning one report into a thousand calls.
+        ev, tok, pages = [], None, 0
+        while pages < LOG_PAGE_CAP:
+            r = cl.filter_log_events(**kw, **({'nextToken': tok} if tok else {}))
+            ev += r.get('events') or []
+            tok, pages = r.get('nextToken'), pages + 1
+            if not tok or len(ev) > lim: break
     except Exception as e:
         # "The specified log group does not exist" is true and useless: it does exist, in another
         # region. AWS cannot say that because it only knows the region it was asked about - but we
@@ -270,6 +286,14 @@ def run_cloudwatch_logs(cfg: dict):
                            'group belongs to ONE region, so the same name in another region is a '
                            'different group. Pick it from the list again (each entry says its region), '
                            "or set this source's region to the one it lives in.") from None
+    # newest first: when the cap bites, the recent end of the window is the half worth keeping,
+    # and AWS hands these back oldest-first
+    ev.sort(key=lambda e: e.get('timestamp') or 0, reverse=True)
     rows = [{'at': datetime.fromtimestamp(e['timestamp'] / 1000).strftime('%Y-%m-%d %H:%M:%S'),
              'stream': e.get('logStreamName'), 'message': (e.get('message') or '').strip()[:500]} for e in ev]
-    return rows_out(rows, lim, unit='events', mine=mine)
+    hrs = f'{hours:g}h'
+    head, body = rows_out(rows, lim, unit=f'events in the last {hrs}', mine=mine)
+    # a scan that stopped at the page bound is not "all of it", and only this code knows
+    if tok and len(ev) <= lim:
+        head += f' — stopped after {LOG_PAGE_CAP} pages, so there may be more; narrow it with a filter pattern'
+    return head, body

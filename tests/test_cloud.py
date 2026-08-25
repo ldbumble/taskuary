@@ -57,7 +57,8 @@ class AwsTests(unittest.TestCase):
             head, body = aws.run_s3_object({'bucket': 'b', 'key': 'a.csv'})
             self.assertIn('10 bytes', head); self.assertIn('hello rows', body)
             head, body = aws.run_cloudwatch_logs({'log_group': '/aws/x', 'pattern': '?ERROR'})
-            self.assertEqual(head, '1 events'); self.assertIn('ERROR boom', body)
+            # the headline names the WINDOW now, which is what answers "only 1 event?"
+            self.assertEqual(head, '1 events in the last 24h'); self.assertIn('ERROR boom', body)
 
     def test_generic_call_unwraps_the_one_list(self):
         with mock.patch.object(aws, 'client', return_value=FakeAws()):

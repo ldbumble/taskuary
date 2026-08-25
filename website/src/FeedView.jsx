@@ -70,10 +70,21 @@ const actionOf = (r) => (r.Channel === "report" ? "report"
 const needsYou = (r) => !!r.NeedsYou && r.TaskStatus !== "done";
 
 // Teams chats get a synthesized "<sender> in <source>" subject - redundant next to the
-// sender + source we already show, so drop it.
+// sender + source we already show, so drop it. Reports stamp the title as from, source
+// AND the start of the subject, which used to read "Morning digest · Morning digest — Morning digest — …".
 const subjectOf = (r) => {
-  const s = r.Subject || "";
-  return s === `${r.FromName} in ${r.SourceName}` ? "" : s;
+  let s = r.Subject || "";
+  if (s === `${r.FromName} in ${r.SourceName}`) return "";
+  const who = String(r.FromName || "").trim();
+  if (who && s.toLowerCase().startsWith(who.toLowerCase())) {
+    s = s.slice(who.length).replace(/^\s*[—\-–:]+\s*/, "");
+  }
+  return s;
+};
+const sourceOf = (r) => {
+  const src = r.SourceName || "";
+  const who = r.FromName || r.FromEmail || "";
+  return src && src !== who ? src : "";
 };
 
 // One plain-English sentence: what the hub did + where it stands.
@@ -303,7 +314,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const stats = [
     { label: "in today", n: todays.length, f: "" },
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
-    { label: "need me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true },
+    { label: "needs me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true },
     { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
   ];
 
@@ -387,7 +398,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
           )}
         </Box>
         {/* the stats, demoted from tiles to a caption line - still clickable where a tile
-            was ("need me" filters), and the sync story rides the same line */}
+            was ("needs me" filters), and the sync story rides the same line */}
         {rows && (
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
             {/* one face for the whole line: the mono digits next to Inter labels read as two
@@ -481,11 +492,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
                           bgcolor: `${CHANNEL_COLORS[r.Channel] || "#98a1b3"}18` }}>
                           <ChannelIcon channel={r.Channel} />
                         </Box>
-                        <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, maxWidth: 190, flexShrink: 0 }}>
+                        <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, maxWidth: { sm: 190 }, minWidth: 0, flexShrink: { xs: 1, sm: 0 } }}>
                           {r.FromName || r.FromEmail || "unknown"}
                         </Typography>
-                        {r.SourceName && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 150, flexShrink: 0 }}>· {r.SourceName}</Typography>}
-                        <Typography variant="body2" noWrap sx={{ color: DIM, flex: 1, minWidth: 0 }}>{subjectOf(r) ? `— ${subjectOf(r)}` : ""}</Typography>
+                        {sourceOf(r) && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 150, flexShrink: 0 }}>· {sourceOf(r)}</Typography>}
+                        <Typography variant="body2" noWrap sx={{ color: DIM, flex: 1, minWidth: 0, display: { xs: "none", sm: "block" } }}>{subjectOf(r) ? `— ${subjectOf(r)}` : ""}</Typography>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexShrink: 0 }}>
                           {r.Attachments > 0 && (
                             <Typography variant="caption" title={`${r.Attachments} attached`}

@@ -83,8 +83,9 @@ const KNOB_META = {
     desc: "A new task with software in it immediately opens a live agent session in its repo.",
     help: "On: the moment triage says 'this is work' AND the work is plainly about code - a failure with a trace, a named repository or pull request, a file path - your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nWork with no code in it (chase a vendor, add a user, produce a document) is still a real task - it just waits on your list rather than opening a session, because a CLI sitting in a repository has nothing to do with it. One click sends it to an agent anyway if you disagree.\n\nRequires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way." },
   notify_level: { group: "Notifications", label: "Push to your chat", type: "select", options: ["needs_me", "all", "off"],
+    optionLabels: { needs_me: "needs me", all: "everything", off: "off" },
     desc: "Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.",
-    help: "Give a chat connector the NOTIFY role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds_me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting in Review'. all = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output." },
+    help: "Give a chat connector the Notifications role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting in Review'. everything = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output." },
 
   phone_approvals: { group: "Notifications", label: "Approve from your phone", type: "switch",
     desc: "Reply to a ping in the notify chat to decide the review — approve, reject, or type the reply yourself.",
@@ -157,6 +158,7 @@ export default function SettingsView() {
 
   const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
   const [agentNames, setAgentNames] = useState([]);
+  const [connectors, setConnectors] = useState([]);
 
   const load = useCallback(async () => {
     try {
@@ -164,6 +166,7 @@ export default function SettingsView() {
       setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []);
       api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
       api.get("/api/agents").then(({ data }) => setAgentNames((data.data || []).map((a) => a.Name))).catch(() => {});
+      api.get("/api/connectors").then(({ data }) => setConnectors(data.data || [])).catch(() => {});
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load settings"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -233,7 +236,9 @@ export default function SettingsView() {
     }
     if (m.type === "select") return (
       <Select size="small" value={s.Value} onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
-        {m.options.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>{o.replace("_", " ")}</MenuItem>)}
+        {m.options.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>
+          {(m.optionLabels && m.optionLabels[o]) || o.replaceAll("_", " ")}
+        </MenuItem>)}
       </Select>
     );
     // the browser knows every IANA zone - a dropdown, not a spelling test
@@ -273,10 +278,12 @@ export default function SettingsView() {
       <Box sx={{ maxWidth: 980 }}>
         <Crumb onBack={() => setPage(null)} title="Configuration" />
         <UnderTabs tabs={tabs} value={cfgTab} onChange={setCfgTab} />
+        {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
         {rows.map((s) => {
           const m = meta(s.Name);
           return (
-            <Box key={s.Name} sx={{ display: "flex", alignItems: "center", gap: 3, py: 2.5, borderBottom: `1px solid ${BORDER}` }}>
+            <Box key={s.Name} sx={{ display: "flex", alignItems: "center", gap: 3, py: 2.5, borderBottom: `1px solid ${BORDER}`,
+              opacity: s.Name === "phone_approvals" && (settings.find((x) => x.Name === "notify_level") || {}).Value === "off" ? 0.5 : 1 }}>
               <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
                 onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
                 <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
@@ -480,3 +487,42 @@ const HelpDialog = ({ help, onClose }) => (
     )}
   </Dialog>
 );
+
+const parseCfg = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
+
+// The two knobs above are mute until a chat is actually named. Say so here, rather
+// than leaving the page looking like a finished setup that silently goes nowhere.
+const NotifyStatus = ({ connectors, settings }) => {
+  const level = (settings.find((s) => s.Name === "notify_level") || {}).Value || "needs_me";
+  const phones = (settings.find((s) => s.Name === "phone_approvals") || {}).Value === "1";
+  const named = (connectors || []).filter((c) => {
+    if (!c.Active) return false;
+    if (!String(c.Roles || "").split(",").includes("notify")) return false;
+    return !!String(parseCfg(c.ConfigJson).notify_chat || "").trim();
+  });
+  const armed = (connectors || []).filter((c) => String(c.Roles || "").split(",").includes("notify"));
+  let text, color = DIM;
+  if (level === "off") {
+    text = "Pushes are off — nothing is sent, even if a chat is named.";
+  } else if (named.length) {
+    const bits = named.map((c) => `${c.Name} · ${parseCfg(c.ConfigJson).notify_chat}`);
+    text = `Pinging ${bits.join(" · ")}${phones ? " — reply in that chat to approve" : ""}`;
+    color = "#15803d";
+  } else if (armed.length) {
+    const names = armed.map((c) => c.Name).join(", ");
+    text = `${names} ${armed.length === 1 ? "has" : "have"} the Notifications role, but no chat is named yet — set it under Connectors → Credentials.`;
+    color = "#b45309";
+  } else {
+    text = "No notify chat yet — on a Telegram, WhatsApp or Teams card, add the Notifications role and name the chat in Credentials.";
+  }
+  const empty = !named.length && !armed.length && level !== "off";
+  return (
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5,
+      px: 1.25, py: 0.85,
+      bgcolor: named.length ? "#e8f6ee" : empty ? "#fef4e6" : "#f7f8fa",
+      border: `1px solid ${named.length ? "#cbe8d6" : empty ? "#f3ddb8" : BORDER}`, borderRadius: 1.5 }}>
+      {named[0] && <ChannelIcon channel={named[0].Type} sx={{ fontSize: 15, mt: 0.15 }} />}
+      <Typography variant="caption" sx={{ color, lineHeight: 1.45 }}>{text}</Typography>
+    </Box>
+  );
+};

@@ -667,10 +667,10 @@ export const Crumb = ({ section, onBack, title }) => (
 );
 
 export const UnderTabs = ({ tabs, value, onChange }) => (
-  <Box sx={{ display: "flex", gap: 3, borderBottom: "1px solid #e5e8ee", mb: 2 }}>
+  <Box sx={{ display: "flex", gap: 2.5, borderBottom: "1px solid #e5e8ee", mb: 2, overflowX: "auto" }}>
     {tabs.map((t) => (
       <Box key={t} onClick={() => onChange(t)}
-        sx={{ pb: 1, cursor: "pointer", fontSize: 13, fontWeight: 600, mb: "-1px",
+        sx={{ pb: 1, cursor: "pointer", fontSize: 13, fontWeight: 600, mb: "-1px", flexShrink: 0,
           color: value === t ? "#4f46e5" : DIM,
           borderBottom: `2px solid ${value === t ? "#4f46e5" : "transparent"}`,
           "&:hover": { color: "#1c2536" } }}>

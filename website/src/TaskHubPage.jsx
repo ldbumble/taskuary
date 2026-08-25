@@ -92,10 +92,9 @@ export default function TaskHubPage() {
           </Typography>
           <ServerVersion />
 
-          <Box sx={{ display: "flex", gap: 0.5, ml: 3 }}>
-            {TABS.map((t) => (
-              <Badge key={t} color="warning" badgeContent={t === "Review" ? pending : 0} max={99}
-                sx={{ "& .MuiBadge-badge": { fontSize: 9.5, height: 15, minWidth: 15 } }}>
+          <Box sx={{ display: "flex", gap: 0.5, ml: 3, minWidth: 0, overflowX: "auto" }}>
+            {TABS.map((t) => {
+              const pill = (
                 <Box onClick={() => go(t)}
                   sx={{ px: 1.5, py: 0.5, borderRadius: 99, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
                     color: tab === t ? "#4f46e5" : DIM, bgcolor: tab === t ? "#eef0ff" : "transparent",
@@ -103,8 +102,18 @@ export default function TaskHubPage() {
                     transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#eef0ff" : "#f1f3f6" } }}>
                   {t}
                 </Box>
-              </Badge>
-            ))}
+              );
+              // only Review wears a count, in the same amber as "needs you" — wrapping every
+              // tab in a Badge left a few pixels of dead space even at zero
+              return t === "Review" ? (
+                <Badge key={t} badgeContent={pending} max={99} overlap="rectangular" showZero={false}
+                  invisible={!pending}
+                  sx={{ "& .MuiBadge-badge": { fontSize: 9.5, height: 16, minWidth: 16, px: 0.45,
+                    bgcolor: "#b45309", color: "#fff", fontWeight: 700, right: -2, top: 2 } }}>
+                  {pill}
+                </Badge>
+              ) : <React.Fragment key={t}>{pill}</React.Fragment>;
+            })}
           </Box>
           <Box sx={{ flex: 1 }} />
           <Tooltip title="Refresh">

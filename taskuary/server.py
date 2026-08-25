@@ -493,16 +493,18 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     return {'reviewId': rid, 'taskId': tid, 'draft': draft}
 
 
-class NotMineBody(BaseModel): note: str | None = None; scope: str = 'sender'
+class NotMineBody(BaseModel):
+    note: str | None = None
+    scope: str = 'sender'
+    topic: str | None = None        # the owner's own wording for a 'subject' verdict's key
 
 NOT_MINE_SCOPES = ('subject', 'sender', 'sender_domain', 'global')
 
 def _topic_key(m: dict) -> str:
-    """The subject a topic verdict keys on, minus the Re:/Fwd: - empty when there is not enough
-    of one to match on, which is when the verdict has to be about the sender instead."""
-    from .routing import norm_subject, tokens
-    subj = norm_subject(m.get('Subject') or '')
-    return subj[:200] if len(tokens(subj)) >= 2 else ''
+    """The topic a subject-scoped verdict keys on. Empty when the subject has too little in it
+    to match on, which is when the verdict has to be about the sender instead."""
+    from .routing import subject_topic
+    return subject_topic(m.get('Subject') or '')
 
 def _suggest_scope(m: dict) -> str:
     """Which scope this verdict most likely means. It defaulted to 'sender', and that is the
@@ -511,14 +513,14 @@ def _suggest_scope(m: dict) -> str:
     again. A subject to key on means the topic is the better bet; the owner still chooses."""
     return 'subject' if _topic_key(m) else 'sender'
 
-def _not_mine_note(m: dict, scope: str = None) -> str:
+def _not_mine_note(m: dict, scope: str = None, topic: str = None) -> str:
     """The note we would write, phrased for the scope it will be saved under - the text and the
     dropdown have to agree, or the saved verdict says something the owner did not choose."""
     who = m.get('FromEmail') or m.get('FromName') or 'this sender'
     subj = (m.get('Subject') or '')[:90]
     tail = 'is other people\'s work - file it, do not open a task or draft a reply.'
     scope = scope or _suggest_scope(m)
-    if scope == 'subject': return f'Mail about "{_topic_key(m) or subj}" {tail}'
+    if scope == 'subject': return f'Mail about "{topic or _topic_key(m) or subj}" {tail}'
     if scope == 'sender_domain': return f'Mail like "{subj}" from anyone at {who.rsplit("@", 1)[-1]} {tail}'
     if scope == 'global': return f'Mail like "{subj}", whoever sends it, {tail}'
     return f'Mail like "{subj}" from {who} {tail}'
@@ -542,11 +544,15 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     scope = body.scope
     # a scope with nothing to key on would save a verdict that can never match: fall back to the
     # widest thing this message CAN be keyed on rather than writing a note that does nothing
-    if scope == 'subject' and not _topic_key(m): scope = 'sender' if em else 'global'
+    # the owner can say what the topic IS - they know that "resident refund request" is the
+    # standing part and the resident's name is not, and no amount of trimming beats being told
+    from .routing import norm_subject, tokens
+    topic = norm_subject((body.topic or '').strip())[:200] or _topic_key(m)
+    if scope == 'subject' and len(tokens(topic)) < 2: scope = 'sender' if em else 'global'
     if scope in ('sender', 'sender_domain') and not em: scope = 'global'
-    key = (_topic_key(m) if scope == 'subject' else None if scope == 'global'
+    key = (topic if scope == 'subject' else None if scope == 'global'
            else em.rsplit('@', 1)[-1] if scope == 'sender_domain' else em)
-    note = (body.note or '').strip() or _not_mine_note(m, scope)
+    note = (body.note or '').strip() or _not_mine_note(m, scope, key if scope == 'subject' else None)
     memid = store.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note[:1000],
                               'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR})
     tid = m.get('TaskId')
@@ -599,15 +605,17 @@ def file_message(mid: int):
     return {'ok': True, 'taskDeleted': bool(tid)}
 
 @app.get('/api/messages/{mid}/not-mine/suggest')
-def not_mine_suggest(mid: int, scope: str = None):
+def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
     """The note we'd save, so the panel can show it for editing before it's committed - phrased
     for `scope`, or for the scope this message most likely calls for when none is given."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     if scope and scope not in NOT_MINE_SCOPES: raise HTTPException(422, 'bad scope')
     scope = scope or _suggest_scope(m)
-    return {'note': _not_mine_note(m, scope), 'from': m.get('FromEmail'), 'scope': scope,
-            'topic': _topic_key(m)}
+    from .routing import norm_subject
+    topic = norm_subject((topic or '').strip())[:200] or _topic_key(m)
+    return {'note': _not_mine_note(m, scope, topic), 'from': m.get('FromEmail'), 'scope': scope,
+            'topic': topic}
 
 def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
     try:

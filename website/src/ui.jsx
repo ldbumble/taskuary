@@ -435,6 +435,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
   // default is what filed "resident refunds are not our task" under one colleague of seventeen.
   const [scope, setScope] = useState("");
   const [topic, setTopic] = useState("");
+  const [topicEdited, setTopicEdited] = useState(false);
   const [edited, setEdited] = useState(false);
   const [saved, setSaved] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -445,15 +446,16 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
   // but an EDITED note is the owner's own words and is never overwritten
   useEffect(() => {
     if (!open) return;
-    api.get(`/api/messages/${messageId}/not-mine/suggest`, { params: scope ? { scope } : {} })
-      .then(({ data }) => { setScope((c) => c || data.scope); setTopic(data.topic || ""); if (!edited) setNote(data.note); })
+    api.get(`/api/messages/${messageId}/not-mine/suggest`, { params: { ...(scope ? { scope } : {}), ...(topicEdited ? { topic } : {}) } })
+      .then(({ data }) => { setScope((c) => c || data.scope); if (!topicEdited) setTopic(data.topic || ""); if (!edited) setNote(data.note); })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, messageId, scope]);
   const save = async () => {
     setBusy(true); setErr("");
     try {
-      const { data } = await api.post(`/api/messages/${messageId}/not-mine`, { note: note.trim() || null, scope: scope || "sender" });
+      const { data } = await api.post(`/api/messages/${messageId}/not-mine`,
+        { note: note.trim() || null, scope: scope || "sender", topic: topic.trim() || null });
       setSaved(data);
       setTimeout(() => onDone?.(), 1400);
     } catch (e) {
@@ -492,6 +494,17 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
       <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>
         Not our task — what should triage remember?
       </Typography>
+      {/* WHAT the verdict is about, in the owner's words. Trimming the subject guesses at the
+          standing part ("resident refund request") and drops the changing one (the resident);
+          being told beats guessing, and a topic keyed too narrowly is a verdict that fires once. */}
+      {scope === "subject" && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
+          <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap" }}>mail about</Typography>
+          <TextField fullWidth size="small" value={topic} sx={{ bgcolor: "#fff" }}
+            inputProps={{ style: { fontSize: 12.5, padding: "4px 8px" } }}
+            onChange={(e) => { setTopicEdited(true); setTopic(e.target.value); }} />
+        </Box>
+      )}
       <TextField fullWidth multiline minRows={2} size="small" value={note} sx={{ bgcolor: "#fff" }}
         onChange={(e) => { setEdited(true); setNote(e.target.value); }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
@@ -510,7 +523,8 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
             : "Their mail keeps arriving — only the verdict is learned."}
         </Typography>
         <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>cancel</Button>
-        <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={save}
+        <Button size="small" variant="contained" disableElevation
+          disabled={busy || !note.trim() || (scope === "subject" && !topic.trim())} onClick={save}
           sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not ours — remember this"}</Button>
       </Box>
       {err && <Typography variant="caption" sx={{ color: "#b42318", fontWeight: 600, display: "block", mt: 0.75 }}>

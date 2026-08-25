@@ -92,3 +92,50 @@ class HistgenTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TopicRollUpTests(unittest.TestCase):
+    """"Generate from history should see no responses on it." It already marked each mail
+    ANSWERED or not - one line at a time. So a fortnight of resident-refund mail, each with a
+    different resident in the subject and none of them ever answered, arrived as seventeen
+    unrelated no-reply lines, and the prompt's own rule ("never a rule from a single
+    conversation") forbade the model from saying the one thing the mailbox was shouting."""
+    REFUNDS = [{'id': f'r{i}', 'subject': f'Re: Resident Refund Request - {name}',
+                'receivedDateTime': f'2026-08-{10 + i:02d}T09:00:00Z', 'conversationId': f'rc{i}',
+                'from': {'emailAddress': {'address': f'{name.split(",")[0].lower()}@regencyhealthrehab.com'}}}
+               for i, name in enumerate(['Doe, Jane', 'PAYNE, MICHAEL', 'Watson, Lisa',
+                                         'Foote, Marie Grace', 'Smith, Rosemary'])]
+
+    def _payload(self, sent, inbox):
+        seen = {}
+        def llm(system, user, max_tokens=0):
+            seen['user'] = user
+            return GUIDE
+        s = MemoryStore()
+        with graph(sent, inbox), mock.patch('taskuary.llm.build_llm', return_value=llm):
+            histgen.generate(s, 'triage')
+        return seen['user'], histgen.STATUS['evidence']
+
+    def test_a_recurring_never_answered_topic_is_counted_and_named(self):
+        user, ev = self._payload(SENT, self.REFUNDS + INBOX)
+        self.assertIn('TOPIC ROLL-UP', user)
+        # one topic, five mails, none answered - and the changing resident is not part of it
+        self.assertIn('"resident refund request": 5 mails, 0 answered', user)
+        self.assertIn('never answered', user)
+        self.assertNotIn('doe', user.split('INBOUND MAIL:')[0])   # not in the roll-up
+        # and the receipts show the owner the same thing, so the guidance is inspectable
+        self.assertTrue(any('never-answered first' in e for e in ev))
+
+    def test_an_answered_topic_is_not_dressed_up_as_ignorable(self):
+        """The signal has to cut both ways or it is not a signal."""
+        answered = [{'id': 's9', 'subject': 'RE: Resident Refund Request - PAYNE, MICHAEL',
+                     'receivedDateTime': '2026-08-11T10:00:00Z', 'conversationId': 'rc1',
+                     'body': {'content': 'Approved, processing today.'}}]
+        user, _ev = self._payload(SENT + answered, self.REFUNDS)
+        self.assertIn('"resident refund request": 5 mails, 1 answered', user)
+        self.assertNotIn('never answered', user)
+
+    def test_a_one_off_subject_is_not_a_topic(self):
+        """Three sightings is routine work; one is a conversation."""
+        user, _ev = self._payload(SENT, INBOX)
+        self.assertNotIn('TOPIC ROLL-UP', user)

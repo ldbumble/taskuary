@@ -16,7 +16,8 @@ from taskuary.store import MemoryStore
 c = TestClient(server.app)
 
 REFUND = 'Re: Resident Refund Request - Doe, Jane'
-TOPIC = 'resident refund request - doe, jane'
+# what a verdict on that subject now keys on: the standing part, with the resident left out
+TOPIC = 'resident refund request'
 
 
 def _store(*notes):
@@ -141,7 +142,7 @@ class TheDialogTests(unittest.TestCase):
         d = c.post(f'/api/messages/{mid}/not-mine',
                    json={'scope': 'subject', 'note': 'resident refunds are not our task'}).json()
         self.assertEqual(d['scope'], 'subject')
-        self.assertEqual(d['scopeKey'], 'resident refund request - juergens, larry')
+        self.assertEqual(d['scopeKey'], TOPIC)          # the resident is not the topic
         self.assertIn(tid, [t['taskId'] for t in d['alsoCovered']])
         self.assertTrue(server.store.get_task(tid))                # reported, never deleted
         # and the verdict now covers mail from anyone about refunds
@@ -153,3 +154,43 @@ class TheDialogTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TheTopicIsTheStandingPartTests(unittest.TestCase):
+    """A verdict keyed on "resident refund request - doe, jane" put the match on a
+    knife edge: the resident is half the words, so the next mail scored exactly the 0.5 floor
+    and a longer name fell under it. A rule that general work has to key on the general part."""
+    def _msg(self, subject):
+        return server.store.add_message({'ExternalId': f'topic-{subject}', 'Channel': 'email',
+                                         'Subject': subject, 'FromEmail': 'hudson@regencyhealthrehab.com',
+                                         'BodyText': 'history attached', 'Status': 'filed'})
+
+    def test_the_per_item_tail_is_not_part_of_the_topic(self):
+        from taskuary.routing import subject_topic
+        for subj in ('Re: Resident Refund Request - Doe, Jane',
+                     'RE: Resident Refund Request - Foote, Marie Grace',
+                     'Resident Refund Request'):
+            self.assertEqual(subject_topic(subj), 'resident refund request')
+        self.assertEqual(subject_topic('Vendor Create'), 'vendor create')
+        self.assertEqual(subject_topic('Hi'), '')            # nothing to key a topic on
+
+    def test_the_generalised_key_matches_every_resident_outright(self):
+        key = 'resident refund request'
+        for subj in ('Re: Resident Refund Request - PAYNE, MICHAEL',
+                     'RE: Resident Refund Request - Watson, Lisa',
+                     'Resident refund request - Roe, Sam'):
+            self.assertTrue(ingest.topic_hit(key, subj))
+        self.assertFalse(ingest.topic_hit(key, 'Vendor Create'))
+
+    def test_the_owner_can_say_what_the_topic_is(self):
+        """Trimming is a guess at the standing part. Being told beats guessing."""
+        mid = self._msg('Re: Resident Refund Request - Juergens, Larry')
+        d = c.post(f'/api/messages/{mid}/not-mine',
+                   json={'scope': 'subject', 'topic': 'RE: resident refunds', 'note': 'not ours'}).json()
+        self.assertEqual(d['scopeKey'], 'resident refunds')       # normalised, Re: stripped
+        self.assertTrue(ingest.topic_hit(d['scopeKey'], 'Resident Refunds - anyone at all'))
+
+    def test_a_topic_too_thin_to_match_falls_back_rather_than_saving_nothing(self):
+        mid = self._msg('Re: Resident Refund Request - Adams, Neil')
+        d = c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'subject', 'topic': 'the'}).json()
+        self.assertEqual((d['scope'], d['scopeKey']), ('sender', 'hudson@regencyhealthrehab.com'))

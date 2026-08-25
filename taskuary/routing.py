@@ -22,6 +22,20 @@ _STOP = {'the','and','for','you','are','not','with','this','that','have','from',
 def norm_subject(s): return _SUBJ_PREFIX.sub('', s or '').strip().lower()
 def tokens(s): return [t for t in _TOKEN.findall((s or '').lower()) if t not in _STOP]
 
+# The STANDING part of a subject line. "Resident Refund Request - Doe, Jane" is one
+# recurring topic and one resident: the trailing " - <somebody>" changes with every mail, so it
+# is not what the mail is ABOUT. Keeping it makes the name half the words - which puts a topic
+# match on a knife edge and makes a hundred one-off subjects out of one piece of routine work.
+_SUBJ_TAIL = re.compile(r'\s+[-–—]\s+[^-–—]{1,40}$')
+
+def subject_topic(s, min_words=2):
+    """'' when there is not enough of a subject left to be a topic at all."""
+    norm = norm_subject(s)
+    trimmed = _SUBJ_TAIL.sub('', norm).strip()
+    for cand in (trimmed, norm):
+        if len(tokens(cand)) >= min_words: return cand[:200]
+    return ''
+
 def cosine(a, b):
     """Cosine similarity between two token lists (term-count vectors)."""
     ca,cb = Counter(a),Counter(b)

@@ -472,7 +472,7 @@ export default function SettingsView() {
     <Box sx={{ maxWidth: 1160, mx: "auto" }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <TextField fullWidth placeholder="Search settings, rules, memory — matches help text too…" value={q}
-        onChange={(e) => setQ(e.target.value)} sx={{ mb: 3, bgcolor: "#fff", borderRadius: 2, maxWidth: 520 }}
+        onChange={(e) => setQ(e.target.value)} sx={{ mb: 3, bgcolor: "#fff", borderRadius: 2, maxWidth: 520, mx: "auto", display: "block" }}
         InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: FAINT }} /></InputAdornment> }} />
 
       {q ? (

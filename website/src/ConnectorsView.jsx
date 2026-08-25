@@ -431,7 +431,7 @@ export default function ConnectorsView() {
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
         <TextField fullWidth placeholder="Search connectors — Slack, SQL Server, Anthropic… matches setup guides too" value={q}
-          onChange={(e) => setQ(e.target.value)} sx={{ bgcolor: "#fff", borderRadius: 2, maxWidth: 520 }}
+          onChange={(e) => setQ(e.target.value)} sx={{ bgcolor: "#fff", borderRadius: 2, maxWidth: 520, mx: "auto", display: "block" }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: FAINT }} /></InputAdornment> }} />
         <Box sx={{ flex: 1 }} />
         <Button size="small" variant="contained" disableElevation onClick={syncNow} disabled={syncing}

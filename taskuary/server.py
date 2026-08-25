@@ -1064,6 +1064,24 @@ def report_preview(body: dict):
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
 
+class SetupBody(BaseModel): dismissed: bool
+
+@app.get('/api/setup')
+def setup_state():
+    """What still stands between this install and a working funnel, read off real state - so a
+    step un-does itself if the connection behind it is removed."""
+    from . import setup as setup_mod
+    return setup_mod.state(store)
+
+@app.post('/api/setup/dismiss')
+def setup_dismiss(body: SetupBody):
+    """"I know, leave me alone." A setting, so it stays dismissed across restarts - and it is
+    reversible, because a checklist you cannot get back is a worse trap than one you cannot hide."""
+    from . import setup as setup_mod
+    store.set_setting(setup_mod.DISMISSED, '1' if body.dismissed else '0', ACTOR)
+    store.audit('setting', 0, 'setup_dismiss' if body.dismissed else 'setup_reopen', ACTOR)
+    return {'ok': True, **setup_mod.state(store)}
+
 @app.get('/api/aws/catalog')
 def aws_catalog(service: str = None):
     """The services and operations a report source can name, read off botocore's own models -

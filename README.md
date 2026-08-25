@@ -17,7 +17,7 @@ you already use does it; you approve the result. Runs entirely on your machine.
 
 <sub>Real app, real data — a mail triaged and its reply drafted for your approval, then a scheduled SQL report landing on the same rail with its chart and spreadsheet. Nothing sends without you.</sub>
 
-**Where it is:** early — **v0.2.0**, and moving fast. The funnel, the review queue, the agent
+**Where it is:** early — **v0.2.1**, and moving fast. The funnel, the review queue, the agent
 sessions and the reports pipeline are all real and in daily use on my own inbox; the edges are
 still being knocked off, and breaking changes are possible before 1.0. Issues get answered.
 [Full status and roadmap ↓](#status--roadmap)
@@ -329,7 +329,7 @@ exe is built on push to master.
 
 ## Status / roadmap
 
-Early (v0.2.0) and moving fast — said up top too, because it should not be something you find
+Early (v0.2.1) and moving fast — said up top too, because it should not be something you find
 out at the bottom.
 
 - [x] AI-gated triage, review queue, resumable agent sessions, hash-chained audit

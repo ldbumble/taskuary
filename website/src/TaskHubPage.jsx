@@ -15,6 +15,7 @@ import ConnectorsView from "./ConnectorsView.jsx";
 import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
+import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 
 const PAGE_MAX = 1160;      // the widest page column; the bar matches it
 
@@ -38,6 +39,22 @@ export default function TaskHubPage() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [pending, setPending] = useState(0);
   const [tick, setTick] = useState(0);
+  // the counter, and the panel it opens
+  const [setup, reloadSetup] = useSetup(tick);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [greeted, setGreeted] = useState(false);
+  // a first run opens it once, unprompted: somebody who has just installed this should not have
+  // to find the checklist. Once put away (or once required steps are done) it never opens itself.
+  useEffect(() => {
+    if (greeted || !setup || setup.ready || setup.dismissed) return;
+    if (setup.done === 0) setSetupOpen(true);
+    setGreeted(true);
+  }, [setup, greeted]);
+  const dismissSetup = async (d) => {
+    await api.post("/api/setup/dismiss", { dismissed: d });
+    reloadSetup();
+    if (d) setSetupOpen(false);
+  };
 
   // Leaving a tab and coming back used to land you at the TOP of it. Nothing scrolled the
   // page: the tall tab unmounted, the document shrank to the short one, and the browser
@@ -97,6 +114,7 @@ export default function TaskHubPage() {
             everything in → one funnel → agents + you
           </Typography>
           <ServerVersion />
+          <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />
 
           <Box sx={{ display: "flex", gap: 0.5, ml: 3, minWidth: 0, overflowX: "auto" }}>
             {TABS.map((t) => {
@@ -127,6 +145,10 @@ export default function TaskHubPage() {
           </Tooltip>
         </Box>
         </Box>
+
+        <SetupPanel open={setupOpen} state={setup} onClose={() => { setSetupOpen(false); reloadSetup(); }}
+          onDismiss={dismissSetup}
+          onGo={(where) => { setSetupOpen(false); go(where); }} />
 
         <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
           {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}

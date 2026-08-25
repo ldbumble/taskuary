@@ -6,7 +6,9 @@ The checklist is DERIVED, never stored: a step is done when the thing it asks fo
 and un-does itself when the connection behind it is removed. A stored checklist would go on
 saying "done" after somebody deleted the mailbox.
 """
+import json
 import unittest
+from unittest import mock
 
 from fastapi.testclient import TestClient
 from taskuary import server, setup
@@ -131,6 +133,71 @@ class PuttingItAwayTests(unittest.TestCase):
         for x in d['steps']:
             for k in ('key', 'title', 'why', 'done', 'where'):
                 self.assertIn(k, x)
+
+
+class TheWizardActuallySetsUpTests(unittest.TestCase):
+    """Pointing at a tab is not setting up: it hands the work back with directions attached. These
+    walk the exact calls the panel makes and check the state moves - because a wizard that saves a
+    key without testing it leaves you with a connected-looking install and an empty Timeline."""
+    def _reset(self):
+        for conn in server.store.list_connectors():      # not `c` - that is the TestClient
+            if conn['Type'] in ('anthropic', 'gmail'):
+                server.store.save_connector({'ConnectorId': conn['ConnectorId'], 'Active': 0, 'Secret': ''}, 't')
+
+    def test_the_owner_step_writes_the_name_the_documents_use(self):
+        was = server.store.owner().get('owner')
+        try:
+            self.assertEqual(c.put('/api/owner', json={'name': 'Dana Example',
+                                                       'email': 'dana@example.org'}).status_code, 200)
+            self.assertTrue(_step(c.get('/api/setup').json(), 'owner')['done'])
+            self.assertEqual(server.store.owner()['owner_first'], 'Dana')   # what signs a reply
+        finally:
+            if was and was != 'the owner': c.put('/api/owner', json={'name': was})
+
+    def test_connecting_a_brain_saves_it_and_only_counts_once_it_answers(self):
+        """The test call is the point. A key that saved and does not work is exactly the state
+        somebody discovers days later from a Timeline that never triaged anything."""
+        self._reset()
+        cid = server.store.get_connector_by_type('anthropic')['ConnectorId']
+        r = c.post('/api/connectors', json={'ConnectorId': cid, 'Type': 'anthropic',
+                                            'Name': 'Anthropic', 'Secret': 'sk-test', 'Active': True})
+        self.assertEqual(r.status_code, 200)
+        with mock.patch('taskuary.llm.test_ai', return_value='model responded: ok'):
+            out = c.post(f'/api/connectors/{cid}/test', json={}).json()
+        self.assertTrue(out['ok'], out)
+        self.assertTrue(_step(c.get('/api/setup').json(), 'ai')['done'])
+
+    def test_a_wrong_key_is_reported_and_leaves_the_step_undone(self):
+        self._reset()
+        cid = server.store.get_connector_by_type('anthropic')['ConnectorId']
+        c.post('/api/connectors', json={'ConnectorId': cid, 'Type': 'anthropic', 'Name': 'Anthropic',
+                                        'Secret': 'sk-wrong', 'Active': True})
+        with mock.patch('taskuary.llm.test_ai', side_effect=RuntimeError('401 invalid x-api-key')):
+            out = c.post(f'/api/connectors/{cid}/test', json={}).json()
+        self.assertFalse(out['ok'])
+        self.assertIn('401', out['detail'])          # the panel shows this verbatim
+        self._reset()
+
+    def test_connecting_a_mailbox_registers_the_source_that_makes_it_a_funnel(self):
+        """A connector with no source behind it is half-connected. The IMAP test is what registers
+        the mailbox, which is why the wizard tests rather than just saving."""
+        self._reset()
+        cid = server.store.get_connector_by_type('gmail')['ConnectorId']
+        c.post('/api/connectors', json={'ConnectorId': cid, 'Type': 'gmail', 'Name': 'Gmail',
+                                        'Secret': 'app-password',
+                                        'ConfigJson': json.dumps({'address': 'dana@gmail.com'}),
+                                        'Active': True})
+        self.assertFalse(any(s['Channel'] == 'email' and s['Address'] == 'dana@gmail.com'
+                             for s in server.store.list_sources(active_only=False)))
+        with mock.patch('taskuary.imapmail.test_imap', return_value='logged in as dana@gmail.com') as t:
+            def _register(store, conn):
+                store.save_source({'Channel': 'email', 'Address': 'dana@gmail.com',
+                                   'ConnectorId': conn['ConnectorId'], 'Active': 1}, 'connector-test')
+                return 'logged in as dana@gmail.com'
+            t.side_effect = _register
+            self.assertTrue(c.post(f'/api/connectors/{cid}/test', json={}).json()['ok'])
+        self.assertTrue(_step(c.get('/api/setup').json(), 'inbound')['done'])
+        self._reset()
 
 
 if __name__ == '__main__':

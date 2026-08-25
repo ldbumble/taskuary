@@ -147,7 +147,7 @@ export default function TaskHubPage() {
         </Box>
 
         <SetupPanel open={setupOpen} state={setup} onClose={() => { setSetupOpen(false); reloadSetup(); }}
-          onDismiss={dismissSetup}
+          onDismiss={dismissSetup} onRefresh={reloadSetup}
           onGo={(where) => { setSetupOpen(false); go(where); }} />
 
         <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>

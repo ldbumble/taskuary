@@ -8,9 +8,9 @@ from datetime import datetime
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
-            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status')
+            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
-REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason')
+REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
@@ -107,7 +107,8 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
   CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT);
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
-  SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT);
+  SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
+  Direction TEXT DEFAULT 'in');
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
@@ -125,7 +126,7 @@ CREATE TABLE IF NOT EXISTS run (RunId INTEGER PRIMARY KEY, TaskId INTEGER, Agent
   SessionId TEXT, DiffText TEXT, DispatchedBy TEXT, StartedAt TEXT, UpdatedAt TEXT, FinishedAt TEXT);
 CREATE TABLE IF NOT EXISTS review (ReviewId INTEGER PRIMARY KEY, TaskId INTEGER, MessageId INTEGER,
   RunId INTEGER, Kind TEXT, DraftText TEXT, FinalText TEXT, Status TEXT DEFAULT 'pending',
-  Reason TEXT, DecidedBy TEXT, DecidedAt TEXT, DecideNote TEXT, CreatedAt TEXT);
+  Reason TEXT, DecidedBy TEXT, DecidedAt TEXT, DecideNote TEXT, CreatedAt TEXT, Deliver TEXT);
 CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind TEXT, Pattern TEXT,
   Action TEXT, Reason TEXT, SortOrder INTEGER DEFAULT 100, Active INTEGER DEFAULT 1, CreatedBy TEXT);
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
@@ -238,6 +239,19 @@ class SQLiteStore:
             self.cx.executescript(SCHEMA)
             # columns added after a release: CREATE TABLE IF NOT EXISTS never reaches an
             # existing db, so widen it here (cheap, idempotent)
+            # Work can now leave as well as arrive, so a row has to say which way it went. A
+            # timeline that shows only inbound is a half-picture the moment a report is sent
+            # to somebody - and 'sent to Dana' looks exactly like 'received from Dana' without
+            # it. Default 'in': every row that already exists arrived.
+            mcols = {r[1] for r in self.cx.execute('PRAGMA table_info(message)')}
+            if 'Direction' not in mcols:
+                self.cx.execute("ALTER TABLE message ADD COLUMN Direction TEXT DEFAULT 'in'")
+            # WHERE an approved outbound draft goes. A reply knows its recipient from the
+            # message it answers; an outbound report has no such message, so the review has to
+            # carry the address itself or approving it would have nowhere to send.
+            rcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
+            if 'Deliver' not in rcols:
+                self.cx.execute('ALTER TABLE review ADD COLUMN Deliver TEXT')
             have = {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}
             if 'Roles' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Roles TEXT')
             # left NULL on purpose: scopes.scope_of falls back to the type's default, so an
@@ -688,7 +702,7 @@ class SQLiteStore:
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
-                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId,
+                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction,
                        t.Title, t.Status TaskStatus, t.Priority, {self.NEEDS_YOU} NeedsYou,
                        (SELECT COUNT(*) FROM message x WHERE x.TaskId=m.TaskId AND x.Status<>'context') ChainSize,
                        (SELECT Decision FROM route WHERE MessageId=m.MessageId ORDER BY RouteId DESC LIMIT 1) Decision,

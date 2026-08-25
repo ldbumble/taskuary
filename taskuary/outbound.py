@@ -118,6 +118,46 @@ def can_reply(store, channel) -> bool:
     return True
 
 
+def send_out(store, channel: str, to, subject: str, body: str) -> dict:
+    """Send something nobody asked for: a report going OUT, to an address the owner chose.
+
+    reply_to_message answers a message - it reads the mailbox, thread id and chat id off the row
+    that arrived. An outbound report has no such row, so the destination has to be given. Same
+    senders underneath, same credentials, same channel switches: a channel the owner turned off
+    for replies is off for this too, because "Taskuary may write to Slack" is one decision and
+    not two.
+    """
+    to = [t.strip() for t in (to if isinstance(to, (list, tuple)) else str(to or '').split(',')) if str(t).strip()]
+    ch = (channel or 'email').lower()
+    if not can_reply(store, ch):
+        raise RuntimeError(f'sending on {ch} is off - Settings → Replies decides which channels '
+                           'Taskuary may write to, and it governs outbound reports too')
+    if ch == 'email':
+        if not to: raise RuntimeError('no recipient - an outbound email needs an address')
+        # Graph when the Outlook card is connected, otherwise the IMAP mailbox's own SMTP
+        c = store.get_connector_by_type('outlook')
+        if c and c.get('Active'):
+            return send_email(store, to, subject or '(no subject)', body)
+        from .imapmail import send_smtp
+        box = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
+                    if x['Type'] in ('gmail', 'imap') and x['Active']), None)
+        if not box: raise RuntimeError('no mailbox is connected to send from')
+        return send_smtp(store, box, to, subject or '(no subject)', body)
+    if ch == 'teams':
+        if not to: raise RuntimeError('no chat id - a Teams message needs one to land in')
+        return send_teams(store, to[0], f'**{subject}**\n\n{body}' if subject else body)
+    if ch in ('telegram', 'whatsapp'):
+        from . import messengers
+        if not to: raise RuntimeError(f'no chat id - a {ch} message needs one to land in')
+        return (messengers.tg_send if ch == 'telegram' else messengers.wa_send)(
+            store, to[0], f'{subject}\n\n{body}' if subject else body)
+    if ch == 'discord':
+        from .devtools import discord_send
+        if not to: raise RuntimeError('no channel id - a Discord message needs one to land in')
+        return discord_send(store, to[0], f'**{subject}**\n\n{body}' if subject else body)
+    raise RuntimeError(f'cannot send on {ch} - email, Teams, Telegram, WhatsApp and Discord can carry a report out')
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""

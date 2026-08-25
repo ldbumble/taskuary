@@ -493,6 +493,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
                             </Typography>
                           )}
                           <RefChip taskId={r.TaskId} onClick={(e) => { e.stopPropagation(); onOpenTask(r.TaskId); }} />
+                          {/* which way the work went. Without it "sent to Dana" and "received
+                              from Dana" are the same row, and the funnel only ever looked one way. */}
+                          {r.Direction === "out" && (
+                            <Chip size="small" label="out" title="Taskuary sent this"
+                              sx={{ height: 19, fontSize: 10.5, fontWeight: 700, bgcolor: "#eef0ff", color: "#4f46e5" }} />
+                          )}
                           <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
                           <ChevronRightIcon className="thubGo" sx={{ fontSize: 18, color: "#4f46e5",
                             opacity: sel?.MessageId === r.MessageId ? 1 : 0,

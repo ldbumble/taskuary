@@ -4,6 +4,7 @@ FAILS returns the review to the queue wearing the error, so nothing looks finish
 never left the machine. The corrections feed LEARNED.md (an edit shows how the owner
 writes, a reject what should never have been drafted).
 """
+import json
 from loguru import logger
 
 VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
@@ -40,6 +41,28 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     store.decide_review(rid, VERB2STATUS[verb], final, actor, note)
     if final and rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f'Reviewed draft ({verb}):\n{final}')
     sent, send_err = None, None
+    # an OUTBOUND draft carries its own destination: there is no message it is answering, so the
+    # review row says where it goes. Same door, same approval, same audit - the only difference
+    # is which way the work is travelling.
+    deliver = {}
+    if rv.get('Deliver'):
+        try: deliver = json.loads(rv['Deliver']) or {}
+        except (TypeError, ValueError): deliver = {}
+    if final and deliver:
+        try:
+            sent = outbound.send_out(store, deliver.get('channel'), deliver.get('to'),
+                                     deliver.get('subject'), final)
+            if rv.get('MessageId'):
+                store.set_message_status(rv['MessageId'], 'sent')
+        except Exception as e:
+            send_err = str(e)[:300]
+            logger.warning(f'outbound send failed for review {rid}: {send_err}')
+            store.update_review_draft(rid, final, rv.get('RunId'))
+            store.decide_review(rid, 'pending', final, actor, note)
+            return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': send_err}
+        store.audit('review', rid, 'sent_outbound', actor,
+                    detail={'channel': sent.get('channel'), 'to': sent.get('to')})
+        return {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None}
     if final and rv.get('MessageId'):
         msg = store.get_message(rv['MessageId'])
         try:

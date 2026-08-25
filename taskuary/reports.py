@@ -575,12 +575,58 @@ def run_report_source(store, src: dict, llm=None) -> dict:
         made = []
         logger.warning(f'report artifacts for {title} failed: {e}')
     store.audit('message', mid, 'report', 'report', 'agent', title)
+    # ...and if the report is meant to LEAVE, this is where it turns around. Same run, same row
+    # on the timeline - it just travels the other way, and says so.
+    if cfg.get('deliver', {}).get('to'):
+        try: deliver_report(store, src, cfg, subject, strip_directive(body))
+        except Exception as e:
+            logger.warning(f'outbound delivery for {title} failed: {e}')
+            store.add_route(mid, None, 'feed', None, f'the report ran; sending it out failed: {str(e)[:200]}',
+                            [], 'report')
     # the digest report is ALSO what keeps DIGEST.md alive: one run, two homes - the Timeline
     # row you read in the morning, and the doc the Docs tab shows
     if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
         from .digest import HEADER
         store.save_doc('digest', f'{HEADER}_refreshed {stamp[:16]}_\n\n{strip_directive(body)}\n', 'digest')
     return {'message_id': mid, 'subject': subject, 'files': len(made)}
+
+
+def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:
+    """A report that goes OUT: to an address the owner chose, on a channel they picked, either
+    after they have read it or straight away.
+
+    `gate` is the whole point and it defaults to 'review'. Everything else in this app holds to
+    "nothing sends without you", and a scheduled job that mails your customers on its own would
+    be the one place that promise did not hold. Choosing 'auto' is the owner saying, once, that
+    THIS report is safe to send unread - not a default they discover afterwards.
+
+    Either way it lands on the timeline as an outbound row, so the funnel shows both directions.
+    """
+    d = cfg.get('deliver') or {}
+    gate = str(d.get('gate') or 'review').lower()
+    to = d.get('to') if isinstance(d.get('to'), list) else [x.strip() for x in str(d.get('to') or '').split(',') if x.strip()]
+    subj = (d.get('subject') or subject or cfg.get('title') or 'Report').strip()
+    stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    mid = store.add_message({
+        'ExternalId': f'out:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',
+        'Channel': d.get('channel') or 'email', 'SourceName': cfg.get('title') or src['Address'],
+        'Subject': subj, 'FromName': 'Taskuary', 'SentAt': stamp, 'BodyText': body,
+        'Direction': 'out', 'Status': 'draft' if gate == 'review' else 'sent'})
+    who = ', '.join(to) or 'nobody yet'
+    if gate == 'review':
+        store.add_review({'MessageId': mid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': body,
+                          'Reason': f'{cfg.get("title") or "report"} → {who}. Approve to send it.',
+                          'Deliver': json.dumps({'channel': d.get('channel') or 'email', 'to': to, 'subject': subj})})
+        store.add_route(mid, None, 'draft', None,
+                        f'outbound report waiting for you - approve in Review and it goes to {who}', [], 'report')
+        store.audit('message', mid, 'outbound_drafted', 'report', 'agent', {'to': to, 'channel': d.get('channel')})
+        return {'gate': 'review', 'message_id': mid, 'to': to}
+    from . import outbound
+    sent = outbound.send_out(store, d.get('channel') or 'email', to, subj, body)
+    store.add_route(mid, None, 'send', None,
+                    f'sent automatically to {who} - this report is set to send without review', [], 'report')
+    store.audit('message', mid, 'outbound_sent', 'report', 'agent', {'to': to, 'channel': sent.get('channel')})
+    return {'gate': 'auto', 'message_id': mid, 'sent': sent}
 
 
 def run_due_reports(store, startup: bool = False) -> int:

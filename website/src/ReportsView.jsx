@@ -244,6 +244,9 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   };
   const bodyCfg = () => {
     const c = { ...cfg };
+    // an empty recipient means it was switched on and never filled in - saving that would make
+    // a report that tries to send to nobody on every run
+    if (c.deliver && !String(c.deliver.to || "").trim()) delete c.deliver;
     for (const k of SOURCE_KEYS) delete c[k];            // sources live in sources[] now
     for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
     if (c.every_minutes) c.every_minutes = Number(c.every_minutes);
@@ -394,6 +397,54 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
                   Leave it empty to file the raw rows with no AI pass.
                 </Typography>
+              )}
+            </Box>
+
+            {/* WHERE IT GOES. A report has always landed on the Timeline and stopped there; this
+                is the same run turning around. Off by default: a report that quietly emailed
+                somebody the first time you saved it would be the worst kind of surprise. */}
+            <Box sx={{ mt: 2, ...card, p: 1.5 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
+                  SEND IT SOMEWHERE (OPTIONAL)
+                </Typography>
+                <Switch size="small" checked={!!cfg.deliver}
+                  onChange={(e) => setCfg({ ...cfg, deliver: e.target.checked ? { channel: "email", to: "", gate: "review" } : undefined })} />
+              </Box>
+              {!cfg.deliver ? (
+                <Typography variant="caption" sx={{ color: FAINT }}>
+                  Off — the report lands on your Timeline and goes nowhere else.
+                </Typography>
+              ) : (
+                <>
+                  <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
+                    <Select size="small" value={cfg.deliver.channel || "email"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 130 }}
+                      onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, channel: e.target.value } })}>
+                      {["email", "teams", "telegram", "whatsapp", "discord"].map((ch) => (
+                        <MenuItem key={ch} value={ch} sx={{ fontSize: 12 }}>{ch}</MenuItem>
+                      ))}
+                    </Select>
+                    <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 220 }}
+                      label={cfg.deliver.channel === "email" ? "to — addresses, comma separated" : "to — the chat id it lands in"}
+                      value={cfg.deliver.to || ""}
+                      onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, to: e.target.value } })} />
+                    <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }}
+                      label="subject (blank = the report's headline)" value={cfg.deliver.subject || ""}
+                      onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, subject: e.target.value } })} />
+                  </Box>
+                  <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
+                    <Select size="small" value={cfg.deliver.gate || "review"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
+                      onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, gate: e.target.value } })}>
+                      <MenuItem value="review" sx={{ fontSize: 12 }}>wait for me to approve it (Review)</MenuItem>
+                      <MenuItem value="auto" sx={{ fontSize: 12 }}>send it without asking</MenuItem>
+                    </Select>
+                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#b45309" : FAINT, flex: 1, minWidth: 200 }}>
+                      {cfg.deliver.gate === "auto"
+                        ? "This report will send on its schedule with nobody reading it first. Everything else in Taskuary waits for you — this is the one place you can turn that off, deliberately."
+                        : "Each run lands in Review as a draft. Approving it sends; editing first is fine."}
+                    </Typography>
+                  </Box>
+                </>
               )}
             </Box>
             <Box sx={{ mt: 1.5 }}><Button variant="contained" disableElevation onClick={() => setStep(1)}>Continue</Button></Box>

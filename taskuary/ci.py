@@ -15,6 +15,7 @@ from datetime import datetime
 from loguru import logger
 
 PR_MARK = 'PULL REQUEST'          # comment marker: 'PULL REQUEST {json}'
+PRC_MARK = 'PR COMMENT'           # a human's comment on that PR, kept on the task's own thread
 PUSH_MARK = 'PUSHED'              # the same, for work landed straight on the default branch
 CI_MARK = 'CI FEEDBACK'           # what we have already handed back, so it goes back ONCE
 BRANCH_SAFE = re.compile(r'[^a-zA-Z0-9._/-]+')
@@ -221,10 +222,64 @@ def check_task(store, task_id: int, llm=None) -> dict:
     return {'state': 'failure', 'fed': True, 'handed': handed, 'at': ref, 'kind': at['kind']}
 
 
+def pull_comments(store, task_id: int, at: dict) -> int:
+    """Somebody commented on our pull request - put it on the TIMELINE, on this task.
+
+    github.pr_review_comments has existed since the CI watcher was written, its docstring
+    calling review comments "the other thing that should reach the agent", and nothing has ever
+    called it. So a reviewer could ask for a change and the only place it existed was GitHub:
+    the task sat there looking finished, and the owner found out by remembering to go and look.
+
+    Each comment becomes a message ON THE SAME TASK - it is the same piece of work, not a new
+    one - which is what puts the task back in front of the owner as needs-you. A live session
+    is told as well, because a reviewer's note is exactly what the agent should act on next."""
+    from . import github, terminal as hub_term
+    from .store import task_ref
+    if at.get('kind') != 'pr': return 0
+    try:
+        c = _conn(store)
+        comments = github.pr_review_comments(c['Secret'], at['repo'], at['number'])
+    except Exception as e:
+        logger.warning(f'reading PR comments for task {task_id} failed: {e}')
+        return 0
+    n, newest = 0, None
+    for cm in comments:
+        ext = f"ghc:{at['repo']}#{at['number']}:{cm.get('id')}"
+        if not cm.get('id') or store.message_exists(ext): continue
+        where = f" on {cm['path']}" if cm.get('path') else ''
+        body = f"{cm['who']} commented{where} on pull request #{at['number']}:\n\n{cm['body']}"
+        mid = store.add_message({
+            'TaskId': task_id, 'ExternalId': ext, 'Channel': 'github',
+            'ConversationId': f"pr:{at['repo']}#{at['number']}", 'SourceName': at['repo'],
+            'Subject': f"PR #{at['number']} - {cm['kind']} comment from {cm['who']}",
+            'FromName': cm['who'], 'FromEmail': f"{cm['who']}@users.noreply.github.com",
+            'SentAt': str(cm.get('at') or '').replace('T', ' ').rstrip('Z'),
+            'BodyText': body, 'SourceLink': cm.get('url') or at.get('url'), 'Status': 'routed'})
+        store.add_route(mid, task_id, 'attach', None,
+                        f"a human commented on the pull request for {task_ref(task_id)} - "
+                        'time to look at it again', [], 'github')
+        newest, n = body, n + 1
+    if newest:
+        store.add_comment(task_id, 'github', 'agent', f'{PRC_MARK} {newest[:400]}')
+        # a live session gets it typed in; with nobody at the keyboard the task goes back to open,
+        # so the timeline row it just grew is not the only thing carrying the news
+        if not hub_term.say_to_task(store, task_id, {'FromName': 'GitHub', 'Channel': 'github',
+                                                     'BodyText': newest}, 'github'):
+            store.update_task(task_id, {'Status': 'open'}, 'github')
+        store.audit('task', task_id, 'pr_comments', 'github', detail={'new': n, 'pr': at.get('number')})
+    return n
+
+
 def poll(store, llm=None) -> int:
-    """Every task whose work has landed - PR or direct push - checked once. Called from the
-    same sync as everything else; off unless the owner turned ci_watch on."""
-    if store.get_settings().get('ci_watch', 'off') == 'off': return 0
+    """Every task whose work has landed - PR or direct push - looked at once. Called from the
+    same sync as everything else.
+
+    Two different things, and only one of them is opt-in. A human commenting on our pull request
+    is INBOUND WORK arriving, which is the whole point of the app, so it lands on the timeline
+    whatever the settings say. Handing a RED BUILD to a running agent is the automation, and that
+    is what ci_watch gates - it ships off, and gating the comments behind it too would have meant
+    the default install never told anybody their PR had been reviewed."""
+    watch = store.get_settings().get('ci_watch', 'off') != 'off'
     n = 0
     for t in store.list_tasks():
         if t['Status'] in ('done', 'dropped'): continue
@@ -232,6 +287,11 @@ def poll(store, llm=None) -> int:
         # a merged/closed PR is finished business; a direct push is only ever checked while
         # its checks could still be running, which the state below settles
         if not at or at.get('state') == 'closed': continue
+        try:
+            n += pull_comments(store, t['TaskId'], at)
+        except Exception as e:
+            logger.warning(f'PR comments for task {t["TaskId"]} failed: {e}')
+        if not watch: continue
         out = check_task(store, t['TaskId'], llm)
         n += 1 if out.get('fed') else 0
     return n

@@ -87,9 +87,12 @@ def checks(tok, repo, sha):
 
 
 def pr_review_comments(tok, repo, number, since=None):
-    """Human review comments on the diff - the other thing that should reach the agent."""
+    """Human comments on a pull request - both kinds: line notes on the diff, and the
+    conversation on the PR itself. `id` and `url` come back too, because a comment that lands
+    on the timeline needs to be de-duplicated across polls and to link to where it was said."""
     out = []
-    for path in (f'/repos/{repo}/pulls/{number}/comments', f'/repos/{repo}/issues/{number}/comments'):
+    for kind, path in (('review', f'/repos/{repo}/pulls/{number}/comments'),
+                       ('conversation', f'/repos/{repo}/issues/{number}/comments')):
         try:
             r = requests.get(f'{GH}{path}', headers=_h(tok), timeout=20,
                              params={'per_page': 50, **({'since': since} if since else {})})
@@ -97,8 +100,9 @@ def pr_review_comments(tok, repo, number, since=None):
             for c in r.json():
                 u = (c.get('user') or {})
                 if u.get('type') == 'Bot': continue
-                out.append({'who': u.get('login'), 'body': (c.get('body') or '')[:2000],
-                            'path': c.get('path'), 'at': c.get('created_at')})
+                out.append({'id': c.get('id'), 'kind': kind, 'who': u.get('login'),
+                            'body': (c.get('body') or '')[:2000], 'path': c.get('path'),
+                            'url': c.get('html_url'), 'at': c.get('created_at')})
         except requests.RequestException:
             continue
     return sorted(out, key=lambda c: str(c.get('at') or ''))

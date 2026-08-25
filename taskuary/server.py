@@ -105,7 +105,13 @@ class ConnectorBody(BaseModel):
 
 @app.get('/', response_class=HTMLResponse)
 def index():
-    return (Path(__file__).parent / 'web' / 'index.html').read_text(encoding='utf-8')
+    """The one file that must NEVER be cached. Every asset under /assets carries a content hash
+    in its name, so those can be held forever - but index.html is what NAMES them, and a cached
+    copy points a fresh install at a bundle that is no longer there (or worse, one that is). An
+    old index.html is how a fixed crash keeps crashing: the fix shipped, the browser kept asking
+    for yesterday's JS, and the stack trace named a file the repo had already replaced."""
+    html = (Path(__file__).parent / 'web' / 'index.html').read_text(encoding='utf-8')
+    return HTMLResponse(html, headers={'Cache-Control': 'no-store, must-revalidate'})
 
 _assets = Path(__file__).parent / 'web' / 'assets'
 if _assets.is_dir():

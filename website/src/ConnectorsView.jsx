@@ -427,7 +427,7 @@ export default function ConnectorsView() {
     .map((c) => ({ ...c, crumb: g.title }))) : [];
 
   return (
-    <Box sx={{ maxWidth: 1160 }}>
+    <Box sx={{ maxWidth: 1160, mx: "auto" }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
         <TextField fullWidth placeholder="Search connectors — Slack, SQL Server, Anthropic… matches setup guides too" value={q}
@@ -644,7 +644,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   ];
 
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={["Setup", "Guide"]} value={tab} onChange={setTab} />
@@ -669,7 +669,7 @@ function MssqlDetail({ conn, drivers, reload, onBack }) {
   const [tab, setTab] = useState("Connection");
   if (!conn) return null;
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title="Microsoft SQL Server" />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) on the Reports tab.
@@ -779,7 +779,7 @@ function WinrmDetail({ conn, reload, onBack }) {
   };
 
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title="Remote Windows (WinRM)" />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
@@ -985,7 +985,7 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
   };
 
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={meta.title} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc} The connection only — build the scheduled reports on the Reports tab.
@@ -1270,7 +1270,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
 };
 
 const Steps = ({ steps }) => (
-  <Box sx={{ maxWidth: 720 }}>
+  <Box sx={{ maxWidth: 720, mx: "auto" }}>
     {steps.map((step, i) => (
       <Box key={i} sx={{ display: "flex", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
         <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "#eef0ff", color: "#4f46e5",

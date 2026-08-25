@@ -284,7 +284,7 @@ export default function SettingsView() {
     const rows = settings.filter((s) => !HIDDEN.has(s.Name) && meta(s.Name).group === cfgTab);
     const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
     return (
-      <Box sx={{ maxWidth: 980 }}>
+      <Box sx={{ maxWidth: 980, mx: "auto" }}>
         <Crumb onBack={() => setPage(null)} title="Configuration" />
         <UnderTabs tabs={tabs} value={cfgTab} onChange={setCfgTab} />
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
@@ -312,7 +312,7 @@ export default function SettingsView() {
 
   if (page === "policies") {
     return (
-      <Box sx={{ maxWidth: 980 }}>
+      <Box sx={{ maxWidth: 980, mx: "auto" }}>
         <Crumb onBack={() => setPage(null)} title="Routing policies" />
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <Typography variant="body2" sx={{ color: DIM }}>
@@ -371,7 +371,7 @@ export default function SettingsView() {
 
   if (page === "memory") {
     return (
-      <Box sx={{ maxWidth: 980 }}>
+      <Box sx={{ maxWidth: 980, mx: "auto" }}>
         <Crumb onBack={() => setPage(null)} title="Agent memory" />
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <Typography variant="body2" sx={{ color: DIM }}>
@@ -429,7 +429,7 @@ export default function SettingsView() {
 
   if (page === "audit") {
     return (
-      <Box sx={{ maxWidth: 980 }}>
+      <Box sx={{ maxWidth: 980, mx: "auto" }}>
         <Crumb onBack={() => setPage(null)} title="Audit integrity" />
         <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
           Every action lands in a hash-chained, tamper-evident log — verification recomputes the whole chain.
@@ -469,7 +469,7 @@ export default function SettingsView() {
 
   /* ── landing ──────────────────────────────────────────────────────────── */
   return (
-    <Box sx={{ maxWidth: 1160 }}>
+    <Box sx={{ maxWidth: 1160, mx: "auto" }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <TextField fullWidth placeholder="Search settings, rules, memory — matches help text too…" value={q}
         onChange={(e) => setQ(e.target.value)} sx={{ mb: 3, bgcolor: "#fff", borderRadius: 2, maxWidth: 520 }}

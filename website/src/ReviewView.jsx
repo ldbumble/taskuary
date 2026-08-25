@@ -60,7 +60,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
   };
 
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Box sx={{ ...card, px: 1.5, py: 1, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
         <FilterPills options={FILTERS} value={filter} onChange={setFilter} />
         <Box sx={{ flex: 1 }} />

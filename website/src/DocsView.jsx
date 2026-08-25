@@ -120,7 +120,7 @@ export default function DocsView() {
 
   if (docName) {
     return (
-      <Box sx={{ maxWidth: 1100 }}>
+      <Box sx={{ maxWidth: 1100, mx: "auto" }}>
         <Crumb section="Docs" onBack={() => setDocName(null)} title={DOCS[docName].label} />
         <UnderTabs tabs={NAMES.map((n) => DOCS[n].label)} value={DOCS[docName].label}
           onChange={(label) => { setGenMsg(""); setDocName(NAMES.find((n) => DOCS[n].label === label)); }} />
@@ -177,7 +177,7 @@ export default function DocsView() {
   }
 
   return (
-    <Box sx={{ maxWidth: 1160 }}>
+    <Box sx={{ maxWidth: 1160, mx: "auto" }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>Operator documents</Typography>
       <OwnerCard />

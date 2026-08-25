@@ -114,7 +114,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
 
   if (!agents) return <CircularProgress size={22} sx={{ m: 4 }} />;
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section={section} onBack={onBack} title={title} />
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>

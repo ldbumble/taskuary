@@ -16,6 +16,8 @@ import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 
+const PAGE_MAX = 1160;      // the widest page column; the bar matches it
+
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
 
 function ServerVersion() {
@@ -80,8 +82,12 @@ export default function TaskHubPage() {
       {/* textAlign left kills the CRA-default .App { text-align: center } leaking in */}
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
         {/* ── slim top bar ───────────────────────────────────────────── */}
+        {/* The BAR spans the window (it is a background and a border); its CONTENTS sit on the
+            same centred column as the page below, so the logo and the tabs line up with the
+            content instead of hugging the left edge of a wide monitor. */}
+        <Box sx={{ bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 10 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2.5, py: 1,
-          bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 10 }}>
+          maxWidth: PAGE_MAX, mx: "auto" }}>
           <Box sx={{ width: 26, height: 26, borderRadius: 1.5, background: GRADIENT, display: "flex",
             alignItems: "center", justifyContent: "center" }}>
             <HubIcon sx={{ color: "#fff", fontSize: 17 }} />
@@ -119,6 +125,7 @@ export default function TaskHubPage() {
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
+        </Box>
         </Box>
 
         <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>

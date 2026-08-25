@@ -166,7 +166,7 @@ export default function ReportsView() {
   }
 
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", mb: 0.5 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1 }}>Scheduled reports</Typography>
@@ -300,7 +300,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
 
   const typeOptions = types.filter((t) => t.status === "builtin");
   return (
-    <Box sx={{ maxWidth: 980 }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Reports" onBack={onBack} title={cur ? (parse(cur.ConfigJson).title || "Edit report") : "New report"} />
       <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
         <Step completed={srcs.some((x) => x.type)}>

@@ -21,9 +21,14 @@ is the person sitting at the machine. That assumption is the whole security mode
 notes below are what follows from it.
 
 - **Don't expose it to a network you don't trust.** If you must reach it from elsewhere,
-  set `[server].token` in `~/.taskuary/config.toml` and send it as the `X-Taskuary-Token`
-  header (and put it behind TLS you control). The token gate is a lock on a door, not a
-  hardened perimeter.
+  set `[server].token` in `~/.taskuary/config.toml` (or `TASKUARY_TOKEN` in Docker) and
+  send it as the `X-Taskuary-Token` header (and put it behind TLS you control). The token
+  gate is a lock on a door, not a hardened perimeter. `/api/health` stays open on purpose
+  so a container HEALTHCHECK can pulse the process without the token.
+- **Docker still assumes localhost.** `docker compose` publishes `127.0.0.1:7787`; the
+  process inside listens on `0.0.0.0` only so Docker can reach it. Changing the publish
+  bind to `0.0.0.0:7787` (LAN) is the same as a local install with `[server].host =
+  "0.0.0.0"` — set a token first.
 - **The API executes things by design.** Reports run SQL and PowerShell, `/api/tools/run`
   runs a connector's query or script, agent dispatch runs your configured CLI, and the
   terminal opens a real shell — all with your credentials, on your machine. Anyone who

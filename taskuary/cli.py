@@ -4,12 +4,20 @@ import uvicorn
 from . import __version__, config
 
 
+def public_url(host, port) -> str:
+    """0.0.0.0 / :: are bind addresses, not a place a browser can go."""
+    shown = '127.0.0.1' if host in ('0.0.0.0', '::') else host
+    return f'http://{shown}:{port}'
+
 def _busy(host, port):
-    with socket.socket() as s: return s.connect_ex((host, port)) == 0
+    probe = '127.0.0.1' if host in ('0.0.0.0', '::') else host
+    with socket.socket() as s: return s.connect_ex((probe, port)) == 0
 
 def _is_taskuary(url):
     try:
         import requests
+        r = requests.get(f'{url}/api/health', timeout=2)
+        if r.status_code == 200 and (r.json() or {}).get('ok') is True: return True
         return requests.get(f'{url}/api/settings', timeout=2).status_code in (200, 401)
     except Exception:
         return False
@@ -17,6 +25,7 @@ def _is_taskuary(url):
 
 def main():
     ap = argparse.ArgumentParser(prog='taskuary', description='Automate your job - the local-first agent work hub.')
+    ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
     ap.add_argument('--port', type=int, help='override [server].port')
     ap.add_argument('--no-browser', action='store_true')
     ap.add_argument('--debug', action='store_true', help='verbose console logging (requests, report runs, errors)')
@@ -42,8 +51,8 @@ def main():
     from .logs import setup as setup_logs
     setup_logs(args.debug)
     cfg = config.load()
-    host, port = cfg['server']['host'], args.port or cfg['server']['port']
-    url = f'http://{host}:{port}'
+    host, port = args.host or cfg['server']['host'], args.port or cfg['server']['port']
+    url = public_url(host, port)
     if _busy(host, port):
         if _is_taskuary(url):
             # don't crash into 'address already in use' - reuse the running instance
@@ -52,7 +61,7 @@ def main():
             return
         from .desktop import free_port
         old, port = port, free_port(host)
-        url = f'http://{host}:{port}'
+        url = public_url(host, port)
         print(f'port {old} is in use by something else - using {port} instead')
     print(f'Taskuary {__version__} - {url}  (data: {config.db_path()})')
     if not args.no_browser:

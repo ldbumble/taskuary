@@ -34,6 +34,8 @@ ACTIONS = {
     'azure': 'read', 'azure_blob': 'read', 'azure_logs': 'read',
     'entra_users': 'read', 'entra_groups': 'read', 'entra_signins': 'read', 'entra_licenses': 'read',
     'prometheus': 'read', 'datadog': 'read',
+    # search and page-reading: they fetch, nothing upstream moves
+    'exa': 'read', 'tavily': 'read', 'firecrawl': 'read', 'reader': 'read',
     'rest': 'read',          # run_rest is GET-only by construction
     'rss': 'read', 'digest': 'read', 'automate': 'read',     # automate reads Taskuary's own traffic
     # ── write: the everyday work an agent is here to do ───────────────────────────────

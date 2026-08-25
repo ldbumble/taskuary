@@ -138,6 +138,14 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'whatsapp':
             from .messengers import wa_test
             detail = wa_test(store, store.get_connector(c['ConnectorId'], with_secret=True))
+        elif c['Type'] in ('exa', 'tavily', 'firecrawl', 'reader'):
+            # a real call, not a key-shape check: these all fail the same way (401) and the
+            # owner should find that out here rather than from an empty report on Monday
+            from .reports import REGISTRY, resolve_cfg
+            probe = ({'url': 'https://example.com'} if c['Type'] in ('firecrawl', 'reader')
+                     else {'query': 'taskuary local-first ai task hub', 'num': 1})
+            head, _body = REGISTRY[c['Type']](resolve_cfg(store, {**probe, 'type': c['Type'], 'max_rows': 1}))
+            detail = f'{c["Type"]} answered: {head}'
         elif c['Type'] in ('jira', 'asana', 'monday', 'clickup', 'todoist'):
             from . import pm
             detail = pm.test(store, store.get_connector(c['ConnectorId'], with_secret=True))

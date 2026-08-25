@@ -308,7 +308,18 @@ def run_local_file(cfg):
     return head, '\n'.join(shown)[:BODY_CHARS]
 
 
+def _research(name):
+    def run(cfg):
+        from . import research
+        return getattr(research, f'run_{name}')(cfg)
+    run.__doc__ = f'research.run_{name} - see taskuary/research.py'
+    return run
+
+
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
+            # the web as a source: plain REST, a key on a card, nothing new in the exe
+            'exa': _research('exa'), 'tavily': _research('tavily'),
+            'firecrawl': _research('firecrawl'), 'reader': _research('reader'),
             'local_file': run_local_file,
             'aws': run_aws, 's3_object': run_s3, 'cloudwatch_logs': run_cwlogs,
             'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
@@ -382,7 +393,14 @@ def datadog_connection(store) -> dict:
     return _card(store, 'datadog', 'api_key')
 
 
+def _apikey_card(typ):
+    """A card whose whole configuration is one key: the secret arrives as `api_key`."""
+    return lambda store: _card(store, typ, 'api_key')
+
+
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
+                 'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),
+                 'firecrawl': _apikey_card('firecrawl'), 'reader': _apikey_card('reader'),
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

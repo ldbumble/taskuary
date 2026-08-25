@@ -214,6 +214,9 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool',
                  'database': 'report,tool',
                  'prometheus': 'report,tool', 'datadog': 'report,tool',
+                 # research reads the public web - a report source, and a tool an agent may use
+                 'exa': 'report,tool', 'tavily': 'report,tool',
+                 'firecrawl': 'report,tool', 'reader': 'report,tool',
                  # aws/azure: the per-OBJECT picker carries the intent (report by default,
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
@@ -274,7 +277,9 @@ class SQLiteStore:
                          ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),
                          ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
-                         ('prometheus', 'Prometheus'), ('datadog', 'Datadog')):
+                         ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
+                         ('exa', 'Exa search'), ('tavily', 'Tavily search'),
+                         ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed

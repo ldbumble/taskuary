@@ -72,6 +72,19 @@ const FIELDS = {
     ["path into the JSON (json only)", "path_expr", "text", "items"], AI_FIELD],
   rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
   rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],
+  // Research: the web as a source. Each is one REST call with a key on its card - what is NOT
+  // here is anything that drives a browser (logging in, clicking), which needs CDP and a client
+  // library rather than an API.
+  exa: [["what to search for", "query", "multiline", "companies shipping local-first AI tools, last 30 days"],
+    ["how many results", "num", "text", "8"],
+    ["only these domains (optional, comma separated)", "domains", "text", "news.ycombinator.com, lobste.rs"],
+    ["published since (optional)", "since", "text", "2026-01-01"], AI_FIELD],
+  tavily: [["what to search for", "query", "multiline", "what changed in the EU AI Act this month"],
+    ["depth", "depth", "text", "basic — or advanced for a harder question"],
+    ["how many results", "num", "text", "8"],
+    ["news window (optional)", "time_range", "text", "day · week · month · year"], AI_FIELD],
+  firecrawl: [["page to read", "url", "text", "https://example.com/pricing"], AI_FIELD],
+  reader: [["page to read", "url", "text", "https://example.com/pricing"], AI_FIELD],
 };
 const TYPE_LABELS = {
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
@@ -82,6 +95,8 @@ const TYPE_LABELS = {
   prometheus: "Prometheus", datadog: "Datadog monitors",
   digest: "Taskuary digest", automate: "Automation ideas (own data)",
   local_file: "File on this computer",
+  exa: "Exa — search the web", tavily: "Tavily — search + answer",
+  firecrawl: "Firecrawl — read a page", reader: "Jina Reader — read a page (no key)",
 };
 
 /* The picker was 21 flat entries in the order the registry happens to list them, which is not a
@@ -95,6 +110,7 @@ const TYPE_GROUPS = [
   ["Azure", ["azure", "azure_blob", "azure_logs"]],
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
+  ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],
   ["Windows", ["winrm"]],
   ["Taskuary's own data", ["digest", "automate"]],
@@ -103,7 +119,7 @@ const TYPE_GROUPS = [
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
-  prometheus: "Prometheus", datadog: "Datadog" };
+  prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const NL = String.fromCharCode(10);
@@ -113,7 +129,8 @@ const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", 
   "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver",
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
   "api_version", "path_expr", "account", "container", "blob", "workspace_id",
-  "filter", "select", "group", "failed_only", "days"];
+  "filter", "select", "group", "failed_only", "days",
+  "num", "domains", "since", "depth", "time_range", "topic", "answer", "main", "chars"];
 
 const toSources = (cfg) => {
   if (Array.isArray(cfg.sources) && cfg.sources.length) return cfg.sources;
@@ -658,7 +675,8 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
   });
   const cardType = CARD_OF[src.type] || src.type;
   const conn = connectors.find((c) => c.Type === cardType);
-  const needsConn = ["mssql", "winrm", "database", "aws", "azure", "prometheus", "datadog"].includes(cardType);
+  const needsConn = ["mssql", "winrm", "database", "aws", "azure", "prometheus", "datadog",
+    "exa", "tavily", "firecrawl"].includes(cardType);   // reader works with no key at all
   const connOk = conn?.LastSyncAt && !conn?.LastError;
   return (
     <Box draggable onDragStart={onDragStart} onDragEnd={onDragEnd}

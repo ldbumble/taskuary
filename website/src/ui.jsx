@@ -422,23 +422,33 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
 // "This isn't ours." Says so about THIS item and teaches the classifier at the same time:
 // the note is saved to memory, and triage reads it on every later message from that sender.
 // Editable before saving, because the reason is the part that has to be right.
-export const NotMine = ({ messageId, onDone, row, first }) => {
+// `onLock` tells the panel above to stop following the mouse while this is open: rows shift
+// under the cursor during a sync, hover re-selects whatever landed there, and the panel -
+// keyed on the selected message - unmounted with the half-typed verdict inside it. That read
+// as "Not our task doesn't work while syncing", and nothing said otherwise because the save
+// error was swallowed. Both ends are fixed here: the lock, and a visible failure.
+export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [scope, setScope] = useState("sender");
   const [saved, setSaved] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => { onLock?.(open && !saved); }, [open, saved, onLock]);
+  useEffect(() => () => onLock?.(false), [onLock]);      // unmounted anyway: never leave it locked
   useEffect(() => {
     if (!open || note) return;
     api.get(`/api/messages/${messageId}/not-mine/suggest`).then(({ data }) => setNote(data.note)).catch(() => {});
   }, [open, messageId, note]);
   const save = async () => {
-    setBusy(true);
+    setBusy(true); setErr("");
     try {
       const { data } = await api.post(`/api/messages/${messageId}/not-mine`, { note: note.trim() || null, scope });
       setSaved(data);
       setTimeout(() => onDone?.(), 1400);
-    } catch { /* leave the panel up so the note isn't lost */ }
+    } catch (e) {
+      setErr(e?.response?.data?.detail || e?.message || "the verdict did not save — try again");
+    }
     setBusy(false);
   };
   if (saved) return (
@@ -475,6 +485,9 @@ export const NotMine = ({ messageId, onDone, row, first }) => {
         <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={save}
           sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not ours — remember this"}</Button>
       </Box>
+      {err && <Typography variant="caption" sx={{ color: "#b42318", fontWeight: 600, display: "block", mt: 0.75 }}>
+        {err} — your note is still here.
+      </Typography>}
     </Box>
   );
 };

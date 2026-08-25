@@ -61,6 +61,12 @@ def _dec(v) -> str:
     except Exception: return v or ''
 
 
+def _hdr_addrs(msg, name) -> list:
+    """The addresses on one header. Cc vs To is what tells triage whether the mail was aimed
+    at this mailbox or merely copied to it."""
+    return [a for _n, a in email.utils.getaddresses([_dec(v) for v in (msg.get_all(name) or [])]) if a]
+
+
 def _body_and_attachments(msg) -> tuple:
     """(text, attachments-shaped-like-Graph) so save_attachments and vision reuse the pipeline."""
     from .channels import _clean
@@ -115,6 +121,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                 'external_id': f'imap:{user}:{uid}', 'channel': 'email',
                 'subject': _dec(msg.get('Subject')), 'body': body[:20000],
                 'from_name': frm_name or frm_addr, 'from_email': frm_addr,
+                'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
                 # References threads replies the way Graph's conversationId does
                 'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
                 'sent_at': sent, 'source_name': user,

@@ -14,10 +14,16 @@ from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
-MAIL_SELECT = 'id,subject,from,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments,isRead'
+MAIL_SELECT = 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments,isRead'
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
+
+
+def _addrs(rows) -> list:
+    """The addresses off a Graph recipient list. Triage needs to know whether the mailbox is
+    on the To line or merely in Cc - being copied on other people's work is not an assignment."""
+    return [a for a in ((r.get('emailAddress') or {}).get('address') or '' for r in rows or []) if a]
 
 
 def graph_creds(store, c):
@@ -411,7 +417,7 @@ def _graph_user(tok, oid, cache):
 _HOSTED = re.compile(r'<img[^>]+src="([^"]*?/hostedContents/[^"]*?)"', re.I)
 
 
-def hosted_images(tok: str, html: str, cap: int = 4) -> list:
+def hosted_images(tok: str, html: str, cap: int = 4, where: str = '') -> list:
     out = []
     for i, url in enumerate(dict.fromkeys(_HOSTED.findall(html or '')).keys()):
         if i >= cap: break
@@ -419,7 +425,14 @@ def hosted_images(tok: str, html: str, cap: int = 4) -> list:
             r = requests.get(unescape(url), headers={'Authorization': f'Bearer {tok}'}, timeout=30)
             r.raise_for_status()
         except Exception as e:
-            logger.warning(f'teams hosted image fetch failed: {e}')
+            # one readable line, not the signed hostedContents URL twice over: it is 900
+            # characters of query string, it says nothing the status code does not, and two
+            # of them per message buried the rest of the sync log. 403 here is the membership
+            # check described below - expected, not a fault to hunt.
+            code = getattr(getattr(e, 'response', None), 'status_code', None)
+            why = ('Microsoft refused it for this chat (403 - the app is not a member)' if code == 403
+                   else f'HTTP {code}' if code else str(e)[:120])
+            logger.warning(f'teams image {i + 1} not readable{f" in {where}" if where else ""}: {why}')
             continue
         ct = (r.headers.get('Content-Type') or 'image/png').split(';')[0].strip()
         out.append({'id': hashlib.sha1(url.encode()).hexdigest()[:16],
@@ -453,7 +466,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         # fetched BEFORE triage, like the mail path: the classifier has to see the screenshot
         # to judge it, and afterwards is too late
         raw_html = (m.get('body') or {}).get('content') or ''
-        atts = hosted_images(tok, raw_html)
+        atts = hosted_images(tok, raw_html, where=topic or f'chat with {name}')
         # a picture we could not FETCH must not vanish silently the way it used to. Graph
         # refuses hostedContents unless the app registration carries ChatMessage.Read.All, and
         # "the screenshot was the whole ask" is exactly the message you cannot afford to read
@@ -713,6 +726,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
                             'subject': m.get('subject'), 'body': _body(m),
                             'from_name': frm.get('name'), 'from_email': frm.get('address'),
+                            'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address'],
                             'images': images_for_triage(store, atts)}, llm=llm)

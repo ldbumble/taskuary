@@ -255,7 +255,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
   const drill = async (row) => {
-    setSel(row); setDetail(null); setEditText(null); setSendErr(""); want.current = row.MessageId;
+    setSel(row); setDetail(null); setEditText(null); setSendErr(""); setPanelLock(false); want.current = row.MessageId;
     // no task = report / filed / ignored: fetch the message itself so the panel shows the
     // WHOLE body (the feed row only carries a truncated preview)
     try {
@@ -266,10 +266,15 @@ export default function FeedView({ onOpenTask, onChanged }) {
       if (want.current === row.MessageId) setDetail({ messages: [] });   // panel falls back to the preview
     }
   };
+  // A verdict being TYPED locks the panel the same way a draft does. It did not, and a sync
+  // is when it hurts: rows arrive at the top every two seconds, the list slides under a
+  // stationary cursor, hover selects whatever moved into place, and the panel - keyed on the
+  // selected message - took the half-written "not our task" note down with it.
+  const [panelLock, setPanelLock] = useState(false);
   const hoverSelect = (row) => {
     clearTimeout(hoverTimer.current);
     if (sel?.MessageId === row.MessageId) return;
-    if (sel && (editText ?? "").trim()) return;        // don't yank an OPEN panel mid-edit
+    if (sel && ((editText ?? "").trim() || panelLock)) return;   // don't yank an OPEN panel mid-edit
     hoverTimer.current = setTimeout(() => drill(row), 260);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
@@ -811,7 +816,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                                  : "file it and move on — nothing is learned, their next message arrives as usual"} />
               {/* not ours -> the reason goes to memory, and triage reads it next time. Below the
                   harmless one on purpose: this is the durable verdict, not the tidy-up. */}
-              <NotMine row messageId={sel.MessageId} onDone={onSkipped} />
+              <NotMine row messageId={sel.MessageId} onDone={onSkipped} onLock={setPanelLock} />
               {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
                 <ChoiceRow tint="#e8f6ee" busy
                   icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}

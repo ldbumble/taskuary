@@ -535,7 +535,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
               decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
               onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
-              sendErr={sendErr} clearSendErr={() => setSendErr("")} />
+              sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
           </Box>
         </Box>
       )}
@@ -587,7 +587,7 @@ const PanelLabel = ({ children }) => (
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
 const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh,
-                        sendErr, clearSendErr }) => {
+                        sendErr, clearSendErr, onLock }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
@@ -810,7 +810,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                                  : "file it and move on — nothing is learned, their next message arrives as usual"} />
               {/* not ours -> the reason goes to memory, and triage reads it next time. Below the
                   harmless one on purpose: this is the durable verdict, not the tidy-up. */}
-              <NotMine row messageId={sel.MessageId} onDone={onSkipped} onLock={setPanelLock} />
+              <NotMine row messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
               {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
                 <ChoiceRow tint="#e8f6ee" busy
                   icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}

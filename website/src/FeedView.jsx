@@ -783,6 +783,15 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
                   label="Hand it to a person" hint="not ours to do — the AI writes the forward, you send it" />
               )}
+              {/* under the row that OPENED it. It used to render after the whole list, past the
+                  drawer, so clicking a button near the top scrolled a tray in at the bottom with
+                  nothing connecting the two - and every other tray here expands in place. */}
+              {handoff && sel.TaskId && (
+                <Box sx={{ width: "100%", bgcolor: PANEL2, borderTop: `1px solid ${BORDER}`, px: 1.25, py: 1 }}>
+                  <PanelLabel>Hand this to a person</PanelLabel>
+                  <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
+                </Box>
+              )}
               <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               {sel.TaskId && (
                 <ChoiceRow tint="#e6f7fb" onClick={() => setReshape(true)}
@@ -839,12 +848,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               )}
             </Drawer>
 
-            {handoff && sel.TaskId && (
-              <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
-                <PanelLabel>Hand this to a person</PanelLabel>
-                <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
-              </Box>
-            )}
           </Box>
         )}
       </Box>

@@ -436,9 +436,31 @@ export default function SettingsView() {
         </Typography>
         <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
         {verify && (
-          <Typography sx={{ mt: 2, fontWeight: 700, fontSize: 13.5, color: verify.ok ? "#15803d" : "#b91c1c" }}>
-            {verify.ok ? `✓ Intact — ${verify.rows} rows verified` : `✗ BROKEN at ids ${verify.broken_ids.join(", ")}`}
-          </Typography>
+          <Box sx={{ mt: 2 }}>
+            {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#15803d" }}>
+              ✓ Intact — {verify.rows} rows verified
+            </Typography>}
+            {/* two different findings, and calling both "BROKEN" cried wolf about a bug in
+                store.py: a row whose CONTENTS were edited is the thing this log exists to catch,
+                and a row that two concurrent writers linked to the same parent is not. */}
+            {!!verify.altered_ids?.length && (
+              <Alert severity="error" sx={{ fontSize: 12.5, mb: 1 }}>
+                <b>Contents altered</b> at {verify.altered_ids.join(", ")} — {verify.altered_ids.length === 1 ? "this row does" : "these rows do"} not
+                match {verify.altered_ids.length === 1 ? "its" : "their"} own hash. This is what the log is for: something changed the record after it was written.
+              </Alert>
+            )}
+            {!!verify.forked_ids?.length && (
+              <Alert severity="warning" sx={{ fontSize: 12.5 }}>
+                <b>Out of order</b> at {verify.forked_ids.join(", ")} — nothing was altered.
+                Two writers linked to the same previous row at the same moment, which was a bug in
+                Taskuary's own writer (fixed — it cannot happen to rows written from here on).
+                The contents of every row are intact.
+              </Alert>
+            )}
+            {!verify.ok && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+              {verify.rows} rows checked.
+            </Typography>}
+          </Box>
         )}
         <HelpDialog help={help} onClose={() => setHelp(null)} />
       </Box>

@@ -457,22 +457,44 @@ class SQLiteStore:
 
     # audit chain
     def audit(self, et, eid, action, actor, actor_type='human', detail=None, run_id=None):
+        """One row, linked to the one before it - and the read of "the one before it" and the write
+        have to be the SAME critical section. They were two: _one took the lock, released it, then
+        _exec took it again. So the poll thread and a click could both read the same last row and
+        both insert, each pointing at the same parent - a FORK, which verification then reported as
+        a broken chain. A tamper-evident log that breaks itself is worse than none: it makes a real
+        tamper indistinguishable from its own noise. (Seen at ids 151/152 of a live database, both
+        stamped the same second, both carrying the same PrevHash.)"""
         d = detail if isinstance(detail, str) or detail is None else json.dumps(detail, default=str)
-        last = self._one('SELECT RowHash FROM audit ORDER BY Id DESC LIMIT 1')
-        prev = last['RowHash'] if last and last['RowHash'] else GENESIS
-        rh = chain_hash(prev, _audit_payload(et, eid, action, actor, actor_type, run_id, d))
-        self._exec('INSERT INTO audit (EntityType,EntityId,Action,Actor,ActorType,RunId,Detail,PrevHash,RowHash,CreatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                   (et, eid, action, actor, actor_type, run_id, d, prev, rh, _now()))
+        with self.lock:
+            row = self.cx.execute('SELECT RowHash FROM audit ORDER BY Id DESC LIMIT 1').fetchone()
+            prev = (row['RowHash'] if row and row['RowHash'] else None) or GENESIS
+            rh = chain_hash(prev, _audit_payload(et, eid, action, actor, actor_type, run_id, d))
+            self.cx.execute('INSERT INTO audit (EntityType,EntityId,Action,Actor,ActorType,RunId,Detail,PrevHash,RowHash,CreatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                            (et, eid, action, actor, actor_type, run_id, d, prev, rh, _now()))
+            self.cx.commit()
     def list_audit(self, et=None, eid=None, limit=200):
         if et: return self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit))
         return self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))
     def verify_audit_chain(self):
-        prev, bad = GENESIS, []
+        """Two different failures, and calling both "broken" was the problem.
+
+        ALTERED: the row's own hash does not match its own contents. Somebody edited the row -
+        this is what the log exists to catch, and it is never innocent.
+
+        FORKED: the row hashes its own contents correctly against the PrevHash it recorded, but
+        that PrevHash is not the row before it. Nothing was edited; two writers raced (see
+        audit()). Reporting that as tampering cried wolf about a bug in this file."""
+        prev, altered, forked = GENESIS, [], []
         for r in self._rows('SELECT * FROM audit ORDER BY Id'):
-            exp = chain_hash(prev, _audit_payload(r['EntityType'], r['EntityId'], r['Action'], r['Actor'], r['ActorType'], r['RunId'], r['Detail']))
-            if r['RowHash'] != exp or r['PrevHash'] != prev: bad.append(r['Id'])
-            prev = r['RowHash'] or exp
-        return {'rows': len(self._rows('SELECT Id FROM audit')), 'ok': not bad, 'broken_ids': bad}
+            payload = _audit_payload(r['EntityType'], r['EntityId'], r['Action'], r['Actor'],
+                                     r['ActorType'], r['RunId'], r['Detail'])
+            if r['RowHash'] != chain_hash(r['PrevHash'] or GENESIS, payload): altered.append(r['Id'])
+            elif r['PrevHash'] != prev: forked.append(r['Id'])
+            prev = r['RowHash'] or chain_hash(prev, payload)
+        return {'rows': len(self._rows('SELECT Id FROM audit')), 'ok': not (altered or forked),
+                'altered_ids': altered, 'forked_ids': forked,
+                # kept so anything reading the old shape still sees every id that failed
+                'broken_ids': sorted(altered + forked)}
 
     # agents & runs
     def list_agents(self, active_only=True):

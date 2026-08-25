@@ -7,7 +7,7 @@ answering is the responder's job (reply_only), doing is the coder's.
 """
 import json, re, threading
 from loguru import logger
-from .routing import route, draft_task_fields
+from .routing import route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref
@@ -73,6 +73,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     new_rid = None                       # set when a fresh reply task opens a review below
+    notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
+    def _notes_note():
+        # a cap that goes unmentioned reads as "everything you told me was applied". It was
+        # not, and only the owner can judge whether the notes that missed out mattered - so
+        # every verdict this funnel writes down says it happened.
+        return (f' · {len(notes)} of {len(notes) + notes_left} standing notes applied '
+                '(the rest did not fit)' if notes_left else '')
     if r['decision'] == 'attach':
         tid = r['task_id']
         mid = store.add_message(_fields(msg, tid))
@@ -111,9 +118,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                         fail['err'] = str(e)[:200]
                         raise
                 from .learn import injectable
+                notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
+                                                   f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000])
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'),
                                          learned=injectable(store.doc('learned') or ''),
-                                         notes=notes_for(store, msg), images=msg.get('images'),
+                                         notes=notes, notes_left=notes_left, images=msg.get('images'),
                                          system=store.doc('triage'))
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic
@@ -126,7 +135,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             intent = {'intent': 'task', 'why': ''}
         if intent['intent'] == 'fyi':
             mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
-            store.add_route(mid, None, 'file', None, f"triage: fyi - {intent.get('why') or 'informational'}", [], 'triage')
+            store.add_route(mid, None, 'file', None,
+                            f"triage: fyi - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         from .outbound import can_reply
         if intent['intent'] == 'reply_only' and not can_reply(store, msg.get('channel')):
@@ -178,6 +188,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
                else 'auto-dispatch is off (Settings) - start the session from the task')
         reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
+                  + _notes_note()
                   + f" · {r['reason']} · {act}")
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
@@ -213,16 +224,61 @@ def _notify_new(store, msg: dict, tid, mid, why: str, rid=None):
         logger.warning(f'notify failed for message {mid}: {e}')
 
 
-def notes_for(store, msg: dict) -> list:
-    """The owner's standing notes that apply to this message - global ones plus anything
-    learned about this sender or their domain. Triage reads them, so a verdict given once
-    ("this kind of mail is not ours") applies to every message like it afterwards."""
-    em = (msg.get('from_email') or '').lower()
-    dom = em.rsplit('@', 1)[-1] if '@' in em else ''
-    return [n['Note'] for n in store.list_memories()
+# ── which standing notes reach a prompt ─────────────────────────────────────────────────
+# Notes used to be taken in ROW ORDER and the joined text cut at 2000 characters, so past the
+# twentieth note - or the two-thousandth character - verdicts the owner had already given
+# silently stopped being applied. The silence is the real bug: triage gets it wrong and the
+# reason is invisible, because a note that fell off the end looks exactly like a note that was
+# never written. Now the notes most likely to decide THIS message go first, whole notes only,
+# and whatever did not fit is counted so the caller can say so out loud.
+#
+# No FTS index behind this on purpose: standing notes are one owner's hand-given verdicts -
+# hundreds, not millions - and scoring a few hundred short strings in Python costs less than a
+# millisecond. A virtual table would buy nothing here and would add a schema to keep in sync.
+NOTE_CAP = 20            # how many notes one prompt carries...
+NOTE_BUDGET = 2000       # ...and how many characters, whichever runs out first
+
+
+def _note_score(n: dict, words: set) -> float:
+    """How likely this note is to change the verdict on the message in hand. Three signals, and
+    the weights say which one wins: the message's OWN words turning up in the note (one quoting
+    the subject you are looking at is the strongest evidence there is), how narrowly the note
+    was scoped, and whether the owner gave it as a verdict or a model distilled it. MemoryId
+    breaks the ties, so a later verdict outranks the one it supersedes."""
+    nw = set(tokens(n.get('Note')))
+    overlap = len(nw & words) / len(nw) if nw else 0.0
+    return (4 * overlap + {'sender': 3.0, 'sender_domain': 1.5}.get(n['Scope'], 0.0)
+            + (1.0 if n.get('Source') == 'verdict' else 0.0) + n['MemoryId'] / 1e6)
+
+
+def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> tuple:
+    """(the notes to put in a prompt, most pointed first; how many matched but were left out).
+
+    `senders` is every address on the thread - one message's sender, or a whole chain's."""
+    who = {s.lower() for s in senders if s}
+    doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
+    hits = [n for n in store.list_memories()          # active only - a switched-off note is silent
             if n['Scope'] == 'global'
-            or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() == em)
-            or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() == dom)]
+            or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
+            or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)]
+    words = set(tokens(text))
+    hits.sort(key=lambda n: _note_score(n, words), reverse=True)
+    out, used = [], 0
+    for n in hits[:cap]:
+        note = (n['Note'] or '').strip()
+        # a verdict cut in half reads as a DIFFERENT verdict, so notes go in whole or not at all
+        if not note or (out and used + len(note) > budget): break
+        out.append(note); used += len(note)
+    return out, len(hits) - len(out)
+
+
+def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:
+    """The owner's standing notes that apply to this message - global ones plus anything
+    learned about this sender or their domain, ranked against what the message actually says.
+    Triage reads them, so a verdict given once ("this kind of mail is not ours") applies to
+    every message like it afterwards."""
+    return relevant_notes(store, [msg.get('from_email') or ''],
+                          f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000], cap, budget)[0]
 
 
 def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding', assignee: str = None) -> int:

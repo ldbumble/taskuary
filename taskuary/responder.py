@@ -105,7 +105,10 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     last = msgs[-1]
     soul = store.doc('soul') or ''
     owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
-    notes = notes_for(store, {'from_email': last.get('FromEmail')})
+    # the mail's own words rank the notes, so pass them: a note quoting this subject is the
+    # one most likely to change how the reply should read
+    notes = notes_for(store, {'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
+                              'body': last.get('BodyText')}, budget=1500)
     chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
     from .learn import injectable
     lrn = injectable(store.doc('learned') or '')
@@ -123,7 +126,10 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
               + (f'\n\nYour learned profile - how you write and work, distilled from your own '
                  f'verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
     if notes:
-        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
+        # ranked and budgeted by notes_for. The old notes[:20] then [:1500] took them in row
+        # order and cut the last one mid-sentence, so a verdict past the character line was
+        # both absent and unmentioned
+        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes)
     from .triage import strip_boilerplate
     thread = '\n\n'.join(
         f"--- {'YOU' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail'))}"
@@ -187,9 +193,13 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
                  f'this:\n{sty[:2500]}' if sty else '')
               + (f'\n\nYour learned profile - how you write and work, distilled from your own '
                  f'verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
-    notes = notes_for(store, {'from_email': m.get('FromEmail')})
+    notes = notes_for(store, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'),
+                              'body': m.get('BodyText')}, budget=1500)
     if notes:
-        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes[:20])[:1500]
+        # ranked and budgeted by notes_for. The old notes[:20] then [:1500] took them in row
+        # order and cut the last one mid-sentence, so a verdict past the character line was
+        # both absent and unmentioned
+        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes)
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()

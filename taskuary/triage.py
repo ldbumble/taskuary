@@ -116,7 +116,7 @@ def strip_boilerplate(text: str) -> str:
 
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
-                    learned: str = None, system: str = None) -> dict:
+                    learned: str = None, system: str = None, notes_left: int = 0) -> dict:
     """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
     they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
     'Not our task' stick: the next message like it is classified with that lesson in hand.
@@ -138,9 +138,14 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 system += ("\n\nLearned profile - patterns distilled from the owner's past verdicts "
                            '(the document above outranks it where they disagree):\n' + learned[:1500])
             if notes:
+                # already ranked and budgeted by ingest.relevant_notes - re-cutting here is what
+                # used to throw away whichever verdicts happened to sit past the 2000th character
                 system += ('\n\nStanding notes from the owner - these are VERDICTS they already gave on '
                            'mail like this, and they outrank your own reading:\n'
-                           + '\n'.join(f'- {n}' for n in notes[:20])[:2000])
+                           + '\n'.join(f'- {n}' for n in notes)
+                           + (f'\n({notes_left} further note(s) also apply to this sender but did not fit. '
+                              'Say so in your reason if the verdict feels underdetermined - do not claim '
+                              'nothing is on file.)' if notes_left else ''))
             how = addressed_to_you(msg)
             # the code supplies the field, so the code explains it - a TRIAGE.md written before
             # addressing existed (every doc already on disk: templates seed first-run only and

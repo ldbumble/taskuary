@@ -201,12 +201,18 @@ def task_context(store, task_id: int) -> str:
 
 
 def memory_block(store, messages: list) -> str:
-    senders = {(m.get('FromEmail') or '').lower() for m in messages if m.get('FromEmail')}
-    domains = {s.rsplit('@', 1)[-1] for s in senders if '@' in s}
-    hits = [f"- {n['Note']}" for n in store.list_memories()
-            if n['Scope'] == 'global' or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in senders)
-            or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in domains)]
-    return ('Standing notes (learned from the owner - FOLLOW these):\n' + '\n'.join(hits)) if hits else ''
+    """The standing notes an agent working this thread has to follow - the ones that bear on
+    THIS thread, not every note on file. It used to be every match with no cap at all, which
+    grows without limit as the owner keeps giving verdicts; ranking by what the thread actually
+    says puts the ones that matter at the top and says how many were left out."""
+    from .ingest import relevant_notes
+    text = ' '.join(f"{m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in messages)[:4000]
+    notes, left = relevant_notes(store, [(m.get('FromEmail') or '') for m in messages], text)
+    if not notes: return ''
+    return ('Standing notes (learned from the owner - FOLLOW these):\n'
+            + '\n'.join(f'- {n}' for n in notes)
+            + (f'\n({left} more apply to this thread but did not fit - ask before assuming '
+               'nothing else was said.)' if left else ''))
 
 
 # dispatch() lived here: one open->close HEADLESS run on a task, the CLI working and closing

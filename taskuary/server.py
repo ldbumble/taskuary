@@ -310,8 +310,15 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     if em and (body is None or body.learn):
         store.save_policy({'Name': f'not-a-task: {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'ignore',
                            'Reason': 'owner said not a task', 'SortOrder': 50, 'Active': 1}, ACTOR)
-        mid = store.add_memory({'Scope': 'sender', 'ScopeKey': em, 'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                                'Note': f"Messages from {em} like '{(msgs[0].get('Subject') or '')[:80]}' are not tasks - do not open tasks or draft replies."})
+        # the same generalisation as "Not our task": this verdict is about a kind of work, and
+        # keyed to one sender it stops applying the moment a colleague forwards the same thing.
+        # (The sender ignore POLICY above stays per-sender - that one really is about them.)
+        topic = _topic_key(msgs[0])
+        mid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
+                                'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                                'Note': (f'Mail about "{topic}" is not a task' if topic else
+                                         f"Messages from {em} like '{(msgs[0].get('Subject') or '')[:80]}' are not tasks")
+                                        + ' - do not open tasks or draft replies.'})
         learned = {'policy': em, 'memory_id': mid}
         # the sender note is durable already; the GENERAL lesson (what kinds of mail are not
         # tasks for this owner) is LEARNED.md's to distill. learn=false teaches nothing, as asked.
@@ -1229,7 +1236,13 @@ def memory(): return {'data': store.list_memories(active_only=False)}
 
 @app.post('/api/memory')
 def add_memory(body: MemoryBody):
-    if body.scope not in ('global', 'sender', 'sender_domain', 'source'): raise HTTPException(422, 'bad scope')
+    # 'subject' was missing here, so a topic rule - which is what most verdicts actually are -
+    # could only be written by pressing "Not our task" on a message, never typed in by hand
+    if body.scope not in ('global', 'sender', 'sender_domain', 'source', 'subject'):
+        raise HTTPException(422, 'bad scope')
+    # a keyed scope with no key matches nothing, ever: saved, listed, and silent
+    if body.scope != 'global' and not (body.scope_key or '').strip():
+        raise HTTPException(422, f'a {body.scope} note needs a scope_key to match on')
     if not body.note.strip(): raise HTTPException(422, 'note is required')
     mid = store.add_memory({'Scope': body.scope, 'ScopeKey': body.scope_key, 'Note': body.note.strip()[:1000],
                             'Source': 'manual', 'Active': 1, 'CreatedBy': ACTOR})

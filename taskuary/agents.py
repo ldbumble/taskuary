@@ -197,6 +197,8 @@ def task_context(store, task_id: int) -> str:
         lines += [f"- [{m.get('SentAt')}] {m.get('FromName') or m.get('FromEmail')}: {m.get('Subject') or ''}",
                   f"  {str(m.get('BodyText') or '')[:1500]}"]
     lines += ['', 'Thread:'] + [f"- {c.get('Actor')}: {str(c.get('Body'))[:300]}" for c in d['comments']]
+    mem = memory_block(store, d['messages'])
+    if mem: lines += ['', mem]
     return '\n'.join(lines)
 
 

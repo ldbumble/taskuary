@@ -74,6 +74,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     new_rid = None                       # set when a fresh reply task opens a review below
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
+    mine = owner_addresses(store)        # who "you" is on the To/Cc lines - every mailbox, not just this one
     def _notes_note():
         # a cap that goes unmentioned reads as "everything you told me was applied". It was
         # not, and only the owner can judge whether the notes that missed out mattered - so
@@ -112,7 +113,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # heuristics spraying tasks for every automated notification. Heuristics still
         # short-circuit the obvious fyi noise before spending an AI call.
         if cfg.get('intent_classify_enabled', '1') == '1':
-            h = heuristic_intent(msg)
+            h = heuristic_intent(msg, mine)
             if h['intent'] == 'fyi':                     # obvious automated noise: no AI call needed
                 intent = h
             elif llm is None:
@@ -131,11 +132,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                         raise
                 from .learn import injectable
                 notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
-                                                   f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000])
+                                                   f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
+                                                   subject=msg.get('subject') or '',
+                                                   source=msg.get('source_name') or '')
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'),
                                          learned=injectable(store.doc('learned') or ''),
                                          notes=notes, notes_left=notes_left, images=msg.get('images'),
-                                         system=store.doc('triage'))
+                                         system=store.doc('triage'), mine=mine)
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic
                     mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
@@ -279,28 +282,35 @@ def _note_score(n: dict, words: set) -> float:
     overlap = len(nw & words) / len(nw) if nw else 0.0
     # 'subject' ranks with 'sender': a topic note is only a candidate because it already matched
     # the topic, which is as pointed as knowing the person
-    return (4 * overlap + {'sender': 3.0, 'subject': 3.0, 'sender_domain': 1.5}.get(n['Scope'], 0.0)
+    return (4 * overlap + {'sender': 3.0, 'subject': 3.0, 'sender_domain': 1.5, 'source': 1.5}.get(n['Scope'], 0.0)
             + (1.0 if n.get('Source') == 'verdict' else 0.0) + n['MemoryId'] / 1e6)
 
 
-def applicable_notes(store, senders, subject: str = '', text: str = '') -> list:
+def applicable_notes(store, senders, subject: str = '', text: str = '', source: str = '') -> list:
     """Every ACTIVE note that bears on this message - by sender, by their domain, by the topic
-    it is about, or globally. A switched-off note is silent."""
+    it is about, by the connection it arrived on, or globally. A switched-off note is silent.
+
+    'source' was accepted by POST /api/memory and matched by NOTHING, so a note saved against a
+    mailbox or a repo was written, listed in the UI, and then never applied to anything. It is a
+    useful scope - everything landing in a shared log mailbox being somebody else's work - so it
+    is honoured here rather than taken away from whatever notes already carry it."""
     who = {(s or '').lower() for s in senders if s}
     doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
+    src = (source or '').lower()
     return [n for n in store.list_memories()
             if n['Scope'] == 'global'
             or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
             or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)
-            or (n['Scope'] == 'subject' and topic_hit(n.get('ScopeKey') or '', subject, text))]
+            or (n['Scope'] == 'subject' and topic_hit(n.get('ScopeKey') or '', subject, text))
+            or (n['Scope'] == 'source' and src and (n.get('ScopeKey') or '').lower() == src)]
 
 
 def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET,
-                   subject: str = '') -> tuple:
+                   subject: str = '', source: str = '') -> tuple:
     """(the notes to put in a prompt, most pointed first; how many matched but were left out).
 
     `senders` is every address on the thread - one message's sender, or a whole chain's."""
-    hits = applicable_notes(store, senders, subject, text)
+    hits = applicable_notes(store, senders, subject, text, source)
     words = set(tokens(text))
     hits.sort(key=lambda n: _note_score(n, words), reverse=True)
     out, used = [], 0
@@ -310,6 +320,14 @@ def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int =
         if not note or (out and used + len(note) > budget): break
         out.append(note); used += len(note)
     return out, len(hits) - len(out)
+
+
+def owner_addresses(store) -> set:
+    """Every address that IS the owner: each mailbox Taskuary polls. Needed because the mailbox
+    a message ARRIVED at is not always the owner's own - a shared or journal mailbox receives
+    copies of mail addressed to them personally, and only their real address is on the Cc line."""
+    return {(s['Address'] or '').lower() for s in store.list_sources()
+            if s.get('Channel') == 'email' and s.get('Address')}
 
 
 def veto(store, msg: dict) -> str:
@@ -325,7 +343,8 @@ def veto(store, msg: dict) -> str:
     stayed 'needs you' no matter how many times the owner said the topic was not theirs. The
     verdict was unreachable by design, and giving it again could not help."""
     hits = applicable_notes(store, [msg.get('from_email') or ''], msg.get('subject') or '',
-                            f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000])
+                            f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
+                            msg.get('source_name') or '')
     return next((n['Note'] for n in hits if n.get('Source') == 'verdict'), '')
 
 
@@ -336,7 +355,7 @@ def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) 
     every message like it afterwards."""
     return relevant_notes(store, [msg.get('from_email') or ''],
                           f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000], cap, budget,
-                          subject=msg.get('subject') or '')[0]
+                          subject=msg.get('subject') or '', source=msg.get('source_name') or '')[0]
 
 
 def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding', assignee: str = None) -> int:

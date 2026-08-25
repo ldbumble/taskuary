@@ -700,6 +700,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {no_emails(soul)}')
     rules = rules_text(store)
     if rules: parts.append(f'RULES: {no_emails(rules)}')
+    # ...and the owner's own standing notes about THIS thread. agents.memory_block has built
+    # this block since it was written and nothing ever called it, so every verdict the owner
+    # gave - who to defer to, what is not ours, what never gets touched - reached the triage
+    # brain and the reply writer, and never the agent that does the work.
+    from .agents import memory_block
+    mem = memory_block(store, msgs)
+    if mem: parts.append(no_emails(' '.join(mem.split())[:DOC_CHARS]))
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.

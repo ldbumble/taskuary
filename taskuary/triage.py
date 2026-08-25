@@ -37,17 +37,21 @@ INTENT_SYSTEM = (
     'Torn between task and reply_only? Choose reply_only. The owner can turn a reply into a task in '
     'one click, and a wrongly-started agent costs far more than a draft.')
 
-def addressed_to_you(msg: dict) -> str:
+def addressed_to_you(msg: dict, mine=()) -> str:
     """'to', 'cc', 'not named', or '' when the channel carries no recipient lines at all (chat) -
     the one fact that separates "this is mine" from "I am watching someone else's thread", and it
     was never collected, so no classifier could ever weigh it. The ADDRESSES are deliberately not
     returned: what reaches a prompt is the relationship, never the mailbox (0.2.1, no addresses in
     prompts)."""
-    me = (msg.get('source_name') or '').strip().lower()
-    to = [str(a).lower() for a in (msg.get('to') or [])]
-    cc = [str(a).lower() for a in (msg.get('cc') or [])]
+    # EVERY address that is the owner, not just the mailbox this copy landed in. Mail to a
+    # shared or journal mailbox is still addressed to them when their own address is on the Cc
+    # line - and comparing only the arrival mailbox called that 'not named', which is exactly
+    # backwards for the case the whole signal exists to catch.
+    me = {a for a in ({(msg.get('source_name') or '').strip().lower()} | {str(a).lower() for a in mine}) if a}
+    to = {str(a).lower() for a in (msg.get('to') or [])}
+    cc = {str(a).lower() for a in (msg.get('cc') or [])}
     if not me or not (to or cc): return ''
-    return 'to' if me in to else 'cc' if me in cc else 'not named'
+    return 'to' if me & to else 'cc' if me & cc else 'not named'
 
 
 _ASK = re.compile(r'\b(can you|could you|are you|do you|would you|let me know|please confirm|any update)\b', re.I)
@@ -55,7 +59,7 @@ _ACT = re.compile(r'\b(please (add|send|update|fix|remove|create|set up)|need yo
 _FYI = re.compile(r'\b(fyi|for your (records|reference)|no action (needed|required)|auto-?generated|this is an automated|do not reply)\b', re.I)
 
 
-def heuristic_intent(msg: dict) -> dict:
+def heuristic_intent(msg: dict, mine=()) -> dict:
     body = (msg.get('body') or '').strip()
     low = f"{msg.get('subject') or ''} {body[:600]}"
     if _FYI.search(low) and not body.rstrip().endswith('?'):
@@ -68,7 +72,7 @@ def heuristic_intent(msg: dict) -> dict:
     # the thread you are kept informed of, and it used to open a task every time. A cc that DOES
     # ask (_ACT, _ASK, a question mark) never reaches this line, and one carrying a screenshot
     # still goes to the AI, because the picture can hold the whole ask.
-    if addressed_to_you(msg) == 'cc' and not msg.get('images'):
+    if addressed_to_you(msg, mine) == 'cc' and not msg.get('images'):
         return {'intent': 'fyi', 'why': 'you are only in cc and nothing in it asks for anything (keyword heuristic)'}
     return {'intent': 'task', 'why': 'no fyi markers and no plain question - assumed real work (keyword heuristic, no AI read this)'}
 
@@ -116,7 +120,7 @@ def strip_boilerplate(text: str) -> str:
 
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
-                    learned: str = None, system: str = None, notes_left: int = 0) -> dict:
+                    learned: str = None, system: str = None, notes_left: int = 0, mine=()) -> dict:
     """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
     they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
     'Not our task' stick: the next message like it is classified with that lesson in hand.
@@ -146,7 +150,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit. '
                               'Say so in your reason if the verdict feels underdetermined - do not claim '
                               'nothing is on file.)' if notes_left else ''))
-            how = addressed_to_you(msg)
+            how = addressed_to_you(msg, mine)
             # the code supplies the field, so the code explains it - a TRIAGE.md written before
             # addressing existed (every doc already on disk: templates seed first-run only and
             # the owner's edits are never overwritten) would otherwise get the fact with no rule
@@ -166,4 +170,4 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 return {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
         except Exception:
             pass
-    return heuristic_intent(msg)
+    return heuristic_intent(msg, mine)

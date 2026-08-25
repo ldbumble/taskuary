@@ -71,3 +71,32 @@ test("every state setter is declared in the component that uses it", () => {
   }
   assert.deepStrictEqual(bad, [], `free variables that throw at render:\n  ${bad.join("\n  ")}`);
 });
+
+/* The same fault in a different disguise: <ConfirmDelete> used in ConnectorsView with no
+ * import. esbuild reads an unknown capitalised identifier as a reference to a global, bundles
+ * it without a word, and React throws at render - which is how setPanelLock shipped. A JSX tag
+ * has to resolve to something declared in its own file: imported, defined, or a member
+ * expression (<Foo.Bar>) whose root is. */
+test("every component used in JSX is declared in that file", () => {
+  const bad = [];
+  for (const f of readdirSync(SRC).filter((f) => f.endsWith(".jsx"))) {
+    const raw = readFileSync(join(SRC, f), "utf8");
+    const src = strip(raw);
+    // declarations come off the RAW source: strip() reads an apostrophe in JSX text ("every
+    // source's rows") as a string quote and swallows what follows, which hid two real
+    // declarations and reported them as missing. Uses still come off the stripped copy, where
+    // a component merely NAMED in a comment cannot masquerade as a use.
+    const known = new Set([
+      // imported: both `import X from` and the named `{ A, B as C }` forms
+      ...[...raw.matchAll(/import\s+(\w+)\s*(?:,|from)/g)].map((m) => m[1]),
+      ...[...raw.matchAll(/import\s*\{([^}]*)\}\s*from/g)]
+        .flatMap((m) => m[1].split(",").map((x) => x.trim().split(/\s+as\s+/).pop().trim())),
+      // declared here
+      ...[...raw.matchAll(/(?:const|let|var|function|class)\s+([A-Z]\w*)/g)].map((m) => m[1]),
+    ]);
+    for (const tag of new Set([...src.matchAll(/<([A-Z]\w*)/g)].map((m) => m[1]))) {
+      if (!known.has(tag)) bad.push(`${f} · <${tag}> is used but never imported or defined there`);
+    }
+  }
+  assert.deepStrictEqual(bad, [], `components that throw at render:\n  ${bad.join("\n  ")}`);
+});

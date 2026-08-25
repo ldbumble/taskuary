@@ -19,7 +19,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono, PILL_COLORS } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize the census by facility. Flag anything under 70 and any day-over-day drop."];
@@ -282,6 +282,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
      POST that failed for any other reason threw into a void with no catch anywhere. */
   const [saveErr, setSaveErr] = useState("");
   const [savedMsg, setSavedMsg] = useState("");
+  const [confirmDel, setConfirmDel] = useState(false);
   const save = async () => {
     setSaveErr(""); setSavedMsg("");
     const c = bodyCfg();
@@ -468,12 +469,16 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             {cur && (
               <Box sx={{ display: "flex", gap: 1, mt: 1.5, alignItems: "center" }}>
                 <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-                  onClick={async () => { await api.delete(`/api/sources/${cur.SourceId}`); reload(); onBack(); }}>Delete report</Button>
+                  onClick={() => setConfirmDel(true)}>Delete report</Button>
               </Box>
             )}
           </StepContent>
         </Step>
       </Stepper>
+      <ConfirmDelete open={confirmDel} what={`the report "${cfg.title || cur?.Address || "untitled"}"`}
+        consequence="It stops running on its schedule and disappears from the Reports tab. Briefs it already filed stay on the Timeline."
+        onClose={() => setConfirmDel(false)}
+        onConfirm={async () => { await api.delete(`/api/sources/${cur.SourceId}`); await reload(); onBack(); }} />
     </Box>
   );
 }

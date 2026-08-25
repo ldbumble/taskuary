@@ -17,7 +17,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, LandingCard, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, LandingCard, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
 import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
@@ -476,20 +476,15 @@ function RemoveConnection({ conn, reload, onBack }) {
     await api.post(`/api/connectors/${conn.ConnectorId}/reset`);
     reload(); onBack();
   };
+  // this one already asked, as a row that swapped itself for a "Sure?" - which is a different
+  // shape of question from every other delete in the app. Same dialog as the rest now.
   return (
     <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", maxWidth: 720 }}>
-      {confirm ? (
-        <>
-          <Typography variant="body2" sx={{ color: "#b91c1c", flex: 1 }}>
-            Wipes the saved credentials & settings and turns its sources off. The card stays in the catalog. Sure?
-          </Typography>
-          <Button size="small" color="error" variant="contained" disableElevation onClick={remove}>Remove</Button>
-          <Button size="small" onClick={() => setConfirm(false)}>Cancel</Button>
-        </>
-      ) : (
-        <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#8a94a6" }}
-          onClick={() => setConfirm(true)}>Remove connection</Button>
-      )}
+      <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#8a94a6" }}
+        onClick={() => setConfirm(true)}>Remove connection</Button>
+      <ConfirmDelete open={confirm} what={`the ${conn.Name || conn.Type} connection`} confirmLabel="Remove"
+        consequence="Its saved credentials and settings are wiped and its sources are switched off. The card stays in the catalog, so you can set it up again from scratch."
+        onClose={() => setConfirm(false)} onConfirm={remove} />
     </Box>
   );
 }

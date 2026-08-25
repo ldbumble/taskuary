@@ -1,6 +1,7 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import React, { useEffect, useState } from "react";
-import { Box, Button, Chip, CircularProgress, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+  DialogContentText, DialogTitle, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import BlockIcon from "@mui/icons-material/Block";
 import api from "./api";
@@ -47,6 +48,45 @@ export const ChannelIcon = ({ channel, sx }) => {
   if (hasLogo(channel)) return <Logo name={channel} sx={sx} />;
   const Icon = CHANNEL_ICONS[channel] || TerminalIcon;
   return <Icon sx={{ fontSize: 15, color: CHANNEL_COLORS[channel] || "#98a1b3", ...sx }} />;
+};
+
+/* One dialog for everything that destroys something.
+
+   Deleting a report, an agent or a connection, and "Not a task" - which deletes the task AND
+   writes a rule about its sender - were all a single unconfirmed click; "Not a task" was one
+   click inside a MENU, where the pointer is already moving. None of it is undoable.
+
+   `what` names the thing in the user's own words, `consequence` says what actually happens
+   beyond the obvious (a sender rule written, credentials wiped, a schedule stopped) - a dialog
+   that only says "are you sure?" tells you nothing you did not already know. The failure is
+   shown here rather than swallowed: these calls can be refused, and a dialog that closes on a
+   failed delete claims the thing is gone. */
+export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete", onConfirm, onClose }) => {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const go = async () => {
+    setBusy(true); setErr("");
+    try { await onConfirm(); setBusy(false); onClose(); }
+    catch (e) { setErr(e?.response?.data?.detail || e?.message || "that did not work"); setBusy(false); }
+  };
+  return (
+    <Dialog open={!!open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 700, pb: 0.5 }}>Delete {what}?</DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ fontSize: 13, color: DIM }}>
+          {consequence} This cannot be undone.
+        </DialogContentText>
+        {err && <Alert severity="error" sx={{ mt: 1.5, fontSize: 12.5 }}>{err}</Alert>}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        {/* Cancel is the default focus and sits where the eye lands: the safe one is not the
+            one you hit by reflex */}
+        <Button onClick={onClose} disabled={busy} autoFocus sx={{ fontSize: 12.5 }}>Cancel</Button>
+        <Button onClick={go} disabled={busy} color="error" variant="contained" disableElevation
+          sx={{ fontSize: 12.5 }}>{busy ? "…" : confirmLabel}</Button>
+      </DialogActions>
+    </Dialog>
+  );
 };
 
 export const RefChip = ({ taskId, onClick }) => taskId ? (

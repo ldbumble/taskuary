@@ -5,7 +5,7 @@ import { Alert, Box, Button, Chip, CircularProgress, MenuItem, Select, TextField
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
-import { Crumb, Empty, LandingCard } from "./ui.jsx";
+import { Crumb, Empty, LandingCard, ConfirmDelete } from "./ui.jsx";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import BoltIcon from "@mui/icons-material/Bolt";
 import StarIcon from "@mui/icons-material/Star";
@@ -73,7 +73,8 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     try { await api.put(`/api/agents/${encodeURIComponent(draft.name.trim())}`, p); setDraft(null); load(); }
     catch (e) { setErr(e?.response?.data?.detail || "save failed"); }
   };
-  const del = async (name) => { await api.delete(`/api/agents/${encodeURIComponent(name)}`); load(); };
+  const [confirmDel, setConfirmDel] = useState(null);
+  const del = async (name) => { await api.delete(`/api/agents/${encodeURIComponent(name)}`); await load(); };
   const [tests, setTests] = useState({});
   // which agent works tasks when nothing names one - the row wears it, and one click moves it
   const [defAgent, setDefAgent] = useState("");
@@ -184,7 +185,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
           <Button size="small" startIcon={<BoltIcon sx={{ fontSize: 13 }} />} disabled={tests[name]?.busy}
             onClick={() => runTest(name)}>{tests[name]?.busy ? "Testing…" : "Test"}</Button>
           <Button size="small" onClick={() => edit(name)}>Edit</Button>
-          <Button size="small" color="error" onClick={() => del(name)}>Delete</Button>
+          <Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
         </Box>
       )).flatMap((row, i) => {
         const name = Object.keys(agents)[i];
@@ -237,6 +238,9 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
           </Box>
         </Box>
       )}
+      <ConfirmDelete open={!!confirmDel} what={`the agent "${confirmDel}"`}
+        consequence="Any task set to use it falls back to the default agent. Sessions it has already run are kept."
+        onClose={() => setConfirmDel(null)} onConfirm={() => del(confirmDel)} />
     </Box>
   );
 };

@@ -17,7 +17,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
@@ -169,9 +169,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     loadTasks(); onChanged?.();
     if (r?.dropped === selected) onSelect(r.merged); else loadDetail(selected);
   };
+  // one click, inside a MENU, where the pointer is already moving - and it deletes the task and
+  // writes a standing rule about its sender. The two sharpest things in the app were the two
+  // easiest to hit by accident.
+  const [confirmNAT, setConfirmNAT] = useState(false);
   const notATask = async () => {
     await api.post(`/api/tasks/${selected}/not-a-task`);
-    onSelect(null); loadTasks(); onChanged?.();
+    onSelect(null); await loadTasks(); onChanged?.();
   };
   // The task's own session - the only terminal in the app. undefined means "not looked
   // yet", null means "looked, none running": the difference decides whether we may
@@ -319,7 +323,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         secondary="which checkout the session works in" />
                     </MenuItem>
                     <Divider />
-                    <MenuItem onClick={() => { setMenuEl(null); notATask(); }} sx={{ color: "#b91c1c" }}>
+                    <MenuItem onClick={() => { setMenuEl(null); setConfirmNAT(true); }} sx={{ color: "#b91c1c" }}>
                       <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#b91c1c" }} /></ListItemIcon>
                       <ListItemText primary="Not a task" secondary="delete it and teach triage why" />
                     </MenuItem>
@@ -669,6 +673,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Button variant="contained" disabled={!nt.Title.trim()} onClick={create}>Create</Button>
         </DialogActions>
       </Dialog>
+      <ConfirmDelete open={confirmNAT} what={t ? `"${(t.Title || "this task").slice(0, 60)}"` : "this task"}
+        consequence={"It is deleted, and its sender is taught that mail like this is never a task — so their future messages file themselves. "
+          + "Its messages stay on the Timeline."}
+        onClose={() => setConfirmNAT(false)} onConfirm={notATask} />
     </Box>
   );
 }

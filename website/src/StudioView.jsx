@@ -2,7 +2,7 @@
 // the agent working it, and an empty desk is spare capacity - so "how much can run at once"
 // stops being a number in Settings and becomes something you can see. Nothing here is a new
 // source of truth: desks come from /api/agents, occupancy from the same /api/tasks the columns
-// read, and the wall ports from /api/sources.
+// read.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
@@ -54,7 +54,6 @@ const stateOf = (t) => {
 export default function StudioView({ onOpenTask }) {
   const [tasks, setTasks] = useState(null);
   const [agents, setAgents] = useState([]);
-  const [sources, setSources] = useState([]);
   const [cam, setCam] = useState({ yaw: 0, zoom: 1.1, px: 0, py: 0 });
   const camRef = useRef(cam), goal = useRef(cam), raf = useRef(0), drag = useRef(null);
   // One exponential ease per frame toward the goal. No spring, no overshoot: a room that
@@ -79,14 +78,12 @@ export default function StudioView({ onOpenTask }) {
   const [frame, setFrame] = useState(0);          // the only clock the room has
 
   const load = useCallback(async () => {
-    const [t, a, s] = await Promise.all([
+    const [t, a] = await Promise.all([
       api.get("/api/tasks").catch(() => ({ data: {} })),
       api.get("/api/agents").catch(() => ({ data: {} })),
-      api.get("/api/sources").catch(() => ({ data: {} })),
     ]);
     setTasks((t.data.data || []).filter((x) => x.Status !== "dropped"));
     setAgents(a.data.data || a.data.agents || []);
-    setSources((s.data.data || []).filter((x) => x.Active));
   }, []);
   useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
 
@@ -147,15 +144,11 @@ export default function StudioView({ onOpenTask }) {
     poly(BGZ, pts(P(0, 0, 0), P(0, GY, 0), P(0, GY, WH), P(0, 0, WH)), "#e2dbcf");
     poly(BGZ, pts(P(0, 0, 88), P(GX, 0, 88), P(GX, 0, 91), P(0, 0, 91)), "#cec4b1");
 
-    /* Windows, a whiteboard and a plant - the three things that were only ever in the design
-       mock. None of them carries data; that is the point. A room with a window in it reads as a
-       place, and the floor is asking to be read as one. Windows take whatever stretch of the
-       back wall the connector ports leave free, so they never collide with a port. */
-    /* Windows sit HIGH on the back wall, above the connector ports rather than beside them.
-       Beside them meant two connectors ate the whole wall and no window fitted - and high is
-       where a window belongs anyway. The door's stretch is skipped. */
+    /* Windows, a whiteboard and a plant. None of them carries data; that is the point - a room
+       with a window in it reads as a place, and this floor is asking to be read as one. The
+       windows have the back wall to themselves now, corner to door. */
     const doorAt = GX - 2.0;
-    for (let wx = 0.55; wx + 1.15 < doorAt - 0.15; wx += 1.4) {
+    for (let wx = 0.5; wx + 1.15 < doorAt - 0.1; wx += 1.32) {
       poly(BGZ, pts(P(wx - 0.07, 0, 26), P(wx + 1.22, 0, 26), P(wx + 1.22, 0, 90), P(wx - 0.07, 0, 90)), "#fffdfb");
       poly(BGZ, pts(P(wx, 0, 31), P(wx + 1.15, 0, 31), P(wx + 1.15, 0, 85), P(wx, 0, 85)), "#d5e5ed");
       poly(BGZ, pts(P(wx, 0, 57), P(wx + 1.15, 0, 57), P(wx + 1.15, 0, 59.5), P(wx, 0, 59.5)), "#fffdfb");
@@ -183,7 +176,7 @@ export default function StudioView({ onOpenTask }) {
     };
 
     // a plant in the far corner. It is the cheapest thing on this list and does the most.
-    const plx = GX - 0.55, ply = 0.55, plz = dep(plx, ply) + 0.2, pl = P(plx, ply, 0);
+    const plx = 0.6, ply = GY - 0.6, plz = dep(plx, ply) + 0.2, pl = P(plx, ply, 0);
     oval(plz, pl[0], pl[1], 19, 7, "rgba(38,37,33,.13)");
     poly(plz + 0.01, pts([pl[0] - 12, pl[1] - 24], [pl[0] + 12, pl[1] - 24], [pl[0] + 8, pl[1] - 1], [pl[0] - 8, pl[1] - 1]), "#c39274");
     poly(plz + 0.02, pts([pl[0] - 2, pl[1] - 24], [pl[0] - 20, pl[1] - 56], [pl[0] - 7, pl[1] - 64], [pl[0] - 1, pl[1] - 38]), "#6f8a6e");
@@ -239,7 +232,7 @@ export default function StudioView({ onOpenTask }) {
       const st = stateOf(t), live = isLive(t);
       const z = box(gx, gy, 2.0, 1.1, DH, "#d3c4a6", "#a8977a", "#bfae8f");
       const mx = gx + 0.6, mw = 0.85, my = gy + 0.3;
-      box(mx + 0.28, my + 0.06, 0.3, 0.24, DH + 7, "#7c8794", "#616b77", "#8e97a1", 0.01);   // stand
+      box(mx + 0.28, my + 0.06, 0.3, 0.24, DH + 7, "#d3c4a6", "#a8977a", "#bfae8f", 0.01);   // stand
       poly(z + 0.02, pts(P(mx - 0.05, my, DH + 6), P(mx + mw + 0.05, my, DH + 6),
         P(mx + mw + 0.05, my, DH + 40), P(mx - 0.05, my, DH + 40)), "#333b45");
       poly(z + 0.03, pts(P(mx, my, DH + 9), P(mx + mw, my, DH + 9),
@@ -264,30 +257,8 @@ export default function StudioView({ onOpenTask }) {
       return { t, st, x: lab[0], y: lab[1] };
     });
 
-    // every connector gets a port on the back wall, and its mail arrives at it
-    const room = Math.max(1, Math.floor((GX - 2.6) / 1.7));
-    const ports = sources.slice(0, Math.min(4, room)).map((s, i) => {
-      const x = 0.8 + i * 1.7;
-      poly(BGZ, pts(P(x, 0, 96), P(x + 1.1, 0, 96), P(x + 1.1, 0, 122), P(x, 0, 122)), "#fffdfb");
-      poly(BGZ, pts(P(x + 0.08, 0, 99), P(x + 1.02, 0, 99), P(x + 1.02, 0, 119), P(x + 0.08, 0, 119)), i === 0 ? "#eae4d8" : "#e9e3d8");
-      const m = P(x + 0.55, 0, 109);
-      prims.push({ k: "l", z: BGZ + 1, d: `M ${m[0] + 80} ${m[1] - 170} Q ${m[0] + 44} ${m[1] - 78} ${m[0]} ${m[1]}`,
-        stroke: i === 0 ? ACCENT : "#cbc2b0", o: i === 0 ? 0.75 : 0.4 });
-      return { x: m[0], y: m[1] - 9, name: s.Channel === "report" ? "report" : s.Channel };
-    });
-
-    // somebody is walking in for the next queued task, door → the first free desk
-    const freeIx = desks.findIndex((d) => !d);
-    if (queue.length && freeIx >= 0) {
-      const tx = 0.9 + (freeIx % cols) * 2.7 + 1.0, ty = 2.4 + Math.floor(freeIx / cols) * 2.9 - 0.55;
-      const q = ((frame % 36) / 36);
-      const e = q < 0.5 ? 2 * q * q : 1 - (-2 * q + 2) ** 2 / 2;
-      person(dx + 0.55 + (tx - dx - 0.55) * e, 0.9 + (ty - 0.9) * e, SKINS[4], "walk", frame);
-    }
-
-    prims.sort((a, b) => a.z - b.z);
-    return { prims, tags, ports };
-  }, [cam.yaw, desks, sources, queue.length, frame]);
+    return { prims, tags };
+  }, [cam.yaw, desks, queue.length, frame]);
 
   if (!tasks) return <CircularProgress size={22} sx={{ m: 4 }} />;
   const free = desks.filter((d) => !d).length;
@@ -333,15 +304,6 @@ export default function StudioView({ onOpenTask }) {
               : <path key={i} d={p.d} fill="none" stroke={p.stroke} strokeWidth="1.6" strokeDasharray="1 6"
                 strokeLinecap="round" opacity={p.o} />))}
       </Box>
-
-      {scene.ports.map((p) => (
-        <Box key={p.name + p.x} sx={{ position: "absolute", left: sx(p.x), top: sy(p.y),
-          transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 0.6,
-          bgcolor: "rgba(255,255,255,.94)", border: `1px solid ${BORDER}`, borderRadius: "5px", px: 0.7, height: 19,
-          fontSize: 10, fontWeight: 600, color: DIM, whiteSpace: "nowrap" }}>
-          <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: ACCENT }} />{p.name}
-        </Box>
-      ))}
 
       {scene.tags.map((g, i) => (
         <Box key={i} onClick={() => { if (g.t) { setPick(g.t.TaskId); flyTo(g.x, g.y); } }}
@@ -420,8 +382,7 @@ export default function StudioView({ onOpenTask }) {
       </Box>
 
       <Typography sx={{ position: "absolute", right: 16, bottom: 14, fontSize: 11, color: FAINT, textAlign: "right", lineHeight: 1.6 }}>
-        A desk is a task · an agent at a keyboard is a live session · a free desk is spare capacity<br />
-        Mail lands on the wall port it came from
+        A desk is a task · an agent at a keyboard is a live session · a free desk is spare capacity
       </Typography>
     </Box>
   );

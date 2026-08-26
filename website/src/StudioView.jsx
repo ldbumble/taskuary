@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Box, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, ROLES, mono } from "./theme.jsx";
+import { cliName } from "./BoardView.jsx";
 
 // Logical drawing space; the SVG scales it, so every number below is layout, not pixels.
 const W = 1200, H = 640, TW = 40, TH = 22;
@@ -20,6 +21,14 @@ const SKINS = [
 ];
 
 const isLive = (t) => !!(t && (t.Session || t.RunStatus === "running"));
+// how long this session has been going. "claude is typing" told you nothing you could act on;
+// "claude · 14m" is the Board's own answer, and the two views should not disagree.
+const since = (t) => {
+  const at = t?.Session?.started || t?.RunStartedAt;
+  if (!at) return "";
+  const sec = Math.max(0, (Date.now() - new Date(String(at).replace(" ", "T"))) / 1000);
+  return sec < 90 ? `${Math.round(sec)}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${(sec / 3600).toFixed(1)}h`;
+};
 // What the figure at the desk is DOING, which the floor never said before - it only ever
 // coloured a dot. Hunched at the keyboard = a coding agent is writing code; pen on a form =
 // an agent working a task with no code in it; hand up = it has stopped and is waiting on YOU.
@@ -34,7 +43,10 @@ const poseOf = (t) => {
 // that is "waiting on you" is the one colour that means that, everywhere in the app.
 const stateOf = (t) => {
   if (!t) return { label: "free", color: ROLES.muted.solid };
-  if (isLive(t)) return { label: `${t.Session?.agent || t.RunAgent || "agent"} is typing`, color: ROLES.working.solid };
+  if (isLive(t)) {
+    const who = cliName(t.Session?.agent || t.RunAgent || "agent"), ago = since(t);
+    return { label: ago ? `${who} · ${ago}` : who, color: ROLES.working.solid };
+  }
   if (t.Status === "waiting" || t.ReviewStatus === "pending") return { label: "waiting on you", color: ROLES.you.solid };
   return { label: "open", color: ROLES.muted.solid };
 };
@@ -143,21 +155,24 @@ export default function StudioView({ onOpenTask }) {
        Beside them meant two connectors ate the whole wall and no window fitted - and high is
        where a window belongs anyway. The door's stretch is skipped. */
     const doorAt = GX - 2.0;
-    for (let wx = 0.6; wx + 1.1 < doorAt - 0.2; wx += 1.35) {
-      poly(BGZ, pts(P(wx - 0.07, 0, 86), P(wx + 1.17, 0, 86), P(wx + 1.17, 0, 128), P(wx - 0.07, 0, 128)), "#fffdfb");
-      poly(BGZ, pts(P(wx, 0, 90), P(wx + 1.1, 0, 90), P(wx + 1.1, 0, 124), P(wx, 0, 124)), "#d5e5ed");
-      poly(BGZ, pts(P(wx, 0, 106), P(wx + 1.1, 0, 106), P(wx + 1.1, 0, 108.5), P(wx, 0, 108.5)), "#fffdfb");
+    for (let wx = 0.55; wx + 1.15 < doorAt - 0.15; wx += 1.4) {
+      poly(BGZ, pts(P(wx - 0.07, 0, 26), P(wx + 1.22, 0, 26), P(wx + 1.22, 0, 90), P(wx - 0.07, 0, 90)), "#fffdfb");
+      poly(BGZ, pts(P(wx, 0, 31), P(wx + 1.15, 0, 31), P(wx + 1.15, 0, 85), P(wx, 0, 85)), "#d5e5ed");
+      poly(BGZ, pts(P(wx, 0, 57), P(wx + 1.15, 0, 57), P(wx + 1.15, 0, 59.5), P(wx, 0, 59.5)), "#fffdfb");
     }
     // the whiteboard, on the one wall with nothing on it. Fixed size: derived from GY it grew
     // to four tiles wide and its strokes ran the whole length of it.
-    const wbA = 1.0, wbB = Math.min(3.4, GY - 1.2);
-    poly(BGZ, pts(P(0, wbA, 42), P(0, wbB, 42), P(0, wbB, 100), P(0, wbA, 100)), "#b8ae9a");
-    poly(BGZ, pts(P(0, wbA + 0.1, 46), P(0, wbB - 0.1, 46), P(0, wbB - 0.1, 96), P(0, wbA + 0.1, 96)), "#fffdfb");
-    [[0.85, 86], [1.25, 77], [0.6, 68]].forEach(([len, z]) => {
-      const y0 = wbA + 0.28, y1 = Math.min(y0 + len, wbB - 0.25);
-      poly(BGZ, pts(P(0, y0, z), P(0, y1, z), P(0, y1, z + 2.2), P(0, y0, z + 2.2)), "#5c7a90");
+    // About half the side wall, with strokes measured in tiles rather than as a fraction of the
+    // board - a fraction meant the board's own size decided how long they were, so widening it
+    // turned three notes into three lines running the length of the room.
+    const wbA = 0.9, wbB = Math.min(wbA + 3.4, GY - 0.9);
+    poly(BGZ, pts(P(0, wbA, 34), P(0, wbB, 34), P(0, wbB, 110), P(0, wbA, 110)), "#b8ae9a");
+    poly(BGZ, pts(P(0, wbA + 0.11, 39), P(0, wbB - 0.11, 39), P(0, wbB - 0.11, 105), P(0, wbA + 0.11, 105)), "#fffdfb");
+    [[0.95, 94], [1.35, 84], [0.65, 74], [1.1, 64]].forEach(([len, z]) => {
+      const y0 = wbA + 0.34, y1 = Math.min(y0 + len, wbB - 0.3);
+      poly(BGZ, pts(P(0, y0, z), P(0, y1, z), P(0, y1, z + 2.4), P(0, y0, z + 2.4)), "#5c7a90");
     });
-    poly(BGZ, pts(P(0, wbB - 0.85, 52), P(0, wbB - 0.3, 52), P(0, wbB - 0.3, 63), P(0, wbB - 0.85, 63)), "#cfe0cf");
+    poly(BGZ, pts(P(0, wbB - 1.15, 46), P(0, wbB - 0.4, 46), P(0, wbB - 0.4, 60), P(0, wbB - 1.15, 60)), "#cfe0cf");
 
     const box = (x, y, w, d, h, top, left, right, zbias) => {
       const z = dep(x + w / 2, y + d / 2) + (zbias || 0);
@@ -245,7 +260,7 @@ export default function StudioView({ onOpenTask }) {
       }
       box(gx + 0.35, gy + 0.7, 0.9, 0.28, DH + 2, "#cfc7b4", "#aea595", "#bdb3a0", 0.02);    // keyboard
       if (t) person(gx + 1.0, gy - 0.55, SKINS[i % SKINS.length], poseOf(t), frame);
-      const lab = P(gx + 1.0, gy + 0.55, DH + 58);
+      const lab = P(gx + 1.0, gy + 0.55, DH + 66);
       return { t, st, x: lab[0], y: lab[1] };
     });
 
@@ -253,9 +268,9 @@ export default function StudioView({ onOpenTask }) {
     const room = Math.max(1, Math.floor((GX - 2.6) / 1.7));
     const ports = sources.slice(0, Math.min(4, room)).map((s, i) => {
       const x = 0.8 + i * 1.7;
-      poly(BGZ, pts(P(x, 0, 58), P(x + 1.1, 0, 58), P(x + 1.1, 0, 84), P(x, 0, 84)), "#ffffff");
-      poly(BGZ, pts(P(x + 0.08, 0, 61), P(x + 1.02, 0, 61), P(x + 1.02, 0, 81), P(x + 0.08, 0, 81)), i === 0 ? "#eae4d8" : "#e9e3d8");
-      const m = P(x + 0.55, 0, 71);
+      poly(BGZ, pts(P(x, 0, 96), P(x + 1.1, 0, 96), P(x + 1.1, 0, 122), P(x, 0, 122)), "#fffdfb");
+      poly(BGZ, pts(P(x + 0.08, 0, 99), P(x + 1.02, 0, 99), P(x + 1.02, 0, 119), P(x + 0.08, 0, 119)), i === 0 ? "#eae4d8" : "#e9e3d8");
+      const m = P(x + 0.55, 0, 109);
       prims.push({ k: "l", z: BGZ + 1, d: `M ${m[0] + 80} ${m[1] - 170} Q ${m[0] + 44} ${m[1] - 78} ${m[0]} ${m[1]}`,
         stroke: i === 0 ? ACCENT : "#cbc2b0", o: i === 0 ? 0.75 : 0.4 });
       return { x: m[0], y: m[1] - 9, name: s.Channel === "report" ? "report" : s.Channel };
@@ -330,18 +345,20 @@ export default function StudioView({ onOpenTask }) {
 
       {scene.tags.map((g, i) => (
         <Box key={i} onClick={() => { if (g.t) { setPick(g.t.TaskId); flyTo(g.x, g.y); } }}
-          sx={{ position: "absolute", left: sx(g.x), top: sy(g.y), transform: "translateX(-50%)",
-            display: "flex", alignItems: "center", gap: 0.7, bgcolor: PANEL, border: `1px solid ${BORDER}`,
-            borderRadius: "6px", px: 0.9, height: 21, boxShadow: "0 2px 6px rgba(30,50,38,.10)",
-            fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
-            cursor: g.t ? "pointer" : "default",
-            ...(pick && g.t?.TaskId === pick ? { borderColor: ACCENT, boxShadow: `0 0 0 2px ${ACCENT}22` } : {}),
-            "&:hover": g.t ? { borderColor: "#d8cfbe" } : {} }}>
-          <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: g.st.color }} />
+          sx={{ position: "absolute", left: sx(g.x), top: sy(g.y),
+            transform: "translate(-50%, -100%)", textAlign: "center", whiteSpace: "nowrap",
+            cursor: g.t ? "pointer" : "default", lineHeight: 1.3,
+            // no pill: the room shows through, as in the design. A double text-shadow keeps it
+            // legible whether it lands on pale wall or on a dark monitor.
+            textShadow: "0 0 3px rgba(255,253,251,.95), 0 0 8px rgba(255,253,251,.85)",
+            "&:hover .thubRef": g.t ? { textDecoration: "underline" } : {} }}>
           {g.t
-            ? <><Box component="span" sx={{ ...mono, color: DIM }}>{g.t.ref}</Box>
-              <Box component="span" sx={{ color: FAINT, fontWeight: 500 }}>{g.st.label}</Box></>
-            : <Box component="span" sx={{ color: DIM, fontWeight: 600 }}>free desk</Box>}
+            ? <>
+              <Box className="thubRef" sx={{ ...mono, fontSize: 12, fontWeight: 700, color: INK,
+                textDecoration: pick === g.t.TaskId ? "underline" : "none" }}>{g.t.ref}</Box>
+              <Box sx={{ fontSize: 11, fontWeight: 600, color: g.st.color }}>{g.st.label}</Box>
+            </>
+            : <Box sx={{ fontSize: 11, fontWeight: 600, color: FAINT }}>free desk</Box>}
         </Box>
       ))}
 

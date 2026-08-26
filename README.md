@@ -15,8 +15,6 @@ you already use does it; you approve the result. Runs entirely on your machine.
 
 ![The Taskuary Studio on taskuary.com: mail, chats and reports arrive beside the door and are triaged; each one that is work sends an agent through the door to a desk, where its screen shows what it is doing. An empty desk is capacity you are not using.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
 
-<sub>The landing page at <a href="https://taskuary.com">taskuary.com</a> — the Studio, running the story the app tells every day: everything in → one funnel → agents + you. Nothing sends without you.</sub>
-
 **Where it is:** early — **v0.3.0**, and moving fast. The funnel, the review queue, the agent
 sessions and the reports pipeline are all real and in daily use on my own inbox; the edges are
 still being knocked off, and breaking changes are possible before 1.0. Issues get answered.

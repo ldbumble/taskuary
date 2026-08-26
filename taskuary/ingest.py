@@ -110,18 +110,20 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     A message with `_mid` is one deferred() already stored and drain() is now judging: the
     checks above the judgement (dedupe, feed, policy) were made when it arrived."""
     cfg = store.get_settings()
-    # the policy answer is needed on both passes (escalate marks the task urgent below), and it
-    # is an in-memory match - cheap enough to make twice
+    fresh = not msg.get('_mid')
+    # a message seen twice is dropped on the first line - before any policy pass, before any AI
+    if fresh and store.message_exists(msg.get('external_id') or ''):
+        return {'status': 'duplicate', 'task_id': None, 'message_id': None}
+    if fresh and file_only:
+        mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
+        store.add_route(mid, None, 'feed', None,
+                        'shown for information - this connection is a feed, not a task trigger', [], 'feed')
+        return {'status': 'feed', 'task_id': None, 'message_id': mid}
+    # the policy answer is needed on both passes (escalate marks the task urgent below); it is
+    # an in-memory match, cheap enough to make twice
     pol = evaluate(msg, store.list_policies(), store.known_sender(msg.get('from_email')),
                    cfg.get('default_action', 'draft'))
-    if not msg.get('_mid'):
-        if store.message_exists(msg.get('external_id') or ''):
-            return {'status': 'duplicate', 'task_id': None, 'message_id': None}
-        if file_only:
-            mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
-            store.add_route(mid, None, 'feed', None,
-                            'shown for information - this connection is a feed, not a task trigger', [], 'feed')
-            return {'status': 'feed', 'task_id': None, 'message_id': mid}
+    if fresh:
         if pol['action'] in ('skip', 'ignore'):
             # skip = stored for dedupe but NEVER shown (flood senders); ignore = shown, no task
             mid = store.add_message({**_fields(msg, None), 'Status': 'skipped' if pol['action'] == 'skip' else 'ignored'})

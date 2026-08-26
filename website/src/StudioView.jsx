@@ -294,6 +294,9 @@ export default function StudioView({ onOpenTask }) {
       return { t, st, x: lab[0], y: lab[1] };
     });
 
+    // painter's order: the walls at BGZ first, then everything by depth - without this the figure,
+    // pushed last, was drawn OVER the monitor it sits behind
+    prims.sort((a, b) => a.z - b.z);
     return { prims, tags };
   }, [cam.yaw, desks, live, queue.length, frame]);
 

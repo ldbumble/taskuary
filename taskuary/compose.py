@@ -27,7 +27,7 @@ MAX_PEEKS = 3         # schema look-ups per compose: a table, its columns, and o
 
 # what a config of this type MUST carry to run at all. A composed report with only a title is a
 # form the owner has to finish - which is the thing the composer exists to spare them.
-REQUIRED = {'intacct': ('object',), 'intacct_fields': ('object',), 'mssql': ('query',), 'database': ('query',), 'sqlite': ('db', 'query'),
+REQUIRED = {'agent': ('prompt|skill',), 'intacct': ('object',), 'intacct_fields': ('object',), 'mssql': ('query',), 'database': ('query',), 'sqlite': ('db', 'query'),
             'rest': ('url',), 'local_file': ('path',), 'winrm': ('script',), 's3_object': ('bucket',), 'cloudwatch_logs': ('log_group',)}
 
 # Sage Intacct, as the model needs it spelled out: the executor docstring says what the keys are,
@@ -93,7 +93,10 @@ SYSTEM = (
     'the owner asked for a summary, a flag, a comparison or an interpretation - and write it as a '
     'concrete instruction ("Summarize spend by facility; flag any vendor above 10k or new this '
     'month"), never "summarize the data".\n'
-    '- "max_rows" only when the ask implies a size.\n\n'
+    '- "max_rows" only when the ask implies a size.\n'
+    '- "agent" is the type for "run my <skill> every week", "have the AI research X on a schedule", or any '
+    'report whose source is the AI itself doing work: set "skill" to the slash command (without the slash is fine) '
+    'and/or "prompt" to the instruction; the answer is the report, so ai_prompt is usually unnecessary.\n\n'
     'JUDGEMENT\n'
     '- A query you had to guess at is the thing to ask about. A wrong filter on a finance report '
     'is silently wrong forever; a question costs five seconds.\n'
@@ -175,6 +178,7 @@ def validate(store, cfg: dict):
     if not str(cfg.get('title') or '').strip(): return False, 'the report has no title'
     row = next((c for c in catalog(store) if c['type'] == t), None)
     if row and not row['ready']: return False, f"{t} cannot run: {row['why_not']}"
-    missing = [k for k in REQUIRED.get(t, ()) if not str(cfg.get(k) or '').strip() and not cfg.get(k)]
+    # 'a|b' means either will do (an agent report needs a skill OR a prompt)
+    missing = [k for k in REQUIRED.get(t, ()) if not any(cfg.get(alt) for alt in k.split('|'))]
     if missing: return False, f"the {t} report is not finished: it has no {' / '.join(missing)} - the composer should have looked the schema up or asked"
     return True, ''

@@ -85,6 +85,36 @@ def run_intacct_fields(cfg):
     return rows_out(fields_of(cfg, obj), lim, unit='fields', mine=mine)
 
 
+AGENT_SYSTEM = ('You are running a SCHEDULED REPORT for a busy operator. Do exactly what the instruction '
+                'says - use your tools, read what you need to read - and then answer with the report itself: '
+                'plain text or markdown, concrete (numbers, names, dates, deltas), no preamble and no '
+                'questions back. If something the instruction asks about cannot be found, say so in the report.')
+
+
+def run_agent(cfg):
+    """{"agent": "coder", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
+    the AI itself as the source: a coding CLI agent (Connectors -> AI CLI agents) runs your saved
+    SKILL (a slash command - "/weekly-user-review") and/or a prompt, on the schedule, and what it
+    answers is the report. "cwd" is optional: a project-level skill lives in its repo, a user-level
+    one runs from anywhere. The AI summary pass is usually unnecessary - the agent already wrote prose.
+
+    This is the "run my Claude skill every Monday" report: the agent researches, reads the systems
+    it has tools for, and files what it found onto the Timeline like any other report."""
+    from .llm import make_cli_llm
+    store = cfg.get('store')
+    if store is None: raise RuntimeError('the agent source needs the store (run it through the reports pipeline)')
+    skill, prompt = str(cfg.get('skill') or '').strip().lstrip('/'), str(cfg.get('prompt') or '').strip()
+    if not skill and not prompt: raise RuntimeError('give the agent a skill (/name) or a prompt - or both')
+    name = str(cfg.get('agent') or 'coder').strip()
+    llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None)
+    if llm is None: raise RuntimeError(f'no CLI agent named {name!r} - add one under Connectors -> AI CLI agents')
+    ask = (f'/{skill}' + (' ' if prompt else '') if skill else '') + prompt
+    out = str(llm(AGENT_SYSTEM, ask) or '').strip()
+    if not out: raise RuntimeError(f'{name} answered nothing')
+    what = f'/{skill}' if skill else 'a prompt'
+    return f'{name} ran {what} - {len(out.splitlines())} lines', out[:BODY_CHARS]
+
+
 def run_rest(cfg):
     """{"url", "headers", "path": "a.b"} - GET a JSON endpoint, dot-path into it.
 
@@ -365,6 +395,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
             'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
+            'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
             **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
@@ -456,7 +487,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 
 
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') in ('digest', 'automate'): return {**cfg, 'store': store}   # their data IS the store
+    if cfg.get('type') in ('digest', 'automate', 'agent'): return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile)
     conn = CONNECTION_OF.get(cfg.get('type'))
     if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg

@@ -76,6 +76,14 @@ const FIELDS = {
     ["filters, one per line: FIELD op value", "filters", "filter_lines",
       "WHENDUE <= 08/31/2026\nSTATE = Posted"], AI_FIELD],
   intacct_fields: [["object", "object", "text", "APBILL \u2014 what does this object actually carry?"], AI_FIELD],
+  // the AI itself as the source: a coding CLI agent runs a saved skill (a slash command) and/or a
+  // prompt on the schedule, and what it answers IS the report - "run my weekly user-management
+  // review every Monday". The summary pass is optional: the agent already wrote prose.
+  agent: [["skill — the slash command the agent should run (optional)", "skill", "text", "/weekly-user-review"],
+    ["prompt — what to do, or what the skill needs to know", "prompt", "multiline", "Review this week's user-management changes and list anything unusual."],
+    ["agent (blank = coder)", "agent", "text", "coder · codex · gemini"],
+    ["repository folder — for a skill that lives in a repo (optional)", "cwd", "text", "C:/work/fanapp"],
+    ["model (optional — the agent's default otherwise)", "model", "text", ""], AI_FIELD],
   rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
   rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],
   // Research: the web as a source. Each is one REST call with a key on its card - what is NOT
@@ -101,6 +109,7 @@ const TYPE_LABELS = {
   prometheus: "Prometheus", datadog: "Datadog monitors",
   intacct: "Sage Intacct", intacct_fields: "Intacct \u2014 what fields exist",
   digest: "Taskuary digest", automate: "Automation ideas (own data)",
+  agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
   exa: "Exa — search the web", tavily: "Tavily — search + answer",
   firecrawl: "Firecrawl — read a page", reader: "Jina Reader — read a page (no key)",
@@ -118,6 +127,7 @@ const TYPE_GROUPS = [
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
   ["Corporate systems", ["intacct", "intacct_fields"]],
+  ["The AI itself", ["agent"]],
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],
   ["Windows", ["winrm"]],
@@ -173,7 +183,8 @@ const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", 
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
   "api_version", "path_expr", "account", "container", "blob", "workspace_id",
   "filter", "select", "group", "failed_only", "days",
-  "object", "fields", "filters", "order",              // Intacct - missing here is why a composed report arrived with only its title
+  "object", "fields", "filters", "order",
+  "agent", "skill", "prompt", "cwd", "model",     // the AI-agent source              // Intacct - missing here is why a composed report arrived with only its title
   "num", "domains", "since", "depth", "time_range", "topic", "answer", "main", "chars"];
 
 const toSources = (cfg) => {

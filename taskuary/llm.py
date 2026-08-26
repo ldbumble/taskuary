@@ -49,7 +49,7 @@ def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
 MAX_TOKENS = 400
 
 
-def make_cli_llm(store, agent_name: str, model: str = None):
+def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -69,6 +69,7 @@ def make_cli_llm(store, agent_name: str, model: str = None):
     elif light:
         prof['model'] = light
     if model: prof['model'] = model     # an explicit per-job model outranks the light gear
+    if cwd: prof['cwd'] = cwd           # a scheduled skill that lives in a repo runs from that repo (reports.run_agent)
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
     def llm(system, user, max_tokens=MAX_TOKENS, images=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says

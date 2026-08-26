@@ -404,7 +404,7 @@ export default function BoardView({ onOpenTask }) {
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>
           <TextField label="Task name — how it reads on the board" value={nt.Title}
             onChange={(e) => setNt({ ...nt, Title: e.target.value })} />
-          <TextField label="Prompt — what you want the agent to do" multiline minRows={4} value={nt.Summary}
+          <TextField label="Prompt — what you want the agent to do" multiline minRows={4} maxRows={12} value={nt.Summary}
             placeholder="Exactly what to do, where to look, what done means. This text is sent to the agent as its instruction."
             onChange={(e) => setNt({ ...nt, Summary: e.target.value })} />
           {repos.length > 0 && (

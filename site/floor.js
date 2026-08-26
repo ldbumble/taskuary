@@ -115,8 +115,8 @@
       // the room is the page: as big as the viewport allows, sitting a little right of centre so
       // the words have the top-left, and lifted a touch with the mouse
       const wide = cw > 820;
-      const s = Math.min((wide ? cw * 0.92 : cw * 1.08) / W, (wide ? ch * 1.04 : ch * 0.9) / H);
-      const ox0 = (cw - W * s) / 2, oy0 = (ch - H * s) / 2 + ch * 0.02 - mouse.lift;
+      const s = Math.min((wide ? cw * 0.92 : cw * 1.12) / W, (wide ? ch * 1.04 : ch * 1.0) / H);
+      const ox0 = (cw - W * s) / 2 + (wide ? cw * 0.04 : 0), oy0 = (ch - H * s) / 2 + (wide ? ch * 0.02 : 0) - mouse.lift;
       fit = { s, ox: ox0, oy: oy0 };
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox0, dpr * oy0);
 
@@ -138,7 +138,7 @@
 
       const c = [P(0, 0, 0), P(GX, 0, 0), P(GX, GY, 0), P(0, GY, 0)], dn = (p) => [p[0], p[1] + 18];
       // a soft shadow under the slab, so the room floats on the paper rather than being printed on it
-      oval(BGZ - 1, (c[1][0] + c[3][0]) / 2, c[2][1] + 30, (c[1][0] - c[3][0]) * 0.56, 40, "rgba(255,250,240,.06)");
+      oval(BGZ - 1, (c[1][0] + c[3][0]) / 2, c[2][1] + 30, (c[1][0] - c[3][0]) * 0.56, 40, "rgba(38,37,33,.09)");
       poly(BGZ, [c[3], c[2], dn(c[2]), dn(c[3])], "#a8977a");
       poly(BGZ, [c[2], c[1], dn(c[1]), dn(c[2])], "#8e7f66");
       poly(BGZ, [c[0], c[1], c[2], c[3]], "#e6ded1");

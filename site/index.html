@@ -52,8 +52,8 @@
   /* hero: the whole first screen is the room. The words sit on top of it, top-left, small
      enough to leave the floor alone; the inbox rail on the right feeds it; the door is the way
      in. Everything else scrolls in underneath. */
-  .hero{position:relative;height:100vh;min-height:560px;overflow:hidden;background:#0b0b0c;
-        background:radial-gradient(70% 60% at 50% 48%,#17171a 0%,#0b0b0c 70%)}
+  .hero{position:relative;height:100vh;min-height:560px;overflow:hidden;background:var(--bg);
+        background:radial-gradient(70% 60% at 50% 48%,#fbf9f6 0%,var(--bg) 70%);border-bottom:1px solid var(--bd)}
   .hero canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y}
   .hero .words{position:absolute;inset:0;pointer-events:none}
   .hero .words .wrap{position:relative;height:100%}
@@ -62,7 +62,7 @@
   .copy .sub{margin:0;text-align:left;font-size:clamp(14.5px,1.1vw,16px);max-width:390px}
   .copy .cta{justify-content:flex-start;margin:22px 0 10px}
   .copy .fine{text-align:left}
-  .rail{position:absolute;right:24px;bottom:46px;width:min(300px,26vw);display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .rail{position:absolute;left:24px;bottom:52px;width:min(290px,26vw);display:flex;flex-direction:column;gap:8px;pointer-events:none}
   .rail[hidden]{display:none}   /* the class's display:flex would outrank the attribute */
   .rail .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;
              display:flex;align-items:center;gap:8px;margin-bottom:2px}
@@ -83,10 +83,10 @@
   .pill.fyi{color:#6f6960;background:#e6e0d5;border-color:#dad3c5}
   .pill.sent{color:#3c5740;background:#e2ebe0;border-color:#c9dcc8}
   /* the card that leaves the rail and goes in through the door */
-  .flyer{position:fixed;z-index:5;pointer-events:none;background:#1c1d21;border:1px solid #3a3c44;border-radius:8px;padding:6px 10px;
-         font-size:11.5px;font-weight:600;color:#e6e6ea;box-shadow:0 10px 30px -12px rgba(38,37,33,.4);
+  .flyer{position:fixed;z-index:5;pointer-events:none;background:var(--panel);border:1px solid #cbd4dc;border-radius:8px;padding:6px 10px;
+         font-size:11.5px;font-weight:600;color:var(--ink);box-shadow:0 10px 30px -12px rgba(38,37,33,.4);
          transition:transform 1.1s cubic-bezier(.35,.1,.25,1),opacity .35s .8s;will-change:transform}
-  .cue{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);color:#6c6c70;font-size:11.5px;font-family:var(--mono);letter-spacing:.08em;
+  .cue{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);color:var(--faint);font-size:11.5px;font-family:var(--mono);letter-spacing:.08em;
        display:flex;align-items:center;gap:8px;pointer-events:auto;cursor:pointer}
   .cue span{display:inline-block;animation:cue 2.2s ease-in-out infinite}
   @keyframes cue{50%{transform:translateY(4px)}}
@@ -160,7 +160,12 @@
 
   @media (max-width:860px){
     nav .links a.hide{display:none}
-    .hero{height:100vh;min-height:480px}
+    .hero{height:auto;min-height:100vh;display:flex;flex-direction:column}
+    .hero canvas{position:relative;inset:auto;height:46vh}
+    .hero .words{position:relative;inset:auto;flex:1}
+    .hero .words .wrap{height:auto;padding:0 16px 56px}
+    .rail{position:static;width:auto;margin-top:8px}
+    .cue{bottom:16px}
     .intro{padding-top:40px}
     .intro h1{font-size:40px}
     .flow{grid-template-columns:1fr}
@@ -180,7 +185,7 @@
   <div class="hero" id="top">
     <canvas id="floor" role="img" aria-label="The Taskuary Studio: as mail is triaged into tasks, agents walk in through the door and sit at desks; each screen shows what its agent is doing. Click the door to enter the site."></canvas>
     <div class="words"><div class="wrap">
-      <div class="rail" id="rail" aria-hidden="true" hidden></div>
+      <div class="rail" id="rail" aria-hidden="true"><div class="lbl"><i></i> arriving</div></div>
       <div class="cue" id="cue"><span>↳</span> find the door</div>
     </div></div>
   </div>
@@ -349,8 +354,8 @@ docker compose up -d</div>
     // a card leaves the rail and goes in through the door - the room and the rail are one story
     function fly(card){
       if (!floor || !floor.door()) return;
-      var canvas = document.getElementById('floor'), cr = canvas.getBoundingClientRect(), d = floor.door();
-      var r = { left: window.innerWidth - 20, top: cr.top + d[1] - 180, width: 240 };
+      var canvas = document.getElementById('floor'), cr = canvas.getBoundingClientRect(), d = floor.door(), cb = card.getBoundingClientRect();
+      var r = { left: cb.left, top: cb.top, width: Math.min(240, cb.width) };
       var f = document.createElement('div'); f.className = 'flyer'; f.textContent = card.querySelector('.subj').textContent.slice(0, 34);
       f.style.left = r.left + 'px'; f.style.top = r.top + 'px'; f.style.width = r.width + 'px'; document.body.appendChild(f);
       requestAnimationFrame(function(){

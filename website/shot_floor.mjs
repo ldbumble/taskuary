@@ -28,9 +28,11 @@ console.log("floor shot ok");
 if (process.argv[3]) {
   // turn the room and zoom in, the way a person would, then prove it settled somewhere legible
   const box = await p.evaluate(() => {
-    const s = document.querySelector("svg[viewBox]");
-    const r = s.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    const all = [...document.querySelectorAll("svg[viewBox]")]
+      .map((n) => ({ n, r: n.getBoundingClientRect() }))
+      .sort((a, b) => b.r.width * b.r.height - a.r.width * a.r.height);
+    const r = all[0].r;
+    return { x: r.x + r.width * 0.62, y: r.y + r.height * 0.45 };
   });
   await p.mouse.move(box.x, box.y);
   await p.mouse.down();

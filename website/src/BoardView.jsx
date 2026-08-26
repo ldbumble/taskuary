@@ -280,7 +280,7 @@ export default function BoardView({ onOpenTask }) {
         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
           {view === "columns"
             ? "Done shows today only — older finished work lives in Tasks, reopenable any time."
-            : "One desk per agent you have connected — an empty desk is capacity you are not using."}
+            : "One desk per agent that can run at once — an empty desk is capacity you are not using."}
         </Typography>
         {/* the same board, two ways to look at it - columns to move work, the floor to see how
             much of your capacity is actually busy */}

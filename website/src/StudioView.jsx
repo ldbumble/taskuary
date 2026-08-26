@@ -4,7 +4,7 @@
 // source of truth: desks come from /api/agents, occupancy from the same /api/tasks the columns
 // read.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import { Box, CircularProgress, Slider, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, ROLES, mono } from "./theme.jsx";
 import { cliName } from "./BoardView.jsx";
@@ -74,17 +74,21 @@ export default function StudioView({ onOpenTask }) {
   }, [tick]);
   useEffect(() => () => raf.current && cancelAnimationFrame(raf.current), []);
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const [cap, setCap] = useState(null);   // Settings -> Agents at once; the floor IS this number
   const [live, setLive] = useState({});   // TaskId -> the same {tail, files, StartedAt} the Board reads
   const [pick, setPick] = useState(null);
   const [frame, setFrame] = useState(0);          // the only clock the room has
 
   const load = useCallback(async () => {
-    const [t, a] = await Promise.all([
+    const [t, a, cfg] = await Promise.all([
       api.get("/api/tasks").catch(() => ({ data: {} })),
       api.get("/api/agents").catch(() => ({ data: {} })),
+      api.get("/api/settings").catch(() => ({ data: {} })),
     ]);
     setTasks((t.data.data || []).filter((x) => x.Status !== "dropped"));
     setAgents(a.data.data || a.data.agents || []);
+    const row = (cfg.data.data || []).find((x) => x.Name === "auto_sessions");
+    setCap((c) => (c == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : c));
   }, []);
   useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
   // the tails poll fast, exactly as the Board's do: a screen you are watching is a status wall
@@ -97,12 +101,12 @@ export default function StudioView({ onOpenTask }) {
   }, []);
 
   const desks = useMemo(() => {
-    const n = Math.max(4, Math.min(12, agents.length || 4));
+    const n = Math.max(1, Math.min(8, cap ?? 4));
     const live = (tasks || []).filter(isLive);
     const mine = (tasks || []).filter((t) => !live.includes(t) && (t.Status === "waiting" || t.ReviewStatus === "pending"));
     const seated = [...live, ...mine].slice(0, n);
     return Array.from({ length: n }, (_, i) => seated[i] || null);
-  }, [tasks, agents]);
+  }, [tasks, cap]);
 
   const queue = useMemo(() => (tasks || []).filter(
     (t) => t.Status === "open" && !isLive(t) && !desks.includes(t)), [tasks, desks]);
@@ -115,7 +119,6 @@ export default function StudioView({ onOpenTask }) {
     return () => clearInterval(id);
   }, [busy, walking]);
 
-  const picked = (tasks || []).find((t) => t.TaskId === pick) || null;
 
   const scene = useMemo(() => {
     // The floor is sized to the desks, not the other way round: four agents in an eleven-square
@@ -141,10 +144,16 @@ export default function StudioView({ onOpenTask }) {
     const poly = (z, p, fill, o) => prims.push({ k: "p", z, pts: p, fill, o: o == null ? 1 : o });
     const rect = (z, x, y, w, h, r, fill) => prims.push({ k: "r", z, x, y, w, h, r, fill });
     const oval = (z, cx, cy, rx, ry, fill, o) => prims.push({ k: "e", z, cx, cy, rx, ry, fill, o: o == null ? 1 : o });
-    const SHEAR = (TH / TW).toFixed(4);
+    /* Type on the monitor's own plane. Varying x on the plane y=const moves the screen point
+       by ((ca-sa)*TW, (ca+sa)*TH), and z moves it straight up - so that pair IS the shear, and
+       at yaw 0 it collapses to the (1, TH/TW) the first cut hard-coded. Past about 70 degrees
+       the plane is edge-on: the type would compress to a smear and then mirror, so it stops. */
+    const SH_A = ca - sa, SH_B = (ca + sa) * (TH / TW);
     const glass = (z, at, x, y, size, fill, str) => {
+      if (SH_A < 0.34) return;                           // turned too far to read: draw nothing
       const o = P(0, at, 0);                             // in-plane origin; x/y below are local px
-      prims.push({ k: "t", z, m: `matrix(1,${SHEAR},0,1,${o[0]},${o[1]})`, x, y, s: size, fill, text: str });
+      prims.push({ k: "t", z, m: `matrix(${SH_A.toFixed(4)},${SH_B.toFixed(4)},0,1,${o[0]},${o[1]})`,
+                   x, y, s: size, fill, text: str });
     };
     const BGZ = -1e4;
 
@@ -290,6 +299,8 @@ export default function StudioView({ onOpenTask }) {
 
   if (!tasks) return <CircularProgress size={22} sx={{ m: 4 }} />;
   const free = desks.filter((d) => !d).length;
+  const seated = desks.filter(Boolean);
+  const deskAt = (id) => scene.tags.find((g) => g.t?.TaskId === id);
   const vw = W / cam.zoom, vh = H / cam.zoom;
   const vx = cam.px + (W - vw) / 2, vy = cam.py + (H - vh) / 2;
   // The chips are HTML on top of the SVG, so they must be projected through the same viewBox -
@@ -354,45 +365,72 @@ export default function StudioView({ onOpenTask }) {
         </Box>
       ))}
 
-      <Box sx={{ position: "absolute", left: 16, top: 12, width: 268, bgcolor: PANEL, border: `1px solid ${BORDER}`,
-        borderRadius: "11px", boxShadow: "0 10px 28px rgba(30,50,38,.11)", overflow: "hidden" }}>
+      <Box sx={{ position: "absolute", left: 16, top: 12, width: 286, bgcolor: PANEL, border: `1px solid ${BORDER}`,
+        borderRadius: "11px", boxShadow: "0 10px 28px rgba(30,50,38,.11)", overflow: "hidden",
+        display: "flex", flexDirection: "column", maxHeight: "calc(100% - 84px)" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.75, pt: 1.4, pb: 1.1, borderBottom: `1px solid ${BORDER}` }}>
-          <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.3, color: FAINT, flex: 1 }}>WAITING FOR A DESK</Typography>
-          <Typography sx={{ fontSize: 11, color: FAINT }}>{queue.length}</Typography>
+          <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.3, color: FAINT, flex: 1 }}>ON THE FLOOR</Typography>
+          <Typography sx={{ fontSize: 11, color: FAINT }}>{seated.length}/{desks.length}</Typography>
         </Box>
-        {queue.slice(0, 3).map((t) => (
-          <Box key={t.TaskId} onClick={() => onOpenTask(t.TaskId)}
-            sx={{ px: 1.75, py: 1.1, borderBottom: `1px solid ${BORDER}`, cursor: "pointer", "&:hover": { bgcolor: "#f4f1ec" } }}>
-            <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{t.ref}</Typography>
-            <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: INK, pt: 0.4 }}>{t.Title}</Typography>
-          </Box>
-        ))}
-        {!queue.length && <Typography sx={{ px: 1.75, py: 1.4, fontSize: 12, color: FAINT }}>Nothing is waiting — every open task has a desk.</Typography>}
-        <Typography sx={{ px: 1.75, py: 1.1, fontSize: 11, color: FAINT, lineHeight: 1.5 }}>
-          {desks.length} desks — one per agent you have connected. {free} free.
-        </Typography>
-      </Box>
-
-      {picked && (
-        <Box sx={{ position: "absolute", right: 16, top: 12, width: 292, bgcolor: PANEL, border: `1px solid ${BORDER}`,
-          borderRadius: "11px", boxShadow: "0 10px 28px rgba(30,50,38,.11)", overflow: "hidden" }}>
-          <Box sx={{ px: 1.75, pt: 1.4, pb: 1.2, borderBottom: `1px solid ${BORDER}` }}>
-            <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{picked.ref} · {stateOf(picked).label}</Typography>
-            <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, pt: 0.6, lineHeight: 1.35 }}>{picked.Title}</Typography>
-          </Box>
-          {picked.Summary && (
-            <Typography sx={{ px: 1.75, py: 1.2, fontSize: 12, color: DIM, lineHeight: 1.55,
-              display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-              {picked.Summary}
+        <Box sx={{ overflowY: "auto", minHeight: 0 }}>
+          {/* one row per occupied desk. Clicking flies the camera to it, and picking a desk in
+              the room highlights the row here - the two are the same selection. */}
+          {seated.map((t) => {
+            const st = stateOf(t, live[t.TaskId]), on = pick === t.TaskId;
+            return (
+              <Box key={t.TaskId} onClick={() => { setPick(t.TaskId); const d = deskAt(t.TaskId); if (d) flyTo(d.x, d.y); }}
+                sx={{ px: 1.75, py: 1.05, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
+                  borderLeft: `3px solid ${on ? st.color : "transparent"}`,
+                  bgcolor: on ? "#f4f1ec" : "transparent", "&:hover": { bgcolor: "#f4f1ec" } }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                  <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: st.color, flexShrink: 0 }} />
+                  <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{t.ref}</Typography>
+                  <Typography noWrap sx={{ fontSize: 10.5, color: st.color, fontWeight: 600, flex: 1, minWidth: 0 }}>{st.label}</Typography>
+                </Box>
+                <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: INK, pt: 0.3 }}>{t.Title}</Typography>
+                {on && (
+                  <Typography onClick={(e) => { e.stopPropagation(); onOpenTask(t.TaskId); }}
+                    sx={{ fontSize: 11.5, fontWeight: 600, color: ACCENT, pt: 0.5, "&:hover": { textDecoration: "underline" } }}>
+                    Open the task →
+                  </Typography>
+                )}
+              </Box>
+            );
+          })}
+          {!seated.length && (
+            <Typography sx={{ px: 1.75, py: 1.4, fontSize: 12, color: FAINT }}>
+              Every desk is free — nothing is being worked right now.
             </Typography>
           )}
-          <Box onClick={() => onOpenTask(picked.TaskId)}
-            sx={{ px: 1.75, py: 1.2, borderTop: `1px solid ${BORDER}`, cursor: "pointer", color: ACCENT,
-              fontSize: 12.5, fontWeight: 600, "&:hover": { bgcolor: "#f4f1ec" } }}>
-            Open the task →
-          </Box>
+          {queue.length > 0 && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.75, pt: 1.2, pb: 0.9,
+              bgcolor: "#f4f1ec", borderBottom: `1px solid ${BORDER}` }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.3, color: FAINT, flex: 1 }}>WAITING FOR A DESK</Typography>
+              <Typography sx={{ fontSize: 11, color: FAINT }}>{queue.length}</Typography>
+            </Box>
+          )}
+          {queue.slice(0, 6).map((t) => (
+            <Box key={t.TaskId} onClick={() => onOpenTask(t.TaskId)}
+              sx={{ px: 1.75, py: 0.9, borderBottom: `1px solid ${BORDER}`, cursor: "pointer", "&:hover": { bgcolor: "#f4f1ec" } }}>
+              <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{t.ref}</Typography>
+              <Typography noWrap sx={{ fontSize: 12.5, color: DIM, pt: 0.2 }}>{t.Title}</Typography>
+            </Box>
+          ))}
         </Box>
-      )}
+        {/* the desk count IS the Agents-at-once setting, so this writes it. Move the slider and
+            the room widens; open Settings and you find the same number. */}
+        <Box sx={{ px: 1.75, pt: 1.1, pb: 1.3, borderTop: `1px solid ${BORDER}`, flexShrink: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75 }}>
+            <Typography sx={{ fontSize: 11, color: DIM, flex: 1 }}>Agents at once</Typography>
+            <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 700, color: INK }}>{cap ?? "—"}</Typography>
+            <Typography sx={{ fontSize: 11, color: FAINT }}>{free} free</Typography>
+          </Box>
+          <Slider size="small" min={1} max={8} step={1} marks value={cap ?? 4}
+            onChange={(_, v) => setCap(v)}
+            onChangeCommitted={(_, v) => api.patch("/api/settings", { name: "auto_sessions", value: String(v) }).catch(() => {})}
+            sx={{ mt: 0.25, color: ACCENT, "& .MuiSlider-markActive": { bgcolor: PANEL } }} />
+        </Box>
+      </Box>
 
       <Box sx={{ position: "absolute", left: 16, bottom: 14, display: "flex", alignItems: "center", gap: 1.1,
         bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: "11px", px: 1.4, py: 1,

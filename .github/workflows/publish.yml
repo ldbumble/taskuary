@@ -79,13 +79,29 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
 
+  exe:
+    # the one-file Windows build, so taskuary.com's Download button has a stable target:
+    # github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -e .[mssql,desktop,build]
+      - run: pyinstaller taskuary.spec
+      - uses: actions/upload-artifact@v4
+        with: { name: exe, path: dist/Taskuary.exe }
+
   release:
-    needs: pypi
+    needs: [pypi, exe]
     runs-on: ubuntu-latest
     permissions: { contents: write }        # to create the release and attach the files
     steps:
       - uses: actions/download-artifact@v4
         with: { name: dist, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: exe, path: dist }
       # The Changelog link in the README points at /releases. A bare tag there is not a
       # changelog - and the sdist/wheel attached give anyone auditing the release something
       # to compare against what PyPI is serving.

@@ -441,6 +441,25 @@ class SQLiteStore:
         if fields.get('SentAt'): fields = {**fields, 'SentAt': norm_stamp(fields['SentAt'])}
         return self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
+    def thread_messages(self, conversation_id=None, subject=None, limit=40):
+        """Every message already on this thread, oldest last - by ConversationId where the channel
+        gives us one, else by normalised subject for the channels that do not.
+
+        Triage needs this to answer the one question a message cannot answer about itself: has
+        somebody ELSE already picked this up? That fact is never in the message; it is in the
+        messages around it."""
+        if conversation_id:
+            rows = self._rows('SELECT * FROM message WHERE ConversationId=? ORDER BY SentAt DESC LIMIT ?',
+                              (conversation_id, limit))
+            if rows: return list(reversed(rows))
+        if not subject: return []
+        from .routing import norm_subject
+        key = norm_subject(subject)
+        if not key: return []
+        # no index on a normalised subject, so bound the scan rather than the table
+        rows = self._rows('SELECT * FROM message WHERE Subject IS NOT NULL ORDER BY SentAt DESC LIMIT 400')
+        return list(reversed([r for r in rows if norm_subject(r['Subject']) == key][:limit]))
+
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""

@@ -148,7 +148,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                                    f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                                                    subject=msg.get('subject') or '',
                                                    source=msg.get('source_name') or '')
-                intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'),
+                thread = others_on_thread(store, msg, mine)
+                intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
                                          learned=injectable(store.doc('learned') or ''),
                                          notes=notes, notes_left=notes_left, images=msg.get('images'),
                                          system=store.doc('triage'), mine=mine)
@@ -380,6 +381,33 @@ def veto(store, msg: dict, topic_only: bool = False) -> str:
                             msg.get('source_name') or '')
     return next((n['Note'] for n in hits if n.get('Source') == 'verdict'
                  and not (topic_only and (n['Scope'] != 'subject' or not n.get('ScopeKey')))), '')
+
+
+def others_on_thread(store, msg: dict, mine=()) -> dict:
+    """Has somebody ELSE already answered on this thread?
+
+    A colleague replying is the strongest everyday sign that a request is not waiting on the
+    owner - and it is precisely the fact a classifier cannot get from the message, because it
+    lives in the messages AROUND it. Without it, every "can you add a column?" on a
+    seventeen-person thread lands on the owner even when a colleague answered it an hour ago.
+
+    Only people who actually SENT something count. Being cc'd is not answering. The owner's own
+    replies are excluded (that is not somebody else picking it up) and so is this message's own
+    sender (a follow-up from the asker is still the asker)."""
+    prior = store.thread_messages(msg.get('conversation_id'), msg.get('subject'))
+    if not prior: return {}
+    me = {(a or '').lower() for a in mine if a} | {(msg.get('source_name') or '').lower()}
+    sender = (msg.get('from_email') or '').lower()
+    who = lambda m: (m.get('FromName') or (m.get('FromEmail') or '').split('@')[0] or 'someone')
+    others = []
+    for m in prior:
+        e = (m.get('FromEmail') or '').lower()
+        if not e or e == sender or e in me: continue
+        if who(m) not in others: others.append(who(m))
+    if not others: return {}
+    last = prior[-1]
+    return {'others_replied': others[-3:], 'last_on_thread': who(last),
+            'last_on_thread_is_you': (last.get('FromEmail') or '').lower() in me}
 
 
 def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:

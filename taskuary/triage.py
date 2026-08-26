@@ -23,6 +23,12 @@ INTENT_SYSTEM = (
     'fyi = informational only: automated notices, reports, newsletters, thanks, threads the owner is '
     'merely copied on.\n'
     'addressed_to_you and recipients are SIGNALS to weigh, never rules to obey. "to" = the mail was aimed at the owner; "cc" = they were copied, which OFTEN means somebody else owns the work; "not named" = it arrived through a group alias. But a cc can absolutely be theirs: one that names them, asks them something directly, or that only they can answer is their work, and being on the cc line counts for nothing against that. recipients counts everyone on the mail - a note to thirty people is more likely a broadcast than a job. Weigh these with everything else in the message; never decide on them alone. Both fields are absent on channels with no recipient lines.\n'
+    'others_replied names people - other than you and the sender - who have already SENT a message on '
+    'this thread, and last_on_thread is whoever spoke most recently. Somebody else answering is the '
+    'strongest everyday sign that a request is not waiting on you: when a colleague has replied and the '
+    'ask is not aimed at you specifically, prefer fyi. Weigh it, do not obey it - a question that names '
+    'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
+    'fields mean nobody else has spoken, which is not evidence either way.\n'
     'Torn between task and reply_only? Choose reply_only. The owner can turn a reply into a task in '
     'one click, and a wrongly-started agent costs far more than a draft.')
 
@@ -108,13 +114,19 @@ def strip_boilerplate(text: str) -> str:
 
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
-                    learned: str = None, system: str = None, notes_left: int = 0, mine=()) -> dict:
+                    learned: str = None, system: str = None, notes_left: int = 0, mine=(),
+                    thread: dict = None) -> dict:
     """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
     they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
     'Not our task' stick: the next message like it is classified with that lesson in hand.
 
     `images` are the attached screenshots, for a model that can see them. Half of "see below"
     mail says nothing in its body - triage read three words and filed it as informational.
+
+    `thread` is what the messages AROUND this one say - chiefly whether a colleague has already
+    replied. Supplied as a signal for the same reason as the To/Cc lines: the code's job is to
+    put the fact in front of the model, and how much it counts for is a judgement that belongs
+    in TRIAGE.md where the owner can argue with it.
 
     `system` is TRIAGE.md, the owner-editable classifier instructions - HTML comments are
     stripped (the doc's own how-to-edit note is for the owner, not the model), and a blanked
@@ -146,6 +158,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
+                               **(thread or {}),
                                'body': strip_boilerplate(str(msg.get('body') or ''))[:1500]})
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '

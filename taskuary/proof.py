@@ -23,6 +23,8 @@ TEST_LINES = [
     (r'^(ok|FAIL)\s+\S+\s+[\d.]+s', 'go'),
     # dotnet: "Passed! - Failed: 0, Passed: 12"
     (r'(?:Passed|Failed)!\s*-\s*Failed:\s*(\d+),\s*Passed:\s*(\d+)', 'dotnet'),
+    # phpunit: "OK (42 tests, 108 assertions)" / "FAILURES! Tests: 42, Failures: 3"
+    (r'(?:OK \((\d+) tests?, \d+ assertions?\)|FAILURES!\s+Tests:\s*(\d+),\s+Failures:\s*(\d+))', 'phpunit'),
 ]
 FAIL_WORDS = re.compile(r'\b(FAILED|FAIL|failed|error:|Error:|Traceback)\b')
 
@@ -31,10 +33,12 @@ def tests_from(text: str) -> dict:
     """What the session actually ran, read off the transcript. {ran, runner, passed, failed,
     line} - ran=False when nothing recognizable ran, which the card SAYS instead of hiding."""
     if not text: return {'ran': False}
+    found = []
     for pat, runner in TEST_LINES:
-        m = None
-        for m in re.finditer(pat, text, re.M): pass      # the LAST run is the current truth
-        if not m: continue
+        for m in re.finditer(pat, text, re.M):
+            found.append((m.start(), m, runner))
+    if found:
+        _pos, m, runner = max(found, key=lambda x: x[0])  # the LAST run is the current truth
         g = [x for x in m.groups() if x is not None]
         nums = [int(x) for x in g if str(x).isdigit()]
         if runner == 'pytest':
@@ -43,6 +47,8 @@ def tests_from(text: str) -> dict:
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, nums[0])
         elif runner == 'dotnet':
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, 0)
+        elif runner == 'phpunit':
+            passed, failed = (nums[0], 0) if m.group(1) is not None else (nums[0], nums[1])
         else:
             passed, failed = (0, 0) if m.group(1) == 'ok' else (0, 1)
         return {'ran': True, 'runner': runner, 'passed': passed, 'failed': failed,

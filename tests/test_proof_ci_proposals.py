@@ -37,6 +37,17 @@ class ProofTests(unittest.TestCase):
         # the LAST run is the truth: a fixed suite must not report the earlier failure
         self.assertEqual(proof.tests_from('5 passed, 2 failed in 1s\n...\n7 passed in 2s')['failed'], 0)
 
+
+    def test_phpunit_summaries_are_detected(self):
+        ok = proof.tests_from('PHPUnit 10.5.0\nOK (42 tests, 108 assertions)')
+        self.assertEqual((ok['runner'], ok['passed'], ok['failed']), ('phpunit', 42, 0))
+        failed = proof.tests_from('FAILURES!\nTests: 42, Failures: 3')
+        self.assertEqual((failed['runner'], failed['passed'], failed['failed']), ('phpunit', 42, 3))
+
+    def test_last_summary_wins_across_runners(self):
+        r = proof.tests_from('Tests:  2 failed, 9 passed\n...fixed...\nOK (42 tests, 108 assertions)')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 42, 0))
+
     def test_merely_mentioning_pytest_is_not_a_result(self):
         self.assertFalse(proof.tests_from('I will now run pytest on the suite')['ran'])
         self.assertFalse(proof.tests_from('')['ran'])

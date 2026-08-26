@@ -122,27 +122,24 @@ export default function TaskHubPage() {
           <Box sx={{ display: "flex", gap: 0.5, minWidth: 0, overflowX: "auto",
             position: { xs: "static", xl: "absolute" },
             left: { xl: "50%" }, transform: { xl: "translateX(-50%)" }, ml: { xs: 3, xl: 0 } }}>
-            {TABS.map((t) => {
-              const pill = (
-                <Box onClick={() => go(t)}
-                  sx={{ px: 1.5, py: 0.5, borderRadius: 99, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                    color: tab === t ? "#2f6b4f" : DIM, bgcolor: tab === t ? "#e4efe8" : "transparent",
-                    border: `1px solid ${tab === t ? "#b6d0c2" : "transparent"}`,
-                    transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#e4efe8" : "#f4f7f1" } }}>
-                  {t}
-                </Box>
-              );
-              // only Review wears a count, in the same amber as "needs you" — wrapping every
-              // tab in a Badge left a few pixels of dead space even at zero
-              return t === "Review" ? (
-                <Badge key={t} badgeContent={pending} max={99} overlap="rectangular" showZero={false}
-                  invisible={!pending}
-                  sx={{ "& .MuiBadge-badge": { fontSize: 9.5, height: 16, minWidth: 16, px: 0.45,
-                    bgcolor: "#2f6b4f", color: "#fff", fontWeight: 700, right: -2, top: 2 } }}>
-                  {pill}
-                </Badge>
-              ) : <React.Fragment key={t}>{pill}</React.Fragment>;
-            })}
+            {TABS.map((t) => (
+              // the count rides INSIDE the pill. A MUI Badge hangs outside its child's box, and
+              // this strip is overflowX:auto - so the number was being clipped by the scroller
+              // it sits in, which is how "Review 1" showed up as a half-eaten dot.
+              <Box key={t} onClick={() => go(t)}
+                sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 1.5, py: 0.5, borderRadius: 99,
+                  cursor: "pointer", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
+                  color: tab === t ? "#2f6b4f" : DIM, bgcolor: tab === t ? "#e4efe8" : "transparent",
+                  border: `1px solid ${tab === t ? "#b6d0c2" : "transparent"}`,
+                  transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#e4efe8" : "#f4f7f1" } }}>
+                {t}
+                {t === "Review" && pending > 0 && (
+                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    minWidth: 16, height: 16, px: 0.45, borderRadius: 99, bgcolor: "#2f6b4f", color: "#fff",
+                    fontSize: 9.5, fontWeight: 700 }}>{pending > 99 ? "99+" : pending}</Box>
+                )}
+              </Box>
+            ))}
           </Box>
           <Box sx={{ flex: 1 }} />
           <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />

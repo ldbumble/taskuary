@@ -90,13 +90,6 @@ const blurb = (r) => {
 // The time gutter. 58px broke "12:40 PM" onto two lines, which is what made the column look
 // unkempt - the number and its meridiem have to live on one line.
 const GUTTER = 70;
-// "3 PM" for the hour separators - printed only when the hour changes.
-const hourOf = (t) => {
-  if (!t) return "";
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("en-US", { hour: "numeric", hour12: true });
-};
 // The rail dot says WHAT STATE it is in. Channel identity is already on the icon beside the
 // sender, and the old row said it three times over (stripe, dot, tinted tile).
 const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
@@ -330,7 +323,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       // Timeline column tops out at 860px and stays LEFT; the second track always exists
       // (panel or empty space) so the dock header - which spans both - centers over the
       // PAGE, not over the timeline column. Panel keeps its 400px floor when open.
-      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 860px) minmax(400px, 1fr)" } }}>
+      width: "100%", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(360px, 452px)" } }}>
       {/* floating dock: one detached pill with Sync now DEAD-CENTER between the two filter
           groups, and the stats as a quiet caption line beneath. The old two-row toolbar
           card boxed the controls into the timeline column; the dock frees them to belong
@@ -441,7 +434,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       </Box>
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
-      <Box sx={{ minWidth: 0, maxWidth: 860 }}>
+      <Box sx={{ minWidth: 0 }}>
         {/* syncing = the TIMELINE is loading, so the timeline says so: rows dim and a
             spinner sits on the list itself - the old 3px bar over just the left column
             read as a broken artifact, not a state */}
@@ -464,40 +457,27 @@ export default function FeedView({ onOpenTask, onChanged }) {
               <Box>
                 {items.map((r, i) => (
                   <React.Fragment key={r.MessageId}>
-                    {/* the hour only prints when it CHANGES, so the day gets a shape without a
-                        row of repeated timestamps doing the work */}
-                    {hourOf(r.SentAt) && hourOf(r.SentAt) !== hourOf(items[i - 1]?.SentAt) && (
-                      <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                        alignItems: "center", height: 26, mb: "2px" }}>
-                        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".9px", color: "#a7afa8",
-                          textAlign: "right", pr: "11px" }}>{hourOf(r.SentAt)}</Typography>
-                        <Box sx={{ position: "relative", height: 26 }}>
-                          <Box sx={{ position: "absolute", left: "6px", top: 0, bottom: 0, width: "1px", bgcolor: BORDER }} />
-                        </Box>
-                        <Box sx={{ height: "1px", bgcolor: "#e4e9e0", ml: "12px" }} />
-                      </Box>
-                    )}
                     <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                      alignItems: "stretch", mb: "6px",
+                      alignItems: "stretch", mb: "5px",
                       ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
                       {/* time sits OUTSIDE the card, in its own gutter - wide enough that
                           "12:40 PM" can never wrap onto a second line */}
                       <Typography sx={{ ...mono, fontSize: 10.5, color: "#98a09a", textAlign: "right",
-                        pt: "13px", pr: "11px", whiteSpace: "nowrap", letterSpacing: "-.2px" }}>
+                        pt: "11px", pr: "11px", whiteSpace: "nowrap", letterSpacing: "-.2px" }}>
                         {fmtTime12(r.SentAt)}
                       </Typography>
                       {/* rail + dot: the dot carries STATE, not channel - the icon already says
                           where it came from, and three encodings of one fact read as noise */}
                       <Box sx={{ position: "relative" }}>
                         <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
-                        <Box sx={{ position: "absolute", left: "2.5px", top: "15px", width: 8, height: 8, borderRadius: "50%",
+                        <Box sx={{ position: "absolute", left: "2.5px", top: "13px", width: 8, height: 8, borderRadius: "50%",
                           bgcolor: dotOf(r), boxShadow: `0 0 0 3.5px ${BG}` }} />
                       </Box>
                       {/* one DEFINED object per message: who and what on top, what the hub did
                           underneath. Hover adds the message gist; click opens the panel. */}
                       <Box onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
                         sx={{ bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#fafbf8" : PANEL,
-                          border: `1px solid ${BORDER}`, borderRadius: "8px", px: "12px", pt: "9px", pb: "10px",
+                          border: `1px solid ${BORDER}`, borderRadius: "8px", px: "12px", pt: "7px", pb: "8px",
                           minWidth: 0, overflow: "hidden",
                           transition: "box-shadow .18s, border-color .18s",
                           ...(sel?.MessageId === r.MessageId
@@ -571,8 +551,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
         // pushed DOWN so the panel's top edge lines up with the first timeline card (past
         // the day-group margin + day header + row margin ≈ 44px), instead of floating
         // above the list it annotates. Sticky still takes over once you scroll.
-        <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch", mt: "44px" }}>
-          <Box sx={{ position: "sticky", top: 60 }}>
+        <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch", mt: "34px" }}>
+          <Box sx={{ position: "sticky", top: 62 }}>
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
               decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
               onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
@@ -684,7 +664,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
       "@keyframes thubGrow": { from: { opacity: 0, transform: "translateX(-32px) scale(.965)" },
         to: { opacity: 1, transform: "none" } },
       animation: "thubGrow .3s cubic-bezier(.2,.8,.3,1) both", transformOrigin: "left center" }}>
-      <Box sx={{ ...frameInner, display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 140px)" }}>
+      <Box sx={{ ...frameInner, display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 108px)" }}>
         {/* header */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
           <ChevronRightIcon sx={{ fontSize: 17, color: "#2f6b4f" }} />
@@ -909,11 +889,11 @@ const DayHeader = ({ label }) => {
   return (
     <>
       <Box ref={ref} sx={{ height: "1px" }} />
-      <Box sx={{ position: "sticky", top: 0, zIndex: 3, py: 0.75, ml: `${GUTTER}px` }}>
-        <Box sx={{ display: "inline-block", px: stuck ? 1.5 : 0, py: stuck ? 0.4 : 0,
+      <Box sx={{ position: "sticky", top: 0, zIndex: 3, py: 0.75, display: "flex", justifyContent: "center" }}>
+        <Box sx={{ display: "inline-block", px: stuck ? 1.75 : 1.25, py: stuck ? 0.5 : 0.25,
           bgcolor: stuck ? PANEL : BG, border: `1px solid ${stuck ? BORDER : "transparent"}`,
-          borderRadius: 99, boxShadow: stuck ? "0 4px 14px rgba(30,50,38,.12)" : "none",
-          transform: stuck ? "scale(1.08)" : "scale(1)", transformOrigin: "left center",
+          borderRadius: 99, boxShadow: stuck ? "0 6px 18px rgba(30,50,38,.14)" : "none",
+          transform: stuck ? "scale(1.12)" : "scale(1)", transformOrigin: "center",
           transition: "all .25s cubic-bezier(.34,1.56,.64,1)" }}>
           <Typography variant="caption" sx={{ ...mono, color: stuck ? "#2f6b4f" : INK, fontWeight: 800,
             fontSize: 11.5, letterSpacing: 0.5 }}>

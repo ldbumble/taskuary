@@ -49,11 +49,52 @@
   .btn.sm{padding:7px 12px;font-size:13.5px}
   .btn svg{width:16px;height:16px;flex:none}
 
-  /* hero */
-  header{padding:72px 0 0;text-align:center}
-  h1{font-size:clamp(40px,6.2vw,68px);line-height:1.02;letter-spacing:-.03em;margin:14px 0 18px;font-weight:700}
+  /* hero: the whole first screen is the room. The words sit on top of it, top-left, small
+     enough to leave the floor alone; the inbox rail on the right feeds it; the door is the way
+     in. Everything else scrolls in underneath. */
+  .hero{position:relative;height:calc(100vh - 58px);min-height:600px;overflow:hidden;border-bottom:1px solid var(--bd);
+        background:radial-gradient(90% 70% at 58% 45%,#eeeae2 0%,var(--bg) 62%)}
+  .hero canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y}
+  .hero .words{position:absolute;inset:0;pointer-events:none}
+  .hero .words .wrap{position:relative;height:100%}
+  .copy{position:absolute;left:24px;top:8vh;max-width:400px;pointer-events:auto}
+  .copy h1{text-align:left;font-size:clamp(38px,4.6vw,58px);margin:10px 0 12px}
+  .copy .sub{margin:0;text-align:left;font-size:clamp(14.5px,1.1vw,16px);max-width:390px}
+  .copy .cta{justify-content:flex-start;margin:22px 0 10px}
+  .copy .fine{text-align:left}
+  .rail{position:absolute;right:24px;bottom:46px;width:min(300px,26vw);display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .rail .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;
+             display:flex;align-items:center;gap:8px;margin-bottom:2px}
+  .rail .lbl i{width:7px;height:7px;border-radius:50%;background:var(--sage);display:inline-block;animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .mail{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:10px 12px 9px;box-shadow:0 8px 24px -12px rgba(38,37,33,.25);
+        transform:translateY(14px);opacity:0;transition:transform .5s cubic-bezier(.2,.7,.2,1),opacity .5s;font-size:12.5px;line-height:1.35}
+  .mail.in{transform:none;opacity:1}
+  .mail.out{opacity:0;transform:translateY(-8px) scale(.98)}
+  .mail .from{display:flex;align-items:center;gap:7px;color:var(--faint);font-size:11.5px}
+  .mail .from .ch{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;background:var(--panel2);border-radius:5px;padding:1px 6px;color:var(--dim)}
+  .mail .subj{color:var(--ink);font-weight:600;margin-top:3px}
+  .mail .stamp{margin-top:7px;display:none;align-items:flex-start;gap:6px;font-size:11.5px;color:var(--dim);border-top:1px dashed var(--bd);padding-top:6px}
+  .mail.ruled .stamp{display:flex}
+  .pill{flex:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:999px;border:1px solid}
+  .pill.task{color:#41525f;background:#e4e9ee;border-color:#cbd4dc}
+  .pill.reply{color:var(--alert);background:var(--alert-tint);border-color:var(--alert-bd)}
+  .pill.fyi{color:#6f6960;background:#e6e0d5;border-color:#dad3c5}
+  .pill.sent{color:#3c5740;background:#e2ebe0;border-color:#c9dcc8}
+  /* the card that leaves the rail and goes in through the door */
+  .flyer{position:fixed;z-index:5;pointer-events:none;background:var(--panel);border:1px solid #cbd4dc;border-radius:8px;padding:6px 10px;
+         font-size:11.5px;font-weight:600;color:var(--ink);box-shadow:0 10px 30px -12px rgba(38,37,33,.4);
+         transition:transform 1.1s cubic-bezier(.35,.1,.25,1),opacity .35s .8s;will-change:transform}
+  .cue{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);color:var(--faint);font-size:11.5px;font-family:var(--mono);letter-spacing:.08em;
+       display:flex;align-items:center;gap:8px;pointer-events:auto;cursor:pointer}
+  .cue b{font-weight:600;color:var(--dim)}
+  .cue span{display:inline-block;animation:cue 2.2s ease-in-out infinite}
+  @keyframes cue{50%{transform:translateY(4px)}}
+  header{padding:0}
+  .after{padding-top:8px}
+  h1{line-height:1.02;letter-spacing:-.03em;font-weight:700}
   h1 .accent{color:var(--accent)}
-  .sub{max-width:720px;margin:0 auto;color:var(--dim);font-size:clamp(17px,1.6vw,20px);line-height:1.5}
+  .sub{color:var(--dim);line-height:1.5}
   .sub b{color:var(--ink);font-weight:600}
   .cta{display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;margin:30px 0 14px}
   .pip{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:13.5px;background:var(--panel);border:1px solid var(--bd);border-radius:9px;padding:9px 12px 9px 14px;color:var(--ink)}
@@ -62,10 +103,6 @@
   .pip button:hover{background:var(--panel2)}
   .fine{color:var(--faint);font-size:13px}
   .fine a{color:var(--faint);text-decoration:underline;text-decoration-color:var(--bd)}
-  .shot{margin:44px auto 0;max-width:1180px;padding:0 16px}
-  .frame{background:var(--panel);border:1px solid var(--bd);border-radius:14px;box-shadow:0 30px 70px -30px rgba(38,37,33,.35),0 2px 6px rgba(38,37,33,.06);overflow:hidden}
-  .frame img{display:block;width:100%;height:auto}
-  .caption{color:var(--faint);font-size:13px;text-align:center;margin:14px auto 0;max-width:760px}
 
   /* flow strip */
   .flow{margin:56px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--bd);border-radius:12px;background:var(--panel);overflow:hidden}
@@ -119,12 +156,21 @@
 
   @media (max-width:860px){
     nav .links a.hide{display:none}
+    .hero{height:auto;min-height:100vh;display:flex;flex-direction:column}
+    .hero canvas{position:relative;inset:auto;height:60vh;order:2}
+    .hero .words{position:relative;inset:auto;order:1}
+    .hero .words .wrap{height:auto}
+    .copy{position:static;padding:30px 0 8px;max-width:none}
+    .copy h1{font-size:36px}
+    .copy .sub{font-size:14.5px}
+    .copy .cta{margin-top:16px}
+    .hero canvas{height:52vh}
+    .rail,.cue{display:none}
     .flow{grid-template-columns:1fr}
     .flow > div{border-left:0;border-top:1px solid var(--bd)}
     .flow > div:first-child{border-top:0}
     .flow .arrow{display:none}
     .grid,.dl,.oss{grid-template-columns:1fr}
-    header{padding-top:48px}
     section{padding-top:64px}
   }
 </style>
@@ -145,29 +191,29 @@
 </nav>
 
 <header>
-  <div class="wrap">
-    <div class="eyebrow">everything in → one funnel → agents + you</div>
-    <h1>Automate <span class="accent">your job.</span></h1>
-    <p class="sub"><b>Your inbox and your coding agents in one place.</b> Email, Teams, Slack, GitHub issues and scheduled
-      reports land on one timeline; AI triage says what is real work; the coding CLI you already use does it;
-      you approve the result. Runs entirely on your machine.</p>
-    <div class="cta">
-      <a class="btn primary" href="https://github.com/ldbumble/taskuary/releases/latest">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-        Download for Windows</a>
-      <span class="pip"><span class="dollar">$</span><span id="pipcmd">pip install taskuary</span><button type="button" onclick="copyPip(this)">copy</button></span>
-      <a class="btn ghost" href="https://github.com/ldbumble/taskuary">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5A12 12 0 0 0 0 12.7c0 5.4 3.4 10 8.2 11.6.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.3 1.8 1.3 1.1 1.9 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.4-5.5-6.1 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.6.1-3.3 0 0 1-.3 3.3 1.3a11.4 11.4 0 0 1 6 0c2.3-1.6 3.3-1.3 3.3-1.3.7 1.7.3 3 .1 3.3.8.9 1.2 2 1.2 3.3 0 4.7-2.8 5.8-5.5 6.1.4.4.8 1.1.8 2.3v3.3c0 .3.2.7.8.6A12 12 0 0 0 24 12.7 12 12 0 0 0 12 .5z"/></svg>
-        View source</a>
-    </div>
-    <div class="fine">Free and open source (MIT) · Windows app, or <span class="mono">pip</span> anywhere Python 3.10+ runs · your data never leaves the machine</div>
-  </div>
-  <div class="shot">
-    <div class="frame"><img src="/hero.png" alt="The Taskuary Studio: an isometric office where each desk is a task and the agent at it is drawn doing what it is actually doing — coding at a lit screen, or with a hand up because it is waiting on you. The list on the left shows who is on the floor and who is waiting for a desk." width="2880" height="1440" fetchpriority="high"></div>
-    <p class="caption">The Studio. One desk per agent that can run at once — the agent at it is drawn doing what it is actually doing, the screen shows the files it is touching, and an empty desk is capacity you are not using.</p>
+  <div class="hero" id="top">
+    <canvas id="floor" role="img" aria-label="The Taskuary Studio: as mail is triaged into tasks, agents walk in through the door and sit at desks; each screen shows what its agent is doing. Click the door to enter the site."></canvas>
+    <div class="words"><div class="wrap">
+      <div class="copy">
+        <div class="eyebrow">everything in → one funnel → agents + you</div>
+        <h1>Automate <span class="accent">your job.</span></h1>
+        <p class="sub"><b>Your inbox and your coding agents in one place.</b> Mail, chats, issues and reports land on one
+          timeline; triage says what is real work; the coding CLI you already use does it; you approve.
+          Runs entirely on your machine.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/ldbumble/taskuary/releases/latest">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Download for Windows</a>
+          <span class="pip"><span class="dollar">$</span><span id="pipcmd">pip install taskuary</span><button type="button" onclick="copyPip(this)">copy</button></span>
+        </div>
+        <div class="fine">Free and open source (MIT) · <a href="https://github.com/ldbumble/taskuary">source on GitHub</a> · your data never leaves the machine</div>
+      </div>
+      <div class="rail" id="rail" aria-hidden="true"><div class="lbl"><i></i> what is arriving</div></div>
+      <div class="cue" id="cue"><b>walk through the door</b> or scroll <span>↓</span></div>
+    </div></div>
   </div>
 
-  <div class="wrap">
+  <div class="wrap after">
     <div class="flow" id="how">
       <div><div class="n">01 · IN</div><h3>Everything lands on one timeline</h3><p>Outlook and IMAP mail, Teams, Slack, Telegram, WhatsApp, GitHub issues, Jira, and the reports you schedule — one rail, in the order it arrived.</p><span class="arrow">→</span></div>
       <div><div class="n">02 · FUNNEL</div><h3>Triage says what is real work</h3><p>It reads the thread, not just the message: who was addressed, whether a colleague already answered, what you ruled before. A question becomes a drafted reply; work becomes a task.</p><span class="arrow">→</span></div>
@@ -295,7 +341,52 @@ docker compose up -d</div>
   </div>
 </footer>
 
+<script src="/floor.js"></script>
 <script>
+  (function(){
+    var rail = document.getElementById('rail'), cards = {}, floor = null;
+    var CH = { email: 'mail', teams: 'teams', slack: 'slack', github: 'github', report: 'report' };
+    var WORDS = { task: 'task → an agent', reply: 'reply · needs you', fyi: 'filed', sent: 'sent ✓' };
+    // a card leaves the rail and goes in through the door - the room and the rail are one story
+    function fly(card){
+      if (!floor || !floor.door()) return;
+      var canvas = document.getElementById('floor'), r = card.getBoundingClientRect(), cr = canvas.getBoundingClientRect(), d = floor.door();
+      var f = document.createElement('div'); f.className = 'flyer'; f.textContent = card.querySelector('.subj').textContent.slice(0, 34);
+      f.style.left = r.left + 'px'; f.style.top = r.top + 'px'; f.style.width = Math.min(240, r.width) + 'px'; document.body.appendChild(f);
+      requestAnimationFrame(function(){
+        var tx = (cr.left + d[0]) - r.left - Math.min(240, r.width) / 2, ty = (cr.top + d[1]) - r.top - 10;
+        f.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(.42)'; f.style.opacity = '0';
+      });
+      setTimeout(function(){ f.remove(); }, 1400);
+    }
+    function onEvent(ev){
+      if (ev.k === 'reset') { Object.keys(cards).forEach(function(k){ cards[k].remove(); }); cards = {}; return; }
+      if (ev.k === 'mail') {
+        var el = document.createElement('div'); el.className = 'mail';
+        el.innerHTML = '<div class="from"><span class="ch"></span><span></span></div><div class="subj"></div>' +
+                       '<div class="stamp"><span class="pill"></span><span class="why"></span></div>';
+        el.querySelector('.ch').textContent = CH[ev.ch] || ev.ch;
+        el.querySelector('.from span:last-child').textContent = ev.from; el.querySelector('.subj').textContent = ev.subj;
+        rail.insertBefore(el, rail.children[1] || null); cards[ev.id] = el; requestAnimationFrame(function(){ el.classList.add('in'); });
+        var live = rail.querySelectorAll('.mail.in:not(.out)');
+        if (live.length > 3) { var old = live[live.length - 1]; old.classList.add('out'); setTimeout(function(){ old.remove(); }, 600); }
+      }
+      if (ev.k === 'verdict' && cards[ev.id]) {
+        var c = cards[ev.id]; c.classList.add('ruled');
+        c.querySelector('.pill').className = 'pill ' + ev.v; c.querySelector('.pill').textContent = WORDS[ev.v];
+        c.querySelector('.why').textContent = ev.why;
+        if (ev.v === 'task') fly(c);
+      }
+      if (ev.k === 'approve' && cards[ev.id]) {
+        var p = cards[ev.id].querySelector('.pill'); p.className = 'pill sent'; p.textContent = WORDS.sent;
+        cards[ev.id].querySelector('.why').textContent = 'you approved the draft — it went out';
+      }
+    }
+    var enter = function(){ document.getElementById('how').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    var canvas = document.getElementById('floor');
+    if (canvas && window.TaskuaryFloor) floor = window.TaskuaryFloor.mount(canvas, { onEvent: onEvent, onDoor: enter });
+    var cue = document.getElementById('cue'); if (cue) cue.addEventListener('click', enter);
+  })();
   function copyPip(btn){
     navigator.clipboard.writeText(document.getElementById('pipcmd').textContent).then(function(){
       btn.textContent = 'copied'; setTimeout(function(){ btn.textContent = 'copy'; }, 1400);

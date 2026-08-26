@@ -194,7 +194,14 @@ const NoteDialog = ({ open, task, onClose }) => {
 // off the Status column alone left a card in "Queued" while its agent asked what to do.
 const laneOf = (t, live) => {
   const l = live[t.TaskId];
-  if (t.Status === "done") return "done";
+  // Work started again on a finished task is work in progress, whatever the Status column
+  // still says. The tell is WHEN the session began: one that started after the task was
+  // closed means somebody picked it back up, while one that predates the close is just a
+  // terminal nobody shut - and bouncing every card out of Done because its window is still
+  // open would be its own bug. No ClosedAt to compare against (a row closed before the
+  // column existed) trusts the live session: it is the fact happening right now.
+  const resumed = l && (!t.ClosedAt || String(l.StartedAt || "") > String(t.ClosedAt));
+  if (t.Status === "done" && !resumed) return "done";
   if (l) return l.kind === "session" && l.idle >= IDLE_WAITING ? "waiting" : "working";
   if (t.RunStatus === "error") return "waiting";       // it failed: your move, never back to "queued"
   if (t.ReviewStatus === "pending" || t.Status === "waiting") return "waiting";

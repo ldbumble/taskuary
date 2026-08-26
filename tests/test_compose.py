@@ -4,7 +4,7 @@ The composer is a model writing a config, so what these cover is the fence aroun
 only choose types this install can actually run, it may not invent config keys or systems, and
 it is allowed - expected - to ask rather than guess.
 """
-import json
+import json, os, tempfile
 import unittest
 
 from taskuary import compose
@@ -156,7 +156,12 @@ class LookBeforeWritingTests(unittest.TestCase):
 
     def test_a_failed_peek_is_information_not_a_crash(self):
         """'that object does not exist' is something the model should read and act on."""
-        llm = llm_saying(json.dumps({'peek': {'type': 'sqlite', 'db': 'C:/nope.db', 'query': 'SELECT 1'}}),
+        # a db inside a directory that does not exist: sqlite refuses everywhere. 'C:/nope.db' only
+        # failed where C: was not a drive - on the Windows runner it is, the runner is an admin,
+        # and sqlite quietly CREATED C:
+ope.db, so the peek that must fail succeeded
+        nowhere = os.path.join(tempfile.gettempdir(), 'taskuary-no-such-dir', 'nope.db')
+        llm = llm_saying(json.dumps({'peek': {'type': 'sqlite', 'db': nowhere, 'query': 'SELECT 1'}}),
                          cfg_answer(type='digest', title='Digest'))
         out = compose.compose(self.s, 'x', llm)
         self.assertEqual(out['config']['type'], 'digest')

@@ -1007,7 +1007,7 @@ class ApiTests(unittest.TestCase):
         just to hold the review put a TQ badge on 'it was just his demo'. The review rides
         task-less, still lands in the pending queue, and approving still sends."""
         mid = server.store.add_message({'ExternalId': 'graph:FILED1', 'Channel': 'teams',
-                                        'FromName': 'R. M. Ortiz', 'ConversationId': 'teams:19:x',
+                                        'FromName': 'J. D. Ortiz', 'ConversationId': 'teams:19:x',
                                         'BodyText': 'It was just his demo. Ready to move over.', 'Status': 'filed'})
         tasks_before = len(server.store.list_tasks())
         with mock.patch('taskuary.responder.draft_for_message', return_value='Got it - send it over.'):

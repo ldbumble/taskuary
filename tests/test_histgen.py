@@ -122,7 +122,7 @@ class TopicRollUpTests(unittest.TestCase):
         # one topic, five mails, none answered - and the changing resident is not part of it
         self.assertIn('"resident refund request": 5 mails, 0 answered', user)
         self.assertIn('never answered', user)
-        self.assertNotIn('doe', user.split('INBOUND MAIL:')[0])   # not in the roll-up
+        self.assertNotIn('Doe', user.split('INBOUND MAIL:')[0])   # not in the roll-up
         # and the receipts show the owner the same thing, so the guidance is inspectable
         self.assertTrue(any('never-answered first' in e for e in ev))
 

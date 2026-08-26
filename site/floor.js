@@ -47,27 +47,27 @@
      'task' flies to the door), 'walk' sends an agent to a desk, 'done' sends it home,
      'approve' is you pressing Send. */
   const STORY = [
-    { t: 0.6, k: "mail", id: "pr", ch: "github", from: "priya-dev · pull request", subj: "ldbumble/taskuary#19 Small design corrections" },
+    { t: 0.6, k: "mail", id: "pr", ch: "github", from: "priya-dev · pull request", subj: "acme/ledger#212 Fix rounding in the AR aging report" },
     { t: 2.3, k: "verdict", id: "pr", v: "task", why: "a pull request on your repo is work by construction" },
     { t: 3.1, k: "walk", desk: 0, skin: 1, ref: "TQ-0044", who: "claude",
-      tail: ["→ Read: ReportsView.jsx", "→ Edit: theme.jsx", "→ Bash: npm test", "14 passed, 0 failed"], files: 3 },
-    { t: 5.2, k: "mail", id: "mfa", ch: "teams", from: "Sam Okafor · VPN Helpdesk", subj: "Anyone able to reset my VPN token? Locked out again." },
-    { t: 7.0, k: "verdict", id: "mfa", v: "fyi", why: "Lee Tan already answered on this thread" },
-    { t: 8.8, k: "mail", id: "pct", ch: "email", from: "Dana Whitfield · CFO", subj: "Collection % — why does excluding those payers not change it?" },
-    { t: 10.5, k: "verdict", id: "pct", v: "reply", why: "a question — the answer is drafted for you" },
-    { t: 12.2, k: "mail", id: "rep", ch: "report", from: "Process Error Check · scheduled", subj: "4 rows — LedgerBalance mismatch" },
+      tail: ["→ Read: aging.py", "→ Edit: rounding.py", "→ Bash: pytest -q", "14 passed, 0 failed"], files: 3 },
+    { t: 5.2, k: "mail", id: "vpn", ch: "teams", from: "Sam Okafor · IT Helpdesk", subj: "Anyone able to reset my VPN token? Locked out again." },
+    { t: 7.0, k: "verdict", id: "vpn", v: "fyi", why: "Lee already answered on this thread" },
+    { t: 8.8, k: "mail", id: "var", ch: "email", from: "Dana Whitfield · Controller", subj: "Month-end variance — why is the accrual off by 2%?" },
+    { t: 10.5, k: "verdict", id: "var", v: "reply", why: "a question — the answer is drafted for you" },
+    { t: 12.2, k: "mail", id: "rep", ch: "report", from: "Nightly Ledger Check · scheduled", subj: "3 rows — balance mismatch" },
     { t: 13.6, k: "verdict", id: "rep", v: "task", why: "a failed check is work: an agent takes it" },
     { t: 14.4, k: "walk", desk: 1, skin: 3, ref: "TQ-0034", who: "codex",
-      tail: ["→ Read: process_check.sql", "→ Bash: pytest -q", "3 rows off: LedgerBalance", "→ Edit: reconcile.py"], files: 2 },
-    { t: 14.8, k: "approve", id: "pct" },
-    { t: 17.4, k: "mail", id: "pto", ch: "email", from: "Gwen · Payroll", subj: "PTO true up — the import fails on EmployeeId" },
-    { t: 19.1, k: "verdict", id: "pto", v: "task", why: "a bug report: coding work" },
+      tail: ["→ Read: ledger_check.sql", "→ Bash: pytest -q", "3 rows off: Balance", "→ Edit: reconcile.py"], files: 2 },
+    { t: 14.8, k: "approve", id: "var" },
+    { t: 17.4, k: "mail", id: "ts", ch: "email", from: "Jordan Park · Payroll", subj: "Timesheet import fails on EmployeeId" },
+    { t: 19.1, k: "verdict", id: "ts", v: "task", why: "a bug report: coding work" },
     { t: 19.9, k: "walk", desk: 2, skin: 2, ref: "TQ-0038", who: "gemini",
       tail: ["→ Read: payroll/import.py", "KeyError: EmployeeId", "→ Edit: import.py", "→ Bash: pytest tests/"], files: 1 },
-    { t: 22.5, k: "mail", id: "ops", ch: "slack", from: "#ops · Dana", subj: "Deploy to staging failed — I am on it" },
+    { t: 22.5, k: "mail", id: "ops", ch: "slack", from: "#ops · Priya", subj: "Staging deploy failed — I am on it" },
     { t: 24.0, k: "verdict", id: "ops", v: "fyi", why: "a colleague is already on it" },
-    { t: 26.5, k: "done", desk: 0, note: "opened PR #19 ✓" },
-    { t: 28.5, k: "mail", id: "ven", ch: "report", from: "Vendor Create · scheduled", subj: "500 rows — 12 new vendors this week" },
+    { t: 26.5, k: "done", desk: 0, note: "opened PR #212 ✓" },
+    { t: 28.5, k: "mail", id: "ven", ch: "report", from: "New Vendors · scheduled", subj: "12 rows — new vendors this week" },
     { t: 30.0, k: "verdict", id: "ven", v: "task", why: "the report asked for a follow-up when rows arrive" },
     { t: 30.8, k: "walk", desk: 0, skin: 4, ref: "TQ-0051", who: "claude",
       tail: ["→ Read: vendors.csv", "12 new, 2 duplicates", "→ Edit: vendor_dedupe.py", "→ Bash: pytest -q"], files: 2 },
@@ -115,8 +115,8 @@
       // the room is the page: as big as the viewport allows, sitting a little right of centre so
       // the words have the top-left, and lifted a touch with the mouse
       const wide = cw > 820;
-      const s = Math.min((wide ? cw * 0.84 : cw * 1.08) / W, (wide ? ch * 0.98 : ch * 0.66) / H);
-      const ox0 = wide ? (cw - W * s) / 2 - cw * 0.05 : (cw - W * s) / 2, oy0 = (wide ? (ch - H * s) / 2 + ch * 0.06 : ch - H * s - ch * 0.02) - mouse.lift;
+      const s = Math.min((wide ? cw * 0.92 : cw * 1.08) / W, (wide ? ch * 1.04 : ch * 0.9) / H);
+      const ox0 = (cw - W * s) / 2, oy0 = (ch - H * s) / 2 + ch * 0.02 - mouse.lift;
       fit = { s, ox: ox0, oy: oy0 };
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox0, dpr * oy0);
 
@@ -138,7 +138,7 @@
 
       const c = [P(0, 0, 0), P(GX, 0, 0), P(GX, GY, 0), P(0, GY, 0)], dn = (p) => [p[0], p[1] + 18];
       // a soft shadow under the slab, so the room floats on the paper rather than being printed on it
-      oval(BGZ - 1, (c[1][0] + c[3][0]) / 2, c[2][1] + 26, (c[1][0] - c[3][0]) * 0.52, 34, "rgba(38,37,33,.10)");
+      oval(BGZ - 1, (c[1][0] + c[3][0]) / 2, c[2][1] + 30, (c[1][0] - c[3][0]) * 0.56, 40, "rgba(255,250,240,.06)");
       poly(BGZ, [c[3], c[2], dn(c[2]), dn(c[3])], "#a8977a");
       poly(BGZ, [c[2], c[1], dn(c[1]), dn(c[2])], "#8e7f66");
       poly(BGZ, [c[0], c[1], c[2], c[3]], "#e6ded1");
@@ -245,7 +245,7 @@
           ctx.font = (p.weight || "400") + " " + p.s + "px 'IBM Plex Mono', Consolas, monospace"; ctx.fillStyle = p.fill; ctx.textBaseline = "alphabetic"; ctx.fillText(p.text, p.x, p.y); ctx.restore();
         } else if (p.k === "l") {
           ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-          ctx.shadowColor = "rgba(255,253,251,.95)"; ctx.shadowBlur = 6;
+          ctx.shadowColor = "rgba(255,253,251,.95)"; ctx.shadowBlur = 5;
           let y = p.y - (p.lines.length - 1) * 13;
           p.lines.forEach(([text, fill, weight], k) => {
             ctx.font = weight + " " + (k ? 11 : 12) + "px " + (k ? "'IBM Plex Sans', system-ui, sans-serif" : "'IBM Plex Mono', Consolas, monospace");

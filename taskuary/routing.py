@@ -116,14 +116,21 @@ _CODE_SOFT = ('bug', 'error', 'exception', 'crash', 'broken', 'regression', 'tim
 _ASKS = ('can you', 'could you', 'please send', 'let me know', 'would you mind', 'any chance')
 
 
-def draft_task_fields(msg):
+def draft_task_fields(msg, urgent: bool = False):
     """Title/summary/kind/priority for a task created from a message. `kind` routes the work:
-    coding = an agent on a checkout, reply = the responder and Review, general = your list."""
+    coding = an agent on a checkout, reply = the responder and Review, general = your list.
+
+    `urgent` is DECIDED BY A RULE, never guessed here. Priority used to come from a keyword
+    scan for urgent/asap/immediately/outage/down, which flagged mail nobody had called
+    urgent: bare substrings, so every message carrying the "do not DOWNload attachments"
+    external-mail banner came in urgent. A word in a footer is not a priority, and a
+    priority every third task carries ranks nothing. Urgency is the owner's judgement about
+    WHO is writing, so it lives in an escalate policy they can read and edit."""
     subj = norm_subject(msg.get('subject')) or (msg.get('body') or '')[:80] or 'untitled'
     body = (msg.get('body') or '').strip()
     head = subj + '\n' + body[:2000]           # a trace usually sits below the pleasantries
     low = head.lower()
     kind = ('coding' if _CODE_HARD.search(head) or sum(w in low for w in _CODE_SOFT) >= 2 else
             'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'general')
-    pri = 'urgent' if any(w in low for w in ('urgent','asap','immediately','outage','down')) else 'normal'
-    return {'title': subj[:300].capitalize(), 'summary': body[:1000], 'kind': kind, 'priority': pri}
+    return {'title': subj[:300].capitalize(), 'summary': body[:1000], 'kind': kind,
+            'priority': 'urgent' if urgent else 'normal'}

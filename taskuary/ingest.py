@@ -189,7 +189,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                             f"triage: reply_only - {intent.get('why') or 'a question'} · {why}, "
                             'so it is filed instead of drafted', [], 'triage')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
-        f = draft_task_fields(msg)
+        # 'escalate' was declared in the policy precedence and then read by nobody. It IS
+        # the urgency rule: the owner names the senders whose mail jumps the queue, and that
+        # is the only thing that marks a task urgent.
+        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate')
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',

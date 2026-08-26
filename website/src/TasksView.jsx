@@ -264,7 +264,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700 }}>{task.ref}</Typography>
                   <StateChip task={task} />
-                  {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: "#f0e2e4", color: "#6b2733", height: 17, fontSize: 10 }} />}
+                  {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
                   {String(task.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#6f8a6e" }} />}
                   <Box sx={{ flex: 1 }} />
                   <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(task.CreatedAt)}</Typography>

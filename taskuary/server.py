@@ -716,8 +716,14 @@ def handoff(task_id: int, body: HandoffBody):
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
     store.add_comment(task_id, ACTOR, 'human', f'Handed off to {body.to} by {body.channel}:\n{text}')
-    store.audit('task', task_id, 'handoff', ACTOR, detail={'to': body.to, 'channel': body.channel})
-    return {'sent': sent, 'text': text}
+    # Handing work to a person ENDS it here. The forward went out and somebody else owns the
+    # thing now, so leaving the card open on 'needs you' is the funnel asking for a second
+    # decision about work the owner just gave away. Closing it also retires the task's pending
+    # reviews, so the Review queue stops asking about a draft that has already been forwarded.
+    store.update_task(task_id, {'Status': 'done'}, ACTOR)
+    store.audit('task', task_id, 'handoff', ACTOR,
+                detail={'to': body.to, 'channel': body.channel, 'closed': True})
+    return {'sent': sent, 'text': text, 'status': 'done'}
 
 @app.get('/api/runs/live')
 def live_runs(lines: int = 3):

@@ -158,8 +158,7 @@ class LookBeforeWritingTests(unittest.TestCase):
         """'that object does not exist' is something the model should read and act on."""
         # a db inside a directory that does not exist: sqlite refuses everywhere. 'C:/nope.db' only
         # failed where C: was not a drive - on the Windows runner it is, the runner is an admin,
-        # and sqlite quietly CREATED C:
-ope.db, so the peek that must fail succeeded
+        # and sqlite quietly CREATED the file at the drive root, so the peek that must fail succeeded
         nowhere = os.path.join(tempfile.gettempdir(), 'taskuary-no-such-dir', 'nope.db')
         llm = llm_saying(json.dumps({'peek': {'type': 'sqlite', 'db': nowhere, 'query': 'SELECT 1'}}),
                          cfg_answer(type='digest', title='Digest'))

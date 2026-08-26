@@ -285,6 +285,21 @@ const DATA_META = {
       "Test & discover calls STS (reporting which account/ARN you are) and then asks the keys what they can SEE: every S3 bucket and CloudWatch log group is listed under 'What you have access to'.",
       "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines appear on the Timeline), tasks (they go through triage), or off.",
       "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."] },
+  intacct: { title: "Sage Intacct", types: ["intacct", "intacct_fields"],
+    fields: [["sender id (the integration's, issued by Sage)", "sender_id"],
+      ["sender password", "sender_password"],
+      ["web services user id", "user_id"],
+      ["company id", "company_id"],
+      ["entity / location id (optional \u2014 blank = top level)", "entity_id"]],
+    secretLabel: "web services user password (write-only)",
+    desc: "The general ledger, AP bills, vendors, budgets and statistical accounts as scheduled reports \u2014 read-only, over the XML gateway.",
+    howto: ["Intacct wants a WEB SERVICES user, not your login: Company \u2192 Admin \u2192 Web Services Users \u2192 add one, give it a role that can read what you'll report on.",
+      "Then Company \u2192 Setup \u2192 Security \u2192 Web Services Authorizations and add the sender id \u2014 without this every call is refused however correct the password is.",
+      "Five credentials, and they authorise different things: the SENDER pair identifies the integration (Sage issues it), the USER pair is the web services user above, and the company id picks the tenant. Only the user password is stored write-only.",
+      "Multi-entity? Leave the entity id blank to sit at the top level, or name one to scope every report to it.",
+      "Test logs in for real and then tries to READ \u2014 a green card that only proves the password works hides the usual failure, which is a role with permission on nothing.",
+      "Build the reports on the REPORTS tab: name an object (GLENTRY, APBILL, VENDOR, GLACCOUNT\u2026), the fields you want and any filters. 'Intacct \u2014 what fields exist' is a report in its own right when you don't know what an object carries.",
+      "Or just say what you want in English at the top of the Reports tab \u2014 it reads the object's real field list before writing the report."] },
   prometheus: { title: "Prometheus", types: ["prometheus"],
     fields: [["base URL", "base_url", "http://prometheus.yourcompany.local:9090"]],
     secretLabel: "bearer token (optional — most Prometheus servers need none)",
@@ -392,10 +407,13 @@ const GROUP_TITLES = ["AI — agents & models", "Messaging", "Developer", "Proje
 const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "SharePoint list",
   smb_file: "Network file share", local_file: "File on this computer", graphql: "GraphQL",
   sqlite: "SQLite", gcp: "Google Cloud", kubernetes: "Kubernetes", grafana: "Grafana",
-  elastic: "Elasticsearch", perplexity: "Perplexity", serpapi: "SerpAPI", browserbase: "Browserbase" };
+  elastic: "Elasticsearch", perplexity: "Perplexity", serpapi: "SerpAPI", browserbase: "Browserbase",
+  netsuite: "NetSuite", quickbooks: "QuickBooks", sap: "SAP", workday: "Workday", adp: "ADP",
+  epic: "Epic (EMR)", cerner: "Oracle Cerner (EMR)", pointclickcare: "PointClickCare (EMR)" };
 const KNOWN_PLANNED = [];
 const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "elastic",
-  "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file"]);
+  "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file",
+  "netsuite", "quickbooks", "sap", "workday", "adp", "epic", "cerner", "pointclickcare"]);
 
 export default function ConnectorsView() {
   const [connectors, setConnectors] = useState(null);
@@ -512,6 +530,11 @@ export default function ConnectorsView() {
         go: () => setOpen({ kind: "winrm" }),
       }] : []),
       ...plannedCards(["gcp", "kubernetes"]),
+    ]},
+    { title: "Corporate systems", cards: [
+      ...dataCards(["intacct"]),
+      ...plannedCards(["netsuite", "quickbooks", "sap", "workday", "adp",
+                       "epic", "cerner", "pointclickcare"]),
     ]},
     { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...plannedCards(["grafana", "elastic"])] },
     // the web as a source: one REST call and a key each. What is deliberately NOT here is

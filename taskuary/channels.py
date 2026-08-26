@@ -193,6 +193,10 @@ def test_connector(store, cid: int) -> dict:
                 if d.get('hint'): detail += f" — {d['hint']}"
             except Exception as e:
                 detail += f' · discovery failed: {str(e)[:120]}'
+        elif c['Type'] == 'intacct':
+            from .intacct import probe
+            from .reports import intacct_connection
+            detail = probe(intacct_connection(store))
         elif c['Type'] == 'prometheus':
             from .reports import run_prometheus, prometheus_connection
             head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})

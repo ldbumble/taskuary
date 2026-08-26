@@ -215,6 +215,9 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool',
                  'database': 'report,tool',
                  'prometheus': 'report,tool', 'datadog': 'report,tool',
+                 # the books are read-only here: report and tool, never trigger. Intacct does
+                 # not push, and an agent that can WRITE a journal entry is a different product
+                 'intacct': 'report,tool',
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
                  'firecrawl': 'report,tool', 'reader': 'report,tool',
@@ -279,6 +282,7 @@ class SQLiteStore:
                          ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
+                         ('intacct', 'Sage Intacct'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',

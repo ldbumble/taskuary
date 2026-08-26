@@ -70,6 +70,12 @@ const FIELDS = {
     ["last N lines (text and log files only)", "tail", "text", "50"],
     ["sheet name (xlsx only, blank = the first)", "sheet", "text", ""],
     ["path into the JSON (json only)", "path_expr", "text", "items"], AI_FIELD],
+  intacct: [["object", "object", "text", "GLENTRY \u00b7 APBILL \u00b7 VENDOR \u00b7 GLACCOUNT \u00b7 LOCATION \u00b7 GLBUDGETITEM"],
+    ["fields (comma separated \u2014 blank = every field on the object)", "fields", "csv_list",
+      "RECORDNO, VENDORID, TOTALDUE, WHENDUE"],
+    ["filters, one per line: FIELD op value", "filters", "filter_lines",
+      "WHENDUE <= 08/31/2026\nSTATE = Posted"], AI_FIELD],
+  intacct_fields: [["object", "object", "text", "APBILL \u2014 what does this object actually carry?"], AI_FIELD],
   rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
   rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],
   // Research: the web as a source. Each is one REST call with a key on its card - what is NOT
@@ -93,6 +99,7 @@ const TYPE_LABELS = {
   entra_users: "Entra ID — people", entra_groups: "Entra ID — group members",
   entra_signins: "Entra ID — sign-ins", entra_licenses: "Entra ID — licence seats",
   prometheus: "Prometheus", datadog: "Datadog monitors",
+  intacct: "Sage Intacct", intacct_fields: "Intacct \u2014 what fields exist",
   digest: "Taskuary digest", automate: "Automation ideas (own data)",
   local_file: "File on this computer",
   exa: "Exa — search the web", tavily: "Tavily — search + answer",
@@ -110,6 +117,7 @@ const TYPE_GROUPS = [
   ["Azure", ["azure", "azure_blob", "azure_logs"]],
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
+  ["Corporate systems", ["intacct", "intacct_fields"]],
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],
   ["Windows", ["winrm"]],
@@ -117,12 +125,47 @@ const TYPE_GROUPS = [
 ];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
-  entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure" };
+  entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
+  intacct_fields: "intacct" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
-  prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl" };
+  prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl",
+  intacct: "Sage Intacct" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const NL = String.fromCharCode(10);
+
+/* What the boxes hold is text; what the executors take is lists. One conversion, used by both
+   Test and Save - they each carried their own subset before, which is how a filter that
+   previewed correctly could still be saved as a string. */
+const OPS = ["<=", ">=", "!=", "=", "<", ">", "like", "in", "isnull", "isnotnull"];
+const asFilters = (text) => String(text).split(NL).map((l) => l.trim()).filter(Boolean).map((l) => {
+  // "WHENDUE <= 08/31/2026" - the operator is whatever sits between the field and the value,
+  // longest first so ">=" is never read as ">" with a stray "=" on the value
+  const sp = l.indexOf(" ");
+  if (sp < 1) return null;                       // no space = no field to speak of
+  const op = OPS.find((o) => l.slice(sp + 1).trim().toLowerCase().startsWith(o));
+  if (!op) return null;
+  const at = l.toLowerCase().indexOf(op, sp);
+  const field = l.slice(0, at).trim(), val = l.slice(at + op.length).trim();
+  if (!field) return null;
+  // "in" takes a list; every other operator takes the rest of the line as one value
+  return [field, op, op === "in" ? val.split(",").map((x) => x.trim()).filter(Boolean) : val];
+}).filter(Boolean);
+
+const toShape = (src) => {
+  const c = { ...src };
+  if (typeof c.args === "string") c.args = c.args.split(NL).map((x) => x.trim()).filter(Boolean);
+  if (typeof c.fields === "string") c.fields = c.fields.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+  if (typeof c.filters === "string") c.filters = asFilters(c.filters);
+  for (const k of ["headers", "params", "tool_args"]) {
+    if (typeof c[k] === "string" && c[k].trim()) { try { c[k] = JSON.parse(c[k]); } catch { /* preview will complain */ } }
+  }
+  if (c.max_rows) c.max_rows = Number(c.max_rows);
+  for (const k of Object.keys(c)) {
+    if (c[k] === "" || c[k] == null || (Array.isArray(c[k]) && !c[k].length)) delete c[k];
+  }
+  return c;
+};
 // Everything that belongs to ONE source card; the rest (title, prompt, schedule) is the
 // report itself. Splitting here is what lets old single-source configs load unchanged.
 const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick", "region",
@@ -160,6 +203,7 @@ export default function ReportsView() {
 
   // a report run is synchronous and can take a while (a slow query, an AI pass) - say so
   // on the row that's working instead of leaving a dead button
+  const [draft, setDraft] = useState(null);   // a composed config waiting in the builder
   const [running, setRunning] = useState(null);
   const runNow = async (sid) => {
     setRunning(sid); setNote(null);
@@ -197,9 +241,10 @@ export default function ReportsView() {
       note="A report is a pipeline: source → query → optional AI summary → your Timeline. The connections themselves live on the Connectors tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {open ? (
-        <ReportWizard key={String(bucket)} sourceId={openId} sources={sources} types={types} connectors={connectors}
-          reload={load} onBack={() => { setBucket("all"); load(); }}
-          onSaved={(sid) => setBucket(sid)} />
+        <ReportWizard key={String(bucket) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
+          types={types} connectors={connectors} draft={draft}
+          reload={load} onBack={() => { setBucket("all"); setDraft(null); load(); }}
+          onSaved={(sid) => { setDraft(null); setBucket(sid); }} />
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
@@ -213,6 +258,12 @@ export default function ReportsView() {
           onClick={() => { setQ(""); setBucket("new"); }}>New report</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+      <Composer onDraft={(config, meta) => {
+        setDraft(config);
+        setNote({ ok: true, detail: `${meta.explain || "Drafted."} Check it below and preview before saving.`
+          + (meta.confidence === "low" ? " It is not confident about this one." : "") });
+        setBucket("new");
+      }} />
       {!sources.length ? <Empty>No reports yet — "New report" walks you through source, query, AI summary and schedule.</Empty>
         : !list.length && <Empty>Nothing here.</Empty>}
       {list.map((s) => {
@@ -250,9 +301,11 @@ export default function ReportsView() {
 }
 
 /* ── the pipeline wizard: source → configure → test & preview → schedule ── */
-function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved }) {
+function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved, draft }) {
   const cur = sources.find((s) => s.SourceId === sourceId);
-  const saved = cur ? { ...BLANK, ...parse(cur.ConfigJson) } : { ...BLANK };
+  // a composed draft is a STARTING POINT, not a saved report: it lands in the same boxes the
+  // owner would have filled in, and nothing exists until they preview it and press save
+  const saved = cur ? { ...BLANK, ...parse(cur.ConfigJson) } : { ...BLANK, ...(draft || {}) };
   const [cfg, setCfg] = useState(saved);
   const [srcs, setSrcs] = useState(toSources(saved));   // the funnel's inputs, in order
   const [drag, setDrag] = useState(null);
@@ -269,15 +322,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const aiActive = connectors.some((c) => ["anthropic", "openai", "azure_openai"].includes(c.Type) && c.Active && c.HasSecret);
 
   // one source card -> the shape an executor expects
-  const cleanSource = (src) => {
-    const c = { ...src };
-    if (typeof c.args === "string") c.args = c.args.split(NL).map((x) => x.trim()).filter(Boolean);
-    if (typeof c.headers === "string" && c.headers.trim()) { try { c.headers = JSON.parse(c.headers); } catch { /* preview will complain */ } }
-    if (typeof c.params === "string" && c.params.trim()) { try { c.params = JSON.parse(c.params); } catch { /* preview will complain */ } }
-    if (c.max_rows) c.max_rows = Number(c.max_rows);
-    for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
-    return c;
-  };
+  const cleanSource = toShape;
   const bodyCfg = () => {
     const c = { ...cfg };
     // an empty recipient means it was switched on and never filled in - saving that would make
@@ -628,6 +673,73 @@ function AwsPicker({ label, which, value, placeholder, service, onChange }) {
   );
 }
 
+/* Say what you want; the model writes the configuration.
+
+   The Reports tab is a builder, and a builder asks you to know things first - which of
+   twenty-odd source types your data is behind, what its config keys are called, what query
+   language is on the other end. This asks for the sentence instead. What comes back is a
+   DRAFT in the ordinary boxes: it is not saved, it has not run, and the next thing the owner
+   does is preview it against the real system. Questions come back as questions rather than a
+   guess, because a wrong filter on a finance report is silently wrong forever. */
+function Composer({ onDraft }) {
+  const [ask, setAsk] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState(null);
+  const [answers, setAnswers] = useState({});
+
+  const go = async (withAnswers) => {
+    setBusy(true);
+    try {
+      const { data } = await api.post("/api/reports/compose", { ask, answers: withAnswers || undefined });
+      setOut(data);
+      if (data.config) { onDraft(data.config, data); setAsk(""); setAnswers({}); setOut(null); }
+    } catch (e) { setOut({ error: e?.response?.data?.detail || "the composer could not be reached" }); }
+    setBusy(false);
+  };
+
+  const answered = out?.questions?.length && out.questions.every((q) => String(answers[q] || "").trim());
+  return (
+    <Box sx={{ ...card, p: 1.5, mb: 2, bgcolor: PANEL2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.9 }}>
+        <AutoAwesomeIcon sx={{ fontSize: 15, color: ACCENT2 }} />
+        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>Describe the report you want</Typography>
+      </Box>
+      <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy}
+        sx={{ bgcolor: "#fff" }}
+        placeholder={"Read C:/exports/census-*.csv every morning, total the beds by facility and flag anything under 70."
+          + NL + "Every Monday, list the AP bills from Intacct due in the next 30 days and call out anything over 10k."}
+        onChange={(e) => setAsk(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && ask.trim()) go(); }} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.9 }}>
+        <Button size="small" variant="contained" disableElevation disabled={busy || !ask.trim()}
+          onClick={() => go()} startIcon={busy ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />}>
+          {busy ? "Working it out…" : "Build it"}
+        </Button>
+        <Typography sx={{ fontSize: 11, color: FAINT }}>
+          It can only use connections you have set up — and it will ask rather than guess.
+        </Typography>
+      </Box>
+
+      {out?.error && <Alert severity="warning" sx={{ mt: 1.25, fontSize: 12.5 }}>{out.error}</Alert>}
+
+      {/* it did not know something. Better here than as a silently wrong WHERE clause. */}
+      {out?.questions?.length > 0 && (
+        <Box sx={{ mt: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography sx={{ fontSize: 11.5, color: DIM, fontWeight: 600 }}>
+            A couple of things it will not guess at:
+          </Typography>
+          {out.questions.map((qq) => (
+            <TextField key={qq} size="small" fullWidth label={qq} sx={{ bgcolor: "#fff" }}
+              value={answers[qq] || ""} onChange={(e) => setAnswers({ ...answers, [qq]: e.target.value })} />
+          ))}
+          <Button size="small" variant="contained" disableElevation disabled={busy || !answered}
+            onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>Answer & build</Button>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 /* "What does this actually return?" - answerable on the card now, before the whole pipeline is
    assembled and without the AI pass in the way. The wizard's own Test showed the HEADLINE only
    ("12 items"), which is the one thing you can already guess; the rows are the question. */
@@ -636,10 +748,7 @@ function SourceTest({ src }) {
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true);
-    const c = { ...src, title: "test" };
-    if (typeof c.params === "string" && c.params.trim()) { try { c.params = JSON.parse(c.params); } catch { /* the server says so */ } }
-    if (c.max_rows) c.max_rows = Number(c.max_rows);
-    for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
+    const c = toShape({ ...src, title: "test" });
     try {
       const { data } = await api.post("/api/reports/preview", { ...c, ai_prompt: undefined });
       setOut(data);
@@ -765,8 +874,10 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
             onChange={(x) => onChange({ [key]: x.value, ...(x.region !== undefined ? { region: x.region } : {}) })} />;
         }
         return <TextField key={key} size="small" label={label} placeholder={ph} value={shown} sx={{ bgcolor: "#fff" }}
-          multiline={kind === "multiline"} minRows={kind === "multiline" ? 3 : undefined}
-          inputProps={kind === "multiline" ? { style: { fontFamily: "Consolas, monospace", fontSize: 11.5 } } : undefined}
+          multiline={kind === "multiline" || kind === "filter_lines"}
+          minRows={kind === "multiline" ? 3 : kind === "filter_lines" ? 2 : undefined}
+          inputProps={["multiline", "filter_lines", "csv_list"].includes(kind)
+            ? { style: { fontFamily: "Consolas, monospace", fontSize: 11.5 } } : undefined}
           onChange={(e) => onChange({ [key]: e.target.value })} />;
       })}
       {/* blank is not "no cap" - it is the 200-row default, and the field has to say so or

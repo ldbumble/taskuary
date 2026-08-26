@@ -105,10 +105,14 @@ Then, in **Connectors** — a minute or two each:
    the same funnel.
 3. **Your coding CLI** — pick a preset (Claude Code, Codex, Gemini, Cursor, Copilot), Save,
    Test. Add a GitHub PAT and repos are discovered for you.
-4. **Reports** (optional) — point at SQL Server, any database by connection string, AWS,
-   Azure, Prometheus, Datadog, MCP, REST or RSS and schedule a query with an AI prompt; the
-   summary lands on your Timeline. One ships ready-made: the **Morning digest**, a daily
-   brief of your own funnel — edit its prompt to taste, or delete it.
+4. **Reports** (optional) — or just **say what you want**: *“read C:/exports/census-*.csv
+   every morning, total the beds by facility and flag anything under 70”* fills the builder
+   in for you. It can only use connections you have actually set up, it reads a system's real
+   schema before writing a query against it, and it asks rather than guesses — then you
+   preview it against the live system before anything is scheduled. Or point it by hand at SQL
+   Server, any database by connection string, AWS, Azure, Sage Intacct, Prometheus, Datadog,
+   MCP, REST or RSS. One ships ready-made: the **Morning digest**, a daily brief of your own
+   funnel — edit its prompt to taste, or delete it.
 
 No cloud key at all? Set **Settings → Triage & routing → Triage brain** to your CLI agent
 and skip step 1 — one brain does everything, slower and pricier per message. See
@@ -297,6 +301,8 @@ which enables resumable message-the-agent sessions; plain-text CLIs work too.
 | `azure` | ✅ | same discovery for blob containers and Log Analytics workspaces across the subscriptions your app can see, each with its own report/feed/tasks picker — plus **any ARM path**. Reuses the Outlook card's app registration automatically; it just needs RBAC roles |
 | `entra_*` | ✅ | **Entra ID on the same app registration**: people (with `accountEnabled`, so a disabled account never reads as active), a group's *transitive* members, sign-in activity, and licence SKUs with seats consumed vs spare — the unused-seat report. Test names which of these the app is actually permitted |
 | `prometheus` / `datadog` | ✅ | PromQL instant queries (each series = a row of labels + value); Datadog monitor states, trouble sorted first — reports and agent tools |
+| `intacct` | ✅ | **Sage Intacct over the XML gateway** — GL detail, AP bills, vendors, budgets, statistical accounts, read-only. Name an object and the fields you want, or ask *“what fields exist”* and it reports the real schema, custom fields included |
+| `netsuite` `quickbooks` `sap` `workday` `adp` `epic` `cerner` `pointclickcare` | 🗺 planned | the rest of the systems-of-record shelf — finance, HR, and the EMRs |
 | `winrm` | ✅ | run PowerShell on any machine you can RDP into; output → Timeline |
 | `mcp` | ✅ | any MCP server's tool as a scheduled report |
 | `sqlite` / `rest` / `rss` | ✅ | scheduled reports, AI summaries optional |
@@ -356,6 +362,9 @@ out at the bottom.
 - [x] Self-learning triage: LEARNED.md distilled from your verdicts, with strength + evidence per line
 - [x] Generate from history: TRIAGE.md and STYLE.md bootstrapped from 3 months of your own mailbox
 - [x] Data connections: any database by connection string, AWS, Azure, Prometheus, Datadog
+- [x] Systems of record: Sage Intacct (read-only, with schema discovery)
+- [x] Reports written in plain English — the model drafts the config against your real
+      connections and schemas, asks when it cannot tell, and you preview before saving
 - [x] Developer inboxes: GitLab, Azure DevOps, Linear, Trello, Notion, Discord, Sentry, PagerDuty
 - [x] Board inboxes: Jira, Asana, Monday.com, ClickUp, Todoist
 - [x] The round trip: answers typed into the working agent's session; reviews decided from your phone

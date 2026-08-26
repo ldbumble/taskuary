@@ -124,6 +124,14 @@ export const LOGOS = {
       <path fill="#0078D4" d="M12.05 7.75L6.3 19.85l9.6-1.05 4.35 1.8-8.2-12.85z" opacity=".85" />
     </S>
   ),
+  /* Sage's mark is a leaf-ish arrow in their green; simplified to the shape that survives
+     at 20px - the swoop and the counter, on the brand square. */
+  intacct: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="4.2" fill="#00D639" />
+      <path fill="#0A1E14" d="M17.8 8.3c-1.5-1.5-3.8-2-5.9-1.4-2.4.7-4 2.7-4 5 0 1.5.8 2.6 2.4 3.2l2.6 1c.7.3 1 .6 1 1.1 0 .7-.7 1.2-1.8 1.2-1.3 0-2.5-.5-3.5-1.5l-1.4 1.9c1.4 1.3 3.1 2 5 2 2.7 0 4.6-1.5 4.6-3.8 0-1.5-.8-2.6-2.5-3.3l-2.6-1c-.6-.25-.9-.55-.9-1 0-.75.8-1.35 2-1.35 1.1 0 2.2.4 3.1 1.2z" />
+    </S>
+  ),
   prometheus: (p) => (
     <S {...p}>
       <circle cx="12" cy="12" r="10" fill="#E6522C" />

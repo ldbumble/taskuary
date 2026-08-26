@@ -1052,6 +1052,19 @@ def tool_run(body: dict):
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', ACTOR, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
 
+@app.post('/api/reports/compose')
+def report_compose(body: dict):
+    """Say what you want in English; get a report config back, or the questions that stand
+    between here and one. Nothing is saved - the answer goes into the same builder the owner
+    would have filled in by hand, and Preview runs it for real before anything is scheduled."""
+    from .compose import compose
+    out = compose(store, (body or {}).get('ask') or '', _llm(), (body or {}).get('answers'))
+    if out.get('config'):
+        store.audit('report', 0, 'compose', ACTOR, detail={'ask': ((body or {}).get('ask') or '')[:300],
+                                                           'type': out['config'].get('type'),
+                                                           'confidence': out.get('confidence')})
+    return out
+
 @app.post('/api/reports/preview')
 def report_preview(body: dict):
     """Dry-run a report config - executor plus the AI pass when ai_prompt is set -

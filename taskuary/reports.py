@@ -11,7 +11,12 @@ import io, json, re, sqlite3
 from datetime import datetime, timedelta
 from loguru import logger
 
-PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file']   # smb_file is a NETWORK
+PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file',
+           # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
+           # the category is the question people arrive with - "does this reach our ERP / our
+           # EMR" - and an empty Corporate systems group answers that worse than a list does.
+           'netsuite', 'quickbooks', 'sap', 'workday', 'adp',
+           'epic', 'cerner', 'pointclickcare']   # smb_file is a NETWORK
 # share and still planned; a path on this machine is local_file and works now
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
@@ -51,6 +56,33 @@ def run_mssql(cfg):
     see mssql.py. Configure the connection entirely from the Connectors tab."""
     from .mssql import run_report
     return run_report(cfg)
+
+
+def run_intacct(cfg):
+    """{"object": "GLENTRY", "fields": [...], "filters": [["BATCH_DATE", ">=", "08/01/2026"]],
+    "max_rows": 200} - one readByQuery against Sage Intacct. The five credentials live on the
+    Intacct card; a report carries only what it is asking for.
+
+    Leave "fields" out and every field on the object comes back, which is the right default for
+    a list somebody wants to eyeball and the wrong one for GL detail - so say which columns you
+    want when the object is wide."""
+    from .intacct import query
+    obj = (cfg.get('object') or '').strip()
+    if not obj: raise RuntimeError('no Intacct object set - e.g. GLENTRY, APBILL, VENDOR, LOCATION')
+    lim, mine = row_limit(cfg)
+    rows = query(cfg, obj, cfg.get('fields'), cfg.get('filters'), limit=lim + 1, order=cfg.get('order'))
+    return rows_out(rows, lim, mine=mine)
+
+
+def run_intacct_fields(cfg):
+    """{"object": "APBILL"} - what the object actually HAS in this company, custom fields and
+    all. It is a report in its own right (schedule it and a new custom field shows up on the
+    timeline), and it is what the composer reads before writing an Intacct report."""
+    from .intacct import fields_of
+    obj = (cfg.get('object') or '').strip()
+    if not obj: raise RuntimeError('no Intacct object set')
+    lim, mine = row_limit(cfg)
+    return rows_out(fields_of(cfg, obj), lim, unit='fields', mine=mine)
 
 
 def run_rest(cfg):
@@ -331,13 +363,15 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'entra_signins': run_entra_signins, 'entra_licenses': run_entra_licenses,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
+            'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
             'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
             **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure',
-           'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure'}
+           'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
+           'intacct_fields': 'intacct'}
 
 def card_of(t): return CARD_OF.get(t, t)
 
@@ -387,6 +421,14 @@ def azure_connection(store) -> dict:
     return cfg
 
 
+def intacct_connection(store) -> dict:
+    """Five credentials, of which exactly one is a secret worth hiding: the API USER's
+    password. The sender pair identifies the integration and the company id names the tenant -
+    neither is a password to this company's books, and burying them write-only would only mean
+    nobody can ever check the sender id for a typo."""
+    return _card(store, 'intacct', 'user_password')
+
+
 def prometheus_connection(store) -> dict:
     """base_url (+ optional bearer token as the write-only secret) lives on the card."""
     return _card(store, 'prometheus', 'token')
@@ -409,7 +451,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,
                  'entra_signins': azure_connection, 'entra_licenses': azure_connection,
-                 'prometheus': prometheus_connection, 'datadog': datadog_connection}
+                 'prometheus': prometheus_connection, 'datadog': datadog_connection,
+                 'intacct': intacct_connection, 'intacct_fields': intacct_connection}
 
 
 def resolve_cfg(store, cfg: dict) -> dict:

@@ -29,6 +29,7 @@ ACTIONS = {
     # ── read: the connection is a window, nothing upstream moves ──────────────────────
     'poll': 'read', 'fetch': 'read', 'search': 'read', 'list': 'read', 'discover': 'read',
     'sqlite': 'read', 'mssql': 'read', 'database': 'read',
+    'intacct': 'read', 'intacct_fields': 'read',      # readByQuery and lookup; nothing posts
     'local_file': 'read',    # a path on this machine, opened read-only - like the sqlite above it
     'aws': 'read', 's3_object': 'read', 'cloudwatch_logs': 'read',
     'azure': 'read', 'azure_blob': 'read', 'azure_logs': 'read',
@@ -57,6 +58,7 @@ DEFAULT_SCOPE = {
     'telegram': 'write', 'whatsapp': 'write', 'discord': 'write',
     'gmail': 'write', 'imap': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
+    'intacct': 'read',
     'aws': 'read', 'azure': 'read',
     'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',
     'linear': 'read', 'trello': 'read', 'notion': 'read', 'sentry': 'read', 'pagerduty': 'read',

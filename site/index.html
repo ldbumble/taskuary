@@ -63,6 +63,7 @@
   .copy .cta{justify-content:flex-start;margin:22px 0 10px}
   .copy .fine{text-align:left}
   .rail{position:absolute;right:24px;bottom:46px;width:min(300px,26vw);display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .rail[hidden]{display:none}   /* the class's display:flex would outrank the attribute */
   .rail .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;
              display:flex;align-items:center;gap:8px;margin-bottom:2px}
   .rail .lbl i{width:7px;height:7px;border-radius:50%;background:var(--sage);display:inline-block;animation:pulse 1.6s ease-in-out infinite}

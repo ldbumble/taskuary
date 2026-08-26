@@ -62,7 +62,7 @@
   .copy .sub{margin:0;text-align:left;font-size:clamp(14.5px,1.1vw,16px);max-width:390px}
   .copy .cta{justify-content:flex-start;margin:22px 0 10px}
   .copy .fine{text-align:left}
-  .rail{position:absolute;left:24px;bottom:52px;width:min(290px,26vw);display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .rail{position:absolute;left:24px;top:50%;transform:translateY(-50%);width:min(340px,26vw);display:flex;flex-direction:column;gap:8px;pointer-events:none}
   .rail[hidden]{display:none}   /* the class's display:flex would outrank the attribute */
   .rail .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;
              display:flex;align-items:center;gap:8px;margin-bottom:2px}
@@ -164,7 +164,7 @@
     .hero canvas{position:relative;inset:auto;height:46vh}
     .hero .words{position:relative;inset:auto;flex:1}
     .hero .words .wrap{height:auto;padding:0 16px 56px}
-    .rail{position:static;width:auto;margin-top:8px}
+    .rail{position:static;width:auto;margin-top:8px;transform:none}
     .cue{bottom:16px}
     .intro{padding-top:40px}
     .intro h1{font-size:40px}
@@ -374,7 +374,7 @@ docker compose up -d</div>
         el.querySelector('.from span:last-child').textContent = ev.from; el.querySelector('.subj').textContent = ev.subj;
         rail.insertBefore(el, rail.children[1] || null); cards[ev.id] = el; requestAnimationFrame(function(){ el.classList.add('in'); });
         var live = rail.querySelectorAll('.mail.in:not(.out)');
-        if (live.length > 3) { var old = live[live.length - 1]; old.classList.add('out'); setTimeout(function(){ old.remove(); }, 600); }
+        if (live.length > 2) { var old = live[live.length - 1]; old.classList.add('out'); setTimeout(function(){ old.remove(); }, 600); }
       }
       if (ev.k === 'verdict' && cards[ev.id]) {
         var c = cards[ev.id]; c.classList.add('ruled');

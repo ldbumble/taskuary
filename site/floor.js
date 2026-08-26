@@ -115,8 +115,10 @@
       // the room is the page: as big as the viewport allows, sitting a little right of centre so
       // the words have the top-left, and lifted a touch with the mouse
       const wide = cw > 820;
-      const s = Math.min((wide ? cw * 0.92 : cw * 1.12) / W, (wide ? ch * 1.04 : ch * 1.0) / H);
-      const ox0 = (cw - W * s) / 2 + (wide ? cw * 0.04 : 0), oy0 = (ch - H * s) / 2 + (wide ? ch * 0.02 : 0) - mouse.lift;
+      const FEED = wide ? Math.min(340, cw * 0.26) + 48 : 0;           // the feed's column, left; the room lives in the rest
+      const avail = cw - FEED;
+      const s = Math.min((wide ? avail * 0.98 : cw * 1.12) / W, (wide ? ch * 1.04 : ch * 1.0) / H);
+      const ox0 = FEED + (avail - W * s) / 2, oy0 = (ch - H * s) / 2 + (wide ? ch * 0.02 : 0) - mouse.lift;
       fit = { s, ox: ox0, oy: oy0 };
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox0, dpr * oy0);
 

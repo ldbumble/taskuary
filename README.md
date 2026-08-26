@@ -13,9 +13,9 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![Taskuary in use: the timeline of email, chats and scheduled reports; a mail opened to show why triage made it a task and the AI reply drafted for approval; a scheduled report landing with its bar chart and spreadsheet; the Reports pipeline list; and the agent board with live sessions and the note one agent left the next](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
+![The Taskuary Studio, live on taskuary.com: mail, chats and reports arrive on the left and are triaged; each one that is work sends an agent through the door to a desk, where its screen shows what it is doing — and an empty desk is capacity you are not using](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero-site.png)
 
-<sub>Real app, real data — a mail triaged and its reply drafted for your approval, then a scheduled SQL report landing on the same rail with its chart and spreadsheet. Nothing sends without you.</sub>
+<sub>The landing page at <a href="https://taskuary.com">taskuary.com</a> — the Studio, running the story the app tells every day: everything in → one funnel → agents + you. Nothing sends without you.</sub>
 
 **Where it is:** early — **v0.3.0**, and moving fast. The funnel, the review queue, the agent
 sessions and the reports pipeline are all real and in daily use on my own inbox; the edges are

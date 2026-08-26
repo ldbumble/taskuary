@@ -54,9 +54,13 @@ def run_mssql(cfg):
 
 
 def run_rest(cfg):
-    """{"url", "headers", "path": "a.b"} - GET a JSON endpoint, dot-path into it."""
-    import requests
-    r = requests.get(cfg['url'], headers=cfg.get('headers') or {}, timeout=30)
+    """{"url", "headers", "path": "a.b"} - GET a JSON endpoint, dot-path into it.
+
+    Through webguard, because the same executor is reachable from POST /api/tools/run: the URL
+    can come from an AGENT, whose context is full of mail this codebase calls data and never
+    instructions. See webguard for what a fetch to 169.254.169.254 would otherwise be."""
+    from . import webguard
+    r = webguard.get(cfg['url'], headers=cfg.get('headers') or {})
     r.raise_for_status()
     data = r.json()
     for k in (cfg.get('path') or '').split('.'):
@@ -65,9 +69,9 @@ def run_rest(cfg):
 
 
 def run_rss(cfg):
-    """{"url"} - latest titles from an RSS/Atom feed."""
-    import requests
-    xml = requests.get(cfg['url'], timeout=30).text
+    """{"url"} - latest titles from an RSS/Atom feed. Guarded like run_rest: same reason."""
+    from . import webguard
+    xml = webguard.get(cfg['url']).text
     titles = re.findall(r'<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>', xml)[1:11]
     return f'{len(titles)} new items', '\n'.join(f'- {t}' for t in titles)[:4000]
 

@@ -41,6 +41,16 @@ class ProofTests(unittest.TestCase):
         self.assertFalse(proof.tests_from('I will now run pytest on the suite')['ran'])
         self.assertFalse(proof.tests_from('')['ran'])
 
+    def test_cargo_results(self):
+        passed = proof.tests_from('test result: ok. 42 passed; 0 failed; 1 ignored')
+        self.assertEqual((passed['passed'], passed['failed'], passed['runner']), (42, 0, 'cargo'))
+        failed = proof.tests_from('test result: FAILED. 39 passed; 3 failed; 0 ignored')
+        self.assertEqual((failed['passed'], failed['failed']), (39, 3))
+        rerun = proof.tests_from('test result: FAILED. 39 passed; 3 failed;\n'
+                                 'test result: ok. 42 passed; 0 failed;')
+        self.assertEqual((rerun['passed'], rerun['failed']), (42, 0))
+        self.assertFalse(proof.tests_from('I will now run cargo test')['ran'])
+
     def test_gather_states_the_gaps(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'PTO rounding', 'Kind': 'coding', 'Status': 'waiting'}, 't')

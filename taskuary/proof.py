@@ -23,6 +23,8 @@ TEST_LINES = [
     (r'^(ok|FAIL)\s+\S+\s+[\d.]+s', 'go'),
     # dotnet: "Passed! - Failed: 0, Passed: 12"
     (r'(?:Passed|Failed)!\s*-\s*Failed:\s*(\d+),\s*Passed:\s*(\d+)', 'dotnet'),
+    # cargo: "test result: ok. 42 passed; 0 failed"
+    (r'^test result:\s+(?:ok|FAILED)\.\s+(\d+) passed;\s+(\d+) failed;', 'cargo'),
 ]
 FAIL_WORDS = re.compile(r'\b(FAILED|FAIL|failed|error:|Error:|Traceback)\b')
 
@@ -43,6 +45,8 @@ def tests_from(text: str) -> dict:
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, nums[0])
         elif runner == 'dotnet':
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, 0)
+        elif runner == 'cargo':
+            passed, failed = (nums[0], nums[1]) if len(nums) > 1 else (0, 0)
         else:
             passed, failed = (0, 0) if m.group(1) == 'ok' else (0, 1)
         return {'ran': True, 'runner': runner, 'passed': passed, 'failed': failed,

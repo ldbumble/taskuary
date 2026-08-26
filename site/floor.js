@@ -86,7 +86,7 @@
     let fired = new Set(), t0 = performance.now(), last = -1, raf = 0;
     // the mouse turns the room a little, and the door knows when it is being looked at
     const mouse = { x: 0.5, y: 0.5, yaw: 0, lift: 0, overDoor: false, glow: 0 };
-    let doorQuad = null, doorTop = null, fit = null;
+    let doorQuad = null, doorTop = null, fit = null, roomBox = null;
     const toCss = (p) => [p[0] * fit.s + fit.ox, p[1] * fit.s + fit.oy];
 
     const state = (agent, t) => {                // where an agent is in its life at time t
@@ -114,11 +114,15 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, cw, ch);
       // the room is the page: as big as the viewport allows, sitting a little right of centre so
       // the words have the top-left, and lifted a touch with the mouse
-      const wide = cw > 820;
-      const FEED = wide ? Math.min(340, cw * 0.26) + 48 : 0;           // the feed's column, left; the room lives in the rest
-      const avail = cw - FEED;
-      const s = Math.min((wide ? avail * 0.98 : cw * 1.12) / W, (wide ? ch * 1.04 : ch * 1.0) / H);
-      const ox0 = FEED + (avail - W * s) / 2, oy0 = (ch - H * s) / 2 + (wide ? ch * 0.02 : 0) - mouse.lift;
+      // Sized by the ROOM, not the logical box: the diamond is (GX+GY)*TW wide and about 500
+      // tall with its walls, and it sits centred on the screen - the one thing this page is
+      // about. Wide screens keep a column free on each side (the feed lives in the right one,
+      // beside the door); phones give the room the full width.
+      const wide = cw > 820, DIA_W = (GX + GY) * TW, DIA_H = (GX + GY) * TH + WH + 18;
+      const feedW = wide ? Math.min(320, Math.max(240, cw * 0.2)) : 0;
+      // wide: the feed column, its 28px edge offset and a clear 56px gap are kept free on BOTH sides, so the room stays centred
+      const s = wide ? Math.min((cw - 2 * (feedW + 28 + 56)) / DIA_W, ch * 0.86 / DIA_H) : Math.min(cw * 0.98 / DIA_W, ch * 0.92 / DIA_H);
+      const ox0 = cw / 2 - W * s / 2, oy0 = ch / 2 - (H / 2 - 24) * s + (wide ? ch * 0.03 : 0) - mouse.lift;
       fit = { s, ox: ox0, oy: oy0 };
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox0, dpr * oy0);
 
@@ -191,6 +195,7 @@
       // remembered in CSS pixels for the hit test and for whoever wants to fly something at it
       doorQuad = [P(dx, 0, 0), P(dx + 1.1, 0, 0), P(dx + 1.1, 0, 124), P(dx, 0, 124)].map(toCss);
       doorTop = toCss(P(dx + 0.55, 0, 60));
+      roomBox = [toCss(P(0, GY, 0))[0], toCss(P(0, 0, WH))[1], toCss(P(GX, 0, 0))[0], toCss(P(GX, GY, 0))[1] + 18 * fit.s];   // left, top, right, bottom (CSS px)
 
       const person = (x, y, s, mode, ph) => {
         const p = P(x, y, 0), z = dep(x, y) + (mode === "sit" ? -0.05 : 0.05);
@@ -288,11 +293,11 @@
     if (still) {                                  // one composed frame: three agents seated, no motion
       STORY.filter((e) => e.k === "walk" && e.t < 20).forEach((e) => apply({ ...e }, -100));
       draw(0, -0.02);
-      return { stop() {}, door: () => doorTop };
+      return { stop() {}, door: () => doorTop, room: () => roomBox };
     }
     raf = requestAnimationFrame(frame);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) { cancelAnimationFrame(raf); last = -1; raf = requestAnimationFrame(frame); } });
-    return { stop() { cancelAnimationFrame(raf); }, door: () => doorTop };
+    return { stop() { cancelAnimationFrame(raf); }, door: () => doorTop, room: () => roomBox };
   }
 
   window.TaskuaryFloor = { mount, STORY, LOOP };

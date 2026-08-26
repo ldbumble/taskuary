@@ -13,7 +13,7 @@
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI
 you already use does it; you approve the result. Runs entirely on your machine.
 
-![The Taskuary Studio, live on taskuary.com: mail, chats and reports arrive on the left and are triaged; each one that is work sends an agent through the door to a desk, where its screen shows what it is doing — and an empty desk is capacity you are not using](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero-site.png)
+![The Taskuary Studio on taskuary.com: mail, chats and reports arrive beside the door and are triaged; each one that is work sends an agent through the door to a desk, where its screen shows what it is doing. An empty desk is capacity you are not using.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
 
 <sub>The landing page at <a href="https://taskuary.com">taskuary.com</a> — the Studio, running the story the app tells every day: everything in → one funnel → agents + you. Nothing sends without you.</sub>
 
@@ -135,6 +135,15 @@ The container is the web app (Timeline, Review, Reports, Connectors). Coding CLI
 *your* machine. Publish the port past localhost only with `TASKUARY_TOKEN` set.
 
 ## The workspace
+
+**The Timeline is where you live.** Everything inbound on one day-grouped rail — mail, chats,
+issues, the reports you scheduled — each row wearing one chip that says what it *is* and
+whether it needs you. Click a row and the whole story opens beside it: the message, why triage
+ruled the way it did, the drafted reply waiting for your approval, and every way out.
+
+![The Timeline: a day of mail, chats, Telegram and WhatsApp messages and scheduled reports on one rail, each with a chip — needs you, task created, completed, filed, report. A row is open on the right: the message, why it is here, its history, the AI-drafted reply with Approve & send, and the choices below it — send to a coding agent, open the task, hand it to a person, split it, not a task.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline.png)
+
+<sub>Demo data. The seven "needs you" chips are the whole point: nothing else on the page is waiting on you.</sub>
 
 One tab per question, two lines each; the details live in the app's own help text.
 

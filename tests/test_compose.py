@@ -180,3 +180,36 @@ class LookBeforeWritingTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FinishedConfigTests(unittest.TestCase):
+    """"Adelphi AP bills posted daily, by person" came back as a Sage Intacct source with a title
+    and nothing else - no object, no fields, no filter - and the wizard showed exactly that. Two
+    faults: the composer accepted a config its type cannot run, and the wizard's source card did
+    not know Intacct's keys at all. The first is here; the second is website/test."""
+    def setUp(self):
+        self.s = MemoryStore()
+        c = next(x for x in self.s.list_connectors() if x['Type'] == 'intacct')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'pw',
+                               'ConfigJson': json.dumps({'sender_id': 'a', 'sender_password': 'b', 'user_id': 'c', 'company_id': 'd'})}, 'test')
+
+    def test_an_intacct_report_with_no_object_is_not_finished(self):
+        ok, why = compose.validate(self.s, {'type': 'intacct', 'title': 'Adelphi AP Bills Posted Daily'})
+        self.assertFalse(ok); self.assertIn('no object', why)
+        ok, _ = compose.validate(self.s, {'type': 'intacct', 'title': 'x', 'object': 'APBILL'})
+        self.assertTrue(ok)
+
+    def test_the_composer_hands_back_the_error_not_the_empty_form(self):
+        out = compose.compose(self.s, 'how many bills were posted by person in the Adelphi facility, daily',
+                              llm_saying(cfg_answer(type='intacct', title='Adelphi AP Bills Posted Daily')))
+        self.assertIn('not finished', out['error'])
+
+    def test_intacct_gets_its_playbook_only_when_it_is_connected(self):
+        llm = llm_saying(cfg_answer(type='intacct', title='t', object='APBILL', fields=['CREATEDBY', 'LOCATIONID'],
+                                    filters=[['LOCATIONID', '=', 'ADEL']], ai_prompt='count per CREATEDBY'))
+        out = compose.compose(self.s, 'bills posted by person at Adelphi', llm)
+        self.assertEqual(out['config']['object'], 'APBILL')
+        self.assertIn('LOCATION', llm.seen[0]['system']); self.assertIn('intacct_fields', llm.seen[0]['system'])
+        bare = llm_saying(cfg_answer(type='digest', title='d'))
+        compose.compose(MemoryStore(), 'what repeats?', bare)
+        self.assertNotIn('SAGE INTACCT', bare.seen[0]['system'])

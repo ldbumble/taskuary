@@ -23,7 +23,22 @@ import json, re
 
 from loguru import logger
 
-MAX_PEEKS = 2         # schema look-ups per compose; two is enough to name a table and its columns
+MAX_PEEKS = 3         # schema look-ups per compose: a table, its columns, and one lookup (a location id, say)
+
+# what a config of this type MUST carry to run at all. A composed report with only a title is a
+# form the owner has to finish - which is the thing the composer exists to spare them.
+REQUIRED = {'intacct': ('object',), 'intacct_fields': ('object',), 'mssql': ('query',), 'database': ('query',), 'sqlite': ('db', 'query'),
+            'rest': ('url',), 'local_file': ('path',), 'winrm': ('script',), 's3_object': ('bucket',), 'cloudwatch_logs': ('log_group',)}
+
+# Sage Intacct, as the model needs it spelled out: the executor docstring says what the keys are,
+# not how the system thinks. Fields are UPPERCASE ids; readByQuery filters, never SQL; nothing
+# aggregates on the server, so "how many per person" is fields + an ai_prompt that counts.
+INTACCT_PLAYBOOK = """SAGE INTACCT (type "intacct")
+- Objects: APBILL (vendor bills), APBILLITEM (bill lines), APPYMT, ARINVOICE, VENDOR, CUSTOMER, GLENTRY / GLDETAIL (journal detail), GLACCOUNT, LOCATION (facilities/entities), DEPARTMENT, GLBUDGETITEM, PROJECT.
+- Field ids are UPPERCASE: RECORDNO, RECORDID, VENDORID, VENDORNAME, WHENCREATED (entered), WHENPOSTED (posted), WHENDUE, TOTALENTERED, TOTALDUE, STATE, CREATEDBY / MODIFIEDBY (the user - "who posted it"), AUUSERID, LOCATIONID, DEPARTMENTID. Custom fields exist per company: peek {"type": "intacct_fields", "object": "APBILL"} to see the real list.
+- "filters" is a list of [FIELD, op, value]; ops: = != > < >= <= like notlike in notin isnull isnotnull. Dates are MM/DD/YYYY. Facilities are LOCATIONs: when the owner names one ("Adelphi"), peek {"type": "intacct", "object": "LOCATION", "fields": ["LOCATIONID", "NAME"], "filters": [["NAME", "like", "Adelphi%"]]} and filter the report on LOCATIONID.
+- readByQuery does not group or count. "How many X per Y" = the rows with the Y field included, plus an ai_prompt that counts per Y and lists the total. "Posted yesterday/today" = a WHENPOSTED filter; a daily report should say so in explain.
+- Always set "object", and set "fields" to the handful the question needs - APBILL has dozens."""
 SCHEMA_ROWS = 300
 
 
@@ -85,7 +100,9 @@ SYSTEM = (
     '- Never invent a table, column, object or field name. Peek, or ask.\n'
     '- The owner describes what they WANT, not what exists. "Our census file" is a path you do '
     'not have - ask for it.\n'
-    '- confidence "low" is a real answer. Say so in explain and the owner will check it.')
+    '- confidence "low" is a real answer. Say so in explain and the owner will check it.\n'
+    '- A config is not finished until it carries what its type needs to RUN: an Intacct report has an object, a SQL '
+    'report has a query, a REST report has a url. A title alone is the owner\'s form handed back to them - peek or ask instead.')
 
 
 def _json(text):
@@ -121,11 +138,13 @@ def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS)
     if not (ask or '').strip(): return {'error': 'say what you want the report to do'}
 
     cat = catalog(store)
+    # the Intacct playbook rides along only where Intacct is actually connected
+    system = SYSTEM + ('\n\n' + INTACCT_PLAYBOOK if any(c['type'] == 'intacct' and c['ready'] for c in cat) else '')
     user = {'request': ask.strip(), 'catalog': cat,
             **({'answers_to_your_questions': answers} if answers else {})}
     looked = []
     for _ in range(max(1, rounds + 1)):
-        out = _json(llm(SYSTEM, json.dumps(user, default=str), max_tokens=2000))
+        out = _json(llm(system, json.dumps(user, default=str), max_tokens=2000))
         if not out: return {'error': 'the model did not answer with a configuration - try rewording the ask'}
         if out.get('questions'):
             return {'questions': [str(q)[:300] for q in out['questions']][:3], 'looked_at': looked}
@@ -156,4 +175,6 @@ def validate(store, cfg: dict):
     if not str(cfg.get('title') or '').strip(): return False, 'the report has no title'
     row = next((c for c in catalog(store) if c['type'] == t), None)
     if row and not row['ready']: return False, f"{t} cannot run: {row['why_not']}"
+    missing = [k for k in REQUIRED.get(t, ()) if not str(cfg.get(k) or '').strip() and not cfg.get(k)]
+    if missing: return False, f"the {t} report is not finished: it has no {' / '.join(missing)} - the composer should have looked the schema up or asked"
     return True, ''

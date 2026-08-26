@@ -173,6 +173,7 @@ const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", 
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
   "api_version", "path_expr", "account", "container", "blob", "workspace_id",
   "filter", "select", "group", "failed_only", "days",
+  "object", "fields", "filters", "order",              // Intacct - missing here is why a composed report arrived with only its title
   "num", "domains", "since", "depth", "time_range", "topic", "answer", "main", "chars"];
 
 const toSources = (cfg) => {

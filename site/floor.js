@@ -229,10 +229,13 @@
         if (here && st.mode === "type") {
           const leaving = a.leaveAt != null && t >= a.leaveAt - 1.2;
           const n = Math.min(a.tail.length, 1 + Math.floor(st.seated / 1.1));   // lines appear one by one
-          const rows = leaving ? [a.note] : a.tail.slice(0, n);
-          rows.forEach((line, k) => glass(z + 0.04, myy, (mxx + 0.06) * TW, -(DH + 38 - k * 7.4), 4.8, leaving ? "#a7c79a" : CODE[k % CODE.length], line.slice(0, 22)));
+          // the glass is mw*TW wide and the type is ~2.9px a character - the same arithmetic the
+          // app uses, so a line never runs off the edge of the screen it is drawn on
+          const fitN = Math.floor((mw * TW - 6) / 2.9);
+          const rows = (leaving ? [a.note] : a.tail.slice(0, n)).map((l) => l.length > fitN ? l.slice(0, fitN - 1) + "…" : l);
+          rows.forEach((line, k) => glass(z + 0.04, myy, (mxx + 0.06) * TW, -(DH + 38 - k * 7.4), 4.8, leaving ? "#a7c79a" : CODE[k % CODE.length], line));
           if (!leaving && st.seated > 2.4) glass(z + 0.04, myy, (mxx + 0.06) * TW, -(DH + 12), 4.4, "#7f8a96", "✎ " + a.files + " file" + (a.files === 1 ? "" : "s"));
-          if (!leaving && Math.floor(st.seated * 2) % 2 === 0) glass(z + 0.04, myy, (mxx + 0.06 + 0.048 * Math.min(22, rows[rows.length - 1].length)) * TW, -(DH + 38 - (rows.length - 1) * 7.4), 4.8, "#e6ecef", "▍");
+          if (!leaving && Math.floor(st.seated * 2) % 2 === 0 && rows[rows.length - 1].length < fitN) glass(z + 0.04, myy, (mxx + 0.06) * TW + 2.9 * rows[rows.length - 1].length, -(DH + 38 - (rows.length - 1) * 7.4), 4.8, "#e6ecef", "▍");
         }
         box(gx + 0.35, gy + 0.7, 0.9, 0.28, DH + 2, "#cfc7b4", "#aea595", "#bdb3a0", 0.02);
         const lab = P(gx + 1.0, gy + 0.55, DH + 66);

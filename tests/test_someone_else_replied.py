@@ -159,19 +159,22 @@ class ChatIdentityTests(unittest.TestCase):
         self.assertEqual(out, {})
 
 
-class OwnIssueTests(unittest.TestCase):
-    """An issue the owner filed on their own repo is work by construction: five of five that the
-    classifier filed as fyi were promoted by hand. Other people's issues stay the model's call."""
+class RepoWorkTests(unittest.TestCase):
+    """A pull request on the owner's repo, and an issue they filed themselves, are work by
+    construction: five of five contributor PRs the classifier filed as fyi were promoted by hand.
+    Other people's issues stay the model's call."""
     def _gh(self, head):
-        return {'external_id': f'gh-{head[:14]}', 'channel': 'github', 'conversation_id': 'gh:o/r#7', 'no_auto': True,
+        return {'external_id': f'gh-{head[:22]}', 'channel': 'github', 'conversation_id': 'gh:o/r#7', 'no_auto': True,
                 'from_email': 'who@users.noreply.github.com', 'subject': 'o/r#7 Crash on startup',
                 'body': head + chr(10) + 'Traceback ... KeyError'}
 
-    def test_the_owners_own_issue_is_a_task_without_a_model(self):
-        asked = []
-        out = ingest.ingest_message(MemoryStore(), self._gh('[issue by ldbumble - association: OWNER]'),
-                                    llm=lambda *a, **k: asked.append(1) or '{"intent": "fyi", "why": "a note to self"}')
-        self.assertEqual((out['status'], asked), ('created', []))
+    def test_a_pull_request_and_the_owners_own_issue_are_tasks_without_a_model(self):
+        for head in ('[pull request by priya-dev - association: CONTRIBUTOR]', '[pull request by new - association: FIRST_TIME_CONTRIBUTOR]',
+                     '[issue by ldbumble - association: OWNER]'):
+            asked = []
+            out = ingest.ingest_message(MemoryStore(), self._gh(head),
+                                        llm=lambda *a, **k: asked.append(1) or '{"intent": "fyi", "why": "a notification"}')
+            self.assertEqual((out['status'], asked), ('created', []), head)
 
     def test_somebody_elses_issue_is_still_the_models_call(self):
         for head in ('[issue by kai - association: NONE]', '[issue by pat - association: MEMBER]'):

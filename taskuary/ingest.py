@@ -349,20 +349,23 @@ def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int =
     return out, len(hits) - len(out)
 
 
-# An issue the OWNER filed on their own repo (channels.ingest_github_issues writes the author line
-# first). Asked whether it was work, the classifier said 'fyi' for five of five - "the owner's
-# own note" - and the owner promoted every one by hand. Nobody files an issue on their own repo
-# for information. Other people's issues stay the classifier's call: a drive-by question is a
-# reply, and whether the repo takes replies at all is decided downstream.
-_GH_OWNER = re.compile(r'^\[(issue|pull request) by [^\]]*? - association: OWNER\]', re.I)
+# Work by construction on the owner's repo (channels.ingest_github_issues writes the author line
+# first): a PULL REQUEST - somebody is asking for a review and a merge, which is the only reason
+# a PR exists - and an issue the owner filed themselves. Asked whether a contributor's PR was
+# work, the classifier said 'fyi' for five of five and the owner promoted every one by hand.
+# Other people's ISSUES stay the classifier's call: a drive-by question is a reply, and whether
+# the repo takes replies at all is decided downstream. A repo whose PR picker says 'feed' never
+# reaches this at all (file_only).
+_GH_WORK = re.compile(r'^\[(pull request by [^\]]*|issue by [^\]]*? - association: OWNER)\]', re.I)
 
 
 def decided_intent(msg: dict, mine=()) -> dict | None:
     """The verdicts no model is needed for: the owner's own issue is a task, and obvious automated
     noise is fyi (heuristic_intent's short-circuit). None means: ask. Shared with evalset.evaluate
     so the measured accuracy is the funnel's, not the bare model's."""
-    if msg.get('channel') == 'github' and _GH_OWNER.match(str(msg.get('body') or '')):
-        return {'intent': 'task', 'why': 'an issue you filed on your own repository is work by construction - no classifier needed'}
+    if msg.get('channel') == 'github' and _GH_WORK.match(str(msg.get('body') or '')):
+        what = 'a pull request' if 'pull request' in str(msg.get('body') or '')[:16].lower() else 'an issue you filed'
+        return {'intent': 'task', 'why': f'{what} on your own repository is work by construction - no classifier needed'}
     h = heuristic_intent(msg, mine)
     return h if h['intent'] == 'fyi' else None
 

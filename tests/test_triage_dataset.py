@@ -159,6 +159,13 @@ class DatasetTests(unittest.TestCase):
         e = add(5, ConversationId='conv-e', Subject='T&E system', FromEmail='fin@corp.example', FromName='Fin', BodyText='FYI only.')
         rid2 = s.add_review({'TaskId': tid, 'MessageId': e, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
         s.decide_review(rid2, 'no_reply', None, 'owner')
+        # a Teams ask the owner dismissed the draft for - and then answered in the chat himself
+        g = s.add_message({'ExternalId': 'e6', 'Channel': 'teams', 'Status': 'filed', 'SentAt': '2026-08-06 09:00:00', 'ConversationId': 'teams:19:dm',
+                           'Subject': 'Teams chat with Priya', 'FromName': 'Priya Colleague', 'BodyText': 'Can you fix my timesheet?'})
+        s.add_message({'ExternalId': 'e6-you', 'Channel': 'teams', 'Status': 'context', 'SentAt': '2026-08-06 09:40:00', 'ConversationId': 'teams:19:dm',
+                       'Subject': 'Teams chat with Priya', 'FromName': 'You', 'BodyText': 'Done.'})
+        rid3 = s.add_review({'TaskId': tid, 'MessageId': g, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
+        s.decide_review(rid3, 'no_reply', None, 'owner')
         return s
 
     def test_labels_follow_the_owners_verdicts(self):
@@ -167,6 +174,7 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual((cs['m3']['label'], cs['m3']['label_source']), ('task', 'owner:promoted'))
         self.assertEqual((cs['m4']['label'], cs['m4']['label_source']), ('reply_only', 'review:approved'))
         self.assertEqual((cs['m5']['label'], cs['m5']['label_source']), ('fyi', 'review:no_reply'))
+        self.assertEqual((cs['m6']['label'], cs['m6']['label_source']), ('reply_only', 'review:no_reply_answered_in_channel'))
         self.assertNotIn('m2', cs)                                            # untouched and fresh: no label yet
         self.assertEqual(cs['m3']['addressed_to_you'], 'to')
         self.assertEqual(cs['m1']['triage'], {'decision': 'create', 'intent': 'reply_only', 'by': 'router'})

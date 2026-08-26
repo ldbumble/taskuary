@@ -34,11 +34,27 @@ _INTENT = re.compile(r'triage: (task|reply_only|fyi)')
 
 
 # ── labels: what the owner said ─────────────────────────────────────────────────────────
-def _labels(store) -> dict:
+ANSWERED_WITHIN_DAYS = 2     # a "no reply" followed by the owner's own line in the channel this soon = answered there
+
+
+def _labels(store, mine=()) -> dict:
     """MessageId -> (label, source, weak). Explicit verdicts first; an untouched call the owner
-    let stand for ACCEPT_AFTER_DAYS is a weak label - agreement by silence, not by hand."""
+    let stand for ACCEPT_AFTER_DAYS is a weak label - agreement by silence, not by hand.
+
+    "No reply" is two verdicts wearing one button. Seven of eleven were followed within hours by
+    the owner's OWN line in the same chat - they answered in Teams and dismissed the draft - so
+    the ask WAS a reply_only and triage had it right; scored as fyi, the funnel looked wrong for
+    doing its job. The owner's later lines on the conversation tell the two apart."""
     out = {}
     q = store._rows
+    me = tuple(a.lower() for a in mine if a)
+    def answered_in_channel(mid):
+        m = store.get_message(mid) or {}
+        if not m.get('ConversationId') or not m.get('SentAt'): return False
+        ph = ','.join('?' * len(me)) or "''"
+        return bool(q(f"SELECT 1 FROM message WHERE ConversationId=? AND SentAt>? AND SentAt<=datetime(?, '+{ANSWERED_WITHIN_DAYS} days') "
+                     f"AND (FromName='You' OR Status='context' OR Direction='out' OR lower(FromEmail) IN ({ph})) LIMIT 1",
+                     (m['ConversationId'], m['SentAt'], m['SentAt'], *me)))
     for r in q("SELECT MessageId, Reason FROM route WHERE RoutedBy='owner' AND Decision='ignore' ORDER BY RouteId"):
         why = (r['Reason'] or '').lower()
         src = 'owner:not_ours' if why.startswith('not ours') else 'owner:not_a_task' if why.startswith('not a task') else 'owner:nothing_to_do'
@@ -48,8 +64,10 @@ def _labels(store) -> dict:
         out[r['MessageId']] = ('reply_only' if r['Kind'] == 'reply' else 'task', 'owner:promoted', False)
     for r in q("SELECT MessageId, Status FROM review WHERE DecidedBy='owner' AND MessageId IS NOT NULL "
                "AND Status IN ('approved','edited','no_reply') ORDER BY ReviewId"):
-        out[r['MessageId']] = (('fyi', 'review:no_reply', False) if r['Status'] == 'no_reply'
-                               else ('reply_only', f"review:{r['Status']}", False))
+        if r['Status'] == 'no_reply':
+            out[r['MessageId']] = (('reply_only', 'review:no_reply_answered_in_channel', False) if answered_in_channel(r['MessageId'])
+                                   else ('fyi', 'review:no_reply', False))
+        else: out[r['MessageId']] = ('reply_only', f"review:{r['Status']}", False)
     cutoff = (datetime.now() - timedelta(days=ACCEPT_AFTER_DAYS)).isoformat(sep=' ', timespec='seconds')
     for r in q("SELECT m.MessageId, m.Status, r.Reason, r.Decision FROM message m JOIN route r ON r.MessageId=m.MessageId "
                "WHERE r.RoutedBy IN ('router','triage') AND m.CreatedAt < ? ORDER BY r.RouteId", (cutoff,)):
@@ -94,7 +112,7 @@ def build(store, include_weak: bool = True) -> list:
     from .ingest import owner_addresses
     mine = owner_addresses(store)
     domains = {a.rsplit('@', 1)[-1] for a in mine if '@' in a}
-    labels, calls = _labels(store), _triage_call(store)
+    labels, calls = _labels(store, mine), _triage_call(store)
     rows = store._rows("SELECT * FROM message WHERE (Direction='in' OR Direction IS NULL) AND Status != 'skipped' ORDER BY MessageId")
     by_conv = {}
     for m in rows: by_conv.setdefault(m.get('ConversationId'), []).append(m)

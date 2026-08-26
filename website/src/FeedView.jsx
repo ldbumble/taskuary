@@ -63,6 +63,7 @@ const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 // never judged - it is information. Only a policy 'ignore' is a verdict.
 const actionOf = (r) => (r.Channel === "report" ? "report"
   : r.MsgStatus === "feed" ? "feed"
+    : r.MsgStatus === "triaging" ? "triaging"
     : r.MsgStatus === "ignored" ? "ignore"
       : r.MsgStatus === "filed" ? "filed"
         : r.ReviewKind === "auto" ? "auto"
@@ -78,6 +79,7 @@ const blurb = (r) => {
     return r.TaskId ? `Your reply — kept on ${ref(r.TaskId)} so the thread shows both sides` : "Your reply — kept for context, never a task";
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
   if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
+  if (r.MsgStatus === "triaging") return "On the timeline first — triage is deciding what it is";
   if (r.MsgStatus === "ignored") return `Ignored by policy — ${r.RouteReason || "no task created"}`;
   if (r.MsgStatus === "filed") return `Filed, nothing to do — ${r.RouteReason || "informational"}`;
   const routed = r.Decision === "attach" ? `Added to ${ref(r.TaskId)} (existing thread)` : `New task ${ref(r.TaskId)} created`;
@@ -95,7 +97,7 @@ const GUTTER = 70;
 // The rail dot says WHAT STATE it is in. Channel identity is already on the icon beside the
 // sender, and the old row said it three times over (stripe, dot, tinted tile).
 const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
-  : ["ignored", "filed"].includes(r.MsgStatus) ? "#cfc9bf"
+  : ["ignored", "filed", "triaging"].includes(r.MsgStatus) ? "#cfc9bf"
     : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
       : r.TaskId ? ACCENT2 : "#a7b0a8");
 

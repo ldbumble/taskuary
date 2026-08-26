@@ -508,6 +508,11 @@ class SQLiteStore:
         return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, SentAt, substr(BodyText, 1, 2000) BodyText '
                           'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
     def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
+    def place_message(self, mid, task_id, status):
+        """A row that was shown first and judged later lands where the judgement puts it (ingest.drain)."""
+        self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
+    def pending_triage(self, limit=500):
+        return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
         self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
     # What was ON the mail: the screenshot of the spreadsheet, the invoice PDF. The bytes live on

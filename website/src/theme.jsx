@@ -57,6 +57,7 @@ export const ACTION_COLORS = {
   filed: role("muted", "filed"),
   skip: role("muted", "skipped"),
   task_only: role("working", "task created"),
+  triaging: role("muted", "triaging…"),          // shown first, decided next (ingest.deferred)
 };
 
 // Catppuccin Mocha — the palette the Claude Code / Codex theme plugins use, so a session

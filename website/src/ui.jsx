@@ -109,6 +109,10 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou }) => {
   // What actually matters to the reader: current state, not just the original verdict.
   // 'report' and 'feed' are NOT verdicts - nothing judged those items; they are here to be
   // read. Only 'ignored' means a policy actually rejected something.
+  if (action === "triaging") {                     // decided in seconds: the pill breathes until then
+    return <Chip size="small" label="triaging…" sx={{ bgcolor: "#e6e0d5", color: "#6f6960", height: 19, fontSize: 10.5, fontWeight: 700,
+      "@keyframes tqBreathe": { "50%": { opacity: 0.45 } }, animation: "tqBreathe 1.4s ease-in-out infinite" }} />;
+  }
   const key = ["report", "feed", "filed"].includes(action) ? action
     : reviewStatus === "auto" ? "auto"
       : reviewStatus === "pending" ? "draft"

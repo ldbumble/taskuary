@@ -5,7 +5,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
 answering is the responder's job (reply_only), doing is the coder's.
 """
-import json, re, threading
+import contextlib, json, re, threading
 from loguru import logger
 from .routing import route, draft_task_fields, tokens
 from .policy import evaluate
@@ -51,25 +51,87 @@ def source_rules(store, msg: dict) -> str:
     return str(cfg.get('task_prompt') or '').strip()
 
 
+# ── show first, judge next ────────────────────────────────────────────────────────────────
+# A sync used to be one long silence: every message waited for its own AI call before it
+# appeared, so a 40-mail catch-up was five minutes of "syncing" and then everything at once.
+# Inside deferred(), ingest_message STORES the message (status 'triaging') and returns; the
+# timeline shows it at once wearing a "triaging" pill; drain() then judges the queue in arrival
+# order and each row lands where its verdict puts it. Dedupe, feeds and policies stay immediate:
+# they cost nothing and their answer is final.
+_DEFER = threading.local()
+_PENDING = {}        # MessageId -> the message as it arrived (images, no_auto...), for drain in this process
+
+
+@contextlib.contextmanager
+def deferred():
+    prev = getattr(_DEFER, 'on', False); _DEFER.on = True
+    try: yield
+    finally: _DEFER.on = prev
+
+
+def _land(store, msg: dict, task_id, status: str) -> int:
+    """Where the judged message goes: the row deferred() already showed, or a new one."""
+    if msg.get('_mid'): store.place_message(msg['_mid'], task_id, status); return msg['_mid']
+    return store.add_message({**_fields(msg, task_id), 'Status': status})
+
+
+def _from_row(r: dict) -> dict:
+    """A pending row back into a message, for a drain in a later process (no images then)."""
+    rec = json.loads(r.get('RecipientsJson') or 'null') or {}
+    return {'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
+            'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
+            'body': r.get('BodyText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
+            'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': r.get('Channel') == 'github'}
+
+
+def drain(store, llm=None, progress=None, limit: int = 500) -> int:
+    """Judge what deferred() stored - oldest first, one at a time, because a thread's second
+    message must find the task its first one opened. A message whose triage raises is filed
+    with the error on its route rather than left spinning; the next one still gets judged."""
+    rows = store.pending_triage(limit)
+    for i, r in enumerate(rows):
+        mid = r['MessageId']
+        msg = {**(_PENDING.pop(mid, None) or _from_row(r)), '_mid': mid}
+        try:
+            ingest_message(store, msg, llm=llm)
+        except Exception as e:
+            logger.warning(f'deferred triage failed for message {mid}: {e}')
+            store.place_message(mid, None, 'filed')
+            store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
+        if progress: progress(len(rows) - i - 1)
+    return len(rows)
+
+
 def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only: bool = False) -> dict:
     """file_only = this connection is a FEED, not a trigger: the item is shown on the
     timeline and nothing else happens to it - no triage, no AI call, no task. It is a
-    cheaper and quieter path than 'ignore', which is a verdict about the message."""
-    if store.message_exists(msg.get('external_id') or ''):
-        return {'status': 'duplicate', 'task_id': None, 'message_id': None}
-    if file_only:
-        mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
-        store.add_route(mid, None, 'feed', None,
-                        'shown for information - this connection is a feed, not a task trigger', [], 'feed')
-        return {'status': 'feed', 'task_id': None, 'message_id': mid}
+    cheaper and quieter path than 'ignore', which is a verdict about the message.
+
+    A message with `_mid` is one deferred() already stored and drain() is now judging: the
+    checks above the judgement (dedupe, feed, policy) were made when it arrived."""
     cfg = store.get_settings()
+    # the policy answer is needed on both passes (escalate marks the task urgent below), and it
+    # is an in-memory match - cheap enough to make twice
     pol = evaluate(msg, store.list_policies(), store.known_sender(msg.get('from_email')),
                    cfg.get('default_action', 'draft'))
-    if pol['action'] in ('skip', 'ignore'):
-        # skip = stored for dedupe but NEVER shown (flood senders); ignore = shown, no task
-        mid = store.add_message({**_fields(msg, None), 'Status': 'skipped' if pol['action'] == 'skip' else 'ignored'})
-        store.add_route(mid, None, pol['action'], None, f"policy '{pol['rule']}': {pol['reason']}", [], 'policy')
-        return {'status': pol['action'] + ('ped' if pol['action'] == 'skip' else 'd'), 'task_id': None, 'message_id': mid}
+    if not msg.get('_mid'):
+        if store.message_exists(msg.get('external_id') or ''):
+            return {'status': 'duplicate', 'task_id': None, 'message_id': None}
+        if file_only:
+            mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
+            store.add_route(mid, None, 'feed', None,
+                            'shown for information - this connection is a feed, not a task trigger', [], 'feed')
+            return {'status': 'feed', 'task_id': None, 'message_id': mid}
+        if pol['action'] in ('skip', 'ignore'):
+            # skip = stored for dedupe but NEVER shown (flood senders); ignore = shown, no task
+            mid = store.add_message({**_fields(msg, None), 'Status': 'skipped' if pol['action'] == 'skip' else 'ignored'})
+            store.add_route(mid, None, pol['action'], None, f"policy '{pol['rule']}': {pol['reason']}", [], 'policy')
+            return {'status': pol['action'] + ('ped' if pol['action'] == 'skip' else 'd'), 'task_id': None, 'message_id': mid}
+        if getattr(_DEFER, 'on', False):
+            mid = store.add_message({**_fields(msg, None), 'Status': 'triaging'})
+            store.add_route(mid, None, 'queued', None, 'on the timeline first - triage decides next', [], actor)
+            _PENDING[mid] = msg
+            return {'status': 'queued', 'task_id': None, 'message_id': mid}
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     new_rid = None                       # set when a fresh reply task opens a review below
@@ -89,13 +151,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         busy = any(x['Status'] == 'running' for x in store.list_runs(tid))
         vetoed = '' if busy else veto(store, msg)
         if vetoed:
-            mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+            mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
                             f'your standing verdict says this is not ours, so it did not join '
                             f'{task_ref(tid)}: "{vetoed[:200]}"', [], 'memory')
             logger.info(f'ingest: filed by your own verdict instead of attaching to {task_ref(tid)}')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
-        mid = store.add_message(_fields(msg, tid))
+        mid = _land(store, msg, tid, 'routed')
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
         # the classic round trip: the agent asked something, the hub asked the person, and
         # THIS is their answer arriving on the same thread. With answer_to_agent=auto it is
@@ -115,7 +177,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # below, not read at all. A verdict the owner typed is not advice; it decides.
         vetoed = veto(store, msg, topic_only=True)
         if vetoed:
-            mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+            mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
                             f'your standing verdict says this is not ours, so no task was opened: '
                             f'"{vetoed[:200]}"', [], 'memory')
@@ -130,7 +192,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if pre:
                 intent = pre
             elif llm is None:
-                mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+                mid = _land(store, msg, None, 'filed')
                 store.add_route(mid, None, 'file', None,
                                 'awaiting AI triage - connect an AI connector (Connectors → AI) to classify inbound automatically', [], 'triage')
                 logger.debug(f"ingest: filed (no AI connector) - {msg.get('subject') or ''}")
@@ -155,7 +217,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                          system=store.doc('triage'), mine=mine)
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic
-                    mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+                    mid = _land(store, msg, None, 'filed')
                     store.add_route(mid, None, 'file', None,
                                     f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail", [], 'triage')
                     logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
@@ -164,7 +226,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     # the call SUCCEEDED and came back unusable, so `fail` is empty and the old
                     # code sailed on with a keyword guess that reads none of the standing notes
                     # above. Same situation as no AI connector, same answer: file it.
-                    mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+                    mid = _land(store, msg, None, 'filed')
                     store.add_route(mid, None, 'file', None,
                                     'AI triage returned an answer it could not read as a verdict - filed rather than '
                                     'assumed to be work' + _notes_note(), [], 'triage')
@@ -173,7 +235,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         else:
             intent = {'intent': 'task', 'why': ''}
         if intent['intent'] == 'fyi':
-            mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+            mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
                             f"triage: fyi - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
@@ -184,7 +246,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             ch = msg.get('channel') or 'this channel'
             why = ('GitHub replies are off (GitHub card)' if ch == 'github'
                    else f'replies are off for {ch} (Settings → Replies)')
-            mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+            mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
                             f"triage: reply_only - {intent.get('why') or 'a question'} · {why}, "
                             'so it is filed instead of drafted', [], 'triage')
@@ -198,7 +260,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                  'SourceRef': msg.get('source_link')}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
-        mid = store.add_message(_fields(msg, tid))
+        mid = _land(store, msg, tid, 'routed')
         # the agents actually pick work up here:
         # - reply tasks ALWAYS enter the review queue ("needs me"); auto_draft_enabled
         #   additionally has the responder write the draft in the background

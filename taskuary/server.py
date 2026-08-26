@@ -1377,7 +1377,17 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             store.set_setting('ingest_status', json.dumps(
                 {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
                  'what': f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else '')}), 'system')
-        poll_channels(store, backfill_days, progress=_say)
+        # show first, judge next: the poll stores every message as it reads it (the timeline
+        # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
+        from . import ingest as ingest_mod
+        with ingest_mod.deferred():
+            poll_channels(store, backfill_days, progress=_say)
+        def _left(n):
+            store.set_setting('ingest_status', json.dumps(
+                {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
+                 'what': f'{what} · triaging' + (f' · {n} left' if n else '')}), 'system')
+        try: ingest_mod.drain(store, _llm(), progress=_left)
+        except Exception as e: logger.warning(f'deferred triage drain failed: {e}')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         try:

@@ -323,7 +323,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
       // Timeline column tops out at 860px and stays LEFT; the second track always exists
       // (panel or empty space) so the dock header - which spans both - centers over the
       // PAGE, not over the timeline column. Panel keeps its 400px floor when open.
-      width: "100%", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(360px, 452px)" } }}>
+      width: "100%", justifyContent: "center",
+      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 820px) minmax(420px, 540px)" } }}>
       {/* floating dock: one detached pill with Sync now DEAD-CENTER between the two filter
           groups, and the stats as a quiet caption line beneath. The old two-row toolbar
           card boxed the controls into the timeline column; the dock frees them to belong
@@ -458,26 +459,26 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 {items.map((r, i) => (
                   <React.Fragment key={r.MessageId}>
                     <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                      alignItems: "stretch", mb: "5px",
+                      alignItems: "stretch", mb: "4px",
                       ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
                       {/* time sits OUTSIDE the card, in its own gutter - wide enough that
                           "12:40 PM" can never wrap onto a second line */}
                       <Typography sx={{ ...mono, fontSize: 10.5, color: "#98a09a", textAlign: "right",
-                        pt: "11px", pr: "11px", whiteSpace: "nowrap", letterSpacing: "-.2px" }}>
+                        pt: "8px", pr: "11px", whiteSpace: "nowrap", letterSpacing: "-.2px" }}>
                         {fmtTime12(r.SentAt)}
                       </Typography>
                       {/* rail + dot: the dot carries STATE, not channel - the icon already says
                           where it came from, and three encodings of one fact read as noise */}
                       <Box sx={{ position: "relative" }}>
                         <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
-                        <Box sx={{ position: "absolute", left: "2.5px", top: "13px", width: 8, height: 8, borderRadius: "50%",
+                        <Box sx={{ position: "absolute", left: "2.5px", top: "11px", width: 8, height: 8, borderRadius: "50%",
                           bgcolor: dotOf(r), boxShadow: `0 0 0 3.5px ${BG}` }} />
                       </Box>
                       {/* one DEFINED object per message: who and what on top, what the hub did
                           underneath. Hover adds the message gist; click opens the panel. */}
                       <Box onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
                         sx={{ bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#fafbf8" : PANEL,
-                          border: `1px solid ${BORDER}`, borderRadius: "8px", px: "12px", pt: "7px", pb: "8px",
+                          border: `1px solid ${BORDER}`, borderRadius: "8px", px: "11px", pt: "5px", pb: "6px",
                           minWidth: 0, overflow: "hidden",
                           transition: "box-shadow .18s, border-color .18s",
                           ...(sel?.MessageId === r.MessageId
@@ -491,11 +492,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
                             <ChannelIcon channel={r.Channel} />
                           </Box>
                           <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: ["ignored", "filed"].includes(r.MsgStatus) ? DIM : INK,
-                            fontSize: 13, letterSpacing: "-.1px", maxWidth: { sm: 200 }, minWidth: 0, flexShrink: { xs: 1, sm: 0 } }}>
+                            fontSize: 12.5, letterSpacing: "-.1px", maxWidth: { sm: 200 }, minWidth: 0, flexShrink: { xs: 1, sm: 0 } }}>
                             {r.FromName || r.FromEmail || "unknown"}
                           </Typography>
                           {sourceOf(r) && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 140, flexShrink: 0 }}>· {sourceOf(r)}</Typography>}
-                          <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 13, flex: 1, minWidth: 0,
+                          <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0,
                             display: { xs: "none", sm: "block" } }}>{subjectOf(r) || ""}</Typography>
                           <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexShrink: 0 }}>
                             {r.Attachments > 0 && (
@@ -519,7 +520,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                           </Box>
                         </Box>
                         {/* the blurb no longer hides behind hover: it is the whole point */}
-                        <Typography noWrap sx={{ fontSize: 11.5, lineHeight: 1.4, pt: "4px",
+                        <Typography noWrap sx={{ fontSize: 11, lineHeight: 1.35, pt: "2px",
                           color: needsYou(r) ? "#2f6b4f" : "#8b938d" }}>{blurb(r)}</Typography>
                         {r.Preview && (
                           <Box className="thubDetail" sx={{ display: "grid", gridTemplateRows: "0fr", transition: "grid-template-rows .22s ease" }}>

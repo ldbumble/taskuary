@@ -16,8 +16,8 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
-import { PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, LandingCard, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
 import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
@@ -355,6 +355,34 @@ const WINRM_HOWTO = [
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const NL = String.fromCharCode(10);
 
+// A card per connection. The dot is read off the status line the card already carries -
+// "off", "not set up" and "connection failing" are the only three states worth a colour.
+const connDot = (c) => (c.planned ? "#cdd5c8"
+  : /failing|test failed/.test(c.desc) ? "#8f4a41"
+    : /^off|not set up|no key yet/.test(c.desc) ? "#cdd5c8" : "#2f6b4f");
+
+const ConnCard = ({ c }) => (
+  <Box onClick={c.planned ? undefined : c.go}
+    sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 1.6,
+      opacity: c.planned ? 0.5 : 1, cursor: c.planned ? "default" : "pointer",
+      transition: "border-color .15s, box-shadow .15s",
+      ...(c.planned ? {} : { "&:hover": { borderColor: "#b6d0c2", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }) }}>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
+      <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#f4f7f1", flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#2f6b4f" }} />
+          : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
+      </Box>
+      <Typography noWrap sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
+      <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
+    </Box>
+    <Typography sx={{ color: FAINT, fontSize: 11.5, lineHeight: 1.5, pt: 1,
+      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+      {c.desc}
+    </Typography>
+  </Box>
+);
+
 export default function ConnectorsView() {
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
@@ -458,9 +486,9 @@ export default function ConnectorsView() {
     .map((c) => ({ ...c, crumb: g.title }))) : [];
 
   return (
-    <Box sx={{ maxWidth: 1160, mx: "auto" }}>
+    <Box sx={{ maxWidth: 1240, mx: "auto" }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
         <TextField fullWidth placeholder="Search connectors — Slack, SQL Server, Anthropic… matches setup guides too" value={q}
           onChange={(e) => setQ(e.target.value)} sx={{ bgcolor: "#fff", borderRadius: 2, maxWidth: 520, mx: "auto", display: "block" }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: FAINT }} /></InputAdornment> }} />
@@ -483,16 +511,12 @@ export default function ConnectorsView() {
           ))}
         </Box>
       ) : groups.map((g) => (
-        <Box key={g.title} sx={{ mb: 4 }}>
-          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>{g.title}</Typography>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3 }}>
-            {g.cards.map((c) => (
-              <Box key={c.key} sx={{ opacity: c.planned ? 0.45 : 1 }}>
-                <LandingCard title={c.title} desc={c.desc} onOpen={c.planned ? () => {} : c.go}
-                  icon={c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />
-                    : <ChannelIcon channel={c.channel} sx={{ fontSize: 19 }} />} />
-              </Box>
-            ))}
+        <Box key={g.title} sx={{ mb: 3.5 }}>
+          <Typography sx={{ color: FAINT, fontWeight: 700, fontSize: 10, letterSpacing: 1.4, mb: 1.25 }}>
+            {g.title.toUpperCase()}
+          </Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" }, gap: 1.5 }}>
+            {g.cards.map((c) => <ConnCard key={c.key} c={c} />)}
           </Box>
         </Box>
       ))}

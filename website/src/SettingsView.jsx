@@ -18,10 +18,9 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
-import { ChannelIcon, Empty, Crumb as CrumbBase, UnderTabs, LandingCard } from "./ui.jsx";
+import { ChannelIcon, Empty, UnderTabs } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 
-const Crumb = (props) => <CrumbBase section="Settings" {...props} />;
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
 // skip = never shows on the timeline at all (flood senders); ignore = shows, no task
@@ -152,7 +151,7 @@ const PAGES = {
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Tamper-evident hash chain over every action the hub takes." },
 };
 
-export default function SettingsView() {
+function SettingsPages({ page, setPage, q, setQ }) {
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -160,9 +159,7 @@ export default function SettingsView() {
   const [draft, setDraft] = useState(null);
   const [verify, setVerify] = useState(null);
   const [help, setHelp] = useState(null);
-  const [page, setPage] = useState(null);          // null = landing
   const [cfgTab, setCfgTab] = useState("Triage & routing");
-  const [q, setQ] = useState("");
   const [err, setErr] = useState("");
 
   const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
@@ -284,8 +281,7 @@ export default function SettingsView() {
     const rows = settings.filter((s) => !HIDDEN.has(s.Name) && meta(s.Name).group === cfgTab);
     const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
     return (
-      <Box sx={{ maxWidth: 980, mx: "auto" }}>
-        <Crumb onBack={() => setPage(null)} title="Configuration" />
+      <Box>
         <UnderTabs tabs={tabs} value={cfgTab} onChange={setCfgTab} />
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
         {rows.map((s) => {
@@ -312,8 +308,7 @@ export default function SettingsView() {
 
   if (page === "policies") {
     return (
-      <Box sx={{ maxWidth: 980, mx: "auto" }}>
-        <Crumb onBack={() => setPage(null)} title="Routing policies" />
+      <Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <Typography variant="body2" sx={{ color: DIM }}>
             Deterministic gates the AI can never override.
@@ -371,8 +366,7 @@ export default function SettingsView() {
 
   if (page === "memory") {
     return (
-      <Box sx={{ maxWidth: 980, mx: "auto" }}>
-        <Crumb onBack={() => setPage(null)} title="Agent memory" />
+      <Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <Typography variant="body2" sx={{ color: DIM }}>
             Standing notes learned from your verdicts, injected into every draft.
@@ -429,8 +423,7 @@ export default function SettingsView() {
 
   if (page === "audit") {
     return (
-      <Box sx={{ maxWidth: 980, mx: "auto" }}>
-        <Crumb onBack={() => setPage(null)} title="Audit integrity" />
+      <Box>
         <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
           Every action lands in a hash-chained, tamper-evident log — verification recomputes the whole chain.
         </Typography>
@@ -467,45 +460,61 @@ export default function SettingsView() {
     );
   }
 
-  /* ── landing ──────────────────────────────────────────────────────────── */
+  /* ── search results, or nothing: the rail is always on screen now ────── */
   return (
-    <Box sx={{ maxWidth: 1160, mx: "auto" }}>
+    <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <TextField fullWidth placeholder="Search settings, rules, memory — matches help text too…" value={q}
-        onChange={(e) => setQ(e.target.value)} sx={{ mb: 3, bgcolor: "#fff", borderRadius: 2, maxWidth: 520, mx: "auto", display: "block" }}
-        InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: FAINT }} /></InputAdornment> }} />
-
-      {q ? (
-        <Box>
-          {!results.length && <Empty>Nothing matches.</Empty>}
-          {results.map((r) => (
-            <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-              "&:hover": { bgcolor: "#fafbfd" } }}>
-              <Typography sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb}</Typography>
-            </Box>
-          ))}
+      {!results.length && <Empty>Nothing matches.</Empty>}
+      {results.map((r) => (
+        <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
+          "&:hover": { bgcolor: "#f7f9f5" } }}>
+          <Typography sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
+          <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb}</Typography>
         </Box>
-      ) : (
-        <>
-          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>Agent behavior</Typography>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3, mb: 4 }}>
-            {["config", "policies", "memory", "agents"].map((k) => <PageCard key={k} k={k} onOpen={() => setPage(k)} />)}
-          </Box>
-          <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>System</Typography>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 3 }}>
-            <PageCard k="audit" onOpen={() => setPage("audit")} />
-          </Box>
-        </>
-      )}
+      ))}
     </Box>
   );
 }
 
-const PageCard = ({ k, onOpen }) => {
-  const p = PAGES[k]; const Icon = p.icon;
-  return <LandingCard icon={<Icon sx={{ fontSize: 19, color: "#2f6b4f" }} />} title={p.title} desc={p.desc} onOpen={onOpen} />;
-};
+// One page, a rail, and a search box that is always reachable. The landing grid meant every
+// trip between two settings went section → back → section; these five are edited together.
+const NAV = ["config", "policies", "memory", "agents", "audit"];
+
+export default function SettingsView() {
+  const [page, setPage] = useState("config");
+  const [q, setQ] = useState("");
+  return (
+    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "236px minmax(0,1fr)" },
+      gap: 3, alignItems: "start", maxWidth: 1320, mx: "auto" }}>
+      <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
+        <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Settings</Typography>
+        <TextField fullWidth placeholder="Search settings, rules, memory…" value={q}
+          onChange={(e) => setQ(e.target.value)} sx={{ mb: 1.5, bgcolor: "#fff", borderRadius: 2 }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }} />
+        {NAV.map((k) => {
+          const on = !q && page === k;
+          return (
+            <Box key={k} onClick={() => { setQ(""); setPage(k); }}
+              sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, height: 34, borderRadius: 1.75,
+                cursor: "pointer", fontSize: 12.5, fontWeight: on ? 600 : 400,
+                color: on ? "#245740" : DIM, bgcolor: on ? "#e4efe8" : "transparent",
+                "&:hover": { bgcolor: on ? "#e4efe8" : "#f7f9f5" } }}>
+              {React.createElement(PAGES[k].icon, { sx: { fontSize: 16 } })}
+              {PAGES[k].title}
+            </Box>
+          );
+        })}
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 2, px: 1.25, lineHeight: 1.6 }}>
+          Everything here is stored locally, in the same SQLite file as your tasks.
+        </Typography>
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} />
+      </Box>
+    </Box>
+  );
+}
+
 
 const HelpDialog = ({ help, onClose }) => (
   <Dialog open={!!help} onClose={onClose} fullWidth maxWidth="sm">

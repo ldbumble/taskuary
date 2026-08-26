@@ -1,5 +1,6 @@
-// Operator documents, Stripe-style like Settings: a landing of doc cards, drilling into
-// an editor page with a Docs breadcrumb and a horizontal tab bar to switch documents.
+// Operator documents: the markdown the agents actually read. A list on the left, the file
+// open beside it - these six are read against each other, so hiding five behind a landing
+// grid cost a round trip every time you wanted to compare two.
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
@@ -9,8 +10,7 @@ import PsychologyIcon from "@mui/icons-material/Psychology";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import api from "./api";
-import { FAINT, INK } from "./theme.jsx";
-import { Crumb, UnderTabs, LandingCard } from "./ui.jsx";
+import { FAINT, INK, mono } from "./theme.jsx";
 
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />,
@@ -80,7 +80,7 @@ const OwnerCard = () => {
 };
 
 export default function DocsView() {
-  const [docName, setDocName] = useState(null);   // null = landing
+  const [docName, setDocName] = useState(NAMES[0]);
   const [docs, setDocs] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
   const [saved, setSaved] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
   const [loaded, setLoaded] = useState(false);
@@ -118,14 +118,42 @@ export default function DocsView() {
 
   if (!loaded && !err) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  if (docName) {
-    return (
-      <Box sx={{ maxWidth: 1100, mx: "auto" }}>
-        <Crumb section="Docs" onBack={() => setDocName(null)} title={DOCS[docName].label} />
-        <UnderTabs tabs={NAMES.map((n) => DOCS[n].label)} value={DOCS[docName].label}
-          onChange={(label) => { setGenMsg(""); setDocName(NAMES.find((n) => DOCS[n].label === label)); }} />
+  // A list you can see is worth more than a landing you have to go back to: switching
+  // documents used to mean breadcrumb → grid → card, and these six are read together.
+  return (
+    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "300px minmax(0,1fr)" },
+      gap: 3, alignItems: "start" }}>
+
+      <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
+        <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Operator documents</Typography>
+        {NAMES.map((n) => (
+          <Box key={n} onClick={() => { setGenMsg(""); setGenEv(null); setDocName(n); }}
+            sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
+              bgcolor: n === docName ? "#fff" : "transparent",
+              border: `1px solid ${n === docName ? "#b6d0c2" : "transparent"}`,
+              boxShadow: n === docName ? "0 1px 3px rgba(30,50,38,.06)" : "none",
+              "&:hover": { bgcolor: n === docName ? "#fff" : "#f7f9f5" } }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box sx={{ display: "flex", opacity: n === docName ? 1 : .65 }}>{DOCS[n].icon}</Box>
+              <Typography sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1 }}>{DOCS[n].label}</Typography>
+              {n === docName && (
+                <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
+                  borderRadius: 1.25, bgcolor: "#2f6b4f", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
+              )}
+            </Box>
+            <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{DOCS[n].blurb}</Typography>
+          </Box>
+        ))}
+        <Box sx={{ mt: 2 }}><OwnerCard /></Box>
+      </Box>
+
+      <Box sx={{ minWidth: 0 }}>
+        {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5 }}>
-          <Typography variant="body2" sx={{ color: FAINT, flex: 1 }}>{DOCS[docName].blurb}</Typography>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{DOCS[docName].label}</Typography>
+            <Typography variant="body2" sx={{ color: FAINT, pt: 0.75 }}>{DOCS[docName].blurb}</Typography>
+          </Box>
           {GEN[docName] && (
             <Button size="small" variant="outlined" disabled={genBusy} title={GEN[docName]}
               startIcon={genBusy ? <CircularProgress size={12} /> : null}
@@ -163,29 +191,19 @@ export default function DocsView() {
             <Box sx={{ maxHeight: 260, overflowY: "auto" }}>
               {genEv.map((l, i) => (
                 <Typography key={i} variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap",
-                  fontFamily: l.startsWith("  ") ? "'JetBrains Mono', Consolas, monospace" : "inherit",
+                  fontFamily: l.startsWith("  ") ? "'IBM Plex Mono', Consolas, monospace" : "inherit",
                   fontSize: l.startsWith("  ") ? 10.5 : 11.5, color: l.startsWith("  ") ? FAINT : INK }}>{l}</Typography>
               ))}
             </Box>
           </Box>
         )}
-        <TextField fullWidth multiline minRows={18} maxRows={32} value={docs[docName]}
+        <TextField fullWidth multiline minRows={22} maxRows={40} value={docs[docName]}
           onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })} sx={{ bgcolor: "#fff" }}
-          inputProps={{ style: { fontFamily: "'JetBrains Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.55, color: INK } }} />
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ maxWidth: 1160, mx: "auto" }}>
-      {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, mb: 2 }}>Operator documents</Typography>
-      <OwnerCard />
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }, gap: 3 }}>
-        {NAMES.map((n) => (
-          <LandingCard key={n} icon={DOCS[n].icon} title={DOCS[n].label} desc={DOCS[n].blurb}
-            onOpen={() => setDocName(n)} />
-        ))}
+          inputProps={{ style: { fontFamily: "'IBM Plex Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.6, color: INK } }} />
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1.25, lineHeight: 1.6 }}>
+          Editing this changes the funnel on the very next message. Nothing here is sent anywhere —
+          these files live beside your database.
+        </Typography>
       </Box>
     </Box>
   );

@@ -12,7 +12,7 @@ import StudioView from "./StudioView.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
+import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING } from "./ui.jsx";
 
 // "coder · running" says nothing you can act on. How long it has been going, and what it is
@@ -28,8 +28,8 @@ const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] |
 // WHICH agent is on the card, said out loud: a small legend sitting ON the border with the
 // CLI's name, in a hue from the app's own palette - subtle but distinct, never brand colors
 // that fight the theme. Live or running only; a finished run's card goes back to house style.
-const AGENT_HUES = { claude: "#3f8a66", codex: "#1f6b64", gemini: "#2563eb",
-                     cursor: "#1f6b64", copilot: "#64748b" };
+const AGENT_HUES = { claude: "#7d9a7c", codex: "#6f8a6e", gemini: "#2563eb",
+                     cursor: "#6f8a6e", copilot: "#8a8276" };
 // 'coder' says nothing about which model family answers - resolve every display through
 // the profile's actual command, so the board speaks CLI names (claude, codex, gemini)
 export const cliName = (name, cmds = {}) =>
@@ -39,7 +39,7 @@ const agentBadge = (name, runStatus, isLive, cmds = {}) => {
   if (!isLive && runStatus !== "running") return null;
   const cmd = cliName(name, cmds);
   const hit = Object.entries(AGENT_HUES).find(([k]) => cmd.includes(k));
-  if (!hit) return name ? { word: String(name), color: "#8b938d" } : null;
+  if (!hit) return name ? { word: String(name), color: "#867f74" } : null;
   return { word: hit[0], color: hit[1] };
 };
 
@@ -97,7 +97,7 @@ const NoteChip = ({ onOpen }) => (
   <Tooltip arrow title="what this agent left for whoever picks the task up next">
     <Box onClick={(e) => { e.stopPropagation(); onOpen(); }}
       sx={{ display: "inline-flex", alignItems: "center", gap: 0.3, px: 0.6, height: 16,
-        borderRadius: 0.75, bgcolor: "#e2efed", border: "1px solid #bcd9d5", cursor: "pointer",
+        borderRadius: 0.75, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", cursor: "pointer",
         "&:hover": { bgcolor: "#ede9fe" } }}>
       <Typography sx={{ color: "#6b21a8", fontWeight: 800, fontSize: 8.5, letterSpacing: ".05em" }}>
         ✎ NOTE
@@ -112,9 +112,9 @@ const NoteChip = ({ onOpen }) => (
 // the blast radius). Anything the agent wrote outside the found/did/next shape is shown
 // verbatim rather than dropped: a note we cannot parse is still the note it left.
 const SECTION = {
-  found: { title: "WHAT IT WORKED OUT", icon: "🔍", fg: "#1f6b64", bg: "#e2efed", bd: "#bcd9d5" },
-  did: { title: "WHAT IT ALREADY CHANGED", icon: "✓", fg: "#4d6b3f", bg: "#eaf1e4", bd: "#cfe0c4" },
-  next: { title: "THE NEXT STEP", icon: "→", fg: "#2f6b4f", bg: "#e4efe8", bd: "#b6d0c2" },
+  found: { title: "WHAT IT WORKED OUT", icon: "🔍", fg: "#6f8a6e", bg: "#e3e6e1", bd: "#d2d6cf" },
+  did: { title: "WHAT IT ALREADY CHANGED", icon: "✓", fg: "#47654a", bg: "#dfeade", bd: "#c8d9c7" },
+  next: { title: "THE NEXT STEP", icon: "→", fg: "#55697a", bg: "#eae4d8", bd: "#d8cfbe" },
 };
 
 const NoteDialog = ({ open, task, onClose }) => {
@@ -135,7 +135,7 @@ const NoteDialog = ({ open, task, onClose }) => {
       PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ fontSize: 14.5, pb: 0.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography sx={{ ...mono, color: "#2f6b4f", fontWeight: 700, fontSize: 12 }}>{task?.ref}</Typography>
+          <Typography sx={{ ...mono, color: "#55697a", fontWeight: 700, fontSize: 12 }}>{task?.ref}</Typography>
           <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14 }}>the handover note</Typography>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
@@ -170,8 +170,8 @@ const NoteDialog = ({ open, task, onClose }) => {
                   borderTop: i ? `1px solid ${BORDER}` : "none" }}>
                   <Typography sx={{ ...mono, color: INK, fontSize: 10.5, flex: 1, minWidth: 0 }} noWrap
                     title={f.path}>{f.path}</Typography>
-                  <Typography sx={{ ...mono, color: "#4d6b3f", fontSize: 10 }}>+{f.added}</Typography>
-                  <Typography sx={{ ...mono, color: "#8f4a41", fontSize: 10 }}>−{f.removed}</Typography>
+                  <Typography sx={{ ...mono, color: "#47654a", fontSize: 10 }}>+{f.added}</Typography>
+                  <Typography sx={{ ...mono, color: "#6b2733", fontSize: 10 }}>−{f.removed}</Typography>
                 </Box>
               ))}
             </Box>
@@ -210,10 +210,10 @@ const localToday = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const COLS = [
-  { key: "queued", title: "Queued", dot: "#8b938d", status: "open" },
-  { key: "working", title: "Agent working", dot: "#1f6b64", status: "in_progress" },
-  { key: "waiting", title: "Waiting on you", dot: "#2f6b4f", status: "waiting" },
-  { key: "done", title: "Done", dot: "#4d6b3f", status: "done" },
+  { key: "queued", title: "Queued", dot: "#867f74", status: "open" },
+  { key: "working", title: "Agent working", dot: "#6f8a6e", status: "in_progress" },
+  { key: "waiting", title: "Waiting on you", dot: ALERT, status: "waiting" },
+  { key: "done", title: "Done", dot: "#47654a", status: "done" },
 ];
 
 export default function BoardView({ onOpenTask }) {
@@ -312,9 +312,9 @@ export default function BoardView({ onOpenTask }) {
             // read as four unrelated boxes floating on the page, and a short lane gave a
             // drop target the size of its one card
             <Box key={col.key} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(col)}
-              sx={{ bgcolor: "#f4f7f1", border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 0.85,
+              sx={{ bgcolor: "#e9e3d8", border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 0.85,
                 minHeight: { xs: 200, md: "calc(100vh - 190px)" }, alignSelf: "stretch",
-                outline: dragId && col.key !== "waiting" ? "2px dashed #b6d0c2" : "none", outlineOffset: -4 }}>
+                outline: dragId && col.key !== "waiting" ? "2px dashed #d8cfbe" : "none", outlineOffset: -4 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.4, pb: 0.85 }}>
                 <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: col.dot }} />
                 <Typography variant="body2" sx={{ color: INK, fontWeight: 700, flex: 1, fontSize: 11.5 }}>{col.title}</Typography>
@@ -339,16 +339,16 @@ export default function BoardView({ onOpenTask }) {
                     </Typography>
                   )}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
-                    <Typography variant="caption" sx={{ ...mono, color: "#2f6b4f", fontWeight: 700, fontSize: 10,
+                    <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700, fontSize: 10,
                       whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 12 }} />
-                    {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 12, color: "#1f6b64" }} />}
+                    {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 12, color: "#6f8a6e" }} />}
                     {t.RunStatus && (
                       <Chip size="small" label={`${cliName(t.RunAgent, cmds) || "agent"} · ${t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
-                          bgcolor: t.RunStatus === "running" ? "#e4efe8" : t.RunStatus === "error" ? "#f4eae8" : "#eaf1e4",
-                          color: t.RunStatus === "running" ? "#2f6b4f" : t.RunStatus === "error" ? "#8f4a41" : "#4d6b3f" }} />
+                          bgcolor: t.RunStatus === "running" ? "#eae4d8" : t.RunStatus === "error" ? "#f0e2e4" : "#dfeade",
+                          color: t.RunStatus === "running" ? "#55697a" : t.RunStatus === "error" ? "#6b2733" : "#47654a" }} />
                     )}
                     {t.HandoverNote && <NoteChip onOpen={() => setNoteFor(t)} />}
                     <Box sx={{ flex: 1 }} />
@@ -362,8 +362,8 @@ export default function BoardView({ onOpenTask }) {
                       without hovering anything */}
                   {t.Queued && (
                     <Box sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: "#eef2ff", border: "1px solid #dfe3fb",
-                      borderLeft: "3px solid #3f8a66", borderRadius: 1.25 }}>
-                      <Typography variant="caption" sx={{ color: "#2f6b4f", fontWeight: 700, display: "block",
+                      borderLeft: "3px solid #7d9a7c", borderRadius: 1.25 }}>
+                      <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, display: "block",
                         fontSize: 10, lineHeight: 1.4 }}>
                         ⏳ {t.Queued.behind ? `Waiting on ${t.Queued.behind}` : "Waiting for a free agent slot"}
                         {t.Queued.behindTitle ? ` — “${t.Queued.behindTitle}”` : ""}
@@ -381,7 +381,7 @@ export default function BoardView({ onOpenTask }) {
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
                     <Box sx={{ flex: 1 }} />
-                    <Typography variant="caption" sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
+                    <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
                   </Box>
                 </Box>
                 );

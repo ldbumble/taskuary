@@ -156,4 +156,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 return {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
         except Exception:
             pass
-    return heuristic_intent(msg, mine)
+    # An LLM was supplied, answered, and the answer was not usable (bad JSON, an intent outside
+    # the contract). That is NOT "no AI configured": heuristic_intent's last branch assumes real
+    # work and reads none of the owner's standing notes, so a garbled answer opened a task the
+    # owner had already refused - repeatedly, since every retry garbled the same way. Say the
+    # verdict is degraded and let the caller file instead of guessing.
+    out = heuristic_intent(msg, mine)
+    return {**out, 'degraded': True} if llm else out

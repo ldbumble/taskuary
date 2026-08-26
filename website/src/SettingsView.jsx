@@ -18,7 +18,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
-import { ChannelIcon, Empty, UnderTabs } from "./ui.jsx";
+import { ChannelIcon, Empty, FilterPills } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 
 
@@ -90,6 +90,9 @@ const KNOB_META = {
   coder_auto_enabled: { group: "Coder agent", label: "Auto-dispatch new coding tasks", type: "switch",
     desc: "A new task with software in it immediately opens a live agent session in its repo.",
     help: "On: the moment triage says 'this is work' AND the work is plainly about code - a failure with a trace, a named repository or pull request, a file path - your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nWork with no code in it (chase a vendor, add a user, produce a document) is still a real task - it just waits on your list rather than opening a session, because a CLI sitting in a repository has nothing to do with it. One click sends it to an agent anyway if you disagree.\n\nRequires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way." },
+  auto_sessions: { group: "Coder agent", label: "Agents at once", type: "number",
+    desc: "How many unattended agent sessions may run together. The rest queue.",
+    help: "The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.\n\nPast the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board's floor view is drawn to this number, so raising it widens the room instead of crowding it.\n\nRaise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this." },
   notify_level: { group: "Notifications", label: "Push to your chat", type: "select", options: ["needs_me", "all", "off"],
     optionLabels: { needs_me: "needs me", all: "everything", off: "off" },
     desc: "Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.",
@@ -232,8 +235,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
             <Box key={ch} onClick={() => toggle(ch)}
               sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.9, py: 0.35, borderRadius: 99,
                 cursor: "pointer", fontSize: 11.5, fontWeight: on.has(ch) ? 700 : 500, userSelect: "none",
-                bgcolor: on.has(ch) ? "#e4efe8" : "#f4f7f1", color: on.has(ch) ? "#2f6b4f" : DIM,
-                border: `1px solid ${on.has(ch) ? "#b6d0c2" : BORDER}`, "&:hover": { borderColor: "#b6d0c2" } }}>
+                bgcolor: on.has(ch) ? "#eae4d8" : "#e9e3d8", color: on.has(ch) ? "#55697a" : DIM,
+                border: `1px solid ${on.has(ch) ? "#d8cfbe" : BORDER}`, "&:hover": { borderColor: "#d8cfbe" } }}>
               <ChannelIcon channel={ch} sx={{ fontSize: 12 }} />{ch}
             </Box>
           ))}
@@ -282,7 +285,9 @@ function SettingsPages({ page, setPage, q, setQ }) {
     const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
     return (
       <Box>
-        <UnderTabs tabs={tabs} value={cfgTab} onChange={setCfgTab} />
+        {/* the segmented pill bar, same as Reports and the Timeline - the old underlined tab
+            strip was the one place in the app still wearing a different header */}
+        <Box sx={{ mb: 2 }}><FilterPills options={tabs} value={cfgTab} onChange={setCfgTab} /></Box>
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
         {rows.map((s) => {
           const m = meta(s.Name);
@@ -293,7 +298,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
                 onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
                 <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
                   {m.label}
-                  {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cdd5c8" }} />}
+                  {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
                 </Typography>
                 <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
               </Box>
@@ -313,7 +318,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
           <Typography variant="body2" sx={{ color: DIM }}>
             Deterministic gates the AI can never override.
             <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
-              sx={{ color: "#2f6b4f", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
               How precedence works →
             </Typography>
           </Typography>
@@ -336,7 +341,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
         ))}
         {draft && (
           <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-            <Typography variant="body2" sx={{ color: "#2f6b4f", fontWeight: 700 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
+            <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 700 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
             <TextField label="Name" value={draft.Name} onChange={(e) => setDraft({ ...draft, Name: e.target.value })} />
             <Box sx={{ display: "flex", gap: 1 }}>
               <Select fullWidth value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
@@ -371,7 +376,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
           <Typography variant="body2" sx={{ color: DIM }}>
             Standing notes learned from your verdicts, injected into every draft.
             <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
-              sx={{ color: "#2f6b4f", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
               How memory works →
             </Typography>
           </Typography>
@@ -430,7 +435,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
         <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
         {verify && (
           <Box sx={{ mt: 2 }}>
-            {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#4d6b3f" }}>
+            {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#47654a" }}>
               ✓ Intact — {verify.rows} rows verified
             </Typography>}
             {/* two different findings, and calling both "BROKEN" cried wolf about a bug in
@@ -467,8 +472,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
       {!results.length && <Empty>Nothing matches.</Empty>}
       {results.map((r) => (
         <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-          "&:hover": { bgcolor: "#f7f9f5" } }}>
-          <Typography sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
+          "&:hover": { bgcolor: "#f4f1ec" } }}>
+          <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
           <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb}</Typography>
         </Box>
       ))}
@@ -497,8 +502,8 @@ export default function SettingsView() {
             <Box key={k} onClick={() => { setQ(""); setPage(k); }}
               sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, height: 34, borderRadius: 1.75,
                 cursor: "pointer", fontSize: 12.5, fontWeight: on ? 600 : 400,
-                color: on ? "#245740" : DIM, bgcolor: on ? "#e4efe8" : "transparent",
-                "&:hover": { bgcolor: on ? "#e4efe8" : "#f7f9f5" } }}>
+                color: on ? "#41525f" : DIM, bgcolor: on ? "#eae4d8" : "transparent",
+                "&:hover": { bgcolor: on ? "#eae4d8" : "#f4f1ec" } }}>
               {React.createElement(PAGES[k].icon, { sx: { fontSize: 16 } })}
               {PAGES[k].title}
             </Box>
@@ -540,10 +545,10 @@ const NotifyStatus = ({ connectors, settings }) => {
   const good = st.kind === "pinging", warn = st.kind === "none" || st.kind === "unnamed" || st.kind === "inactive";
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5, px: 1.25, py: 0.85,
-      bgcolor: good ? "#eaf1e4" : warn ? "#e4efe8" : "#f7f9f5",
-      border: `1px solid ${good ? "#cbe8d6" : warn ? "#b6d0c2" : BORDER}`, borderRadius: 1.5 }}>
+      bgcolor: good ? "#dfeade" : warn ? "#eae4d8" : "#f4f1ec",
+      border: `1px solid ${good ? "#c8d9c7" : warn ? "#d8cfbe" : BORDER}`, borderRadius: 1.5 }}>
       {st.targets[0] && <ChannelIcon channel={st.targets[0].Type} sx={{ fontSize: 15, mt: 0.15 }} />}
-      <Typography variant="caption" sx={{ color: good ? "#4d6b3f" : warn ? "#2f6b4f" : DIM, lineHeight: 1.45 }}>{st.text}</Typography>
+      <Typography variant="caption" sx={{ color: good ? "#47654a" : warn ? "#55697a" : DIM, lineHeight: 1.45 }}>{st.text}</Typography>
     </Box>
   );
 };

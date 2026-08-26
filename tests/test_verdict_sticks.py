@@ -1,11 +1,15 @@
 """"I wrote this a bunch and the system is not learning it."
 
-Two reasons it could not, and both are covered here. A verdict about a KIND OF WORK had
+Four reasons it could not, and all four are covered here. A verdict about a KIND OF WORK had
 nowhere to live - the scopes were this sender, their domain, or everybody - so "resident
 refunds are not our task" got filed under whichever colleague was on screen and never fired
-again on a seventeen-person thread. And ATTACHING skipped every judgement: once a task existed,
+again on a seventeen-person thread. ATTACHING skipped every judgement: once a task existed,
 each new message on the thread joined it with no triage, no notes and no AI call, so the task
-stayed 'needs you' no matter what the owner had said.
+stayed 'needs you' no matter what the owner had said. CREATING skipped it too, and less
+visibly - veto() guarded the attach branch alone, so the same topic on a thread with no task
+yet went to the classifier as advice rather than as a decision. And a model that ANSWERED
+UNUSABLY fell through to a keyword heuristic whose last branch assumes real work and reads no
+notes at all, which is how a refused topic kept opening a fresh task every single time.
 """
 import unittest
 from fastapi.testclient import TestClient
@@ -194,3 +198,72 @@ class TheTopicIsTheStandingPartTests(unittest.TestCase):
         mid = self._msg('Re: Resident Refund Request - Adams, Neil')
         d = c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'subject', 'topic': 'the'}).json()
         self.assertEqual((d['scope'], d['scopeKey']), ('sender', 'hudson@regencyhealthrehab.com'))
+
+
+class CreateRespectsTheVerdictTests(unittest.TestCase):
+    """The half that was still missing. veto() guarded ATTACH only, so the same topic arriving
+    on a thread with no task open yet reached the classifier as a NOTE - advice, which loses to
+    a model having a bad day. Twenty verdicts, twenty new tasks."""
+    def _arrive(self, s, llm=None, subject='Resident Refund Request - Watson, Lisa'):
+        return ingest.ingest_message(s, {'external_id': f'new-{subject}', 'channel': 'email',
+                                         'from_email': 'never-seen@elsewhere.com', 'subject': subject,
+                                         'body': 'Attached is the transaction history.'}, llm=llm)
+
+    def test_a_topic_verdict_stops_a_new_task_opening(self):
+        s = _store(VERDICT)
+        out = self._arrive(s, llm=lambda *a, **k: '{"intent": "task", "why": "real work"}')
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
+        self.assertEqual(row['NeedsYou'], 0)
+        self.assertIn('Resident refunds are not our task', row['RouteReason'])
+
+    def test_a_verdict_about_a_PERSON_still_only_advises(self):
+        """Someone whose last message was not yours can still send you something that is, so a
+        sender-scoped verdict goes to the classifier instead of deciding for it."""
+        s = _store(('sender', 'dana@vendor.com', 'Dana asking about ledgers is not ours.', 'verdict'))
+        seen = {}
+        def llm(sys_, usr_, **kw):
+            seen['sys'] = sys_
+            return '{"intent": "task", "why": "real work"}'
+        out = ingest.ingest_message(s, {'external_id': 'p1', 'channel': 'email', 'from_email': 'dana@vendor.com',
+                                        'subject': 'Quarterly ledger', 'body': 'please rebuild the ledger'}, llm=llm)
+        self.assertEqual(out['status'], 'created')
+        self.assertIn('Dana asking about ledgers', seen['sys'])
+
+    def test_mail_about_something_else_is_untouched(self):
+        s = _store(VERDICT)
+        out = self._arrive(s, subject='Directors meeting agenda',
+                           llm=lambda *a, **k: '{"intent": "task", "why": "real work"}')
+        self.assertEqual(out['status'], 'created')
+
+
+class DegradedTriageTests(unittest.TestCase):
+    """The AI answered, and the answer was not a verdict. `fail` only catches a call that RAISED,
+    so the old code sailed on with heuristic_intent's last branch - "assumed real work", which
+    reads no standing notes at all - and opened the task anyway. The timeline said so out loud:
+    "assumed real work (keyword heuristic, no AI read this)"."""
+    MSG = {'external_id': 'd1', 'channel': 'email', 'from_email': 'someone@elsewhere.com',
+           'subject': 'Resident Refund Request - Watson, Lisa', 'body': 'Attached is the history.'}
+
+    def test_an_unusable_answer_files_instead_of_assuming_work(self):
+        s = MemoryStore()
+        out = ingest.ingest_message(s, dict(self.MSG), llm=lambda *a, **k: 'I think this is a task, honestly')
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        self.assertIn('could not read as a verdict', next(
+            r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])['RouteReason'])
+
+    def test_the_cheap_fyi_short_circuit_still_runs_without_a_model(self):
+        """That branch is a keyword rule that only ever FILES, which is the safe direction -
+        it is not degraded and must keep saving the AI call."""
+        s, called = MemoryStore(), []
+        out = ingest.ingest_message(s, {'external_id': 'd2', 'channel': 'email', 'from_email': 'x@y.com',
+                                        'subject': 'Weekly digest',
+                                        'body': 'This is an automated message. No action required.'},
+                                    llm=lambda *a, **k: called.append(1) or '{"intent": "task", "why": "x"}')
+        self.assertEqual((out['status'], called), ('filed', []))
+
+    def test_degradation_is_marked_only_when_a_model_was_actually_asked(self):
+        from taskuary.triage import classify_intent
+        msg = {'from_email': 'x@y.com', 'subject': 'something', 'body': 'a body with no question'}
+        self.assertTrue(classify_intent(msg, llm=lambda *a, **k: 'not json').get('degraded'))
+        self.assertNotIn('degraded', classify_intent(msg))      # no model asked, nothing degraded

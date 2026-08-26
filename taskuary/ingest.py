@@ -108,6 +108,19 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             except Exception as e:
                 logger.warning(f'answer_to_agent failed for task {tid}: {e}')
     else:
+        # A standing verdict stops a task OPENING, not just a message attaching. This is where
+        # "I have said twenty times that resident refunds are not ours" went wrong: veto() only
+        # ever guarded the attach branch, so the same topic arriving on a fresh thread reached
+        # the classifier as a NOTE - advice a model can weigh and, when its answer degrades
+        # below, not read at all. A verdict the owner typed is not advice; it decides.
+        vetoed = veto(store, msg, topic_only=True)
+        if vetoed:
+            mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+            store.add_route(mid, None, 'file', None,
+                            f'your standing verdict says this is not ours, so no task was opened: '
+                            f'"{vetoed[:200]}"', [], 'memory')
+            logger.info(f"ingest: filed by your own verdict - {msg.get('subject') or ''}")
+            return {'status': 'filed', 'task_id': None, 'message_id': mid}
         # AI-gated triage: without an active AI connector, nothing becomes a task on its
         # own - messages FILE onto the timeline (visible, promotable by hand) instead of
         # heuristics spraying tasks for every automated notification. Heuristics still
@@ -145,6 +158,16 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     store.add_route(mid, None, 'file', None,
                                     f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail", [], 'triage')
                     logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
+                    return {'status': 'filed', 'task_id': None, 'message_id': mid}
+                if intent.get('degraded'):
+                    # the call SUCCEEDED and came back unusable, so `fail` is empty and the old
+                    # code sailed on with a keyword guess that reads none of the standing notes
+                    # above. Same situation as no AI connector, same answer: file it.
+                    mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
+                    store.add_route(mid, None, 'file', None,
+                                    'AI triage returned an answer it could not read as a verdict - filed rather than '
+                                    'assumed to be work' + _notes_note(), [], 'triage')
+                    logger.warning(f"ingest: unusable AI verdict, filed - {msg.get('subject') or ''}")
                     return {'status': 'filed', 'task_id': None, 'message_id': mid}
         else:
             intent = {'intent': 'task', 'why': ''}
@@ -330,7 +353,7 @@ def owner_addresses(store) -> set:
             if s.get('Channel') == 'email' and s.get('Address')}
 
 
-def veto(store, msg: dict) -> str:
+def veto(store, msg: dict, topic_only: bool = False) -> str:
     """The owner's own verdict that this message is not work, if they have given one - the note
     itself, so the timeline can quote what decided it.
 
@@ -341,11 +364,22 @@ def veto(store, msg: dict) -> str:
     This exists because ATTACHING skipped every judgement. A thread with a task already open
     absorbed each new message straight onto it - no triage, no notes, no AI call - so the task
     stayed 'needs you' no matter how many times the owner said the topic was not theirs. The
-    verdict was unreachable by design, and giving it again could not help."""
+    verdict was unreachable by design, and giving it again could not help.
+
+    `topic_only` keeps just the 'subject'-scoped verdicts - "this KIND of work is not ours".
+    Those are the ones that must decide rather than advise, because the whole reason the topic
+    scope exists is that the sender changes every time (a refund thread carries a different
+    resident and a different colleague on each message), so nothing else can catch them.
+
+    A verdict about a PERSON stays advice, deliberately: someone whose last message was not
+    yours can still send you something that is, and the classifier weighing the note is the
+    right shape for that. A 'global' verdict would mean "never open a task again for anyone",
+    which nobody has ever meant by pressing Not our task."""
     hits = applicable_notes(store, [msg.get('from_email') or ''], msg.get('subject') or '',
                             f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                             msg.get('source_name') or '')
-    return next((n['Note'] for n in hits if n.get('Source') == 'verdict'), '')
+    return next((n['Note'] for n in hits if n.get('Source') == 'verdict'
+                 and not (topic_only and (n['Scope'] != 'subject' or not n.get('ScopeKey')))), '')
 
 
 def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:
@@ -417,7 +451,16 @@ def _spawn(fn, *args):
     threading.Thread(target=fn, args=args, daemon=True).start()
 
 
-AUTO_SESSIONS = 4      # unattended sessions to keep alive at once; past this it waits for you
+AUTO_SESSIONS = 4      # DEFAULT unattended sessions to keep alive at once; past this it waits for you
+
+
+def auto_sessions(store) -> int:
+    """How many unattended agent sessions may run at once. Was a module constant, which meant
+    the one number that decides how much work the machine takes on could only be changed by
+    editing the source - so it is a setting now, and AUTO_SESSIONS is just its default."""
+    try: n = int(store.get_settings().get('auto_sessions') or AUTO_SESSIONS)
+    except (ValueError, TypeError): return AUTO_SESSIONS
+    return max(1, min(16, n))
 
 def _auto_code(store, tid):
     """Auto-dispatch puts the CLI on the task in a REAL session - the same one you see when
@@ -431,10 +474,11 @@ def _auto_code(store, tid):
     agent = store.get_settings().get('default_agent') or 'coder'
     # the note belongs INSIDE the worker: written before the thread started, a task could
     # claim "auto-dispatched" with no session behind it whenever the process died first
-    if len([t for t in term.SESSIONS.values() if t.alive]) >= AUTO_SESSIONS:
-        store.enqueue_dispatch(tid, None, agent, f'{AUTO_SESSIONS} agent sessions are already live')
+    cap = auto_sessions(store)
+    if len([t for t in term.SESSIONS.values() if t.alive]) >= cap:
+        store.enqueue_dispatch(tid, None, agent, f'{cap} agent sessions are already live')
         store.add_comment(tid, 'router', 'agent',
-                          f'Queued: {AUTO_SESSIONS} agent sessions are already live - '
+                          f'Queued: {cap} agent sessions are already live - '
                           'it starts by itself when one ends.')
         return
     try:

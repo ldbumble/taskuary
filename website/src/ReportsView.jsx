@@ -19,7 +19,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize the census by facility. Flag anything under 70 and any day-over-day drop."];
@@ -143,10 +143,11 @@ export default function ReportsView() {
   const [sources, setSources] = useState(null);
   const [types, setTypes] = useState([]);
   const [connectors, setConnectors] = useState([]);
-  const [editing, setEditing] = useState(null);   // null = landing; {SourceId|null}
   const [syncing, setSyncing] = useState(false);
   const [note, setNote] = useState(null);
   const [err, setErr] = useState("");
+  const [bucket, setBucket] = useState("all");   // which rail section is open
+  const [q, setQ] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -176,35 +177,52 @@ export default function ReportsView() {
 
   if (!sources) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  if (editing) {
-    return <ReportWizard sourceId={editing.SourceId} sources={sources} types={types} connectors={connectors}
-      reload={load} onBack={() => { setEditing(null); load(); }}
-      onSaved={(sid) => setEditing({ SourceId: sid })} />;
-  }
+  /* The rail lists the REPORTS, not categories of them, and picking one opens its fields
+     right there - no second click through an Edit button, which is the whole point of a
+     master-detail layout. "All reports" keeps the overview with the per-row Run/Edit
+     controls; a title selects that report and the pipeline appears beside it. */
+  const titleOf = (s) => parse(s.ConfigJson).title || s.Address || `report ${s.SourceId}`;
+  const railItems = [
+    { key: "all", label: "All reports", n: sources.length || null },
+    ...sources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
+    { key: "new", label: "+ New report" },
+  ];
+  const list = sources.filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
+  const openId = bucket === "new" ? null : bucket;
+  const open = bucket !== "all" && !q;
 
   return (
-    <Box sx={{ maxWidth: 980, mx: "auto" }}>
+    <SideRail title="Reports" q={q} setQ={setQ} placeholder="Search reports…"
+      items={railItems} value={bucket} onChange={setBucket}
+      note="A report is a pipeline: source → query → optional AI summary → your Timeline. The connections themselves live on the Connectors tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <Box sx={{ display: "flex", alignItems: "center", mb: 0.5 }}>
-        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1 }}>Scheduled reports</Typography>
+      {open ? (
+        <ReportWizard key={String(bucket)} sourceId={openId} sources={sources} types={types} connectors={connectors}
+          reload={load} onBack={() => { setBucket("all"); load(); }}
+          onSaved={(sid) => setBucket(sid)} />
+      ) : (<>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
+          {q ? `Matches for “${q}”` : "Scheduled reports"}
+        </Typography>
         <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing} sx={{ mr: 1 }}
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
           {syncing ? "Running…" : "Run due now"}
         </Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => setEditing({ SourceId: null })}>New report</Button>
+          onClick={() => { setQ(""); setBucket("new"); }}>New report</Button>
       </Box>
-      <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
-        A report is a pipeline: source → query → optional AI summary → your Timeline. Connections live on the Connectors tab.
-      </Typography>
-      {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#4d6b3f" : "#8f4a41" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
-      {!sources.length && <Empty>No reports yet — "New report" walks you through source, query, AI summary and schedule.</Empty>}
-      {sources.map((s) => {
+      {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+      {!sources.length ? <Empty>No reports yet — "New report" walks you through source, query, AI summary and schedule.</Empty>
+        : !list.length && <Empty>Nothing here.</Empty>}
+      {list.map((s) => {
         const c = parse(s.ConfigJson);
         const sched = c.on_startup ? "on startup" : c.cron ? `cron ${c.cron}`
           : c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
         return (
-          <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, borderBottom: `1px solid ${BORDER}` }}>
+          <Box key={s.SourceId} onClick={() => { setQ(""); setBucket(s.SourceId); }}
+            sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
+              borderBottom: `1px solid ${BORDER}`, "&:hover": { bgcolor: "#faf8f4" } }}>
             <StatusDot ok={!!s.Active} />
             <ChannelIcon channel="report" />
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -214,19 +232,20 @@ export default function ReportsView() {
               </Typography>
             </Box>
             {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
-              bgcolor: "#e4efe8", border: "1px solid #b6d0c2" }}>
-              <AutoAwesomeIcon sx={{ fontSize: 12, color: "#2f6b4f" }} />
-              <Typography variant="caption" sx={{ color: "#2f6b4f", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
+              bgcolor: "#eae4d8", border: "1px solid #d8cfbe" }}>
+              <AutoAwesomeIcon sx={{ fontSize: 12, color: "#55697a" }} />
+              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
             </Box>}
             <Button size="small" disabled={running === s.SourceId}
               startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
               onClick={() => runNow(s.SourceId)}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
-            <Button size="small" onClick={() => setEditing({ SourceId: s.SourceId })}>Edit</Button>
+            <Button size="small" onClick={() => { setQ(""); setBucket(s.SourceId); }}>Edit</Button>
             <Switch checked={!!s.Active} onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
           </Box>
         );
       })}
-    </Box>
+      </>)}
+    </SideRail>
   );
 }
 
@@ -352,7 +371,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Box onClick={() => setSrcs((cur) => [...cur, { type: "mssql" }])}
                 sx={{ ...card, width: 300, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
                   justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed",
-                  color: DIM, "&:hover": { borderColor: "#b6d0c2", color: "#2f6b4f" } }}>
+                  color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                 <AddIcon sx={{ fontSize: 20 }} />
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>add a source</Typography>
               </Box>
@@ -363,10 +382,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Box sx={{ width: 0, height: 0, borderLeft: "12px solid transparent", borderRight: "12px solid transparent",
                 borderTop: `14px solid ${BORDER}` }} />
             </Box>
-            <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#b6d0c2" }}>
+            <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
-                <AutoAwesomeIcon sx={{ fontSize: 15, color: "#2f6b4f" }} />
-                <Typography variant="caption" sx={{ color: "#2f6b4f", fontWeight: 700 }}>
+                <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
+                <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700 }}>
                   ONE PROMPT OVER ALL {srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}
                 </Typography>
               </Box>
@@ -406,7 +425,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </Box>
               )}
               {cfg.ai_prompt && !aiActive && !cfg.ai_brain && (
-                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#2f6b4f" }}>
+                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#55697a" }}>
                   ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connectors → AI).
                 </Typography>
               )}
@@ -455,7 +474,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       <MenuItem value="review" sx={{ fontSize: 12 }}>wait for me to approve it (Review)</MenuItem>
                       <MenuItem value="auto" sx={{ fontSize: 12 }}>send it without asking</MenuItem>
                     </Select>
-                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#2f6b4f" : FAINT, flex: 1, minWidth: 200 }}>
+                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#55697a" : FAINT, flex: 1, minWidth: 200 }}>
                       {cfg.deliver.gate === "auto"
                         ? "This report will send on its schedule with nobody reading it first. Everything else in Taskuary waits for you — this is the one place you can turn that off, deliberately."
                         : "Each run lands in Review as a draft. Approving it sends; editing first is fine."}
@@ -480,10 +499,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 startIcon={busy === "preview" ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>Preview pipeline</Button>
               <Button onClick={() => setStep(2)}>Continue</Button>
             </Box>
-            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
+            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
             {preview && (preview.ok ? (
               <Box sx={{ mt: 1 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: "#4d6b3f" }}>✓ {preview.headline}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: "#47654a" }}>✓ {preview.headline}</Typography>
                 <Box component="pre" sx={{ ...mono, whiteSpace: "pre-wrap", bgcolor: PANEL2, border: `1px solid ${BORDER}`,
                   borderRadius: 1.5, p: 1.25, fontSize: 11, maxHeight: 260, overflow: "auto", color: INK }}>{preview.summary}</Box>
                 {/* the chart is half of what a scheduled run hands back, so the dry run shows it too -
@@ -498,7 +517,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   </Box>
                 )}
               </Box>
-            ) : <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#8f4a41" }}>✗ {preview.error}</Typography>)}
+            ) : <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {preview.error}</Typography>)}
           </StepContent>
         </Step>
         <Step completed={!!cur}>
@@ -527,13 +546,13 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               Pick one. Everything blank = once a day, whenever the app is open.
             </Typography>
             {!cfg.title && (
-              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#2f6b4f", fontWeight: 600 }}>
+              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#55697a", fontWeight: 600 }}>
                 No title yet — <Box component="span" sx={{ textDecoration: "underline", cursor: "pointer" }}
                   onClick={() => setStep(0)}>add one in step 1</Box> and this button wakes up.
               </Typography>
             )}
             {saveErr && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{saveErr}</Alert>}
-            {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#4d6b3f" }}>✓ {savedMsg}</Typography>}
+            {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#47654a" }}>✓ {savedMsg}</Typography>}
             {cur && (
               <Box sx={{ display: "flex", gap: 1, mt: 1.5, alignItems: "center" }}>
                 <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
@@ -684,12 +703,12 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       sx={{ ...card, width: 300, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
         opacity: dragging ? 0.45 : 1, cursor: "grab", "&:active": { cursor: "grabbing" } }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-        <DragIndicatorIcon sx={{ fontSize: 16, color: "#cdd5c8" }} />
+        <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />
         <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1 }}>source {index + 1} of {count}</Typography>
         <ContentCopyIcon onClick={onCopy} titleAccess="Duplicate — same connection, different query"
-          sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#2f6b4f" } }} />
+          sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }} />
         {count > 1 && <CloseIcon onClick={onRemove} titleAccess="Remove this source"
-          sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#8f4a41" } }} />}
+          sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#6b2733" } }} />}
       </Box>
       <Select size="small" value={src.type || "mssql"} onChange={(e) => onRetype(e.target.value)}
         sx={{ fontSize: 12.5, bgcolor: "#fff" }}>
@@ -708,7 +727,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         })()}
       </Select>
       {needsConn && (
-        <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#4d6b3f" : "#2f6b4f" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#47654a" : "#55697a" }}>
           {connOk ? `✓ uses the ${CARD_LABELS[cardType] || cardType} connection from Connectors`
             : `⚠ set up Connectors → ${CARD_LABELS[cardType] || cardType} first`}
         </Typography>

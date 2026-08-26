@@ -17,7 +17,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
@@ -357,20 +357,20 @@ const NL = String.fromCharCode(10);
 
 // A card per connection. The dot is read off the status line the card already carries -
 // "off", "not set up" and "connection failing" are the only three states worth a colour.
-const connDot = (c) => (c.planned ? "#cdd5c8"
-  : /failing|test failed/.test(c.desc) ? "#8f4a41"
-    : /^off|not set up|no key yet/.test(c.desc) ? "#cdd5c8" : "#2f6b4f");
+const connDot = (c) => (c.planned ? "#cfc9bf"
+  : /failing|test failed/.test(c.desc) ? "#6b2733"
+    : /^off|not set up|no key yet/.test(c.desc) ? "#cfc9bf" : "#55697a");
 
 const ConnCard = ({ c }) => (
   <Box onClick={c.planned ? undefined : c.go}
     sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 1.6,
       opacity: c.planned ? 0.5 : 1, cursor: c.planned ? "default" : "pointer",
       transition: "border-color .15s, box-shadow .15s",
-      ...(c.planned ? {} : { "&:hover": { borderColor: "#b6d0c2", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }) }}>
+      ...(c.planned ? {} : { "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }) }}>
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
-      <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#f4f7f1", flexShrink: 0,
+      <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#e9e3d8", flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#2f6b4f" }} />
+        {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#55697a" }} />
           : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
       </Box>
       <Typography noWrap sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
@@ -383,12 +383,27 @@ const ConnCard = ({ c }) => (
   </Box>
 );
 
+// The catalog's sections, named once: the rail reads them before `groups` is built (groups
+// needs the loaded connectors), and they must stay in step.
+const GROUP_TITLES = ["AI — agents & models", "Messaging", "Developer", "Project management",
+  "Databases", "Cloud & infrastructure", "Observability", "Agentic web", "Files & sheets", "Everything else"];
+// planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
+// in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
+const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "SharePoint list",
+  smb_file: "Network file share", local_file: "File on this computer", graphql: "GraphQL",
+  sqlite: "SQLite", gcp: "Google Cloud", kubernetes: "Kubernetes", grafana: "Grafana",
+  elastic: "Elasticsearch", perplexity: "Perplexity", serpapi: "SerpAPI", browserbase: "Browserbase" };
+const KNOWN_PLANNED = [];
+const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "elastic",
+  "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file"]);
+
 export default function ConnectorsView() {
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
   const [types, setTypes] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [q, setQ] = useState("");
+  const [group, setGroup] = useState(GROUP_TITLES[0]);   // which catalog section the rail has open
   const [open, setOpen] = useState(null);   // {kind:'channel',id} | {kind:'rtype',rtype,SourceId?} | {kind:'agents'}
   const [syncing, setSyncing] = useState(false);
   const [err, setErr] = useState("");
@@ -446,6 +461,24 @@ export default function ConnectorsView() {
       haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`,
       go: () => setOpen({ kind: "channel", id: c.ConnectorId }) };
   };
+  // three shapes of card, said once instead of inline in five groups
+  const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
+    + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length} reports (built on the Reports tab)`;
+  const dataCards = (keys) => keys.filter((t) => DATA_META[t] && byType[t]).map((t) => {
+    const dm = DATA_META[t];
+    return { key: t, title: dm.title, channel: t,
+      desc: (byType[t].LastError ? "connection failing" : byType[t].LastSyncAt ? "connection ✓" : "not set up")
+        + ` · ${reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length} reports (built on the Reports tab)`,
+      haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
+      go: () => setOpen({ kind: "data", type: t }) };
+  });
+  const planned = types.filter((t) => t.status === "planned").map((t) => t.type);
+  // `rest` catches whatever the server starts advertising that this file has not been taught
+  // about yet, so a new planned type never silently vanishes from the catalog
+  const plannedCards = (keys, rest = false) => (rest ? planned.filter((t) => !PLACED.has(t)) : keys.filter((t) => planned.includes(t)))
+    .map((t) => ({ key: `p${t}`, title: PLANNED_TITLES[t] || t.replace(/_/g, " "), desc: "planned",
+      channel: t, haystack: `${t} planned`, planned: true }));
+
   const groups = [
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "claude / codex / gemini — bring your own coding CLI, resumable sessions",
@@ -456,43 +489,53 @@ export default function ConnectorsView() {
     { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Developer", cards: ["github", "gitlab", "azdo", "sentry", "pagerduty"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Project management", cards: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Data connections", cards: [
+    /* One "Data connections" bucket held eleven cards that have nothing to do with each
+       other - a SQL server, a log store and a web-search API are three different jobs, and a
+       rail entry saying "11" tells you nothing about which one you came for. Split by what
+       the thing IS, and the planned cards land in the group they will belong to rather than
+       all together at the bottom. */
+    { title: "Databases", cards: [
       {
         key: "mssql", title: "Microsoft SQL Server", channel: "mssql",
-        desc: (byType.mssql?.LastError ? "connection failing" : byType.mssql?.LastSyncAt ? "connection ✓" : "not set up")
-          + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === "mssql").length} reports (built on the Reports tab)`,
+        desc: dataDesc(byType.mssql, "mssql"),
         haystack: "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" "),
         go: () => setOpen({ kind: "mssql" }),
       },
+      ...dataCards(["database"]), ...plannedCards(["graphql", "sqlite"]),
+    ]},
+    { title: "Cloud & infrastructure", cards: [
+      ...dataCards(["aws", "azure"]),
       ...(byType.winrm ? [{
         key: "winrm", title: "Remote Windows (WinRM)", channel: "winrm",
-        desc: (byType.winrm.LastError ? "connection failing" : byType.winrm.LastSyncAt ? "connection ✓" : "not set up")
-          + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === "winrm").length} reports (built on the Reports tab)`,
+        desc: dataDesc(byType.winrm, "winrm"),
         haystack: "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" "),
         go: () => setOpen({ kind: "winrm" }),
       }] : []),
-      ...Object.entries(DATA_META).filter(([t]) => byType[t]).map(([t, dm]) => ({
-        key: t, title: dm.title, channel: t,
-        desc: (byType[t].LastError ? "connection failing" : byType[t].LastSyncAt ? "connection ✓" : "not set up")
-          + ` · ${reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length} reports (built on the Reports tab)`,
-        haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
-        go: () => setOpen({ kind: "data", type: t }),
-      })),
-      ...types.filter((t) => t.status === "planned").map((t) => ({
-        key: `p${t.type}`, title: t.type, desc: "planned", channel: t.type, haystack: `${t.type} planned`, planned: true })),
+      ...plannedCards(["gcp", "kubernetes"]),
     ]},
+    { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...plannedCards(["grafana", "elastic"])] },
+    // the web as a source: one REST call and a key each. What is deliberately NOT here is
+    // anything that drives a browser - logging in, clicking - which needs CDP, not an API.
+    { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "firecrawl", "reader"]), ...plannedCards(["perplexity", "serpapi", "browserbase"])] },
+    { title: "Files & sheets", cards: plannedCards(["google_sheets", "sharepoint_list", "smb_file", "local_file"]) },
+    { title: "Everything else", cards: plannedCards(KNOWN_PLANNED, true) },
   ];
   const hits = q ? groups.flatMap((g) => g.cards.filter((c) => !c.planned && c.haystack.toLowerCase().includes(q.toLowerCase()))
     .map((c) => ({ ...c, crumb: g.title }))) : [];
 
+  const shown = groups.find((g) => g.title === group) || groups[0];
+
   return (
-    <Box sx={{ maxWidth: 1240, mx: "auto" }}>
+    <SideRail title="Connectors" q={q} setQ={setQ}
+      placeholder="Search connectors — Slack, SQL Server…"
+      items={groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.filter((c) => !c.planned).length || null }))}
+      value={group} onChange={setGroup}
+      note="Keys and connection settings are stored locally, in the same SQLite file as your tasks.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
-        <TextField fullWidth placeholder="Search connectors — Slack, SQL Server, Anthropic… matches setup guides too" value={q}
-          onChange={(e) => setQ(e.target.value)} sx={{ bgcolor: "#fff", borderRadius: 2, maxWidth: 520, mx: "auto", display: "block" }}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: FAINT }} /></InputAdornment> }} />
-        <Box sx={{ flex: 1 }} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2 }}>
+        <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
+          {q ? `Matches for “${q}”` : shown.title}
+        </Typography>
         <Button size="small" variant="contained" disableElevation onClick={syncNow} disabled={syncing}
           startIcon={syncing ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
           {syncing ? "Syncing…" : "Sync now"}
@@ -504,23 +547,18 @@ export default function ConnectorsView() {
           {!hits.length && <Empty>Nothing matches.</Empty>}
           {hits.map((r) => (
             <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-              "&:hover": { bgcolor: "#fafbfd" } }}>
-              <Typography sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 13.5 }}>{r.title}</Typography>
+              "&:hover": { bgcolor: "#faf8f4" } }}>
+              <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.title}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb} · {r.desc}</Typography>
             </Box>
           ))}
         </Box>
-      ) : groups.map((g) => (
-        <Box key={g.title} sx={{ mb: 3.5 }}>
-          <Typography sx={{ color: FAINT, fontWeight: 700, fontSize: 10, letterSpacing: 1.4, mb: 1.25 }}>
-            {g.title.toUpperCase()}
-          </Typography>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" }, gap: 1.5 }}>
-            {g.cards.map((c) => <ConnCard key={c.key} c={c} />)}
-          </Box>
+      ) : (
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", xl: "repeat(3, 1fr)" }, gap: 1.5 }}>
+          {shown.cards.map((c) => <ConnCard key={c.key} c={c} />)}
         </Box>
-      ))}
-    </Box>
+      )}
+    </SideRail>
   );
 }
 
@@ -535,7 +573,7 @@ function RemoveConnection({ conn, reload, onBack }) {
   // shape of question from every other delete in the app. Same dialog as the rest now.
   return (
     <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", maxWidth: 720 }}>
-      <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#8b938d" }}
+      <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#867f74" }}
         onClick={() => setConfirm(true)}>Remove connection</Button>
       <ConfirmDelete open={confirm} what={`the ${conn.Name || conn.Type} connection`} confirmLabel="Remove"
         consequence="Its saved credentials and settings are wiped and its sources are switched off. The card stays in the catalog, so you can set it up again from scratch."
@@ -615,7 +653,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
           <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
             {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-          {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
+          {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
         </Box>
       </Box>
     )},
@@ -624,9 +662,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Live probe — token / model / channel read, for real.</Typography>
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
           startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-        {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
+        {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
           {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-        {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
+        {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
       </Box>
     )},
     ...(m.srcLabel ? [{ label: m.srcLabel, done: mine.some((s) => s.Active), body: (
@@ -784,7 +822,7 @@ function MssqlConnection({ conn, drivers, reload }) {
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
                 {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-              {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
+              {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
             </Box>
           </Box>
         </StepContent>
@@ -795,9 +833,9 @@ function MssqlConnection({ conn, drivers, reload }) {
           <Typography variant="body2" sx={{ color: DIM, mb: 1, mt: 0.5 }}>Connects for real and reports the server version — every scheduled report inherits this connection.</Typography>
           <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
             startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-          {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
+          {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </StepContent>
       </Step>
     </Stepper>
@@ -846,11 +884,11 @@ function WinrmDetail({ conn, reload, onBack }) {
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
             <Button variant="outlined" disabled={busy === "test" || !cfg.host} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-            {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
+            {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
-          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
+          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
@@ -960,7 +998,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
                 {CLOUD_MODES.map(([v, label]) => (
                   <Box key={v} component="span" title={label}
                     onClick={() => !bulk && setAllShown(v)}
-                    sx={{ fontSize: 11, fontWeight: 700, color: bulk ? FAINT : "#2f6b4f", cursor: bulk ? "default" : "pointer",
+                    sx={{ fontSize: 11, fontWeight: 700, color: bulk ? FAINT : "#55697a", cursor: bulk ? "default" : "pointer",
                       "&:hover": { textDecoration: bulk ? "none" : "underline" } }}>
                     {bulk === v ? `${v}…` : v}
                   </Box>
@@ -1058,11 +1096,11 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
             <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
               {meta.discovers ? "Test & discover" : "Test"}</Button>
-            {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
+            {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
-          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
+          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}
       {tab === "Connection" && meta.discovers && (
@@ -1205,7 +1243,7 @@ const RoleStep = ({ conn, reload, only }) => {
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
       ))}
       {keys.includes("notify") && roles.has("notify") && (
-        <Typography variant="caption" sx={{ color: chat ? "#4d6b3f" : "#2f6b4f", display: "block", mt: 1, lineHeight: 1.45 }}>
+        <Typography variant="caption" sx={{ color: chat ? "#47654a" : "#55697a", display: "block", mt: 1, lineHeight: 1.45 }}>
           {chat
             ? `Pinging chat ${chat} · what goes out is Settings → Notifications`
             : "Name the chat in Credentials, or pings have nowhere to go."}
@@ -1311,7 +1349,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
           ))}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
             <Button size="small" variant="contained" disableElevation onClick={savePrompts}>Save prompts</Button>
-            {saved && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{saved}</Typography>}
+            {saved && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{saved}</Typography>}
           </Box>
         </Box>
       )}
@@ -1323,7 +1361,7 @@ const Steps = ({ steps }) => (
   <Box sx={{ maxWidth: 720, mx: "auto" }}>
     {steps.map((step, i) => (
       <Box key={i} sx={{ display: "flex", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
-        <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "#e4efe8", color: "#2f6b4f",
+        <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "#eae4d8", color: "#55697a",
           fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</Box>
         <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{step}</Typography>
       </Box>

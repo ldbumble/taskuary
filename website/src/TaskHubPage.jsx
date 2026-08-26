@@ -6,7 +6,7 @@ import { ThemeProvider, CssBaseline } from "@mui/material";
 import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
-import { theme, BG, BORDER, DIM, INK, PANEL, GRADIENT } from "./theme.jsx";
+import { theme, ALERT, BG, BORDER, DIM, INK, PANEL, GRADIENT } from "./theme.jsx";
 import FeedView from "./FeedView.jsx";
 import BoardView from "./BoardView.jsx";
 import TasksView from "./TasksView.jsx";
@@ -25,7 +25,7 @@ function ServerVersion() {
   if (!v) return null;
   return (
     <Tooltip title={`server started ${v.started} — if this version looks old, restart taskuary`}>
-      <Typography variant="caption" sx={{ color: "#9aa39b", fontFamily: "Consolas, monospace", fontSize: 10.5 }}>
+      <Typography variant="caption" sx={{ color: "#a9a294", fontFamily: "Consolas, monospace", fontSize: 10.5 }}>
         v{v.version}
       </Typography>
     </Tooltip>
@@ -129,13 +129,13 @@ export default function TaskHubPage() {
               <Box key={t} onClick={() => go(t)}
                 sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 1.5, py: 0.5, borderRadius: 99,
                   cursor: "pointer", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
-                  color: tab === t ? "#2f6b4f" : DIM, bgcolor: tab === t ? "#e4efe8" : "transparent",
-                  border: `1px solid ${tab === t ? "#b6d0c2" : "transparent"}`,
-                  transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#e4efe8" : "#f4f7f1" } }}>
+                  color: tab === t ? "#55697a" : DIM, bgcolor: tab === t ? "#eae4d8" : "transparent",
+                  border: `1px solid ${tab === t ? "#d8cfbe" : "transparent"}`,
+                  transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#eae4d8" : "#e9e3d8" } }}>
                 {t}
                 {t === "Review" && pending > 0 && (
                   <Box component="span" sx={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    minWidth: 16, height: 16, px: 0.45, borderRadius: 99, bgcolor: "#2f6b4f", color: "#fff",
+                    minWidth: 16, height: 16, px: 0.45, borderRadius: 99, bgcolor: ALERT, color: "#fffdfb",
                     fontSize: 9.5, fontWeight: 700 }}>{pending > 99 ? "99+" : pending}</Box>
                 )}
               </Box>
@@ -152,7 +152,9 @@ export default function TaskHubPage() {
           onDismiss={dismissSetup} onRefresh={reloadSetup}
           onGo={(where) => { setSetupOpen(false); go(where); }} />
 
-        <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
+        {/* tighter side padding than top/bottom: the horizontal margin is dead space on a wide
+            window, and every tab inside already caps its own content width where it wants to */}
+        <Box sx={{ px: { xs: 1.5, md: 1.75 }, py: { xs: 1.5, md: 2.25 } }}>
           {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
           {everTasks && (

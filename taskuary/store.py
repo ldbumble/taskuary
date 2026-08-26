@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, B
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
+                    'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
                     'triage_ai': '',      # '' = first active AI connector | connector:<type> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
                     # minutes between background polls while the app is OPEN. The Timeline said

@@ -173,6 +173,64 @@ export const LOGOS = {
       <path fill="#fff" d="M6.1 12.2h4.2v1.15H6.1zm0 2.2h4.2v1.15H6.1zm0 2.2h4.2v1.15H6.1z" />
     </S>
   ),
+  /* ── Agentic web. Four cards were sharing one grey Material glyph, which is exactly the
+     "not finished yet" the note at the top of this file is about. Simplified marks in each
+     product's own brand colour, drawn to be legible at 15px. ── */
+  exa: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#1A1A1A" />
+      <path fill="#fff" d="M12 5.4l1.5 4.1 4.1 1.5-4.1 1.5L12 16.6l-1.5-4.1L6.4 11l4.1-1.5z" />
+      <circle cx="12" cy="11" r="1.5" fill="#1A1A1A" />
+      <path stroke="#fff" strokeWidth="1.6" strokeLinecap="round" d="M16.4 15.4l2.6 2.9" />
+    </S>
+  ),
+  tavily: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#6C4CF1" />
+      <path fill="#fff" d="M12 6.2c2.9 1.6 4.4 3.7 4.4 6.2A4.4 4.4 0 0 1 12 18a4.4 4.4 0 0 1-4.4-5.6c0-2.5 1.5-4.6 4.4-6.2z" />
+      <path fill="#6C4CF1" opacity=".35" d="M12 9.4c1.4.9 2.1 2 2.1 3.3A2.1 2.1 0 0 1 12 15z" />
+    </S>
+  ),
+  firecrawl: (p) => (
+    <S {...p}>
+      <path fill="#F0500C" d="M12 2.2c3.1 3 4.7 5.6 4.7 7.9 0 1.2-.4 2.2-1.2 3 .5-1.9.2-3.5-1-4.9.2 2.5-.7 4.3-2.6 5.6-1.3.9-2 2-2 3.2 0 1.6 1 2.8 2.7 3.4a5.9 5.9 0 0 1-5.5-1.9 6.6 6.6 0 0 1-1.8-4.6c0-3.3 2.2-6.9 6.7-11.7z" />
+      <path fill="#FFA24D" d="M12.6 12.6c1.4 1.4 2.1 2.7 2.1 3.9 0 1.6-1 2.8-2.7 3.4 1.9-.2 3.4-1 4.4-2.4.7-1 1-2.1.9-3.3-.6.8-1.4 1.3-2.4 1.5.2-1.1-.1-2.1-1-3.1z" />
+    </S>
+  ),
+  // Jina Reader: the "read this page for me" one, so the mark is a page rather than a bird
+  reader: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#111" />
+      <path fill="#fff" d="M6.6 7.4h4.6a1.4 1.4 0 0 1 1.4 1.4v8.2a2.2 2.2 0 0 0-1.6-.7H6.6z" />
+      <path fill="#fff" opacity=".62" d="M17.4 7.4h-4.6A1.4 1.4 0 0 0 11.4 8.8v8.2a2.2 2.2 0 0 1 1.6-.7h4.4z" />
+      <path stroke="#111" strokeWidth="1.1" strokeLinecap="round" d="M8 10.2h2.4M8 12.3h2.4M13.6 10.2H16M13.6 12.3H16" />
+    </S>
+  ),
+  /* ── the plumbing cards, also stuck on the fallback glyph ── */
+  winrm: (p) => (
+    <S {...p}>
+      <path fill="#0078D4" d="M3 5.1l7.9-1.1v7.6H3zm8.9-1.2L21 2.6v8.9h-9.1zM3 12.6h7.9v7.5L3 19zm8.9 0H21v8.8l-9.1-1.2z" />
+      <path stroke="#fff" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none" d="M5.4 15.2l1.6 1.6-1.6 1.6" />
+    </S>
+  ),
+  database: (p) => (
+    <S {...p}>
+      <g fill="#6b6459">
+        <ellipse cx="12" cy="5.6" rx="7.4" ry="2.8" />
+        <path d="M4.6 8.4v3.4c0 1.55 3.31 2.8 7.4 2.8s7.4-1.25 7.4-2.8V8.4c0 1.55-3.31 2.8-7.4 2.8s-7.4-1.25-7.4-2.8z" />
+        <path d="M4.6 14.4v3.4c0 1.55 3.31 2.8 7.4 2.8s7.4-1.25 7.4-2.8v-3.4c0 1.55-3.31 2.8-7.4 2.8s-7.4-1.25-7.4-2.8z" />
+      </g>
+      <ellipse cx="12" cy="5.6" rx="4.4" ry="1.4" fill="#b3aa9a" />
+    </S>
+  ),
+  smb_file: (p) => (
+    <S {...p}>
+      <path fill="#8a8276" d="M2.6 6.4a1.6 1.6 0 0 1 1.6-1.6h4l1.8 2h9.4A1.6 1.6 0 0 1 21 8.4v9.2a1.6 1.6 0 0 1-1.6 1.6H4.2a1.6 1.6 0 0 1-1.6-1.6z" />
+      <path fill="#b3aa9a" d="M2.6 10.2h18.8v7.4a1.6 1.6 0 0 1-1.6 1.6H4.2a1.6 1.6 0 0 1-1.6-1.6z" />
+      <g fill="#fff"><circle cx="8" cy="14.6" r="1.5" /><circle cx="16" cy="14.6" r="1.5" /></g>
+      <path stroke="#fff" strokeWidth="1.2" d="M8 14.6h8" />
+    </S>
+  ),
 };
 
 export const hasLogo = (k) => !!LOGOS[k];

@@ -8,11 +8,11 @@ import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./the
 import { ChannelIcon, RefChip, timeAgo, Empty, FilterPills } from "./ui.jsx";
 
 const FILTERS = [
-  { key: "pending", label: "pending", c: PILL_COLORS.amber },
+  { key: "pending", label: "pending", c: PILL_COLORS.you },
   { key: "held", label: "waiting on the agent", c: PILL_COLORS.teal },
   { key: "auto", label: "auto-handled", c: PILL_COLORS.teal },
   { key: "approved", label: "approved", c: PILL_COLORS.green }, { key: "edited", label: "edited" },
-  { key: "no_reply", label: "no reply", c: PILL_COLORS.gray }, { key: "rejected", label: "rejected", c: PILL_COLORS.red },
+  { key: "no_reply", label: "no reply", c: PILL_COLORS.gray }, { key: "rejected", label: "rejected", c: PILL_COLORS.bad },
   { key: "", label: "all" },
 ];
 
@@ -78,8 +78,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ width: 28, height: 28, borderRadius: 1.5, flexShrink: 0, display: "flex",
               alignItems: "center", justifyContent: "center",
-              bgcolor: "#e2efed" }}>
-              <AutoAwesomeIcon sx={{ fontSize: 15, color: "#1f6b64" }} />
+              bgcolor: "#e3e6e1" }}>
+              <AutoAwesomeIcon sx={{ fontSize: 15, color: "#6f8a6e" }} />
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ color: INK, fontWeight: 700, lineHeight: 1.25 }} noWrap>
@@ -95,7 +95,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             <Chip size="small" label={r.Status} sx={{ height: 19, fontSize: 10, bgcolor: PANEL, border: `1px solid ${BORDER}`, color: DIM }} />
           </Box>
           <Box sx={{ px: 1.5, py: 1.25 }}>
-            {r.Reason && <Typography variant="caption" sx={{ color: "#1f6b64", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
+            {r.Reason && <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
 
             {r.Status === "pending" && (
               <Box sx={{ mt: 0.5 }}>
@@ -111,7 +111,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                       off gets 'No response required' as THE action, not a send that bounces */}
                   {r.CanSend === false ? (
                     <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
-                      sx={{ bgcolor: "#64748b", "&:hover": { bgcolor: "#475569" } }}
+                      sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
                       title={r.Channel === "github"
                         ? "GitHub replies are off (GitHub card → Reply to issue/PR authors) — close this without sending"
                         : "This channel can't be replied to — close this without sending"}
@@ -127,7 +127,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     </Button>
                   )}
                   {r.CanSend !== false && (
-                    <Button size="small" sx={{ color: "#8b938d" }} disabled={busy === r.ReviewId}
+                    <Button size="small" sx={{ color: "#867f74" }} disabled={busy === r.ReviewId}
                       onClick={() => decide(r, "no_reply")}>No reply needed</Button>
                   )}
                   <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Reject</Button>
@@ -148,8 +148,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
               </Box>
             )}
             {r.Status === "held" && (
-              <Box sx={{ mt: 0.5, bgcolor: "#e2efed", border: "1px solid #bcd9d5", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
-                <Typography variant="caption" sx={{ color: "#1f6b64", fontWeight: 700, display: "block" }}>
+              <Box sx={{ mt: 0.5, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
+                <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, display: "block" }}>
                   Waiting on the agent working this task
                 </Typography>
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25 }}>

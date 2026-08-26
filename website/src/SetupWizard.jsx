@@ -40,15 +40,15 @@ export const SetupChip = ({ state, onOpen }) => {
     <Tooltip title={state.dismissed ? "Setup — put away, click to reopen" : "Finish setting Taskuary up"}>
       <Box onClick={onOpen}
         sx={{ display: "flex", alignItems: "center", gap: 0.75, cursor: "pointer", ml: 1,
-          px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#b6d0c2"}`,
-          bgcolor: state.dismissed ? "transparent" : "#e4efe8",
+          px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#d8cfbe"}`,
+          bgcolor: state.dismissed ? "transparent" : "#eae4d8",
           opacity: state.dismissed ? 0.75 : 1, "&:hover": { opacity: 1 } }}>
         <Box sx={{ position: "relative", display: "flex", width: 16, height: 16 }}>
           <CircularProgress variant="determinate" value={100} size={16} thickness={6}
             sx={{ color: "#e6e9ef", position: "absolute" }} />
-          <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: "#2f6b4f" }} />
+          <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: "#55697a" }} />
         </Box>
-        <Typography variant="caption" sx={{ fontWeight: 700, color: state.dismissed ? DIM : "#2f6b4f" }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: state.dismissed ? DIM : "#55697a" }}>
           {state.done}/{state.total}
         </Typography>
       </Box>
@@ -205,8 +205,8 @@ const BrainForm = ({ onDone, onGo }) => {
         {BRAINS.map((b) => (
           <Chip key={b.type} label={b.label} size="small" onClick={() => setType(b.type)}
             sx={{ fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-              bgcolor: type === b.type ? "#e4efe8" : "transparent",
-              color: type === b.type ? "#2f6b4f" : DIM, border: `1px solid ${type === b.type ? "#b6d0c2" : BORDER}` }} />
+              bgcolor: type === b.type ? "#eae4d8" : "transparent",
+              color: type === b.type ? "#55697a" : DIM, border: `1px solid ${type === b.type ? "#d8cfbe" : BORDER}` }} />
         ))}
       </Box>
       <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
@@ -222,7 +222,7 @@ const BrainForm = ({ onDone, onGo }) => {
       {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}</Alert>}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
         Running a local model, or on Azure OpenAI?{" "}
-        <Box component="span" sx={{ color: "#2f6b4f", cursor: "pointer" }} onClick={() => onGo("Connectors")}>
+        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connectors")}>
           Set those up on the Connectors tab
         </Box>{" "}— they need a model name or an endpoint, not just a key.
       </Typography>
@@ -248,8 +248,8 @@ const MailboxForm = ({ onDone, onGo }) => {
         {BOXES.map((b) => (
           <Chip key={b.type} label={b.label} size="small" onClick={() => setType(b.type)}
             sx={{ fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-              bgcolor: type === b.type ? "#e4efe8" : "transparent",
-              color: type === b.type ? "#2f6b4f" : DIM, border: `1px solid ${type === b.type ? "#b6d0c2" : BORDER}` }} />
+              bgcolor: type === b.type ? "#eae4d8" : "transparent",
+              color: type === b.type ? "#55697a" : DIM, border: `1px solid ${type === b.type ? "#d8cfbe" : BORDER}` }} />
         ))}
       </Box>
       <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
@@ -269,7 +269,7 @@ const MailboxForm = ({ onDone, onGo }) => {
       {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}</Alert>}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
         Outlook, Teams, Slack, GitHub and the trackers need an app registration or a bot token —{" "}
-        <Box component="span" sx={{ color: "#2f6b4f", cursor: "pointer" }} onClick={() => onGo("Connectors")}>
+        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connectors")}>
           their cards walk you through it
         </Box>.
       </Typography>
@@ -319,14 +319,14 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
     <Box sx={{ borderTop: n ? `1px solid ${BORDER}` : "none",
       // the open step is lifted out of the list rather than merely indented
       bgcolor: active ? "#fff" : "transparent",
-      boxShadow: active ? "inset 3px 0 0 #2f6b4f" : "none",
+      boxShadow: active ? "inset 3px 0 0 #55697a" : "none",
       px: active ? 1.5 : 0, py: s.done ? 1 : 1.5,
       transition: "background-color .15s" }}>
       <Box sx={{ display: "flex", gap: 1.5, alignItems: s.done ? "center" : "flex-start" }}>
         <Box sx={{ pt: s.done ? 0 : 0.25, display: "flex" }}>
           {s.done
-            ? <CheckCircleIcon sx={{ fontSize: 18, color: "#4d6b3f" }} />
-            : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: s.optional ? "#cdd5c8" : "#2f6b4f" }} />}
+            ? <CheckCircleIcon sx={{ fontSize: 18, color: "#47654a" }} />
+            : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: s.optional ? "#cfc9bf" : "#55697a" }} />}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
@@ -334,7 +334,7 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
               color: s.done ? DIM : INK }}>{s.title}</Typography>
             {s.optional && !s.done && <Typography variant="caption" sx={{ color: FAINT }}>optional</Typography>}
             {s.done && s.detail && (
-              <Typography variant="caption" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{s.detail}</Typography>
+              <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>{s.detail}</Typography>
             )}
           </Box>
           {/* WHY before HOW, while it is still a decision */}
@@ -358,7 +358,7 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
         {/* a finished step can still be reopened - "done" is not "never again" */}
         {s.done && Form && !open && (
           <Typography variant="caption" onClick={onOpen}
-            sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#2f6b4f" } }}>
+            sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>
             change
           </Typography>
         )}
@@ -372,7 +372,7 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
    the funnel yet, and "you're all set" tells them nothing about where to look next. */
 const NextSteps = ({ onGo }) => (
   <Box sx={{ mt: 2, p: 1.5, bgcolor: "#f2f7f4", border: "1px solid #cfe6d9", borderRadius: 1.5 }}>
-    <Typography sx={{ fontWeight: 700, fontSize: 13, color: "#4d6b3f", mb: 0.75 }}>What happens now</Typography>
+    <Typography sx={{ fontWeight: 700, fontSize: 13, color: "#47654a", mb: 0.75 }}>What happens now</Typography>
     {[
       ["Timeline", "Every message lands here as it arrives, with the verdict triage gave it and why."],
       ["Review", "Questions get a reply drafted in your voice. Nothing sends until you approve it."],
@@ -381,7 +381,7 @@ const NextSteps = ({ onGo }) => (
     ].map(([tab, text]) => (
       <Box key={tab} sx={{ display: "flex", gap: 1, mb: 0.5 }}>
         <Box component="span" onClick={() => onGo(tab)}
-          sx={{ fontWeight: 700, fontSize: 12, color: "#2f6b4f", cursor: "pointer", minWidth: 62 }}>{tab}</Box>
+          sx={{ fontWeight: 700, fontSize: 12, color: "#55697a", cursor: "pointer", minWidth: 62 }}>{tab}</Box>
         <Typography variant="caption" sx={{ color: DIM, flex: 1, lineHeight: 1.5 }}>{text}</Typography>
       </Box>
     ))}

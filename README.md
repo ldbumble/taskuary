@@ -17,7 +17,7 @@ you already use does it; you approve the result. Runs entirely on your machine.
 
 <sub>Real app, real data — a mail triaged and its reply drafted for your approval, then a scheduled SQL report landing on the same rail with its chart and spreadsheet. Nothing sends without you.</sub>
 
-**Where it is:** early — **v0.2.1**, and moving fast. The funnel, the review queue, the agent
+**Where it is:** early — **v0.3.0**, and moving fast. The funnel, the review queue, the agent
 sessions and the reports pipeline are all real and in daily use on my own inbox; the edges are
 still being knocked off, and breaking changes are possible before 1.0. Issues get answered.
 [Full status and roadmap ↓](#status--roadmap)
@@ -143,7 +143,8 @@ One tab per question, two lines each; the details live in the app's own help tex
   right now — a live session counts as working, and a session gone quiet moves its card to
   *waiting on you* with the question showing. Cards working now show a live peephole and
   the files their agent has modified so far; a queued card says whom it waits behind (see
-  [Many agents, one repo](#many-agents-one-repo--no-stepping-on-each-other)).
+  [Many agents, one repo](#many-agents-one-repo--no-stepping-on-each-other)). Flip it to
+  **Studio** for the same board as a floor you can walk around — below.
 - **Tasks** — **the page is a terminal**: your CLI in the task's repo, prompt typed in and
   sent, and you keep talking. Taskuary picks the checkout from the SOUL.md repo map (one
   click to override); the prompt carries the ask, the mail, the files and the rules, so the
@@ -177,6 +178,17 @@ Two principles hold everywhere: **nothing sends or ships without your approval**
 **agents work where you can watch** — a real terminal, never a hidden run. Out of the box
 it works the mail (auto-dispatch + auto-draft, both switchable); triage is AI-gated, so
 with no AI connected messages file visibly instead of heuristics spraying tasks.
+
+## The floor — capacity you can see
+
+![The Studio view: an isometric office where each desk is a task and the agent at it is drawn doing what it is actually doing — hunched at a lit screen for a coding session, a pen on a form for a task with no code in it, hand up when it has stopped and is waiting on you. An empty desk is capacity going unused.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-floor.png)
+
+"How much can run at once" is a number in Settings — **Agents at once**, four by default —
+and on the Board's **Studio** toggle it stops being a number. One desk per slot: a desk with
+somebody at it is a task being worked, an empty desk is capacity you are not using, and the
+posture says which kind of work it is rather than making you read a chip. Drag to turn the
+room, scroll to zoom, click a desk to fly to it; raise the limit in Settings and the floor
+widens rather than crowding.
 
 ## Many agents, one repo — no stepping on each other
 
@@ -329,7 +341,7 @@ exe is built on push to master.
 
 ## Status / roadmap
 
-Early (v0.2.1) and moving fast — said up top too, because it should not be something you find
+Early (v0.3.0) and moving fast — said up top too, because it should not be something you find
 out at the bottom.
 
 - [x] AI-gated triage, review queue, resumable agent sessions, hash-chained audit

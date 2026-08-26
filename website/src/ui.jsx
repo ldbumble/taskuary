@@ -1,7 +1,8 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import React, { useEffect, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
-  DialogContentText, DialogTitle, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
+  DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
+import SearchIcon from "@mui/icons-material/Search";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import BlockIcon from "@mui/icons-material/Block";
 import api from "./api";
@@ -25,16 +26,16 @@ import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import StorageIcon from "@mui/icons-material/Storage";
 import { Logo, hasLogo } from "./logos.jsx";
-import { ACTION_COLORS, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
+import { ACTION_COLORS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
-export const CHANNEL_COLORS = { teams: "#6264A7", email: "#0F6CBD", github: "#1c2536", report: "#1f6b64",
-  slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", ai: "#2f6b4f",
+export const CHANNEL_COLORS = { teams: "#6264A7", email: "#7c7367", github: "#2b2a26", report: "#6f8a6e",
+  slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", ai: "#55697a",
   jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF", clickup: "#7b68ee", todoist: "#e44332",
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
-  aws: "#ff9900", azure: "#0078d4", database: "#475569", smb_file: "#475569" };
+  aws: "#ff9900", azure: "#0078d4", database: "#6b6459", smb_file: "#6b6459" };
 const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon,
   ai: AutoAwesomeIcon, jira: BugReportIcon, asana: ChecklistIcon, monday: ViewKanbanIcon,
@@ -47,7 +48,7 @@ const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: Assessmen
 export const ChannelIcon = ({ channel, sx }) => {
   if (hasLogo(channel)) return <Logo name={channel} sx={sx} />;
   const Icon = CHANNEL_ICONS[channel] || TerminalIcon;
-  return <Icon sx={{ fontSize: 15, color: CHANNEL_COLORS[channel] || "#9aa39b", ...sx }} />;
+  return <Icon sx={{ fontSize: 15, color: CHANNEL_COLORS[channel] || "#a9a294", ...sx }} />;
 };
 
 /* One dialog for everything that destroys something.
@@ -91,18 +92,18 @@ export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete"
 
 export const RefChip = ({ taskId, onClick }) => taskId ? (
   <Chip size="small" label={`TQ-${String(taskId).padStart(4, "0")}`} onClick={onClick}
-    sx={{ ...mono, bgcolor: "#e4efe8", color: "#2f6b4f", height: 19, fontSize: 10.5 }} />
+    sx={{ ...mono, bgcolor: "#eae4d8", color: "#55697a", height: 19, fontSize: 10.5 }} />
 ) : null;
 
 export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou }) => {
   // A finished task outranks everything else the chip could say.
   if (taskStatus === "done" && reviewStatus !== "pending") {
-    return <Chip size="small" label="completed" sx={{ bgcolor: "#eaf1e4", color: "#4d6b3f", height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+    return <Chip size="small" label="completed" sx={{ bgcolor: "#dfeade", color: "#47654a", height: 19, fontSize: 10.5, fontWeight: 700 }} />;
   }
   // and "nobody is moving this" outranks the verdict: what happened to it matters less
   // than whether it is sitting on you right now
   if (needsYou) {
-    return <Chip size="small" label="needs you" sx={{ bgcolor: "#e4efe8", color: "#2f6b4f", border: "1px solid #b6d0c2",
+    return <Chip size="small" label="needs you" sx={{ bgcolor: ALERT, color: "#fffdfb",
       height: 19, fontSize: 10.5, fontWeight: 700 }} />;
   }
   // What actually matters to the reader: current state, not just the original verdict.
@@ -116,16 +117,16 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou }) => {
   const decided = reviewStatus && !["pending", "auto"].includes(reviewStatus);
   const label = !decided ? c.label : reviewStatus === "no_reply" ? "no reply needed" : `reviewed · ${reviewStatus}`;
   return <Chip size="small" label={label}
-    sx={{ bgcolor: decided ? (reviewStatus === "no_reply" ? "#eef1eb" : "#eaf1e4") : c.bg,
-      color: decided ? (reviewStatus === "no_reply" ? "#8b938d" : "#4d6b3f") : c.fg, height: 19, fontSize: 10.5 }} />;
+    sx={{ bgcolor: decided ? (reviewStatus === "no_reply" ? "#e9e3d8" : "#dfeade") : c.bg,
+      color: decided ? (reviewStatus === "no_reply" ? "#867f74" : "#47654a") : c.fg, height: 19, fontSize: 10.5 }} />;
 };
 
 /* ── Proof of work: the evidence behind a task, so approving is a judgement and not an act
    of faith. Everything here is measured (git, the session's own test output, the checks
    API) - and what is MISSING is stated, because a thin card must never read as a clean
    one. Fetches itself; renders nothing at all for a task with no evidence yet. ── */
-const PILL = { ok: { bg: "#eaf1e4", fg: "#4d6b3f" }, bad: { bg: "#f4eae8", fg: "#8f4a41" },
-  wait: { bg: "#e4efe8", fg: "#2f6b4f" }, none: { bg: "#eef1eb", fg: "#8b938d" } };
+const PILL = { ok: { bg: "#dfeade", fg: "#47654a" }, bad: { bg: "#f0e2e4", fg: "#6b2733" },
+  wait: { bg: "#eae4d8", fg: "#55697a" }, none: { bg: "#e9e3d8", fg: "#867f74" } };
 const Pill = ({ tone = "none", children }) => (
   <Box component="span" sx={{ ...PILL[tone], px: 0.85, py: 0.2, borderRadius: 99, fontSize: 10.5, fontWeight: 700 }}>
     {children}
@@ -175,8 +176,8 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
           {p.files.slice(0, 24).map((f) => (
             <Box key={f.path} sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
               <Typography variant="caption" sx={{ ...mono, color: INK, fontSize: 10.5, flex: 1, minWidth: 0 }} noWrap>{f.path}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: "#4d6b3f", fontSize: 10 }}>+{f.added}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: "#8f4a41", fontSize: 10 }}>−{f.removed}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: "#47654a", fontSize: 10 }}>+{f.added}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: "#6b2733", fontSize: 10 }}>−{f.removed}</Typography>
             </Box>
           ))}
         </Box>
@@ -184,7 +185,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
       {ci?.checks?.failed?.length > 0 && (
         <Box sx={{ mt: 0.5 }}>
           {ci.checks.failed.map((f) => (
-            <Typography key={f.name} variant="caption" sx={{ color: "#8f4a41", display: "block", fontSize: 10.5 }}>
+            <Typography key={f.name} variant="caption" sx={{ color: "#6b2733", display: "block", fontSize: 10.5 }}>
               ✗ {f.name}{f.summary ? ` — ${f.summary}` : ""}
             </Typography>
           ))}
@@ -199,11 +200,11 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
         {ci ? (
           <>
             <Box component="a" href={ci.url} target="_blank" rel="noreferrer"
-              sx={{ fontSize: 11, fontWeight: 700, color: "#2f6b4f", textDecoration: "none" }}>
+              sx={{ fontSize: 11, fontWeight: 700, color: "#55697a", textDecoration: "none" }}>
               {ci.kind === "pr" ? "open PR ↗" : "the commit ↗"}
             </Box>
             <Box component="span" onClick={() => !busy && act("ci")}
-              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#2f6b4f", cursor: "pointer" }}>
+              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
               {busy === "ci" ? "checking…" : "re-check CI"}
             </Box>
           </>
@@ -214,29 +215,29 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
             <Box component="span" onClick={() => !busy && act("land")}
               title={p.flow === "direct" ? "pushes the commits already in the checkout straight onto the default branch"
                 : "opens a DRAFT pull request from this task's branch — never merges"}
-              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#2f6b4f", cursor: "pointer" }}>
+              sx={{ fontSize: 11, fontWeight: 700, color: busy ? FAINT : "#55697a", cursor: "pointer" }}>
               {busy === "land" ? "landing…" : p.flow === "direct" ? "push straight to the branch" : "open a draft PR"}
             </Box>
             <Box component="span" onClick={() => !busy && act(`land?flow=${p.flow === "direct" ? "pr" : "direct"}`)}
               title="just this once, the other way"
-              sx={{ fontSize: 11, color: busy ? FAINT : FAINT, cursor: "pointer", "&:hover": { color: "#2f6b4f" } }}>
+              sx={{ fontSize: 11, color: busy ? FAINT : FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
               {p.flow === "direct" ? "or a draft PR" : "or push direct"}
             </Box>
           </>
         )}
         {onOpenTask && (
           <Box component="span" onClick={() => onOpenTask(taskId)}
-            sx={{ fontSize: 11, fontWeight: 700, color: "#2f6b4f", cursor: "pointer" }}>the whole session</Box>
+            sx={{ fontSize: 11, fontWeight: 700, color: "#55697a", cursor: "pointer" }}>the whole session</Box>
         )}
       </Box>
-      {p.error && <Typography variant="caption" sx={{ color: "#8f4a41", display: "block", mt: 0.5 }}>{p.error}</Typography>}
+      {p.error && <Typography variant="caption" sx={{ color: "#6b2733", display: "block", mt: 0.5 }}>{p.error}</Typography>}
     </Box>
   );
 };
 
 export const StatusDot = ({ ok, warn }) => (
   <Box component="span" sx={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", mr: 1,
-    bgcolor: ok ? "#22c55e" : warn ? "#2f6b4f" : "#cdd5c8" }} />
+    bgcolor: ok ? "#22c55e" : warn ? "#55697a" : "#cfc9bf" }} />
 );
 
 // Expandable "prompt sent to agent" block inside a run trace - collapsed by default.
@@ -301,13 +302,13 @@ export const DiffBlock = ({ text }) => {
   if (!text) return null;
   const lines = String(text).split("\n");
   const style = (l) => l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff --git")
-    ? { color: "#1c2536", fontWeight: 700, bgcolor: "#eef1eb" }
-    : l.startsWith("@@") ? { color: "#1f6b64", bgcolor: "#e2efed" }
-      : l.startsWith("+") ? { color: "#4d6b3f", bgcolor: "#eaf1e4" }
-        : l.startsWith("-") ? { color: "#8f4a41", bgcolor: "#f4eae8" }
+    ? { color: "#2b2a26", fontWeight: 700, bgcolor: "#e9e3d8" }
+    : l.startsWith("@@") ? { color: "#6f8a6e", bgcolor: "#e3e6e1" }
+      : l.startsWith("+") ? { color: "#47654a", bgcolor: "#dfeade" }
+        : l.startsWith("-") ? { color: "#6b2733", bgcolor: "#f0e2e4" }
           : { color: "#5e685f" };
   return (
-    <Box sx={{ border: "1px solid #dce1d8", borderRadius: 1.5, overflow: "auto", maxHeight: 360, bgcolor: "#fff" }}>
+    <Box sx={{ border: "1px solid #e1dcd5", borderRadius: 1.5, overflow: "auto", maxHeight: 360, bgcolor: "#fff" }}>
       {lines.map((l, i) => (
         <Box key={i} component="pre" sx={{ ...mono, m: 0, px: 1.25, py: 0.1, fontSize: 11,
           lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-all", ...style(l) }}>
@@ -334,7 +335,7 @@ export const DiffFiles = ({ files, cwd, branch }) => {
         <Box key={f.path} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, mb: 0.75, overflow: "hidden", bgcolor: "#fff" }}>
           <Box onClick={() => flip(i)}
             sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.7, cursor: "pointer",
-              bgcolor: "#f7f9f5", "&:hover": { bgcolor: "#f4f7f1" } }}>
+              bgcolor: "#f4f1ec", "&:hover": { bgcolor: "#e9e3d8" } }}>
             <ChevronRightIcon sx={{ fontSize: 16, color: FAINT, flexShrink: 0,
               transform: open.has(i) ? "rotate(90deg)" : "none", transition: "transform .12s" }} />
             <Typography sx={{ ...mono, fontSize: 11.5, color: INK, flex: 1, minWidth: 0,
@@ -342,8 +343,8 @@ export const DiffFiles = ({ files, cwd, branch }) => {
               {f.path}
             </Typography>
             {/* the two numbers people actually scan a file list for */}
-            <Typography sx={{ ...mono, fontSize: 11, color: "#4d6b3f", fontVariantNumeric: "tabular-nums" }}>+{f.added}</Typography>
-            <Typography sx={{ ...mono, fontSize: 11, color: "#8f4a41", fontVariantNumeric: "tabular-nums" }}>−{f.removed}</Typography>
+            <Typography sx={{ ...mono, fontSize: 11, color: "#47654a", fontVariantNumeric: "tabular-nums" }}>+{f.added}</Typography>
+            <Typography sx={{ ...mono, fontSize: 11, color: "#6b2733", fontVariantNumeric: "tabular-nums" }}>−{f.removed}</Typography>
           </Box>
           {open.has(i) && (f.binary
             ? <Typography variant="caption" sx={{ color: FAINT, display: "block", px: 1.5, py: 1 }}>Binary file — git reports it changed, there is no text to show.</Typography>
@@ -357,16 +358,16 @@ export const DiffFiles = ({ files, cwd, branch }) => {
 };
 
 // The coder's report, parsed into labeled sections instead of a wall of text.
-const REPORT_COLORS = { Triage: "#1f6b64", Determination: "#1f6b64", Actions: "#2f6b4f", Summary: "#4d6b3f",
-  Found: "#1f6b64", Did: "#2f6b4f", Next: "#1f6b64" };
+const REPORT_COLORS = { Triage: "#6f8a6e", Determination: "#6f8a6e", Actions: "#55697a", Summary: "#47654a",
+  Found: "#6f8a6e", Did: "#55697a", Next: "#6f8a6e" };
 /* The four things you can do with a timeline item were four buttons of four different sizes
    and colours, two rows apart, half of them right-aligned - so the reader had to hunt for
    the set. One list, one shape per row: what it is, and what it does. */
-export const ChoiceRow = ({ icon, label, hint, tint = "#e4efe8", onClick, first, busy }) => (
+export const ChoiceRow = ({ icon, label, hint, tint = "#eae4d8", onClick, first, busy }) => (
   <Box onClick={busy ? undefined : onClick}
     sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, py: 0.7, cursor: busy ? "default" : "pointer",
       borderTop: first ? "none" : `1px solid ${BORDER}`, transition: "background .12s",
-      "&:hover": { bgcolor: busy ? "transparent" : "#f7f9f5" }, "&:hover .thubChoiceGo": { opacity: 1, transform: "none" } }}>
+      "&:hover": { bgcolor: busy ? "transparent" : "#f4f1ec" }, "&:hover .thubChoiceGo": { opacity: 1, transform: "none" } }}>
     <Box sx={{ width: 24, height: 24, borderRadius: 1.5, bgcolor: tint, flexShrink: 0,
       display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</Box>
     <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -505,7 +506,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
   };
   if (saved) return (
     <Box>
-      <Typography variant="caption" sx={{ color: "#4d6b3f", fontWeight: 600, display: "block" }}>
+      <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600, display: "block" }}>
         ✓ noted — triage will apply this to{" "}
         {saved.scope === "global" ? "every sender" : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey}
         {" "}from now on
@@ -513,7 +514,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
       {/* the verdict works from here on; tasks opened BEFORE it are still sitting there, and
           saying nothing about them is how a fix reads as "still not learning" */}
       {!!saved.alsoCovered?.length && (
-        <Typography variant="caption" sx={{ color: "#2f6b4f", display: "block", mt: 0.25 }}>
+        <Typography variant="caption" sx={{ color: "#55697a", display: "block", mt: 0.25 }}>
           {saved.alsoCovered.length} open task{saved.alsoCovered.length === 1 ? "" : "s"} already match it
           ({saved.alsoCovered.slice(0, 4).map((t) => `TQ-${String(t.taskId).padStart(4, "0")}`).join(", ")}
           {saved.alsoCovered.length > 4 ? ", …" : ""}) — close them the same way if they are not yours either.
@@ -522,11 +523,11 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
     </Box>
   );
   if (!open) return row ? (
-    <ChoiceRow first={first} tint="#eef1eb" onClick={() => setOpen(true)}
-      icon={<BlockIcon sx={{ fontSize: 15, color: "#8b938d" }} />}
+    <ChoiceRow first={first} tint="#e9e3d8" onClick={() => setOpen(true)}
+      icon={<BlockIcon sx={{ fontSize: 15, color: "#867f74" }} />}
       label="Not our task" hint="say why once — triage remembers it for this topic, or this sender" />
   ) : (
-    <Button size="small" sx={{ color: "#8b938d", fontSize: 11 }} onClick={() => setOpen(true)}
+    <Button size="small" sx={{ color: "#867f74", fontSize: 11 }} onClick={() => setOpen(true)}
       title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
   );
   return (
@@ -599,8 +600,8 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
   };
   if (sent) return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: dense ? 0.5 : 1 }}>
-      <SmartToyIcon sx={{ fontSize: 15, color: "#4d6b3f" }} />
-      <Typography variant="caption" sx={{ color: "#4d6b3f", fontWeight: 600 }}>
+      <SmartToyIcon sx={{ fontSize: 15, color: "#47654a" }} />
+      <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>
         {sent.agent} is on it in a live session — {sent.ref}
       </Typography>
       <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
@@ -608,18 +609,18 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
     </Box>
   );
   if (!open) return row ? (
-    <ChoiceRow first={first} tint="#e2efed" onClick={() => setOpen(true)}
-      icon={<SmartToyIcon sx={{ fontSize: 15, color: "#1f6b64" }} />}
+    <ChoiceRow first={first} tint="#e3e6e1" onClick={() => setOpen(true)}
+      icon={<SmartToyIcon sx={{ fontSize: 15, color: "#6f8a6e" }} />}
       label="Send it to a coding agent" hint="opens a live session on a new task — you watch it work" />
   ) : (
     <Button size="small" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />} onClick={() => setOpen(true)}
-      sx={{ fontSize: 11.5, color: "#1f6b64" }}>Send to coding agent</Button>
+      sx={{ fontSize: 11.5, color: "#6f8a6e" }}>Send to coding agent</Button>
   );
   return (
     <Box sx={{ mt: 1, p: 1.25, bgcolor: "#faf8ff", border: "1px solid #e9ddfb", borderRadius: 1.5 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
-        <SmartToyIcon sx={{ fontSize: 15, color: "#1f6b64" }} />
-        <Typography variant="caption" sx={{ color: "#1f6b64", fontWeight: 700 }}>Send to an agent</Typography>
+        <SmartToyIcon sx={{ fontSize: 15, color: "#6f8a6e" }} />
+        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700 }}>Send to an agent</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         <AgentPicker agents={agents} models={models} agent={agent} model={model}
           onAgent={setAgent} onModel={setModel} size={26} />
@@ -635,11 +636,11 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
         <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>cancel</Button>
         <Button size="small" variant="contained" disableElevation disabled={busy} onClick={send}
           startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
-          sx={{ fontSize: 11.5, bgcolor: "#1f6b64", "&:hover": { bgcolor: "#6b1fb0" } }}>
+          sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#6b1fb0" } }}>
           {busy ? "sending…" : "Send"}
         </Button>
       </Box>
-      {err && <Typography variant="caption" sx={{ color: "#8f4a41", display: "block", mt: 0.5 }}>{err}</Typography>}
+      {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block", mt: 0.5 }}>{err}</Typography>}
     </Box>
   );
 };
@@ -648,11 +649,11 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
    in their head ("in_progress + reviewed·rejected" — so is it mine or not?). This is the
    one answer: what does this task need from ME, right now. Everything shows this. */
 export const TASK_STATES = [
-  { key: "needs_you", label: "needs you", c: { bg: "#e4efe8", fg: "#2f6b4f", bd: "#b6d0c2" } },
-  { key: "working", label: "agent working", c: { bg: "#e2efed", fg: "#1f6b64", bd: "#bcd9d5" } },
-  { key: "queued", label: "queued", c: { bg: "#e4efe8", fg: "#2f6b4f", bd: "#b6d0c2" } },
-  { key: "done", label: "done", c: { bg: "#eaf1e4", fg: "#4d6b3f", bd: "#cbe8d6" } },
-  { key: "dropped", label: "dropped", c: { bg: "#eef1eb", fg: "#8b938d", bd: "#dce1d8" } },
+  { key: "needs_you", label: "needs you", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
+  { key: "working", label: "agent working", c: { bg: "#e3e6e1", fg: "#6f8a6e", bd: "#d2d6cf" } },
+  { key: "queued", label: "queued", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
+  { key: "done", label: "done", c: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" } },
+  { key: "dropped", label: "dropped", c: { bg: "#e9e3d8", fg: "#867f74", bd: "#e1dcd5" } },
 ];
 const ST = Object.fromEntries(TASK_STATES.map((x) => [x.key, x]));
 // A CLI that has printed nothing for this long is parked at its own prompt - the next move
@@ -677,8 +678,8 @@ export const StateChip = ({ task }) => {
 };
 
 export const TaskStatusChip = ({ status }) => (
-  <Chip size="small" label={status} sx={{ bgcolor: "transparent", border: `1px solid ${TASK_STATUS_COLORS[status] || "#9aa39b"}55`,
-    color: TASK_STATUS_COLORS[status] || "#9aa39b", height: 19, fontSize: 10.5 }} />
+  <Chip size="small" label={status} sx={{ bgcolor: "transparent", border: `1px solid ${TASK_STATUS_COLORS[status] || "#a9a294"}55`,
+    color: TASK_STATUS_COLORS[status] || "#a9a294", height: 19, fontSize: 10.5 }} />
 );
 
 export const timeAgo = (s) => {
@@ -754,21 +755,57 @@ export const localDay = (s) => s ? asUtc(s).toLocaleDateString("sv-SE", tzOpt())
 export const Crumb = ({ section, onBack, title }) => (
   <Box sx={{ mb: 2.5 }}>
     <Typography variant="caption" onClick={onBack}
-      sx={{ color: "#2f6b4f", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+      sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
       {section}
     </Typography>
-    <Typography sx={{ color: "#1c2536", fontWeight: 800, fontSize: 20, lineHeight: 1.2, mt: 0.25 }}>{title}</Typography>
+    <Typography sx={{ color: "#2b2a26", fontWeight: 800, fontSize: 20, lineHeight: 1.2, mt: 0.25 }}>{title}</Typography>
+  </Box>
+);
+
+/* The Docs/Settings shell, lifted out so every tab that has sections wears it: a sticky rail
+   on the left, the open section beside it. Connectors and Reports were the last two opening on
+   a full-width wall - the layout the rest of the app stopped using - so a search and a section
+   list are here rather than copied twice more. `right` renders above the section content, for
+   the actions a tab keeps on screen (Sync now, New report). */
+export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeholder, children }) => (
+  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "236px minmax(0,1fr)" },
+    gap: 3, alignItems: "start", maxWidth: 1320, mx: "auto" }}>
+    <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
+      <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>{title}</Typography>
+      {setQ && (
+        <TextField fullWidth placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)}
+          sx={{ mb: 1.5, bgcolor: "#fff", borderRadius: 2 }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }} />
+      )}
+      {items.map((it) => {
+        const key = it.key ?? it, on = !q && value === key;
+        return (
+          <Box key={key} onClick={() => { setQ?.(""); onChange(key); }}
+            sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, height: 34, borderRadius: 1.75,
+              cursor: "pointer", fontSize: 12.5, fontWeight: on ? 600 : 400,
+              color: on ? "#41525f" : DIM, bgcolor: on ? "#eae4d8" : "transparent",
+              "&:hover": { bgcolor: on ? "#eae4d8" : "#f4f1ec" } }}>
+            <Box sx={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {it.label ?? it}
+            </Box>
+            {it.n != null && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{it.n}</Typography>}
+          </Box>
+        );
+      })}
+      {note && <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 2, px: 1.25, lineHeight: 1.6 }}>{note}</Typography>}
+    </Box>
+    <Box sx={{ minWidth: 0 }}>{children}</Box>
   </Box>
 );
 
 export const UnderTabs = ({ tabs, value, onChange }) => (
-  <Box sx={{ display: "flex", gap: 2.5, borderBottom: "1px solid #dce1d8", mb: 2, overflowX: "auto" }}>
+  <Box sx={{ display: "flex", gap: 2.5, borderBottom: "1px solid #e1dcd5", mb: 2, overflowX: "auto" }}>
     {tabs.map((t) => (
       <Box key={t} onClick={() => onChange(t)}
         sx={{ pb: 1, cursor: "pointer", fontSize: 13, fontWeight: 600, mb: "-1px", flexShrink: 0,
-          color: value === t ? "#2f6b4f" : DIM,
-          borderBottom: `2px solid ${value === t ? "#2f6b4f" : "transparent"}`,
-          "&:hover": { color: "#1c2536" } }}>
+          color: value === t ? "#55697a" : DIM,
+          borderBottom: `2px solid ${value === t ? "#55697a" : "transparent"}`,
+          "&:hover": { color: "#2b2a26" } }}>
         {t}
       </Box>
     ))}
@@ -778,13 +815,13 @@ export const UnderTabs = ({ tabs, value, onChange }) => (
 export const LandingCard = ({ icon, title, desc, onOpen }) => (
   <Box onClick={onOpen} sx={{ display: "flex", gap: 1.5, cursor: "pointer", alignItems: "flex-start",
     "&:hover .thubPgTitle": { textDecoration: "underline" } }}>
-    <Box sx={{ width: 38, height: 38, borderRadius: 2, bgcolor: "#fff", border: "1px solid #dce1d8",
+    <Box sx={{ width: 38, height: 38, borderRadius: 2, bgcolor: "#fff", border: "1px solid #e1dcd5",
       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
       boxShadow: "0 1px 2px rgba(30,50,38,.05)" }}>
       {icon}
     </Box>
     <Box sx={{ minWidth: 0 }}>
-      <Typography className="thubPgTitle" sx={{ color: "#2f6b4f", fontWeight: 700, fontSize: 14.5, lineHeight: 1.3 }}>{title}</Typography>
+      <Typography className="thubPgTitle" sx={{ color: "#55697a", fontWeight: 700, fontSize: 14.5, lineHeight: 1.3 }}>{title}</Typography>
       <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{desc}</Typography>
     </Box>
   </Box>
@@ -803,8 +840,8 @@ export const Empty = ({ children }) => (
 
 export const scoreBar = (v) => (
   <Tooltip title={v?.toFixed ? v.toFixed(2) : v}>
-    <Box sx={{ width: 54, height: 4, bgcolor: PANEL2, border: "1px solid #dce1d8", borderRadius: 3, overflow: "hidden", display: "inline-block", mr: 1 }}>
-      <Box sx={{ width: `${Math.min(100, (v || 0) * 100)}%`, height: "100%", bgcolor: "#2f6b4f" }} />
+    <Box sx={{ width: 54, height: 4, bgcolor: PANEL2, border: "1px solid #e1dcd5", borderRadius: 3, overflow: "hidden", display: "inline-block", mr: 1 }}>
+      <Box sx={{ width: `${Math.min(100, (v || 0) * 100)}%`, height: "100%", bgcolor: "#55697a" }} />
     </Box>
   </Tooltip>
 );
@@ -813,11 +850,11 @@ export const scoreBar = (v) => (
 // Segmented control: one contained housing, obviously interactive; the active segment
 // fills with its muted color pair {bg, fg, bd} (indigo default), the rest stay quiet.
 export const FilterPills = ({ options, value, onChange }) => (
-  <Box sx={{ display: "inline-flex", gap: 0.25, p: 0.4, bgcolor: "#f4f7f1",
-    border: "1px solid #dce1d8", borderRadius: 2.5 }}>
+  <Box sx={{ display: "inline-flex", gap: 0.25, p: 0.4, bgcolor: "#e9e3d8",
+    border: "1px solid #e1dcd5", borderRadius: 2.5 }}>
     {options.map((o) => {
       const key = o.key ?? o, on = value === key;
-      const c = o.c || { bg: "#e4efe8", fg: "#2f6b4f", bd: "#b6d0c2" };
+      const c = o.c || { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" };
       return (
         <Box key={key} onClick={() => onChange(key)}
           sx={{ px: 1.25, py: 0.45, borderRadius: 1.75, cursor: "pointer", fontSize: 11.5,
@@ -826,14 +863,14 @@ export const FilterPills = ({ options, value, onChange }) => (
             bgcolor: on ? c.bg : "transparent", color: on ? c.fg : DIM,
             border: `1px solid ${on ? c.bd : "transparent"}`,
             boxShadow: on ? "0 1px 2px rgba(30,50,38,.08)" : "none",
-            transition: "all .15s", "&:hover": on ? {} : { bgcolor: "#e9ecf1", color: "#1c2536" } }}>
+            transition: "all .15s", "&:hover": on ? {} : { bgcolor: "#eae5dd", color: "#2b2a26" } }}>
           {o.label ?? (o || "all")}
           {/* the count is a BADGE, not the last word of the label - glued on with a space,
               "needs you 2" reads as one phrase and the number disappears into the name */}
           {o.n != null && (
             <Box component="span" sx={{ px: 0.55, py: 0.05, borderRadius: 99, fontSize: 10, fontWeight: 700,
               fontVariantNumeric: "tabular-nums", lineHeight: 1.5,
-              bgcolor: on ? "rgba(255,255,255,.7)" : "#e3e7ee", color: on ? c.fg : "#8b938d" }}>{o.n}</Box>
+              bgcolor: on ? "rgba(255,255,255,.7)" : "#e6e2da", color: on ? c.fg : "#867f74" }}>{o.n}</Box>
           )}
         </Box>
       );

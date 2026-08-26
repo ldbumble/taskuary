@@ -116,11 +116,11 @@ def drain(store):
     """A session ended (or a slot freed up): start what was queued, in arrival order. Anything
     whose blocker is still working stays put; anything whose task moved on is just cleared."""
     from . import terminal as term
-    from .ingest import AUTO_SESSIONS
+    from .ingest import auto_sessions
     if not _DRAINING.acquire(blocking=False): return
     try:
         for q in store.queued_dispatches():
-            if len([t for t in term.SESSIONS.values() if t.alive]) >= AUTO_SESSIONS: return
+            if len([t for t in term.SESSIONS.values() if t.alive]) >= auto_sessions(store): return
             b = q.get('BehindTaskId')
             if b and (term.for_task(b) or any(r['TaskId'] == b for r in store.running_runs())): continue
             t = store.get_task(q['TaskId']) or {}

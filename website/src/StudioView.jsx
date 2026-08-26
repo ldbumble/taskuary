@@ -23,8 +23,8 @@ const SKINS = [
 const isLive = (t) => !!(t && (t.Session || t.RunStatus === "running"));
 // how long this session has been going. "claude is typing" told you nothing you could act on;
 // "claude · 14m" is the Board's own answer, and the two views should not disagree.
-const since = (t) => {
-  const at = t?.Session?.started || t?.RunStartedAt;
+const since = (t, l) => {
+  const at = l?.StartedAt || t?.Session?.started || t?.RunStartedAt;
   if (!at) return "";
   const sec = Math.max(0, (Date.now() - new Date(String(at).replace(" ", "T"))) / 1000);
   return sec < 90 ? `${Math.round(sec)}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${(sec / 3600).toFixed(1)}h`;
@@ -41,10 +41,10 @@ const poseOf = (t) => {
 };
 // A desk's colour comes off the same ROLES table the Timeline and the Board read, so a task
 // that is "waiting on you" is the one colour that means that, everywhere in the app.
-const stateOf = (t) => {
+const stateOf = (t, l) => {
   if (!t) return { label: "free", color: ROLES.muted.solid };
   if (isLive(t)) {
-    const who = cliName(t.Session?.agent || t.RunAgent || "agent"), ago = since(t);
+    const who = cliName(l?.AgentName || t.Session?.agent || t.RunAgent || "agent"), ago = since(t, l);
     return { label: ago ? `${who} · ${ago}` : who, color: ROLES.working.solid };
   }
   if (t.Status === "waiting" || t.ReviewStatus === "pending") return { label: "waiting on you", color: ROLES.you.solid };
@@ -74,6 +74,7 @@ export default function StudioView({ onOpenTask }) {
   }, [tick]);
   useEffect(() => () => raf.current && cancelAnimationFrame(raf.current), []);
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const [live, setLive] = useState({});   // TaskId -> the same {tail, files, StartedAt} the Board reads
   const [pick, setPick] = useState(null);
   const [frame, setFrame] = useState(0);          // the only clock the room has
 
@@ -86,6 +87,14 @@ export default function StudioView({ onOpenTask }) {
     setAgents(a.data.data || a.data.agents || []);
   }, []);
   useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  // the tails poll fast, exactly as the Board's do: a screen you are watching is a status wall
+  useEffect(() => {
+    const tick = () => api.get("/api/runs/live").then(({ data }) =>
+      setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => clearInterval(id);
+  }, []);
 
   const desks = useMemo(() => {
     const n = Math.max(4, Math.min(12, agents.length || 4));
@@ -132,6 +141,11 @@ export default function StudioView({ onOpenTask }) {
     const poly = (z, p, fill, o) => prims.push({ k: "p", z, pts: p, fill, o: o == null ? 1 : o });
     const rect = (z, x, y, w, h, r, fill) => prims.push({ k: "r", z, x, y, w, h, r, fill });
     const oval = (z, cx, cy, rx, ry, fill, o) => prims.push({ k: "e", z, cx, cy, rx, ry, fill, o: o == null ? 1 : o });
+    const SHEAR = (TH / TW).toFixed(4);
+    const glass = (z, at, x, y, size, fill, str) => {
+      const o = P(0, at, 0);                             // in-plane origin; x/y below are local px
+      prims.push({ k: "t", z, m: `matrix(1,${SHEAR},0,1,${o[0]},${o[1]})`, x, y, s: size, fill, text: str });
+    };
     const BGZ = -1e4;
 
     const c = [P(0, 0, 0), P(GX, 0, 0), P(GX, GY, 0), P(0, GY, 0)];
@@ -229,14 +243,15 @@ export default function StudioView({ onOpenTask }) {
     const DH = 30;                                            // desk height
     const tags = desks.map((t, i) => {
       const gx = 0.9 + (i % cols) * 2.7, gy = 2.4 + Math.floor(i / cols) * 2.9;
-      const st = stateOf(t), live = isLive(t);
+      const l = t ? live[t.TaskId] : null;
+      const st = stateOf(t, l), liveNow = isLive(t);
       const z = box(gx, gy, 2.0, 1.1, DH, "#d3c4a6", "#a8977a", "#bfae8f");
-      const mx = gx + 0.6, mw = 0.85, my = gy + 0.3;
+      const mx = gx + 0.45, mw = 1.15, my = gy + 0.3;      // wider: it has to carry text now
       box(mx + 0.28, my + 0.06, 0.3, 0.24, DH + 7, "#d3c4a6", "#a8977a", "#bfae8f", 0.01);   // stand
       poly(z + 0.02, pts(P(mx - 0.05, my, DH + 6), P(mx + mw + 0.05, my, DH + 6),
-        P(mx + mw + 0.05, my, DH + 40), P(mx - 0.05, my, DH + 40)), "#333b45");
+        P(mx + mw + 0.05, my, DH + 46), P(mx - 0.05, my, DH + 46)), "#333b45");
       poly(z + 0.03, pts(P(mx, my, DH + 9), P(mx + mw, my, DH + 9),
-        P(mx + mw, my, DH + 37), P(mx, my, DH + 37)), live ? "#1b212a" : "#cfc7b4");
+        P(mx + mw, my, DH + 43), P(mx, my, DH + 43)), liveNow ? "#1b212a" : "#cfc7b4");
       const pose = poseOf(t);
       if (pose === "paper") {                                 // a form on the desk, not a diff
         box(gx + 0.3, gy + 0.62, 1.0, 0.3, DH + 2, "#fffdfb", "#ded7c8", "#e8e2d5", 0.03);
@@ -246,10 +261,23 @@ export default function StudioView({ onOpenTask }) {
             P(gx + 1.18, yy + 0.02, DH + 2.1), P(gx + 0.42, yy + 0.02, DH + 2.1)), k ? "#a9a294" : "#4d4a43");
         }
       }
-      if (live && pose === "type") for (let k = 0; k < 3; k++) {   // code, scrolling as it types
-        const zz = DH + 31 - k * 7, w2 = mw * (0.3 + ((k + frame) % 3) * 0.2);
-        poly(z + 0.04, pts(P(mx + 0.08, my, zz), P(mx + 0.08 + w2, my, zz),
-          P(mx + 0.08 + w2, my, zz + 2.6), P(mx + 0.08, my, zz + 2.6)), CODE[k]);
+      /* The run's OWN last lines, laid on the glass. This used to be three coloured bars whose
+         widths came off a frame counter - decoration that looked like data, which is worse than
+         no data. At overview zoom it reads as code; fly to the desk and you can read it, which
+         is what the camera is for. */
+      if (liveNow && pose === "type") {
+        const tail = (l?.tail || []).slice(-4);
+        const rows = tail.length ? tail : ["waiting for output…"];
+        rows.forEach((line, k) => {
+          const fit = Math.floor((mw * TW - 5) / 2.9);        // characters that fit the glass
+          const clean = String(line).replace(/\s+/g, " ").trim().slice(0, fit);
+          glass(z + 0.04, my, (mx + 0.06) * TW, -(DH + 38 - k * 7.4), 4.8,
+            CODE[k % CODE.length], clean);
+        });
+        if (l?.files?.length) {
+          glass(z + 0.04, my, (mx + 0.06) * TW, -(DH + 12), 4.4, "#7f8a96",
+            `✎ ${l.files.length} file${l.files.length === 1 ? "" : "s"}`);
+        }
       }
       box(gx + 0.35, gy + 0.7, 0.9, 0.28, DH + 2, "#cfc7b4", "#aea595", "#bdb3a0", 0.02);    // keyboard
       if (t) person(gx + 1.0, gy - 0.55, SKINS[i % SKINS.length], poseOf(t), frame);
@@ -258,7 +286,7 @@ export default function StudioView({ onOpenTask }) {
     });
 
     return { prims, tags };
-  }, [cam.yaw, desks, queue.length, frame]);
+  }, [cam.yaw, desks, live, queue.length, frame]);
 
   if (!tasks) return <CircularProgress size={22} sx={{ m: 4 }} />;
   const free = desks.filter((d) => !d).length;
@@ -300,6 +328,8 @@ export default function StudioView({ onOpenTask }) {
         {scene.prims.map((p, i) => (p.k === "p"
           ? <polygon key={i} points={p.pts} fill={p.fill} opacity={p.o} />
           : p.k === "r" ? <rect key={i} x={p.x} y={p.y} width={p.w} height={p.h} rx={p.r} fill={p.fill} />
+            : p.k === "t" ? <text key={i} transform={p.m} x={p.x} y={p.y} fontSize={p.s} fill={p.fill}
+            fontFamily="'IBM Plex Mono', Consolas, monospace" style={{ whiteSpace: "pre" }}>{p.text}</text>
             : p.k === "e" ? <ellipse key={i} cx={p.cx} cy={p.cy} rx={p.rx} ry={p.ry} fill={p.fill} opacity={p.o} />
               : <path key={i} d={p.d} fill="none" stroke={p.stroke} strokeWidth="1.6" strokeDasharray="1 6"
                 strokeLinecap="round" opacity={p.o} />))}

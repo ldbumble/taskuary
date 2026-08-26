@@ -60,18 +60,18 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
   };
   if (done) return (
     <Section>
-      <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>
+      <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>
         ✓ broken in two — the second job is {done}. Send it to an agent from its own task.
       </Typography>
     </Section>
   );
   return (
     <Section>
-      <Head icon={<CallSplitIcon sx={{ fontSize: 17, color: "#0e7490" }} />} title="Break it into two tasks"
+      <Head icon={<CallSplitIcon sx={{ fontSize: 17, color: "#1f6b64" }} />} title="Break it into two tasks"
         sub={`Two jobs filed as one. ${taskRef || "This task"} keeps its session, report and history — the second job starts clean.`} />
       {!sug ? <CircularProgress size={16} /> : (
         <>
-          <Typography variant="caption" sx={{ color: sug.two ? "#0e7490" : FAINT, display: "block", mb: 1 }}>
+          <Typography variant="caption" sx={{ color: sug.two ? "#1f6b64" : FAINT, display: "block", mb: 1 }}>
             {sug.ai
               ? sug.two ? `The AI reads two jobs in here — ${sug.why}. Edit either side; nothing happens until you say so.`
                         : `The AI reads this as one job${sug.why ? ` — ${sug.why}` : ""}. Split it anyway if you disagree.`
@@ -107,7 +107,7 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
             <Button size="small" variant="contained" disableElevation disabled={busy || !second.title.trim()}
               startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <CallSplitIcon sx={{ fontSize: 15 }} />}
               onClick={go}>Break it in two</Button>
-            {err && <Typography variant="caption" sx={{ color: "#b91c1c" }}>{err}</Typography>}
+            {err && <Typography variant="caption" sx={{ color: "#8f4a41" }}>{err}</Typography>}
           </Box>
         </>
       )}
@@ -139,7 +139,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
   };
   if (done) return (
     <Section>
-      <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>
+      <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>
         ✓ folded together — {done.ref} carries the work now
         {done.moved ? `, with ${done.moved} message${done.moved === 1 ? "" : "s"} moved over` : ""}.
       </Typography>
@@ -147,7 +147,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
   );
   return (
     <Section>
-      <Head icon={<MergeIcon sx={{ fontSize: 17, color: "#7e22ce" }} />} title="Fold it into another task"
+      <Head icon={<MergeIcon sx={{ fontSize: 17, color: "#1f6b64" }} />} title="Fold it into another task"
         sub="One job filed twice. The messages move to the survivor; the other is dropped with a pointer at it — never deleted." />
       {!cands ? <CircularProgress size={16} /> : !cands.length ? (
         <Typography variant="caption" sx={{ color: FAINT }}>No other open task to fold into.</Typography>
@@ -158,8 +158,8 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
             isOptionEqualToValue={(a, b) => a.task_id === b.task_id}
             renderOption={(props, o) => (
               <li {...props} style={{ display: "block", fontSize: 12.5 }}>
-                <span style={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{o.ref}</span> {o.title}
-                <div style={{ color: "#8a94a6", fontSize: 10.5 }}>{o.why} · match {o.score.toFixed(2)}</div>
+                <span style={{ ...mono, color: "#2f6b4f", fontWeight: 700 }}>{o.ref}</span> {o.title}
+                <div style={{ color: "#8b938d", fontSize: 10.5 }}>{o.why} · match {o.score.toFixed(2)}</div>
               </li>
             )}
             renderInput={(params) => <TextField {...params} placeholder="the task this is really the same as" />} />
@@ -169,7 +169,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
               {[["other", `${pick.ref} — this one closes`], ["this", `${taskRef || "this task"} — ${pick.ref} closes`]].map(([k, label]) => (
                 <Chip key={k} size="small" label={label} onClick={() => setKeep(k)}
                   sx={{ height: 20, fontSize: 10.5, cursor: "pointer",
-                    bgcolor: keep === k ? "#eef0ff" : PANEL2, color: keep === k ? "#4f46e5" : DIM,
+                    bgcolor: keep === k ? "#e4efe8" : PANEL2, color: keep === k ? "#2f6b4f" : DIM,
                     border: `1px solid ${keep === k ? "#c7d2fe" : BORDER}`, fontWeight: keep === k ? 700 : 400 }} />
               ))}
             </Box>
@@ -178,7 +178,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
             <Button size="small" variant="contained" disableElevation disabled={busy || !pick}
               startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <MergeIcon sx={{ fontSize: 15 }} />}
               onClick={go}>Fold them together</Button>
-            {err && <Typography variant="caption" sx={{ color: "#b91c1c" }}>{err}</Typography>}
+            {err && <Typography variant="caption" sx={{ color: "#8f4a41" }}>{err}</Typography>}
           </Box>
           {pick && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>

@@ -36,7 +36,7 @@ export const Handoff = ({ taskId, onSent }) => {
     setBusy("");
   };
   if (sent) return (
-    <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>
+    <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>
       ✓ sent to {(sent.to || []).join(", ") || "the chat"} by {sent.channel}
     </Typography>
   );
@@ -65,7 +65,7 @@ export const Handoff = ({ taskId, onSent }) => {
         <Button size="small" variant="contained" disableElevation disabled={!!busy || !to.trim() || !text.trim()}
           startIcon={busy === "send" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <ForwardToInboxIcon sx={{ fontSize: 15 }} />}
           onClick={send}>Send it</Button>
-        {err && <Typography variant="caption" sx={{ color: "#b91c1c" }}>{err}</Typography>}
+        {err && <Typography variant="caption" sx={{ color: "#8f4a41" }}>{err}</Typography>}
       </Box>
     </Box>
   );

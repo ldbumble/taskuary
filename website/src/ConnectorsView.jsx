@@ -477,7 +477,7 @@ export default function ConnectorsView() {
           {hits.map((r) => (
             <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
               "&:hover": { bgcolor: "#fafbfd" } }}>
-              <Typography sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 13.5 }}>{r.title}</Typography>
+              <Typography sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 13.5 }}>{r.title}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb} · {r.desc}</Typography>
             </Box>
           ))}
@@ -489,7 +489,7 @@ export default function ConnectorsView() {
             {g.cards.map((c) => (
               <Box key={c.key} sx={{ opacity: c.planned ? 0.45 : 1 }}>
                 <LandingCard title={c.title} desc={c.desc} onOpen={c.planned ? () => {} : c.go}
-                  icon={c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 19, color: "#4f46e5" }} />
+                  icon={c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />
                     : <ChannelIcon channel={c.channel} sx={{ fontSize: 19 }} />} />
               </Box>
             ))}
@@ -511,7 +511,7 @@ function RemoveConnection({ conn, reload, onBack }) {
   // shape of question from every other delete in the app. Same dialog as the rest now.
   return (
     <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", maxWidth: 720 }}>
-      <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#8a94a6" }}
+      <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#8b938d" }}
         onClick={() => setConfirm(true)}>Remove connection</Button>
       <ConfirmDelete open={confirm} what={`the ${conn.Name || conn.Type} connection`} confirmLabel="Remove"
         consequence="Its saved credentials and settings are wiped and its sources are switched off. The card stays in the catalog, so you can set it up again from scratch."
@@ -591,7 +591,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
           <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
             {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-          {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
+          {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
         </Box>
       </Box>
     )},
@@ -600,9 +600,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Live probe — token / model / channel read, for real.</Typography>
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
           startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-        {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
+        {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
           {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-        {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
+        {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
       </Box>
     )},
     ...(m.srcLabel ? [{ label: m.srcLabel, done: mine.some((s) => s.Active), body: (
@@ -760,7 +760,7 @@ function MssqlConnection({ conn, drivers, reload }) {
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
                 {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-              {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
+              {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
             </Box>
           </Box>
         </StepContent>
@@ -771,9 +771,9 @@ function MssqlConnection({ conn, drivers, reload }) {
           <Typography variant="body2" sx={{ color: DIM, mb: 1, mt: 0.5 }}>Connects for real and reports the server version — every scheduled report inherits this connection.</Typography>
           <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
             startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-          {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
+          {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
         </StepContent>
       </Step>
     </Stepper>
@@ -822,11 +822,11 @@ function WinrmDetail({ conn, reload, onBack }) {
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
             <Button variant="outlined" disabled={busy === "test" || !cfg.host} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-            {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
+            {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
-          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
+          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
@@ -936,7 +936,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
                 {CLOUD_MODES.map(([v, label]) => (
                   <Box key={v} component="span" title={label}
                     onClick={() => !bulk && setAllShown(v)}
-                    sx={{ fontSize: 11, fontWeight: 700, color: bulk ? FAINT : "#4f46e5", cursor: bulk ? "default" : "pointer",
+                    sx={{ fontSize: 11, fontWeight: 700, color: bulk ? FAINT : "#2f6b4f", cursor: bulk ? "default" : "pointer",
                       "&:hover": { textDecoration: bulk ? "none" : "underline" } }}>
                     {bulk === v ? `${v}…` : v}
                   </Box>
@@ -1034,11 +1034,11 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
             <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
               {meta.discovers ? "Test & discover" : "Test"}</Button>
-            {msg && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{msg}</Typography>}
+            {msg && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
-          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>
+          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#b91c1c" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#8f4a41" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}
       {tab === "Connection" && meta.discovers && (
@@ -1181,7 +1181,7 @@ const RoleStep = ({ conn, reload, only }) => {
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
       ))}
       {keys.includes("notify") && roles.has("notify") && (
-        <Typography variant="caption" sx={{ color: chat ? "#15803d" : "#b45309", display: "block", mt: 1, lineHeight: 1.45 }}>
+        <Typography variant="caption" sx={{ color: chat ? "#4d6b3f" : "#2f6b4f", display: "block", mt: 1, lineHeight: 1.45 }}>
           {chat
             ? `Pinging chat ${chat} · what goes out is Settings → Notifications`
             : "Name the chat in Credentials, or pings have nowhere to go."}
@@ -1287,7 +1287,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
           ))}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
             <Button size="small" variant="contained" disableElevation onClick={savePrompts}>Save prompts</Button>
-            {saved && <Typography variant="body2" sx={{ color: "#15803d", fontWeight: 600 }}>{saved}</Typography>}
+            {saved && <Typography variant="body2" sx={{ color: "#4d6b3f", fontWeight: 600 }}>{saved}</Typography>}
           </Box>
         </Box>
       )}
@@ -1299,7 +1299,7 @@ const Steps = ({ steps }) => (
   <Box sx={{ maxWidth: 720, mx: "auto" }}>
     {steps.map((step, i) => (
       <Box key={i} sx={{ display: "flex", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
-        <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "#eef0ff", color: "#4f46e5",
+        <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "#e4efe8", color: "#2f6b4f",
           fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</Box>
         <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{step}</Typography>
       </Box>

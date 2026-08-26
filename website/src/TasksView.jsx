@@ -255,15 +255,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length ? <Empty>No tasks here.</Empty> : shown.map((task) => (
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
                 sx={{ px: 1.25, py: 1, mb: 0.75, cursor: "pointer", bgcolor: "#fff", borderRadius: 1.75,
-                  border: `1px solid ${selected === task.TaskId ? "#4f46e5" : BORDER}`,
-                  boxShadow: selected === task.TaskId ? "0 1px 8px rgba(79,70,229,.14)" : "none",
+                  border: `1px solid ${selected === task.TaskId ? "#2f6b4f" : BORDER}`,
+                  boxShadow: selected === task.TaskId ? "0 1px 8px rgba(47,107,79,.14)" : "none",
                   transition: "border-color .12s, box-shadow .12s",
-                  "&:hover": { borderColor: selected === task.TaskId ? "#4f46e5" : "#c9cff0" } }}>
+                  "&:hover": { borderColor: selected === task.TaskId ? "#2f6b4f" : "#b6d0c2" } }}>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
-                  <Typography variant="caption" sx={{ ...mono, color: "#4f46e5", fontWeight: 700 }}>{task.ref}</Typography>
+                  <Typography variant="caption" sx={{ ...mono, color: "#2f6b4f", fontWeight: 700 }}>{task.ref}</Typography>
                   <StateChip task={task} />
-                  {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: "#fdecec", color: "#b91c1c", height: 17, fontSize: 10 }} />}
-                  {String(task.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />}
+                  {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: "#f4eae8", color: "#8f4a41", height: 17, fontSize: 10 }} />}
+                  {String(task.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 13, color: "#1f6b64" }} />}
                   <Box sx={{ flex: 1 }} />
                   <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(task.CreatedAt)}</Typography>
                 </Box>
@@ -286,7 +286,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* one primary action, everything else behind one tidy menu - six buttons in a
                     row read as none of them mattering */}
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography sx={{ ...mono, color: "#4f46e5", fontWeight: 700, fontSize: 12.5 }}>{detail.ref}</Typography>
+                  <Typography sx={{ ...mono, color: "#2f6b4f", fontWeight: 700, fontSize: 12.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 650, fontSize: 15, minWidth: 200, letterSpacing: "-.01em" }} noWrap>
                     {t.Title}
                   </Typography>
@@ -295,8 +295,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {t.Status !== "done" && (
                     <Tooltip title="I took care of it — close the task and wrap anything running">
                       <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
-                        sx={{ color: "#15803d", borderColor: "#15803d66", px: 1.25,
-                          "&:hover": { borderColor: "#15803d", bgcolor: "#f0faf4" } }}
+                        sx={{ color: "#4d6b3f", borderColor: "#4d6b3f66", px: 1.25,
+                          "&:hover": { borderColor: "#4d6b3f", bgcolor: "#f0faf4" } }}
                         onClick={() => patch({ Status: "done" })}>Mark done</Button>
                     </Tooltip>
                   )}
@@ -308,23 +308,23 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <Menu anchorEl={menuEl} open={!!menuEl} onClose={() => setMenuEl(null)}
                     slotProps={{ paper: { sx: { minWidth: 280 } } }}>
                     <MenuItem onClick={() => { setMenuEl(null); setHandoff(true); }}>
-                      <ListItemIcon><ForwardToInboxIcon sx={{ fontSize: 17, color: "#4f46e5" }} /></ListItemIcon>
+                      <ListItemIcon><ForwardToInboxIcon sx={{ fontSize: 17, color: "#2f6b4f" }} /></ListItemIcon>
                       <ListItemText primary="Hand it to a person"
                         secondary="not ours to do — the AI writes the forward, you send it" />
                     </MenuItem>
                     <MenuItem onClick={() => { setMenuEl(null); setReshape(true); }}>
-                      <ListItemIcon><CallSplitIcon sx={{ fontSize: 17, color: "#0e7490" }} /></ListItemIcon>
+                      <ListItemIcon><CallSplitIcon sx={{ fontSize: 17, color: "#1f6b64" }} /></ListItemIcon>
                       <ListItemText primary="Two jobs in here, or a duplicate?"
                         secondary="break it in two, or fold it into the task it repeats" />
                     </MenuItem>
                     <MenuItem onClick={() => { setMenuEl(null); setRepoPick(true); }}>
-                      <ListItemIcon><AccountTreeIcon sx={{ fontSize: 17, color: "#4f46e5" }} /></ListItemIcon>
+                      <ListItemIcon><AccountTreeIcon sx={{ fontSize: 17, color: "#2f6b4f" }} /></ListItemIcon>
                       <ListItemText primary={repoOf(t) ? `Repo: ${repoOf(t)}` : "Pick the repository"}
                         secondary="which checkout the session works in" />
                     </MenuItem>
                     <Divider />
-                    <MenuItem onClick={() => { setMenuEl(null); setConfirmNAT(true); }} sx={{ color: "#b91c1c" }}>
-                      <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#b91c1c" }} /></ListItemIcon>
+                    <MenuItem onClick={() => { setMenuEl(null); setConfirmNAT(true); }} sx={{ color: "#8f4a41" }}>
+                      <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#8f4a41" }} /></ListItemIcon>
                       <ListItemText primary="Not a task" secondary="delete it and teach triage why" />
                     </MenuItem>
                   </Menu>
@@ -363,7 +363,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {repoPick && (
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-                      <AccountTreeIcon sx={{ fontSize: 16, color: "#4f46e5" }} />
+                      <AccountTreeIcon sx={{ fontSize: 16, color: "#2f6b4f" }} />
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1 }}>
                         Which repository is this about?
                       </Typography>
@@ -375,7 +375,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Box>
                 )}
                 {wrapping && !wrapped ? (
-                  <Box sx={{ ...card, bgcolor: "#f5f3ff", border: "1px solid #ddd6fe" }}>
+                  <Box sx={{ ...card, bgcolor: "#e2efed", border: "1px solid #bcd9d5" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <CircularProgress size={15} />
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
@@ -390,11 +390,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />
                   </Box>
                 ) : wrapped ? (
-                  <Box sx={{ ...card, bgcolor: wrapped.note ? "#fff8e6" : "#f5f3ff",
-                    border: `1px solid ${wrapped.note ? "#f3ddb8" : "#ddd6fe"}` }}>
+                  <Box sx={{ ...card, bgcolor: wrapped.note ? "#eaf1e4" : "#e2efed",
+                    border: `1px solid ${wrapped.note ? "#b6d0c2" : "#bcd9d5"}` }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-                      {wrapped.note ? <PauseCircleIcon sx={{ fontSize: 17, color: "#b45309" }} />
-                        : <DoneAllIcon sx={{ fontSize: 17, color: "#15803d" }} />}
+                      {wrapped.note ? <PauseCircleIcon sx={{ fontSize: 17, color: "#2f6b4f" }} />
+                        : <DoneAllIcon sx={{ fontSize: 17, color: "#4d6b3f" }} />}
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, flex: 1 }}>
                         {wrapped.note ? "Paused — here is where it got to" : "Session closed — here is what it did"}
                       </Typography>
@@ -435,7 +435,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
                         startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
                           : <DoneAllIcon sx={{ fontSize: 15 }} />}
-                        sx={{ fontSize: 11.5, bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                        sx={{ fontSize: 11.5, bgcolor: "#4d6b3f", "&:hover": { bgcolor: "#166534" } }}
                         onClick={wrapUp}>
                         {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
                       </Button>
@@ -452,7 +452,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <TerminalPane sid={term.sid} height="clamp(300px, calc(100vh - 300px), 820px)"
                       onExit={() => findTerm(selected)} />
                     {wrapping && (
-                      <Typography variant="caption" sx={{ color: "#0e7490", display: "block", mt: 0.5 }}>
+                      <Typography variant="caption" sx={{ color: "#1f6b64", display: "block", mt: 0.5 }}>
                         {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."
                           : "Closing the session and writing up what is on screen — the agent is not asked anything."}
                       </Typography>
@@ -465,7 +465,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       prompts, its questions, your keystrokes.
                     </Typography>
                     {liveRun && (
-                      <Typography variant="caption" sx={{ color: "#b45309", display: "block", mb: 1.25 }}>
+                      <Typography variant="caption" sx={{ color: "#2f6b4f", display: "block", mb: 1.25 }}>
                         {liveRun.AgentName} has a run going on this task (run {liveRun.RunId}) — watch it under Earlier
                         runs below. Starting a session here puts a second agent on the same task.
                       </Typography>
@@ -496,7 +496,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
                             startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
                               : <DoneAllIcon sx={{ fontSize: 15 }} />}
-                            sx={{ fontSize: 11.5, bgcolor: "#15803d", "&:hover": { bgcolor: "#166534" } }}
+                            sx={{ fontSize: 11.5, bgcolor: "#4d6b3f", "&:hover": { bgcolor: "#166534" } }}
                             onClick={wrapUp}>
                             {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
                           </Button>
@@ -514,7 +514,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* the summary the agent left behind, once it has finished */}
                 {report && !wrapped && (
                   <Block title="What the agent did">
-                    <Box sx={{ bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
+                    <Box sx={{ bgcolor: "#e2efed", border: "1px solid #bcd9d5", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
                       <CoderReport body={report.Body} />
                     </Box>
                     {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
@@ -540,7 +540,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           {m.SourceLink && <Link href={m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>source</Link>}
                           <Box sx={{ flex: 1 }} />
                           {route && (
-                            <Typography variant="caption" sx={{ color: "#7e22ce", display: "flex", alignItems: "center", gap: 0.4 }}>
+                            <Typography variant="caption" sx={{ color: "#1f6b64", display: "flex", alignItems: "center", gap: 0.4 }}>
                               <AltRouteIcon sx={{ fontSize: 12 }} /> {route.Decision}
                             </Typography>
                           )}
@@ -562,15 +562,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {detail.runs.length > 0 && (
                   <Fold title={`Earlier runs · ${detail.runs.length}`}>
                     {detail.runs.map((r) => (
-                      <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#fff8e6" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
+                      <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#eaf1e4" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
-                          <SmartToyIcon sx={{ fontSize: 13, color: "#7e22ce" }} />
+                          <SmartToyIcon sx={{ fontSize: 13, color: "#1f6b64" }} />
                           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
                           {r.Status === "running" && <CircularProgress size={11} />}
                           <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
                         </Box>
                         <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
-                        {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#15803d", display: "block" }}>{r.Result}</Typography>}
+                        {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#4d6b3f", display: "block" }}>{r.Result}</Typography>}
                         {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
                       </Box>
                     ))}
@@ -599,13 +599,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       <Drawer anchor="right" open={!!diffOpen && !!t} onClose={() => setDiffOpen(false)}
         PaperProps={{ sx: { width: { xs: "100%", sm: 760 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-          <DifferenceIcon sx={{ fontSize: 18, color: "#7e22ce" }} />
+          <DifferenceIcon sx={{ fontSize: 18, color: "#1f6b64" }} />
           <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>What has it changed?</Typography>
           {diff && !!diff.files?.length && (
             <Typography sx={{ ...mono, fontSize: 11.5, color: DIM }}>
               {diff.files.length} file{diff.files.length === 1 ? "" : "s"}
-              <Box component="span" sx={{ color: "#15803d", ml: 1 }}>+{diff.added}</Box>
-              <Box component="span" sx={{ color: "#b91c1c", ml: 0.75 }}>−{diff.removed}</Box>
+              <Box component="span" sx={{ color: "#4d6b3f", ml: 1 }}>+{diff.added}</Box>
+              <Box component="span" sx={{ color: "#8f4a41", ml: 0.75 }}>−{diff.removed}</Box>
             </Typography>
           )}
           <Tooltip title="Ask git again — the agent may have written more since you opened this">
@@ -629,7 +629,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       <Drawer anchor="right" open={!!handoff && !!t} onClose={() => setHandoff(false)}
         PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-          <ForwardToInboxIcon sx={{ fontSize: 18, color: "#4f46e5" }} />
+          <ForwardToInboxIcon sx={{ fontSize: 18, color: "#2f6b4f" }} />
           <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
           <IconButton size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
@@ -643,7 +643,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       <Drawer anchor="right" open={!!reshape && !!t} onClose={() => setReshape(false)}
         PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-          <CallSplitIcon sx={{ fontSize: 18, color: "#0e7490" }} />
+          <CallSplitIcon sx={{ fontSize: 18, color: "#1f6b64" }} />
           <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
           <IconButton size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
@@ -700,7 +700,7 @@ const CommentRow = ({ c }) => {
       "&:hover": { bgcolor: open ? "transparent" : PANEL2 } }}>
       <Box component="td" sx={{ py: 0.6, pr: 1, whiteSpace: "nowrap" }}>
         <Typography variant="caption" sx={{ ...mono, fontWeight: 700, fontSize: 10.5,
-          color: c.ActorType === "agent" ? "#7e22ce" : "#4f46e5" }}>{c.Actor}</Typography>
+          color: c.ActorType === "agent" ? "#1f6b64" : "#2f6b4f" }}>{c.Actor}</Typography>
       </Box>
       <Box component="td" sx={{ py: 0.6, pr: 1.25, whiteSpace: "nowrap" }}>
         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{timeAgo(c.CreatedAt)}</Typography>
@@ -712,7 +712,7 @@ const CommentRow = ({ c }) => {
           {body}
         </Typography>
         {long && (
-          <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 10.5 }}>
+          <Typography variant="caption" sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 10.5 }}>
             {open ? "less ↑" : `${body.length.toLocaleString()} chars ↓`}
           </Typography>
         )}

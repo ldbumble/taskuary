@@ -25,7 +25,7 @@ function ServerVersion() {
   if (!v) return null;
   return (
     <Tooltip title={`server started ${v.started} — if this version looks old, restart taskuary`}>
-      <Typography variant="caption" sx={{ color: "#98a1b3", fontFamily: "Consolas, monospace", fontSize: 10.5 }}>
+      <Typography variant="caption" sx={{ color: "#9aa39b", fontFamily: "Consolas, monospace", fontSize: 10.5 }}>
         v{v.version}
       </Typography>
     </Tooltip>
@@ -126,9 +126,9 @@ export default function TaskHubPage() {
               const pill = (
                 <Box onClick={() => go(t)}
                   sx={{ px: 1.5, py: 0.5, borderRadius: 99, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                    color: tab === t ? "#4f46e5" : DIM, bgcolor: tab === t ? "#eef0ff" : "transparent",
-                    border: `1px solid ${tab === t ? "#c9cff0" : "transparent"}`,
-                    transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#eef0ff" : "#f1f3f6" } }}>
+                    color: tab === t ? "#2f6b4f" : DIM, bgcolor: tab === t ? "#e4efe8" : "transparent",
+                    border: `1px solid ${tab === t ? "#b6d0c2" : "transparent"}`,
+                    transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#e4efe8" : "#f4f7f1" } }}>
                   {t}
                 </Box>
               );
@@ -138,7 +138,7 @@ export default function TaskHubPage() {
                 <Badge key={t} badgeContent={pending} max={99} overlap="rectangular" showZero={false}
                   invisible={!pending}
                   sx={{ "& .MuiBadge-badge": { fontSize: 9.5, height: 16, minWidth: 16, px: 0.45,
-                    bgcolor: "#b45309", color: "#fff", fontWeight: 700, right: -2, top: 2 } }}>
+                    bgcolor: "#2f6b4f", color: "#fff", fontWeight: 700, right: -2, top: 2 } }}>
                   {pill}
                 </Badge>
               ) : <React.Fragment key={t}>{pill}</React.Fragment>;

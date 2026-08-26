@@ -182,21 +182,21 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
             far cheaper than scrolling back for what just went past */}
         <Box component="button" onClick={() => setSize((n) => SIZES[Math.max(0, SIZES.indexOf(n) - 1)])}
           disabled={size === SIZES[0]} title="smaller text — more of the run on screen"
-          sx={{ ...mono, fontSize: 11, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8a94a6",
+          sx={{ ...mono, fontSize: 11, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8b938d",
             border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
-            "&:hover:not(:disabled)": { color: "#e5e8ee" } }}>A−</Box>
+            "&:hover:not(:disabled)": { color: "#dce1d8" } }}>A−</Box>
         {/* the number, so the range is DISCOVERABLE: two unlabelled letters gave no way to
             tell whether you were already at the smallest or had five steps left */}
-        <Typography sx={{ ...mono, fontSize: 9.5, color: "#8a94a6", minWidth: 16, textAlign: "center",
+        <Typography sx={{ ...mono, fontSize: 9.5, color: "#8b938d", minWidth: 16, textAlign: "center",
           fontVariantNumeric: "tabular-nums" }}>{size}</Typography>
         <Box component="button" onClick={() => setSize((n) => SIZES[Math.min(SIZES.length - 1, SIZES.indexOf(n) + 1)])}
           disabled={size === SIZES[SIZES.length - 1]} title="bigger text"
-          sx={{ ...mono, fontSize: 13, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8a94a6",
+          sx={{ ...mono, fontSize: 13, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#8b938d",
             border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
-            "&:hover:not(:disabled)": { color: "#e5e8ee" } }}>A+</Box>
+            "&:hover:not(:disabled)": { color: "#dce1d8" } }}>A+</Box>
         <Box component="select" value={themeName} onChange={(e) => setThemeName(e.target.value)}
           title="terminal palette"
-          sx={{ ...mono, fontSize: 10, bgcolor: "transparent", color: "#8a94a6", border: "none",
+          sx={{ ...mono, fontSize: 10, bgcolor: "transparent", color: "#8b938d", border: "none",
             outline: "none", cursor: "pointer" }}>
           {Object.keys(THEMES).map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
         </Box>

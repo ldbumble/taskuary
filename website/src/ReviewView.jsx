@@ -78,8 +78,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ width: 28, height: 28, borderRadius: 1.5, flexShrink: 0, display: "flex",
               alignItems: "center", justifyContent: "center",
-              bgcolor: "#e6f7fb" }}>
-              <AutoAwesomeIcon sx={{ fontSize: 15, color: "#0e7490" }} />
+              bgcolor: "#e2efed" }}>
+              <AutoAwesomeIcon sx={{ fontSize: 15, color: "#1f6b64" }} />
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ color: INK, fontWeight: 700, lineHeight: 1.25 }} noWrap>
@@ -95,7 +95,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             <Chip size="small" label={r.Status} sx={{ height: 19, fontSize: 10, bgcolor: PANEL, border: `1px solid ${BORDER}`, color: DIM }} />
           </Box>
           <Box sx={{ px: 1.5, py: 1.25 }}>
-            {r.Reason && <Typography variant="caption" sx={{ color: "#7e22ce", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
+            {r.Reason && <Typography variant="caption" sx={{ color: "#1f6b64", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
 
             {r.Status === "pending" && (
               <Box sx={{ mt: 0.5 }}>
@@ -127,7 +127,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     </Button>
                   )}
                   {r.CanSend !== false && (
-                    <Button size="small" sx={{ color: "#8a94a6" }} disabled={busy === r.ReviewId}
+                    <Button size="small" sx={{ color: "#8b938d" }} disabled={busy === r.ReviewId}
                       onClick={() => decide(r, "no_reply")}>No reply needed</Button>
                   )}
                   <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Reject</Button>
@@ -148,8 +148,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
               </Box>
             )}
             {r.Status === "held" && (
-              <Box sx={{ mt: 0.5, bgcolor: "#e6f7fb", border: "1px solid #c2e7f0", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
-                <Typography variant="caption" sx={{ color: "#0e7490", fontWeight: 700, display: "block" }}>
+              <Box sx={{ mt: 0.5, bgcolor: "#e2efed", border: "1px solid #bcd9d5", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
+                <Typography variant="caption" sx={{ color: "#1f6b64", fontWeight: 700, display: "block" }}>
                   Waiting on the agent working this task
                 </Typography>
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25 }}>

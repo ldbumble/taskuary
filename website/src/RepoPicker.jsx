@@ -53,17 +53,17 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
         const on = r.repo === picked;
         return (
           <Box key={r.repo} sx={{ border: `1px solid ${on ? "#c7d2fe" : BORDER}`, borderRadius: 1.5,
-            bgcolor: on ? "#eef0ff" : PANEL, px: 1.1, py: 0.7, mb: 0.6 }}>
+            bgcolor: on ? "#e4efe8" : PANEL, px: 1.1, py: 0.7, mb: 0.6 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-              <AccountTreeIcon sx={{ fontSize: 14, color: on ? "#4f46e5" : FAINT }} />
-              <Typography variant="caption" sx={{ ...mono, fontWeight: 700, color: on ? "#4f46e5" : INK,
+              <AccountTreeIcon sx={{ fontSize: 14, color: on ? "#2f6b4f" : FAINT }} />
+              <Typography variant="caption" sx={{ ...mono, fontWeight: 700, color: on ? "#2f6b4f" : INK,
                 flex: 1, minWidth: 0 }} noWrap>{r.repo}</Typography>
-              {r.tagged && <Chip size="small" label="pinned" sx={{ height: 16, fontSize: 9, bgcolor: "#eef0ff", color: "#4f46e5" }} />}
+              {r.tagged && <Chip size="small" label="pinned" sx={{ height: 16, fontSize: 9, bgcolor: "#e4efe8", color: "#2f6b4f" }} />}
               {!r.has_path && (
                 <Chip size="small" icon={<WarningAmberIcon sx={{ fontSize: 11 }} />} label="no local path"
-                  sx={{ height: 16, fontSize: 9, bgcolor: "#fff8e6", color: "#b45309" }} />
+                  sx={{ height: 16, fontSize: 9, bgcolor: "#eaf1e4", color: "#2f6b4f" }} />
               )}
-              {on ? <CheckIcon sx={{ fontSize: 15, color: "#15803d" }} />
+              {on ? <CheckIcon sx={{ fontSize: 15, color: "#4d6b3f" }} />
                 : <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.75 }} disabled={busy}
                     onClick={() => choose(r)}>use this</Button>}
             </Box>
@@ -81,7 +81,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
                 session cannot open here at all - it would silently land in the default folder. */}
             {open === r.repo && (
               <Box sx={{ mt: 0.75, pl: 2.6 }}>
-                <Typography variant="caption" sx={{ color: r.found ? "#15803d" : "#b45309", display: "block", mb: 0.5 }}>
+                <Typography variant="caption" sx={{ color: r.found ? "#4d6b3f" : "#2f6b4f", display: "block", mb: 0.5 }}>
                   {r.found
                     ? `Found a checkout of ${r.repo} (matched by its git remote) — confirm or correct the path.`
                     : `Where is ${r.repo} checked out on this machine? Saved on the ${agent} agent, so every
@@ -100,7 +100,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
           </Box>
         );
       })}
-      {err && <Typography variant="caption" sx={{ color: "#b91c1c", display: "block" }}>{err}</Typography>}
+      {err && <Typography variant="caption" sx={{ color: "#8f4a41", display: "block" }}>{err}</Typography>}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
         Paths saved here land on the agent — also editable in bulk under Settings → Agents
         (the repo → dir map).

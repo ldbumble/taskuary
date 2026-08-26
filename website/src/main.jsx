@@ -12,25 +12,25 @@ class Boundary extends React.Component {
   render() {
     if (!this.state.err) return this.props.children;
     return (
-      <div style={{ maxWidth: 720, margin: "80px auto", padding: 24, fontFamily: "'Inter', 'Segoe UI', sans-serif",
+      <div style={{ maxWidth: 720, margin: "80px auto", padding: 24, fontFamily: "'IBM Plex Sans', 'Segoe UI', sans-serif",
         background: "#fff", border: "1px solid #f3d1d1", borderRadius: 12 }}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: "#b91c1c", marginBottom: 8 }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: "#8f4a41", marginBottom: 8 }}>
           Something in this view failed to draw
         </div>
         <div style={{ fontSize: 13, color: "#1f2430", marginBottom: 12 }}>
           Your data and any running agent sessions are untouched — they live on the server, not in this page.
         </div>
-        <pre style={{ fontSize: 11.5, background: "#f7f8fa", border: "1px solid #e3e6ec", borderRadius: 8,
-          padding: 12, whiteSpace: "pre-wrap", color: "#697386", maxHeight: 180, overflow: "auto" }}>
+        <pre style={{ fontSize: 11.5, background: "#f7f9f5", border: "1px solid #dce1d8", borderRadius: 8,
+          padding: 12, whiteSpace: "pre-wrap", color: "#5e685f", maxHeight: 180, overflow: "auto" }}>
           {String(this.state.err?.stack || this.state.err)}
         </pre>
         <button onClick={() => this.setState({ err: null })}
-          style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid #c9cff0", background: "#eef0ff",
-            color: "#4f46e5", fontWeight: 700, cursor: "pointer" }}>
+          style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid #b6d0c2", background: "#e4efe8",
+            color: "#2f6b4f", fontWeight: 700, cursor: "pointer" }}>
           Try again
         </button>
         <button onClick={() => location.reload()}
-          style={{ marginLeft: 8, padding: "6px 16px", borderRadius: 8, border: "1px solid #e3e6ec",
+          style={{ marginLeft: 8, padding: "6px 16px", borderRadius: 8, border: "1px solid #dce1d8",
             background: "#fff", color: "#1f2430", cursor: "pointer" }}>
           Reload the app
         </button>

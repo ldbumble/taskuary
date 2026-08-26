@@ -48,7 +48,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
   if (!items.length) return canFetch ? (
     <Typography variant="caption" onClick={busy ? undefined : fetchNow}
       sx={{ color: err ? FAINT : ACCENT2, cursor: busy ? "default" : "pointer", display: "inline-flex",
-        alignItems: "center", gap: 0.3, mt: 0.5, fontSize: 10.5, "&:hover": { color: err ? FAINT : "#4f46e5" } }}>
+        alignItems: "center", gap: 0.3, mt: 0.5, fontSize: 10.5, "&:hover": { color: err ? FAINT : "#2f6b4f" } }}>
       {busy ? <CircularProgress size={10} /> : <AttachFileIcon sx={{ fontSize: 12 }} />}
       {err || "look for attachments on this mail"}
     </Typography>
@@ -66,7 +66,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
             <Box key={a.id} onClick={() => setBig(a)} title={`${a.name} · ${kb(a.size)} — click to enlarge`}
               sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", cursor: "zoom-in",
                 bgcolor: "#fff", alignSelf: "flex-start", maxWidth: "100%",
-                "&:hover": { borderColor: "#c9cff0" } }}>
+                "&:hover": { borderColor: "#b6d0c2" } }}>
               <Box component="img" src={attUrl(a)} alt={a.name}
                 sx={{ display: "block", maxHeight: dense ? 150 : 420, maxWidth: "100%", objectFit: "contain" }} />
             </Box>
@@ -85,8 +85,8 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
               sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.9, py: 0.4, borderRadius: 1.5,
                 border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: 260,
                 cursor: a.url ? "pointer" : "default", opacity: a.url ? 1 : 0.6,
-                "&:hover": { borderColor: a.url ? "#c9cff0" : BORDER } }}>
-              <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 700, color: "#4f46e5" }}>{kindOf(a)}</Typography>
+                "&:hover": { borderColor: a.url ? "#b6d0c2" : BORDER } }}>
+              <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 700, color: "#2f6b4f" }}>{kindOf(a)}</Typography>
               <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>{a.name}</Typography>
               <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{kb(a.size)}</Typography>
             </Box>

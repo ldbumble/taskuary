@@ -13,17 +13,17 @@ import { FAINT, INK } from "./theme.jsx";
 import { Crumb, UnderTabs, LandingCard } from "./ui.jsx";
 
 const DOCS = {
-  soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+  soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />,
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
-  triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+  triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />,
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
-  style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+  style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />,
     blurb: "How you write replies — greeting, tone, length, phrasing — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
-  coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+  coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
-  digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+  digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />,
     blurb: "Your morning brief — what's in flight, who waits on whom. Written by the Morning digest report: the same brief lands on your Timeline daily, its prompt is edited on the Reports tab (that decides what goes in here), and deleting that report turns it off." },
-  learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />,
+  learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />,
     blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
 };
 const NAMES = Object.keys(DOCS);
@@ -60,7 +60,7 @@ const OwnerCard = () => {
   };
   if (!who) return null;
   return (
-    <Box sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #e3e6ec", borderRadius: 2,
+    <Box sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #dce1d8", borderRadius: 2,
       display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
       <Box sx={{ minWidth: 260, flex: 1 }}>
         <Typography variant="body2" sx={{ color: INK, fontWeight: 700 }}>Who the documents speak for</Typography>
@@ -74,7 +74,7 @@ const OwnerCard = () => {
       <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)}
         sx={{ bgcolor: "#fff", width: 230 }} />
       <Button size="small" variant="contained" disableElevation disabled={!name.trim()} onClick={save}>Save</Button>
-      {msg && <Typography variant="caption" sx={{ color: msg.startsWith("saved") ? "#15803d" : "#b91c1c" }}>{msg}</Typography>}
+      {msg && <Typography variant="caption" sx={{ color: msg.startsWith("saved") ? "#4d6b3f" : "#8f4a41" }}>{msg}</Typography>}
     </Box>
   );
 };
@@ -151,13 +151,13 @@ export default function DocsView() {
         </Box>
         {genMsg && GEN[docName] && (
           <Typography variant="caption" sx={{ display: "block", mb: 1,
-            color: genMsg.startsWith("✓") ? "#15803d" : "#b91c1c" }}>{genMsg}</Typography>
+            color: genMsg.startsWith("✓") ? "#4d6b3f" : "#8f4a41" }}>{genMsg}</Typography>
         )}
         {/* the receipts: exactly what the model read and what each line voted for - so the
             block in the doc is traceable back to your own mail, not a vibe */}
         {genEv?.length > 0 && GEN[docName] && (
-          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e3e6ec", borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ color: "#0e7490", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.5 }}>
+          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #dce1d8", borderRadius: 2 }}>
+            <Typography variant="caption" sx={{ color: "#1f6b64", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.5 }}>
               WHAT IT READ — AND WHAT EACH LINE DID
             </Typography>
             <Box sx={{ maxHeight: 260, overflowY: "auto" }}>

@@ -235,8 +235,8 @@ export default function SettingsView() {
             <Box key={ch} onClick={() => toggle(ch)}
               sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.9, py: 0.35, borderRadius: 99,
                 cursor: "pointer", fontSize: 11.5, fontWeight: on.has(ch) ? 700 : 500, userSelect: "none",
-                bgcolor: on.has(ch) ? "#eef0ff" : "#f1f3f6", color: on.has(ch) ? "#4f46e5" : DIM,
-                border: `1px solid ${on.has(ch) ? "#c9cff0" : BORDER}`, "&:hover": { borderColor: "#c9cff0" } }}>
+                bgcolor: on.has(ch) ? "#e4efe8" : "#f4f7f1", color: on.has(ch) ? "#2f6b4f" : DIM,
+                border: `1px solid ${on.has(ch) ? "#b6d0c2" : BORDER}`, "&:hover": { borderColor: "#b6d0c2" } }}>
               <ChannelIcon channel={ch} sx={{ fontSize: 12 }} />{ch}
             </Box>
           ))}
@@ -297,7 +297,7 @@ export default function SettingsView() {
                 onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
                 <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
                   {m.label}
-                  {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#c2c9d6" }} />}
+                  {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cdd5c8" }} />}
                 </Typography>
                 <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
               </Box>
@@ -318,7 +318,7 @@ export default function SettingsView() {
           <Typography variant="body2" sx={{ color: DIM }}>
             Deterministic gates the AI can never override.
             <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
-              sx={{ color: "#4f46e5", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              sx={{ color: "#2f6b4f", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
               How precedence works →
             </Typography>
           </Typography>
@@ -341,7 +341,7 @@ export default function SettingsView() {
         ))}
         {draft && (
           <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-            <Typography variant="body2" sx={{ color: "#4f46e5", fontWeight: 700 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
+            <Typography variant="body2" sx={{ color: "#2f6b4f", fontWeight: 700 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
             <TextField label="Name" value={draft.Name} onChange={(e) => setDraft({ ...draft, Name: e.target.value })} />
             <Box sx={{ display: "flex", gap: 1 }}>
               <Select fullWidth value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
@@ -377,7 +377,7 @@ export default function SettingsView() {
           <Typography variant="body2" sx={{ color: DIM }}>
             Standing notes learned from your verdicts, injected into every draft.
             <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
-              sx={{ color: "#4f46e5", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              sx={{ color: "#2f6b4f", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
               How memory works →
             </Typography>
           </Typography>
@@ -437,7 +437,7 @@ export default function SettingsView() {
         <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
         {verify && (
           <Box sx={{ mt: 2 }}>
-            {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#15803d" }}>
+            {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#4d6b3f" }}>
               ✓ Intact — {verify.rows} rows verified
             </Typography>}
             {/* two different findings, and calling both "BROKEN" cried wolf about a bug in
@@ -481,7 +481,7 @@ export default function SettingsView() {
           {results.map((r) => (
             <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
               "&:hover": { bgcolor: "#fafbfd" } }}>
-              <Typography sx={{ color: "#4f46e5", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
+              <Typography sx={{ color: "#2f6b4f", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb}</Typography>
             </Box>
           ))}
@@ -504,7 +504,7 @@ export default function SettingsView() {
 
 const PageCard = ({ k, onOpen }) => {
   const p = PAGES[k]; const Icon = p.icon;
-  return <LandingCard icon={<Icon sx={{ fontSize: 19, color: "#4f46e5" }} />} title={p.title} desc={p.desc} onOpen={onOpen} />;
+  return <LandingCard icon={<Icon sx={{ fontSize: 19, color: "#2f6b4f" }} />} title={p.title} desc={p.desc} onOpen={onOpen} />;
 };
 
 const HelpDialog = ({ help, onClose }) => (
@@ -531,10 +531,10 @@ const NotifyStatus = ({ connectors, settings }) => {
   const good = st.kind === "pinging", warn = st.kind === "none" || st.kind === "unnamed" || st.kind === "inactive";
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5, px: 1.25, py: 0.85,
-      bgcolor: good ? "#e8f6ee" : warn ? "#fef4e6" : "#f7f8fa",
-      border: `1px solid ${good ? "#cbe8d6" : warn ? "#f3ddb8" : BORDER}`, borderRadius: 1.5 }}>
+      bgcolor: good ? "#eaf1e4" : warn ? "#e4efe8" : "#f7f9f5",
+      border: `1px solid ${good ? "#cbe8d6" : warn ? "#b6d0c2" : BORDER}`, borderRadius: 1.5 }}>
       {st.targets[0] && <ChannelIcon channel={st.targets[0].Type} sx={{ fontSize: 15, mt: 0.15 }} />}
-      <Typography variant="caption" sx={{ color: good ? "#15803d" : warn ? "#b45309" : DIM, lineHeight: 1.45 }}>{st.text}</Typography>
+      <Typography variant="caption" sx={{ color: good ? "#4d6b3f" : warn ? "#2f6b4f" : DIM, lineHeight: 1.45 }}>{st.text}</Typography>
     </Box>
   );
 };

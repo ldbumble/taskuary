@@ -15,13 +15,13 @@ import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import api from "./api";
-import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
+import { BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, CHANNEL_COLORS, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
+import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
@@ -29,8 +29,8 @@ import { subjectOf, sourceOf } from "./feedText.js";
 // Two different dimensions, two controls: WHAT STATE it's in (everything vs needs me)
 // and WHICH CHANNEL it came from - they combine (e.g. "needs me" + "email").
 const VIEW_FILTERS = [
-  { key: "", label: "everything", c: { bg: "#eef0ff", fg: "#4f46e5", bd: "#c9cff0" } },
-  { key: "pending", label: "needs me", c: { bg: "#fef4e6", fg: "#b45309", bd: "#f3ddb8" } },
+  { key: "", label: "everything", c: { bg: "#e4efe8", fg: "#2f6b4f", bd: "#b6d0c2" } },
+  { key: "pending", label: "needs me", c: { bg: "#e4efe8", fg: "#2f6b4f", bd: "#b6d0c2" } },
 ];
 // The pill row is a fixed set of CATEGORIES - it must not grow as connections do (a
 // pill per mailbox, repo, channel and report would be unreadable by connection five).
@@ -38,13 +38,13 @@ const VIEW_FILTERS = [
 const CATEGORIES = [
   { key: "", label: "everything", channels: null },
   { key: "messages", label: "messages", channels: ["email", "teams", "slack", "telegram", "whatsapp", "discord"],
-    c: { bg: "#e8f1fa", fg: "#0F6CBD", bd: "#c4dcf2" } },
-  { key: "code", label: "code", channels: ["github", "gitlab"], c: { bg: "#eceef1", fg: "#1c2536", bd: "#d3d8e0" } },
+    c: { bg: "#e2efed", fg: "#0F6CBD", bd: "#bcd9d5" } },
+  { key: "code", label: "code", channels: ["github", "gitlab"], c: { bg: "#eef1eb", fg: "#1c2536", bd: "#d5dbd1" } },
   { key: "pm", label: "boards", channels: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion", "azdo"],
-    c: { bg: "#eef0ff", fg: "#4338ca", bd: "#c9cff0" } },
-  { key: "alerts", label: "alerts", channels: ["sentry", "pagerduty"], c: { bg: "#fdecec", fg: "#b91c1c", bd: "#f3c8c8" } },
-  { key: "cloud", label: "cloud", channels: ["aws", "azure"], c: { bg: "#fff4e6", fg: "#b45309", bd: "#f3ddb8" } },
-  { key: "reports", label: "reports", channels: ["report"], c: { bg: "#e6f7fb", fg: "#0e7490", bd: "#c2e7f0" } },
+    c: { bg: "#e4efe8", fg: "#245740", bd: "#b6d0c2" } },
+  { key: "alerts", label: "alerts", channels: ["sentry", "pagerduty"], c: { bg: "#f4eae8", fg: "#8f4a41", bd: "#e3cec9" } },
+  { key: "cloud", label: "cloud", channels: ["aws", "azure"], c: { bg: "#fff4e6", fg: "#2f6b4f", bd: "#b6d0c2" } },
+  { key: "reports", label: "reports", channels: ["report"], c: { bg: "#e2efed", fg: "#1f6b64", bd: "#bcd9d5" } },
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
   telegram: "Telegram chats", whatsapp: "WhatsApp chats", discord: "Discord channels",
@@ -86,6 +86,23 @@ const blurb = (r) => {
             : r.ReviewStatus ? `reviewed (${r.ReviewStatus})` : "an agent is working it";
   return `${routed} · ${state}`;
 };
+
+// The time gutter. 58px broke "12:40 PM" onto two lines, which is what made the column look
+// unkempt - the number and its meridiem have to live on one line.
+const GUTTER = 70;
+// "3 PM" for the hour separators - printed only when the hour changes.
+const hourOf = (t) => {
+  if (!t) return "";
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-US", { hour: "numeric", hour12: true });
+};
+// The rail dot says WHAT STATE it is in. Channel identity is already on the icon beside the
+// sender, and the old row said it three times over (stripe, dot, tinted tile).
+const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
+  : ["ignored", "filed"].includes(r.MsgStatus) ? "#cdd5c8"
+    : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#7d9e6c"
+      : r.TaskId ? ACCENT2 : "#a7b0a8");
 
 const PAGE = 100;
 
@@ -321,7 +338,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       <Box sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 99, px: 1.5, py: 0.6,
-          boxShadow: "0 8px 28px rgba(16,24,40,.10)" }}>
+          boxShadow: "0 8px 28px rgba(30,50,38,.10)" }}>
           <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
           <Box sx={{ width: "1px", height: 20, bgcolor: BORDER, flexShrink: 0 }} />
           {/* the label stays SHORT while it works: the "catching up on…" story lives in the
@@ -330,7 +347,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             title={syncing || bgSync ? syncWhat : undefined}
             startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
             sx={{ py: 0.4, fontSize: 11.5, whiteSpace: "nowrap", borderRadius: 99,
-              background: "linear-gradient(90deg, #4f46e5, #7c6cf0)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
+              background: "linear-gradient(90deg, #2f6b4f, #3f8a66)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
           <Box sx={{ width: "1px", height: 20, bgcolor: BORDER, flexShrink: 0 }} />
           <FilterPills options={CATEGORIES} value={cat} onChange={setCat} />
           {pickerChannels.length > 0 && (
@@ -340,10 +357,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
               renderValue={(v) => (!v ? "all sources"
                 : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
                   : String(v.split(":").slice(2).join(":")).split("@")[0])}
-              sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: pick ? "#e8f1fa" : "#fff", height: 26,
+              sx={{ fontSize: 11.5, fontWeight: 600, borderRadius: 99, bgcolor: pick ? "#e2efed" : "#fff", height: 26,
                 color: pick ? "#0F6CBD" : DIM, maxWidth: 210,
                 "& .MuiSelect-select": { py: 0.3, px: 1.25 },
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#c4dcf2" : BORDER } }}>
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#bcd9d5" : BORDER } }}>
               {/* 96 discovered buckets turned this into a page-long wall. It is a bounded,
                   searchable list now: type to narrow, and each channel shows a few with a
                   count for the rest rather than every object it has ever seen. */}
@@ -394,13 +411,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
             {stats.map((s) => (
               <Box key={s.label} onClick={() => s.f && setView(s.f)}
                 sx={{ display: "flex", alignItems: "baseline", gap: 0.6, cursor: s.f ? "pointer" : "default",
-                  ...(s.f ? { "&:hover .thubStatLbl": { color: "#4f46e5" } } : {}) }}>
+                  ...(s.f ? { "&:hover .thubStatLbl": { color: "#2f6b4f" } } : {}) }}>
                 <Typography sx={{ fontWeight: 800, fontSize: 12.5,
-                  color: s.hot && s.n ? "#b45309" : s.n ? "#4f46e5" : INK }}>{s.n}</Typography>
+                  color: s.hot && s.n ? "#2f6b4f" : s.n ? "#2f6b4f" : INK }}>{s.n}</Typography>
                 <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
               </Box>
             ))}
-            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? "#4f46e5" : FAINT }}>
+            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? "#2f6b4f" : FAINT }}>
               {syncing || bgSync ? `· ${syncWhat || "syncing…"}`
                 : lastSync
                   ? `· last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
@@ -416,7 +433,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <Alert severity="error" variant="outlined" onClose={() => setErr("")}
             action={<Button size="small" color="error" onClick={() => { setErr(""); setRows(null); load(rowsLen.current); }}
               sx={{ fontSize: 11.5, borderRadius: 99 }}>Retry</Button>}
-            sx={{ py: 0.1, borderRadius: 99, bgcolor: PANEL, alignItems: "center", boxShadow: "0 8px 28px rgba(16,24,40,.10)",
+            sx={{ py: 0.1, borderRadius: 99, bgcolor: PANEL, alignItems: "center", boxShadow: "0 8px 28px rgba(30,50,38,.10)",
               "& .MuiAlert-message": { fontSize: 12.5, py: 0.75 }, "& .MuiAlert-action": { pt: 0, alignItems: "center" } }}>
             {err}
           </Alert>
@@ -446,79 +463,97 @@ export default function FeedView({ onOpenTask, onChanged }) {
               <DayHeader label={fmtDay(day)} />
               <Box>
                 {items.map((r, i) => (
-                  <Box key={r.MessageId} sx={{ display: "flex", alignItems: "stretch", gap: 0,
-                    ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
-                    {/* time column */}
-                    <Typography variant="caption" sx={{ ...mono, color: FAINT, width: 58, textAlign: "right", pt: 2.1, flexShrink: 0 }}>
-                      {fmtTime12(r.SentAt)}
-                    </Typography>
-                    {/* rail + dot */}
-                    <Box sx={{ width: 16, flexShrink: 0, position: "relative" }}>
-                      <Box sx={{ position: "absolute", left: 7, top: 0, bottom: 0, width: "2px", bgcolor: BORDER }} />
-                      <Box sx={{ position: "absolute", left: 4, top: 20, width: 8, height: 8, borderRadius: "50%",
-                        bgcolor: r.ReviewStatus === "pending" ? "#f59e0b"
-                          : ["ignored", "filed"].includes(r.MsgStatus) ? "#cbd2dd"
-                            : CHANNEL_COLORS[r.Channel] || "#4f46e5",
-                        border: `2px solid ${PANEL}` }} />
-                    </Box>
-                    {/* blurb: uniform one-line card; hover grows it (message gist) and shows the
-                      go-arrow; click sends it to the review canvas on the right */}
-                    <Box onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
-                      sx={{ ...card, ...hoverable, flex: 1, minWidth: 0, py: 0, px: 1.25, my: 0.5, ml: 1, overflow: "hidden",
-                        position: "relative", pl: 1.75,
-                        "&::before": { content: '""', position: "absolute", left: 6, top: 9, bottom: 9, width: "3px",
-                          borderRadius: 99, bgcolor: CHANNEL_COLORS[r.Channel] || "#c9cff0" },
-                        transition: "box-shadow .18s, border-color .18s, transform .18s",
-                        ...(sel?.MessageId === r.MessageId ? { borderColor: "#4f46e5", boxShadow: "0 3px 12px rgba(79,70,229,.16)", bgcolor: "#fbfbff" } : {}),
-                        "&:hover": { borderColor: "#c9cff0", boxShadow: "0 3px 12px rgba(79,70,229,.12)", cursor: "pointer", transform: "translateY(-1px)" },
-                        "&:hover .thubDetail": { gridTemplateRows: "1fr" },
-                        "&:hover .thubDetailText": { opacity: 1, transform: "none" },
-                        "&:hover .thubGo": { opacity: 1, transform: "translateX(0)" } }}>
-                      <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", minWidth: 0, height: 40 }}>
-                        <Box sx={{ width: 24, height: 24, borderRadius: 1.25, flexShrink: 0, display: "flex",
-                          alignItems: "center", justifyContent: "center",
-                          bgcolor: `${CHANNEL_COLORS[r.Channel] || "#98a1b3"}18` }}>
-                          <ChannelIcon channel={r.Channel} />
+                  <React.Fragment key={r.MessageId}>
+                    {/* the hour only prints when it CHANGES, so the day gets a shape without a
+                        row of repeated timestamps doing the work */}
+                    {hourOf(r.SentAt) && hourOf(r.SentAt) !== hourOf(items[i - 1]?.SentAt) && (
+                      <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
+                        alignItems: "center", height: 26, mb: "2px" }}>
+                        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".9px", color: "#a7afa8",
+                          textAlign: "right", pr: "11px" }}>{hourOf(r.SentAt)}</Typography>
+                        <Box sx={{ position: "relative", height: 26 }}>
+                          <Box sx={{ position: "absolute", left: "6px", top: 0, bottom: 0, width: "1px", bgcolor: BORDER }} />
                         </Box>
-                        <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, maxWidth: { sm: 190 }, minWidth: 0, flexShrink: { xs: 1, sm: 0 } }}>
-                          {r.FromName || r.FromEmail || "unknown"}
-                        </Typography>
-                        {sourceOf(r) && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 150, flexShrink: 0 }}>· {sourceOf(r)}</Typography>}
-                        <Typography variant="body2" noWrap sx={{ color: DIM, flex: 1, minWidth: 0, display: { xs: "none", sm: "block" } }}>{subjectOf(r) ? `— ${subjectOf(r)}` : ""}</Typography>
-                        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexShrink: 0 }}>
-                          {r.Attachments > 0 && (
-                            <Typography variant="caption" title={`${r.Attachments} attached`}
-                              sx={{ color: FAINT, display: "flex", alignItems: "center", fontSize: 10.5 }}>
-                              <AttachFileIcon sx={{ fontSize: 13 }} />{r.Attachments > 1 ? r.Attachments : ""}
-                            </Typography>
-                          )}
-                          <RefChip taskId={r.TaskId} onClick={(e) => { e.stopPropagation(); onOpenTask(r.TaskId); }} />
-                          {/* which way the work went. Without it "sent to Dana" and "received
-                              from Dana" are the same row, and the funnel only ever looked one way. */}
-                          {r.Direction === "out" && (
-                            <Chip size="small" label="out" title="Taskuary sent this"
-                              sx={{ height: 19, fontSize: 10.5, fontWeight: 700, bgcolor: "#eef0ff", color: "#4f46e5" }} />
-                          )}
-                          <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
-                          <ChevronRightIcon className="thubGo" sx={{ fontSize: 18, color: "#4f46e5",
-                            opacity: sel?.MessageId === r.MessageId ? 1 : 0,
-                            transform: sel?.MessageId === r.MessageId ? "translateX(0)" : "translateX(-6px)",
-                            transition: "opacity .18s, transform .18s" }} />
-                        </Box>
+                        <Box sx={{ height: "1px", bgcolor: "#e4e9e0", ml: "12px" }} />
                       </Box>
-                      <Box className="thubDetail" sx={{ display: "grid", gridTemplateRows: "0fr", transition: "grid-template-rows .22s ease" }}>
-                        <Box sx={{ overflow: "hidden" }}>
-                          <Box className="thubDetailText" sx={{ pb: 1, ml: "23px",
-                            opacity: 0, transform: "translateX(18px)", transition: "opacity .22s ease .05s, transform .22s ease .05s" }}>
-                            {r.Preview && <Typography variant="caption" noWrap sx={{ display: "block", color: INK }}>
-                            “{r.Preview}”
-                            </Typography>}
-                            <Typography variant="caption" noWrap sx={{ display: "block", color: DIM }}>{blurb(r)}</Typography>
+                    )}
+                    <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
+                      alignItems: "stretch", mb: "6px",
+                      ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
+                      {/* time sits OUTSIDE the card, in its own gutter - wide enough that
+                          "12:40 PM" can never wrap onto a second line */}
+                      <Typography sx={{ ...mono, fontSize: 10.5, color: "#98a09a", textAlign: "right",
+                        pt: "13px", pr: "11px", whiteSpace: "nowrap", letterSpacing: "-.2px" }}>
+                        {fmtTime12(r.SentAt)}
+                      </Typography>
+                      {/* rail + dot: the dot carries STATE, not channel - the icon already says
+                          where it came from, and three encodings of one fact read as noise */}
+                      <Box sx={{ position: "relative" }}>
+                        <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
+                        <Box sx={{ position: "absolute", left: "2.5px", top: "15px", width: 8, height: 8, borderRadius: "50%",
+                          bgcolor: dotOf(r), boxShadow: `0 0 0 3.5px ${BG}` }} />
+                      </Box>
+                      {/* one DEFINED object per message: who and what on top, what the hub did
+                          underneath. Hover adds the message gist; click opens the panel. */}
+                      <Box onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
+                        sx={{ bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#fafbf8" : PANEL,
+                          border: `1px solid ${BORDER}`, borderRadius: "8px", px: "12px", pt: "9px", pb: "10px",
+                          minWidth: 0, overflow: "hidden",
+                          transition: "box-shadow .18s, border-color .18s",
+                          ...(sel?.MessageId === r.MessageId
+                            ? { borderColor: "#b6d0c2", boxShadow: "inset 2px 0 0 #2f6b4f, 0 1px 3px rgba(30,50,38,.07)" } : {}),
+                          "&:hover": { borderColor: "#b6d0c2", boxShadow: "0 2px 8px rgba(47,107,79,.10)", cursor: "pointer" },
+                          "&:hover .thubDetail": { gridTemplateRows: "1fr" },
+                          "&:hover .thubDetailText": { opacity: 1 },
+                          "&:hover .thubGo": { opacity: 1, transform: "translateX(0)" } }}>
+                        <Box sx={{ display: "flex", gap: 0.85, alignItems: "baseline", minWidth: 0 }}>
+                          <Box sx={{ alignSelf: "center", display: "flex", flexShrink: 0, opacity: .8 }}>
+                            <ChannelIcon channel={r.Channel} />
+                          </Box>
+                          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: ["ignored", "filed"].includes(r.MsgStatus) ? DIM : INK,
+                            fontSize: 13, letterSpacing: "-.1px", maxWidth: { sm: 200 }, minWidth: 0, flexShrink: { xs: 1, sm: 0 } }}>
+                            {r.FromName || r.FromEmail || "unknown"}
+                          </Typography>
+                          {sourceOf(r) && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 140, flexShrink: 0 }}>· {sourceOf(r)}</Typography>}
+                          <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 13, flex: 1, minWidth: 0,
+                            display: { xs: "none", sm: "block" } }}>{subjectOf(r) || ""}</Typography>
+                          <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexShrink: 0 }}>
+                            {r.Attachments > 0 && (
+                              <Typography variant="caption" title={`${r.Attachments} attached`}
+                                sx={{ color: FAINT, display: "flex", alignItems: "center", fontSize: 10.5 }}>
+                                <AttachFileIcon sx={{ fontSize: 13 }} />{r.Attachments > 1 ? r.Attachments : ""}
+                              </Typography>
+                            )}
+                            <RefChip taskId={r.TaskId} onClick={(e) => { e.stopPropagation(); onOpenTask(r.TaskId); }} />
+                            {/* which way the work went. Without it "sent to Dana" and "received
+                                from Dana" are the same row, and the funnel only ever looked one way. */}
+                            {r.Direction === "out" && (
+                              <Chip size="small" label="out" title="Taskuary sent this"
+                                sx={{ height: 19, fontSize: 10.5, fontWeight: 700, bgcolor: "#e4efe8", color: "#2f6b4f" }} />
+                            )}
+                            <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
+                            <ChevronRightIcon className="thubGo" sx={{ fontSize: 16, color: "#2f6b4f",
+                              opacity: sel?.MessageId === r.MessageId ? 1 : 0,
+                              transform: sel?.MessageId === r.MessageId ? "translateX(0)" : "translateX(-6px)",
+                              transition: "opacity .18s, transform .18s" }} />
                           </Box>
                         </Box>
+                        {/* the blurb no longer hides behind hover: it is the whole point */}
+                        <Typography noWrap sx={{ fontSize: 11.5, lineHeight: 1.4, pt: "4px",
+                          color: needsYou(r) ? "#2f6b4f" : "#8b938d" }}>{blurb(r)}</Typography>
+                        {r.Preview && (
+                          <Box className="thubDetail" sx={{ display: "grid", gridTemplateRows: "0fr", transition: "grid-template-rows .22s ease" }}>
+                            <Box sx={{ overflow: "hidden" }}>
+                              <Typography className="thubDetailText" variant="caption" noWrap
+                                sx={{ display: "block", color: INK, pt: "5px", opacity: 0, transition: "opacity .22s ease .05s" }}>
+                                “{r.Preview}”
+                              </Typography>
+                            </Box>
+                          </Box>
+                        )}
                       </Box>
                     </Box>
-                  </Box>
+                  </React.Fragment>
                 ))}
               </Box>
             </Box>
@@ -563,16 +598,16 @@ const fmtDay = (d) => {
 // oldest first, with consecutive duplicates collapsed into one row with a ×N count.
 const historyOf = (sel, detail) => {
   const ev = [];
-  if (detail?.task) ev.push({ at: detail.task.CreatedAt, label: `Task ${detail.ref} opened`, sub: detail.task.Kind, c: "#4f46e5" });
-  (detail?.routes || []).forEach((r) => ev.push({ at: detail.task?.CreatedAt, c: "#7e22ce",
+  if (detail?.task) ev.push({ at: detail.task.CreatedAt, label: `Task ${detail.ref} opened`, sub: detail.task.Kind, c: "#2f6b4f" });
+  (detail?.routes || []).forEach((r) => ev.push({ at: detail.task?.CreatedAt, c: "#1f6b64",
     label: r.Decision === "attach" ? "Routed — attached to this thread"
       : r.Decision === "create" ? "Routed — new task created" : `Routed — ${r.Decision}` }));
   (detail?.runs || []).forEach((r) => ev.push({ at: r.StartedAt, label: `${r.AgentName} run`, sub: r.Status,
-    c: r.Status === "error" ? "#b91c1c" : "#0e7490" }));
+    c: r.Status === "error" ? "#8f4a41" : "#1f6b64" }));
   (detail?.comments || []).filter((c) => c.ActorType === "human").forEach((c) =>
-    ev.push({ at: c.CreatedAt, label: c.Actor, sub: cleanText(c.Body).slice(0, 70), c: "#697386" }));
-  if (sel.ReviewStatus && sel.ReviewStatus !== "pending") ev.push({ at: null, label: "You decided", sub: sel.ReviewStatus.replace("_", " "), c: "#15803d" });
-  if (["done", "dropped"].includes(detail?.task?.Status)) ev.push({ at: detail.task.UpdatedAt, label: `Task ${detail.task.Status}`, c: "#15803d" });
+    ev.push({ at: c.CreatedAt, label: c.Actor, sub: cleanText(c.Body).slice(0, 70), c: "#5e685f" }));
+  if (sel.ReviewStatus && sel.ReviewStatus !== "pending") ev.push({ at: null, label: "You decided", sub: sel.ReviewStatus.replace("_", " "), c: "#4d6b3f" });
+  if (["done", "dropped"].includes(detail?.task?.Status)) ev.push({ at: detail.task.UpdatedAt, label: `Task ${detail.task.Status}`, c: "#4d6b3f" });
   ev.sort((a, b) => String(a.at || "9").localeCompare(String(b.at || "9")));
   const out = [];
   for (const e of ev) {
@@ -652,7 +687,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
       <Box sx={{ ...frameInner, display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 140px)" }}>
         {/* header */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
-          <ChevronRightIcon sx={{ fontSize: 17, color: "#4f46e5" }} />
+          <ChevronRightIcon sx={{ fontSize: 17, color: "#2f6b4f" }} />
           <ChannelIcon channel={sel.Channel} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" sx={{ color: INK, fontWeight: 700, fontSize: 13.5, lineHeight: 1.25, textAlign: "left" }} noWrap>
@@ -684,7 +719,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {rep && (
                 <>
                   <PanelLabel>What the coder did</PanelLabel>
-                  <Box sx={{ bgcolor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
+                  <Box sx={{ bgcolor: "#e2efed", border: "1px solid #bcd9d5", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
                     <CoderReport body={rep.Body} />
                   </Box>
                 </>
@@ -715,7 +750,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: h.c, flexShrink: 0 }} />
                         <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flexShrink: 0 }}>{h.label}</Typography>
                         {h.sub ? <Typography variant="caption" sx={{ color: DIM, flex: 1, minWidth: 0 }} noWrap>{h.sub}</Typography> : <Box sx={{ flex: 1 }} />}
-                        {h.n > 1 && <Chip size="small" label={`×${h.n}`} sx={{ height: 16, fontSize: 9.5, bgcolor: "#eef0ff", color: "#4f46e5" }} />}
+                        {h.n > 1 && <Chip size="small" label={`×${h.n}`} sx={{ height: 16, fontSize: 9.5, bgcolor: "#e4efe8", color: "#2f6b4f" }} />}
                         {h.at && <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>{fmtDateTime(h.at)}</Typography>}
                       </Box>
                     ))}
@@ -743,8 +778,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 </>
               )}
               {!pending && !opened && sel.Channel !== "report" && (
-                <ChoiceRow tint="#eef0ff" busy={opening} onClick={openReply}
-                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                <ChoiceRow tint="#e4efe8" busy={opening} onClick={openReply}
+                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#2f6b4f" }} />}
                   label="Reply to this"
                   hint="the AI drafts it from the thread (and the coder's report, if one ran) — approving sends" />
               )}
@@ -762,8 +797,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             <PanelLabel>What should happen with this?</PanelLabel>
             <ChoiceList>
               {onIt ? (
-                <ChoiceRow first tint="#f5f3ff" onClick={() => onOpenTask(sel.TaskId)}
-                  icon={<SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#b45309" : "#7e22ce" }} />}
+                <ChoiceRow first tint="#e2efed" onClick={() => onOpenTask(sel.TaskId)}
+                  icon={<SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#2f6b4f" : "#1f6b64" }} />}
                   label={onIt.waiting ? `${onIt.agent} is waiting for your answer` : `${onIt.agent} is working this now`}
                   hint={onIt.waiting ? "open the task and answer it in the session" : "open the task to watch it live"} />
               ) : !codeless ? (
@@ -772,21 +807,21 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {/* the agent asked, the person answered on the thread - one click puts the
                   answer in front of the agent (Settings → answer_to_agent; auto skips the click) */}
               {onIt && sel.MessageId && (
-                <ChoiceRow tint="#f5f3ff" busy={handed} onClick={handToAgent}
-                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#7e22ce" }} />}
+                <ChoiceRow tint="#e2efed" busy={handed} onClick={handToAgent}
+                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#1f6b64" }} />}
                   label={handed ? "Answer typed into the session" : `Type this into ${onIt.agent}'s session`}
                   hint={handed ? "the agent has it — watch it continue on the task" : "their message is typed into the live session, as if you relayed it"} />
               )}
               {sel.TaskId ? (
-                <ChoiceRow tint="#eef0ff" onClick={() => onOpenTask(sel.TaskId)}
-                  icon={<OpenInFullIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                <ChoiceRow tint="#e4efe8" onClick={() => onOpenTask(sel.TaskId)}
+                  icon={<OpenInFullIcon sx={{ fontSize: 14, color: "#2f6b4f" }} />}
                   label={`Open task ${ref(sel.TaskId)}`} hint="the whole story: session, report, history" />
               ) : (
                 <MineToDo messageId={sel.MessageId} onMade={() => onRefresh?.()} />
               )}
               {sel.TaskId && (
-                <ChoiceRow tint="#eef0ff" onClick={() => setHandoff((h) => !h)}
-                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+                <ChoiceRow tint="#e4efe8" onClick={() => setHandoff((h) => !h)}
+                  icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#2f6b4f" }} />}
                   label="Hand it to a person" hint="not ours to do — the AI writes the forward, you send it" />
               )}
               {/* under the row that OPENED it. It used to render after the whole list, past the
@@ -800,8 +835,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               )}
               <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               {sel.TaskId && (
-                <ChoiceRow tint="#e6f7fb" onClick={() => setReshape(true)}
-                  icon={<CallSplitIcon sx={{ fontSize: 14, color: "#0e7490" }} />}
+                <ChoiceRow tint="#e2efed" onClick={() => setReshape(true)}
+                  icon={<CallSplitIcon sx={{ fontSize: 14, color: "#1f6b64" }} />}
                   label="Two jobs in here, or a duplicate?"
                   hint={`break ${ref(sel.TaskId)} in two, or fold it into the task it repeats`} />
               )}
@@ -815,11 +850,11 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   only way off the timeline was "Not our task", which writes a verdict against
                   the sender - or against EVERY sender on a channel with no address, like Teams.
                   One wrong click there teaches the funnel to stop listening to a colleague. */}
-              <ChoiceRow tint="#f4f5f7" onClick={async () => {
+              <ChoiceRow tint="#f4f7f1" onClick={async () => {
                   await api.post(`/api/messages/${sel.MessageId}/file`);
                   onSkipped?.();
                 }}
-                icon={<CloseIcon sx={{ fontSize: 14, color: "#697386" }} />}
+                icon={<CloseIcon sx={{ fontSize: 14, color: "#5e685f" }} />}
                 label={sel.TaskId ? "Not a task — just conversation" : "Nothing to do here"}
                 hint={sel.TaskId ? `delete ${ref(sel.TaskId)}, learn nothing; the messages stay on the timeline`
                                  : "file it and move on — nothing is learned, their next message arrives as usual"} />
@@ -827,13 +862,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   harmless one on purpose: this is the durable verdict, not the tidy-up. */}
               <NotMine row messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
               {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
-                <ChoiceRow tint="#e8f6ee" busy
-                  icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#15803d" }} />}
+                <ChoiceRow tint="#eaf1e4" busy
+                  icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#4d6b3f" }} />}
                   label="Sender skipped"
                   hint={skipped ? `${skipped} past message${skipped === 1 ? "" : "s"} hidden too` : "they will not appear again"} />
               ) : (
-                <ChoiceRow tint="#eef0f3" onClick={skipSender}
-                  icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#8a94a6" }} />}
+                <ChoiceRow tint="#eef1eb" onClick={skipSender}
+                  icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#8b938d" }} />}
                   label="Skip this sender" hint={`hide ${sel.FromEmail} and their past mail — undo in Settings`} />
               ))}
             </ChoiceList>
@@ -841,7 +876,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             <Drawer anchor="right" open={!!reshape && !!sel.TaskId} onClose={() => setReshape(false)}
               PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-                <CallSplitIcon sx={{ fontSize: 18, color: "#0e7490" }} />
+                <CallSplitIcon sx={{ fontSize: 18, color: "#1f6b64" }} />
                 <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
                 <IconButton size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
               </Box>
@@ -874,13 +909,13 @@ const DayHeader = ({ label }) => {
   return (
     <>
       <Box ref={ref} sx={{ height: "1px" }} />
-      <Box sx={{ position: "sticky", top: 0, zIndex: 3, py: 0.75, ml: "56px" }}>
+      <Box sx={{ position: "sticky", top: 0, zIndex: 3, py: 0.75, ml: `${GUTTER}px` }}>
         <Box sx={{ display: "inline-block", px: stuck ? 1.5 : 0, py: stuck ? 0.4 : 0,
           bgcolor: stuck ? PANEL : BG, border: `1px solid ${stuck ? BORDER : "transparent"}`,
-          borderRadius: 99, boxShadow: stuck ? "0 4px 14px rgba(16,24,40,.12)" : "none",
+          borderRadius: 99, boxShadow: stuck ? "0 4px 14px rgba(30,50,38,.12)" : "none",
           transform: stuck ? "scale(1.08)" : "scale(1)", transformOrigin: "left center",
           transition: "all .25s cubic-bezier(.34,1.56,.64,1)" }}>
-          <Typography variant="caption" sx={{ ...mono, color: stuck ? "#4f46e5" : INK, fontWeight: 800,
+          <Typography variant="caption" sx={{ ...mono, color: stuck ? "#2f6b4f" : INK, fontWeight: 800,
             fontSize: 11.5, letterSpacing: 0.5 }}>
             {label}
           </Typography>
@@ -936,9 +971,9 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
             return (
               <Box key={m.MessageId} onClick={() => setMid(m.MessageId)}
                 sx={{ px: 1.1, py: 0.35, borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                  border: `1px solid ${on ? "#c9cff0" : BORDER}`, color: on ? "#4f46e5" : you ? FAINT : DIM,
-                  bgcolor: on ? "#eef0ff" : "#fff", whiteSpace: "nowrap", transition: "all .15s",
-                  "&:hover": { borderColor: "#c9cff0", color: "#4f46e5" } }}>
+                  border: `1px solid ${on ? "#b6d0c2" : BORDER}`, color: on ? "#2f6b4f" : you ? FAINT : DIM,
+                  bgcolor: on ? "#e4efe8" : "#fff", whiteSpace: "nowrap", transition: "all .15s",
+                  "&:hover": { borderColor: "#b6d0c2", color: "#2f6b4f" } }}>
                 {you ? "↩ you" : (m.FromName || m.FromEmail || "?").split(" ")[0]} · {pt(m.SentAt)}
               </Box>
             );
@@ -946,13 +981,13 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
         </Box>
       )}
       <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25,
-        borderLeft: `3px solid ${you ? "#c9cff0" : "#0F6CBD"}` }}>
+        borderLeft: `3px solid ${you ? "#b6d0c2" : "#0F6CBD"}` }}>
         {/* who / which way / when - so "new inbound" is never confused with "your reply" */}
         {cur && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6, flexWrap: "wrap" }}>
             <Chip size="small" label={you ? "↩ your reply" : "inbound"}
               sx={{ height: 17, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3,
-                bgcolor: you ? "#eef0ff" : "#e8f1fa", color: you ? "#4f46e5" : "#0F6CBD" }} />
+                bgcolor: you ? "#e4efe8" : "#e2efed", color: you ? "#2f6b4f" : "#0F6CBD" }} />
             <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
               {you ? "you" : cur.FromName || cur.FromEmail || "unknown"}
             </Typography>
@@ -967,7 +1002,7 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
         {raw && (
           <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
             <Typography variant="caption" onClick={() => setShowRaw(!showRaw)}
-              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#4f46e5" } }}>
+              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#2f6b4f" } }}>
               {showRaw ? "hide" : "show"} raw data — {raw.length.toLocaleString()} chars {showRaw ? "↑" : "↓"}
             </Typography>
             {showRaw && (
@@ -982,7 +1017,7 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
         {latest && quoted && (
           <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
             <Typography variant="caption" onClick={() => setShowQuoted(!showQuoted)}
-              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#4f46e5" } }}>
+              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#2f6b4f" } }}>
               {showQuoted ? "hide" : "show"} quoted thread below it — {quoted.length.toLocaleString()} chars {showQuoted ? "↑" : "↓"}
             </Typography>
             {showQuoted && (
@@ -1028,8 +1063,8 @@ const MineToDo = ({ messageId, onMade }) => {
     setBusy(false);
   };
   return (
-    <ChoiceRow tint="#eef0ff" busy={busy || !!made} onClick={go}
-      icon={<AssignmentIndIcon sx={{ fontSize: 14, color: "#4f46e5" }} />}
+    <ChoiceRow tint="#e4efe8" busy={busy || !!made} onClick={go}
+      icon={<AssignmentIndIcon sx={{ fontSize: 14, color: "#2f6b4f" }} />}
       label={made ? `${made} — on your list` : "Mine to do"}
       hint={err || (made ? "a task with your name on it, no agent" : "a task on your own list — nobody is dispatched")} />
   );
@@ -1049,8 +1084,8 @@ const SplitTask = ({ row, onSplit }) => {
     setBusy(false);
   };
   return (
-    <ChoiceRow tint="#e6f7fb" busy={busy || !!done} onClick={go}
-      icon={<CallSplitIcon sx={{ fontSize: 14, color: "#0e7490" }} />}
+    <ChoiceRow tint="#e2efed" busy={busy || !!done} onClick={go}
+      icon={<CallSplitIcon sx={{ fontSize: 14, color: "#1f6b64" }} />}
       label={done ? `Now its own task ${ref(done)}` : "Give this message its own task"}
       hint={err || (done ? "send it to an agent above" : `a separate ask from the rest of ${ref(row.TaskId)}`)} />
   );
@@ -1074,7 +1109,7 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
           <Button size="small" variant="contained" disabled={!(editText ?? draft ?? "").trim()}
             onClick={() => decide(reviewId, "approve", editText ?? draft)}
             title="Sends the text above on the channel it arrived on">Approve &amp; send</Button>
-          <Button size="small" sx={{ color: "#8a94a6" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
+          <Button size="small" sx={{ color: "#8b938d" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
         </>
       )}
       <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>

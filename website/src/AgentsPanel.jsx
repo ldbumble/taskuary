@@ -129,7 +129,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2.5, mb: 3 }}>
         {PRESETS.map((pr) => (
           <LandingCard key={pr.name} title={pr.label} desc={pr.desc}
-            icon={<SmartToyIcon sx={{ fontSize: 19, color: "#4f46e5" }} />} onOpen={() => usePreset(pr)} />
+            icon={<SmartToyIcon sx={{ fontSize: 19, color: "#2f6b4f" }} />} onOpen={() => usePreset(pr)} />
         ))}
       </Box>
       {brains.length > 0 && (
@@ -148,8 +148,8 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
                   onClick={() => b.ready && pickTriage(b.value)}
                   title={b.ready ? "" : "not ready — save a key / finish setup on its connector first"}
                   sx={{ height: 24, fontSize: 11, fontWeight: on ? 700 : 400, opacity: b.ready ? 1 : 0.45,
-                    bgcolor: on ? "#4f46e5" : "#fff", color: on ? "#fff" : DIM,
-                    border: `1px solid ${on ? "#4f46e5" : BORDER}` }} />
+                    bgcolor: on ? "#2f6b4f" : "#fff", color: on ? "#fff" : DIM,
+                    border: `1px solid ${on ? "#2f6b4f" : BORDER}` }} />
               );
             })}
           </Box>
@@ -160,12 +160,12 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
         <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, px: 1,
           borderBottom: `1px solid ${BORDER}`, borderRadius: 1.5,
           bgcolor: defAgent === name ? "#f6f7ff" : "transparent",
-          borderLeft: `3px solid ${defAgent === name ? "#4f46e5" : "transparent"}` }}>
-          <Chip size="small" label={name} sx={{ bgcolor: "#eef0ff", color: "#4f46e5", height: 21, fontSize: 10.5, fontWeight: 700 }} />
+          borderLeft: `3px solid ${defAgent === name ? "#2f6b4f" : "transparent"}` }}>
+          <Chip size="small" label={name} sx={{ bgcolor: "#e4efe8", color: "#2f6b4f", height: 21, fontSize: 10.5, fontWeight: 700 }} />
           {defAgent === name ? (
             <Chip size="small" icon={<StarIcon sx={{ fontSize: 12 }} />} label="default"
               title="Works every task nothing names an agent for — Start session, Send to coding agent, auto-dispatch"
-              sx={{ bgcolor: "#4f46e5", color: "#fff", height: 20, fontSize: 10, fontWeight: 700,
+              sx={{ bgcolor: "#2f6b4f", color: "#fff", height: 20, fontSize: 10, fontWeight: 700,
                 "& .MuiChip-icon": { color: "#fff" } }} />
           ) : (
             <Button size="small" sx={{ fontSize: 10, minWidth: 0, px: 0.75, color: FAINT }}
@@ -177,7 +177,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
           </Typography>
           {a.cmd === "claude" && !(a.args || []).includes("--dangerously-skip-permissions") && (
             <Chip size="small" label="will hang headless — add --dangerously-skip-permissions"
-              sx={{ bgcolor: "#fef4e6", color: "#b45309", height: 20, fontSize: 10 }} />
+              sx={{ bgcolor: "#e4efe8", color: "#2f6b4f", height: 20, fontSize: 10 }} />
           )}
           <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
             timeout {a.timeout || 1200}s{a.resume_args ? " · resumable" : ""}{a.light_model ? ` · light: ${a.light_model}` : ""}
@@ -191,13 +191,13 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
         const name = Object.keys(agents)[i];
         const t = tests[name];
         return t && !t.busy ? [row,
-          <Typography key={name + "t"} variant="body2" sx={{ ml: 1, mb: 1, fontWeight: 600, color: t.ok ? "#15803d" : "#b91c1c" }}>
+          <Typography key={name + "t"} variant="body2" sx={{ ml: 1, mb: 1, fontWeight: 600, color: t.ok ? "#4d6b3f" : "#8f4a41" }}>
             {t.ok ? `✓ ${t.result || "responded"}${t.resumable ? " · resumable session detected" : ""}` : `✗ ${t.error}`}
           </Typography>] : [row];
       })}
       {draft && (
         <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-          <Typography variant="body2" sx={{ color: "#4f46e5", fontWeight: 700 }}>{agents[draft.name] ? `Edit agent · ${draft.name}` : "New agent"}</Typography>
+          <Typography variant="body2" sx={{ color: "#2f6b4f", fontWeight: 700 }}>{agents[draft.name] ? `Edit agent · ${draft.name}` : "New agent"}</Typography>
           <Box sx={{ display: "flex", gap: 1 }}>
             <TextField label="name" value={draft.name} disabled={!!agents[draft.name]} sx={{ width: 180 }}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />

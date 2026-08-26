@@ -197,7 +197,7 @@ export default function ReportsView() {
       <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
         A report is a pipeline: source → query → optional AI summary → your Timeline. Connections live on the Connectors tab.
       </Typography>
-      {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#15803d" : "#b91c1c" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+      {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#4d6b3f" : "#8f4a41" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       {!sources.length && <Empty>No reports yet — "New report" walks you through source, query, AI summary and schedule.</Empty>}
       {sources.map((s) => {
         const c = parse(s.ConfigJson);
@@ -214,9 +214,9 @@ export default function ReportsView() {
               </Typography>
             </Box>
             {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
-              bgcolor: "#fef4e6", border: "1px solid #f3ddb8" }}>
-              <AutoAwesomeIcon sx={{ fontSize: 12, color: "#b45309" }} />
-              <Typography variant="caption" sx={{ color: "#b45309", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
+              bgcolor: "#e4efe8", border: "1px solid #b6d0c2" }}>
+              <AutoAwesomeIcon sx={{ fontSize: 12, color: "#2f6b4f" }} />
+              <Typography variant="caption" sx={{ color: "#2f6b4f", fontWeight: 700, fontSize: 10 }}>AI summary</Typography>
             </Box>}
             <Button size="small" disabled={running === s.SourceId}
               startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
@@ -352,7 +352,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Box onClick={() => setSrcs((cur) => [...cur, { type: "mssql" }])}
                 sx={{ ...card, width: 300, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
                   justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed",
-                  color: DIM, "&:hover": { borderColor: "#c9cff0", color: "#4f46e5" } }}>
+                  color: DIM, "&:hover": { borderColor: "#b6d0c2", color: "#2f6b4f" } }}>
                 <AddIcon sx={{ fontSize: 20 }} />
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>add a source</Typography>
               </Box>
@@ -363,10 +363,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Box sx={{ width: 0, height: 0, borderLeft: "12px solid transparent", borderRight: "12px solid transparent",
                 borderTop: `14px solid ${BORDER}` }} />
             </Box>
-            <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#f3ddb8" }}>
+            <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#b6d0c2" }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
-                <AutoAwesomeIcon sx={{ fontSize: 15, color: "#b45309" }} />
-                <Typography variant="caption" sx={{ color: "#b45309", fontWeight: 700 }}>
+                <AutoAwesomeIcon sx={{ fontSize: 15, color: "#2f6b4f" }} />
+                <Typography variant="caption" sx={{ color: "#2f6b4f", fontWeight: 700 }}>
                   ONE PROMPT OVER ALL {srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}
                 </Typography>
               </Box>
@@ -406,7 +406,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </Box>
               )}
               {cfg.ai_prompt && !aiActive && !cfg.ai_brain && (
-                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#b45309" }}>
+                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#2f6b4f" }}>
                   ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connectors → AI).
                 </Typography>
               )}
@@ -455,7 +455,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       <MenuItem value="review" sx={{ fontSize: 12 }}>wait for me to approve it (Review)</MenuItem>
                       <MenuItem value="auto" sx={{ fontSize: 12 }}>send it without asking</MenuItem>
                     </Select>
-                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#b45309" : FAINT, flex: 1, minWidth: 200 }}>
+                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#2f6b4f" : FAINT, flex: 1, minWidth: 200 }}>
                       {cfg.deliver.gate === "auto"
                         ? "This report will send on its schedule with nobody reading it first. Everything else in Taskuary waits for you — this is the one place you can turn that off, deliberately."
                         : "Each run lands in Review as a draft. Approving it sends; editing first is fine."}
@@ -480,10 +480,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 startIcon={busy === "preview" ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>Preview pipeline</Button>
               <Button onClick={() => setStep(2)}>Continue</Button>
             </Box>
-            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#15803d" : "#b91c1c" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
+            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#4d6b3f" : "#8f4a41" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
             {preview && (preview.ok ? (
               <Box sx={{ mt: 1 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: "#15803d" }}>✓ {preview.headline}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: "#4d6b3f" }}>✓ {preview.headline}</Typography>
                 <Box component="pre" sx={{ ...mono, whiteSpace: "pre-wrap", bgcolor: PANEL2, border: `1px solid ${BORDER}`,
                   borderRadius: 1.5, p: 1.25, fontSize: 11, maxHeight: 260, overflow: "auto", color: INK }}>{preview.summary}</Box>
                 {/* the chart is half of what a scheduled run hands back, so the dry run shows it too -
@@ -498,7 +498,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   </Box>
                 )}
               </Box>
-            ) : <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#b91c1c" }}>✗ {preview.error}</Typography>)}
+            ) : <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#8f4a41" }}>✗ {preview.error}</Typography>)}
           </StepContent>
         </Step>
         <Step completed={!!cur}>
@@ -527,13 +527,13 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               Pick one. Everything blank = once a day, whenever the app is open.
             </Typography>
             {!cfg.title && (
-              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#b45309", fontWeight: 600 }}>
+              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#2f6b4f", fontWeight: 600 }}>
                 No title yet — <Box component="span" sx={{ textDecoration: "underline", cursor: "pointer" }}
                   onClick={() => setStep(0)}>add one in step 1</Box> and this button wakes up.
               </Typography>
             )}
             {saveErr && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{saveErr}</Alert>}
-            {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#15803d" }}>✓ {savedMsg}</Typography>}
+            {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#4d6b3f" }}>✓ {savedMsg}</Typography>}
             {cur && (
               <Box sx={{ display: "flex", gap: 1, mt: 1.5, alignItems: "center" }}>
                 <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
@@ -684,12 +684,12 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       sx={{ ...card, width: 300, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
         opacity: dragging ? 0.45 : 1, cursor: "grab", "&:active": { cursor: "grabbing" } }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-        <DragIndicatorIcon sx={{ fontSize: 16, color: "#c2c9d6" }} />
+        <DragIndicatorIcon sx={{ fontSize: 16, color: "#cdd5c8" }} />
         <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1 }}>source {index + 1} of {count}</Typography>
         <ContentCopyIcon onClick={onCopy} titleAccess="Duplicate — same connection, different query"
-          sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#4f46e5" } }} />
+          sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#2f6b4f" } }} />
         {count > 1 && <CloseIcon onClick={onRemove} titleAccess="Remove this source"
-          sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#b91c1c" } }} />}
+          sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#8f4a41" } }} />}
       </Box>
       <Select size="small" value={src.type || "mssql"} onChange={(e) => onRetype(e.target.value)}
         sx={{ fontSize: 12.5, bgcolor: "#fff" }}>
@@ -708,7 +708,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         })()}
       </Select>
       {needsConn && (
-        <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#15803d" : "#b45309" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#4d6b3f" : "#2f6b4f" }}>
           {connOk ? `✓ uses the ${CARD_LABELS[cardType] || cardType} connection from Connectors`
             : `⚠ set up Connectors → ${CARD_LABELS[cardType] || cardType} first`}
         </Typography>

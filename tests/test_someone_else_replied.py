@@ -130,3 +130,54 @@ class EndToEndTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ChatIdentityTests(unittest.TestCase):
+    """Teams lines carry no address for most participants, and the owner's own lines are 'You'.
+    Keyed on addresses, a twenty-message group chat read as a thread nobody had spoken on."""
+    def _chat(self, *rows):
+        s = MemoryStore()
+        for i, (name, when) in enumerate(rows):
+            s.add_message({'ExternalId': f'tm{i}', 'ConversationId': 'teams:19:grp', 'Channel': 'teams', 'Subject': 'VPN Helpdesk',
+                           'FromEmail': None, 'FromName': name, 'SentAt': when, 'BodyText': 'body', 'Status': 'filed'})
+        return s
+    ARRIVING = {'external_id': 'tnew', 'channel': 'teams', 'conversation_id': 'teams:19:grp', 'from_name': 'Sam Okafor',
+                'subject': 'VPN Helpdesk', 'body': 'Anyone able to reset my VPN token?'}
+
+    def test_a_participant_with_no_address_still_counts(self):
+        out = ingest.others_on_thread(self._chat(('Lee Tan', '2026-08-21 14:00:00')), self.ARRIVING, (OWNER,))
+        self.assertEqual(out['others_replied'], ['Lee Tan'])
+
+    def test_the_owners_own_chat_lines_are_you(self):
+        out = ingest.others_on_thread(self._chat(('Lee Tan', '2026-08-21 14:00:00'), ('You', '2026-08-21 14:05:00')), self.ARRIVING, (OWNER,))
+        self.assertEqual((out['others_replied'], out['last_on_thread_is_you']), (['Lee Tan'], True))
+        alone = ingest.others_on_thread(self._chat(('You', '2026-08-21 14:05:00')), self.ARRIVING, (OWNER,))
+        self.assertEqual(alone, {})
+
+    def test_the_asker_by_name_is_still_the_asker(self):
+        out = ingest.others_on_thread(self._chat(('Sam Okafor', '2026-08-21 13:00:00')), self.ARRIVING, (OWNER,))
+        self.assertEqual(out, {})
+
+
+class OwnIssueTests(unittest.TestCase):
+    """An issue the owner filed on their own repo is work by construction: five of five that the
+    classifier filed as fyi were promoted by hand. Other people's issues stay the model's call."""
+    def _gh(self, head):
+        return {'external_id': f'gh-{head[:14]}', 'channel': 'github', 'conversation_id': 'gh:o/r#7', 'no_auto': True,
+                'from_email': 'who@users.noreply.github.com', 'subject': 'o/r#7 Crash on startup',
+                'body': head + chr(10) + 'Traceback ... KeyError'}
+
+    def test_the_owners_own_issue_is_a_task_without_a_model(self):
+        asked = []
+        out = ingest.ingest_message(MemoryStore(), self._gh('[issue by ldbumble - association: OWNER]'),
+                                    llm=lambda *a, **k: asked.append(1) or '{"intent": "fyi", "why": "a note to self"}')
+        self.assertEqual((out['status'], asked), ('created', []))
+
+    def test_somebody_elses_issue_is_still_the_models_call(self):
+        for head in ('[issue by kai - association: NONE]', '[issue by pat - association: MEMBER]'):
+            self.assertIsNone(ingest.decided_intent(self._gh(head)), head)
+
+    def test_mail_is_still_the_models_call(self):
+        self.assertIsNone(ingest.decided_intent({'channel': 'email', 'subject': 'Ledger', 'body': 'Can you check the ledger?'}))
+        self.assertEqual(ingest.decided_intent({'channel': 'email', 'subject': 'Statement ready',
+                                                'body': 'This is an automated message, do not reply.'})['intent'], 'fyi')

@@ -28,3 +28,6 @@ taskuary/whatsapp/package-lock.json
 website/_hero/
 website/_gifcheck.png
 website/_sheet.png
+
+# the triage dataset built from YOUR mail (taskuary --evalset share): review it, then `git add -f` on purpose
+tests/data/triage_cases.jsonl

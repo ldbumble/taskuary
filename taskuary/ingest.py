@@ -126,9 +126,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # heuristics spraying tasks for every automated notification. Heuristics still
         # short-circuit the obvious fyi noise before spending an AI call.
         if cfg.get('intent_classify_enabled', '1') == '1':
-            h = heuristic_intent(msg, mine)
-            if h['intent'] == 'fyi':                     # obvious automated noise: no AI call needed
-                intent = h
+            pre = decided_intent(msg, mine)              # tracker items and obvious noise: no AI call needed
+            if pre:
+                intent = pre
             elif llm is None:
                 mid = store.add_message({**_fields(msg, None), 'Status': 'filed'})
                 store.add_route(mid, None, 'file', None,
@@ -349,6 +349,24 @@ def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int =
     return out, len(hits) - len(out)
 
 
+# An issue the OWNER filed on their own repo (channels.ingest_github_issues writes the author line
+# first). Asked whether it was work, the classifier said 'fyi' for five of five - "the owner's
+# own note" - and the owner promoted every one by hand. Nobody files an issue on their own repo
+# for information. Other people's issues stay the classifier's call: a drive-by question is a
+# reply, and whether the repo takes replies at all is decided downstream.
+_GH_OWNER = re.compile(r'^\[(issue|pull request) by [^\]]*? - association: OWNER\]', re.I)
+
+
+def decided_intent(msg: dict, mine=()) -> dict | None:
+    """The verdicts no model is needed for: the owner's own issue is a task, and obvious automated
+    noise is fyi (heuristic_intent's short-circuit). None means: ask. Shared with evalset.evaluate
+    so the measured accuracy is the funnel's, not the bare model's."""
+    if msg.get('channel') == 'github' and _GH_OWNER.match(str(msg.get('body') or '')):
+        return {'intent': 'task', 'why': 'an issue you filed on your own repository is work by construction - no classifier needed'}
+    h = heuristic_intent(msg, mine)
+    return h if h['intent'] == 'fyi' else None
+
+
 def owner_addresses(store) -> set:
     """Every address that IS the owner: each mailbox Taskuary polls. Needed because the mailbox
     a message ARRIVED at is not always the owner's own - a shared or journal mailbox receives
@@ -383,9 +401,11 @@ def veto(store, msg: dict, topic_only: bool = False) -> str:
     One key outranks the scope question entirely: the THREAD. "Collection %" has one usable
     word, so the verdict on it could only be saved against the sender - advice - and the same
     conversation opened a task on the very next reply, with the colleague's answer sitting
-    right there in it. A verdict given on a thread decides that thread, however it was filed."""
-    on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'))
-    if on_thread: return re.sub(r'^not ours\s*-\s*', '', on_thread).strip() or on_thread
+    right there in it. Any owner "this is not work" on a conversation - not ours, not a task,
+    nothing to do - decides that conversation, however (or whether) it was otherwise learned;
+    see store.owner_verdict_on_thread for the chat episode window."""
+    on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'), msg.get('sent_at'))
+    if on_thread: return f'you already ruled on this conversation: {on_thread}'
     hits = applicable_notes(store, [msg.get('from_email') or ''], msg.get('subject') or '',
                             f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                             msg.get('source_name') or '')
@@ -403,21 +423,26 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
 
     Only people who actually SENT something count. Being cc'd is not answering. The owner's own
     replies are excluded (that is not somebody else picking it up) and so is this message's own
-    sender (a follow-up from the asker is still the asker)."""
+    sender (a follow-up from the asker is still the asker).
+
+    Identity is the address OR the name: a Teams line carries no address for most participants,
+    and the owner's own lines arrive as 'You' - keyed on addresses alone, a twenty-message group
+    chat read as a thread nobody had spoken on, and the one signal the classifier gets right
+    every time (5/5 on the owner's own mail) never reached it for chats."""
     prior = store.thread_messages(msg.get('conversation_id'), msg.get('subject'))
     if not prior: return {}
-    me = {(a or '').lower() for a in mine if a} | {(msg.get('source_name') or '').lower()}
-    sender = (msg.get('from_email') or '').lower()
+    me = {(a or '').lower() for a in mine if a} | {(msg.get('source_name') or '').lower()} - {''}
+    ident = lambda m: (m.get('FromEmail') or m.get('FromName') or '').strip().lower()
+    is_me = lambda m: ident(m) in me or (m.get('FromName') or '').strip().lower() == 'you'
+    sender = {(msg.get('from_email') or '').lower(), (msg.get('from_name') or '').strip().lower()} - {''}
     who = lambda m: (m.get('FromName') or (m.get('FromEmail') or '').split('@')[0] or 'someone')
     others = []
     for m in prior:
-        e = (m.get('FromEmail') or '').lower()
-        if not e or e == sender or e in me: continue
+        if not ident(m) or ident(m) in sender or is_me(m): continue
         if who(m) not in others: others.append(who(m))
     if not others: return {}
     last = prior[-1]
-    return {'others_replied': others[-3:], 'last_on_thread': who(last),
-            'last_on_thread_is_you': (last.get('FromEmail') or '').lower() in me}
+    return {'others_replied': others[-3:], 'last_on_thread': who(last), 'last_on_thread_is_you': is_me(last)}
 
 
 def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:
@@ -556,4 +581,7 @@ def _fields(msg, task_id):
             # normalized HERE, the one gate every channel funnels through: a UTC ISO stamp from
             # any single path sorts the whole timeline out of order (see store.norm_stamp)
             'FromEmail': msg.get('from_email'), 'SentAt': norm_stamp(msg.get('sent_at')),
-            'BodyText': msg.get('body'), 'SourceLink': msg.get('source_link'), 'Status': 'routed'}
+            'BodyText': msg.get('body'), 'SourceLink': msg.get('source_link'), 'Status': 'routed',
+            # kept so a verdict can be replayed against the lines that decided it (evalset.py)
+            'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})
+                              if (msg.get('to') or msg.get('cc')) else None}

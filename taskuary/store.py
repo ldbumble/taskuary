@@ -3,12 +3,12 @@ default) and in-memory (tests/demo). Every mutation is meant to be paired with .
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
 import hashlib, json, re, sqlite3, threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
-            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction')
+            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
@@ -75,6 +75,11 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 
+# conversation ids that name a CHAT rather than a topic - one id for every message ever exchanged
+# there, so an owner verdict on it covers an episode, not the relationship (owner_verdict_on_thread)
+CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:')
+CHAT_VERDICT_HOURS = 72
+
 def norm_stamp(s) -> str:
     """One clock for the timeline: every channel's timestamp lands as LOCAL 'YYYY-MM-DD
     HH:MM:SS'. A single path storing raw UTC ISO ('...T18:44:00Z') string-sorted ABOVE later
@@ -108,7 +113,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
-  Direction TEXT DEFAULT 'in');
+  Direction TEXT DEFAULT 'in', RecipientsJson TEXT);
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
@@ -253,6 +258,11 @@ class SQLiteStore:
             mcols = {r[1] for r in self.cx.execute('PRAGMA table_info(message)')}
             if 'Direction' not in mcols:
                 self.cx.execute("ALTER TABLE message ADD COLUMN Direction TEXT DEFAULT 'in'")
+            # WHO the mail was addressed to. triage.addressed_to_you weighed the To/Cc lines at
+            # ingest and then the lines were thrown away, so no verdict could ever be replayed
+            # against them - "was this cc'd mail really mine?" had no evidence left (evalset.py)
+            if 'RecipientsJson' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN RecipientsJson TEXT')
             # WHERE an approved outbound draft goes. A reply knows its recipient from the
             # message it answers; an outbound report has no such message, so the review has to
             # carry the address itself or approving it would have nowhere to send.
@@ -464,22 +474,34 @@ class SQLiteStore:
         rows = self._rows('SELECT * FROM message WHERE Subject IS NOT NULL ORDER BY SentAt DESC LIMIT 400')
         return list(reversed([r for r in rows if norm_subject(r['Subject']) == key][:limit]))
 
-    def owner_verdict_on_thread(self, conversation_id) -> str:
-        """The owner's own "not ours" on an EARLIER message of this same thread, if any - the
-        route reason they left. The thread is the one key that needs no scope: whatever the
-        verdict was filed under (a sender, a topic), it was given about THIS conversation.
+    def owner_verdict_on_thread(self, conversation_id, sent_at=None) -> str:
+        """The owner's own "this is not work" on an EARLIER message of this same conversation, if
+        any - the route reason they left ('not ours - ...', 'not a task - ...', 'nothing to do - ...').
+        The thread is the one key that needs no scope: whatever else the verdict was filed under
+        (a sender, a topic, nothing), it was given about THIS conversation - and the verdict the
+        owner gives most is the one that deliberately teaches nothing about anybody, so without
+        this rule the same thread opened a task on every burst (six times for one Teams chat).
 
         A real conversation id only. The same-subject fallback thread_messages offers is good
         enough to ADVISE (others_on_thread) but not to decide: two mails that merely share a
-        subject line are not proof the owner ruled on the second."""
+        subject line are not proof the owner ruled on the second.
+
+        A chat id is a whole relationship (teams:<chat>, slack:<channel>), not a topic, so a
+        verdict there covers the EPISODE: it lapses CHAT_VERDICT_HOURS after it was given. An
+        email thread is one topic for life, and stays ruled."""
         if not conversation_id: return ''
         mids = [m['MessageId'] for m in self.thread_messages(conversation_id)]
         if not mids: return ''
-        # "Nothing to do here" is an owner 'ignore' too, and it promises to teach nothing - so only
-        # the verdict route (server.not_mine writes 'not ours - <note>') rules the thread
-        rows = self._rows(f"SELECT Reason FROM route WHERE MessageId IN ({','.join('?' * len(mids))}) AND Decision='ignore' "
-                          "AND RoutedBy='owner' AND Reason LIKE 'not ours%' ORDER BY RouteId DESC LIMIT 1", tuple(mids))
-        return (rows[0]['Reason'] or '') if rows else ''
+        rows = self._rows(f"SELECT Reason, CreatedAt FROM route WHERE MessageId IN ({','.join('?' * len(mids))}) "
+                          "AND Decision='ignore' AND RoutedBy='owner' ORDER BY RouteId DESC LIMIT 1", tuple(mids))
+        if not rows: return ''
+        if conversation_id.startswith(CHAT_PREFIXES):
+            try:
+                given = datetime.fromisoformat(rows[0]['CreatedAt'])
+                now = datetime.fromisoformat(norm_stamp(sent_at) or _now())
+                if now - given > timedelta(hours=CHAT_VERDICT_HOURS): return ''
+            except (TypeError, ValueError): pass
+        return rows[0]['Reason'] or ''
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""

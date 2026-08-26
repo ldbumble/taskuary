@@ -848,8 +848,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 }}
                 icon={<CloseIcon sx={{ fontSize: 14, color: "#5e685f" }} />}
                 label={sel.TaskId ? "Not a task — just conversation" : "Nothing to do here"}
-                hint={sel.TaskId ? `delete ${ref(sel.TaskId)}, learn nothing; the messages stay on the timeline`
-                                 : "file it and move on — nothing is learned, their next message arrives as usual"} />
+                hint={sel.TaskId ? `delete ${ref(sel.TaskId)} and file the rest of this conversation; nothing is learned about the sender`
+                                 : "file it and the rest of this conversation — nothing is learned about the sender or the topic"} />
               {/* not ours -> the reason goes to memory, and triage reads it next time. Below the
                   harmless one on purpose: this is the durable verdict, not the tidy-up. */}
               <NotMine row messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />

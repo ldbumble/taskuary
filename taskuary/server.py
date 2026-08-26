@@ -335,6 +335,12 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
             background.add_task(learn.learn_from, store,
                                 f"mem{mid}: owner said NOT A TASK: \"{(msgs[0].get('Subject') or '')[:80]}\" from {em} "
                                 'should never have opened a task')
+    # whatever was (or was not) learned about the sender, THIS conversation has been ruled on:
+    # the owner's ignore route is what ingest.veto reads before the next message on it can open
+    # a task (store.owner_verdict_on_thread) - the six-tasks-from-one-chat failure
+    if msgs:
+        store.add_route(msgs[0]['MessageId'], None, 'ignore', None,
+                        f"not a task - {(msgs[0].get('Subject') or 'this conversation')[:80]}", [], ACTOR)
     store.audit('task', task_id, 'not_a_task_delete', ACTOR)
     _drop_task(task_id)
     return {'ok': True, 'learned': learned}
@@ -608,8 +614,11 @@ def file_message(mid: int):
     triage filed with no task offered only "Not our task", which writes a durable verdict
     against the sender (and against EVERY sender when the channel has no address to key on,
     like Teams) - so getting one chat off the timeline could quietly teach the funnel to stop
-    listening to a colleague. This teaches nothing: the item stops being work, its task goes
-    if it had one, and their next message arrives exactly as before."""
+    listening to a colleague. This teaches nothing about the SENDER or the topic: the item
+    stops being work, its task goes if it had one, and their next message on another thread
+    arrives exactly as before. The rest of THIS conversation is filed with it, though - the
+    owner ignore route below is what ingest.veto reads (store.owner_verdict_on_thread), because
+    "not a task" said on a thread and then a task from its next reply is the funnel arguing."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     tid = m.get('TaskId')

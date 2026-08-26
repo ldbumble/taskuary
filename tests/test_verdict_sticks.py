@@ -318,11 +318,13 @@ class ThreadVerdictTests(unittest.TestCase):
         out = self._arrive(s, 'c4', conv='AAQk-something-else', subject='Budget upload failing')
         self.assertEqual(out['status'], 'created')
 
-    def test_nothing_to_do_filed_by_the_owner_does_not_rule_the_thread(self):
-        """"Nothing to do here" deliberately teaches nothing (server.file_message: "their next
-        message arrives exactly as before") - so on the thread, too, only Not our task decides."""
+    def test_nothing_to_do_said_by_the_owner_rules_the_thread_too(self):
+        """"Nothing to do here" / "Not a task - just conversation" is the verdict the owner gives
+        most, and it teaches nothing about the sender on purpose - but said on a thread it is
+        still a ruling on THAT thread (tests/test_verdict_paths.py has the whole story)."""
         s = MemoryStore()
         first = self._arrive(s, 'c5', subject='Collection %')
         s.delete_task(first['task_id'])
         s.add_route(first['message_id'], None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], 'owner')
-        self.assertEqual(self._arrive(s, 'c6')['status'], 'created')
+        out = self._arrive(s, 'c6')
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))

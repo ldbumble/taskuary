@@ -36,7 +36,21 @@ def main():
                     help='print the triage, reply and coding-agent prompts for a real item on '
                          'this machine - every block labelled with the document or table it '
                          'came from - then exit. Optionally for one message id.')
+    # "is the triage right?" is a rate, and nothing measured it: build the labelled cases out of
+    # the owner's own verdicts, score the configured classifier over them, or export a set that
+    # can leave the machine (people and prose removed) - see evalset.py
+    ap.add_argument('--evalset', choices=['build', 'share', 'evaluate'], metavar='ACTION',
+                    help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
+                         'evaluate (score the configured AI over them), share (anonymised copy for tests/data)')
     args = ap.parse_args()
+    if args.evalset:
+        import sys
+        from . import evalset
+        from .store import SQLiteStore
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        evalset.run(SQLiteStore(config.db_path()), args.evalset, config.home())
+        return
     if args.prompts is not None:
         import sys
         from .promptmap import render

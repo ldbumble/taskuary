@@ -47,7 +47,7 @@ const agentBadge = (name, runStatus, isLive, cmds = {}) => {
 // blackboard line above them: the files THIS agent has modified so far (git-attributed, so it
 // is true even when the agent never says so). Every other agent is told the same list.
 const basename = (f) => String(f).split(/[\\/]/).pop();
-const FileChips = ({ files }) => (files || []).length === 0 ? null : (
+export const FileChips = ({ files }) => (files || []).length === 0 ? null : (
   <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.5, mb: 0.5 }}>
     {files.slice(0, 4).map((f) => (
       <Tooltip key={f} title={f} arrow>

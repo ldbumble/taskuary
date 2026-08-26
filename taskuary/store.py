@@ -464,6 +464,22 @@ class SQLiteStore:
         rows = self._rows('SELECT * FROM message WHERE Subject IS NOT NULL ORDER BY SentAt DESC LIMIT 400')
         return list(reversed([r for r in rows if norm_subject(r['Subject']) == key][:limit]))
 
+    def owner_verdict_on_thread(self, conversation_id) -> str:
+        """The owner's own "not ours" on an EARLIER message of this same thread, if any - the
+        route reason they left. The thread is the one key that needs no scope: whatever the
+        verdict was filed under (a sender, a topic), it was given about THIS conversation.
+
+        A real conversation id only. The same-subject fallback thread_messages offers is good
+        enough to ADVISE (others_on_thread) but not to decide: two mails that merely share a
+        subject line are not proof the owner ruled on the second."""
+        if not conversation_id: return ''
+        mids = [m['MessageId'] for m in self.thread_messages(conversation_id)]
+        if not mids: return ''
+        # "Nothing to do here" is an owner 'ignore' too, and it promises to teach nothing - so only
+        # the verdict route (server.not_mine writes 'not ours - <note>') rules the thread
+        rows = self._rows(f"SELECT Reason FROM route WHERE MessageId IN ({','.join('?' * len(mids))}) AND Decision='ignore' "
+                          "AND RoutedBy='owner' AND Reason LIKE 'not ours%' ORDER BY RouteId DESC LIMIT 1", tuple(mids))
+        return (rows[0]['Reason'] or '') if rows else ''
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""

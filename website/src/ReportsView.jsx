@@ -289,9 +289,10 @@ export default function ReportsView() {
             </Box>}
             <Button size="small" disabled={running === s.SourceId}
               startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
-              onClick={() => runNow(s.SourceId)}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
+              onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
             <Button size="small" onClick={() => { setQ(""); setBucket(s.SourceId); }}>Edit</Button>
-            <Switch checked={!!s.Active} onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
+            <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
+              onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
           </Box>
         );
       })}

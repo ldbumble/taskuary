@@ -799,7 +799,7 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
 );
 
 export const UnderTabs = ({ tabs, value, onChange }) => (
-  <Box sx={{ display: "flex", gap: 2.5, borderBottom: "1px solid #e1dcd5", mb: 2, overflowX: "auto" }}>
+  <Box sx={{ display: "flex", gap: 2.5, borderBottom: "1px solid #e1dcd5", mb: 2, flexWrap: "wrap" }}>
     {tabs.map((t) => (
       <Box key={t} onClick={() => onChange(t)}
         sx={{ pb: 1, cursor: "pointer", fontSize: 13, fontWeight: 600, mb: "-1px", flexShrink: 0,

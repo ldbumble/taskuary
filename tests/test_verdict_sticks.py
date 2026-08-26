@@ -267,3 +267,62 @@ class DegradedTriageTests(unittest.TestCase):
         msg = {'from_email': 'x@y.com', 'subject': 'something', 'body': 'a body with no question'}
         self.assertTrue(classify_intent(msg, llm=lambda *a, **k: 'not json').get('degraded'))
         self.assertNotIn('degraded', classify_intent(msg))      # no model asked, nothing degraded
+
+
+class ThreadVerdictTests(unittest.TestCase):
+    """"Collection %" from the CFO: one usable word in the subject, so "Priya will take care of
+    this one" could only be saved against the sender - advice. The very next reply on the same
+    conversation opened a task, with Priya's answer already sitting in the thread. A verdict
+    given on a thread decides that thread, however it happened to be filed."""
+    CONV = 'AAQk-collection-thread'
+    REPLY = lambda *a, **k: '{"intent": "reply_only", "why": "asks how the percentage is computed"}'
+
+    def _arrive(self, s, ext, frm='dwhitfield@client.example', conv=None, subject='Re: Collection %'):
+        return ingest.ingest_message(s, {'external_id': ext, 'channel': 'email', 'from_email': frm,
+                                         'conversation_id': conv or self.CONV, 'subject': subject,
+                                         'body': 'Why does the percentage stay the same if I exclude those payers?'},
+                                     llm=self.REPLY)
+
+    def _ruled(self):
+        """The first mail arrives, opens a task, and the owner presses Not our task - which the
+        API writes as a sender-scoped memory plus an owner 'ignore' route on the message."""
+        s = MemoryStore()
+        first = self._arrive(s, 'c1', subject='Collection %')
+        self.assertEqual(first['status'], 'created')
+        s.add_memory({'Scope': 'sender', 'ScopeKey': 'dwhitfield@client.example', 'Source': 'verdict', 'Active': 1,
+                      'CreatedBy': 'owner', 'Note': 'Priya will take care of this one. She is responsible for AR stuff.'})
+        s.delete_task(first['task_id'])
+        s.set_message_status(first['message_id'], 'ignored')
+        s.add_route(first['message_id'], None, 'ignore', None,
+                    'not ours - Priya will take care of this one. She is responsible for AR stuff.', [], 'owner')
+        return s
+
+    def test_the_askers_follow_up_on_the_same_thread_is_filed(self):
+        s = self._ruled()
+        out = self._arrive(s, 'c2')
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
+        self.assertEqual(row['NeedsYou'], 0)
+        self.assertIn('Priya will take care of this one', row['RouteReason'])
+        self.assertNotIn('not ours - not ours', row['RouteReason'])
+
+    def test_the_colleagues_answer_on_the_thread_is_filed_too(self):
+        s = self._ruled()
+        out = self._arrive(s, 'c3', frm='priya@corp.example')
+        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+
+    def test_a_new_thread_from_the_same_sender_is_still_the_classifiers_call(self):
+        """The sender-scoped half keeps its meaning: a person ruled out on one thread can still
+        send something that is yours, so a fresh conversation goes to the classifier as before."""
+        s = self._ruled()
+        out = self._arrive(s, 'c4', conv='AAQk-something-else', subject='Budget upload failing')
+        self.assertEqual(out['status'], 'created')
+
+    def test_nothing_to_do_filed_by_the_owner_does_not_rule_the_thread(self):
+        """"Nothing to do here" deliberately teaches nothing (server.file_message: "their next
+        message arrives exactly as before") - so on the thread, too, only Not our task decides."""
+        s = MemoryStore()
+        first = self._arrive(s, 'c5', subject='Collection %')
+        s.delete_task(first['task_id'])
+        s.add_route(first['message_id'], None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], 'owner')
+        self.assertEqual(self._arrive(s, 'c6')['status'], 'created')

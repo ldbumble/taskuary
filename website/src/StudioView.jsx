@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Box, CircularProgress, Slider, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, ROLES, mono } from "./theme.jsx";
-import { cliName } from "./BoardView.jsx";
+import { cliName, FileChips } from "./BoardView.jsx";
 
 // Logical drawing space; the SVG scales it, so every number below is layout, not pixels.
 const W = 1200, H = 640, TW = 40, TH = 22;
@@ -388,6 +388,8 @@ export default function StudioView({ onOpenTask }) {
                   <Typography noWrap sx={{ fontSize: 10.5, color: st.color, fontWeight: 600, flex: 1, minWidth: 0 }}>{st.label}</Typography>
                 </Box>
                 <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: INK, pt: 0.3 }}>{t.Title}</Typography>
+                {/* the same git-attributed list the Board card shows: what THIS agent has touched so far */}
+                {live[t.TaskId]?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={live[t.TaskId].files} /></Box>}
                 {on && (
                   <Typography onClick={(e) => { e.stopPropagation(); onOpenTask(t.TaskId); }}
                     sx={{ fontSize: 11.5, fontWeight: 600, color: ACCENT, pt: 0.5, "&:hover": { textDecoration: "underline" } }}>

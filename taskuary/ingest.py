@@ -378,7 +378,14 @@ def veto(store, msg: dict, topic_only: bool = False) -> str:
     A verdict about a PERSON stays advice, deliberately: someone whose last message was not
     yours can still send you something that is, and the classifier weighing the note is the
     right shape for that. A 'global' verdict would mean "never open a task again for anyone",
-    which nobody has ever meant by pressing Not our task."""
+    which nobody has ever meant by pressing Not our task.
+
+    One key outranks the scope question entirely: the THREAD. "Collection %" has one usable
+    word, so the verdict on it could only be saved against the sender - advice - and the same
+    conversation opened a task on the very next reply, with the colleague's answer sitting
+    right there in it. A verdict given on a thread decides that thread, however it was filed."""
+    on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'))
+    if on_thread: return re.sub(r'^not ours\s*-\s*', '', on_thread).strip() or on_thread
     hits = applicable_notes(store, [msg.get('from_email') or ''], msg.get('subject') or '',
                             f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                             msg.get('source_name') or '')

@@ -43,7 +43,7 @@ export default function StudioView({ onOpenTask }) {
   const [tasks, setTasks] = useState(null);
   const [agents, setAgents] = useState([]);
   const [sources, setSources] = useState([]);
-  const [cam, setCam] = useState({ yaw: 0, zoom: 1.32, px: 0, py: 0 });
+  const [cam, setCam] = useState({ yaw: 0, zoom: 1.1, px: 0, py: 0 });
   const camRef = useRef(cam), goal = useRef(cam), raf = useRef(0), drag = useRef(null);
   // One exponential ease per frame toward the goal. No spring, no overshoot: a room that
   // bounces past the desk you asked for is a toy, and this has to stay legible while it moves.
@@ -135,6 +135,30 @@ export default function StudioView({ onOpenTask }) {
     poly(BGZ, pts(P(0, 0, 0), P(0, GY, 0), P(0, GY, WH), P(0, 0, WH)), "#e2dbcf");
     poly(BGZ, pts(P(0, 0, 88), P(GX, 0, 88), P(GX, 0, 91), P(0, 0, 91)), "#cec4b1");
 
+    /* Windows, a whiteboard and a plant - the three things that were only ever in the design
+       mock. None of them carries data; that is the point. A room with a window in it reads as a
+       place, and the floor is asking to be read as one. Windows take whatever stretch of the
+       back wall the connector ports leave free, so they never collide with a port. */
+    /* Windows sit HIGH on the back wall, above the connector ports rather than beside them.
+       Beside them meant two connectors ate the whole wall and no window fitted - and high is
+       where a window belongs anyway. The door's stretch is skipped. */
+    const doorAt = GX - 2.0;
+    for (let wx = 0.6; wx + 1.1 < doorAt - 0.2; wx += 1.35) {
+      poly(BGZ, pts(P(wx - 0.07, 0, 86), P(wx + 1.17, 0, 86), P(wx + 1.17, 0, 128), P(wx - 0.07, 0, 128)), "#fffdfb");
+      poly(BGZ, pts(P(wx, 0, 90), P(wx + 1.1, 0, 90), P(wx + 1.1, 0, 124), P(wx, 0, 124)), "#d5e5ed");
+      poly(BGZ, pts(P(wx, 0, 106), P(wx + 1.1, 0, 106), P(wx + 1.1, 0, 108.5), P(wx, 0, 108.5)), "#fffdfb");
+    }
+    // the whiteboard, on the one wall with nothing on it. Fixed size: derived from GY it grew
+    // to four tiles wide and its strokes ran the whole length of it.
+    const wbA = 1.0, wbB = Math.min(3.4, GY - 1.2);
+    poly(BGZ, pts(P(0, wbA, 42), P(0, wbB, 42), P(0, wbB, 100), P(0, wbA, 100)), "#b8ae9a");
+    poly(BGZ, pts(P(0, wbA + 0.1, 46), P(0, wbB - 0.1, 46), P(0, wbB - 0.1, 96), P(0, wbA + 0.1, 96)), "#fffdfb");
+    [[0.85, 86], [1.25, 77], [0.6, 68]].forEach(([len, z]) => {
+      const y0 = wbA + 0.28, y1 = Math.min(y0 + len, wbB - 0.25);
+      poly(BGZ, pts(P(0, y0, z), P(0, y1, z), P(0, y1, z + 2.2), P(0, y0, z + 2.2)), "#5c7a90");
+    });
+    poly(BGZ, pts(P(0, wbB - 0.85, 52), P(0, wbB - 0.3, 52), P(0, wbB - 0.3, 63), P(0, wbB - 0.85, 63)), "#cfe0cf");
+
     const box = (x, y, w, d, h, top, left, right, zbias) => {
       const z = dep(x + w / 2, y + d / 2) + (zbias || 0);
       poly(z, pts(P(x, y + d, h), P(x + w, y + d, h), P(x + w, y + d, 0), P(x, y + d, 0)), left);
@@ -142,6 +166,14 @@ export default function StudioView({ onOpenTask }) {
       poly(z, pts(P(x, y, h), P(x + w, y, h), P(x + w, y + d, h), P(x, y + d, h)), top);
       return z;
     };
+
+    // a plant in the far corner. It is the cheapest thing on this list and does the most.
+    const plx = GX - 0.55, ply = 0.55, plz = dep(plx, ply) + 0.2, pl = P(plx, ply, 0);
+    oval(plz, pl[0], pl[1], 19, 7, "rgba(38,37,33,.13)");
+    poly(plz + 0.01, pts([pl[0] - 12, pl[1] - 24], [pl[0] + 12, pl[1] - 24], [pl[0] + 8, pl[1] - 1], [pl[0] - 8, pl[1] - 1]), "#c39274");
+    poly(plz + 0.02, pts([pl[0] - 2, pl[1] - 24], [pl[0] - 20, pl[1] - 56], [pl[0] - 7, pl[1] - 64], [pl[0] - 1, pl[1] - 38]), "#6f8a6e");
+    poly(plz + 0.02, pts([pl[0] + 2, pl[1] - 24], [pl[0] + 20, pl[1] - 60], [pl[0] + 6, pl[1] - 68], [pl[0] + 1, pl[1] - 38]), "#7d9a7c");
+    poly(plz + 0.03, pts([pl[0], pl[1] - 24], [pl[0] - 5, pl[1] - 62], [pl[0] + 4, pl[1] - 74], [pl[0] + 3, pl[1] - 38]), "#628060");
 
     // the door work walks in through
     const dx = GX - 2.0;
@@ -251,7 +283,7 @@ export default function StudioView({ onOpenTask }) {
   const sx = (x) => `${((x - vx) / vw) * 100}%`;
   const sy = (y) => `${((y - vy) / vh) * 100}%`;
   const flyTo = (x, y) => nudge({ zoom: 2.1, px: x - W / 2, py: y - H / 2 });
-  const moved = Math.abs(cam.yaw) > 0.01 || Math.abs(cam.zoom - 1.32) > 0.01;
+  const moved = Math.abs(cam.yaw) > 0.01 || Math.abs(cam.zoom - 1.1) > 0.01;
 
   const onDown = (e) => {
     if (e.button !== 0 && e.button !== 1) return;
@@ -276,7 +308,7 @@ export default function StudioView({ onOpenTask }) {
     <Box sx={{ position: "relative", width: "100%", height: "calc(100vh - 190px)", minHeight: 520, overflow: "hidden" }}>
       <Box component="svg" viewBox={`${vx} ${vy} ${vw} ${vh}`} preserveAspectRatio="xMidYMid meet"
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-        onWheel={onWheel} onDoubleClick={() => nudge({ yaw: 0, zoom: 1.32, px: 0, py: 0 })}
+        onWheel={onWheel} onDoubleClick={() => nudge({ yaw: 0, zoom: 1.1, px: 0, py: 0 })}
         sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none",
           cursor: drag.current ? "grabbing" : "grab" }}>
         {scene.prims.map((p, i) => (p.k === "p"
@@ -301,7 +333,7 @@ export default function StudioView({ onOpenTask }) {
           sx={{ position: "absolute", left: sx(g.x), top: sy(g.y), transform: "translateX(-50%)",
             display: "flex", alignItems: "center", gap: 0.7, bgcolor: PANEL, border: `1px solid ${BORDER}`,
             borderRadius: "6px", px: 0.9, height: 21, boxShadow: "0 2px 6px rgba(30,50,38,.10)",
-            fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap", opacity: g.t ? 1 : 0.55,
+            fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
             cursor: g.t ? "pointer" : "default",
             ...(pick && g.t?.TaskId === pick ? { borderColor: ACCENT, boxShadow: `0 0 0 2px ${ACCENT}22` } : {}),
             "&:hover": g.t ? { borderColor: "#d8cfbe" } : {} }}>
@@ -309,7 +341,7 @@ export default function StudioView({ onOpenTask }) {
           {g.t
             ? <><Box component="span" sx={{ ...mono, color: DIM }}>{g.t.ref}</Box>
               <Box component="span" sx={{ color: FAINT, fontWeight: 500 }}>{g.st.label}</Box></>
-            : <Box component="span" sx={{ color: FAINT, fontWeight: 500 }}>free desk</Box>}
+            : <Box component="span" sx={{ color: DIM, fontWeight: 600 }}>free desk</Box>}
         </Box>
       ))}
 
@@ -363,7 +395,7 @@ export default function StudioView({ onOpenTask }) {
           {moved ? "double-click to reset" : "drag to turn · scroll to zoom · shift-drag to pan · click a desk"}
         </Typography>
         {moved && (
-          <Box onClick={() => nudge({ yaw: 0, zoom: 1.32, px: 0, py: 0 })}
+          <Box onClick={() => nudge({ yaw: 0, zoom: 1.1, px: 0, py: 0 })}
             sx={{ display: "inline-flex", alignItems: "center", height: 22, px: 1, borderRadius: "6px",
               cursor: "pointer", bgcolor: "#e2dacb", color: DIM, fontSize: 11, fontWeight: 600,
               "&:hover": { bgcolor: "#d8cfbe" } }}>Reset view</Box>

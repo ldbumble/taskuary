@@ -19,3 +19,11 @@ def no_real_agents():
     turn it on (or mock start_on_task) themselves."""
     from taskuary import server
     server.store.set_setting('coder_auto_enabled', '0', 'test')
+
+
+@pytest.fixture
+def fx():
+    """A MemoryStore wrapped in the picture factory. Named pictures (pending_draft,
+    running, filed_fyi, ...) are the regression fixtures for Timeline/Board chips."""
+    from taskuary.testing import Factory
+    return Factory()

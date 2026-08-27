@@ -56,9 +56,15 @@ def replay(case: dict):
     msg = evalset.as_message(case)
     if not msg['body']: msg['body'] = stand_in_body(case.get('body_signals') or {})
     if case.get('owner_ruled_thread_before'):
+        # a chat ruling covers the SAME SENDER'S episode (store.owner_verdict_on_thread), so the
+        # ruled line is this sender's own earlier one - a room-wide ruling was the 2026-08-27 bug
         prior = s.thread_messages(msg['conversation_id'])
-        mid = prior[0]['MessageId'] if prior else s.add_message({'ExternalId': f"{case['id']}-ruled", 'ConversationId': msg['conversation_id'],
-                                                                  'Channel': msg['channel'], 'Subject': msg['subject'], 'Status': 'ignored'})
+        me = {(msg.get('from_email') or '').lower(), (msg.get('from_name') or '').lower()} - {''}
+        mine = [p for p in prior if {(p.get('FromEmail') or '').lower(), (p.get('FromName') or '').lower()} & me]
+        ruled = (mine or prior)[-1] if (mine or (prior and not str(msg['conversation_id']).startswith(('teams:', 'slack:', 'telegram:', 'whatsapp:')))) else None
+        mid = ruled['MessageId'] if ruled else s.add_message({'ExternalId': f"{case['id']}-ruled", 'ConversationId': msg['conversation_id'],
+                                                              'Channel': msg['channel'], 'Subject': msg['subject'], 'FromEmail': msg.get('from_email'),
+                                                              'FromName': msg.get('from_name'), 'Status': 'ignored'})
         s.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], 'owner')
     seen = {}
     def oracle(sys_, usr_, **kw):

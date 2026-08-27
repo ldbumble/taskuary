@@ -84,6 +84,19 @@ class NotATaskTests(unittest.TestCase):
         self.assertIn('already ruled on this conversation', row['RouteReason'])
         self.assertIn('nothing to do', row['RouteReason'])
 
+    def test_a_chat_ruling_never_covers_somebody_elses_ask(self):
+        """The support chat is a ROOM. Richard's "Thank you" was filed as nothing to do; Ivan's
+        request in the same chat the next morning is Ivan's, and the classifier is asked."""
+        conv = CHAT + '-room'
+        first = push(1, conv=conv, about='vpn', from_name='Richard Spencer')
+        c.post(f"/api/messages/{first['message_id']}/file")
+        asked = []
+        other = push(2, conv=conv, about='badge', from_name='Ivan Stanley', sent_at=stamp(hours=3), calls=asked)
+        self.assertEqual(other['status'], 'created')
+        self.assertEqual(len(asked), 1)
+        same = push(3, conv=conv, about='vpn', from_name='Richard Spencer', sent_at=stamp(hours=4), calls=asked)
+        self.assertEqual(same['status'], 'filed')                    # the ruled person's own burst still is
+
     def test_a_chat_verdict_covers_the_episode_not_the_relationship(self):
         conv = CHAT + '-episode'
         first = push(1, conv=conv, about='vpn')

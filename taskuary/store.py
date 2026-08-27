@@ -78,7 +78,7 @@ def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 # conversation ids that name a CHAT rather than a topic - one id for every message ever exchanged
 # there, so an owner verdict on it covers an episode, not the relationship (owner_verdict_on_thread)
 CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:', 'imessage:')
-CHAT_VERDICT_HOURS = 72
+CHAT_VERDICT_HOURS = 24      # a chat ruling covers the SAME SENDER'S burst, not the room for three days
 
 def norm_stamp(s) -> str:
     """One clock for the timeline: every channel's timestamp lands as LOCAL 'YYYY-MM-DD
@@ -505,7 +505,7 @@ class SQLiteStore:
         rows = self._rows('SELECT * FROM message WHERE Subject IS NOT NULL ORDER BY SentAt DESC LIMIT 400')
         return list(reversed([r for r in rows if norm_subject(r['Subject']) == key][:limit]))
 
-    def owner_verdict_on_thread(self, conversation_id, sent_at=None) -> str:
+    def owner_verdict_on_thread(self, conversation_id, sent_at=None, sender: str = None) -> str:
         """The owner's own "this is not work" on an EARLIER message of this same conversation, if
         any - the route reason they left ('not ours - ...', 'not a task - ...', 'nothing to do - ...').
         The thread is the one key that needs no scope: whatever else the verdict was filed under
@@ -517,22 +517,31 @@ class SQLiteStore:
         enough to ADVISE (others_on_thread) but not to decide: two mails that merely share a
         subject line are not proof the owner ruled on the second.
 
-        A chat id is a whole relationship (teams:<chat>, slack:<channel>), not a topic, so a
-        verdict there covers the EPISODE: it lapses CHAT_VERDICT_HOURS after it was given. An
-        email thread is one topic for life, and stays ruled."""
+        A chat id is a whole ROOM (teams:<chat>, slack:<channel>), not a topic, so a verdict
+        there covers one person's episode: the SAME SENDER'S next lines, for CHAT_VERDICT_HOURS.
+        It never covers somebody else's ask - a "nothing to do" on Richard's "Thank you" silenced
+        Ivan's request three days later in the same support chat (2026-08-27). An email thread
+        is one topic for life, and stays ruled whoever writes."""
         if not conversation_id: return ''
         mids = [m['MessageId'] for m in self.thread_messages(conversation_id)]
         if not mids: return ''
-        rows = self._rows(f"SELECT Reason, CreatedAt FROM route WHERE MessageId IN ({','.join('?' * len(mids))}) "
-                          "AND Decision='ignore' AND RoutedBy='owner' ORDER BY RouteId DESC LIMIT 1", tuple(mids))
+        chat = conversation_id.startswith(CHAT_PREFIXES)
+        rows = self._rows(f"SELECT r.Reason, r.CreatedAt, m.FromEmail, m.FromName FROM route r JOIN message m ON m.MessageId=r.MessageId "
+                          f"WHERE r.MessageId IN ({','.join('?' * len(mids))}) AND r.Decision='ignore' AND r.RoutedBy='owner' "
+                          "ORDER BY r.RouteId DESC" + ('' if chat else ' LIMIT 1'), tuple(mids))
         if not rows: return ''
-        if conversation_id.startswith(CHAT_PREFIXES):
+        if not chat: return rows[0]['Reason'] or ''
+        who = (sender or '').strip().lower()
+        for r in rows:
+            ruled = {(r['FromEmail'] or '').strip().lower(), (r['FromName'] or '').strip().lower()} - {''}
+            if who and ruled and who not in ruled: continue          # a different person: their ask is their own
             try:
-                given = datetime.fromisoformat(rows[0]['CreatedAt'])
+                given = datetime.fromisoformat(r['CreatedAt'])
                 now = datetime.fromisoformat(norm_stamp(sent_at) or _now())
                 if now - given > timedelta(hours=CHAT_VERDICT_HOURS): return ''
             except (TypeError, ValueError): pass
-        return rows[0]['Reason'] or ''
+            return r['Reason'] or ''
+        return ''
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""

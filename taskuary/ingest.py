@@ -467,7 +467,8 @@ def ruled_on_thread(store, msg: dict) -> str:
     store.owner_verdict_on_thread). This is the only verdict that decides without a model:
     a verdict about a person or a topic is EVIDENCE for the classifier (relevant_notes), because
     the same topic can arrive asking something new, and only a reader can tell."""
-    on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'), msg.get('sent_at'))
+    on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'), msg.get('sent_at'),
+                                              sender=msg.get('from_email') or msg.get('from_name'))
     return f'you already ruled on this conversation: {on_thread}' if on_thread else ''
 
 

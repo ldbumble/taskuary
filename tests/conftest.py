@@ -3,7 +3,11 @@ and opens the store at import time, so this must run first (pytest imports conft
 """
 import os, tempfile
 
-os.environ.setdefault('TASKUARY_HOME', tempfile.mkdtemp(prefix='taskuary_test_'))
+# ALWAYS a fresh temp home - never the user's. This was setdefault(), which respected an already-set
+# TASKUARY_HOME, and a session that had one (or a taskuary import that had already happened) put the
+# whole suite on the LIVE database: 2026-08-27 it overwrote SOUL.md, an Outlook connector's config and
+# left 140 fixture tasks on the owner's board. The one override is explicit and named for tests only.
+os.environ['TASKUARY_HOME'] = os.environ.get('TASKUARY_TEST_HOME') or tempfile.mkdtemp(prefix='taskuary_test_')
 
 
 import pytest

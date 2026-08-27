@@ -719,7 +719,9 @@ function MacPermissions({ conn, test, busy, runTest }) {
               {openErr && ` · ${openErr}`}
             </Typography>
             {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
-              {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+              {test.ok ? "✓" : "✗"} {readNeeds
+                ? `macOS refused the read. Grant Full Disk Access to ${host}, relaunch it, then test again.`
+                : test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
             {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
           </Card>
           <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>

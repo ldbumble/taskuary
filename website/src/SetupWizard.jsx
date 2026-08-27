@@ -163,9 +163,13 @@ const CliPicker = ({ asBrain, onDone }) => {
       ) : list.map((cli) => (
         <Box key={cli.name} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{cli.label}</Typography>
-            <Typography variant="caption" sx={{ color: FAINT, wordBreak: "break-all" }}>
-              {cli.path || (cli.configured ? "already configured here" : cli.cmd)}
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
+              {cli.label}{cli.profile && cli.profile !== cli.label ? <Typography component="span" variant="caption" sx={{ color: FAINT, ml: 0.75 }}>profile “{cli.profile}”</Typography> : null}
+            </Typography>
+            <Typography variant="caption" sx={{ color: cli.configured && !cli.installed ? "#8a3646" : FAINT, wordBreak: "break-all" }}>
+              {cli.path ? cli.path
+                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — install it, or fix the command in Connectors → AI CLI agents`
+                : cli.cmd}
             </Typography>
           </Box>
           <Button size="small" variant="outlined" disabled={!!busy} onClick={() => use(cli)}

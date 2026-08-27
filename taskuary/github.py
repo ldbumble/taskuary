@@ -56,6 +56,14 @@ def pr(tok, repo, number):
             'merged': j.get('merged'), 'mergeable': j.get('mergeable')}
 
 
+def pr_diff(tok, repo, number) -> str:
+    """The pull request's own unified diff, as GitHub serves it - what a review of a PR task is
+    a review OF. The checkout's diff is the agent's footprint; this is the contributor's."""
+    r = requests.get(f'{GH}/repos/{repo}/pulls/{number}', headers={**_h(tok), 'Accept': 'application/vnd.github.diff'}, timeout=30)
+    r.raise_for_status()
+    return r.text
+
+
 def checks(tok, repo, sha):
     """Every check run for a commit, plus the legacy commit statuses some CIs still use.
     {state: success|failure|pending|none, failed: [...], counts} - one verdict, and the

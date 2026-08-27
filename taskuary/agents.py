@@ -83,6 +83,13 @@ def _resolve_cmd(name: str) -> list:
         raise FileNotFoundError(f"'{name}' not found on PATH - is the CLI installed?")
     if os.name == 'nt' and path.lower().endswith(('.cmd', '.bat')):
         return _shim_target(path) or ['cmd', '/c', path]
+    if os.name == 'nt' and '\\windowsapps\\' in path.lower() and '\\microsoft\\windowsapps\\' not in path.lower():
+        # which() walked into C:\Program Files\WindowsApps\<package>\...\codex.EXE - a Store package
+        # folder, which CreateProcess is refused ([WinError 5] Access is denied). The runnable
+        # thing is the execution ALIAS in the user's own WindowsApps folder; fall back to the
+        # shell, which resolves aliases the way a typed command does.
+        alias = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'WindowsApps', os.path.basename(path))
+        return [alias] if os.path.exists(alias) else ['cmd', '/c', name]
     return [path]
 
 
@@ -143,8 +150,14 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False)
+    try:
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False)
+    except PermissionError as e:
+        # said in words, not '[WinError 5]': the file is there and Windows will not run it
+        raise RuntimeError(f"Windows refused to run {cmd[0]} (Access is denied). A CLI installed for another user, or a Store "
+                           f"package folder, cannot be run from here - install {name} for this user, or run it once from a "
+                           f"terminal so its alias exists.") from e
     timed = threading.Event()
     killer = threading.Timer(profile.get('timeout', 1200), lambda: (timed.set(), p.kill()))
     killer.start()

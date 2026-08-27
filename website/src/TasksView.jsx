@@ -639,7 +639,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <IconButton size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
-          {detail?.ref} · {diffScope === "task" ? "what this task's agent changed" : "everything a push would carry, whoever wrote it"}
+          {detail?.ref} · {diff?.scope === "pr" ? `the pull request's own diff — ${diff.pr?.repo}#${diff.pr?.number}, what is being reviewed`
+            : diffScope === "task" ? "what this task's agent changed" : "everything a push would carry, whoever wrote it"}
           {/* an agent told to "commit locally and stop" leaves a CLEAN tree - saying only
               "uncommitted work" over a finished job read as "it did nothing" */}
           {diffScope === "task" && diff?.commits?.length ? ` — ${diff.commits.length} commit${diff.commits.length === 1 ? "" : "s"} of its own, unpushed` : ""}
@@ -651,7 +652,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Box component="span" onClick={() => { const next = diffScope === "task" ? "checkout" : "task"; setDiffScope(next);
               api.get(`/api/tasks/${selected}/diff`, { params: { scope: next } }).then((r) => setDiff(r.data)).catch(() => {}); }}
             sx={{ ml: 1, color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-            {diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${diff.checkout_files} file${diff.checkout_files === 1 ? "" : "s"})` : ""}` : "back to this task's changes"}
+            {diff?.scope === "pr" ? "show the agent's checkout instead" : diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${diff.checkout_files} file${diff.checkout_files === 1 ? "" : "s"})` : ""}` : (diff?.pr ? "back to the pull request's diff" : "back to this task's changes")}
           </Box>
         </Typography>
         {!diff ? <CircularProgress size={20} sx={{ m: 2 }} />

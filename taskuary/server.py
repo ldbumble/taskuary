@@ -21,7 +21,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
-from . import learn, outbound, rank, responder, waitroom
+from . import learn, learnedgraph, outbound, rank, responder, waitroom
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -307,6 +307,38 @@ def set_task_repo(task_id: int, body: RepoBody):
     return out
 
 class NotATaskBody(BaseModel): learn: bool = True
+
+@app.post('/api/tasks/{task_id}/not-coding')
+def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
+    """Owner verdict: real work, but not for the coding agent. The default is the other way
+    round on purpose - everything that is work goes to the agent, which says "nothing to do
+    here" when there is nothing - so this button is how the exceptions get taught: the task
+    stays, on the owner's list, its live session (if any) is closed, and an evidence line says
+    so for the next message like it."""
+    t = store.get_task(task_id)
+    if not t: raise HTTPException(404, 'task not found')
+    live = hub_term.session_for(task_id)
+    if live and live.alive: hub_term.close(live.sid)
+    store.update_task(task_id, {'Kind': 'general'}, ACTOR)
+    store.clear_dispatch(task_id)
+    msgs = store.list_messages(task_id)
+    learned = None
+    if msgs and (body is None or body.learn):
+        m = msgs[0]; em = (m.get('FromEmail') or '').lower(); topic = _topic_key(m)
+        mid = store.add_memory({'Scope': 'subject' if topic else 'sender' if em else 'global', 'ScopeKey': topic or em or None,
+                                'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                                'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or t.get('Title') or '')[:90]}\""
+                                        + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
+                                        + ' - NOT A CODING TASK: real work, kept on the owner\'s list, no agent'})
+        learned = mid
+        learn.note_verdicts(store)
+        if background is not None:
+            background.add_task(learn.learn_from, store,
+                                f"mem{mid}: owner said NOT A CODING TASK: \"{(m.get('Subject') or t.get('Title') or '')[:80]}\" - "
+                                'real work, but not for the coding agent')
+    store.add_comment(task_id, ACTOR, 'human', 'Not a coding task - kept on your list; the agent is off it.')
+    store.audit('task', task_id, 'not_coding', ACTOR, detail={'memory_id': learned})
+    return {'ok': True, 'kind': 'general', 'memoryId': learned}
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
@@ -1272,6 +1304,19 @@ def get_doc(name: str):
 def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
+
+@app.get('/api/learned/graph')
+def learned_graph():
+    """LEARNED.md as a picture: lines, the verdicts that fed them, each line's score over time,
+    the lines that died - the Docs tab's Visualize view (discussion #27)."""
+    return learnedgraph.graph(store)
+
+class AdoptBody(BaseModel): key: str
+
+@app.post('/api/learn/adopt')
+def learn_adopt(body: AdoptBody):
+    try: return learn.adopt(store, body.key, ACTOR)
+    except ValueError as e: raise HTTPException(404, str(e))
 
 @app.get('/api/doc/generate/status')
 def doc_generate_status():

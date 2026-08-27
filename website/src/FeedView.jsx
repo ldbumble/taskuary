@@ -874,6 +874,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
                 </Box>
               )}
+              {/* the default is the agent - everything that is work goes to it - so the exception is
+                  the button: real work, not for the coder. The task stays on your list and the
+                  verdict is remembered for the next message like it. */}
+              {sel.TaskId && (
+                <ChoiceRow tint="#eee7d6" onClick={async () => { await api.post(`/api/tasks/${sel.TaskId}/not-coding`); onRefresh?.(); }}
+                  icon={<CloseIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
+                  label="Not a coding task" hint={`keep ${ref(sel.TaskId)} on your list, take the agent off it — and remember that for mail like this`} />
+              )}
               <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               {sel.TaskId && (
                 <ChoiceRow tint="#e3e6e1" onClick={() => setReshape(true)}

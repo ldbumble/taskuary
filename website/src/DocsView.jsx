@@ -10,6 +10,7 @@ import PsychologyIcon from "@mui/icons-material/Psychology";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import api from "./api";
+import LearnedView from "./LearnedView.jsx";
 import { FAINT, INK, mono } from "./theme.jsx";
 
 const DOCS = {
@@ -89,6 +90,7 @@ export default function DocsView() {
   const [genMsg, setGenMsg] = useState("");   // provenance line, or the plain reason it couldn't
   const [genWhat, setGenWhat] = useState(""); // live progress while it reads the mailbox
   const [genEv, setGenEv] = useState(null);   // the receipts: what was read, line by line
+  const [view, setView] = useState("text");    // LEARNED.md: text, or the picture of what drives what (#27)
   // the generation is inspectable, not a vibe: poll its status while it runs so the button
   // narrates ("reading you@... — 240 sent so far"), then show the exact evidence it judged
   useEffect(() => {
@@ -168,6 +170,14 @@ export default function DocsView() {
               }}>{genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}</Button>
           )}
           {docName === "learned" && (
+            <Box sx={{ display: "flex", border: "1px solid #e1dcd5", borderRadius: 99, overflow: "hidden", fontSize: 11.5, fontWeight: 600, alignSelf: "center" }}>
+              {[["text", "Text"], ["viz", "Visualize"]].map(([k, label]) => (
+                <Box key={k} onClick={() => setView(k)} sx={{ px: 1.5, py: 0.55, cursor: "pointer",
+                  color: view === k ? "#fff" : "#4d4a43", background: view === k ? "linear-gradient(90deg, #55697a, #7d9a7c)" : "#fffdfb" }}>{label}</Box>
+              ))}
+            </Box>
+          )}
+          {docName === "learned" && (
             <Button size="small" variant="outlined" onClick={async () => {
               // consolidate now instead of waiting for the threshold; reload to show the rewrite
               try { await api.post("/api/learn/reflect"); await load(); } catch { /* no AI connected */ }
@@ -197,9 +207,11 @@ export default function DocsView() {
             </Box>
           </Box>
         )}
+        {docName === "learned" && view === "viz" ? <LearnedView onChanged={load} /> : (
         <TextField fullWidth multiline minRows={22} maxRows={40} value={docs[docName]}
           onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })} sx={{ bgcolor: "#fff" }}
           inputProps={{ style: { fontFamily: "'IBM Plex Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.6, color: INK } }} />
+        )}
         <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1.25, lineHeight: 1.6 }}>
           Editing this changes the funnel on the very next message. Nothing here is sent anywhere —
           these files live beside your database.

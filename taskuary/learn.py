@@ -147,7 +147,10 @@ def learn_from(store, event: str, llm=None):
                                           f'\n\nNEW EVENT:\n{event[:2000]}', max_tokens=700))
         # a broken answer never lands in the doc - markers inside it would corrupt the block splice
         if not out or '<!--' in out or len(out) > 6000: return
-        if out != hyp: store.save_doc(DOC, _put_block(doc, HYP_START, HYP_END, out), 'learn')
+        if out != hyp:
+            new_doc = _put_block(doc, HYP_START, HYP_END, out)
+            store.save_doc(DOC, new_doc, 'learn')
+            from . import learnedgraph; learnedgraph.record(store, doc, new_doc, 'learn')
         if n >= REFLECT_AT: reflect(store, llm)
     except Exception as e:
         logger.warning(f'learning skipped: {e}')
@@ -205,11 +208,37 @@ def reflect(store, llm=None) -> bool:
     if not (new.startswith('#') and 200 < len(new) <= 12_000 and new.count('\n') <= 160
             and all(new.count(m) == 1 for m in markers)):
         logger.warning('reflection produced an unusable doc - kept the old one'); return False
-    store.save_doc(DOC, new.rstrip('\n') + ('\n\n' + verdicts.strip('\n') + '\n' if verdicts else ''), 'reflect')
+    final = new.rstrip('\n') + ('\n\n' + verdicts.strip('\n') + '\n' if verdicts else '')
+    store.save_doc(DOC, final, 'reflect')
+    from . import learnedgraph; learnedgraph.record(store, doc, final, 'reflect')
     store.set_setting('learn_pending', '0', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')
     logger.info('LEARNED.md reflected')
     return True
+
+
+ADOPT_UNDER = '## What becomes a task'
+
+def adopt(store, key: str, actor: str = 'owner') -> dict:
+    """The owner's click on a proposed rule or a hypothesis: the line moves into the live
+    section (ADOPT_UNDER, or the first live section present) and from then on rides into every
+    prompt. The one thing the reflection will never do by itself for a hide-rule."""
+    from . import learnedgraph
+    doc = store.get_doc(DOC) or ''
+    target = next((l for l in learnedgraph.lines(doc) if l['key'] == key and l['status'] != 'live'), None)
+    if not target: raise ValueError('no proposed or hypothesis line with that key')
+    raw = next(r for r in doc.splitlines() if learnedgraph.TAG.match(r) and learnedgraph._key(learnedgraph.TAG.match(r).group('text')) == key)
+    rest = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
+    if ADOPT_UNDER in rest:
+        head, tail = rest.split(ADOPT_UNDER, 1)
+        nxt = tail.find('\n## ')
+        body, after = (tail, '') if nxt < 0 else (tail[:nxt], tail[nxt:])
+        rest = head + ADOPT_UNDER + body.rstrip('\n') + '\n' + raw.strip() + '\n' + after
+    else:
+        rest = rest.rstrip('\n') + f'\n\n{ADOPT_UNDER}\n' + raw.strip() + '\n'
+    store.save_doc(DOC, rest, actor)
+    learnedgraph.record(store, doc, rest, actor)
+    return {'ok': True, 'text': target['text']}
 
 
 def reflect_if_due(store) -> bool:

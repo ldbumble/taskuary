@@ -147,6 +147,8 @@ CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, B
   Agent TEXT, Reason TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, Note TEXT, CreatedBy TEXT,
   CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
+CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
+  Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
 """
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -315,6 +317,7 @@ class SQLiteStore:
             # sending it fields (others_replied) the doc never described. Only that pass writes a
             # non-SOUL doc as 'startup' (docsync writes SOUL.md), so those are untouched by anyone.
             self.cx.execute("UPDATE doc SET UpdatedBy='template' WHERE UpdatedBy='startup' AND Name<>'soul'")
+            self.cx.execute("UPDATE memory SET Note=REPLACE(Note, ' from an unknown sender', '') WHERE Source='verdict' AND Note LIKE '%from an unknown sender%'")
             # data heal: verdict notes used to be written as RULES ("Messages from X like 'S' are not
             # tasks - do not open tasks or draft replies"); they are EVIDENCE now (2026-08-27), so the
             # old shape becomes the dated line the new ones get - same facts, no instruction in it
@@ -326,12 +329,12 @@ class SQLiteStore:
                 if not m: continue
                 g = m.groupdict(); when = str(r['CreatedAt'] or '')[:10]
                 subj = g.get('subj') or g.get('s2') or ''
-                who = g.get('who') or g.get('w2') or (r['ScopeKey'] if r['Scope'] == 'sender' else 'an unknown sender')
+                who = g.get('who') or g.get('w2') or (r['ScopeKey'] if r['Scope'] == 'sender' else '')
                 topic = g.get('topic') or g.get('t2')
                 verdict = 'NOT A TASK: the owner filed it, no task, no reply' if 'are not tasks' in r['Note'] or 'is not a task' in r['Note']                           else "NOT OURS: other people's work, no task, no reply"
                 about = (f' - the topic "{topic}"' if topic else f" - anyone at {g['d2']}" if g.get('d2')
                          else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
-                line = f'{when}: "{subj or topic or ""}" from {who}{about} - {verdict}'
+                line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
                 self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
             for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
@@ -655,6 +658,13 @@ class SQLiteStore:
     def set_dispatch_value(self, task_id, value, why=None, floor_=None):
         self._exec('UPDATE dispatchq SET Value=?, Why=COALESCE(?, Why), Floor=COALESCE(?, Floor) WHERE TaskId=?', (value, why, floor_, task_id))
     def clear_dispatch(self, task_id): self._exec('DELETE FROM dispatchq WHERE TaskId=?', (task_id,))
+
+    # LEARNED.md's history (learnedgraph.py): every point a line gained or lost, and every line that died
+    def add_learned_event(self, key, text, status, score, ev, action, actor):
+        return self._exec('INSERT INTO learned_history (Key,Text,Status,Score,Ev,Action,Actor,At) VALUES (?,?,?,?,?,?,?,?)',
+                          (key, text, status, score, ev, action, actor, _now()))
+    def learned_history(self, key=None):
+        return self._rows('SELECT * FROM learned_history' + (' WHERE Key=?' if key else '') + ' ORDER BY Id', (key,) if key else ())
 
     # the waiting room (waitroom.py): owner notes queued on a task while its agent works
     def add_waiting(self, task_id, note, actor):

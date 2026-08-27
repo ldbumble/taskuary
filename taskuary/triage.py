@@ -14,9 +14,9 @@ INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "kind": "coding|general", "why": "<one concrete sentence: what you saw in the message '
     'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
-    'kind matters only when intent is task: coding = plainly about software (a trace, a named repository or '
-    'pull request, a change to a system that has a checkout) and a coding agent will be started; general = real '
-    'work with no code in it. When unsure, coding - an agent on a non-coding task says "nothing to do here" and stops.\n'
+    'kind matters only when intent is task, and the default is coding: every task goes to the coding agent, which '
+    'does what can be done from a keyboard or says "nothing to do here" and stops. Say general ONLY when the owner\'s '
+    'past verdicts say this kind of work is not for the agent, or it plainly cannot be done from a computer.\n'
     'task = someone must DO something beyond writing back: change a system, fix or build something, '
     'produce or chase something. This starts a coding agent on a repository, so choose it only when '
     'work has to happen.\n'
@@ -25,9 +25,9 @@ INTENT_SYSTEM = (
     'approve, so nothing is dropped by choosing this.\n'
     'fyi = informational only: automated notices, reports, newsletters, thanks, threads the owner is '
     'merely copied on.\n'
-    'Chat is not mail: on chat channels (no subject, no recipient lines) a colleague\'s ask is almost always '
-    'reply_only - the owner does the two-minute thing and types back in the same chat. It is a task only when '
-    'it plainly needs a change to software that has a checkout.\n'
+    'Chat is not mail (no subject, no recipient lines) but an ask in chat is still an ask - a task for the agent. '
+    'reply_only is for what a sentence settles with nothing to do behind it; fyi is thanks, status, and threads '
+    'between other people where the owner is neither asked nor named.\n'
     'addressed_to_you and recipients are SIGNALS to weigh, never rules to obey. "to" = the mail was aimed at the owner; "cc" = they were copied, which OFTEN means somebody else owns the work; "not named" = it arrived through a group alias. But a cc can absolutely be theirs: one that names them, asks them something directly, or that only they can answer is their work, and being on the cc line counts for nothing against that. recipients counts everyone on the mail - a note to thirty people is more likely a broadcast than a job. Weigh these with everything else in the message; never decide on them alone. Both fields are absent on channels with no recipient lines.\n'
     'others_replied names people - other than you and the sender - who have already SENT a message on '
     'this thread, and last_on_thread is whoever spoke most recently. Somebody else answering is the '
@@ -36,7 +36,7 @@ INTENT_SYSTEM = (
     'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
     'fields mean nobody else has spoken, which is not evidence either way.\n'
     'Torn between task and reply_only? Choose task - the agent looks and says "nothing to do here" if there is '
-    'nothing to do; a job that only got a drafted reply is a job nobody did. Chat asks stay reply_only.')
+    'nothing to do; a job that only got a drafted reply is a job nobody did.')
 
 def addressed_to_you(msg: dict, mine=()) -> str:
     """'to', 'cc', 'not named', or '' when the channel carries no recipient lines at all (chat) -
@@ -119,6 +119,15 @@ def strip_boilerplate(text: str) -> str:
     return out if out.strip() else (text or '')
 
 
+_VERDICT_MARK = re.compile(r'\b(NOT OURS|NOT A TASK|NOT A CODING TASK)\b')
+
+def _agreement(notes) -> tuple:
+    """(verdict, n) when two or more retrieved notes carry a verdict mark and they all agree;
+    () otherwise. The owner's own free-text notes carry no mark and stay advice."""
+    marks = [m.group(1) for n in notes for m in [_VERDICT_MARK.search(n or '')] if m]
+    return (marks[0], len(marks)) if len(marks) >= 2 and len(set(marks)) == 1 else ()
+
+
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None) -> dict:
@@ -150,7 +159,14 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            '(the document above outranks it where they disagree):\n' + learned[:1500])
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes - re-cutting here is what
-                # used to throw away whichever verdicts happened to sit past the 2000th character
+                # used to throw away whichever verdicts happened to sit past the 2000th character.
+                # When EVERY retrieved verdict says the same thing, that is not a hint to weigh - a
+                # refund thread with two NOT OURS on file still opened a reply task while the model
+                # "judged likeness". No topic is named here: it counts the verdicts it was handed.
+                agree = _agreement(notes)
+                if agree: system += (f'\n\nSETTLED BY YOUR OWNER: all {agree[1]} past verdicts on this sender or topic say '
+                                     f'{agree[0]}. Follow them - the only exception is a message that asks the owner '
+                                     'something NEW and specific; a thread merely continuing is not that.')
                 system += ('\n\nEVIDENCE - verdicts the owner gave on earlier mail that looks related '
                            '(pulled by sender and by topic; each names the sender and subject it was given on). '
                            'Judge how alike THIS message really is: the same sender asking the same kind of '

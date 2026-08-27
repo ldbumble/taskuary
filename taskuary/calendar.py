@@ -159,6 +159,27 @@ def context_for(store, text: str) -> str:
             'claiming availability.\n' + body)
 
 
+_UPCOMING = {'at': 0.0, 'data': None}
+UPCOMING_TTL = 300          # seconds - the Timeline polls for the countdown far more often than Graph should be asked
+
+def upcoming(store, hours: int = 36, force: bool = False) -> dict:
+    """The next events for the Timeline's 'coming up' band: {events, tz, errors, fetched}. Events
+    already running (started within the last 15 min) stay so a meeting you are late for still shows."""
+    if store.get_settings().get('calendar_enabled', '1') != '1': return {'events': [], 'tz': tz_name(tz_of(store)), 'errors': [], 'fetched': None}
+    if not force and _UPCOMING['data'] and time.time() - _UPCOMING['at'] < UPCOMING_TTL: return _UPCOMING['data']
+    ag = agenda(store, days=max(1, (hours + 23) // 24))
+    tz = tz_of(store); now = datetime.now(tz).replace(tzinfo=None)
+    keep = []
+    for e in ag['events']:
+        try: st = datetime.fromisoformat(e['start']); en = datetime.fromisoformat(e['end']) if e.get('end') else st
+        except ValueError: continue
+        if e['all_day'] and st.date() >= now.date() or (en >= now - timedelta(minutes=15) and st <= now + timedelta(hours=hours)):
+            keep.append(e)
+    data = {'events': keep[:10], 'tz': ag['tz'], 'errors': ag['errors'], 'fetched': datetime.now().isoformat(timespec='seconds')}
+    _UPCOMING.update(at=time.time(), data=data)
+    return data
+
+
 def run_calendar(cfg: dict):
     """{"days": 7} - the owner's busy times for the next N days (default 14), every calendar the
     cards can reach. Read-only."""

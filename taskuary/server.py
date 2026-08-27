@@ -873,6 +873,13 @@ def answer_to_agent(tid: int, body: dict):
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
     return {'ok': True}
 
+@app.get('/api/calendar/upcoming')
+def calendar_upcoming(hours: int = 72, force: bool = False):
+    """The Timeline's 'coming up' band: the owner's next events, cached five minutes."""
+    from . import calendar as cal
+    try: return cal.upcoming(store, max(1, min(hours, 96)), force)
+    except Exception as e: return {'events': [], 'tz': None, 'errors': [str(e)[:200]], 'fetched': None}
+
 # ── the funnel: what is being worked, what waits and in what order (rank.py) ────────────
 @app.get('/api/funnel')
 def funnel(): return rank.funnel(store)

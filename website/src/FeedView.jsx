@@ -15,6 +15,7 @@ import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import api from "./api";
+import EventIcon from "@mui/icons-material/Event";
 import { ALERT, ALERT_INK, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -145,6 +146,59 @@ const FunnelBar = ({ onOpenTask }) => {
           ))}
         </Box>
       )}
+    </Box>
+  );
+};
+
+// What is coming up on your calendar, at the top of today: each meeting a row in the
+// Timeline's own shape, tinted so it reads as a different kind of thing, with how long until
+// it starts. Events come cached from the server; the countdown ticks here every 30 s.
+const untilText = (start, end) => {
+  const now = Date.now(), s = new Date(String(start).replace(" ", "T")).getTime(), e = end ? new Date(String(end).replace(" ", "T")).getTime() : s;
+  if (now >= s && now <= e) return { text: "now", hot: true };
+  const m = Math.round((s - now) / 60000);
+  if (m < 0) return { text: "just ended", hot: false };
+  if (m < 60) return { text: `in ${m} min`, hot: m <= 15 };
+  if (m < 60 * 24) return { text: `in ${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`, hot: false };
+  return { text: `in ${Math.round(m / 1440)} day${Math.round(m / 1440) === 1 ? "" : "s"}`, hot: false };
+};
+const ComingUp = () => {
+  const [cal, setCal] = useState(null);
+  const [tick, setTick] = useState(0);            // re-render every 30 s so the countdowns move
+  useEffect(() => {
+    let alive = true;
+    const load = async () => { try { const { data } = await api.get("/api/calendar/upcoming", { params: { hours: 72 } }); if (alive) setCal(data); } catch { /* no calendar */ } };
+    load();
+    const a = setInterval(load, 300000), b = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => { alive = false; clearInterval(a); clearInterval(b); };
+  }, []);
+  if (!cal || !cal.events?.length) return null;
+  return (
+    <Box sx={{ mb: 0.5 }} data-tick={tick}>
+      {cal.events.map((e, i) => {
+        const u = untilText(e.start, e.end);
+        return (
+          <Box key={`${e.start}-${i}`} sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "4px" }}>
+            <Typography sx={{ ...mono, fontSize: 10.5, color: "#8a7a5c", textAlign: "right", pt: "8px", pr: "11px", whiteSpace: "nowrap" }}>
+              {e.all_day ? "all day" : fmtTime12(e.start)}
+            </Typography>
+            <Box sx={{ position: "relative" }}>
+              <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
+              <Box sx={{ position: "absolute", left: "2.5px", top: "11px", width: 8, height: 8, borderRadius: "50%", bgcolor: u.hot ? "#8a3646" : "#8a7a5c", boxShadow: `0 0 0 3.5px ${BG}` }} />
+            </Box>
+            <Box sx={{ bgcolor: "#f5f0e4", border: "1px solid #e3d9c2", borderRadius: "8px", px: "11px", py: "6px", minWidth: 0,
+              display: "flex", gap: 0.85, alignItems: "center" }}>
+              <EventIcon sx={{ fontSize: 16, color: "#8a7a5c", flexShrink: 0 }} />
+              <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12.5, minWidth: 0 }}>{e.subject}</Typography>
+              {e.where && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 200 }}>· {e.where}</Typography>}
+              {e.status === "tentative" && <Typography variant="caption" sx={{ color: FAINT }}>· tentative</Typography>}
+              <Box sx={{ flex: 1 }} />
+              <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
+                color: u.hot ? "#fffdfb" : "#6b5f45", bgcolor: u.hot ? "#8a3646" : "#eee7d6", px: 0.8, py: 0.15, borderRadius: 99 }}>{u.text}</Typography>
+            </Box>
+          </Box>
+        );
+      })}
     </Box>
   );
 };
@@ -343,7 +397,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
   };
 
   // Strict newest-first by sent time (UTC strings compare correctly), then group by local day.
-  const sorted = [...(rows || [])].sort((a, b) => (b.SentAt || "").localeCompare(a.SentAt || ""));
+  // The category is enforced here too: whatever the request returned, a row outside the
+  // picked category never renders under its pill (mail was showing under "code").
+  const catChans = (CATEGORIES.find((x) => x.key === cat) || {}).channels;
+  const sorted = [...(rows || [])].filter((r) => !catChans || catChans.includes(r.Channel))
+    .sort((a, b) => (b.SentAt || "").localeCompare(a.SentAt || ""));
   const days = sorted.reduce((acc, r) => {
     const d = localDay(r.SentAt) || "undated";
     (acc[d] = acc[d] || []).push(r);
@@ -507,9 +565,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <Empty>{view || cat || pick
               ? "Nothing here matches this filter — try “everything”, or widen the Timeline lookback in Settings."
               : "Nothing in the feed yet — connect a source in Connectors (a mailbox, a chat, a repo, a board…) and hit Sync now."}</Empty>
-          ) : Object.entries(days).map(([day, items]) => (
+          ) : Object.entries(days).map(([day, items], di) => (
             <Box key={day} sx={{ mt: 1 }}>
               <DayHeader label={fmtDay(day)} />
+              {di === 0 && !cat && !pick && <ComingUp onOpen={() => {}} />}
               <Box>
                 {items.map((r, i) => (
                   <React.Fragment key={r.MessageId}>
@@ -544,8 +603,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
                           "&:hover .thubDetailText": { opacity: 1 },
                           "&:hover .thubGo": { opacity: 1, transform: "translateX(0)" } }}>
                         <Box sx={{ display: "flex", gap: 0.85, alignItems: "baseline", minWidth: 0 }}>
-                          <Box sx={{ alignSelf: "center", display: "flex", flexShrink: 0, opacity: .8 }}>
-                            <ChannelIcon channel={r.Channel} />
+                          <Box sx={{ alignSelf: "center", display: "flex", flexShrink: 0 }}>
+                            <ChannelIcon channel={r.Channel} sx={{ fontSize: 17 }} />
                           </Box>
                           <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: ["ignored", "filed"].includes(r.MsgStatus) ? DIM : INK,
                             fontSize: 12.5, letterSpacing: "-.1px", maxWidth: { sm: 200 }, minWidth: 0, flexShrink: { xs: 1, sm: 0 } }}>
@@ -978,13 +1037,24 @@ const DayHeader = ({ label }) => {
 // renders AS sections: the emoji-led line becomes a real header, its bullets hang under it.
 // Report bodies only - an email that happens to start a line with 🎉 is not a document.
 const HDR = /^\s*\p{Extended_Pictographic}/u;
+// URLs in a report become links - the digest writes one per task (#task=<id>, which the page
+// opens in place), so the brief is a set of doors, not a reading.
+const URL_RE = /(https?:\/\/[^\s<>"')\]]+)/g;
+const Linkify = ({ text }) => {
+  const parts = String(text).split(URL_RE);
+  return parts.map((p, i) => (URL_RE.test(p) && (URL_RE.lastIndex = 0, true)
+    ? <a key={i} href={p} style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
+        onClick={(e) => { const m = /#task=(\d+)/.exec(p); if (m) { e.preventDefault(); window.location.hash = `task=${m[1]}`; } }}>
+        {/#task=(\d+)/.test(p) ? `open TQ-${String(/#task=(\d+)/.exec(p)[1]).padStart(4, "0")} →` : p}</a>
+    : <React.Fragment key={i}>{p}</React.Fragment>));
+};
 const SectionedText = ({ text }) => (
   <Box sx={{ textAlign: "left" }}>
     {text.split("\n").map((l, i) => (HDR.test(l)
       ? <Typography key={i} variant="body2" sx={{ fontWeight: 700, color: INK, mt: i ? 1.1 : 0,
           pb: 0.35, mb: 0.35, borderBottom: `1px solid ${BORDER}` }}>{l.trim()}</Typography>
       : l.trim()
-        ? <Typography key={i} variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, lineHeight: 1.55 }}>{l}</Typography>
+        ? <Typography key={i} variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, lineHeight: 1.55 }}><Linkify text={l} /></Typography>
         : null))}
   </Box>
 );

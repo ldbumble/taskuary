@@ -32,11 +32,15 @@ PROMPT = (
     'never restate a task under another subject, and never carry a subject across from one block '
     'to another. A block whose data reads "(none)" has nothing to say: omit its section entirely '
     'rather than filling it.\n'
+    'Every TQ-ref keeps the link that follows it in the data, written right after the ref in the '
+    'same bullet, so the reader clicks straight into the task. Lead with what needs the owner NOW.\n'
     'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
 
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
+    'Write what the owner, half awake, should hold in mind TODAY, under 350 words, grouped into sections. Each section is its emoji header on its own line, then tight "- " bullets under it (one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these sections in this order, and OMIT any with nothing to say:\n🚀 In flight — what is being worked and who is waiting on whom\n⏳ Waiting on you — questions still unanswered, replies still unapproved\n📌 Keep honoring — verdicts you gave recently that should keep applying\n📈 Patterns — heads-ups (a sender getting louder, the same system failing twice)\nEvery TQ-ref you write must appear in the data, described with the SAME title it has there - never restate a task under another subject, and never carry a subject across from one block to another. A block whose data reads "(none)" has nothing to say: omit its section entirely rather than filling it.\nNever invent facts; no preamble, no sign-off, nothing outside the sections.',
+
     'Write what the owner, half awake, should hold in mind TODAY, in plain bullets under 350 words:\n'
     '- what is in flight and who is waiting on whom (name tasks by their TQ-refs)\n'
     '- questions still unanswered, replies still unapproved\n'
@@ -68,14 +72,29 @@ def _block(out, head, lines):
     out += list(lines) or ['  (none)']
 
 
+def task_link(tid: int) -> str:
+    """The URL that opens this task in the app - the digest carries one per task so the brief
+    is a set of doors, not a reading. The UI honours #task=<id> on load (TaskHubPage)."""
+    from . import config
+    try: srv = config.load().get('server') or {}
+    except Exception: srv = {}
+    host = srv.get('host') or '127.0.0.1'
+    if host in ('0.0.0.0', '::', ''): host = '127.0.0.1'
+    return f"http://{host}:{srv.get('port') or 7787}/#task={int(tid)}"
+
+
 def gather(store, days: int = DAYS) -> str:
     """The raw material, compact enough to hand an AI whole."""
     since = (datetime.now() - timedelta(days=days)).isoformat(sep=' ', timespec='seconds')
     out = []
     tasks = store.list_tasks()
     live = [t for t in tasks if t.get('Status') in ('open', 'in_progress', 'waiting')]
-    _block(out, 'OPEN WORK:', (f"  TQ-{t['TaskId']:04d} [{t['Status']}] {t.get('Title') or ''} "
-                               f"(kind {t.get('Kind')}, created {t.get('CreatedAt')})" for t in live[:25]))
+    # waiting-on-you first, then in progress, then open: the order the owner should read in
+    rank = {'waiting': 0, 'in_progress': 1, 'open': 2}
+    live.sort(key=lambda t: (rank.get(t.get('Status'), 3), -(t.get('TaskId') or 0)))
+    _block(out, 'OPEN WORK (most urgent first; each line ends with the link that opens the task):',
+           (f"  TQ-{t['TaskId']:04d} [{t['Status']}] {t.get('Title') or ''} "
+            f"(kind {t.get('Kind')}, created {t.get('CreatedAt')}) {task_link(t['TaskId'])}" for t in live[:25]))
     done = [t for t in tasks if t.get('Status') == 'done' and str(t.get('UpdatedAt') or '') >= since]
     _block(out, 'FINISHED THIS WINDOW:', (f"  TQ-{t['TaskId']:04d} {t.get('Title') or ''}" for t in done[:20]))
     # the ref carries its task's TITLE here too (list_reviews already joins it): a line
@@ -83,7 +102,7 @@ def gather(store, days: int = DAYS) -> str:
     # brief that renames a task is a lie in the one place the owner trusts by default
     _block(out, 'WAITING ON THE OWNER (pending reviews):',
            (f"  TQ-{r['TaskId']:04d} ({(r.get('Title') or '?')[:60]}) {r.get('Kind')} "
-            f"on mail: {(r.get('Subject') or '(no subject)')[:90]}" for r in store.list_reviews('pending')[:15]))
+            f"on mail: {(r.get('Subject') or '(no subject)')[:90]} {task_link(r['TaskId'])}" for r in store.list_reviews('pending')[:15]))
     notes = [m for m in store.list_memories() if str(m.get('CreatedAt') or '') >= since]
     # these quote mail subjects, which is exactly what got recycled into a fake pending
     # review once - the header says plainly that nothing here is live work

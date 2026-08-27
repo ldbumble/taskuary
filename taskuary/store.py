@@ -359,7 +359,7 @@ class SQLiteStore:
                 from .digest import PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Morning digest', 'template', 1,
-                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3,
+                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3, 'every_minutes': 180,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
             # ...and its sibling: the weekly 'what should you automate next' brief (toil.py) -
@@ -379,6 +379,9 @@ class SQLiteStore:
                 except ValueError: continue
                 if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
                     c['ai_prompt'] = DIGEST_PROMPT
+                    # a stock digest that never had a cadence set was daily by default; out of the
+                    # box it is now every three hours with a link per task (owner-set cadences kept)
+                    if not any(c.get(k) for k in ('cron', 'every_minutes', 'daily_at', 'on_startup')): c['every_minutes'] = 180
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
             # data heal: 'triage' was a fourth Kind the pickers never offered, so those tasks
             # showed a kind the dropdown could not represent - and every one of them had a

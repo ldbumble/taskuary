@@ -26,6 +26,12 @@ const T = ({ p, bg, fg = "#fff", text, size = 11, weight = 800 }) => (
 );
 
 export const LOGOS = {
+  email: (p) => (
+    <S {...p}>
+      <rect x="2" y="5" width="20" height="14" rx="2.5" fill="#55697a" />
+      <path fill="none" stroke="#fffdfb" strokeWidth="1.8" strokeLinejoin="round" d="M4.2 7.6l7.8 5.9 7.8-5.9" />
+    </S>
+  ),
   outlook: (p) => (
     <S {...p}>
       <rect x="6" y="4" width="16" height="16" rx="2" fill="#0F6CBD" />

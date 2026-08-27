@@ -106,6 +106,13 @@ export default function TaskHubPage() {
   // A terminal belongs to the task it is working - there is no dock and no terminal tab.
   // Opening a task with start=true means "and put your CLI on it now".
   const [autostart, setAutostart] = useState(null);
+  // #task=123 opens that task - the digest's links, a chat ping, a bookmark
+  useEffect(() => {
+    const fromHash = () => { const m = /task=(\d+)/.exec(window.location.hash || ""); if (m) openTask(Number(m[1])); };
+    fromHash(); window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const openTask = (taskId, opts) => {
     setSelectedTask(taskId); go("Tasks"); selRef.current = taskId;
     setAutostart(opts?.start ? { taskId, agent: opts.agent, model: opts.model } : null);

@@ -402,14 +402,16 @@ const REPORT_COLORS = { Triage: "#6f8a6e", Determination: "#6f8a6e", Actions: "#
    the set. One list, one shape per row: what it is, and what it does. */
 export const ChoiceRow = ({ icon, label, hint, tint = "#eae4d8", onClick, first, busy }) => (
   <Box onClick={busy ? undefined : onClick}
-    sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, py: 0.7, cursor: busy ? "default" : "pointer",
+    sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, py: 0.55, cursor: busy ? "default" : "pointer",
       borderTop: first ? "none" : `1px solid ${BORDER}`, transition: "background .12s",
       "&:hover": { bgcolor: busy ? "transparent" : "#f4f1ec" }, "&:hover .thubChoiceGo": { opacity: 1, transform: "none" } }}>
     <Box sx={{ width: 24, height: 24, borderRadius: 1.5, bgcolor: tint, flexShrink: 0,
       display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</Box>
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.3 }}>{label}</Typography>
-      {hint && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.25, fontSize: 10.5 }}>{hint}</Typography>}
+    {/* one line per choice: the label, then its hint trailing in the same line (ellipsis on
+        a narrow panel, the whole of it on hover) - eight two-line rows needed a scrollbar */}
+    <Box sx={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 0.9 }} title={hint || undefined}>
+      <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.3, whiteSpace: "nowrap" }}>{label}</Typography>
+      {hint && <Typography variant="caption" noWrap sx={{ color: FAINT, fontSize: 10.5, minWidth: 0 }}>{hint}</Typography>}
     </Box>
     {busy ? <CircularProgress size={13} />
       : <ChevronRightIcon className="thubChoiceGo" sx={{ fontSize: 16, color: FAINT, opacity: 0,

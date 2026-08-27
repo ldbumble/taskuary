@@ -919,8 +919,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
 
         {/* pinned: whatever the message does, the four options are on screen */}
         {!loading && (
-          <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2,
-            px: 2, pt: 0.25, pb: 1.25, maxHeight: "46vh", overflowY: "auto" }}>
+          <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2, px: 2, pt: 0.25, pb: 1.25 }}>
           {/* These were four buttons in two rows, four sizes, two right-aligned - so "what are
               my options" needed a hunt, and a long message pushed the fourth off-screen. */}
             <PanelLabel>What should happen with this?</PanelLabel>
@@ -1108,6 +1107,16 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
   const text = cut >= 0 ? whole.slice(0, cut).trimEnd() : whole;
   const raw = cut >= 0 ? whole.slice(cut + RAW.length).trim() : "";
   const you = cur?.Status === "context";
+  // an excerpt first. A PR body or a forwarded chain ran the panel into its own scrollbar
+  // and pushed the choices under the fold; the first screen of a message is what the
+  // decision needs, and the rest is one click, not a scroll, away
+  const [full, setFull] = useState(false);
+  useEffect(() => setFull(false), [cur?.MessageId]);
+  const LINES = 8, CHARS = 700;
+  const rows = text.split("\n");
+  const long = rows.length > LINES || text.length > CHARS;
+  const excerpt = long ? rows.slice(0, LINES).join("\n").slice(0, CHARS).trimEnd() + " …" : text;
+  const shown = full || !long ? text : excerpt;
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
   return (
@@ -1147,8 +1156,14 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
         )}
         {cur?.Channel === "report" ? <SectionedText text={text} />
           : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
-              {text}
+              {shown}
             </Typography>}
+        {long && cur?.Channel !== "report" && (
+          <Typography variant="caption" onClick={() => setFull(!full)}
+            sx={{ display: "block", mt: 0.5, color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+            {full ? "show less ↑" : `show the whole message — ${rows.length} lines ↓`}
+          </Typography>
+        )}
         {raw && (
           <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
             <Typography variant="caption" onClick={() => setShowRaw(!showRaw)}

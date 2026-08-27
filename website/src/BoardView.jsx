@@ -12,6 +12,7 @@ import StudioView from "./StudioView.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
+import { pollWhileVisible } from "./visible.js";
 import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgentButton, TellAgent } from "./ui.jsx";
 
@@ -249,14 +250,13 @@ export default function BoardView({ onOpenTask }) {
     try { setTasks(((await api.get("/api/tasks", { params: { active: 1 } })).data.data || []).filter((t) => t.Status !== "dropped")); }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load the board"); }
   }, []);
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { load(); return pollWhileVisible(load, 15000); }, [load]);
   // live tails poll fast (the cards are a status wall you watch); the task page has the full trace
   useEffect(() => {
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
     tick();
-    const t = setInterval(tick, 4000);
-    return () => clearInterval(t);
+    return pollWhileVisible(tick, 4000);
   }, []);
   useEffect(() => {
     if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0] }));

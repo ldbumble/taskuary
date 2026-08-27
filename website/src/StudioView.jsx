@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, CircularProgress, Slider, Typography } from "@mui/material";
 import api from "./api";
+import { pollWhileVisible } from "./visible.js";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, ROLES, mono } from "./theme.jsx";
 import { cliName, FileChips } from "./BoardView.jsx";
 
@@ -90,14 +91,13 @@ export default function StudioView({ onOpenTask }) {
     const row = (cfg.data.data || []).find((x) => x.Name === "auto_sessions");
     setCap((c) => (c == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : c));
   }, []);
-  useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  useEffect(() => { load(); return pollWhileVisible(load, 15000); }, [load]);
   // the tails poll fast, exactly as the Board's do: a screen you are watching is a status wall
   useEffect(() => {
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
     tick();
-    const id = setInterval(tick, 4000);
-    return () => clearInterval(id);
+    return pollWhileVisible(tick, 4000);
   }, []);
 
   const desks = useMemo(() => {
@@ -115,8 +115,7 @@ export default function StudioView({ onOpenTask }) {
   const busy = desks.some(isLive), walking = queue.length > 0 && desks.some((d) => !d);
   useEffect(() => {
     if (!busy && !walking) return undefined;
-    const id = setInterval(() => setFrame((f) => f + 1), 160);
-    return () => clearInterval(id);
+    return pollWhileVisible(() => setFrame((f) => f + 1), 160);
   }, [busy, walking]);
 
 

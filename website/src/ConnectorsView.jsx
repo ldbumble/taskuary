@@ -388,16 +388,26 @@ const NL = String.fromCharCode(10);
 
 // A card per connection. The dot is read off the status line the card already carries -
 // "off", "not set up" and "connection failing" are the only three states worth a colour.
-const connDot = (c) => (c.planned ? "#cfc9bf"
-  : /failing|test failed/.test(c.desc) ? "#6b2733"
-    : /^off|not set up|no key yet/.test(c.desc) ? "#cfc9bf" : "#55697a");
+const connState = (c) => (c.planned ? "planned"
+  : /failing|test failed/.test(c.desc) ? "failing"
+    : /^off|not set up|no key yet/.test(c.desc) ? "off" : "on");
+const connDot = (c) => ({ planned: "#cfc9bf", failing: "#6b2733", off: "#cfc9bf", on: "#55697a" })[connState(c)];
+// the whole card says its state, not just the 7px dot: a live connection wears the brand
+// border on a faintly tinted ground, a failing one the alert border, an unconfigured one
+// stays paper - so a wall of nine cards reads at a glance which three are actually working
+const CARD_STATE = {
+  on:      { border: "#55697a", bg: "#f6f7f9", width: 1.5 },
+  failing: { border: "#8a3646", bg: "#faf3f4", width: 1.5 },
+  off:     { border: BORDER, bg: PANEL, width: 1 },
+  planned: { border: BORDER, bg: PANEL, width: 1 },
+};
 
 const ConnCard = ({ c }) => (
   <Box onClick={c.planned ? undefined : c.go}
-    sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2.5, p: 1.6,
-      opacity: c.planned ? 0.5 : 1, cursor: c.planned ? "default" : "pointer",
+    sx={{ bgcolor: CARD_STATE[connState(c)].bg, border: `${CARD_STATE[connState(c)].width}px solid ${CARD_STATE[connState(c)].border}`, borderRadius: 2.5, p: 1.6,
+      opacity: c.planned ? 0.5 : connState(c) === "off" ? 0.85 : 1, cursor: c.planned ? "default" : "pointer",
       transition: "border-color .15s, box-shadow .15s",
-      ...(c.planned ? {} : { "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }) }}>
+      ...(c.planned ? {} : { "&:hover": { boxShadow: "0 2px 8px rgba(47,107,79,.12)" } }) }}>
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
       <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#e9e3d8", flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center" }}>

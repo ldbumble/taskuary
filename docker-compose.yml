@@ -4,6 +4,9 @@
 # and the WhatsApp bridge are host programs; they are not in this image.
 # Publish past localhost only with TASKUARY_TOKEN set:
 #   TASKUARY_TOKEN=... docker compose up
+#
+# Seed /data with the regression desk (the same pictures tests/test_factory.py pins):
+#   docker compose --profile regression run --rm desk
 services:
   taskuary:
     build: .
@@ -21,6 +24,17 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  desk:
+    profiles: ["regression"]
+    image: taskuary:local
+    build: .
+    user: "1000:1000"
+    volumes:
+      - taskuary-data:/data
+    environment:
+      TASKUARY_HOME: /data
+    command: ["python", "-m", "taskuary.testing", "desk"]
 
 volumes:
   taskuary-data:

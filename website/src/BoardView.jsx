@@ -13,7 +13,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, TellAgentButton } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgentButton, TellAgent } from "./ui.jsx";
 
 // "coder · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
@@ -66,7 +66,7 @@ export const FileChips = ({ files }) => (files || []).length === 0 ? null : (
 );
 
 const LiveTail = ({ run }) => {
-  const waiting = run.kind === "session" && run.idle >= IDLE_WAITING;
+  const waiting = run.kind === "session" && isWaiting(run);
   return (
   <Box sx={{ mt: 0.6, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 0.85, py: 0.5 }}>
     <FileChips files={run.files} />
@@ -202,7 +202,7 @@ const laneOf = (t, live) => {
   // column existed) trusts the live session: it is the fact happening right now.
   const resumed = l && (!t.ClosedAt || String(l.StartedAt || "") > String(t.ClosedAt));
   if (t.Status === "done" && !resumed) return "done";
-  if (l) return l.kind === "session" && l.idle >= IDLE_WAITING ? "waiting" : "working";
+  if (l) return l.kind === "session" && isWaiting(l) ? "waiting" : "working";
   if (t.RunStatus === "error") return "waiting";       // it failed: your move, never back to "queued"
   if (t.ReviewStatus === "pending" || t.Status === "waiting") return "waiting";
   if (t.RunStatus === "running") return "working";
@@ -230,6 +230,14 @@ export default function BoardView({ onOpenTask }) {
   const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [noteFor, setNoteFor] = useState(null);   // the task whose handover note is open
+  const [feedOpen, setFeedOpen] = useState(false); // Feed the agent: the funnel's front door
+  const [feedTask, setFeedTask] = useState(null);
+  useEffect(() => {
+    if (!feedOpen) return;
+    const liveIds = Object.keys(live || {}).map(Number);
+    if (!feedTask || !(tasks || []).some((t) => t.TaskId === feedTask)) setFeedTask(liveIds.length === 1 ? liveIds[0] : (liveIds[0] || null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedOpen]);
   const [repos, setRepos] = useState([]);
   const { agents, models, cmds } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
@@ -303,9 +311,37 @@ export default function BoardView({ onOpenTask }) {
               </Box>
             ))}
         </Box>
+        {/* the funnel's front door, as big as the task button: pick the agent, paste the prompts */}
+        <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
+          sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>✎ Feed the agent</Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
           onClick={() => setNewOpen(true)}>New task for the agent</Button>
       </Box>
+      <Dialog open={feedOpen} onClose={() => setFeedOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ pb: 0.5 }}>Feed the agent
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
+            Queue prompts for an agent - one, or a whole list. They land one per stop, in order, never mid-turn.
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mb: 1.25 }}>
+            {(tasks || []).filter((t) => t.Kind !== "reply" && t.Status !== "done" && t.Status !== "dropped")
+              .sort((a, b) => (live[b.TaskId] ? 1 : 0) - (live[a.TaskId] ? 1 : 0))
+              .map((t) => (
+                <Box key={t.TaskId} onClick={() => setFeedTask(t.TaskId)}
+                  sx={{ px: 1.1, py: 0.5, borderRadius: 99, cursor: "pointer", fontSize: 11.5, fontWeight: 600, maxWidth: 360, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    border: `1px solid ${feedTask === t.TaskId ? "#8a7a5c" : BORDER}`, bgcolor: feedTask === t.TaskId ? "#f1ead9" : PANEL, color: INK }}>
+                  {live[t.TaskId] ? "▮ " : ""}{t.ref} · {t.Title}
+                </Box>
+              ))}
+            {(tasks || []).filter((t) => t.Kind !== "reply" && t.Status !== "done" && t.Status !== "dropped").length === 0 && (
+              <Typography variant="caption" sx={{ color: FAINT }}>No open coding task yet - make one with New task for the agent, then feed it.</Typography>
+            )}
+          </Box>
+          {feedTask ? <TellAgent taskId={feedTask} taskRef={(tasks || []).find((t) => t.TaskId === feedTask)?.ref} onQueued={load} />
+            : <Typography variant="caption" sx={{ color: FAINT }}>Pick the task above - ▮ marks one with an agent on it right now.</Typography>}
+        </DialogContent>
+      </Dialog>
 
       {view === "studio" && <StudioView onOpenTask={onOpenTask} />}
 
@@ -389,7 +425,7 @@ export default function BoardView({ onOpenTask }) {
                       border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.7 } }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
-                    {t.Kind !== "reply" && t.Status !== "done" && <TellAgentButton taskId={t.TaskId} taskRef={t.ref} count={t.Waiting || 0} small />}
+                    {t.Kind !== "reply" && t.Status !== "done" && <TellAgentButton taskId={t.TaskId} taskRef={t.ref} count={t.Waiting || 0} />}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
                   </Box>

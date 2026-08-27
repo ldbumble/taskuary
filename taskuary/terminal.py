@@ -303,10 +303,15 @@ class Term:
         self._files = (got, time.time())
         return got
 
+    def phase(self) -> str: return phase_of(self.tail(4))
+    def waiting(self) -> bool: return waiting_of(self)
+
     def info(self, tail=0):
+        # module functions, not methods: the tests' fakes (and any other stand-in) need only tail() and idle()
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'cmd': ' '.join(self.argv), 'files': self.files(),
+                'idle': self.idle(), 'phase': phase_of(self.tail(4)), 'waiting': waiting_of(self),
+                'cmd': ' '.join(self.argv), 'files': self.files(),
                 **({'tail': self.tail(tail)} if tail else {})}
 
 
@@ -904,8 +909,33 @@ def get(sid): return SESSIONS.get(sid)
 
 
 # A session that has printed nothing for this long is parked at a prompt (or finished) -
-# either way the next move is the owner's, not the agent's.
+# either way the next move is the owner's, not the agent's. The FALLBACK: the CLIs we know
+# say it on screen, and that is read first (phase_of).
 IDLE_WAITING = 45
+
+# What the last lines of the screen say. Claude Code shows "esc to interrupt" (and a spinner)
+# while it works and "? for shortcuts" / "shift+tab to cycle" / "auto mode on" at its prompt;
+# codex shows "esc to interrupt" too and a bare "›" prompt; gemini "Type your message". The
+# LAST line wins where both appear - a status line redrawn in place leaves old frames in the
+# scrollback, so an "esc to interrupt" three lines up is history, not now.
+_WORKING = re.compile(r'esc to interrupt|esc to cancel|\(thinking\)|[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]|\b(thinking|working|running)…', re.I)
+_PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|^\s*[›>❯]\s*$', re.I)
+
+def waiting_of(t) -> bool:
+    """Is the agent parked and the next move the owner's? The CLI's own screen decides where it
+    can (phase_of); only an unrecognised screen falls back to IDLE_WAITING of silence - which
+    flapped: Claude Code repaints its footer at rest, so the clock kept resetting."""
+    p = phase_of(t.tail(4))
+    return p == 'parked' or (p != 'working' and t.idle() >= IDLE_WAITING)
+
+
+def phase_of(lines) -> str:
+    """'working' | 'parked' | 'unknown' from the tail of a screen."""
+    ls = [str(l) for l in (lines or []) if str(l).strip()]
+    for l in reversed(ls):                      # newest first: the first line that says anything decides
+        if _PARKED.search(l): return 'parked'
+        if _WORKING.search(l): return 'working'
+    return 'unknown'
 
 def for_task(task_id, tail=0):
     """The live session working a task, if any - what makes a task 'agent working' even

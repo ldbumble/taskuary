@@ -663,8 +663,11 @@ const ST = Object.fromEntries(TASK_STATES.map((x) => [x.key, x]));
 // A CLI that has printed nothing for this long is parked at its own prompt - the next move
 // is yours, not its. Thinking agents print constantly; a question is silence.
 export const IDLE_WAITING = 45;
+// `waiting` is the server's verdict (the CLI's own screen, silence as fallback); older rows
+// without it fall back to the clock here
+export const isWaiting = (s) => (s?.waiting ?? (s?.idle >= IDLE_WAITING));
 export const busyNow = (t) => (t?.RunStatus === "running")
-  || (t?.Session?.alive && t.Session.idle < IDLE_WAITING);
+  || (t?.Session?.alive && !isWaiting(t.Session));
 // The ladder, top down: dropped, done, an agent is ACTUALLY running it, else it is yours.
 // "in_progress with nothing running" used to read as "agent working" - a task whose agent
 // finished without closing it then sat there looking busy and nobody was told.
@@ -961,7 +964,7 @@ const _elapsed = (since) => {
   return sec < 90 ? `${Math.round(sec)}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${(sec / 3600).toFixed(1)}h`;
 };
 export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
-  const waiting = run ? (run.kind === "session" && (run.asking || run.idle >= IDLE_WAITING)) : false;
+  const waiting = run ? (run.kind === "session" && (run.asking || isWaiting(run))) : false;
   const tail = (run?.tail || []).slice(-lines);
   const files = run?.files || [];
   const who = run?.AgentName || agent || "agent";

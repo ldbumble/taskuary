@@ -775,7 +775,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // and a session gone quiet is a question waiting for an answer, not work in progress
   const ses = detail?.session;
   const run = (detail?.runs || []).find((r) => r.Status === "running");
-  const onIt = ses ? { agent: ses.agent || ses.label, waiting: ses.idle >= IDLE_WAITING }
+  const onIt = ses ? { agent: ses.agent || ses.label, waiting: ses.waiting ?? (ses.idle >= IDLE_WAITING) }
     : run ? { agent: run.AgentName, waiting: false } : null;
   // the live console: while an agent is on this task, the panel polls its last lines every 3 s
   const [liveRow, setLiveRow] = useState(null);

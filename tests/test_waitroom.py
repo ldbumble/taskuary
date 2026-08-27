@@ -22,6 +22,43 @@ class FakeTerm:
 def task(s, status='in_progress'): return s.create_task({'Title': 'PTO import', 'Kind': 'coding', 'Status': status}, 't')
 
 
+class PhaseTests(unittest.TestCase):
+    """Working vs parked is read off the CLI's own screen; silence is only the fallback. The
+    Board flapped between lanes because Claude Code repaints its footer at rest, resetting the
+    idle clock every time."""
+    def test_claude_code_footer_says_parked_even_when_it_just_repainted(self):
+        tail = ['  I updated the three files and the tests pass.', '', '⏵⏵ auto mode on (shift+tab to cycle) · ? for shortcuts']
+        self.assertEqual(terminal.phase_of(tail), 'parked')
+        t = FakeTerm(1, idle=0.5, tail=tail)                       # printed half a second ago - and still parked
+        t.phase = lambda: terminal.phase_of(t.tail(4)); t.waiting = lambda: t.phase() == 'parked' or (t.phase() != 'working' and t.idle() >= terminal.IDLE_WAITING)
+        self.assertTrue(t.waiting())
+
+    def test_esc_to_interrupt_says_working_however_long_the_silence(self):
+        tail = ['⠹ Thinking… (esc to interrupt)']
+        self.assertEqual(terminal.phase_of(tail), 'working')
+        t = FakeTerm(1, idle=terminal.IDLE_WAITING + 60, tail=tail)
+        t.phase = lambda: terminal.phase_of(t.tail(4)); t.waiting = lambda: t.phase() == 'parked' or (t.phase() != 'working' and t.idle() >= terminal.IDLE_WAITING)
+        self.assertFalse(t.waiting())                               # a long test run is not a question
+
+    def test_the_newest_line_wins_over_an_older_frame(self):
+        self.assertEqual(terminal.phase_of(['Running tests… (esc to interrupt)', '? for shortcuts']), 'parked')
+        self.assertEqual(terminal.phase_of(['? for shortcuts', 'Editing foo.py (esc to interrupt)']), 'working')
+
+    def test_an_unknown_screen_falls_back_to_the_clock(self):
+        self.assertEqual(terminal.phase_of(['$ make test', 'ok 12 tests']), 'unknown')
+        self.assertEqual(terminal.phase_of([]), 'unknown')
+
+    def test_the_waiting_room_reads_the_screen_too(self):
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=1, tail=['Done.', '? for shortcuts'])         # parked, freshly repainted
+        t.waiting = lambda: True
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            self.assertEqual(waitroom.state(s, tid)[0], 'parked')
+            t.waiting = lambda: False                                         # working, however quiet
+            t._idle = terminal.IDLE_WAITING + 30
+            self.assertEqual(waitroom.state(s, tid)[0], 'working')
+
+
 class QuestionTests(unittest.TestCase):
     def test_a_question_on_the_tail_is_a_question(self):
         for tail in (['Should I also update the tests?'], ['Do you want to proceed?', '❯ 1. Yes', '  2. No'],

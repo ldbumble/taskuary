@@ -83,7 +83,8 @@ def state(store, tid: int) -> tuple:
     t = next((x for x in term.SESSIONS.values() if x.task_id == tid and x.alive), None)
     if t is None:
         return ('working', None) if any(r.get('TaskId') == tid for r in store.running_runs()) else ('no_session', None)
-    if t.idle() < term.IDLE_WAITING: return 'working', t
+    parked = t.waiting() if hasattr(t, 'waiting') else term.waiting_of(t)
+    if not parked: return 'working', t
     return ('asking' if looks_like_question(t.tail(TAIL_LINES)) else 'parked'), t
 
 

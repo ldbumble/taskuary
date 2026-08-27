@@ -793,7 +793,8 @@ def live_runs(lines: int = 3):
             # the hand-raise notification says "asked you something" instead of "stopped"
             out.append({'RunId': None, 'TaskId': t['taskId'], 'AgentName': t['agent'] or t['label'],
                         'kind': 'session', 'StartedAt': t['started'], 'idle': t['idle'],
-                        'asking': t['idle'] >= hub_term.IDLE_WAITING and waitroom.looks_like_question(t.get('tail') or []),
+                        'waiting': (w := t['waiting'] if t.get('waiting') is not None else t['idle'] >= hub_term.IDLE_WAITING), 'phase': t.get('phase'),
+                        'asking': bool(w) and waitroom.looks_like_question(t.get('tail') or []),
                         'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
                         'files': t.get('files') or [], 'tail': t.get('tail') or []})
     return {'data': out}

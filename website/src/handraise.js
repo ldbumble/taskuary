@@ -64,7 +64,7 @@ export function useHandRaise(onRaise, every = 8000) {
         const { data } = await api.get("/api/runs/live", { params: { lines: 4 } });
         const now = {};
         for (const r of data.data || []) {
-          const waiting = r.kind === "session" && (r.asking || r.idle >= IDLE_WAITING);
+          const waiting = r.kind === "session" && (r.asking || (r.waiting ?? (r.idle >= IDLE_WAITING)));
           now[r.TaskId] = waiting ? "waiting" : "working";
           if (primed.current && waiting && seen.current[r.TaskId] === "working") {
             onRaise({ tid: r.TaskId, ref: `TQ-${String(r.TaskId).padStart(4, "0")}`, agent: r.AgentName, title: r.Title || "",

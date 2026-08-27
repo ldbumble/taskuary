@@ -60,9 +60,8 @@
   .copy{position:absolute;z-index:2;left:0;right:0;top:0;padding:34px 24px 0;text-align:center;pointer-events:none}
   .copy .eyebrow{display:flex;align-items:center;justify-content:center;gap:9px}
   .copy .eyebrow img{width:20px;height:20px;border-radius:6px}
-  .copy h1{font-size:clamp(28px,3vw,44px);margin:12px 0 10px}
+  .copy h1{font-size:clamp(28px,3vw,44px);margin:12px 0 0}
   .copy h1 .accent{white-space:nowrap}
-  .copy .sub{margin:0 auto;max-width:640px;font-size:clamp(14px,1.05vw,16px);line-height:1.45}
   .rail{position:absolute;right:28px;top:max(14vh,calc(var(--band,0px) + 6px));width:clamp(240px,20vw,320px);display:flex;flex-direction:column;gap:8px;pointer-events:none}
   .rail[hidden]{display:none}   /* the class's display:flex would outrank the attribute */
   .rail .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600;
@@ -163,8 +162,7 @@
     nav .links a.hide{display:none}
     .hero{height:auto;min-height:100vh;display:flex;flex-direction:column}
     .copy{position:static;padding:26px 16px 4px}
-    .copy h1{font-size:30px;margin:8px 0 8px}
-    .copy .sub{font-size:14px}
+    .copy h1{font-size:30px;margin:8px 0 0}
     .hero canvas{position:relative;inset:auto;height:44vh}
     .hero .words{position:relative;inset:auto;flex:1}
     .hero .words .wrap{height:auto;padding:0 16px 56px;max-width:none}
@@ -190,7 +188,6 @@
     <div class="copy" id="copy">
       <div class="eyebrow"><img src="/icon.png" alt="">Taskuary</div>
       <h1>Your inbox, staffed by <span class="accent">AI agents.</span></h1>
-      <p class="sub">Mail, Teams, GitHub and scheduled reports land on one desk. Triage says what is real work, the coding agents you already use do it, and you approve.</p>
     </div>
     <canvas id="floor" role="img" aria-label="The Taskuary Studio: as mail is triaged into tasks, agents walk in through the door and sit at desks; each screen shows what its agent is doing. Click the door to enter the site."></canvas>
     <div class="words"><div class="wrap">

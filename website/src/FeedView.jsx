@@ -24,7 +24,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, TellAgent } from "./ui.jsx";
+import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole } from "./ui.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
@@ -924,7 +924,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   {/* the black console: the agent's own last lines, live - the same peephole the Board
                       cards wear, so "working this now" is something you watch, not read */}
                   <LiveConsole run={liveRow} agent={onIt.agent} onOpen={() => onOpenTask(sel.TaskId)} />
-                  <TellAgent taskId={sel.TaskId} taskRef={ref(sel.TaskId)} compact />
                 </Box>
               ) : !codeless ? (
                 <SendToAgent row first messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />

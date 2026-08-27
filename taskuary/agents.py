@@ -83,6 +83,14 @@ def _resolve_cmd(name: str) -> list:
         raise FileNotFoundError(f"'{name}' not found on PATH - is the CLI installed?")
     if os.name == 'nt' and path.lower().endswith(('.cmd', '.bat')):
         return _shim_target(path) or ['cmd', '/c', path]
+    if os.name == 'nt' and '\\windowsapps\\' in path.lower() and '\\microsoft\\windowsapps\\' not in path.lower():
+        # which() walked into C:\Program Files\WindowsApps\<package>\...\codex.EXE - a Store package
+        # folder, which CreateProcess is refused ([WinError 5] Access is denied). The runnable
+        # thing is the execution ALIAS in the user's own WindowsApps folder; fall back to the
+        # shell, which resolves aliases the way a typed command does.
+        import ntpath   # a Windows path, split as one wherever this runs (CI is Linux and macOS)
+        alias = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'WindowsApps', ntpath.basename(path))
+        return [alias] if os.path.exists(alias) else ['cmd', '/c', name]
     return [path]
 
 
@@ -143,8 +151,12 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False)
+    try:
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False)
+    except PermissionError as e:
+        # to the user this IS "not installed": whatever which() found, it cannot be run from here
+        raise FileNotFoundError(f"'{name}' is not installed or not on PATH - install it, then try again.") from e
     timed = threading.Event()
     killer = threading.Timer(profile.get('timeout', 1200), lambda: (timed.set(), p.kill()))
     killer.start()

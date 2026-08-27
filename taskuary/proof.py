@@ -163,6 +163,19 @@ def touched_by(store, task_id: int, cwd: str) -> tuple:
     return sorted(paths), commits, known
 
 
+_GH_ITEM = re.compile(r'^gh:(?P<repo>[^#\s]+)#(?P<n>\d+)$')
+
+def pr_of(store, task_id: int):
+    """(repo, number) when this task IS a pull request from the GitHub connector - its first
+    message is the PR item (ExternalId gh:<repo>#<n>, body opening '[pull request by') - else None."""
+    for m in store.list_messages(task_id):
+        if m.get('Channel') != 'github': continue
+        hit = _GH_ITEM.match(str(m.get('ExternalId') or ''))
+        if hit and str(m.get('BodyText') or '').lstrip().lower().startswith('[pull request by'):
+            return hit.group('repo'), int(hit.group('n'))
+    return None
+
+
 def review(store, task_id: int, scope: str = 'task') -> dict:
     """What THIS task changed in its checkout, per file, for the look you take before anything
     is pushed - or, with scope='checkout', everything a push would carry (the old view, still
@@ -170,12 +183,31 @@ def review(store, task_id: int, scope: str = 'task') -> dict:
     is one - it is where the agent is actually typing, and it beats any tag or map."""
     from . import terminal as hub_term
     t = store.get_task(task_id) or {}
+    # a task that IS a pull request reviews the PR's diff - the contributor's change - by
+    # default; the checkout scopes stay one click away for what the agent itself did
+    pr = pr_of(store, task_id)
+    if pr and scope != 'checkout':
+        repo_, n = pr
+        try:
+            from .github import pr_diff
+            c = store.get_connector_by_type('github', with_secret=True) or {}
+            if not c.get('Secret'): raise RuntimeError('no GitHub token on the card')
+            files = split_files(pr_diff(c['Secret'], repo_, n))
+            for f in files:
+                if len(f['patch']) > MAX_PATCH: f['patch'], f['truncated'] = '', True
+            return {'cwd': None, 'repo': repo_, 'branch': None, 'scope': 'pr', 'pr': {'repo': repo_, 'number': n, 'url': f'https://github.com/{repo_}/pull/{n}'},
+                    'ahead': 0, 'upstream': '', 'files': files, 'commits': [], 'note': '' if files else 'The pull request has no file changes.',
+                    'checkout_files': None, 'added': sum(f['added'] for f in files), 'removed': sum(f['removed'] for f in files)}
+        except Exception as e:
+            logger.warning(f'PR diff for task {task_id} failed: {e}')
+            pr_err = f'Could not fetch the pull request diff ({str(e)[:120]}) - showing the checkout instead.'
+    else: pr_err = ''
     repo = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
     sess = hub_term.for_task(task_id)
     cwd = (sess or {}).get('cwd') or (hub_term.path_for_repo(store, repo) if repo else None)
     if not cwd:
-        return {'cwd': None, 'repo': repo, 'files': [], 'scope': scope,
-                'why': 'no checkout for this task yet - start a session, or pick the repository '
+        return {'cwd': None, 'repo': repo, 'files': [], 'scope': scope, 'pr': {'repo': pr[0], 'number': pr[1]} if pr else None,
+                'why': (pr_err + ' ' if pr_err else '') + 'no checkout for this task yet - start a session, or pick the repository '
                        'from the task menu, and the changes show up here'}
     base, ahead, upstream = push_base(cwd)
     whole = split_files(working_diff(cwd))
@@ -196,7 +228,9 @@ def review(store, task_id: int, scope: str = 'task') -> dict:
                          + ' from other work.' if (others or ahead - len(commits) > 0) else ''))
     for f in files:
         if len(f['patch']) > MAX_PATCH: f['patch'], f['truncated'] = '', True
+    if pr_err: note = (pr_err + ' ' + note).strip()
     return {'cwd': cwd, 'repo': repo, 'branch': _git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip(), 'scope': scope,
+            'pr': {'repo': pr[0], 'number': pr[1], 'url': f'https://github.com/{pr[0]}/pull/{pr[1]}'} if pr else None,
             # what the diff is measured AGAINST, said out loud: "3 commits ahead of origin/main"
             # is the difference between a clean tree and a finished job nobody has pushed
             'ahead': ahead, 'upstream': upstream, 'files': files, 'commits': commits, 'note': note,

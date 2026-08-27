@@ -916,6 +916,13 @@ def waitroom_add(tid: int, body: dict):
     try: return waitroom.add(store, tid, str((body or {}).get('text') or ''), ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
+@app.post('/api/tasks/{tid}/waitroom/bulk')
+def waitroom_bulk(tid: int, body: dict):
+    """A pasted list - one prompt per line - becomes that many notes, in order. With the drip on
+    (Settings -> Coder agent) each lands as its own turn when the agent stops."""
+    try: return waitroom.add_many(store, tid, str((body or {}).get('text') or ''), ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 @app.delete('/api/tasks/{tid}/waitroom/{wid}')
 def waitroom_drop(tid: int, wid: int):
     store.drop_waiting(wid, tid)

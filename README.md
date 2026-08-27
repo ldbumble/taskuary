@@ -253,12 +253,16 @@ other's way with three light moves. No locks, no worktrees, no manager agent:
   says behind whom and why (hover it) — and starts by itself the moment that agent finishes.
   A full house (every session slot busy) queues the same way. Wrong guesses are cheap by
   design: a wrong *yes* waits some minutes, a wrong *no* is caught by the next move.
-- **The waiting room** — you get ideas *while* the agent works, and interrupting it is how a
-  mid-edit agent loses the thread. Type them into the task's **Waiting room** instead (the
-  ✎ chip on the card counts them). They are typed into the session as one numbered batch the
-  moment the agent parks at its prompt — never mid-turn, and never on top of a question it is
-  waiting on *you* to answer; that comes first. A session that already ended reopens with the
-  notes as the ask.
+- **Tell the agent — a funnel of prompts that drips in** — you get ideas *while* the agent
+  works, and interrupting it is how a mid-edit agent loses the thread. Type them into the
+  **✎ Tell the agent** box instead — under the terminal on the task page, on any Board card, in
+  the Timeline's funnel bar. Nothing is typed mid-turn: each note lands the moment the agent
+  parks at its prompt, and never on top of a question it is waiting on *you* to answer; that
+  comes first. **Paste a list** and twenty prompts become twenty notes, in order, and they
+  **drip**: one per stop, each with the agent's full attention, the agent told how many wait
+  behind it so it never goes looking. A session that already ended reopens with the next note
+  as the ask. Withdraw any note until it has gone in. (Settings → Coder agent turns the drip
+  into one batch if you prefer.)
 - **The blackboard** — the board itself is what agents know about each other. Every working
   card shows the files its agent has **actually modified so far** — read off git (dirty
   files minus what was already dirty when the session opened) and the run trace, never off

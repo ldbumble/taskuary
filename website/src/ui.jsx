@@ -862,16 +862,21 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   const [wait, setWait] = React.useState({ data: [], state: null });
   const [text, setText] = React.useState("");
   const [flash, setFlash] = React.useState("");
+  const [many, setMany] = React.useState(false);      // paste a list: one prompt per line, queued in order
   const load = React.useCallback(async () => {
     if (!taskId) return;
     try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
   }, [taskId]);
   React.useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  const lines = text.split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).length;
   const queue = async () => {
     if (!text.trim()) return;
     try {
-      const { data } = await api.post(`/api/tasks/${taskId}/waitroom`, { text });
-      setText("");
+      const { data } = many
+        ? await api.post(`/api/tasks/${taskId}/waitroom/bulk`, { text })
+        : await api.post(`/api/tasks/${taskId}/waitroom`, { text });
+      setText(""); setMany(false);
+      if (many) { setFlash(`${data.queued} prompts queued — they drip in one per stop`); setTimeout(() => setFlash(""), 5000); load(); onQueued?.(data); return; }
       setFlash(data.delivered ? (data.state === "restarted" ? "session reopened with it" : "typed in — the agent was parked") : "queued — goes in when the agent stops");
       setTimeout(() => setFlash(""), 4000);
       load(); onQueued?.(data);
@@ -886,18 +891,25 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: compact ? 1 : 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
         <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>
-          ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} waiting` : ""}
+          ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} in the funnel` : ""}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {stateLine && <Typography variant="caption" sx={{ color: "#6b5f45", fontSize: 10.5 }}>{stateLine}</Typography>}
+        <Typography variant="caption" onClick={() => setMany((m) => !m)}
+          sx={{ color: "#6b5f45", fontSize: 10.5, cursor: "pointer", textDecoration: "underline", ml: 1 }}>
+          {many ? "one note" : "paste a list"}
+        </Typography>
       </Box>
       <Box sx={{ display: "flex", gap: 1 }}>
-        <TextField fullWidth multiline maxRows={compact ? 3 : 5} size="small" value={text} placeholder="Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line."
+        <TextField fullWidth multiline minRows={many ? 6 : 1} maxRows={many ? 14 : (compact ? 3 : 5)} size="small" value={text}
+          placeholder={many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
+            : "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line."}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
+          onKeyDown={(e) => { if (!many && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
           sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: 12.5 } }} />
         <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim()}
-          sx={{ alignSelf: "flex-end", bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>Queue</Button>
+          sx={{ alignSelf: "flex-end", bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, whiteSpace: "nowrap" }}>
+          {many ? `Queue ${lines || ""} prompt${lines === 1 ? "" : "s"}` : "Queue"}</Button>
       </Box>
       {flash && <Typography variant="caption" sx={{ color: "#47654a", display: "block", mt: 0.5 }}>{flash}</Typography>}
       {pending.length > 0 && (

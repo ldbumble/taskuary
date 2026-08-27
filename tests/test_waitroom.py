@@ -36,6 +36,7 @@ class QuestionTests(unittest.TestCase):
 class DeliveryTests(unittest.TestCase):
     def test_held_while_the_agent_works_then_typed_as_one_batch_in_order(self):
         s = MemoryStore(); tid = task(s)
+        s.set_setting('waitroom_drip', '0', 't')                     # the batch mode: everything at once
         t = FakeTerm(tid, idle=2)
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
             r1 = waitroom.add(s, tid, 'also handle the null case', 'owner')
@@ -108,6 +109,40 @@ class DeliveryTests(unittest.TestCase):
         s = MemoryStore(); tid = task(s)
         with self.assertRaises(ValueError): waitroom.add(s, tid, '   ')
         with self.assertRaises(ValueError): waitroom.add(s, 9999, 'x')
+
+
+class DripTests(unittest.TestCase):
+    def test_a_pasted_list_becomes_notes_in_order_and_drips_one_per_stop(self):
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Done.'])
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            out = waitroom.add_many(s, tid, '1. add the null check\n2) rename the flag\n- write the test\n\n   for the edge case\n')
+            time.sleep(0.4)
+            self.assertEqual((out['queued'], out['delivered'], out['left']), (3, 1, 2))
+            typed = t.typed()
+            self.assertIn('(1) add the null check', typed); self.assertNotIn('rename the flag', typed)
+            self.assertIn('2 more notes wait behind this one', typed)               # told, so it does not go looking
+            self.assertEqual([w['Note'] for w in s.waiting_notes(tid)], ['rename the flag', 'write the test for the edge case'])
+            t.writes.clear(); t._idle = 3
+            self.assertEqual(waitroom.tick(s), 0)                                   # working again: the rest wait
+            t._idle = terminal.IDLE_WAITING + 5
+            self.assertEqual(waitroom.tick(s), 1); time.sleep(0.4)                  # next stop: exactly one more
+            self.assertIn('(1) rename the flag', t.typed()); self.assertIn('1 more note waits', t.typed())
+            self.assertEqual(len(s.waiting_notes(tid)), 1)
+
+    def test_split_many_strips_bullets_and_joins_continuations(self):
+        self.assertEqual(waitroom.split_many('• one\n* two\n3. three\n  still three\n\nfour'), ['one', 'two', 'three still three', 'four'])
+        self.assertEqual(waitroom.split_many('  \n'), [])
+
+    def test_bulk_endpoint(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); tid = task(s)
+        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {'a': FakeTerm(tid, idle=1)}, clear=True):
+            c = TestClient(server.app)
+            self.assertEqual(c.post(f'/api/tasks/{tid}/waitroom/bulk', json={'text': 'a\nb\nc'}).json()['queued'], 3)
+            self.assertEqual(c.post(f'/api/tasks/{tid}/waitroom/bulk', json={'text': '  '}).status_code, 422)
+            self.assertEqual(c.get('/api/tasks').json()['data'][0]['Waiting'], 3)
 
 
 class ApiTests(unittest.TestCase):

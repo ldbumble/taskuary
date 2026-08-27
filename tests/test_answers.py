@@ -7,14 +7,12 @@ from unittest import mock
 
 from taskuary import ingest, outbound, phone, terminal, verdicts
 from taskuary.store import MemoryStore
+from taskuary.testing import Factory
 
 
 def seed_review(s, draft='Hi Sarah - rerunning tonight.'):
-    tid = s.create_task({'Title': 't', 'Kind': 'reply', 'Status': 'open'}, 't')
-    mid = s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'q',
-                         'FromEmail': 'sarah@x.com', 'SentAt': '2026-08-23 10:00:00', 'Status': 'routed'})
-    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': draft})
-    return tid, mid, rid
+    p = Factory(s).pending_draft(from_email='sarah@x.com', subject='q', draft=draft)
+    return p.tid, p.mid, p.rid
 
 
 class VerdictTests(unittest.TestCase):
@@ -128,10 +126,7 @@ class SayToTaskTests(unittest.TestCase):
 
 class AttachHookTests(unittest.TestCase):
     def _attachable(self, s):
-        tid = s.create_task({'Title': 'PTO import', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
-        s.add_message({'TaskId': tid, 'ExternalId': 'orig', 'ConversationId': 'c1', 'Channel': 'email',
-                       'Subject': 'PTO import', 'SentAt': '2026-08-23 09:00:00', 'Status': 'routed'})
-        return tid
+        return Factory(s).attachable().tid
 
     def test_auto_hands_the_answer_over(self):
         s = MemoryStore(); s.set_setting('answer_to_agent', 'auto', 't')

@@ -69,6 +69,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
   const [diff, setDiff] = useState(null);
+  const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
   const pollRef = useRef(null);
 
   // fetch everything once and filter on the derived state - the server only knows raw
@@ -175,7 +176,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // spend a subprocess a second on an answer nobody is looking at
   const loadDiff = useCallback(async (id) => {
     setDiff(null);
-    try { setDiff((await api.get(`/api/tasks/${id}/diff`)).data); }
+    try { setDiff((await api.get(`/api/tasks/${id}/diff`, { params: { scope: diffScope } })).data); }
     catch (e) { setDiff({ files: [], why: e?.response?.data?.detail || "Could not read the checkout" }); }
   }, []);
   useEffect(() => { if (diffOpen && selected) loadDiff(selected); }, [diffOpen, selected, loadDiff]);
@@ -666,14 +667,24 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <IconButton size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
-          {detail?.ref} · everything a push would carry
+          {detail?.ref} · {diffScope === "task" ? "what this task's agent changed" : "everything a push would carry, whoever wrote it"}
           {/* an agent told to "commit locally and stop" leaves a CLEAN tree - saying only
               "uncommitted work" over a finished job read as "it did nothing" */}
-          {diff?.ahead ? ` — ${diff.ahead} commit${diff.ahead === 1 ? "" : "s"} ahead of ${diff.upstream}, plus anything uncommitted`
-                       : diff?.upstream ? ` — measured against ${diff.upstream}` : ""}
+          {diffScope === "task" && diff?.commits?.length ? ` — ${diff.commits.length} commit${diff.commits.length === 1 ? "" : "s"} of its own, unpushed` : ""}
+          {diffScope === "checkout" && diff?.ahead ? ` — ${diff.ahead} commit${diff.ahead === 1 ? "" : "s"} ahead of ${diff.upstream}, plus anything uncommitted`
+                       : diffScope === "checkout" && diff?.upstream ? ` — measured against ${diff.upstream}` : ""}
+          {/* a shared checkout carries other tasks' work; the old drawer showed all of it as this
+              task's - a database-only task wore two other agents' commits. The whole view is one
+              click away, and says whose it is. */}
+          <Box component="span" onClick={() => { const next = diffScope === "task" ? "checkout" : "task"; setDiffScope(next);
+              api.get(`/api/tasks/${selected}/diff`, { params: { scope: next } }).then((r) => setDiff(r.data)).catch(() => {}); }}
+            sx={{ ml: 1, color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+            {diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${diff.checkout_files} file${diff.checkout_files === 1 ? "" : "s"})` : ""}` : "back to this task's changes"}
+          </Box>
         </Typography>
         {!diff ? <CircularProgress size={20} sx={{ m: 2 }} />
           : diff.why ? <Empty>{diff.why}</Empty>
+            : diff.note && !diff.files?.length ? <Empty>{diff.note}</Empty>
             : <DiffFiles files={diff.files} cwd={diff.cwd} branch={diff.branch} />}
       </Drawer>
 

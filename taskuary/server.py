@@ -832,13 +832,13 @@ def task_proof(tid: int):
     return proof.gather(store, tid)
 
 @app.get('/api/tasks/{tid}/diff')
-def task_diff(tid: int):
-    """What the agent has changed in this checkout and not committed - per file, so the look
-    you take before anything is pushed is a review and not a wall of text. Read-only by
-    construction: it runs `git diff` and `git status`, never `add`, never `stash`."""
+def task_diff(tid: int, scope: str = 'task'):
+    """What THIS task's agent changed in its checkout, per file (scope=checkout: everything a
+    push would carry, whoever wrote it). Read-only by construction: `git diff`, `git status`,
+    `git log` - never `add`, never `stash`."""
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     from . import proof
-    return proof.review(store, tid)
+    return proof.review(store, tid, 'checkout' if scope == 'checkout' else 'task')
 
 @app.post('/api/tasks/{tid}/land')
 def task_land(tid: int, flow: str = None):

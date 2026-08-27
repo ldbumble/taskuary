@@ -129,27 +129,78 @@ def working_diff(cwd: str) -> str:
     return '\n'.join(x for x in out if x.strip())
 
 
-def review(store, task_id: int) -> dict:
-    """The uncommitted change on a task's checkout, per file, for the look you take before
-    anything is pushed. The live session's OWN cwd is the truth when there is one - it is
-    where the agent is actually typing, and it beats any tag or map."""
+def touched_by(store, task_id: int, cwd: str) -> tuple:
+    """(paths this task's agents changed, attributed unpushed commits) - the task's OWN footprint
+    in a checkout other tasks share. Paths come from the sessions' dirty-now-minus-dirty-at-open
+    snapshot (the Board's file chips) and headless traces; commits are the unpushed ones that
+    name the task or touch those paths. A TQ-0224 that only ran a database update has no
+    footprint, and its drawer used to show two other tasks' commits as if it had written them."""
+    from . import terminal as hub_term, blackboard
+    from .store import task_ref
+    me = blackboard.norm(cwd)
+    paths, known = set(), False
+    for x in list(hub_term.SESSIONS.values()):
+        if getattr(x, 'task_id', None) == task_id and blackboard.norm(getattr(x, 'cwd', '')) == me:
+            known = True
+            try: paths.update(x.files())
+            except Exception: pass
+    for r in store.list_runs(task_id):
+        if r.get('TraceJson'): known = True
+        paths.update(blackboard.trace_files(r.get('TraceJson')))
+    base, _ahead, up = push_base(cwd)
+    commits = []
+    if up:
+        ref = task_ref(task_id)
+        log = _git(cwd, 'log', '--format=%x1e%H%x1f%s', '--name-only', f'{up}..HEAD')
+        for chunk in log.split('\x1e'):
+            if not chunk.strip(): continue
+            head, _, body = chunk.partition('\n')
+            sha, _, subj = head.partition('\x1f')
+            files = {l.strip() for l in body.splitlines() if l.strip()}
+            if ref in subj or (paths and files & paths):
+                commits.append({'sha': sha[:10], 'subject': subj[:120], 'files': sorted(files)})
+                paths.update(files)
+    return sorted(paths), commits, known
+
+
+def review(store, task_id: int, scope: str = 'task') -> dict:
+    """What THIS task changed in its checkout, per file, for the look you take before anything
+    is pushed - or, with scope='checkout', everything a push would carry (the old view, still
+    right when one agent owns the checkout). The live session's OWN cwd is the truth when there
+    is one - it is where the agent is actually typing, and it beats any tag or map."""
     from . import terminal as hub_term
     t = store.get_task(task_id) or {}
     repo = (re.search(r'repo:([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
     sess = hub_term.for_task(task_id)
     cwd = (sess or {}).get('cwd') or (hub_term.path_for_repo(store, repo) if repo else None)
     if not cwd:
-        return {'cwd': None, 'repo': repo, 'files': [],
+        return {'cwd': None, 'repo': repo, 'files': [], 'scope': scope,
                 'why': 'no checkout for this task yet - start a session, or pick the repository '
                        'from the task menu, and the changes show up here'}
-    files = split_files(working_diff(cwd))
+    base, ahead, upstream = push_base(cwd)
+    whole = split_files(working_diff(cwd))
+    commits, note = [], ''
+    if scope == 'checkout': files = whole
+    else:
+        paths, commits, known = touched_by(store, task_id, cwd)
+        if not known:
+            # no session on record for this task (reaped, or never one here): the footprint is
+            # UNKNOWN, not empty - show everything and say why, rather than a false "nothing"
+            scope, files = 'checkout', whole
+            note = 'No session on record for this task, so this is the whole checkout - some of it may be other work.'
+        else: files = [f for f in whole if f['path'] in set(paths)]
+        others = len(whole) - len(files)
+        if known: note = ('' if files else
+                f'This task changed no files in this checkout' + (f' - it has {len(commits)} commit(s) of its own but nothing uncommitted' if commits else '')
+                + '.' + (f' The checkout carries {others} changed file(s)' + (f' and {ahead - len(commits)} unpushed commit(s)' if ahead - len(commits) > 0 else '')
+                         + ' from other work.' if (others or ahead - len(commits) > 0) else ''))
     for f in files:
         if len(f['patch']) > MAX_PATCH: f['patch'], f['truncated'] = '', True
-    base, ahead, upstream = push_base(cwd)
-    return {'cwd': cwd, 'repo': repo, 'branch': _git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
+    return {'cwd': cwd, 'repo': repo, 'branch': _git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD').strip(), 'scope': scope,
             # what the diff is measured AGAINST, said out loud: "3 commits ahead of origin/main"
             # is the difference between a clean tree and a finished job nobody has pushed
-            'ahead': ahead, 'upstream': upstream, 'files': files,
+            'ahead': ahead, 'upstream': upstream, 'files': files, 'commits': commits, 'note': note,
+            'checkout_files': len(whole),
             'added': sum(f['added'] for f in files), 'removed': sum(f['removed'] for f in files)}
 
 

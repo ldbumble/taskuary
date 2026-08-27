@@ -187,3 +187,53 @@ class PushBaseTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TaskFootprintTests(unittest.TestCase):
+    """A shared checkout: the drawer shows THIS task's files, not the other agent's."""
+    def _repo(self):
+        import subprocess, tempfile, os
+        d = tempfile.mkdtemp(prefix='tq_fp_')
+        run = lambda *a: subprocess.run(['git', '-C', d, *a], capture_output=True, text=True, check=True)
+        run('init', '-q'); run('config', 'user.email', 't@t'); run('config', 'user.name', 't')
+        open(os.path.join(d, 'a.py'), 'w').write('a = 1\n'); open(os.path.join(d, 'b.py'), 'w').write('b = 1\n')
+        run('add', '.'); run('commit', '-q', '-m', 'base')
+        return d, run
+
+    def test_only_the_tasks_own_files_and_commits_show(self):
+        import os
+        from unittest import mock
+        from taskuary import proof, terminal
+        d, run = self._repo()
+        s = MemoryStore()
+        mine = s.create_task({'Title': 'mine', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        # another agent's uncommitted edit, and a commit that names another task
+        open(os.path.join(d, 'b.py'), 'a').write('b = 2\n')
+        open(os.path.join(d, 'c.py'), 'w').write('c = 1\n'); run('add', 'c.py'); run('commit', '-q', '-m', 'TQ-0999 other work')
+        # my session touched a.py only
+        open(os.path.join(d, 'a.py'), 'a').write('a = 2\n')
+        fake = mock.Mock(task_id=mine, cwd=d, alive=True); fake.files = lambda: ['a.py']
+        fake.info = lambda tail=0: {'sid': 'f', 'taskId': mine, 'alive': True, 'idle': 0, 'cwd': d, 'files': ['a.py']}
+        with mock.patch.dict(terminal.SESSIONS, {'f': fake}, clear=True):
+            r = proof.review(s, mine)
+            self.assertEqual([f['path'] for f in r['files']], ['a.py'])            # not b.py, not c.py
+            self.assertEqual(r['commits'], [])                                     # TQ-0999's commit is not mine
+            self.assertEqual(r['scope'], 'task')
+            whole = proof.review(s, mine, 'checkout')
+            self.assertEqual(sorted(f['path'] for f in whole['files']), ['a.py', 'b.py'])    # c.py is committed; no upstream, so HEAD is the base
+
+    def test_a_task_that_changed_nothing_says_so_instead_of_wearing_others_work(self):
+        import os
+        from unittest import mock
+        from taskuary import proof, terminal
+        d, run = self._repo()
+        s = MemoryStore()
+        mine = s.create_task({'Title': 'db only', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        open(os.path.join(d, 'b.py'), 'a').write('b = 2\n')
+        fake = mock.Mock(task_id=mine, cwd=d, alive=True); fake.files = lambda: []
+        fake.info = lambda tail=0: {'sid': 'f', 'taskId': mine, 'alive': True, 'idle': 0, 'cwd': d, 'files': []}
+        with mock.patch.dict(terminal.SESSIONS, {'f': fake}, clear=True):
+            r = proof.review(s, mine)
+        self.assertEqual(r['files'], [])
+        self.assertIn('changed no files', r['note']); self.assertIn('1 changed file', r['note'])
+        self.assertEqual(r['checkout_files'], 1)

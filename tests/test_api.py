@@ -651,7 +651,7 @@ class ApiTests(unittest.TestCase):
                         return_value=lambda sys_, usr_, **kw: seen.update(sys=sys_) or '{"intent": "fyi", "why": "not ours"}'):
             second = push(2)
         self.assertEqual((second['status'], second['task_id']), ('filed', None))
-        self.assertIn('VERDICTS they already gave', seen['sys'])
+        self.assertIn('EVIDENCE', seen['sys'])
         self.assertIn('other people', seen['sys'])
         self.assertEqual(c.post('/api/messages/999999/not-mine', json={}).status_code, 404)
         self.assertEqual(c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'weird'}).status_code, 422)
@@ -1038,3 +1038,21 @@ class ApiTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PolicyDeleteTests(unittest.TestCase):
+    def test_delete_removes_the_rule_and_restores_a_skip_rules_history(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            mid = s.add_message({'ExternalId': 'z1', 'Channel': 'email', 'Subject': 'noise', 'FromEmail': 'flood@x.com', 'Status': 'filed'})
+            pid = c.post('/api/policies', json={'Name': 'skip flood', 'Kind': 'sender', 'Pattern': 'flood@x.com',
+                                                'Action': 'skip', 'Reason': 'flood'}).json()['policyId']
+            self.assertEqual(s.get_message(mid)['Status'], 'skipped')                 # applied backwards
+            self.assertEqual(c.delete(f'/api/policies/{pid}').json()['ok'], True)
+            self.assertEqual([p for p in s.list_policies(active_only=False) if p['PolicyId'] == pid], [])
+            self.assertNotEqual(s.get_message(mid)['Status'], 'skipped')              # history is back
+            self.assertEqual(c.delete(f'/api/policies/{pid}').status_code, 404)

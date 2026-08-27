@@ -358,6 +358,12 @@ export default function BoardView({ onOpenTask }) {
                           color: t.RunStatus === "running" ? "#55697a" : t.RunStatus === "error" ? "#6b2733" : "#47654a" }} />
                     )}
                     {t.HandoverNote && <NoteChip onOpen={() => setNoteFor(t)} />}
+                    {t.Waiting > 0 && (
+                      <Chip size="small" title="Notes queued for the agent - typed in when it stops (Tasks → Waiting room)"
+                        label={`✎ ${t.Waiting} waiting`}
+                        sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
+                          bgcolor: "#f1ead9", color: "#7a5c1e" }} />
+                    )}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{timeAgo(t.CreatedAt)}</Typography>
                   </Box>

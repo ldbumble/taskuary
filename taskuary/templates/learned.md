@@ -29,3 +29,11 @@ activate themselves, because a wrong ignore-rule silences the corrections that w
 _(patterns seen once or twice; they strengthen with evidence and are promoted above, or die.
 Nothing in this section or the one above is shown to the agents.)_
 <!-- hypotheses:end -->
+
+## Verdicts - the evidence
+_(every verdict you give, dated, with the sender and subject it was given on. Triage is shown
+the ones about a similar sender or topic and judges how alike the new message is; the general
+lesson is distilled into the sections above.)_
+<!-- verdicts:start -->
+_(nothing yet - "Not our task" and "Not a task" write here)_
+<!-- verdicts:end -->

@@ -39,9 +39,10 @@ def main():
     # "is the triage right?" is a rate, and nothing measured it: build the labelled cases out of
     # the owner's own verdicts, score the configured classifier over them, or export a set that
     # can leave the machine (people and prose removed) - see evalset.py
-    ap.add_argument('--evalset', choices=['build', 'share', 'evaluate'], metavar='ACTION',
+    ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate'], metavar='ACTION',
                     help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
-                         'evaluate (score the configured AI over them), share (anonymised copy for tests/data)')
+                         'evaluate (score the configured AI over them), ablate (score with and without memory), '
+                         'share (anonymised copy for tests/data)')
     args = ap.parse_args()
     if args.evalset:
         import sys

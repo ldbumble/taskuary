@@ -60,13 +60,21 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     u = requests.get('https://api.github.com/user', headers=gh_headers(tok), timeout=20)
     u.raise_for_status()
     repos = list_accessible_repos(tok)
-    have = {s['Address'] for s in store.list_sources(active_only=False) if s['Channel'] == 'github'}
+    have = {s['Address']: s for s in store.list_sources(active_only=False) if s['Channel'] == 'github'}
     added = 0
     for rp in repos:
-        if rp['full_name'] not in have:
+        s = have.get(rp['full_name'])
+        if not s:
             store.save_source({'Channel': 'github', 'Address': rp['full_name'], 'ConnectorId': c['ConnectorId'],
-                               'Active': 1, 'Owner': actor}, actor)
+                               'Active': 1, 'Owner': actor, 'ConfigJson': json.dumps({'private': rp.get('private', False)})}, actor)
             added += 1
+        else:
+            # public or private is what the auto-dispatch picker warns on, so a repo discovered
+            # before the flag existed learns it now - its pickers untouched
+            try: gc = json.loads(s.get('ConfigJson') or '{}')
+            except ValueError: gc = {}
+            if gc.get('private') != rp.get('private', False):
+                store.save_source({'SourceId': s['SourceId'], 'ConfigJson': json.dumps({**gc, 'private': rp.get('private', False)})}, actor)
     from .docsync import sync_connections, update_repo_map
     from .llm import build_llm
     try: llm = build_llm(store)
@@ -556,15 +564,31 @@ def gh_modes(src: dict, file_only: bool) -> tuple:
     return (modes.get('issues') or default_mode, modes.get('prs') or 'off')
 
 
+# Who may start a coding agent by themselves, per repo - the source's 'auto' picker, keyed on
+# GitHub's own author_association. Everyone else's items still become tasks (in 'tasks' mode)
+# and wait for the owner to promote them. Default off: a public repo would otherwise start an
+# agent per drive-by PR (the session cap still holds, but a queue full of strangers is not
+# what the cap is for). The Connectors card warns before switching a PUBLIC repo on.
+GH_TEAM = ('OWNER', 'MEMBER', 'COLLABORATOR')
+GH_AUTO = {'off': (), 'team': GH_TEAM, 'contributors': GH_TEAM + ('CONTRIBUTOR',), 'anyone': None}
+
+
+def gh_auto_ok(src: dict, association: str) -> bool:
+    try: mode = json.loads((src or {}).get('ConfigJson') or '{}').get('auto') or 'off'
+    except ValueError: mode = 'off'
+    allowed = GH_AUTO.get(mode, ())
+    return allowed is None or (association or 'NONE').upper() in allowed
+
+
 def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=False) -> int:
     """GitHub as an INBOUND channel: new issues - and, per repo, pull requests - land on the
     Timeline and go through the same triage as mail. What each KIND does is the source's own
     call (ConfigJson {"issues": "tasks|feed|off", "prs": ...}), because an open-source repo
     usually wants PRs SEEN but not auto-worked. Every item leads with who wrote it and
     GitHub's own author_association, so triage can weigh a stranger's PR on a public repo
-    for what it is - and github items never auto-dispatch a coder (no_auto): a popular repo
-    would otherwise start an agent per drive-by PR. Issues Taskuary opened for its own tasks
-    are skipped, otherwise the coder would file work against itself forever."""
+    for what it is. Whether an item may start a coding agent by itself is the repo's 'auto'
+    picker (gh_auto_ok): off by default, or the team / contributors / anyone. Issues Taskuary
+    opened for its own tasks are skipped, otherwise the coder would file work against itself."""
     repo = src['Address']
     issues_mode, prs_mode = gh_modes(src, file_only)
     if issues_mode == 'off' and prs_mode == 'off': return 0
@@ -584,7 +608,8 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
             'body': f"{head}\n{(i.get('body') or '(no description)')[:20000]}",
             'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
             'conversation_id': f"gh:{repo}#{i['number']}", 'sent_at': _local(i.get('updated_at') or ''),
-            'source_link': i.get('html_url'), 'source_name': repo, 'no_auto': True},
+            'source_link': i.get('html_url'), 'source_name': repo,
+            'no_auto': not gh_auto_ok(src, i.get('author_association'))},
             llm=llm, file_only=mode == 'feed')
         n += out['status'] != 'duplicate'
     return n

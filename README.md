@@ -38,8 +38,11 @@ without you — and nothing leaves your machine except the calls you configured.
 
 Every verdict you give teaches it. Edit a draft before sending — it learns your voice.
 Reject one — it learns what should never have been drafted. Say **"Not our task"** — it
-learns where your job ends, and that one sticks immediately as a standing note on that
-sender (yours to review under Settings → Agent memory).
+learns where your job ends. That verdict is kept as **evidence**: a dated line naming the
+subject and sender it was given on (`LEARNED.md` → *Verdicts*, and Settings → Agent memory).
+The next similar message is triaged with those lines in view, and the model judges how alike
+it really is — the same sender asking the same thing is binding, a shared word is not. Only a
+ruling on the *same conversation* decides without a model.
 
 The general lessons take a stricter road, so one odd Tuesday never becomes a rule:
 
@@ -214,6 +217,12 @@ other's way with three light moves. No locks, no worktrees, no manager agent:
   says behind whom and why (hover it) — and starts by itself the moment that agent finishes.
   A full house (every session slot busy) queues the same way. Wrong guesses are cheap by
   design: a wrong *yes* waits some minutes, a wrong *no* is caught by the next move.
+- **The waiting room** — you get ideas *while* the agent works, and interrupting it is how a
+  mid-edit agent loses the thread. Type them into the task's **Waiting room** instead (the
+  ✎ chip on the card counts them). They are typed into the session as one numbered batch the
+  moment the agent parks at its prompt — never mid-turn, and never on top of a question it is
+  waiting on *you* to answer; that comes first. A session that already ended reopens with the
+  notes as the ask.
 - **The blackboard** — the board itself is what agents know about each other. Every working
   card shows the files its agent has **actually modified so far** — read off git (dirty
   files minus what was already dirty when the session opened) and the run trace, never off
@@ -264,8 +273,9 @@ themselves, and two can **bootstrap themselves from your mail history** (`TRIAGE
 | `LEARNED.md` | your profile, learned from your verdicts — `SOUL.md` outranks it | triage, replies, coding agents |
 | `DIGEST.md` | your morning brief: what's in flight, who waits on whom — written by the **Morning digest** report (Reports tab), whose prompt decides what goes in | you — it lands on your Timeline daily; delete the report to turn it off |
 
-Standing notes (Settings → Agent memory) ride alongside: sender-scoped verdicts injected
-into triage and replies — the specific layer under `LEARNED.md`'s general one.
+Your verdicts ride alongside as evidence: dated, sender-and-subject-specific lines pulled
+into triage and replies when the sender or topic matches — the specific layer under
+`LEARNED.md`'s general one, and mirrored into its *Verdicts* section.
 
 ## Bring your own agent — and pick its model
 

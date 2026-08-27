@@ -12,8 +12,11 @@ import re as _re
 # (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
-    '{"intent": "task|reply_only|fyi", "why": "<one concrete sentence: what you saw in the message '
+    '{"intent": "task|reply_only|fyi", "kind": "coding|general", "why": "<one concrete sentence: what you saw in the message '
     'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
+    'kind matters only when intent is task: coding = plainly about software (a trace, a named repository or '
+    'pull request, a change to a system that has a checkout) and a coding agent will be started; general = real '
+    'work with no code in it. When unsure, coding - an agent on a non-coding task says "nothing to do here" and stops.\n'
     'task = someone must DO something beyond writing back: change a system, fix or build something, '
     'produce or chase something. This starts a coding agent on a repository, so choose it only when '
     'work has to happen.\n'
@@ -22,6 +25,9 @@ INTENT_SYSTEM = (
     'approve, so nothing is dropped by choosing this.\n'
     'fyi = informational only: automated notices, reports, newsletters, thanks, threads the owner is '
     'merely copied on.\n'
+    'Chat is not mail: on chat channels (no subject, no recipient lines) a colleague\'s ask is almost always '
+    'reply_only - the owner does the two-minute thing and types back in the same chat. It is a task only when '
+    'it plainly needs a change to software that has a checkout.\n'
     'addressed_to_you and recipients are SIGNALS to weigh, never rules to obey. "to" = the mail was aimed at the owner; "cc" = they were copied, which OFTEN means somebody else owns the work; "not named" = it arrived through a group alias. But a cc can absolutely be theirs: one that names them, asks them something directly, or that only they can answer is their work, and being on the cc line counts for nothing against that. recipients counts everyone on the mail - a note to thirty people is more likely a broadcast than a job. Weigh these with everything else in the message; never decide on them alone. Both fields are absent on channels with no recipient lines.\n'
     'others_replied names people - other than you and the sender - who have already SENT a message on '
     'this thread, and last_on_thread is whoever spoke most recently. Somebody else answering is the '
@@ -29,8 +35,8 @@ INTENT_SYSTEM = (
     'ask is not aimed at you specifically, prefer fyi. Weigh it, do not obey it - a question that names '
     'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
     'fields mean nobody else has spoken, which is not evidence either way.\n'
-    'Torn between task and reply_only? Choose reply_only. The owner can turn a reply into a task in '
-    'one click, and a wrongly-started agent costs far more than a draft.')
+    'Torn between task and reply_only? Choose task - the agent looks and says "nothing to do here" if there is '
+    'nothing to do; a job that only got a drafted reply is a job nobody did. Chat asks stay reply_only.')
 
 def addressed_to_you(msg: dict, mine=()) -> str:
     """'to', 'cc', 'not named', or '' when the channel carries no recipient lines at all (chat) -
@@ -116,9 +122,10 @@ def strip_boilerplate(text: str) -> str:
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None) -> dict:
-    """`notes` are the owner's standing memory notes that apply to this sender - the verdicts
-    they've already given ("this kind of mail isn't ours"). Injecting them here is what makes
-    'Not our task' stick: the next message like it is classified with that lesson in hand.
+    """`notes` are the owner's past verdicts that may bear on this message - each one dated,
+    with the sender and subject it was given on - selected by sender and topic overlap
+    (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
+    which a keyed rule could not (the same topic can arrive asking something new).
 
     `images` are the attached screenshots, for a model that can see them. Half of "see below"
     mail says nothing in its body - triage read three words and filed it as informational.
@@ -144,8 +151,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes - re-cutting here is what
                 # used to throw away whichever verdicts happened to sit past the 2000th character
-                system += ('\n\nStanding notes from the owner - these are VERDICTS they already gave on '
-                           'mail like this, and they outrank your own reading:\n'
+                system += ('\n\nEVIDENCE - verdicts the owner gave on earlier mail that looks related '
+                           '(pulled by sender and by topic; each names the sender and subject it was given on). '
+                           'Judge how alike THIS message really is: the same sender asking the same kind of '
+                           'thing makes a verdict binding, a shared word does not, and a thread that is now '
+                           'asking the owner something new is new. Where a verdict plainly fits, follow it:\n'
                            + '\n'.join(f'- {n}' for n in notes)
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit. '
                               'Say so in your reason if the verdict feels underdetermined - do not claim '
@@ -166,7 +176,13 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             out = llm(system, user, images=images) if images else llm(system, user)
             j = json.loads(re.sub(r'^```(json)?|```$', '', out.strip(), flags=re.M))
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
-                return {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
+                # `kind` is the model's SECOND verdict - coding or general - and only means anything
+                # on a task. It used to be a regex over the body (routing.draft_task_fields), which
+                # is how a Teams line about someone's job scope opened a coding session; the model
+                # has read the whole message and TRIAGE.md's definition, so its word wins when given.
+                out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
+                if j['intent'] == 'task' and j.get('kind') in ('coding', 'general'): out['kind'] = j['kind']
+                return out
         except Exception:
             pass
     # An LLM was supplied, answered, and the answer was not usable (bad JSON, an intent outside

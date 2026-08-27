@@ -62,7 +62,7 @@ def replay(case: dict):
         s.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], 'owner')
     seen = {}
     def oracle(sys_, usr_, **kw):
-        seen['user'] = json.loads(usr_)
+        seen['user'] = json.loads(usr_); seen['system'] = sys_
         return json.dumps({'intent': case['label'], 'why': 'oracle'})
     out = ingest.ingest_message(s, msg, llm=oracle)
     return s, out, seen
@@ -127,13 +127,24 @@ class ReplayTests(unittest.TestCase):
                 self.assertEqual(seen['user'].get('addressed_to_you'), c['addressed_to_you'], c['id'])
                 self.assertEqual(seen['user'].get('recipients'), c['recipients'], c['id'])
 
-    def test_a_ruled_conversation_and_a_standing_topic_verdict_decide_without_a_model(self):
+    def test_a_ruled_conversation_decides_without_a_model(self):
         for c in cases():
-            if c['label'] != 'fyi' or not (c.get('owner_ruled_thread_before') or c.get('notes_before')): continue
+            if c['label'] != 'fyi' or not c.get('owner_ruled_thread_before'): continue
             with self.subTest(c['id']):
                 _, out, seen = replay(c)
                 self.assertEqual(out['status'], 'filed', c['id'])
                 self.assertNotIn('user', seen, f"{c['id']}: the owner had already decided this, and a model was still asked")
+
+    def test_a_standing_verdict_is_shown_to_the_model_as_evidence(self):
+        """Verdicts about a topic or a sender no longer decide on their own (owner's call,
+        2026-08-27): the model is asked, and told what the owner said on similar mail."""
+        for c in cases():
+            if not c.get('notes_before') or c.get('owner_ruled_thread_before'): continue
+            with self.subTest(c['id']):
+                _, out, seen = replay(c)
+                self.assertIn('user', seen, f"{c['id']}: the model was not asked")
+                self.assertIn('EVIDENCE', seen['system'], c['id'])
+                for n in c['notes_before']: self.assertIn(n['note'][:40], seen['system'], c['id'])
 
 
 class DatasetTests(unittest.TestCase):

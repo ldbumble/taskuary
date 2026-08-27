@@ -82,19 +82,31 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(start.call_args.args[1], out['task_id'])
         self.assertTrue(any('auto-started a live coder session' in c['Body'] for c in s.list_comments(out['task_id'])))
 
-    def test_non_code_work_waits_for_you_instead_of_opening_a_session(self):
-        """"Add the new user to the system" is real work with no repository in it. It used to
-        open a coding session anyway - the gate asked "is this a reply?" and dispatched
-        everything else - so an agent landed in whatever folder was default and worked a task
-        that had no code to change. It is a task on your list now, one click from an agent."""
+    def test_work_the_brain_calls_general_waits_for_you_instead_of_opening_a_session(self):
+        """"Add the new user to the system" is real work with no repository in it. When the
+        classifier SAYS so (kind: general) it is a task on your list, one click from an agent."""
         from unittest import mock
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 't')
+        general = lambda *a, **k: '{"intent": "task", "kind": "general", "why": "no code in it"}'
         with mock.patch('taskuary.terminal.start_on_task') as start:
-            out = ingest_message(s, self.msg(external_id='ac3'), llm=TASK_LLM)
+            out = ingest_message(s, self.msg(external_id='ac3'), llm=general)
         start.assert_not_called()
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))     # real work, still yours
+
+    def test_a_task_the_brain_did_not_call_general_goes_to_the_coder(self):
+        """The owner's call (2026-08-27): err toward the coding agent. A task the brain did not
+        label general - even with no code word in the body - is dispatched; an agent on a
+        non-coding task says "nothing to do here" and stops, a job left on a list does not."""
+        from unittest import mock
+        s = MemoryStore()
+        s.set_setting('coder_auto_enabled', '1', 't')
+        with mock.patch('taskuary.ingest._spawn') as spawn:
+            out = ingest_message(s, self.msg(external_id='ac4'), llm=TASK_LLM)
+        self.assertTrue(any(getattr(c[0][0], '__name__', '') == '_auto_code' for c in spawn.call_args_list))
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
+        self.assertIn('sent to the coding agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
     def test_no_auto_dispatch_when_disabled(self):
         """Dispatching is ON by default now, so this asserts the SWITCH works - turned off,

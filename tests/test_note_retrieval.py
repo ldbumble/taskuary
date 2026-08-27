@@ -97,7 +97,7 @@ class ItSaysSoTests(unittest.TestCase):
                              llm=lambda *a, **k: '{"intent": "fyi", "why": "informational"}')
         self.assertEqual(out['status'], 'filed')
         reason = s.feed(limit=5)[0]['RouteReason']
-        self.assertIn(f'{NOTE_CAP} of 25 standing notes applied', reason)
+        self.assertIn(f'{NOTE_CAP} of 25 past verdicts shown as evidence', reason)
 
     def test_nothing_is_said_when_everything_fit(self):
         s = _store(LEDGER, GLOBAL)

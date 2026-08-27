@@ -62,6 +62,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
   const [comment, setComment] = useState("");
+  // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
+  const [wait, setWait] = useState({ data: [], state: null });
+  const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
@@ -80,6 +83,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     try {
       const { data } = await api.get(`/api/tasks/${id}`);
       setDetail(data);
+      try { setWait((await api.get(`/api/tasks/${id}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
       // opened a task the current filter hides (e.g. from the Board)? widen to "all" so
       // the list and the detail never contradict each other
       setFilter((f) => (f && !inBucket({ ...data.task, Session: data.session,
@@ -119,6 +123,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
     setFilter(""); loadTasks(); onSelect(data.taskId);
   };
+  const queueNote = async () => {
+    if (!waitText.trim() || !selected) return;
+    try {
+      const { data } = await api.post(`/api/tasks/${selected}/waitroom`, { text: waitText });
+      setWaitText("");
+      setErr(data.delivered ? (data.state === "restarted" ? "Session reopened with your note." : "Typed into the session - the agent was parked.") : "");
+      loadDetail(selected);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not queue the note"); }
+  };
+
   const post = async () => {
     if (!comment.trim()) return;
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
@@ -576,6 +590,42 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
                       </Box>
                     ))}
+                  </Fold>
+                )}
+
+                {/* the waiting room: what you think of while the agent works. Queued here, typed
+                    into the session as one batch the moment the agent parks at its prompt - never
+                    mid-edit, and never on top of a question it is waiting on you to answer. */}
+                {detail.task.Kind !== "reply" && (
+                  <Fold title={`Waiting room · ${wait.data.filter((w) => !w.DeliveredAt).length} waiting`}>
+                    <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75, lineHeight: 1.5 }}>
+                      {wait.state === "working" ? "The agent is working - notes queue here and go in as one batch when it stops."
+                        : wait.state === "asking" ? "The agent is waiting on a question for you. Answer it in the terminal; queued notes follow."
+                        : wait.state === "parked" ? "The agent is parked at its prompt - a note goes straight in."
+                        : "No live session - a note reopens one on this task with the notes as the ask."}
+                    </Typography>
+                    {wait.data.map((w) => (
+                      <Box key={w.WId} sx={{ display: "flex", gap: 1, alignItems: "baseline", py: 0.35,
+                        borderTop: `1px solid ${BORDER}`, opacity: w.DeliveredAt ? 0.55 : 1 }}>
+                        <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: w.DeliveredAt ? "#47654a" : "#55697a",
+                          whiteSpace: "nowrap", flexShrink: 0 }}>
+                          {w.DeliveredAt ? (w.How === "seeded" ? "reopened with" : "typed in") : "waiting"}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontSize: 12, flex: 1, whiteSpace: "pre-wrap" }}>{w.Note}</Typography>
+                        {!w.DeliveredAt && (
+                          <IconButton size="small" title="Withdraw" onClick={async () => {
+                            await api.delete(`/api/tasks/${selected}/waitroom/${w.WId}`); loadDetail(selected); }}>
+                            <CloseIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        )}
+                      </Box>
+                    ))}
+                    <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
+                      <TextField fullWidth multiline maxRows={4} placeholder="Tell the agent, when it stops…" value={waitText}
+                        onChange={(e) => setWaitText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queueNote(); } }} />
+                      <Button size="small" onClick={queueNote} disabled={!waitText.trim()}>Queue</Button>
+                    </Box>
                   </Fold>
                 )}
 

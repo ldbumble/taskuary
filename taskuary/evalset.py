@@ -16,11 +16,14 @@ Three uses, same rows:
   evaluate  run the CONFIGURED classifier over the local cases, with the thread and the
             standing notes it would have had, and print accuracy, the confusion table, and
             how it does when a colleague had already replied - the number that was missing
+  ablate    the same, four times: no memory / the notes that existed when each message
+            arrived / every note today / notes + LEARNED.md - so "memory makes it better"
+            is a measured claim (MEMORY_ARMS), not a felt one
 
 A case carries the thread AS IT STOOD when the message arrived (who had spoken, whether one of
 them was the owner) and, for mail ingested since RecipientsJson existed, the To/Cc relationship.
 """
-import json, re
+import json, re, time
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -29,6 +32,7 @@ from .routing import norm_subject
 from .triage import _ASK, _ACT, _FYI, addressed_to_you
 
 LABELS = ('task', 'reply_only', 'fyi')
+RETRIES = 2                  # a model call that fails or garbles is retried this often before it counts as unusable
 ACCEPT_AFTER_DAYS = 3        # an untouched triage call this old is taken as accepted (weakly)
 _INTENT = re.compile(r'triage: (task|reply_only|fyi)')
 
@@ -215,36 +219,104 @@ def as_message(case: dict) -> dict:
             'body': case.get('body') or '', 'sent_at': case.get('sent_at'), 'to': case.get('to'), 'cc': case.get('cc')}
 
 
-def evaluate(store, cases: list, llm, verbose=True) -> dict:
+class _AsOf:
+    """The store as it stood when a message arrived: only the notes written BEFORE it. Every
+    verdict note in the table was written about some message in this same set, so scoring with
+    today's notes tells the classifier the answer for that very message - the honest question
+    is whether the notes it HAD helped, and this is the view that answers it."""
+    def __init__(self, store, until): self.s, self.until = store, until or ''
+    def list_memories(self, active_only=True):
+        return [m for m in self.s.list_memories(active_only) if str(m.get('CreatedAt') or '') < self.until]
+    def __getattr__(self, k): return getattr(self.s, k)
+
+
+MEMORY_ARMS = {                      # what the classifier is allowed to remember, per arm
+    'bare':  dict(notes='none',  learned=False),   # the prompt and the message alone
+    'asof':  dict(notes='asof',  learned=False),   # the notes that existed when the message arrived (what the funnel really had)
+    'notes': dict(notes='today', learned=False),   # every note on file today, LEARNED.md withheld
+    'today': dict(notes='today', learned=True),    # everything - what `evaluate` measures
+}
+
+
+def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learned: bool = True, system: str = None) -> dict:
     """The configured classifier over the local (full-text) cases, told what the funnel would
-    have told it. Standing notes are today's, not that day's - the one thing this cannot replay."""
+    have told it. `notes` = 'today' (every standing note on file), 'asof' (only those written
+    before the message arrived - see _AsOf) or 'none'; `learned` = whether LEARNED.md's
+    promoted sections ride along (the doc has no history, so it is all or nothing). `system`
+    replaces the install's TRIAGE.md for the run - how a wording change is scored before it ships."""
     from .ingest import decided_intent, others_on_thread, owner_addresses, relevant_notes
     from .learn import injectable
+    from .routing import draft_task_fields
     from .triage import classify_intent
     mine = owner_addresses(store)
-    soul, learned, system = store.doc('soul'), injectable(store.doc('learned') or ''), store.doc('triage')
+    soul, system = store.doc('soul'), (system if system is not None else store.doc('triage'))
+    lrn = injectable(store.doc('learned') or '') if learned else ''
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
+    by_channel = {}
     for c in cases:
         if not c.get('body'): continue
         msg = as_message(c)
         thread = others_on_thread(thread_store(c), msg, mine)
-        notes, left = relevant_notes(store, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject'])
-        got = (decided_intent(msg, mine) or classify_intent(msg, llm=llm, soul=soul, thread=thread, learned=learned, notes=notes,
-                                                            notes_left=left, system=system, mine=mine))['intent']
+        src = store if notes == 'today' else _AsOf(store, c.get('sent_at')) if notes == 'asof' else None
+        ns, left = relevant_notes(src, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject']) if src else ([], 0)
+        v = decided_intent(msg, mine)
+        for attempt in range(RETRIES + 1):
+            if v and not v.get('degraded'): break
+            # a throttled or garbled call is not a verdict: try again before scoring it as one
+            if attempt: time.sleep(2 * attempt)
+            v = classify_intent(msg, llm=llm, soul=soul, thread=thread, learned=lrn, notes=ns,
+                                notes_left=left, system=system, mine=mine)
+        # the funnel FILES an answer it cannot read (ingest: 'degraded' -> filed, never assumed
+        # work); scored as the keyword fallback, a transient model error looked like a wrong verdict
+        got = 'fyi' if v.get('degraded') else v['intent']
         conf[(c['label'], got)] += 1
         by_signal['colleague_replied' if thread.get('others_replied') else 'alone'][got == c['label']] += 1
+        by_channel.setdefault(c.get('channel') or '?', Counter())[got == c['label']] += 1
         rows.append({'id': c['id'], 'label': c['label'], 'got': got, 'ok': got == c['label'], 'source': c['label_source'],
+                     'channel': c.get('channel'), 'notes_seen': len(ns), 'why': v.get('why') or '', 'degraded': bool(v.get('degraded')),
+                     # what the regex layer would make of a task (coding/general) - the second, unmeasured verdict
+                     'regex_kind': draft_task_fields(msg)['kind'], 'model_kind': v.get('kind'),
                      'others_replied': thread.get('others_replied') or [], 'subject': c.get('subject')})
     n = sum(conf.values()); ok = sum(v for (a, b), v in conf.items() if a == b)
     out = {'n': n, 'accuracy': (ok / n) if n else None, 'confusion': {f'{a}->{b}': v for (a, b), v in sorted(conf.items())},
-           'by_signal': {k: {'right': v[True], 'wrong': v[False]} for k, v in by_signal.items()}, 'rows': rows}
+           'degraded': sum(r['degraded'] for r in rows),
+           'by_signal': {k: {'right': v[True], 'wrong': v[False]} for k, v in by_signal.items()},
+           'by_channel': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_channel.items())}, 'rows': rows}
     if verbose:
-        print(f"{n} cases, accuracy {out['accuracy']:.0%}" if n else 'no cases with a body to classify')
+        print(f"{n} cases, accuracy {out['accuracy']:.0%}" + (f" ({out['degraded']} model answers unusable - scored as filed)" if out['degraded'] else '')
+              if n else 'no cases with a body to classify')
         for k, v in out['confusion'].items(): print(f'  {k:22s} {v}')
         for k, v in out['by_signal'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")
+        for k, v in out['by_channel'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for r in rows:
             if not r['ok']: print(f"  MISS {r['id']:7s} owner={r['label']:10s} triage={r['got']:10s} [{r['source']}] {r['subject'][:60]}")
     return out
+
+
+def ablate(store, cases: list, llm, arms=MEMORY_ARMS, verbose=True, save=None) -> dict:
+    """Does memory help? The same cases under each MEMORY_ARMS setting, side by side."""
+    # one arm at a time: four arms in parallel throttled an Azure deployment hard enough that a
+    # third of one arm's calls failed and were scored as keyword fallbacks - a fast wrong number
+    res = {k: evaluate(store, cases, llm, verbose=False, **kw) for k, kw in arms.items()}
+    # saved BEFORE anything is printed: a run is minutes of LLM calls, and a printing bug once lost one
+    if save:
+        Path(save).parent.mkdir(parents=True, exist_ok=True)
+        Path(save).write_text(json.dumps(res, indent=1, default=str), encoding='utf-8')
+    if verbose:
+        first = next(iter(res.values()))
+        print(f"{'arm':7s} {'acc':>5s}  " + '  '.join(f'{ch:>8s}' for ch in sorted(first['by_channel'])))
+        for k, r in res.items():
+            chs = '  '.join(f"{v['right']:3d}/{v['right'] + v['wrong']:<4d}" for _, v in sorted(r['by_channel'].items()))
+            opts = {k2: v2 for k2, v2 in arms[k].items() if k2 != 'system'}
+            print(f"{k:7s} {r['accuracy']:5.0%}  {chs}   {opts}" + (f"  ({r['degraded']} unusable)" if r['degraded'] else ''))
+        # where the arms DISAGREE is where memory acted - list those cases, verdict per arm
+        got = {k: {r['id']: r for r in v['rows']} for k, v in res.items()}
+        print('\ncases where memory changed the verdict (label | ' + ' | '.join(res) + '):')
+        for r0 in first['rows']:
+            vs = [got[k][r0['id']]['got'] for k in res]
+            if len(set(vs)) > 1:
+                print(f"  {r0['id']:7s} {r0['channel'] or '?':6s} {r0['label']:10s} | " + ' | '.join(f'{v:10s}' for v in vs) + f"  {r0['subject'][:50]}")
+    return res
 
 
 def run(store, what: str, home: Path, share_to=None, llm=None):
@@ -260,10 +332,11 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
         p = write(share_to or Path.cwd() / 'tests' / 'data' / 'triage_cases.jsonl', anonymise(cases))
         print(f'{len(cases)} anonymised cases -> {p}  (review it before it leaves the machine)')
         return p
-    if what == 'evaluate':
+    if what in ('evaluate', 'ablate'):
         if llm is None:
             from .llm import build_llm
             llm = build_llm(store)
         if llm is None: raise SystemExit('no AI connector is configured - connect one under Connectors -> AI first')
-        return evaluate(store, [c for c in cases if not c['weak']], llm)
-    raise SystemExit(f'unknown evalset action {what!r}: build | share | evaluate')
+        strong = [c for c in cases if not c['weak']]
+        return evaluate(store, strong, llm) if what == 'evaluate' else ablate(store, strong, llm, save=Path(home) / 'eval' / 'ablate_last.json')
+    raise SystemExit(f'unknown evalset action {what!r}: build | share | evaluate | ablate')

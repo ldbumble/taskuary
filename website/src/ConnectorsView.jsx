@@ -1341,25 +1341,37 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             2 · PER REPO — WHAT ISSUES AND PRS DO
           </Typography>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.5 }}>
-            <b>tasks</b> = through triage (never auto-dispatched — you promote what deserves work),
-            <b> feed</b> = shown on the Timeline only, <b>off</b> = ignored. A picker set here pulls
-            that repo whatever the switches above say; picking saves instantly.
+            <b>tasks</b> = through triage, <b>feed</b> = shown on the Timeline only, <b>off</b> = ignored.
+            The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
+            owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
+            <b>anyone</b> = every author. Everyone else's items still become tasks for you to promote.
+            A picker set here pulls that repo whatever the switches above say; picking saves instantly.
           </Typography>
           {mine.filter((s) => s.Active).map((s) => {
             const gc = parse(s.ConfigJson);
             return (
               <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
                 <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 13 }} noWrap>{s.Address}</Typography>
-                {["issues", "prs"].map((kind) => (
-                  <Select key={kind} size="small" value={gc[kind] || (kind === "prs" ? "off" : "tasks")}
+                {gc.private === false && <Chip size="small" label="public" sx={{ height: 18, fontSize: 9.5, bgcolor: "#f1e1da", color: "#6b2733" }} />}
+                {["issues", "prs", "auto"].map((kind) => (
+                  <Select key={kind} size="small" value={gc[kind] || (kind === "issues" ? "tasks" : "off")}
                     sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
                     onChange={async (e) => {
+                      const v = e.target.value;
+                      // a public repo: anyone on the internet can open a PR, and with this on each one
+                      // may start an agent (the session cap still holds - 4 at once by default)
+                      if (kind === "auto" && v !== "off" && gc.private !== true
+                          && !window.confirm(`${s.Address} is ${gc.private === false ? "a PUBLIC repo" : "not known to be private"}.\n\n`
+                            + `With "${v}" on, ${v === "anyone" ? "any author's" : v === "contributors" ? "any past contributor's" : "any team member's"} `
+                            + `PR or issue can start a coding agent by itself - uncontrolled PRs mean uncontrolled agents, `
+                            + `limited only by the session cap. Turn it on anyway?`)) return;
                       await api.post("/api/sources", { SourceId: s.SourceId,
-                        ConfigJson: JSON.stringify({ ...gc, [kind]: e.target.value }) });
+                        ConfigJson: JSON.stringify({ ...gc, [kind]: v }) });
                       reload();
                     }}>
-                    {["tasks", "feed", "off"].map((v) => (
-                      <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>{kind === "prs" ? "PRs" : "issues"}: {v}</MenuItem>
+                    {(kind === "auto" ? ["off", "team", "contributors", "anyone"] : ["tasks", "feed", "off"]).map((v) => (
+                      <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>
+                        {kind === "prs" ? "PRs" : kind === "issues" ? "issues" : "agent"}: {v}</MenuItem>
                     ))}
                   </Select>
                 ))}

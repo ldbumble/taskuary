@@ -21,7 +21,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
-from . import learn, outbound, responder
+from . import learn, outbound, responder, waitroom
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -36,7 +36,9 @@ async def _lifespan(_app):
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     _heal_owner_docs()
     _refresh_soul_connections()
+    learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     threading.Thread(target=poll_forever, daemon=True).start()
+    waitroom.watch(store)          # notes queued for a working agent land when it stops
     yield
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
@@ -166,8 +168,9 @@ def tasks(status: str = None):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
     live CLI on it reads as 'queued' while the agent sits there asking a question."""
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
+    wc = store.waiting_counts()
     return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId']),
-                      'Queued': _queued_info(qs.get(t['TaskId']))}
+                      'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0)}
                      for t in store.list_tasks(status)]}
 
 @app.post('/api/tasks')
@@ -325,10 +328,11 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
         topic = _topic_key(msgs[0])
         mid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
                                 'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                                'Note': (f'Mail about "{topic}" is not a task' if topic else
-                                         f"Messages from {em} like '{(msgs[0].get('Subject') or '')[:80]}' are not tasks")
-                                        + ' - do not open tasks or draft replies.'})
+                                'Note': f"{str(msgs[0].get('SentAt') or '')[:10]}: \"{(msgs[0].get('Subject') or '')[:90]}\" from {em}"
+                                        + (f' - the topic "{topic}"' if topic else '')
+                                        + ' - NOT A TASK: the owner filed it, no task, no reply'})
         learned = {'policy': em, 'memory_id': mid}
+        learn.note_verdicts(store)
         # the sender note is durable already; the GENERAL lesson (what kinds of mail are not
         # tasks for this owner) is LEARNED.md's to distill. learn=false teaches nothing, as asked.
         if background is not None:
@@ -536,16 +540,19 @@ def _suggest_scope(m: dict) -> str:
     return 'subject' if _topic_key(m) else 'sender'
 
 def _not_mine_note(m: dict, scope: str = None, topic: str = None) -> str:
-    """The note we would write, phrased for the scope it will be saved under - the text and the
-    dropdown have to agree, or the saved verdict says something the owner did not choose."""
-    who = m.get('FromEmail') or m.get('FromName') or 'this sender'
+    """The note we would write: an EVIDENCE line - when, what subject, from whom, what the owner
+    said - never a rule. The scope only decides which later messages this line is pulled up
+    for (by topic, by sender, by their domain, or always); the model reads the line itself and
+    judges how alike the new message is. So the wording carries the specifics whatever the
+    scope, and the owner can still say it in their own words."""
+    who = m.get('FromEmail') or m.get('FromName') or 'an unknown sender'
     subj = (m.get('Subject') or '')[:90]
-    tail = 'is other people\'s work - file it, do not open a task or draft a reply.'
+    when = str(m.get('SentAt') or '')[:10]
     scope = scope or _suggest_scope(m)
-    if scope == 'subject': return f'Mail about "{topic or _topic_key(m) or subj}" {tail}'
-    if scope == 'sender_domain': return f'Mail like "{subj}" from anyone at {who.rsplit("@", 1)[-1]} {tail}'
-    if scope == 'global': return f'Mail like "{subj}", whoever sends it, {tail}'
-    return f'Mail like "{subj}" from {who} {tail}'
+    about = (f' - the topic "{topic or _topic_key(m)}"' if scope == 'subject' and (topic or _topic_key(m)) else
+             f' - anyone at {who.rsplit("@", 1)[-1]}' if scope == 'sender_domain' else
+             ' - whoever sends it' if scope == 'global' else '')
+    return f'{when}: "{subj}" from {who}{about} - NOT OURS: other people\'s work, no task, no reply'
 
 @app.post('/api/messages/{mid}/not-mine')
 def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
@@ -577,6 +584,7 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     note = (body.note or '').strip() or _not_mine_note(m, scope, key if scope == 'subject' else None)
     memid = store.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note[:1000],
                               'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR})
+    learn.note_verdicts(store)
     tid = m.get('TaskId')
     if tid and store.get_task(tid):
         store.audit('task', tid, 'not_mine_delete', ACTOR, detail={'message_id': mid, 'memory_id': memid})
@@ -827,6 +835,24 @@ def answer_to_agent(tid: int, body: dict):
     from . import terminal
     if not terminal.say_to_task(store, tid, m, ACTOR):
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
+    return {'ok': True}
+
+# ── the waiting room: notes for a working agent, delivered when it stops (waitroom.py) ──
+@app.get('/api/tasks/{tid}/waitroom')
+def waitroom_list(tid: int):
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    return {'data': store.waitroom(tid), 'state': waitroom.state(store, tid)[0]}
+
+@app.post('/api/tasks/{tid}/waitroom')
+def waitroom_add(tid: int, body: dict):
+    """Queue a note for this task's agent. It is typed in the moment the agent parks at its
+    prompt - unless it parked on a question for you, which comes first."""
+    try: return waitroom.add(store, tid, str((body or {}).get('text') or ''), ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.delete('/api/tasks/{tid}/waitroom/{wid}')
+def waitroom_drop(tid: int, wid: int):
+    store.drop_waiting(wid, tid)
     return {'ok': True}
 
 @app.post('/api/reviews/{rid}/release')
@@ -1304,6 +1330,18 @@ def save_policy(body: PolicyBody):
     if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden, 'active': bool(saved.get('Active'))})
     return {'ok': True, 'policyId': pid, 'affected': hidden}
 
+@app.delete('/api/policies/{pid}')
+def delete_policy(pid: int):
+    """Gone, not just off. The rules "Not a task" writes by itself pile up, and a wrong one
+    could only ever be switched off - the list kept every mistake. A skip rule's hidden history
+    comes back first, exactly as switching it off would have done."""
+    p = next((x for x in store.list_policies(active_only=False) if x['PolicyId'] == pid), None)
+    if not p: raise HTTPException(404, 'policy not found')
+    shown = policy_engine.apply_retroactively(store, {**p, 'Active': 0})
+    store.delete_policy(pid)
+    store.audit('policy', pid, 'delete', ACTOR, detail={'name': p.get('Name'), 'restored': shown})
+    return {'ok': True, 'restored': shown}
+
 @app.get('/api/memory')
 def memory(): return {'data': store.list_memories(active_only=False)}
 
@@ -1456,7 +1494,10 @@ def _heal_owner_docs():
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')
             t = store_mod.retoken_doc(t, who['owner'], who['owner_email'])
             if t != raw:
-                store.save_doc(doc, t, 'startup')
+                # tokenizing a name is not editing the document: a doc nobody has touched stays
+                # 'template' so shipped improvements keep reaching it (store seeds it afresh each
+                # launch and this pass tokenizes it again - idempotent, and current)
+                store.save_doc(doc, t, 'template' if store.doc_owner(doc) == 'template' else 'startup')
                 logger.info(f'{doc}.md: owner names converted to tokens (owner: {who["owner"]})')
     except Exception as e:
         logger.warning(f'owner-doc heal failed: {e}')

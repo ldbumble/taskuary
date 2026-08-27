@@ -145,6 +145,8 @@ CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, Sco
 CREATE TABLE IF NOT EXISTS doc (Name TEXT PRIMARY KEY, Content TEXT, UpdatedBy TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, BehindTaskId INTEGER,
   Agent TEXT, Reason TEXT, CreatedAt TEXT);
+CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, Note TEXT, CreatedBy TEXT,
+  CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
 """
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -303,6 +305,31 @@ class SQLiteStore:
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
             from pathlib import Path
+            # data heal: the owner-name pass (server._heal_owner_docs) used to save every doc it
+            # retokenized as 'startup', which the rule below reads as "somebody edited this" -
+            # so one launch after a real owner was known, NO doc tracked the template any more.
+            # TRIAGE.md on a live install sat at the 2026-08-25 wording while the code went on
+            # sending it fields (others_replied) the doc never described. Only that pass writes a
+            # non-SOUL doc as 'startup' (docsync writes SOUL.md), so those are untouched by anyone.
+            self.cx.execute("UPDATE doc SET UpdatedBy='template' WHERE UpdatedBy='startup' AND Name<>'soul'")
+            # data heal: verdict notes used to be written as RULES ("Messages from X like 'S' are not
+            # tasks - do not open tasks or draft replies"); they are EVIDENCE now (2026-08-27), so the
+            # old shape becomes the dated line the new ones get - same facts, no instruction in it
+            _RULE = re.compile(r"^Messages from (?P<who>\S+) like '(?P<subj>.*)' are not tasks - do not open tasks or draft replies\.$"
+                               r"|^Mail about \"(?P<topic>.*)\" is not a task - do not open tasks or draft replies\.$"
+                               r"|^Mail (?:about \"(?P<t2>.*)\"|like \"(?P<s2>.*)\"(?: from (?P<w2>\S+)| from anyone at (?P<d2>\S+)|, whoever sends it,)?) is other people's work - file it, do not open a task or draft a reply\.$")
+            for r in self.cx.execute("SELECT MemoryId, Note, Scope, ScopeKey, CreatedAt FROM memory WHERE Source='verdict'").fetchall():
+                m = _RULE.match(r['Note'] or '')
+                if not m: continue
+                g = m.groupdict(); when = str(r['CreatedAt'] or '')[:10]
+                subj = g.get('subj') or g.get('s2') or ''
+                who = g.get('who') or g.get('w2') or (r['ScopeKey'] if r['Scope'] == 'sender' else 'an unknown sender')
+                topic = g.get('topic') or g.get('t2')
+                verdict = 'NOT A TASK: the owner filed it, no task, no reply' if 'are not tasks' in r['Note'] or 'is not a task' in r['Note']                           else "NOT OURS: other people's work, no task, no reply"
+                about = (f' - the topic "{topic}"' if topic else f" - anyone at {g['d2']}" if g.get('d2')
+                         else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
+                line = f'{when}: "{subj or topic or ""}" from {who}{about} - {verdict}'
+                self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
             for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
@@ -612,6 +639,22 @@ class SQLiteStore:
     def queued_dispatches(self): return self._rows('SELECT * FROM dispatchq ORDER BY QId')
     def clear_dispatch(self, task_id): self._exec('DELETE FROM dispatchq WHERE TaskId=?', (task_id,))
 
+    # the waiting room (waitroom.py): owner notes queued on a task while its agent works
+    def add_waiting(self, task_id, note, actor):
+        return self._exec('INSERT INTO waitroom (TaskId, Note, CreatedBy, CreatedAt) VALUES (?,?,?,?)', (task_id, note, actor, _now()))
+    def waiting_notes(self, task_id): return self._rows('SELECT * FROM waitroom WHERE TaskId=? AND DeliveredAt IS NULL ORDER BY WId', (task_id,))
+    def waitroom(self, task_id, limit=40):
+        return self._rows('SELECT * FROM waitroom WHERE TaskId=? ORDER BY WId DESC LIMIT ?', (task_id, limit))[::-1]
+    def tasks_with_waiting(self): return [r['TaskId'] for r in self._rows('SELECT DISTINCT TaskId FROM waitroom WHERE DeliveredAt IS NULL ORDER BY TaskId')]
+    def waiting_counts(self):
+        return {r['TaskId']: r['n'] for r in self._rows('SELECT TaskId, COUNT(*) n FROM waitroom WHERE DeliveredAt IS NULL GROUP BY TaskId')}
+    def deliver_waiting(self, wids, how):
+        if wids: self._exec(f"UPDATE waitroom SET DeliveredAt=?, How=? WHERE WId IN ({','.join('?' * len(wids))})", (_now(), how, *wids))
+    def drop_waiting(self, wid, task_id=None):
+        # only an undelivered note can be withdrawn - a delivered one is already in the agent's hands
+        self._exec('DELETE FROM waitroom WHERE WId=? AND DeliveredAt IS NULL' + (' AND TaskId=?' if task_id else ''),
+                   (wid, task_id) if task_id else (wid,))
+
     # reviews (orphans - reviews whose task is gone - never surface)
     def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
@@ -651,6 +694,7 @@ class SQLiteStore:
         self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
 
     # policies / sources / settings / memory / docs
+    def delete_policy(self, pid): self._exec('DELETE FROM policy WHERE PolicyId=?', (pid,))
     def list_policies(self, active_only=True):
         return self._rows('SELECT * FROM policy' + (' WHERE Active=1' if active_only else '') + ' ORDER BY SortOrder')
     def save_policy(self, fields, actor):
@@ -720,6 +764,9 @@ class SQLiteStore:
         """The document AS WRITTEN - placeholders and all. This is what the editor loads and saves;
         every consumer that feeds a doc to an AI wants `doc()` instead."""
         r = self._one('SELECT Content FROM doc WHERE Name=?', (name,)); return r['Content'] if r else None
+    def doc_owner(self, name):
+        """Who last wrote it - 'template' means nobody has, and the shipped text still flows in."""
+        r = self._one('SELECT UpdatedBy FROM doc WHERE Name=?', (name,)); return r['UpdatedBy'] if r else None
     def save_doc(self, name, content, actor):
         self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
                    (name, content, actor, _now(), content, actor, _now()))

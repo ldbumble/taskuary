@@ -111,7 +111,8 @@ def pr_review_comments(tok, repo, number, since=None):
 def list_accessible_repos(tok):
     r = requests.get(f'{GH}/user/repos', headers=_h(tok), params={'per_page': 100, 'sort': 'pushed'}, timeout=20)
     r.raise_for_status()
-    return [{'full_name': x['full_name'], 'description': x.get('description'), 'archived': x.get('archived')}
+    return [{'full_name': x['full_name'], 'description': x.get('description'), 'archived': x.get('archived'),
+             'private': bool(x.get('private'))}
             for x in r.json()]
 
 

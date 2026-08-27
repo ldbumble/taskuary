@@ -75,13 +75,25 @@ def _land(store, msg: dict, task_id, status: str) -> int:
     return store.add_message({**_fields(msg, task_id), 'Status': status})
 
 
-def _from_row(r: dict) -> dict:
+_ASSOC = re.compile(r'^\[(?:pull request|issue) by [^\]]*? - association: ([A-Z_]+)\]', re.I)
+
+def _gh_no_auto(store, r: dict) -> bool:
+    """A GitHub row's dispatch right, re-derived from its own head line and its repo's picker
+    (the in-process pending dict carries it directly; a drain in a later process has to look)."""
+    if r.get('Channel') != 'github': return False
+    from .channels import gh_auto_ok
+    src = next((s for s in store.list_sources(active_only=False) if s['Channel'] == 'github' and s['Address'] == r.get('SourceName')), None)
+    m = _ASSOC.match(str(r.get('BodyText') or ''))
+    return not gh_auto_ok(src, m.group(1) if m else 'NONE')
+
+
+def _from_row(r: dict, store=None) -> dict:
     """A pending row back into a message, for a drain in a later process (no images then)."""
     rec = json.loads(r.get('RecipientsJson') or 'null') or {}
     return {'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
             'body': r.get('BodyText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
-            'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': r.get('Channel') == 'github'}
+            'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r)}
 
 
 def drain(store, llm=None, progress=None, limit: int = 500) -> int:
@@ -143,7 +155,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # a cap that goes unmentioned reads as "everything you told me was applied". It was
         # not, and only the owner can judge whether the notes that missed out mattered - so
         # every verdict this funnel writes down says it happened.
-        return (f' · {len(notes)} of {len(notes) + notes_left} standing notes applied '
+        return (f' · {len(notes)} of {len(notes) + notes_left} past verdicts shown as evidence '
                 '(the rest did not fit)' if notes_left else '')
     if r['decision'] == 'attach':
         tid = r['task_id']
@@ -151,13 +163,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # the one exception: it asked a question on this thread and the answer is arriving, so
         # the round trip outranks a standing verdict about the topic.
         busy = any(x['Status'] == 'running' for x in store.list_runs(tid))
-        vetoed = '' if busy else veto(store, msg)
-        if vetoed:
+        ruled = '' if busy else ruled_on_thread(store, msg)
+        if ruled:
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
-                            f'your standing verdict says this is not ours, so it did not join '
-                            f'{task_ref(tid)}: "{vetoed[:200]}"', [], 'memory')
-            logger.info(f'ingest: filed by your own verdict instead of attaching to {task_ref(tid)}')
+                            f'you already ruled on this conversation, so it did not join {task_ref(tid)}: "{ruled[:200]}"',
+                            [], 'memory')
+            logger.info(f'ingest: filed by your ruling on the thread instead of attaching to {task_ref(tid)}')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
@@ -172,18 +184,19 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             except Exception as e:
                 logger.warning(f'answer_to_agent failed for task {tid}: {e}')
     else:
-        # A standing verdict stops a task OPENING, not just a message attaching. This is where
-        # "I have said twenty times that resident refunds are not ours" went wrong: veto() only
-        # ever guarded the attach branch, so the same topic arriving on a fresh thread reached
-        # the classifier as a NOTE - advice a model can weigh and, when its answer degrades
-        # below, not read at all. A verdict the owner typed is not advice; it decides.
-        vetoed = veto(store, msg, topic_only=True)
-        if vetoed:
+        # The one verdict that decides without a model: you already ruled on THIS conversation
+        # (same thread, or the same chat within its episode window). Everything else you have
+        # ever said - about a sender, about a topic - reaches the classifier below as EVIDENCE,
+        # with the sender and subject it was given on, and the model judges how alike this
+        # message really is. The owner's call (2026-08-27): a topic rule that decided
+        # mechanically ("veto") was too blunt - it could not tell a new refund thread from a
+        # refund thread that this time was asking him something.
+        ruled = ruled_on_thread(store, msg)
+        if ruled:
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
-                            f'your standing verdict says this is not ours, so no task was opened: '
-                            f'"{vetoed[:200]}"', [], 'memory')
-            logger.info(f"ingest: filed by your own verdict - {msg.get('subject') or ''}")
+                            f'you already ruled on this conversation, so no task was opened: "{ruled[:200]}"', [], 'memory')
+            logger.info(f"ingest: filed by your ruling on the thread - {msg.get('subject') or ''}")
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         # AI-gated triage: without an active AI connector, nothing becomes a task on its
         # own - messages FILE onto the timeline (visible, promotable by hand) instead of
@@ -256,7 +269,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # 'escalate' was declared in the policy precedence and then read by nobody. It IS
         # the urgency rule: the owner names the senders whose mail jumps the queue, and that
         # is the only thing that marks a task urgent.
-        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate')
+        # a task the model did not label 'general' goes to the coding agent - the owner's call
+        # (2026-08-27): an agent on a non-coding task says "nothing to do here" and stops, a job left
+        # on a list does not. The keyword scan in draft_task_fields only decides with triage off.
+        judged = cfg.get('intent_classify_enabled', '1') == '1'       # a brain (or a by-construction rule) said 'task'
+        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate',
+                              kind=intent.get('kind') or ('coding' if judged and intent['intent'] == 'task' else None))
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
@@ -442,42 +460,15 @@ def owner_addresses(store) -> set:
             if s.get('Channel') == 'email' and s.get('Address')}
 
 
-def veto(store, msg: dict, topic_only: bool = False) -> str:
-    """The owner's own verdict that this message is not work, if they have given one - the note
-    itself, so the timeline can quote what decided it.
-
-    Only Source='verdict' counts: that is written when the owner presses "Not our task" or "Not
-    a task", and nothing else writes it. A pattern LEARNED.md distilled is a hint for the
-    classifier, never a standing refusal.
-
-    This exists because ATTACHING skipped every judgement. A thread with a task already open
-    absorbed each new message straight onto it - no triage, no notes, no AI call - so the task
-    stayed 'needs you' no matter how many times the owner said the topic was not theirs. The
-    verdict was unreachable by design, and giving it again could not help.
-
-    `topic_only` keeps just the 'subject'-scoped verdicts - "this KIND of work is not ours".
-    Those are the ones that must decide rather than advise, because the whole reason the topic
-    scope exists is that the sender changes every time (a refund thread carries a different
-    resident and a different colleague on each message), so nothing else can catch them.
-
-    A verdict about a PERSON stays advice, deliberately: someone whose last message was not
-    yours can still send you something that is, and the classifier weighing the note is the
-    right shape for that. A 'global' verdict would mean "never open a task again for anyone",
-    which nobody has ever meant by pressing Not our task.
-
-    One key outranks the scope question entirely: the THREAD. "Collection %" has one usable
-    word, so the verdict on it could only be saved against the sender - advice - and the same
-    conversation opened a task on the very next reply, with the colleague's answer sitting
-    right there in it. Any owner "this is not work" on a conversation - not ours, not a task,
-    nothing to do - decides that conversation, however (or whether) it was otherwise learned;
-    see store.owner_verdict_on_thread for the chat episode window."""
+def ruled_on_thread(store, msg: dict) -> str:
+    """The owner's own "this is not work" on THIS conversation, if they gave one - the route
+    reason they left, so the timeline can quote what decided it. Same thread = same topic for
+    life; a chat id is a relationship, so there the ruling covers an episode (see
+    store.owner_verdict_on_thread). This is the only verdict that decides without a model:
+    a verdict about a person or a topic is EVIDENCE for the classifier (relevant_notes), because
+    the same topic can arrive asking something new, and only a reader can tell."""
     on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'), msg.get('sent_at'))
-    if on_thread: return f'you already ruled on this conversation: {on_thread}'
-    hits = applicable_notes(store, [msg.get('from_email') or ''], msg.get('subject') or '',
-                            f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
-                            msg.get('source_name') or '')
-    return next((n['Note'] for n in hits if n.get('Source') == 'verdict'
-                 and not (topic_only and (n['Scope'] != 'subject' or not n.get('ScopeKey')))), '')
+    return f'you already ruled on this conversation: {on_thread}' if on_thread else ''
 
 
 def others_on_thread(store, msg: dict, mine=()) -> dict:

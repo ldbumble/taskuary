@@ -1,4 +1,8 @@
-""""I wrote this a bunch and the system is not learning it."
+"""Verdicts are EVIDENCE the classifier weighs, not rules that decide (owner's call, 2026-08-27):
+the same topic can arrive asking something new, and only a reader can tell. The one verdict that
+still decides without a model is a ruling on THIS conversation (ingest.ruled_on_thread).
+
+Earlier history, kept for the record - "I wrote this a bunch and the system is not learning it."
 
 Four reasons it could not, and all four are covered here. A verdict about a KIND OF WORK had
 nowhere to live - the scopes were this sender, their domain, or everybody - so "resident
@@ -59,13 +63,18 @@ class TopicScopeTests(unittest.TestCase):
         self.assertEqual(ingest.notes_for(s, {'from_email': 'someone-new@elsewhere.com',
                                               'subject': 'Directors meeting', 'body': 'agenda attached'}), [])
 
-    def test_only_the_owners_own_verdicts_can_veto(self):
-        """A distilled pattern is a hint for the classifier. A refusal has to be something the
-        owner actually pressed a button to say."""
-        msg = {'from_email': 'x@y.com', 'subject': REFUND, 'body': 'history attached'}
-        self.assertIn('not our task', ingest.veto(_store(VERDICT), msg))
-        learned = ('subject', TOPIC, 'Resident refunds look like they are not ours.', 'learned')
-        self.assertEqual(ingest.veto(_store(learned), msg), '')
+    def test_a_topic_verdict_reaches_the_classifier_as_evidence_not_as_an_order(self):
+        """The verdict is shown with the sender and subject it was given on, under an EVIDENCE
+        heading that tells the model to judge likeness - never as a rule that outranks it."""
+        seen = {}
+        def llm(sys_, usr_, **kw):
+            seen['sys'] = sys_
+            return '{"intent": "fyi", "why": "same refund thread"}'
+        out = ingest.ingest_message(_store(VERDICT), {'external_id': 'ev1', 'channel': 'email', 'from_email': 'x@y.com',
+                                                      'subject': REFUND, 'body': 'history attached'}, llm=llm)
+        self.assertEqual(out['status'], 'filed')
+        self.assertIn('EVIDENCE', seen['sys']); self.assertIn('Resident refunds are not our task', seen['sys'])
+        self.assertNotIn('outrank your own reading', seen['sys'])     # LEARNED's own 'SOUL outranks it' line is fine
 
 
 class AttachRespectsTheVerdictTests(unittest.TestCase):
@@ -88,15 +97,22 @@ class AttachRespectsTheVerdictTests(unittest.TestCase):
         out = self._arrive(s)
         self.assertEqual((out['status'], out['task_id']), ('attached', tid))
 
-    def test_a_standing_verdict_stops_the_message_joining_the_task(self):
-        """This is what "not learning" looked like: a thread match is worth 1.0, it attached on
-        sight, and no note was ever consulted on the way in."""
+    def test_a_topic_verdict_alone_no_longer_stops_the_thread_joining_its_task(self):
+        """A verdict about the topic is evidence, and attaching runs no model - so the thread
+        keeps building its one task. What DOES stop it is the owner ruling on this conversation."""
         s = _store(VERDICT); tid = self._thread(s)
-        out = self._arrive(s)
+        self.assertEqual(self._arrive(s)['task_id'], tid)
+
+    def test_a_ruling_on_the_conversation_stops_the_message_joining_the_task(self):
+        s = _store(VERDICT); tid = self._thread(s)
+        first = self._arrive(s, ext='e0b')
+        s.set_message_status(first['message_id'], 'ignored')
+        s.add_route(first['message_id'], None, 'ignore', None, 'not ours - resident refunds are not our task', [], 'owner')
+        out = self._arrive(s, ext='e2', frm='another@regencyhealthrehab.com')
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
-        self.assertEqual(row['NeedsYou'], 0)                      # the point of the whole exercise
-        self.assertIn('Resident refunds are not our task', row['RouteReason'])
+        self.assertEqual(row['NeedsYou'], 0)
+        self.assertIn('already ruled on this conversation', row['RouteReason'])
         self.assertIn(f'TQ-{tid:04d}', row['RouteReason'])         # and which task it did not join
 
     def test_a_live_agent_session_still_gets_its_answer(self):
@@ -121,10 +137,11 @@ class TheDialogTests(unittest.TestCase):
         mid = self._msg()
         d = c.get(f'/api/messages/{mid}/not-mine/suggest').json()
         self.assertEqual((d['scope'], d['topic']), ('subject', TOPIC))
-        self.assertIn('Mail about', d['note'])
-        # ask for a different scope and the sentence changes with it
-        self.assertIn('from dlynch1@regencyhealthrehab.com',
-                      c.get(f'/api/messages/{mid}/not-mine/suggest?scope=sender').json()['note'])
+        self.assertIn('NOT OURS', d['note']); self.assertIn(f'the topic "{TOPIC}"', d['note'])
+        self.assertIn('from dlynch1@regencyhealthrehab.com', d['note'])      # the evidence names the sender whatever the scope
+        # ask for a different scope and the line changes with it
+        self.assertIn('anyone at regencyhealthrehab.com',
+                      c.get(f'/api/messages/{mid}/not-mine/suggest?scope=sender_domain').json()['note'])
         self.assertEqual(c.get(f'/api/messages/{mid}/not-mine/suggest?scope=nonsense').status_code, 422)
 
     def test_a_subject_with_nothing_to_key_on_falls_back_to_the_sender(self):
@@ -200,22 +217,22 @@ class TheTopicIsTheStandingPartTests(unittest.TestCase):
         self.assertEqual((d['scope'], d['scopeKey']), ('sender', 'hudson@regencyhealthrehab.com'))
 
 
-class CreateRespectsTheVerdictTests(unittest.TestCase):
-    """The half that was still missing. veto() guarded ATTACH only, so the same topic arriving
-    on a thread with no task open yet reached the classifier as a NOTE - advice, which loses to
-    a model having a bad day. Twenty verdicts, twenty new tasks."""
+class CreateWeighsTheVerdictTests(unittest.TestCase):
+    """A new thread on a ruled topic: the classifier sees the verdict as evidence and decides.
+    It used to be decided for it (veto) - dropped 2026-08-27 at the owner's request."""
     def _arrive(self, s, llm=None, subject='Resident Refund Request - Watson, Lisa'):
         return ingest.ingest_message(s, {'external_id': f'new-{subject}', 'channel': 'email',
                                          'from_email': 'never-seen@elsewhere.com', 'subject': subject,
                                          'body': 'Attached is the transaction history.'}, llm=llm)
 
-    def test_a_topic_verdict_stops_a_new_task_opening(self):
-        s = _store(VERDICT)
-        out = self._arrive(s, llm=lambda *a, **k: '{"intent": "task", "why": "real work"}')
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
-        row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
-        self.assertEqual(row['NeedsYou'], 0)
-        self.assertIn('Resident refunds are not our task', row['RouteReason'])
+    def test_a_topic_verdict_is_shown_and_the_model_decides(self):
+        s = _store(VERDICT); seen = {}
+        def llm(sys_, usr_, **kw):
+            seen['sys'] = sys_
+            return '{"intent": "task", "why": "this one asks the owner to approve"}'
+        out = self._arrive(s, llm=llm)
+        self.assertIn('Resident refunds are not our task', seen['sys'])   # it was told
+        self.assertEqual(out['status'], 'created')                           # and it may still disagree
 
     def test_a_verdict_about_a_PERSON_still_only_advises(self):
         """Someone whose last message was not yours can still send you something that is, so a

@@ -88,14 +88,17 @@ def route(msg, tasks, threshold=ATTACH_THRESHOLD):
         cands.append({'task_id': t['task_id'], 'score': round(total,4), 'signals': {k: round(v,4) for k,v in sig.items()}})
     cands.sort(key=lambda c: -c['score'])
     best = cands[0] if cands else None
+    # The reason is read by a person on the timeline, so it says what happened in words. The
+    # scores stay in `candidates` for anyone debugging the router - "0.31, attaching needs 0.42"
+    # on every card told the owner nothing they could act on.
     if best and best['score'] >= threshold:
         why = ('same conversation thread' if best['signals']['thread'] else
-               'subject/body similarity' + (' + known sender' if best['signals']['sender'] else ''))
+               'reads like the same work' + (', from someone already on it' if best['signals']['sender'] else ''))
         return {'decision':'attach', 'task_id':best['task_id'], 'score':best['score'],
-                'reason': f"attached: {why} (score {best['score']:.2f} >= {threshold})", 'candidates':cands[:5]}
-    top = f" (closest open task: TQ-{best['task_id']:04d} at {best['score']:.2f}, attaching needs {threshold})" if best else ''
+                'reason': f"attached: {why}", 'candidates':cands[:5]}
+    near = f" (TQ-{best['task_id']:04d} came closest, not close enough to join)" if best and best['score'] >= threshold * 0.6 else ''
     return {'decision':'create', 'task_id':None, 'score':best['score'] if best else 0.0,
-            'reason': f'new task - nothing similar already open{top}', 'candidates':cands[:5]}
+            'reason': f'new task - nothing similar already open{near}', 'candidates':cands[:5]}
 
 # KIND decides who works the task, and 'coding' is the one that starts an agent on a
 # checkout - so it has to mean "there is software in here", not "a word appeared". A single
@@ -116,9 +119,12 @@ _CODE_SOFT = ('bug', 'error', 'exception', 'crash', 'broken', 'regression', 'tim
 _ASKS = ('can you', 'could you', 'please send', 'let me know', 'would you mind', 'any chance')
 
 
-def draft_task_fields(msg, urgent: bool = False):
+def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     """Title/summary/kind/priority for a task created from a message. `kind` routes the work:
     coding = an agent on a checkout, reply = the responder and Review, general = your list.
+    Pass `kind` when the classifier named one (triage.classify_intent) - it read the whole
+    message against TRIAGE.md's definition and outranks the keyword scan below, which is the
+    fallback for a brain that did not say.
 
     `urgent` is DECIDED BY A RULE, never guessed here. Priority used to come from a keyword
     scan for urgent/asap/immediately/outage/down, which flagged mail nobody had called
@@ -130,7 +136,8 @@ def draft_task_fields(msg, urgent: bool = False):
     body = (msg.get('body') or '').strip()
     head = subj + '\n' + body[:2000]           # a trace usually sits below the pleasantries
     low = head.lower()
-    kind = ('coding' if _CODE_HARD.search(head) or sum(w in low for w in _CODE_SOFT) >= 2 else
+    kind = (kind if kind in ('coding', 'general') else
+            'coding' if _CODE_HARD.search(head) or sum(w in low for w in _CODE_SOFT) >= 2 else
             'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'general')
     return {'title': subj[:300].capitalize(), 'summary': body[:1000], 'kind': kind,
             'priority': 'urgent' if urgent else 'normal'}

@@ -31,7 +31,10 @@ REFLECT_AT = 3           # corrections that trigger a reflection; fewer still re
 DAYS = 14                # the fallback event window when no reflection has ever run
 HYP_START, HYP_END = '<!-- hypotheses:start -->', '<!-- hypotheses:end -->'
 PROP_START, PROP_END = '<!-- proposed:start -->', '<!-- proposed:end -->'
-_GATED = re.compile(r'\n## [^\n]*\n+<!-- (hypotheses|proposed):start -->.*?<!-- \1:end -->\n?', re.S)
+VERD_START, VERD_END = '<!-- verdicts:start -->', '<!-- verdicts:end -->'
+_GATED = re.compile(r'\n## [^\n]*\n+<!-- (hypotheses|proposed|verdicts):start -->.*?<!-- \1:end -->\n?', re.S)
+VERD_HEADER = '## Verdicts - the evidence'
+VERD_KEEP = 60           # the most recent verdict lines the doc shows; the table keeps them all
 
 LESSON_SYSTEM = (
     'You maintain the Hypotheses section of LEARNED.md: patterns Taskuary is testing about how '
@@ -76,14 +79,54 @@ def _unfence(s): return re.sub(r'^```\w*\s*$|^```\s*$', '', (s or '').strip(), f
 
 def injectable(text: str) -> str:
     """The doc as prompts should read it: active sections only. Hypotheses and proposed rules
-    are gated out - a tested pattern is knowledge, an untested one is noise in a system prompt."""
+    are gated out - a tested pattern is knowledge, an untested one is noise in a system prompt -
+    and so is the verdicts block: those lines reach a prompt by RELEVANCE (ingest.relevant_notes
+    pulls the ones about this sender or topic), never all at once."""
     if not text: return ''
     out = _GATED.sub('\n', text)
-    for a, b in ((HYP_START, HYP_END), (PROP_START, PROP_END)):   # blocks whose header was hand-edited away
+    for a, b in ((HYP_START, HYP_END), (PROP_START, PROP_END), (VERD_START, VERD_END)):   # blocks whose header was hand-edited away
         if a in out and b in out:
             head, rest = out.split(a, 1)
             out = head + rest.split(b, 1)[1]
     return out.strip()
+
+
+def render_verdicts(store) -> str:
+    """The evidence, as the doc shows it: one dated line per verdict the owner gave, newest
+    first, straight from the memory table (which stays the record; this is its readable face)."""
+    rows = [m for m in store.list_memories() if m.get('Source') == 'verdict'][:VERD_KEEP]
+    if not rows: return '_(nothing yet - "Not our task" and "Not a task" write here)_'
+    return '\n'.join(f"- {str(m.get('Note') or '').strip()} [mem{m['MemoryId']} · {m['Scope']}"
+                     + (f": {m['ScopeKey']}" if m.get('ScopeKey') else '') + ']' for m in rows)
+
+
+def note_verdicts(store):
+    """Refresh LEARNED.md's evidence block after a verdict. The section is appended to a doc
+    that predates it (existing installs), never overwriting anything the owner or the
+    reflection wrote. Never raises - the memory row is already saved."""
+    try:
+        doc = store.get_doc(DOC) or ''
+        if VERD_START not in doc or VERD_END not in doc:
+            doc = doc.rstrip('\n') + (f'\n\n{VERD_HEADER}\n_(every verdict you give, dated, with the sender and subject '
+                                      f'it was given on. Triage is shown the ones about a similar sender or topic and judges '
+                                      f'how alike the new message is; the general lesson is distilled above.)_\n'
+                                      f'{VERD_START}\n{VERD_END}\n')
+        new = _put_block(doc, VERD_START, VERD_END, render_verdicts(store))
+        if new != (store.get_doc(DOC) or ''): store.save_doc(DOC, new, 'verdicts')
+    except Exception as e:
+        logger.warning(f'verdict block not written: {e}')
+
+
+def _without_verdicts(doc: str) -> tuple:
+    """(doc minus its verdicts section, the section) - the reflection never sees the block: it
+    is generated, and a model rewriting it would only lose lines."""
+    if VERD_START not in doc or VERD_END not in doc: return doc, ''
+    head, rest = doc.split(VERD_START, 1)
+    body, tail = rest.split(VERD_END, 1)
+    hdr = head.rfind(f'\n{VERD_HEADER}')
+    if hdr >= 0: head, section_head = head[:hdr], head[hdr:]
+    else: section_head = ''
+    return head.rstrip('\n') + '\n' + tail.lstrip('\n'), section_head + VERD_START + body + VERD_END + '\n'
 
 
 def learn_from(store, event: str, llm=None):
@@ -144,8 +187,8 @@ def reflect(store, llm=None) -> bool:
     doc that feeds every prompt would poison them, and the old doc is always a valid answer."""
     from .llm import build_llm
     llm = llm or build_llm(store)
-    doc = store.get_doc(DOC) or ''                 # RAW doc: {{owner}} tokens must survive the rewrite
-    if not llm or not doc: return False
+    doc, verdicts = _without_verdicts(store.get_doc(DOC) or '')   # RAW doc: {{owner}} tokens must survive the rewrite
+    if not llm or not doc.strip(): return False
     since = (store.get_settings().get('learn_last_reflect')
              or (datetime.now() - timedelta(days=DAYS)).isoformat(sep=' ', timespec='seconds'))
     try:
@@ -162,7 +205,7 @@ def reflect(store, llm=None) -> bool:
     if not (new.startswith('#') and 200 < len(new) <= 12_000 and new.count('\n') <= 160
             and all(new.count(m) == 1 for m in markers)):
         logger.warning('reflection produced an unusable doc - kept the old one'); return False
-    store.save_doc(DOC, new, 'reflect')
+    store.save_doc(DOC, new.rstrip('\n') + ('\n\n' + verdicts.strip('\n') + '\n' if verdicts else ''), 'reflect')
     store.set_setting('learn_pending', '0', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')
     logger.info('LEARNED.md reflected')

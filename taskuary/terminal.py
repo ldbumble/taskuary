@@ -139,8 +139,9 @@ class Term:
         self.keep()                                       # the transcript must outlive the pty
         self._emit(None)
         if self.store and self.task_id:                   # whoever queued behind this session gets its turn
-            from . import blackboard
+            from . import blackboard, waitroom
             blackboard.drain_later(self.store)
+            waitroom.later(self.store)                    # ...and notes left for THIS agent reopen it
 
     def keep(self):
         """File this session's readable transcript on its task. A pty is not storage: sessions are
@@ -924,7 +925,18 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
     who = msg.get('FromName') or msg.get('from_name') or msg.get('FromEmail') or msg.get('from_email') or 'the sender'
     body = str(msg.get('BodyText') or msg.get('body') or '').strip()
     if not body: return False
-    text = ' '.join(f'{who} answered (by {msg.get("Channel") or msg.get("channel") or "mail"}): {body}'.split())[:4000]
+    type_into(t, f'{who} answered (by {msg.get("Channel") or msg.get("channel") or "mail"}): {body}'[:4000])
+    store.add_comment(task_id, actor, 'agent', f"{who}'s answer was typed into the live session.")
+    store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who})
+    return True
+
+
+def type_into(t, text: str):
+    """Type `text` into a live session the way seed() proved works: flattened to one line (a
+    newline is Enter in a TUI), fed in frame-sized bites (a one-shot paste drops bytes
+    mid-stream), then Enter until the box answers. Runs on its own thread; returns at once.
+    Shared by say_to_task (an inbound answer) and waitroom.deliver (the owner's queued notes)."""
+    text = ' '.join(str(text or '').split())
     def go():
         for i in range(0, len(text), SEED_CHUNK):
             t.write(text[i:i + SEED_CHUNK])
@@ -936,9 +948,6 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
             time.sleep(SEED_ENTER)
             if t.n > was: return
     threading.Thread(target=go, daemon=True).start()
-    store.add_comment(task_id, actor, 'agent', f"{who}'s answer was typed into the live session.")
-    store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who})
-    return True
 
 
 def session_for(task_id):

@@ -8,6 +8,7 @@ import {
   IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SearchIcon from "@mui/icons-material/Search";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import VerifiedIcon from "@mui/icons-material/Verified";
@@ -182,6 +183,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
 
   const savePolicy = async (p) => { await api.post("/api/policies", p); setDraft(null); load(); };
   const togglePolicy = async (p) => { await api.post("/api/policies", { PolicyId: p.PolicyId, Active: !p.Active }); load(); };
+  const deletePolicy = async (p) => { await api.delete(`/api/policies/${p.PolicyId}`); load(); };
   const saveSetting = async (name, value) => { await api.patch("/api/settings", { name, value }); load(); };
   const toggleMemory = async (m) => { await api.patch(`/api/memory/${m.MemoryId}`, { active: !m.Active }); load(); };
   const addNote = async () => { await api.post("/api/memory", newNote); setNewNote(null); load(); };
@@ -337,6 +339,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
             <Typography variant="caption" sx={{ ...mono, color: FAINT }}>#{p.SortOrder}</Typography>
             <Button size="small" onClick={() => setDraft({ ...p, Active: !!p.Active })}>Edit</Button>
             <Switch checked={!!p.Active} onChange={() => togglePolicy(p)} />
+            <IconButton size="small" title="Delete this rule" onClick={() => deletePolicy(p)}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
           </Box>
         ))}
         {draft && (

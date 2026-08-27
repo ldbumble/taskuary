@@ -3,6 +3,7 @@ import json, tempfile, time, unittest
 from pathlib import Path
 from taskuary import store as store_mod
 from taskuary.store import MemoryStore, task_ref
+from taskuary.testing import inbound
 from taskuary import artifacts, reshape
 from taskuary.ingest import ingest_message
 from taskuary.routing import route
@@ -17,10 +18,8 @@ REPLY_LLM = lambda sys, usr: '{"intent": "reply_only", "why": "q"}'
 
 class CoreTests(unittest.TestCase):
     def msg(self, **kw):
-        base = {'external_id': kw.get('external_id', 'x1'), 'channel': 'api', 'subject': 's',
-                'body': 'please add the new user to the system', 'from_email': 'a@b.com',
-                'conversation_id': None, 'sent_at': '2026-08-17 09:00', 'source_link': None, 'from_name': 'A'}
-        return {**base, **kw}
+        kw.setdefault('external_id', 'x1')
+        return inbound(**kw)
 
     def test_ingest_creates_task_and_feed(self):
         s = MemoryStore()

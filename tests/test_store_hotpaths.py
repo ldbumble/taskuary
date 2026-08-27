@@ -121,3 +121,35 @@ class TimelineIndexTests(unittest.TestCase):
         self.assertTrue(s.known_sender('pat@corp.example'))
         self.assertFalse(s.known_sender('nobody@corp.example'))
         s.cx.close()
+
+
+class RelatedIndexTests(unittest.TestCase):
+    """feed() and list_tasks() look up the latest route/review/run per row. Without
+    these indexes each Timeline load is N times a table scan."""
+
+    def test_indexes_exist(self):
+        s, _ = _file_store()
+        names = _index_names(s)
+        for ix in ('idx_route_message', 'idx_review_message', 'idx_review_task',
+                   'idx_run_task', 'idx_attachment_message', 'idx_comment_task',
+                   'idx_audit_entity', 'idx_dispatchq_task', 'idx_waitroom_task'):
+            self.assertIn(ix, names, ix)
+        s.cx.close()
+
+    def test_latest_route_and_review_lookups_use_them(self):
+        s, _ = _file_store()
+        mid = s.add_message({'ExternalId': 'r1', 'Channel': 'email', 'Status': 'filed'})
+        s.add_route(mid, None, 'file', None, 'fyi', [], 'triage')
+        tid = s.create_task({'Title': 't'}, 't')
+        s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
+        s.start_run(tid, 'coder', 'go', 't')
+        s.add_attachment({'MessageId': mid, 'Name': 'a.png', 'ContentType': 'image/png'})
+        self.assertIn('idx_route_message', _plan(s, 'SELECT * FROM route WHERE MessageId=?', (mid,)))
+        self.assertIn('idx_review_message', _plan(s, 'SELECT * FROM review WHERE MessageId=?', (mid,)))
+        self.assertIn('idx_run_task', _plan(s, "SELECT * FROM run WHERE TaskId=? AND Status='running'", (tid,)))
+        self.assertIn('idx_attachment_message', _plan(s, 'SELECT * FROM attachment WHERE MessageId=?', (mid,)))
+        row = s.feed(limit=5)[0]
+        self.assertEqual(row['Decision'], 'file')
+        self.assertEqual(row['ReviewStatus'], 'pending')
+        self.assertEqual(row['Attachments'], 1)
+        s.cx.close()

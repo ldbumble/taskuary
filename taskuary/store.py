@@ -162,6 +162,16 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_sent ON message(SentAt, MessageId)',
     'CREATE INDEX IF NOT EXISTS idx_message_created ON message(CreatedAt)',
     'CREATE INDEX IF NOT EXISTS idx_message_from ON message(FromEmail)',
+    'CREATE INDEX IF NOT EXISTS idx_route_message ON route(MessageId, RouteId)',
+    'CREATE INDEX IF NOT EXISTS idx_route_task ON route(TaskId)',
+    'CREATE INDEX IF NOT EXISTS idx_review_message ON review(MessageId, ReviewId)',
+    'CREATE INDEX IF NOT EXISTS idx_review_task ON review(TaskId, Status)',
+    'CREATE INDEX IF NOT EXISTS idx_run_task ON run(TaskId, Status)',
+    'CREATE INDEX IF NOT EXISTS idx_attachment_message ON attachment(MessageId)',
+    'CREATE INDEX IF NOT EXISTS idx_comment_task ON comment(TaskId)',
+    'CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit(EntityType, EntityId)',
+    'CREATE INDEX IF NOT EXISTS idx_dispatchq_task ON dispatchq(TaskId)',
+    'CREATE INDEX IF NOT EXISTS idx_waitroom_task ON waitroom(TaskId, DeliveredAt)',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a

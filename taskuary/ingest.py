@@ -101,16 +101,17 @@ def drain(store, llm=None, progress=None, limit: int = 500) -> int:
     message must find the task its first one opened. A message whose triage raises is filed
     with the error on its route rather than left spinning; the next one still gets judged."""
     rows = store.pending_triage(limit)
-    for i, r in enumerate(rows):
-        mid = r['MessageId']
-        msg = {**(_PENDING.pop(mid, None) or _from_row(r)), '_mid': mid}
-        try:
-            ingest_message(store, msg, llm=llm)
-        except Exception as e:
-            logger.warning(f'deferred triage failed for message {mid}: {e}')
-            store.place_message(mid, None, 'filed')
-            store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
-        if progress: progress(len(rows) - i - 1)
+    with store.freeze_snapshots():
+        for i, r in enumerate(rows):
+            mid = r['MessageId']
+            msg = {**(_PENDING.pop(mid, None) or _from_row(r)), '_mid': mid}
+            try:
+                ingest_message(store, msg, llm=llm)
+            except Exception as e:
+                logger.warning(f'deferred triage failed for message {mid}: {e}')
+                store.place_message(mid, None, 'filed')
+                store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
+            if progress: progress(len(rows) - i - 1)
     return len(rows)
 
 

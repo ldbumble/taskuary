@@ -186,3 +186,36 @@ class SnapshotJoinTests(unittest.TestCase):
                                'body': 'and one more thing', 'from_email': 'a@b.com',
                                'conversation_id': 'c1'}, llm=llm)
         self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']))
+
+
+class SnapshotFreezeTests(unittest.TestCase):
+    FYI = {'channel': 'api', 'subject': 'notice', 'body': 'this is an automated summary, no action needed'}
+
+    def test_filed_mail_reuses_the_frozen_snapshot(self):
+        """A catch-up of newsletters does not change the open-task picture, so rebuild once."""
+        from taskuary.ingest import ingest_message
+        s = MemoryStore()
+        n = {'n': 0}
+        real = s._load_snapshots
+        s._load_snapshots = lambda: n.__setitem__('n', n['n'] + 1) or real()
+        with s.freeze_snapshots():
+            ingest_message(s, {**self.FYI, 'external_id': 'f1'})
+            ingest_message(s, {**self.FYI, 'external_id': 'f2'})
+        self.assertEqual(n['n'], 1)
+
+    def test_opening_a_task_drops_the_cache_so_the_next_on_the_thread_attaches(self):
+        from taskuary.ingest import ingest_message, drain, deferred
+        llm = lambda sys, usr: '{"intent": "task", "why": "t"}'
+        s = MemoryStore()
+        with deferred():
+            ingest_message(s, {'external_id': 'd1', 'channel': 'api', 'subject': 's',
+                               'body': 'please add the new user to the system',
+                               'from_email': 'a@b.com', 'conversation_id': 'c-drain'}, llm=llm)
+            ingest_message(s, {'external_id': 'd2', 'channel': 'api', 'subject': 's',
+                               'body': 'and one more thing', 'from_email': 'a@b.com',
+                               'conversation_id': 'c-drain'}, llm=llm)
+        self.assertEqual(len(s.pending_triage()), 2)
+        drain(s, llm=llm)
+        tasks = s.list_tasks()
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(len(s.list_messages(tasks[0]['TaskId'])), 2)

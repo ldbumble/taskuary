@@ -2,7 +2,7 @@
 default) and in-memory (tests/demo). Every mutation is meant to be paired with .audit();
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
-import hashlib, json, re, sqlite3, threading
+import contextlib, hashlib, json, re, sqlite3, threading
 from datetime import datetime, timedelta
 
 GENESIS = '0' * 64
@@ -289,6 +289,8 @@ class SQLiteStore:
         # set because a second connection (desktop + web, or a stuck poll) otherwise
         # fails instantly with "database is locked" instead of waiting its turn.
         self.cx.execute('PRAGMA busy_timeout=5000')
+        self._snap_hold = 0
+        self._snap_cache = None
         with self.lock:
             self.cx.executescript(SCHEMA)
             for ix in INDEXES:
@@ -470,8 +472,10 @@ class SQLiteStore:
         # orphaned session, still holding task_id 34, showed up as the agent working a report
         # it had never been given. A TQ-ref is an identity: it goes in prompts, in transcripts,
         # in pull requests. It must never name two different pieces of work.
-        return self._insert('task', {**fields, 'TaskId': self._next_task_id()},
+        tid = self._insert('task', {**fields, 'TaskId': self._next_task_id()},
                             TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
+        self._bump_snapshots()
+        return tid
 
     def _next_task_id(self) -> int:
         """One past the highest id ever ISSUED - not the highest still present. The audit log
@@ -495,6 +499,7 @@ class SQLiteStore:
         if fields.get('Status') in ('done', 'dropped'):
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
+        self._bump_snapshots()
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
     def list_tasks(self, status=None):
         q = '''SELECT t.*, (SELECT Status FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
@@ -512,7 +517,35 @@ class SQLiteStore:
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',
                   'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task WHERE TaskId=?'):
             self._exec(q, (task_id,))
+        self._bump_snapshots()
+    @contextlib.contextmanager
+    def freeze_snapshots(self):
+        """Reuse one snapshots() result until a task/message write invalidates it.
+
+        drain() holds this so a 40-mail catch-up is not 40 rebuilds: a filed FYI does
+        not change the open-task picture, so the next message reuses it. Opening a
+        task (or attaching mail to one) drops the cache, so a thread's second message
+        still finds the task the first one just created."""
+        self._snap_hold += 1
+        try:
+            yield
+        finally:
+            self._snap_hold -= 1
+            if self._snap_hold <= 0:
+                self._snap_hold, self._snap_cache = 0, None
+
+    def _bump_snapshots(self):
+        self._snap_cache = None
+
     def snapshots(self):
+        if self._snap_hold and self._snap_cache is not None:
+            return self._snap_cache
+        snaps = self._load_snapshots()
+        if self._snap_hold:
+            self._snap_cache = snaps
+        return snaps
+
+    def _load_snapshots(self):
         """Open tasks as the router sees them - one query, not one per task.
 
         A catch-up used to do SELECT * FROM task then SELECT * FROM message for each,
@@ -549,7 +582,10 @@ class SQLiteStore:
         # normalized on the way IN, not only by a heal on the way past: one clock for the
         # timeline, and no row that can sort above its own future
         if fields.get('SentAt'): fields = {**fields, 'SentAt': norm_stamp(fields['SentAt'])}
-        return self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
+        mid = self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
+        if fields.get('TaskId'):
+            self._bump_snapshots()
+        return mid
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def thread_messages(self, conversation_id=None, subject=None, limit=40):
         """Every message already on this thread, oldest last - by ConversationId where the channel
@@ -616,10 +652,13 @@ class SQLiteStore:
     def place_message(self, mid, task_id, status):
         """A row that was shown first and judged later lands where the judgement puts it (ingest.drain)."""
         self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
+        if task_id is not None:
+            self._bump_snapshots()
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
         self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
+        self._bump_snapshots()
     # What was ON the mail: the screenshot of the spreadsheet, the invoice PDF. The bytes live on
     # disk (`Path`) - a database that grows by 8MB a mail is a database nobody backs up.
     def add_attachment(self, fields): return self._insert('attachment', fields, ATT_COLS, {'CreatedAt': _now()})

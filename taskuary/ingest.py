@@ -591,8 +591,20 @@ def _auto_code(store, tid):
     it instead of racing it (affinity routing - the first agent in has control), and a full
     house queues for the next free slot. Both drain automatically as sessions end - the card
     on the board says what it is waiting for."""
-    from . import terminal as term, blackboard as bb
+    from . import terminal as term, blackboard as bb, rank
     agent = store.get_settings().get('default_agent') or 'coder'
+    # Rank mode (the connector's bulk setting): the task does not race for a slot, it joins
+    # ONE value-ordered queue and the drain picks the most valuable waiting task whenever a
+    # slot is free - see rank.py. Clear mode is everything below, unchanged.
+    msgs = store.list_messages(tid)
+    if rank.mode_for(store, msgs[0] if msgs else None) == 'rank':
+        try:
+            rank.enqueue(store, tid, agent)
+            rank.rerank(store)
+            bb.drain(store)
+        except Exception as e:
+            logger.warning(f'ranked dispatch failed for task {tid}: {e}')
+        return
     # the note belongs INSIDE the worker: written before the thread started, a task could
     # claim "auto-dispatched" with no session behind it whenever the process died first
     cap = auto_sessions(store)

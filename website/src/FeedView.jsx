@@ -103,6 +103,52 @@ const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
 
 const PAGE = 100;
 
+// The funnel bar (rank mode): what is being worked and what waits, in value order. One line
+// folded - "In the funnel 3/4 · Next up 7" - so the Timeline is never stuffed with the tail of
+// the queue; unfold it for the ranks, the reasons, and the two overrides.
+const FunnelBar = ({ onOpenTask }) => {
+  const [f, setF] = useState(null);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(async () => { try { setF((await api.get("/api/funnel")).data); } catch { setF(null); } }, []);
+  useEffect(() => { load(); const id = setInterval(load, 10000); return () => clearInterval(id); }, [load]);
+  if (!f || f.mode !== "rank") return null;
+  const act = async (tid, what) => { await api.post(`/api/funnel/${tid}/${what}`); load(); };
+  return (
+    <Box sx={{ gridColumn: "1 / -1", justifySelf: "center", width: "100%", maxWidth: 900, mt: 0.5 }}>
+      <Box onClick={() => setOpen((o) => !o)} sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 1.5, py: 0.6, cursor: "pointer",
+        bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: open ? "10px 10px 0 0" : 99 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: "#47654a", fontSize: 11 }}>
+          In the funnel {f.working.length}/{f.width}
+        </Typography>
+        <Box sx={{ width: "1px", height: 14, bgcolor: BORDER }} />
+        <Typography variant="caption" sx={{ fontWeight: 700, color: "#5b5f97", fontSize: 11 }}>
+          Next up {f.queued.length} {open ? "▾" : "▸"}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
+          {f.working.slice(0, 4).map((w) => w.ref).join(" · ")}
+        </Typography>
+      </Box>
+      {open && (
+        <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderTop: "none", borderRadius: "0 0 10px 10px", px: 1.5, py: 0.5 }}>
+          {f.queued.length === 0 && <Typography variant="caption" sx={{ color: FAINT, display: "block", py: 1 }}>Nothing waiting — every task from a rank-mode connector is being worked.</Typography>}
+          {f.queued.map((q, i) => (
+            <Box key={q.tid} sx={{ display: "flex", alignItems: "center", gap: 1.25, py: 0.6, borderTop: i ? `1px solid ${BORDER}` : "none" }}>
+              <Typography variant="caption" sx={{ ...{ fontFamily: "ui-monospace, monospace" }, color: "#5b5f97", fontWeight: 700, width: 18, fontSize: 11 }}>{i + 1}</Typography>
+              <Typography variant="body2" onClick={() => onOpenTask && onOpenTask(q.tid)} sx={{ fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={q.title}>{q.title}</Typography>
+              <Typography variant="caption" sx={{ color: DIM, fontSize: 10.5, whiteSpace: "nowrap", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }}
+                title={q.why}>{q.behind ? `waiting on ${q.behind} · ` : ""}{q.why}</Typography>
+              <Button size="small" onClick={() => act(q.tid, "pin")} sx={{ fontSize: 10.5, py: 0, minWidth: 0 }}>Start now</Button>
+              <Button size="small" onClick={() => act(q.tid, "later")} sx={{ fontSize: 10.5, py: 0, minWidth: 0, color: DIM }}>Later</Button>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
 export default function FeedView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
@@ -441,6 +487,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
           </Alert>
         )}
       </Box>
+      <FunnelBar onOpenTask={onOpenTask} />
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
       <Box sx={{ minWidth: 0 }}>

@@ -115,17 +115,30 @@ _DRAINING = threading.Lock()
 def drain(store):
     """A session ended (or a slot freed up): start what was queued, in arrival order. Anything
     whose blocker is still working stays put; anything whose task moved on is just cleared."""
-    from . import terminal as term
+    from . import terminal as term, rank
     from .ingest import auto_sessions
     if not _DRAINING.acquire(blocking=False): return
     try:
-        for q in store.queued_dispatches():
+        qs = store.queued_dispatches()
+        # a ranked row's value ages a little per day waited (rank.aged) so the bottom never starves
+        qs.sort(key=lambda q: -(rank.aged(q['Value'], q.get('CreatedAt')) if q.get('Value') is not None else 0.5))
+        for q in qs:
             if len([t for t in term.SESSIONS.values() if t.alive]) >= auto_sessions(store): return
             b = q.get('BehindTaskId')
             if b and (term.for_task(b) or any(r['TaskId'] == b for r in store.running_runs())): continue
             t = store.get_task(q['TaskId']) or {}
             if t.get('Status') not in ('open', 'in_progress') or term.for_task(q['TaskId']):
                 store.clear_dispatch(q['TaskId']); continue
+            # a ranked task never had the affinity check (it queued before anything ran): give
+            # it one on the way out, so two agents do not start on the same files
+            if q.get('Value') is not None and not b:
+                cwd = target_cwd(store, q['TaskId'], q.get('Agent') or 'coder')
+                ps = peers(store, cwd, exclude_tid=q['TaskId']) if cwd else []
+                hit, why = likely_overlap(store, q['TaskId'], ps) if ps else (None, '')
+                if hit:
+                    store._exec('UPDATE dispatchq SET BehindTaskId=?, Reason=? WHERE TaskId=?',
+                                (hit['tid'], why or 'likely to touch the same files', q['TaskId']))
+                    continue
             store.clear_dispatch(q['TaskId'])
             try:
                 term.start_on_task(store, q['TaskId'], q.get('Agent') or 'coder', actor='router')

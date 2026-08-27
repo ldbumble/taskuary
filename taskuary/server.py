@@ -21,7 +21,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
-from . import learn, outbound, responder, waitroom
+from . import learn, outbound, rank, responder, waitroom
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -159,7 +159,7 @@ def _queued_info(q):
     """The card's hover text for a held-back dispatch: what it waits for, and why."""
     if not q: return None
     b = q.get('BehindTaskId')
-    return {'behind': task_ref(b) if b else None,
+    return {'behind': task_ref(b) if b else None, 'value': q.get('Value'), 'why': q.get('Why'),
             'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
             'reason': q.get('Reason'), 'since': q.get('CreatedAt')}
 
@@ -836,6 +836,29 @@ def answer_to_agent(tid: int, body: dict):
     if not terminal.say_to_task(store, tid, m, ACTOR):
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
     return {'ok': True}
+
+# ── the funnel: what is being worked, what waits and in what order (rank.py) ────────────
+@app.get('/api/funnel')
+def funnel(): return rank.funnel(store)
+
+@app.post('/api/funnel/{tid}/pin')
+def funnel_pin(tid: int):
+    """The owner's override: this one is next. Pinned = top value; it starts at the next free slot."""
+    if not any(q['TaskId'] == tid for q in store.queued_dispatches()): raise HTTPException(404, 'that task is not waiting')
+    store.set_dispatch_value(tid, rank.PIN, 'pinned by you')
+    store.audit('task', tid, 'funnel_pin', ACTOR)
+    blackboard.drain_later(store, 0.1)
+    return {'ok': True}
+
+@app.post('/api/funnel/{tid}/later')
+def funnel_later(tid: int):
+    if not any(q['TaskId'] == tid for q in store.queued_dispatches()): raise HTTPException(404, 'that task is not waiting')
+    store.set_dispatch_value(tid, rank.LATER, 'pushed back by you')
+    store.audit('task', tid, 'funnel_later', ACTOR)
+    return {'ok': True}
+
+@app.post('/api/funnel/rerank')
+def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
 # ── the waiting room: notes for a working agent, delivered when it stops (waitroom.py) ──
 @app.get('/api/tasks/{tid}/waitroom')

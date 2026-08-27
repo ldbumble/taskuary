@@ -271,6 +271,9 @@ class SQLiteStore:
             rcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'Deliver' not in rcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN Deliver TEXT')
+            qcols = {r[1] for r in self.cx.execute('PRAGMA table_info(dispatchq)')}
+            for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT')):    # rank.py: value-ordered queue
+                if col not in qcols: self.cx.execute(f'ALTER TABLE dispatchq ADD COLUMN {col} {typ}')
             have = {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}
             if 'Roles' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Roles TEXT')
             # left NULL on purpose: scopes.scope_of falls back to the type's default, so an
@@ -632,11 +635,16 @@ class SQLiteStore:
 
     # the dispatch queue: tasks held back from auto-start because a running agent's work would
     # likely collide (BehindTaskId) or every session slot is busy (NULL) - see blackboard.drain
-    def enqueue_dispatch(self, task_id, behind, agent, reason):
+    def enqueue_dispatch(self, task_id, behind, agent, reason, value=None, why=None):
         if self._one('SELECT 1 x FROM dispatchq WHERE TaskId=?', (task_id,)): return None
-        return self._exec('INSERT INTO dispatchq (TaskId,BehindTaskId,Agent,Reason,CreatedAt) VALUES (?,?,?,?,?)',
-                          (task_id, behind, agent, reason, _now()))
-    def queued_dispatches(self): return self._rows('SELECT * FROM dispatchq ORDER BY QId')
+        return self._exec('INSERT INTO dispatchq (TaskId,BehindTaskId,Agent,Reason,CreatedAt,Value,Floor,Why) VALUES (?,?,?,?,?,?,?,?)',
+                          (task_id, behind, agent, reason, _now(), value, value, why))
+    def queued_dispatches(self):
+        # by value where one is set, arrival order among equals; an unranked (clear-mode) row
+        # counts as the base value, so ranked and unranked queues interleave sensibly
+        return self._rows('SELECT * FROM dispatchq ORDER BY COALESCE(Value, 0.5) DESC, QId')
+    def set_dispatch_value(self, task_id, value, why=None, floor_=None):
+        self._exec('UPDATE dispatchq SET Value=?, Why=COALESCE(?, Why), Floor=COALESCE(?, Floor) WHERE TaskId=?', (value, why, floor_, task_id))
     def clear_dispatch(self, task_id): self._exec('DELETE FROM dispatchq WHERE TaskId=?', (task_id,))
 
     # the waiting room (waitroom.py): owner notes queued on a task while its agent works

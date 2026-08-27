@@ -5,9 +5,10 @@
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Box, Button, CircularProgress, InputAdornment, MenuItem, Radio, Select, Step, StepButton,
+  Alert, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step, StepButton,
   StepContent, Stepper, Switch, TextField, Typography,
 } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import AddIcon from "@mui/icons-material/Add";
 import BoltIcon from "@mui/icons-material/Bolt";
 import SearchIcon from "@mui/icons-material/Search";
@@ -1312,6 +1313,62 @@ const inboundDone = (conn, mine) => {
   return roles.has("trigger") || roles.has("feed") || (conn.Type === "github" && ghInboundExplicit(mine));
 };
 
+// Bulk processing: rank it, don't clear it. One switch per connector, explained in place -
+// the whole idea is a paragraph, and a paragraph belongs next to the switch it explains.
+const BULK_HELP = (
+  <Box sx={{ p: 1.75, maxWidth: 380 }}>
+    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.75 }}>Bulk processing</Typography>
+    <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55, mb: 1 }}>
+      <b>clear</b> — every task from here is worked in arrival order until the queue is empty. Right when the
+      inbox <i>is</i> the job.
+    </Typography>
+    <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55, mb: 1 }}>
+      <b>rank</b> — tasks from here join one value-ordered queue instead of racing for a session. The top
+      <i> K</i> are worked (<i>K</i> = <b>Agents at once</b> in Settings); when one finishes, the most valuable
+      waiting task slides in, and a new arrival re-ranks the queue rather than joining its tail. Nothing is
+      dropped — a low value waits.
+    </Typography>
+    <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55 }}>
+      Value is <b>words first</b>: addressed to you or merely cc'd, how many people, whether a colleague has
+      already replied, urgency, who the author is on a code host. With two or more waiting, one call to the
+      triage brain orders the head of the queue and adds its own reason. You see it on the Timeline's funnel
+      bar and can pin any card to the top or push it back.
+    </Typography>
+  </Box>
+);
+
+const BulkRow = ({ conn, reload }) => {
+  const [cfg, setCfg] = useState(parse(conn.ConfigJson));
+  const [anchor, setAnchor] = useState(null);
+  useEffect(() => { setCfg(parse(conn.ConfigJson)); }, [conn.ConfigJson]);
+  const set = async (v) => {
+    const next = { ...cfg, bulk: v }; setCfg(next);
+    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) }); reload();
+  };
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>Bulk processing</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>
+          {cfg.bulk === "rank" ? "rank — the top K by value are worked, the rest wait in order"
+            : "clear — worked in arrival order until the queue is empty"}
+        </Typography>
+      </Box>
+      <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)} title="How bulk processing works">
+        <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+      </IconButton>
+      <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}>
+        {BULK_HELP}
+      </Popover>
+      <Select size="small" value={cfg.bulk || "clear"} onChange={(e) => set(e.target.value)}
+        sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}>
+        {["clear", "rank"].map((v) => <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>{v}</MenuItem>)}
+      </Select>
+    </Box>
+  );
+};
+
 const InboundStep = ({ conn, m, mine, reload }) => {
   const [roles, toggle] = useRoles(conn, reload);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
@@ -1334,6 +1391,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
         <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
       ))}
+      {on && <BulkRow conn={conn} reload={reload} />}
       {/* 2 — github only: what each repo's items do, overriding the switch per repo */}
       {gh && (
         <Box sx={{ mt: 2 }}>

@@ -204,6 +204,33 @@ posture says which kind of work it is rather than making you read a chip. Drag t
 room, scroll to zoom, click a desk to fly to it; raise the limit in Settings and the floor
 widens rather than crowding.
 
+## Bulk processing — rank it, don't clear it
+
+A worker clears the mailbox: every task is worked in arrival order until the queue is empty.
+An executive is cc'd on most of it, and what matters is how much each item deserves attention
+*relative to the others*. Each connector has a **Bulk processing** switch (Connectors → the
+card → Inbound): **clear** is today's behaviour; **rank** puts that connector's coding tasks
+into one value-ordered queue instead of a race for a session.
+
+- **The funnel.** The top *K* are worked (*K* = **Agents at once**, the same number the floor
+  shows). When one finishes, the most valuable waiting task slides in. A new arrival re-ranks
+  the queue rather than joining its tail. Nothing is dropped — a low value waits, it does not
+  vanish.
+- **Value is words first, a number second.** A deterministic floor comes from what the funnel
+  already knows — addressed to you or merely cc'd, how many people are on it, whether a
+  colleague has already replied, urgency, who the author is on a code host — and the card
+  shows those words, never a decimal. When two or more tasks wait, one listwise call to the
+  triage brain orders the head of the queue and adds its own six-word reason; that is blended
+  half-and-half with the floor. No AI configured → the floor alone. A task that has waited
+  gains a little per day so the bottom never starves.
+- **On the Timeline** a funnel bar under the dock reads *In the funnel 3/4 · Next up 7 ▸*.
+  Nothing ranked lower is laid out on the page — click to unfold the queue, each row with its
+  rank and its reason, and two buttons: **Start now** (pins it to the top) and **Later**. The
+  Board's Queued column is in the same order.
+- **What is not yet here**: duplicate-PR grouping, decay of stale items into fyi, and a more
+  frequent digest for rank-mode users so the fold line never means "missed". Being cc'd is a
+  weak signal for *act*-value but often high *know*-value — that split is where this goes next.
+
 ## Many agents, one repo — no stepping on each other
 
 ![Two agents share one checkout: each working card shows the files ITS agent has modified (claude in the theme files, codex in the report code and its tests), and a third task waits in Queued with the reason written on the card — waiting on TQ-0009, both would modify ReportsView.jsx, starts by itself when it can](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-board.png)

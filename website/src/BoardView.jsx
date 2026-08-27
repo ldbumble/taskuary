@@ -314,6 +314,8 @@ export default function BoardView({ onOpenTask }) {
           const today = localToday();
           const cards = tasks.filter((t) => laneOf(t, live) === col.key
             && (col.key !== "done" || String(t.ClosedAt || t.UpdatedAt || "").startsWith(today)));
+          // rank mode: the Queued lane reads top-down in the order the funnel will take them
+          if (col.key === "queued") cards.sort((a, b) => (b.Queued?.value ?? 0.5) - (a.Queued?.value ?? 0.5));
           return (
             // the lanes run to the bottom of the window: four columns of different heights
             // read as four unrelated boxes floating on the page, and a short lane gave a
@@ -383,7 +385,7 @@ export default function BoardView({ onOpenTask }) {
                       </Typography>
                       <Typography variant="caption" sx={{ color: "#5b5f97", display: "block", fontSize: 9.5,
                         lineHeight: 1.45, mt: 0.2 }}>
-                        {t.Queued.reason ? `${t.Queued.reason} · ` : ""}starts by itself when it can
+                        {t.Queued.why ? `${t.Queued.why} · ` : t.Queued.reason ? `${t.Queued.reason} · ` : ""}starts by itself when it can
                       </Typography>
                     </Box>
                   )}

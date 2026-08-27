@@ -997,7 +997,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                                  : "file it and the rest of this conversation — nothing is learned about the sender or the topic"} />
               {/* not ours -> the reason goes to memory, and triage reads it next time. Below the
                   harmless one on purpose: this is the durable verdict, not the tidy-up. */}
-              <NotMine row messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
+              <NotMine row personId={sel.PersonId} messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
               {sel.Channel === "email" && sel.FromEmail && (skipped !== null ? (
                 <ChoiceRow tint="#dfeade" busy
                   icon={<VolumeOffIcon sx={{ fontSize: 14, color: "#47654a" }} />}

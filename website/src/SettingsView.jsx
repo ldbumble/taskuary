@@ -18,6 +18,7 @@ import TuneIcon from "@mui/icons-material/Tune";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
@@ -25,18 +26,18 @@ import { ChannelIcon, Empty, FilterPills } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 
 
-const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
+const KINDS = ["keyword", "person", "sender", "sender_domain", "noreply", "first_time_person", "first_time_sender"];
 // skip = never shows on the timeline at all (flood senders); ignore = shows, no task
 const ACTIONS = ["skip", "ignore", "escalate", "auto_answer", "draft", "task_only"];
 const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "draft", Reason: "", SortOrder: 100, Active: true };
 // what a note can be ABOUT. "subject" leads because most verdicts are about a kind of work
 // rather than a person - and it was missing here, so a topic rule could only be created by
 // pressing "Not our task" on a message, never written by hand.
-const SCOPES = ["subject", "sender", "sender_domain", "source", "global"];
-const SCOPE_LABEL = { subject: "any mail about a topic", sender: "one sender",
+const SCOPES = ["subject", "person", "sender", "sender_domain", "source", "global"];
+const SCOPE_LABEL = { subject: "any mail about a topic", person: "one person across channels", sender: "one sender handle",
   sender_domain: "everyone at a domain", source: "one connection (mailbox, repo)",
   global: "every message" };
-const SCOPE_KEY_LABEL = { subject: "the topic, e.g. resident refund request", sender: "their address",
+const SCOPE_KEY_LABEL = { subject: "the topic, e.g. resident refund request", person: "their person ID", sender: "their address or handle",
   sender_domain: "the domain, e.g. vendor.com", source: "the mailbox or repo it arrives on" };
 
 const KNOB_META = {
@@ -153,7 +154,7 @@ const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "
 
 const SECTION_HELP = {
   policies: { title: "Routing policies — the deterministic layer",
-    body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: ignore > escalate > auto_answer > draft > task_only — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent - this is the ONLY thing that marks one urgent, so name the senders whose mail jumps your queue), auto_answer (the draft is auto-approved — still never sent), draft (targeted default), task_only (file it, no reply).\n\nWhen you hit 'Not a task', a sender ignore rule is added here automatically — the learning loop writes into this table." },
+    body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: ignore > escalate > auto_answer > draft > task_only — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), person (a person ID from Settings → People), sender (the legacy exact handle across channels), sender_domain (email domains), noreply, first_time_person, and first_time_sender. Person rules follow only identities you explicitly join.\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent), auto_answer (the draft is auto-approved — still never sent), draft (targeted default), task_only (file it, no reply)." },
   memory: { title: "Agent memory — the specific layer",
     body: "Standing notes tied to a sender, domain, or everyone: written when you say 'Not a task' or 'Not our task' (editable before saving), plus anything you add manually. Active notes are injected into triage and every draft, and they outrank the AI's own reading.\n\nThis is the SPECIFIC memory — verdicts about senders and kinds of mail. The GENERAL lessons (your style, your responsibilities, what deserves a task) are distilled from the same verdicts into LEARNED.md on the Docs tab, and the daily DIGEST.md is the working memory. Toggle off anything learned wrong — deactivated notes stay for the record but are never injected." },
   audit: { title: "Audit integrity",
@@ -164,6 +165,7 @@ const PAGES = {
   config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
   memory: { title: "Agent memory", icon: PsychologyIcon, desc: "Standing notes learned from your verdicts, injected into every draft." },
+  people: { title: "People", icon: PeopleAltIcon, desc: "Names and channel identities, joined only when you confirm they are the same person." },
   agents: { title: "Agents", icon: SmartToyIcon, desc: "Bring your own AI CLI — cmd, args, resumable sessions, repo → checkout map." },
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Tamper-evident hash chain over every action the hub takes." },
 };
@@ -172,7 +174,9 @@ function SettingsPages({ page, setPage, q, setQ }) {
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
+  const [people, setPeople] = useState([]);
   const [newNote, setNewNote] = useState(null);
+  const [newIdentity, setNewIdentity] = useState(null);
   const [draft, setDraft] = useState(null);
   const [verify, setVerify] = useState(null);
   const [help, setHelp] = useState(null);
@@ -185,8 +189,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
 
   const load = useCallback(async () => {
     try {
-      const [p, s, m] = await Promise.all([api.get("/api/policies"), api.get("/api/settings"), api.get("/api/memory")]);
-      setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []);
+      const [p, s, m, pe] = await Promise.all([api.get("/api/policies"), api.get("/api/settings"), api.get("/api/memory"), api.get("/api/directory/people")]);
+      setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []); setPeople(pe.data.data || []);
       api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
       api.get("/api/agents").then(({ data }) => setAgentNames((data.data || []).map((a) => a.Name))).catch(() => {});
       api.get("/api/connectors").then(({ data }) => setConnectors(data.data || [])).catch(() => {});
@@ -200,6 +204,11 @@ function SettingsPages({ page, setPage, q, setQ }) {
   const saveSetting = async (name, value) => { await api.patch("/api/settings", { name, value }); load(); };
   const toggleMemory = async (m) => { await api.patch(`/api/memory/${m.MemoryId}`, { active: !m.Active }); load(); };
   const addNote = async () => { await api.post("/api/memory", newNote); setNewNote(null); load(); };
+  const addIdentity = async () => { await api.post("/api/identities", newIdentity); setNewIdentity(null); load(); };
+  const mergePerson = async (source, target) => { if (target) { await api.post(`/api/people/${target}/merge`, { source_person_id: source }); load(); } };
+  const unmergePerson = async (personId) => { await api.post(`/api/people/${personId}/unmerge`); load(); };
+  const renamePerson = async (personId, name, old) => { if (name.trim() && name.trim() !== old) { await api.patch(`/api/people/${personId}`, { name: name.trim() }); load(); } };
+  const savePersonNotes = async (personId, notes, old) => { if (notes !== (old || "")) { await api.patch(`/api/people/${personId}`, { notes }); load(); } };
   const runVerify = async () => setVerify((await api.get("/api/audit/verify")).data);
 
   // Deep search: every hit knows which page (and tab) it lives on and jumps there.
@@ -212,6 +221,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
       .map((p) => ({ key: `p${p.PolicyId}`, label: p.Name, crumb: "Routing policies", go: () => { setPage("policies"); setQ(""); } })),
     ...memory.filter((m) => hit(m.Note, m.Scope, m.ScopeKey, m.Source))
       .map((m) => ({ key: `m${m.MemoryId}`, label: m.Note.slice(0, 70), crumb: "Agent memory", go: () => { setPage("memory"); setQ(""); } })),
+    ...people.filter((p) => hit(p.Name, ...(p.Identities || []).flatMap((i) => [i.Channel, i.Handle])))
+      .map((p) => ({ key: `pe${p.PersonId}`, label: p.Name || `Person ${p.PersonId}`, crumb: "People", go: () => { setPage("people"); setQ(""); } })),
   ];
 
   const control = (s) => {
@@ -382,7 +393,12 @@ function SettingsPages({ page, setPage, q, setQ }) {
               <TextField label="Order" type="number" sx={{ width: 100 }} value={draft.SortOrder}
                 onChange={(e) => setDraft({ ...draft, SortOrder: Number(e.target.value) })} />
             </Box>
-            {!["noreply", "first_time_sender"].includes(draft.Kind) && (
+            {draft.Kind === "person" ? (
+              <Select displayEmpty value={draft.Pattern || ""} onChange={(e) => setDraft({ ...draft, Pattern: String(e.target.value) })}>
+                <MenuItem value="" disabled>Choose a person</MenuItem>
+                {people.map((p) => <MenuItem key={p.PersonId} value={String(p.PersonId)}>{p.Name || `Person ${p.PersonId}`}</MenuItem>)}
+              </Select>
+            ) : !["noreply", "first_time_sender", "first_time_person"].includes(draft.Kind) && (
               <TextField label="Pattern (pipe-separated terms / addresses / domains)"
                 value={draft.Pattern || ""} onChange={(e) => setDraft({ ...draft, Pattern: e.target.value })} />
             )}
@@ -418,7 +434,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
           <Box key={m.MemoryId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: m.Active ? 1 : 0.5 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontSize: 13.5, lineHeight: 1.4 }}>{m.Note}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{m.Scope}{m.ScopeKey ? `: ${m.ScopeKey}` : ""} · {m.Source}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{m.Scope}
+                {m.ScopeKey ? `: ${m.Scope === "person" ? (people.find((p) => String(p.PersonId) === String(m.ScopeKey))?.Name || `person ${m.ScopeKey}`) : m.ScopeKey}` : ""} · {m.Source}</Typography>
             </Box>
             <Switch checked={!!m.Active} onChange={() => toggleMemory(m)} />
           </Box>
@@ -431,7 +448,13 @@ function SettingsPages({ page, setPage, q, setQ }) {
               <Select fullWidth value={newNote.scope} onChange={(e) => setNewNote({ ...newNote, scope: e.target.value })}>
                 {SCOPES.map((s) => <MenuItem key={s} value={s}>{SCOPE_LABEL[s] || s.replace("_", " ")}</MenuItem>)}
               </Select>
-              {newNote.scope !== "global" && (
+              {newNote.scope === "person" ? (
+                <Select fullWidth displayEmpty value={newNote.scope_key || ""}
+                  onChange={(e) => setNewNote({ ...newNote, scope_key: String(e.target.value) })}>
+                  <MenuItem value="" disabled>Choose a person</MenuItem>
+                  {people.map((p) => <MenuItem key={p.PersonId} value={String(p.PersonId)}>{p.Name || `Person ${p.PersonId}`}</MenuItem>)}
+                </Select>
+              ) : newNote.scope !== "global" && (
                 // a keyed scope with no key matches nothing, ever - the server refuses it now,
                 // so the button does too rather than posting a note that could never fire
                 <TextField fullWidth label={SCOPE_KEY_LABEL[newNote.scope] || "what to match on"}
@@ -447,6 +470,82 @@ function SettingsPages({ page, setPage, q, setQ }) {
           </Box>
         )}
         <HelpDialog help={help} onClose={() => setHelp(null)} />
+      </Box>
+    );
+  }
+
+  if (page === "people") {
+    return (
+      <Box>
+        <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
+          A handle says where to reply; a person may have several handles. Taskuary joins them only when you choose.
+          Your verified identities are also generated into SOUL.md.
+        </Typography>
+        {!people.length && <Empty>No identities have arrived yet.</Empty>}
+        {people.map((p) => (
+          <Box key={p.PersonId} sx={{ ...card, p: 2, mb: 1.25, bgcolor: p.IsOwner ? "#f4f7f2" : "#fff" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <TextField defaultValue={p.Name || ""} size="small" label="Name"
+                onBlur={(e) => renamePerson(p.PersonId, e.target.value, p.Name || "")}
+                sx={{ minWidth: 240, bgcolor: "#fff" }} />
+              {p.IsOwner ? <Chip size="small" label="you" color="success" /> : <Chip size="small" label={`person ${p.PersonId}`} />}
+              <Box sx={{ flex: 1 }} />
+              {!p.IsOwner && people.length > 1 && (
+                <Select size="small" displayEmpty value="" onChange={(e) => mergePerson(p.PersonId, Number(e.target.value))}
+                  sx={{ minWidth: 210, bgcolor: "#fff", fontSize: 12 }}>
+                  <MenuItem value="" disabled>Same person as…</MenuItem>
+                  {people.filter((x) => x.PersonId !== p.PersonId).map((x) => (
+                    <MenuItem key={x.PersonId} value={x.PersonId}>{x.Name || `Person ${x.PersonId}`}{x.IsOwner ? " (you)" : ""}</MenuItem>
+                  ))}
+                </Select>
+              )}
+              <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                onClick={() => setNewIdentity({ channel: "email", handle: "", display_name: "", person_id: p.PersonId })}>
+                Add identity
+              </Button>
+            </Box>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1.5 }}>
+              {(p.Identities || []).map((i) => (
+                <Chip key={i.IdentityId} size="small"
+                  icon={<ChannelIcon channel={i.Channel} size={14} />}
+                  label={`${i.Channel}: ${i.Handle}${i.Verified ? " · verified" : ""}`} />
+              ))}
+            </Box>
+            <TextField fullWidth multiline minRows={1} size="small" label="Notes for triage and replies"
+              defaultValue={p.Notes || ""} onBlur={(e) => savePersonNotes(p.PersonId, e.target.value, p.Notes)}
+              sx={{ mt: 1.5, bgcolor: "#fff" }} />
+            {!!(p.Members || []).length && (
+              <Box sx={{ mt: 1.5 }}>
+                {(p.Members || []).map((m) => (
+                  <Button key={m.PersonId} size="small" onClick={() => unmergePerson(m.PersonId)}>
+                    Unjoin {m.Name || `person ${m.PersonId}`}
+                  </Button>
+                ))}
+              </Box>
+            )}
+          </Box>
+        ))}
+        {newIdentity && (
+          <Dialog open onClose={() => setNewIdentity(null)} fullWidth maxWidth="sm">
+            <DialogTitle>Add an identity</DialogTitle>
+            <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "12px !important" }}>
+              <Select value={newIdentity.channel} onChange={(e) => setNewIdentity({ ...newIdentity, channel: e.target.value })}>
+                {["email", "teams", "slack", "telegram", "whatsapp", "imessage", "discord", "github"].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </Select>
+              <TextField label="Address, phone number, username, or account ID" value={newIdentity.handle}
+                onChange={(e) => setNewIdentity({ ...newIdentity, handle: e.target.value })} />
+              <TextField label="Display name (optional)" value={newIdentity.display_name}
+                onChange={(e) => setNewIdentity({ ...newIdentity, display_name: e.target.value })} />
+              <Typography variant="caption" sx={{ color: FAINT }}>
+                Adding a handle already seen elsewhere joins that identity to this person. You can undo the join from this page.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setNewIdentity(null)}>Cancel</Button>
+              <Button variant="contained" disabled={!newIdentity.handle.trim()} onClick={addIdentity}>Save</Button>
+            </DialogActions>
+          </Dialog>
+        )}
       </Box>
     );
   }
@@ -512,7 +611,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
 
 // One page, a rail, and a search box that is always reachable. The landing grid meant every
 // trip between two settings went section → back → section; these five are edited together.
-const NAV = ["config", "policies", "memory", "agents", "audit"];
+const NAV = ["config", "people", "policies", "memory", "agents", "audit"];
 
 export default function SettingsView() {
   const [page, setPage] = useState("config");

@@ -324,6 +324,12 @@ Your verdicts ride alongside as evidence: dated, sender-and-subject-specific lin
 into triage and replies when the sender or topic matches — the specific layer under
 `LEARNED.md`'s general one, and mirrored into its *Verdicts* section.
 
+Taskuary keeps channel handles and people separate. Every incoming address, phone number or
+username gets an identity on its own; Settings → People lets you explicitly join identities
+that belong to the same person, and undo a join. Authenticated owner accounts are attached to
+the owner automatically and shown in SOUL.md's managed **My connected identities** section.
+Raw handles remain on messages because they are still the exact destination a reply needs.
+
 ## Bring your own agent — and pick its model
 
 Every run surface (Board dialog, task page, "send to coding agent") asks two questions:

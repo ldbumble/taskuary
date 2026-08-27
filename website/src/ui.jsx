@@ -507,7 +507,7 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
 // keyed on the selected message - unmounted with the half-typed verdict inside it. That read
 // as "Not our task doesn't work while syncing", and nothing said otherwise because the save
 // error was swallowed. Both ends are fixed here: the lock, and a visible failure.
-export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
+export const NotMine = ({ messageId, onDone, onLock, row, first, personId }) => {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   // no default here on purpose: the server picks the scope this message calls for (a topic when
@@ -547,7 +547,8 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
     <Box>
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600, display: "block" }}>
         ✓ noted — triage will apply this to{" "}
-        {saved.scope === "global" ? "every sender" : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey}
+        {saved.scope === "global" ? "every sender" : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”`
+          : saved.scope === "person" ? "this person on every connected channel" : saved.scopeKey}
         {" "}from now on
       </Typography>
       {/* the verdict works from here on; tasks opened BEFORE it are still sitting there, and
@@ -593,6 +594,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
           {/* the topic first, because a verdict is usually about a KIND OF WORK and whoever
               happens to send it next is not the point */}
           {topic && <MenuItem value="subject" sx={{ fontSize: 12 }}>any mail about this</MenuItem>}
+          {personId && <MenuItem value="person" sx={{ fontSize: 12 }}>this person on every channel</MenuItem>}
           <MenuItem value="sender" sx={{ fontSize: 12 }}>this sender</MenuItem>
           <MenuItem value="sender_domain" sx={{ fontSize: 12 }}>everyone at their domain</MenuItem>
           <MenuItem value="global" sx={{ fontSize: 12 }}>every sender</MenuItem>
@@ -600,6 +602,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
         <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 120 }}>
           {scope === "subject" && topic
             ? `Matches any mail about “${topic}”, whoever sends it — the changing part of the subject is ignored.`
+            : scope === "person" ? "Applies only to identities you explicitly joined to this person."
             : "Their mail keeps arriving — only the verdict is learned."}
         </Typography>
         <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>cancel</Button>

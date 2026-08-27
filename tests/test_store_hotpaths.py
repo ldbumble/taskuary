@@ -43,3 +43,41 @@ class BusyTimeoutTests(unittest.TestCase):
         'database is locked' a flake rather than a wait."""
         s = MemoryStore()
         self.assertGreaterEqual(int(s._one('PRAGMA busy_timeout')['timeout']), 5000)
+
+
+def _index_names(s):
+    return {r['name'] for r in s._rows("SELECT name FROM sqlite_master WHERE type='index'")}
+
+
+def _plan(s, sql, params=()):
+    return ' '.join(r['detail'] for r in s._rows('EXPLAIN QUERY PLAN ' + sql, params)).lower()
+
+
+class ExternalIdIndexTests(unittest.TestCase):
+    def test_index_exists_on_a_fresh_and_a_reopened_db(self):
+        s, path = _file_store()
+        self.assertIn('idx_message_external', _index_names(s))
+        s.cx.close()
+        s2 = SQLiteStore(path)
+        self.assertIn('idx_message_external', _index_names(s2))
+        s2.cx.close()
+
+    def test_dedupe_lookup_uses_the_index(self):
+        """ingest_message's first line is message_exists(external_id). Without an
+        index that is a full scan of every mail ever stored."""
+        s, _ = _file_store()
+        s.add_message({'ExternalId': 'ext-1', 'Channel': 'email', 'Status': 'filed'})
+        plan = _plan(s, 'SELECT 1 x FROM message WHERE ExternalId=?', ('ext-1',))
+        self.assertIn('idx_message_external', plan)
+        self.assertTrue(s.message_exists('ext-1'))
+        self.assertFalse(s.message_exists('no-such'))
+        s.cx.close()
+
+    def test_heals_a_db_that_was_created_before_the_index(self):
+        s, path = _file_store()
+        s._exec('DROP INDEX idx_message_external')
+        self.assertNotIn('idx_message_external', _index_names(s))
+        s.cx.close()
+        s2 = SQLiteStore(path)
+        self.assertIn('idx_message_external', _index_names(s2))
+        s2.cx.close()

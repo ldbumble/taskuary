@@ -151,6 +151,13 @@ CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Te
   Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
 """
 
+# CREATE TABLE IF NOT EXISTS is a no-op on an existing db; these are not. IF NOT EXISTS
+# so a second open (desktop + web, or a restart) does not raise. Named so EXPLAIN QUERY
+# PLAN tests can see them, and so a DROP INDEX in a test is not a mystery.
+INDEXES = (
+    'CREATE INDEX IF NOT EXISTS idx_message_external ON message(ExternalId)',
+)
+
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
 # draft. Both stop short of anything leaving the building - a draft waits for you to send it,
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
@@ -268,6 +275,8 @@ class SQLiteStore:
         self.cx.execute('PRAGMA busy_timeout=5000')
         with self.lock:
             self.cx.executescript(SCHEMA)
+            for ix in INDEXES:
+                self.cx.execute(ix)
             # columns added after a release: CREATE TABLE IF NOT EXISTS never reaches an
             # existing db, so widen it here (cheap, idempotent)
             # Work can now leave as well as arrive, so a row has to say which way it went. A

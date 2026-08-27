@@ -164,14 +164,14 @@ def _queued_info(q):
             'reason': q.get('Reason'), 'since': q.get('CreatedAt')}
 
 @app.get('/api/tasks')
-def tasks(status: str = None):
+def tasks(status: str = None, active: bool = False):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
     live CLI on it reads as 'queued' while the agent sits there asking a question."""
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
     return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0)}
-                     for t in store.list_tasks(status)]}
+                     for t in store.list_tasks(status, active_only=active)]}
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):

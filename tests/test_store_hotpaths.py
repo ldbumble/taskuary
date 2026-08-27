@@ -291,3 +291,17 @@ class ListTasksJoinTests(unittest.TestCase):
         self.assertIn('HANDOVER NOTE', row['HandoverNote'])
         self.assertEqual(s.list_tasks('in_progress')[0]['TaskId'], tid)
         self.assertEqual(s.list_tasks('open'), [])
+
+    def test_active_only_drops_old_done_and_anything_dropped(self):
+        s = MemoryStore()
+        live = s.create_task({'Title': 'live'}, 't')
+        today = s.create_task({'Title': 'finished today'}, 't')
+        s.update_task(today, {'Status': 'done'}, 't')
+        old = s.create_task({'Title': 'finished last week'}, 't')
+        s.update_task(old, {'Status': 'done'}, 't')
+        s._exec("UPDATE task SET ClosedAt='2020-01-01 12:00:00', UpdatedAt='2020-01-01 12:00:00' WHERE TaskId=?", (old,))
+        dropped = s.create_task({'Title': 'dropped'}, 't')
+        s.update_task(dropped, {'Status': 'dropped'}, 't')
+        ids = {t['TaskId'] for t in s.list_tasks(active_only=True)}
+        self.assertEqual(ids, {live, today})
+        self.assertIn(old, {t['TaskId'] for t in s.list_tasks()})

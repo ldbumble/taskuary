@@ -501,7 +501,7 @@ class SQLiteStore:
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
         self._bump_snapshots()
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
-    def list_tasks(self, status=None):
+    def list_tasks(self, status=None, active_only=False):
         q = '''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
                       rn.Status RunStatus, rn.AgentName RunAgent,
                       ho.Body HandoverNote
@@ -520,8 +520,16 @@ class SQLiteStore:
                        SELECT MAX(CommentId) FROM comment WHERE Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
                    )
                ) ho ON ho.TaskId=t.TaskId'''
-        return self._rows(q + (' WHERE t.Status=?' if status else '') + ' ORDER BY t.TaskId DESC',
-                          (status,) if status else ())
+        where, p = [], []
+        if status:
+            where.append('t.Status=?'); p.append(status)
+        if active_only:
+            # the Board's Done column is today only; older finished work lives on Tasks
+            where.append("(t.Status IN ('open','in_progress','waiting') "
+                         "OR (t.Status='done' AND IFNULL(t.ClosedAt, t.UpdatedAt) >= date('now','localtime')))")
+        if where:
+            q += ' WHERE ' + ' AND '.join(where)
+        return self._rows(q + ' ORDER BY t.TaskId DESC', p)
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',

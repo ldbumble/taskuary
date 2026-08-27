@@ -263,6 +263,18 @@ class ApiTests(unittest.TestCase):
         c.patch(f'/api/tasks/{tid}', json={'Status': 'done'})
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
+    def test_active_tasks_omit_old_done(self):
+        """Board/Studio ask ?active=1 so they do not ship every finished task ever."""
+        live = c.post('/api/tasks', json={'Title': 'active-live'}).json()['taskId']
+        old = c.post('/api/tasks', json={'Title': 'active-old'}).json()['taskId']
+        c.patch(f'/api/tasks/{old}', json={'Status': 'done'})
+        server.store._exec("UPDATE task SET ClosedAt='2020-01-01 12:00:00', UpdatedAt='2020-01-01 12:00:00' WHERE TaskId=?", (old,))
+        active = {t['TaskId'] for t in c.get('/api/tasks', params={'active': True}).json()['data']}
+        all_ids = {t['TaskId'] for t in c.get('/api/tasks').json()['data']}
+        self.assertIn(live, active)
+        self.assertNotIn(old, active)
+        self.assertIn(old, all_ids)
+
     def test_decide_accepts_explicit_null_final_text(self):
         # the UI sends {"verb": "reject", "final_text": null} - pydantic v2 422'd on the
         # explicit null (str = None is not Optional), which blanked the Review screen

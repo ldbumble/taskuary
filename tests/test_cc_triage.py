@@ -57,7 +57,8 @@ class AddressingTests(unittest.TestCase):
         triage.classify_intent({'from_email': 'r@ours.com', 'subject': 'Re: Resident Refund Request Approved - Doe', 'body': 'Can you advise when the check was mailed?'}, llm=llm, notes=notes)
         self.assertIn('SETTLED BY YOUR OWNER: all 2 past verdicts', seen['sys'])
         self.assertIn('Answer fyi', seen['sys']); self.assertIn('A question in the message does not reopen it', seen['sys'])
-        self.assertNotIn('NEW and specific', seen['sys'])
+        self.assertNotIn('NEW and specific', seen['sys']); self.assertNotIn('exception is', seen['sys'])   # settled means settled
+        self.assertIn('no exceptions', seen['sys'])
 
     def test_the_keyword_pass_never_decides_a_cc_by_itself(self):
         """It used to: a quiet cc was FILED as fyi by keyword, before any model saw it. But plenty

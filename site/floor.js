@@ -80,7 +80,7 @@
   function mount(canvas, opts) {
     opts = opts || {};
     const ctx = canvas.getContext("2d");
-    const onEvent = opts.onEvent || (() => {}), onDoor = opts.onDoor || (() => {});
+    const onEvent = opts.onEvent || (() => {}), onDoor = opts.onDoor || (() => {}), copy = opts.top || null;   // opts.top: the words above the room; their height is kept clear
     const still = opts.still || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     const agents = Array(N).fill(null);        // per desk: {skin, ref, who, tail, files, t0, path, leaveAt, note}
     let fired = new Set(), t0 = performance.now(), last = -1, raf = 0;
@@ -120,9 +120,13 @@
       // beside the door); phones give the room the full width.
       const wide = cw > 820, DIA_W = (GX + GY) * TW, DIA_H = (GX + GY) * TH + WH + 18;
       const feedW = wide ? Math.min(320, Math.max(240, cw * 0.2)) : 0;
-      // wide: the feed column, its 28px edge offset and a clear 56px gap are kept free on BOTH sides, so the room stays centred
-      const s = wide ? Math.min((cw - 2 * (feedW + 28 + 56)) / DIA_W, ch * 0.86 / DIA_H) : Math.min(cw * 0.98 / DIA_W, ch * 0.92 / DIA_H);
-      const ox0 = cw / 2 - W * s / 2, oy0 = ch / 2 - (H / 2 - 24) * s + (wide ? ch * 0.03 : 0) - mouse.lift;
+      // wide: the headline band across the top is the room's ceiling - the room is fitted and centred in what is left below it
+      const band = wide && copy ? copy.offsetHeight + 12 : 0, fh = ch - band;
+      // wide: the feed column, its 28px edge offset and a clear 56px gap are kept free on BOTH sides, so the room stays centred;
+      // below 1200px that mirror would starve the room, so it centres in the space left of the feed instead
+      const col = feedW + 28 + 56, mirror = cw >= 1200, avail = mirror ? cw - 2 * col : cw - col - 28, cx = mirror ? cw / 2 : 28 + avail / 2;
+      const s = wide ? Math.min(avail / DIA_W, fh * 0.86 / DIA_H) : Math.min(cw * 0.98 / DIA_W, ch * 0.92 / DIA_H);
+      const ox0 = (wide ? cx : cw / 2) - W * s / 2, oy0 = band + fh / 2 - (H / 2 - 24) * s + (wide ? fh * 0.03 : 0) - mouse.lift;
       fit = { s, ox: ox0, oy: oy0 };
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * ox0, dpr * oy0);
 

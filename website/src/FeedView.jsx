@@ -16,6 +16,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import api from "./api";
 import EventIcon from "@mui/icons-material/Event";
+import { pollWhileVisible } from "./visible.js";
 import { ALERT, ALERT_INK, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -111,7 +112,7 @@ const FunnelBar = ({ onOpenTask }) => {
   const [f, setF] = useState(null);
   const [open, setOpen] = useState(false);
   const load = useCallback(async () => { try { setF((await api.get("/api/funnel")).data); } catch { setF(null); } }, []);
-  useEffect(() => { load(); const id = setInterval(load, 10000); return () => clearInterval(id); }, [load]);
+  useEffect(() => { load(); return pollWhileVisible(load, 10000); }, [load]);
   if (!f || f.mode !== "rank") return null;
   const act = async (tid, what) => { await api.post(`/api/funnel/${tid}/${what}`); load(); };
   return (
@@ -351,8 +352,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
     // died the moment you opened another tab, and restarted its ten minutes every time a
     // filter changed this effect's dependencies - so "auto-syncs every 10 min" was a promise
     // kept only by someone sitting on the Timeline, and never when the window was closed.
-    const t = setInterval(() => load(rowsLen.current), 30000);
-    return () => clearInterval(t);
+    return pollWhileVisible(() => load(rowsLen.current), 30000);
   }, [load]);
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => e.isIntersecting && loadMore());

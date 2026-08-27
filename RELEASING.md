@@ -40,6 +40,7 @@ $EDITOR pyproject.toml            # version = "0.3.0"
 cd website && npm run build && cd ..
 
 python -m pytest tests -q         # the gate before anything leaves the machine
+# Timeline/Board chip changes: a named picture in taskuary.testing, pinned in tests/test_factory.py
 
 git commit -am "Release 0.3.0" && git push
 git tag v0.3.0 && git push origin v0.3.0

@@ -27,6 +27,7 @@ import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import StorageIcon from "@mui/icons-material/Storage";
 import { Logo, hasLogo } from "./logos.jsx";
 import { ACTION_COLORS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
+import { CATPPUCCIN } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
@@ -948,6 +949,48 @@ export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) =
         <TellAgent taskId={taskId} taskRef={taskRef} />
       </Dialog>
     </>
+  );
+};
+
+// The agent's live session as a black console - the same peephole the Board cards wear, so
+// "coder is working this now" is a thing you can SEE moving, not a sentence. Last lines of the
+// terminal, the files it has modified, a blinking cursor while it works and a pause mark when
+// it has stopped and is waiting on you. Click opens the task's real terminal.
+const _elapsed = (since) => {
+  if (!since) return "";
+  const sec = Math.max(0, (Date.now() - new Date(String(since).replace(" ", "T"))) / 1000);
+  return sec < 90 ? `${Math.round(sec)}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${(sec / 3600).toFixed(1)}h`;
+};
+export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
+  const waiting = run ? (run.kind === "session" && (run.asking || run.idle >= IDLE_WAITING)) : false;
+  const tail = (run?.tail || []).slice(-lines);
+  const files = run?.files || [];
+  const who = run?.AgentName || agent || "agent";
+  return (
+    <Box onClick={onOpen} title="Open the task - the real terminal"
+      sx={{ bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.5, px: 1.25, py: 0.9, cursor: onOpen ? "pointer" : "default",
+        "&:hover": onOpen ? { borderColor: CATPPUCCIN.overlay } : {} }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: tail.length ? 0.5 : 0 }}>
+        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
+          ...(waiting ? {} : { "@keyframes tqBlink2": { "50%": { opacity: 0.25 } }, animation: "tqBlink2 1.1s step-end infinite" }) }}>
+          {waiting ? `⏸ ${who} ${run?.asking ? "asked you something" : "stopped - waiting on you"}` : `▮ ${who} working${run?.StartedAt ? ` · ${_elapsed(run.StartedAt)}` : ""}`}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {files.slice(0, 4).map((f) => (
+          <Typography key={f} variant="caption" sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.dim, bgcolor: CATPPUCCIN.surface, px: 0.6, borderRadius: 0.75 }}>
+            {String(f).split(/[\\/]/).pop()}
+          </Typography>
+        ))}
+        {onOpen && <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: CATPPUCCIN.faint }}>open ↗</Typography>}
+      </Box>
+      {tail.map((l, i, all) => (
+        <Typography key={i} noWrap variant="caption" sx={{ ...mono, display: "block", fontSize: 10, lineHeight: 1.55,
+          color: l.startsWith("→") ? CATPPUCCIN.blue : l.startsWith("✗") ? CATPPUCCIN.red : CATPPUCCIN.fg, opacity: 0.45 + 0.55 * ((i + 1) / all.length) }}>
+          {l.replace(/\n/g, " ")}
+        </Typography>
+      ))}
+      {!tail.length && <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.faint }}>…</Typography>}
+    </Box>
   );
 };
 

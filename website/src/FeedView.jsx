@@ -22,7 +22,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton } from "./ui.jsx";
+import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, TellAgent } from "./ui.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
@@ -777,6 +777,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const run = (detail?.runs || []).find((r) => r.Status === "running");
   const onIt = ses ? { agent: ses.agent || ses.label, waiting: ses.idle >= IDLE_WAITING }
     : run ? { agent: run.AgentName, waiting: false } : null;
+  // the live console: while an agent is on this task, the panel polls its last lines every 3 s
+  const [liveRow, setLiveRow] = useState(null);
+  useEffect(() => {
+    if (!onIt || !sel?.TaskId) { setLiveRow(null); return; }
+    let alive = true;
+    const poll = async () => { try { const { data } = await api.get("/api/runs/live", { params: { lines: 6 } }); if (alive) setLiveRow((data.data || []).find((r) => r.TaskId === sel.TaskId) || null); } catch { /* keep the last */ } };
+    poll(); const id = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!onIt, sel?.TaskId]);
   const loading = sel.TaskId && !detail;
   // triage's OWN verdict, read off the route line it already wrote. reply_only and fyi both
   // mean "no work to do here" - so a coding agent is not the answer, and offering it first
@@ -902,10 +912,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             <PanelLabel>What should happen with this?</PanelLabel>
             <ChoiceList>
               {onIt ? (
-                <ChoiceRow first tint="#e3e6e1" onClick={() => onOpenTask(sel.TaskId)}
-                  icon={<SmartToyIcon sx={{ fontSize: 15, color: onIt.waiting ? "#55697a" : "#6f8a6e" }} />}
-                  label={onIt.waiting ? `${onIt.agent} is waiting for your answer` : `${onIt.agent} is working this now`}
-                  hint={onIt.waiting ? "open the task and answer it in the session" : "open the task to watch it live"} />
+                <Box sx={{ width: "100%", p: 1, bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 1 }}>
+                  {/* the black console: the agent's own last lines, live - the same peephole the Board
+                      cards wear, so "working this now" is something you watch, not read */}
+                  <LiveConsole run={liveRow} agent={onIt.agent} onOpen={() => onOpenTask(sel.TaskId)} />
+                  <TellAgent taskId={sel.TaskId} taskRef={ref(sel.TaskId)} compact />
+                </Box>
               ) : !codeless ? (
                 <SendToAgent row first messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
               ) : null}

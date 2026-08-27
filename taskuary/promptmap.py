@@ -21,13 +21,13 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     from .learn import injectable
     from .triage import INTENT_SYSTEM, addressed_to_you, strip_boilerplate
     m = {'from_email': msg.get('FromEmail'), 'subject': msg.get('Subject'), 'body': msg.get('BodyText'),
-         'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
+         'source_name': msg.get('SourceName'), 'channel': msg.get('Channel'), 'person_id': msg.get('PersonId')}
     doc = store.doc('triage') or ''
     base = doc.strip() or INTENT_SYSTEM
     soul, learned = store.doc('soul') or '', injectable(store.doc('learned') or '')
     notes, left = relevant_notes(store, [m['from_email'] or ''],
                                  f"{m['subject'] or ''} {m['body'] or ''}"[:4000],
-                                 subject=m['subject'] or '', source=m['source_name'] or '')
+                                 subject=m['subject'] or '', source=m['source_name'] or '', person_id=m['person_id'])
     mine = owner_addresses(store)
     how = addressed_to_you(m, mine)
     out = [('the classifier instructions', 'TRIAGE.md' if doc.strip() else 'triage.INTENT_SYSTEM (the doc is blank)', base)]
@@ -55,7 +55,7 @@ def _blocks_reply(store, tid: int) -> list:
     owner = soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner'
     chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
     sty, lrn = style_doc(store), injectable(store.doc('learned') or '')
-    notes = notes_for(store, {'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
+    notes = notes_for(store, {**last, 'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
                               'body': last.get('BodyText')}, budget=1500)
     out = [('who is writing and the rules of the reply', 'responder.SYSTEM + BREVITY + '
             + ('CHAT (a chat channel)' if chat else 'EMAIL') + ' + NOT_YET (code)',

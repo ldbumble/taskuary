@@ -188,7 +188,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # TRIAGE.md where the owner can argue with it. An untouched document tracks the
             # shipped template, so the paragraph reaches existing installs that way.
             how = addressed_to_you(msg, mine)
-            user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
+            user = json.dumps({'from': msg.get('from_email'),
+                                **({'from_person': msg.get('person_name')} if msg.get('person_name') else {}),
+                                'subject': msg.get('subject'),
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),

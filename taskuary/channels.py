@@ -66,6 +66,9 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     if not tok: raise RuntimeError('no PAT saved yet - paste one under Credentials')
     u = requests.get('https://api.github.com/user', headers=gh_headers(tok), timeout=20)
     u.raise_for_status()
+    account = u.json()
+    store.register_owner_identity('github', account.get('login'), account.get('name') or account.get('login'),
+                                  c.get('ConnectorId'), verified=True)
     repos = list_accessible_repos(tok)
     have = {s['Address']: s for s in store.list_sources(active_only=False) if s['Channel'] == 'github'}
     added = 0
@@ -96,7 +99,7 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     except Exception: llm = None
     update_repo_map(store, repos, actor, tok=tok, llm=llm)
     sync_connections(store, actor)
-    return {'login': u.json().get('login'), 'repos': len(repos), 'added': added, 'unreachable': gone}
+    return {'login': account.get('login'), 'repos': len(repos), 'added': added, 'unreachable': gone}
 
 
 def _slack(tok, method, post=False, **params):
@@ -394,9 +397,11 @@ def ingest_own_message(store, msg: dict, why: str) -> int:
     conv = msg.get('conversation_id')
     tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
     if not tid: return 0
+    ident = store.register_owner_identity(msg.get('channel'), msg.get('from_email'), store.owner()['owner']) if msg.get('from_email') else None
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
+                             'IdentityId': ident['IdentityId'] if ident else None,
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
                              'SourceLink': msg.get('source_link'), 'Status': 'context'})
     store.add_route(mid, tid, 'attach', None, why, [], 'router')

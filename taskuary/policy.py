@@ -18,15 +18,19 @@ _NOREPLY = re.compile(r'(no-?reply|do-?not-?reply|donotreply|notifications?@|aut
 def _split(pattern): return [p.strip().lower() for p in (pattern or '').split('|') if p.strip()]
 
 
-def matches(policy: dict, msg: dict, known_sender: bool = True) -> bool:
+def matches(policy: dict, msg: dict, known_sender: bool = True, known_person: bool = True) -> bool:
     """Does one policy rule hit this message? msg keys: subject, body, from_email."""
     kind, addr = policy['Kind'], (msg.get('from_email') or '').lower()
     text = f"{msg.get('subject') or ''} {msg.get('body') or ''}".lower()
     if kind == 'keyword': return any(t in text for t in _split(policy.get('Pattern')))
     if kind == 'sender': return addr in _split(policy.get('Pattern'))
+    if kind == 'person':
+        people = {str(x) for x in (msg.get('person_ids') or [])} | {str(msg.get('person_id') or '')}
+        return bool(people & set(_split(policy.get('Pattern'))))
     if kind == 'sender_domain': return addr.rsplit('@', 1)[-1] in _split(policy.get('Pattern'))
     if kind == 'noreply': return bool(_NOREPLY.search(addr))
     if kind == 'first_time_sender': return not known_sender
+    if kind == 'first_time_person': return not known_person
     return False
 
 
@@ -42,17 +46,19 @@ def apply_retroactively(store, policy: dict) -> int:
     n = 0
     for m in store.scan_messages():
         if m['Status'] not in froms: continue
-        if not matches(policy, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'), 'body': m.get('BodyText')}):
+        if not matches(policy, {'from_email': m.get('FromEmail'), 'person_id': m.get('PersonId'),
+                                'subject': m.get('Subject'), 'body': m.get('BodyText')}):
             continue
         store.set_message_status(m['MessageId'], 'skipped' if on else ('routed' if m.get('TaskId') else 'ignored'))
         n += 1
     return n
 
 
-def evaluate(msg: dict, policies: list, known_sender: bool = True, default_action: str = 'draft') -> dict:
+def evaluate(msg: dict, policies: list, known_sender: bool = True, default_action: str = 'draft',
+             known_person: bool = True) -> dict:
     """Decide the action for a message. Returns {action, rule, reason} - rule/reason name
     the winning policy, or 'default' when nothing matched."""
-    hits = [p for p in policies if p.get('Active', 1) and matches(p, msg, known_sender)]
+    hits = [p for p in policies if p.get('Active', 1) and matches(p, msg, known_sender, known_person)]
     for action in PRECEDENCE:
         tier = sorted([p for p in hits if p['Action'] == action], key=lambda p: p.get('SortOrder', 100))
         if tier: return {'action': action, 'rule': tier[0]['Name'], 'reason': tier[0]['Reason']}

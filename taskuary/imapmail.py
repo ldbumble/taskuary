@@ -68,6 +68,7 @@ def test_imap(store, c) -> str:
         n = int((data[0] or b'0').decode() or 0)
         if not any(s['Channel'] == 'email' and s['Address'] == user for s in store.list_sources(active_only=False)):
             store.save_source({'Channel': 'email', 'Address': user, 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
+        store.register_owner_identity('email', user, user, c['ConnectorId'], verified=True)
         return f'logged in as {user} - INBOX holds {n} messages; new mail flows in on the next sync'
     finally:
         M.logout()

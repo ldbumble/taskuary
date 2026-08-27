@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
-            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson')
+            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction',
+            'RecipientsJson', 'IdentityId')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
@@ -75,6 +76,19 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 
+
+def norm_handle(channel: str, handle: str) -> str:
+    """A connector identity key. Preserve the display handle elsewhere; this is comparison only.
+
+    Phone-like handles lose punctuation but not a leading +. Everything else is Unicode
+    case-folded. A country code is never guessed: 937... and +1937... may be different people.
+    """
+    raw = str(handle or '').strip()
+    if not raw: return ''
+    if re.fullmatch(r'[+\d\s().-]+', raw) and len(re.sub(r'\D', '', raw)) >= 7:
+        return ('+' if raw.startswith('+') else '') + re.sub(r'\D', '', raw)
+    return raw.casefold()
+
 # conversation ids that name a CHAT rather than a topic - one id for every message ever exchanged
 # there, so an owner verdict on it covers an episode, not the relationship (owner_verdict_on_thread)
 CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:', 'imessage:')
@@ -113,7 +127,13 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
-  Direction TEXT DEFAULT 'in', RecipientsJson TEXT);
+  Direction TEXT DEFAULT 'in', RecipientsJson TEXT, IdentityId INTEGER);
+CREATE TABLE IF NOT EXISTS person (PersonId INTEGER PRIMARY KEY, Name TEXT, Notes TEXT,
+  IsOwner INTEGER DEFAULT 0, MergedIntoPersonId INTEGER, CreatedAt TEXT, UpdatedAt TEXT);
+CREATE TABLE IF NOT EXISTS identity (IdentityId INTEGER PRIMARY KEY, PersonId INTEGER, Channel TEXT,
+  Handle TEXT, NormalizedHandle TEXT, DisplayName TEXT, ConnectorId INTEGER, Verified INTEGER DEFAULT 0,
+  Active INTEGER DEFAULT 1, CreatedAt TEXT, UpdatedAt TEXT,
+  UNIQUE(Channel, NormalizedHandle));
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
@@ -162,6 +182,8 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_sent ON message(SentAt, MessageId)',
     'CREATE INDEX IF NOT EXISTS idx_message_created ON message(CreatedAt)',
     'CREATE INDEX IF NOT EXISTS idx_message_from ON message(FromEmail)',
+    'CREATE INDEX IF NOT EXISTS idx_identity_person ON identity(PersonId)',
+    'CREATE INDEX IF NOT EXISTS idx_person_merged ON person(MergedIntoPersonId)',
     'CREATE INDEX IF NOT EXISTS idx_route_message ON route(MessageId, RouteId)',
     'CREATE INDEX IF NOT EXISTS idx_route_task ON route(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_review_message ON review(MessageId, ReviewId)',
@@ -310,6 +332,11 @@ class SQLiteStore:
             # against them - "was this cc'd mail really mine?" had no evidence left (evalset.py)
             if 'RecipientsJson' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN RecipientsJson TEXT')
+            if 'IdentityId' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN IdentityId INTEGER')
+            # Unlike the new identity tables, message already exists on upgraded databases;
+            # its index must come after the widening above.
+            self.cx.execute('CREATE INDEX IF NOT EXISTS idx_message_identity ON message(IdentityId)')
             # WHERE an approved outbound draft goes. A reply knows its recipient from the
             # message it answers; an outbound report has no such message, so the review has to
             # carry the address itself or approving it would have nowhere to send.
@@ -350,6 +377,62 @@ class SQLiteStore:
                                 (t, n, DEFAULT_ROLES.get(t, '')))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
                 self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
+            # One owner row is the anchor for connector-verified accounts. Other people begin
+            # one identity apiece; only an explicit merge links them. The backfill changes no
+            # legacy sender rule because FromEmail remains untouched and those rules keep using it.
+            owner_row = self.cx.execute('SELECT PersonId FROM person WHERE IsOwner=1 ORDER BY PersonId LIMIT 1').fetchone()
+            if owner_row:
+                owner_pid = owner_row['PersonId']
+            else:
+                st_name = self.cx.execute("SELECT Value FROM setting WHERE Name='owner_name'").fetchone()
+                self.cx.execute('INSERT INTO person (Name, IsOwner, CreatedAt, UpdatedAt) VALUES (?,1,?,?)',
+                                ((st_name['Value'] if st_name else '') or 'The owner', _now(), _now()))
+                owner_pid = self.cx.execute('SELECT last_insert_rowid()').fetchone()[0]
+            identities = {}
+            for ir in self.cx.execute('SELECT IdentityId, Channel, NormalizedHandle FROM identity').fetchall():
+                identities[(ir['Channel'], ir['NormalizedHandle'])] = ir['IdentityId']
+            for mr in self.cx.execute('SELECT MessageId, Channel, FromEmail, FromName FROM message WHERE IdentityId IS NULL').fetchall():
+                key = ((mr['Channel'] or 'api'), norm_handle(mr['Channel'] or 'api', mr['FromEmail']))
+                if not key[1]: continue
+                iid = identities.get(key)
+                if iid is None:
+                    self.cx.execute('INSERT INTO person (Name, IsOwner, CreatedAt, UpdatedAt) VALUES (?,0,?,?)',
+                                    ((mr['FromName'] or mr['FromEmail'] or '').strip(), _now(), _now()))
+                    pid = self.cx.execute('SELECT last_insert_rowid()').fetchone()[0]
+                    self.cx.execute('''INSERT INTO identity
+                        (PersonId, Channel, Handle, NormalizedHandle, DisplayName, CreatedAt, UpdatedAt)
+                        VALUES (?,?,?,?,?,?,?)''',
+                        (pid, key[0], mr['FromEmail'], key[1], mr['FromName'], _now(), _now()))
+                    iid = self.cx.execute('SELECT last_insert_rowid()').fetchone()[0]
+                    identities[key] = iid
+                self.cx.execute('UPDATE message SET IdentityId=? WHERE MessageId=?', (iid, mr['MessageId']))
+            # A configured owner email and a user-authenticated Outlook account are verified
+            # owner identities. Shared/source mailboxes are deliberately not assumed to be Uri.
+            owner_handles = []
+            own_email = self.cx.execute("SELECT Value FROM setting WHERE Name='owner_email'").fetchone()
+            if own_email and (own_email['Value'] or '').strip(): owner_handles.append(('email', own_email['Value'], None))
+            outlook = self.cx.execute("SELECT ConnectorId, ConfigJson FROM connector WHERE Type='outlook'").fetchone()
+            if outlook:
+                try: ocfg = json.loads(outlook['ConfigJson'] or '{}')
+                except ValueError: ocfg = {}
+                if ocfg.get('auth') == 'user' and ocfg.get('account'):
+                    owner_handles.append(('email', ocfg['account'], outlook['ConnectorId']))
+            for ch, handle, cid in owner_handles:
+                nk = norm_handle(ch, handle)
+                row = self.cx.execute('SELECT IdentityId, PersonId FROM identity WHERE Channel=? AND NormalizedHandle=?', (ch, nk)).fetchone()
+                if row:
+                    if row['PersonId'] != owner_pid:
+                        self.cx.execute('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?',
+                                        (owner_pid, _now(), row['PersonId']))
+                    self.cx.execute('UPDATE identity SET Verified=1, ConnectorId=COALESCE(?,ConnectorId), Active=1, UpdatedAt=? WHERE IdentityId=?',
+                                    (cid, _now(), row['IdentityId']))
+                else:
+                    self.cx.execute('INSERT INTO person (Name, IsOwner, MergedIntoPersonId, CreatedAt, UpdatedAt) VALUES (?,0,?,?,?)',
+                                    (handle, owner_pid, _now(), _now()))
+                    source_pid = self.cx.execute('SELECT last_insert_rowid()').fetchone()[0]
+                    self.cx.execute('''INSERT INTO identity
+                        (PersonId, Channel, Handle, NormalizedHandle, ConnectorId, Verified, Active, CreatedAt, UpdatedAt)
+                        VALUES (?,?,?,?,?,1,1,?,?)''', (source_pid, ch, handle, nk, cid, _now(), _now()))
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
             from pathlib import Path
@@ -451,6 +534,10 @@ class SQLiteStore:
             # task keeps its 'waiting' status, so nothing quietly stops needing you.
             self.cx.execute("UPDATE review SET Status='superseded' WHERE Status='pending' AND Kind='escalation'")
             self.cx.commit()
+        # The identity block is a materialised, owner-readable view of the structured rows.
+        # Do this outside the store lock because docsync uses the public store methods.
+        from .docsync import sync_identities
+        sync_identities(self, 'startup')
 
     def _rows(self, q, p=()):
         with self.lock: return [dict(r) for r in self.cx.execute(q, p).fetchall()]
@@ -464,6 +551,199 @@ class SQLiteStore:
         cols = list(d)
         return self._exec(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?'*len(cols))})",
                           [d[c] for c in cols])
+
+    # people / connector identities
+    def canonical_person_id(self, person_id):
+        if not person_id: return None
+        rows = self._rows('SELECT PersonId, MergedIntoPersonId FROM person')
+        parent = {r['PersonId']: r.get('MergedIntoPersonId') for r in rows}
+        cur, seen = int(person_id), set()
+        while parent.get(cur) and cur not in seen:
+            seen.add(cur); cur = parent[cur]
+        return cur
+
+    def person_family_ids(self, person_id) -> set:
+        if not person_id: return set()
+        _people, _identities, roots, families = self._identity_maps()
+        root = roots.get(int(person_id), int(person_id))
+        return set(families.get(root) or ())
+
+    def owner_person(self):
+        return self._one('SELECT * FROM person WHERE IsOwner=1 ORDER BY PersonId LIMIT 1')
+
+    def identity(self, identity_id):
+        row = self._one('SELECT * FROM identity WHERE IdentityId=?', (identity_id,))
+        if not row: return None
+        row['CanonicalPersonId'] = self.canonical_person_id(row['PersonId'])
+        p = self._one('SELECT Name, IsOwner FROM person WHERE PersonId=?', (row['CanonicalPersonId'],)) or {}
+        row['PersonName'], row['IsOwner'] = p.get('Name'), p.get('IsOwner', 0)
+        return row
+
+    def identity_for(self, channel, handle):
+        nk = norm_handle(channel or 'api', handle)
+        if not nk: return None
+        row = self._one('SELECT IdentityId FROM identity WHERE Channel=? AND NormalizedHandle=?',
+                        (channel or 'api', nk))
+        return self.identity(row['IdentityId']) if row else None
+
+    def _identity_maps(self):
+        """One-pass directory maps for feed/snapshot reads; avoid queries per message."""
+        people = self._rows('SELECT * FROM person')
+        identities = self._rows('SELECT * FROM identity')
+        by_person = {p['PersonId']: p for p in people}
+        parent = {p['PersonId']: p.get('MergedIntoPersonId') for p in people}
+        roots = {}
+        def root(pid):
+            if pid in roots: return roots[pid]
+            cur, seen = pid, set()
+            while parent.get(cur) and cur not in seen:
+                seen.add(cur); cur = parent[cur]
+            for x in seen | {pid}: roots[x] = cur
+            return cur
+        families = {}
+        for p in people: families.setdefault(root(p['PersonId']), set()).add(p['PersonId'])
+        return by_person, {i['IdentityId']: i for i in identities}, roots, families
+
+    def _with_people(self, rows):
+        """Add resolved identity fields to outward-facing message dicts without rewriting history."""
+        one = isinstance(rows, dict)
+        items = [rows] if one else rows
+        if not items: return rows
+        by_person, identities, roots, families = self._identity_maps()
+        for row in items:
+            ident = identities.get(row.get('IdentityId'))
+            if not ident: continue
+            root = roots.get(ident['PersonId'], ident['PersonId'])
+            person = by_person.get(root) or {}
+            row['PersonId'], row['PersonName'] = root, person.get('Name')
+            row['PersonIds'] = sorted(families.get(root) or {root})
+            if person.get('Name') and not person.get('IsOwner'):
+                row['ObservedFromName'] = row.get('FromName')
+                row['FromName'] = person['Name']
+        return items[0] if one else items
+
+    def ensure_identity(self, channel, handle, display_name=None, connector_id=None,
+                        verified=False, person_id=None, is_owner=False):
+        """Resolve or create one channel handle without guessing cross-channel sameness."""
+        channel, raw = channel or 'api', str(handle or '').strip()
+        nk = norm_handle(channel, raw)
+        if not nk: return None
+        with self.lock:
+            owner = self.cx.execute('SELECT PersonId FROM person WHERE IsOwner=1 ORDER BY PersonId LIMIT 1').fetchone()
+            if is_owner: person_id = owner['PersonId'] if owner else person_id
+            row = self.cx.execute('SELECT * FROM identity WHERE Channel=? AND NormalizedHandle=?',
+                                  (channel, nk)).fetchone()
+            if row:
+                iid, direct = row['IdentityId'], row['PersonId']
+                if person_id and direct != person_id:
+                    direct_owner = self.cx.execute('SELECT IsOwner FROM person WHERE PersonId=?', (direct,)).fetchone()
+                    if direct_owner and direct_owner['IsOwner']:
+                        self.cx.execute('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?',
+                                        (direct, _now(), person_id))
+                    else:
+                        self.cx.execute('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?',
+                                        (person_id, _now(), direct))
+                self.cx.execute('''UPDATE identity SET DisplayName=COALESCE(?,DisplayName),
+                    ConnectorId=COALESCE(?,ConnectorId), Verified=MAX(Verified,?), Active=1, UpdatedAt=?
+                    WHERE IdentityId=?''', (display_name, connector_id, int(bool(verified)), _now(), iid))
+            else:
+                # Even a confirmed join starts as its own person linked to the target. Keeping
+                # that source row is what makes every join, including an owner identity, undoable.
+                target_id = person_id
+                self.cx.execute('''INSERT INTO person
+                    (Name, IsOwner, MergedIntoPersonId, CreatedAt, UpdatedAt) VALUES (?,0,?,?,?)''',
+                    ((display_name or raw)[:200], target_id, _now(), _now()))
+                person_id = self.cx.execute('SELECT last_insert_rowid()').fetchone()[0]
+                self.cx.execute('''INSERT INTO identity
+                    (PersonId, Channel, Handle, NormalizedHandle, DisplayName, ConnectorId, Verified, Active, CreatedAt, UpdatedAt)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                    (person_id, channel, raw, nk, display_name, connector_id, int(bool(verified)), 1, _now(), _now()))
+                iid = self.cx.execute('SELECT last_insert_rowid()').fetchone()[0]
+            self.cx.commit(); self._writes += 1
+        self._bump_snapshots()
+        return self.identity(iid)
+
+    def register_owner_identity(self, channel, handle, display_name=None, connector_id=None, verified=True):
+        ident = self.ensure_identity(channel, handle, display_name, connector_id, verified, is_owner=True)
+        if ident:
+            from .docsync import sync_identities
+            sync_identities(self, 'identity')
+        return ident
+
+    def deactivate_connector_identities(self, connector_id):
+        self._exec('UPDATE identity SET Active=0, UpdatedAt=? WHERE ConnectorId=?', (_now(), connector_id))
+        from .docsync import sync_identities
+        sync_identities(self, 'identity')
+
+    def list_people(self, include_merged=False):
+        by_id, by_identity, roots, _families = self._identity_maps()
+        people = sorted(by_id.values(), key=lambda p: (-int(p.get('IsOwner') or 0), p.get('Name') or '', p['PersonId']))
+        identities = sorted((i for i in by_identity.values() if i.get('Active')),
+                            key=lambda i: (i.get('Channel') or '', i.get('Handle') or ''))
+        groups = {}
+        for p in people:
+            root = roots.get(p['PersonId'], p['PersonId'])
+            if include_merged or root == p['PersonId']:
+                base = dict(by_id[root] if not include_merged else p)
+                base['Identities'], base['Members'] = [], []
+                groups[p['PersonId'] if include_merged else root] = base
+        if not include_merged:
+            for p in people:
+                root = roots.get(p['PersonId'], p['PersonId'])
+                if root in groups and p['PersonId'] != root:
+                    groups[root]['Members'].append({'PersonId': p['PersonId'], 'Name': p.get('Name')})
+            for ident in identities:
+                root = roots.get(ident['PersonId'], ident['PersonId'])
+                if root in groups:
+                    groups[root]['Identities'].append(ident | {'SourcePersonId': ident['PersonId']})
+        else:
+            for ident in identities:
+                if ident['PersonId'] in groups: groups[ident['PersonId']]['Identities'].append(ident)
+        return list(groups.values())
+
+    def update_person(self, person_id, name=None, notes=None):
+        if not self._one('SELECT PersonId FROM person WHERE PersonId=?', (person_id,)): return False
+        sets, args = [], []
+        if name is not None: sets.append('Name=?'); args.append(name[:200])
+        if notes is not None: sets.append('Notes=?'); args.append(notes[:2000])
+        if sets:
+            self._exec(f"UPDATE person SET {','.join(sets)}, UpdatedAt=? WHERE PersonId=?", args + [_now(), person_id])
+        return True
+
+    def merge_people(self, target_id, source_id):
+        target, source = self.canonical_person_id(target_id), self.canonical_person_id(source_id)
+        if not target or not source or target == source: return target
+        tp = self._one('SELECT IsOwner FROM person WHERE PersonId=?', (target,)) or {}
+        sp = self._one('SELECT IsOwner FROM person WHERE PersonId=?', (source,)) or {}
+        if sp.get('IsOwner') and not tp.get('IsOwner'): target, source = source, target
+        self._exec('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?', (target, _now(), source))
+        self._bump_snapshots()
+        return target
+
+    def unmerge_person(self, person_id):
+        p = self._one('SELECT MergedIntoPersonId FROM person WHERE PersonId=?', (person_id,))
+        if not p or not p.get('MergedIntoPersonId'): return False
+        self._exec('UPDATE person SET MergedIntoPersonId=NULL, UpdatedAt=? WHERE PersonId=?', (_now(), person_id))
+        self._bump_snapshots()
+        return True
+
+    def known_person_sender(self, person_id, exclude_message_id=None):
+        family = self.person_family_ids(person_id)
+        if not family: return False
+        marks = ','.join('?' * len(family))
+        extra = ' AND m.MessageId<>?' if exclude_message_id else ''
+        args = tuple(family) + ((exclude_message_id,) if exclude_message_id else ())
+        return self._one(f'''SELECT 1 x FROM message m JOIN identity i ON i.IdentityId=m.IdentityId
+                             WHERE i.PersonId IN ({marks}) AND IFNULL(m.Direction,'in')='in'{extra} LIMIT 1''', args) is not None
+
+    def person_notes(self, person_id) -> list:
+        family = self.person_family_ids(person_id)
+        if not family: return []
+        marks = ','.join('?' * len(family))
+        return [{'MemoryId': -r['PersonId'], 'Scope': 'person', 'ScopeKey': str(r['PersonId']),
+                 'Note': r['Notes'], 'Source': 'person', 'Active': 1}
+                for r in self._rows(f'SELECT PersonId, Notes FROM person WHERE PersonId IN ({marks})', tuple(family))
+                if (r.get('Notes') or '').strip()]
 
     # tasks
     def create_task(self, fields, actor):
@@ -570,8 +850,9 @@ class SQLiteStore:
         A catch-up used to do SELECT * FROM task then SELECT * FROM message for each,
         so routing 40 mails against 80 open tasks was 3,200 extra round trips on the
         lock. LEFT JOIN keeps a hand-typed task (no messages yet) in the picture."""
+        _people, identities, roots, _families = self._identity_maps()
         rows = self._rows("""
-            SELECT t.TaskId, t.Title, m.Subject, m.FromEmail, m.ConversationId,
+            SELECT t.TaskId, t.Title, m.Subject, m.FromEmail, m.IdentityId, m.ConversationId,
                    substr(m.BodyText, 1, 2000) BodyText
             FROM task t
             LEFT JOIN message m ON m.TaskId = t.TaskId
@@ -584,11 +865,15 @@ class SQLiteStore:
             if snap is None:
                 snap = out[r['TaskId']] = {
                     'task_id': r['TaskId'], 'title': r['Title'],
-                    'subjects': [], 'senders': [], 'conversation_ids': [],
+                    'subjects': [], 'senders': [], 'person_ids': [], 'conversation_ids': [],
                     'text': r['Title'] or '',
                 }
             if r['Subject']: snap['subjects'].append(r['Subject'])
             if r['FromEmail']: snap['senders'].append(r['FromEmail'])
+            if r['IdentityId']:
+                ident = identities.get(r['IdentityId'])
+                person_id = roots.get(ident['PersonId'], ident['PersonId']) if ident else None
+                if person_id and person_id not in snap['person_ids']: snap['person_ids'].append(person_id)
             if r['ConversationId']: snap['conversation_ids'].append(r['ConversationId'])
             if r['BodyText'] is not None:
                 snap['text'] += ' ' + r['BodyText']
@@ -605,7 +890,9 @@ class SQLiteStore:
         if fields.get('TaskId'):
             self._bump_snapshots()
         return mid
-    def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
+    def get_message(self, mid):
+        row = self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
+        return self._with_people(row) if row else None
     def thread_messages(self, conversation_id=None, subject=None, limit=40):
         """Every message already on this thread, oldest last - by ConversationId where the channel
         gives us one, else by normalised subject for the channels that do not.
@@ -616,16 +903,16 @@ class SQLiteStore:
         if conversation_id:
             rows = self._rows('SELECT * FROM message WHERE ConversationId=? ORDER BY SentAt DESC LIMIT ?',
                               (conversation_id, limit))
-            if rows: return list(reversed(rows))
+            if rows: return self._with_people(list(reversed(rows)))
         if not subject: return []
         from .routing import norm_subject
         key = norm_subject(subject)
         if not key: return []
         # no index on a normalised subject, so bound the scan rather than the table
         rows = self._rows('SELECT * FROM message WHERE Subject IS NOT NULL ORDER BY SentAt DESC LIMIT 400')
-        return list(reversed([r for r in rows if norm_subject(r['Subject']) == key][:limit]))
+        return self._with_people(list(reversed([r for r in rows if norm_subject(r['Subject']) == key][:limit])))
 
-    def owner_verdict_on_thread(self, conversation_id, sent_at=None, sender: str = None) -> str:
+    def owner_verdict_on_thread(self, conversation_id, sent_at=None, sender: str = None, person_id=None) -> str:
         """The owner's own "this is not work" on an EARLIER message of this same conversation, if
         any - the route reason they left ('not ours - ...', 'not a task - ...', 'nothing to do - ...').
         The thread is the one key that needs no scope: whatever else the verdict was filed under
@@ -646,15 +933,19 @@ class SQLiteStore:
         mids = [m['MessageId'] for m in self.thread_messages(conversation_id)]
         if not mids: return ''
         chat = conversation_id.startswith(CHAT_PREFIXES)
-        rows = self._rows(f"SELECT r.Reason, r.CreatedAt, m.FromEmail, m.FromName FROM route r JOIN message m ON m.MessageId=r.MessageId "
+        rows = self._rows(f"SELECT r.Reason, r.CreatedAt, m.FromEmail, m.FromName, m.IdentityId FROM route r JOIN message m ON m.MessageId=r.MessageId "
                           f"WHERE r.MessageId IN ({','.join('?' * len(mids))}) AND r.Decision='ignore' AND r.RoutedBy='owner' "
                           "ORDER BY r.RouteId DESC" + ('' if chat else ' LIMIT 1'), tuple(mids))
         if not rows: return ''
         if not chat: return rows[0]['Reason'] or ''
         who = (sender or '').strip().lower()
+        person_id = self.canonical_person_id(person_id)
         for r in rows:
             ruled = {(r['FromEmail'] or '').strip().lower(), (r['FromName'] or '').strip().lower()} - {''}
-            if who and ruled and who not in ruled: continue          # a different person: their ask is their own
+            ruled_person = (self.identity(r['IdentityId']) or {}).get('CanonicalPersonId') if r.get('IdentityId') else None
+            if person_id and ruled_person:
+                if person_id != ruled_person: continue              # a different person: their ask is their own
+            elif who and ruled and who not in ruled: continue
             try:
                 given = datetime.fromisoformat(r['CreatedAt'])
                 now = datetime.fromisoformat(norm_stamp(sent_at) or _now())
@@ -662,11 +953,13 @@ class SQLiteStore:
             except (TypeError, ValueError): pass
             return r['Reason'] or ''
         return ''
-    def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
+    def list_messages(self, task_id):
+        return self._with_people(self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,)))
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""
-        return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, SentAt, substr(BodyText, 1, 2000) BodyText '
-                          'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
+        return self._with_people(self._rows('SELECT MessageId, TaskId, IdentityId, FromEmail, Subject, Status, SentAt, '
+                                            'substr(BodyText, 1, 2000) BodyText FROM message '
+                                            'ORDER BY MessageId DESC LIMIT ?', (limit,)))
     def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
     def place_message(self, mid, task_id, status):
         """A row that was shown first and judged later lands where the judgement puts it (ingest.drain)."""
@@ -890,6 +1183,7 @@ class SQLiteStore:
         """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
         self._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL, Scope=NULL WHERE ConnectorId=?', (cid,))
         self._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))
+        self.deactivate_connector_identities(cid)
     def set_connector_config(self, cid, cfg: dict):
         """Just the config JSON - how the pollers keep their watermark (Telegram's update
         offset, the WhatsApp bridge's sequence) without touching secrets or roles."""
@@ -902,8 +1196,11 @@ class SQLiteStore:
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
-    def known_sender(self, email):
-        return bool(email) and self._one('SELECT 1 x FROM message WHERE FromEmail=? LIMIT 1', (email,)) is not None
+    def known_sender(self, email, exclude_message_id=None):
+        if not email: return False
+        extra = ' AND MessageId<>?' if exclude_message_id else ''
+        args = (email, exclude_message_id) if exclude_message_id else (email,)
+        return self._one(f'SELECT 1 x FROM message WHERE FromEmail=?{extra} LIMIT 1', args) is not None
     def add_memory(self, fields): return self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')
@@ -972,7 +1269,7 @@ class SQLiteStore:
                     THEN 1 ELSE 0 END)"""
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
-        q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
+        q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.IdentityId, m.SentAt,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
@@ -1014,6 +1311,7 @@ class SQLiteStore:
         # the digest and the task page never disagree about what a message is
         from .categories import category_of, team_domains_of
         team = team_domains_of(self.get_settings())
+        self._with_people(rows)
         for r in rows: r['Category'] = category_of(r, team)
         return rows
 

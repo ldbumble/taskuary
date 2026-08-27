@@ -38,6 +38,11 @@ the author: the team is trusted, a first-time contributor is not — flag, don't
 _(maintained automatically as connectors are added in the UI)_
 <!-- connections:end -->
 
+## My connected identities
+<!-- identities:start -->
+_(maintained automatically from verified connector accounts and identities you confirm)_
+<!-- identities:end -->
+
 ## Repository map
 _(updated automatically by GitHub discovery — add per-repo notes; they are preserved)_
 Route each coding task to the repo whose purpose matches; when unsure, escalate rather

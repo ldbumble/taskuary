@@ -104,6 +104,11 @@ class PolicyBody(BaseModel):
     SortOrder: int | None = None; Active: bool | None = None
 class MemoryBody(BaseModel): note: str; scope: str = 'global'; scope_key: str | None = None
 class MemoryToggle(BaseModel): active: bool
+class PersonBody(BaseModel): name: str | None = None; notes: str | None = None
+class IdentityBody(BaseModel):
+    channel: str; handle: str; display_name: str | None = None
+    person_id: int | None = None; is_owner: bool = False
+class MergePeopleBody(BaseModel): source_person_id: int
 class ConnectorBody(BaseModel):
     ConnectorId: int | None = None; Type: str | None = None; Name: str | None = None
     ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
@@ -563,7 +568,7 @@ class NotMineBody(BaseModel):
     scope: str = 'sender'
     topic: str | None = None        # the owner's own wording for a 'subject' verdict's key
 
-NOT_MINE_SCOPES = ('subject', 'sender', 'sender_domain', 'global')
+NOT_MINE_SCOPES = ('subject', 'person', 'sender', 'sender_domain', 'global')
 
 def _topic_key(m: dict) -> str:
     """The topic a subject-scoped verdict keys on. Empty when the subject has too little in it
@@ -584,12 +589,13 @@ def _not_mine_note(m: dict, scope: str = None, topic: str = None) -> str:
     for (by topic, by sender, by their domain, or always); the model reads the line itself and
     judges how alike the new message is. So the wording carries the specifics whatever the
     scope, and the owner can still say it in their own words."""
-    who = m.get('FromEmail') or m.get('FromName') or 'an unknown sender'
+    who = m.get('PersonName') or m.get('FromEmail') or m.get('FromName') or 'an unknown sender'
     subj = (m.get('Subject') or '')[:90]
     when = str(m.get('SentAt') or '')[:10]
     scope = scope or _suggest_scope(m)
     about = (f' - the topic "{topic or _topic_key(m)}"' if scope == 'subject' and (topic or _topic_key(m)) else
              f' - anyone at {who.rsplit("@", 1)[-1]}' if scope == 'sender_domain' else
+             ' - this person across their connected identities' if scope == 'person' else
              ' - whoever sends it' if scope == 'global' else '')
     return f'{when}: "{subj}" from {who}{about} - NOT OURS: other people\'s work, no task, no reply'
 
@@ -617,8 +623,10 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     from .routing import norm_subject, tokens
     topic = norm_subject((body.topic or '').strip())[:200] or _topic_key(m)
     if scope == 'subject' and len(tokens(topic)) < 2: scope = 'sender' if em else 'global'
+    if scope == 'person' and not m.get('PersonId'): scope = 'sender' if em else 'global'
     if scope in ('sender', 'sender_domain') and not em: scope = 'global'
     key = (topic if scope == 'subject' else None if scope == 'global'
+           else str(m['PersonId']) if scope == 'person'
            else em.rsplit('@', 1)[-1] if scope == 'sender_domain' else em)
     note = (body.note or '').strip() or _not_mine_note(m, scope, key if scope == 'subject' else None)
     memid = store.add_memory({'Scope': scope, 'ScopeKey': key, 'Note': note[:1000],
@@ -650,6 +658,7 @@ def _also_covered(scope: str, key: str, dropped_tid) -> list:
     for t in store.snapshots():
         if t['task_id'] == dropped_tid: continue
         hit = (any(topic_hit(key, s) for s in t['subjects']) if scope == 'subject'
+               else int(key) in t.get('person_ids', []) if scope == 'person'
                else any((e or '').lower().endswith('@' + key) for e in t['senders']) if scope == 'sender_domain'
                else key in {(e or '').lower() for e in t['senders']})
         if hit: out.append({'taskId': t['task_id'], 'title': t['title']})
@@ -1174,6 +1183,7 @@ def ms_poll(cid: int, body: dict):
     who = msauth.me(t['access_token'])
     cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name']}
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    store.register_owner_identity('email', who['account'], who['name'], cid, verified=True)
     if who['account'] and not any(s['Channel'] == 'email' and (s['Address'] or '').lower() == who['account'].lower()
                                   for s in store.list_sources(active_only=False)):
         store.save_source({'Channel': 'email', 'Address': who['account'], 'ConnectorId': cid, 'Active': 1}, ACTOR)
@@ -1190,6 +1200,7 @@ def ms_signout(cid: int):
     cfg = json.loads(c.get('ConfigJson') or '{}')
     for k in ('auth', 'account', 'name'): cfg.pop(k, None)
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': '', 'Active': 0}, ACTOR)
+    store.deactivate_connector_identities(cid)
     store.audit('connector', cid, 'ms_signout', ACTOR, detail={'type': c['Type']})
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
@@ -1484,9 +1495,61 @@ def put_owner(body: OwnerBody):
             store.save_doc(doc, tokened, ACTOR)
             changed.append(doc)
     store.set_setting('owner_name', new, ACTOR)
-    if body.email is not None: store.set_setting('owner_email', body.email.strip(), ACTOR)
+    owner = store.owner_person()
+    if owner: store.update_person(owner['PersonId'], name=new)
+    if body.email is not None:
+        store.set_setting('owner_email', body.email.strip(), ACTOR)
+        if body.email.strip(): store.register_owner_identity('email', body.email.strip(), new, verified=True)
+    from .docsync import sync_identities
+    sync_identities(store, ACTOR)
     store.audit('doc', 0, 'set_owner', ACTOR, detail={'from': was['owner'], 'to': new, 'retokened': changed})
     return {**store.owner(), 'retokened': changed}
+
+@app.get('/api/directory/people')
+def directory_people(): return {'data': store.list_people()}
+
+@app.patch('/api/people/{person_id}')
+def update_person(person_id: int, body: PersonBody):
+    if body.name is None and body.notes is None: raise HTTPException(422, 'name or notes is required')
+    if not store.update_person(person_id, body.name.strip() if body.name is not None else None, body.notes):
+        raise HTTPException(404, 'person not found')
+    store.audit('person', person_id, 'edit', ACTOR, detail={'name': body.name, 'notes': bool(body.notes)})
+    from .docsync import sync_identities
+    sync_identities(store, ACTOR)
+    return {'ok': True}
+
+@app.post('/api/identities')
+def add_identity(body: IdentityBody):
+    if not body.channel.strip() or not body.handle.strip(): raise HTTPException(422, 'channel and handle are required')
+    if body.person_id and not any(p['PersonId'] == body.person_id for p in store.list_people(include_merged=True)):
+        raise HTTPException(404, 'person not found')
+    ident = store.ensure_identity(body.channel.strip(), body.handle.strip(), body.display_name,
+                                  person_id=body.person_id, verified=False, is_owner=body.is_owner)
+    if not ident: raise HTTPException(422, 'handle is required')
+    store.audit('identity', ident['IdentityId'], 'confirm', ACTOR,
+                detail={'channel': ident['Channel'], 'handle': ident['Handle'], 'person_id': ident['CanonicalPersonId']})
+    from .docsync import sync_identities
+    sync_identities(store, ACTOR)
+    return {'ok': True, 'identity': ident}
+
+@app.post('/api/people/{target_id}/merge')
+def merge_people(target_id: int, body: MergePeopleBody):
+    people = {p['PersonId'] for p in store.list_people(include_merged=True)}
+    if target_id not in people or body.source_person_id not in people: raise HTTPException(404, 'person not found')
+    root = store.merge_people(target_id, body.source_person_id)
+    store.audit('person', root, 'merge', ACTOR,
+                detail={'target': target_id, 'source': body.source_person_id, 'reversible': True})
+    from .docsync import sync_identities
+    sync_identities(store, ACTOR)
+    return {'ok': True, 'personId': root}
+
+@app.post('/api/people/{person_id}/unmerge')
+def unmerge_person(person_id: int):
+    if not store.unmerge_person(person_id): raise HTTPException(409, 'person is not joined to another person')
+    store.audit('person', person_id, 'unmerge', ACTOR)
+    from .docsync import sync_identities
+    sync_identities(store, ACTOR)
+    return {'ok': True}
 
 @app.get('/api/policies')
 def policies(): return {'data': store.list_policies(active_only=False)}
@@ -1524,7 +1587,7 @@ def memory(): return {'data': store.list_memories(active_only=False)}
 def add_memory(body: MemoryBody):
     # 'subject' was missing here, so a topic rule - which is what most verdicts actually are -
     # could only be written by pressing "Not our task" on a message, never typed in by hand
-    if body.scope not in ('global', 'sender', 'sender_domain', 'source', 'subject'):
+    if body.scope not in ('global', 'person', 'sender', 'sender_domain', 'source', 'subject'):
         raise HTTPException(422, 'bad scope')
     # a keyed scope with no key matches nothing, ever: saved, listed, and silent
     if body.scope != 'global' and not (body.scope_key or '').strip():
@@ -1913,6 +1976,11 @@ def settings():
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):
     store.set_setting(body.name, body.value, ACTOR)
+    if body.name == 'owner_name':
+        owner = store.owner_person()
+        if owner: store.update_person(owner['PersonId'], name=body.value.strip())
+    elif body.name == 'owner_email' and body.value.strip():
+        store.register_owner_identity('email', body.value.strip(), store.owner()['owner'], verified=True)
     return {'ok': True}
 
 @app.get('/api/audit/verify')

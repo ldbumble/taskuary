@@ -221,7 +221,8 @@ def memory_block(store, messages: list) -> str:
     says puts the ones that matter at the top and says how many were left out."""
     from .ingest import relevant_notes
     text = ' '.join(f"{m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in messages)[:4000]
-    notes, left = relevant_notes(store, [(m.get('FromEmail') or '') for m in messages], text)
+    notes, left = relevant_notes(store, [(m.get('FromEmail') or '') for m in messages], text,
+                                 person_id={m.get('PersonId') for m in messages if m.get('PersonId')})
     if not notes: return ''
     return ('Standing notes (learned from the owner - FOLLOW these):\n'
             + '\n'.join(f'- {n}' for n in notes)

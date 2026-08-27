@@ -8,6 +8,7 @@ write themselves in. Two mechanisms, both non-destructive to hand-written prose:
 import json
 
 CONN_START, CONN_END = '<!-- connections:start -->', '<!-- connections:end -->'
+IDENTITY_START, IDENTITY_END = '<!-- identities:start -->', '<!-- identities:end -->'
 REPO_MAP_HEADER = '## Repository map'
 # The poller's own map, not a second copy of it. This used to be a hand-kept duplicate that
 # stopped at monday, so every connector added after it (gitlab, azdo, linear, trello, notion,
@@ -66,6 +67,39 @@ def sync_connections(store, actor='system'):
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)
     new = f'{head}{CONN_START}\n{block}\n{CONN_END}{tail}'
+    if new != doc: store.save_doc('soul', new, actor)
+
+
+def sync_identities(store, actor='system'):
+    """Materialise the owner's verified connector identities into a fenced SOUL section.
+
+    Structured rows remain authoritative. The block is intentionally readable and contains
+    no connector secrets or internal account metadata that an agent cannot use.
+    """
+    doc = store.get_doc('soul') or ''
+    owner = store.owner_person()
+    identities = []
+    if owner:
+        person = next((p for p in store.list_people() if p['PersonId'] == owner['PersonId']), None)
+        identities = (person or {}).get('Identities') or []
+    lines = []
+    for i in identities:
+        label = i.get('DisplayName') or i.get('Handle')
+        handle = i.get('Handle') or ''
+        shown = f'{label} ({handle})' if label and handle and label != handle else handle
+        state = '' if i.get('Verified') else ' (confirmed manually)'
+        if shown: lines.append(f"- {i['Channel']}: {shown}{state}")
+    block = '\n'.join(lines) or '_(maintained automatically from verified connector accounts and identities you confirm)_'
+    section = f'## My connected identities\n{IDENTITY_START}\n{block}\n{IDENTITY_END}'
+    if IDENTITY_START in doc and IDENTITY_END in doc:
+        head, rest = doc.split(IDENTITY_START, 1)
+        _, tail = rest.split(IDENTITY_END, 1)
+        new = f'{head}{IDENTITY_START}\n{block}\n{IDENTITY_END}{tail}'
+    else:
+        if not identities: return
+        # Existing owner-authored SOUL files predate the marker. Appending a fenced block is
+        # non-destructive and gives the UI somewhere stable to refresh from then on.
+        new = doc.rstrip() + '\n\n' + section + '\n'
     if new != doc: store.save_doc('soul', new, actor)
 
 

@@ -127,6 +127,14 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # a message seen twice is dropped on the first line - before any policy pass, before any AI
     if fresh and store.message_exists(msg.get('external_id') or ''):
         return {'status': 'duplicate', 'task_id': None, 'message_id': None}
+    # Resolve the channel handle deterministically before policy/triage. Creating an identity
+    # does not make somebody "known": known_person_sender below checks for an earlier message.
+    ident = (store.ensure_identity(msg.get('channel'), msg.get('from_email'), msg.get('from_name'))
+             if fresh else store.identity((store.get_message(msg['_mid']) or {}).get('IdentityId')))
+    if ident:
+        msg = {**msg, '_identity_id': ident['IdentityId'], 'person_id': ident['CanonicalPersonId'],
+               'person_ids': sorted(store.person_family_ids(ident['CanonicalPersonId'])),
+               'person_name': ident.get('PersonName')}
     if fresh and file_only:
         mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
         store.add_route(mid, None, 'feed', None,
@@ -134,8 +142,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         return {'status': 'feed', 'task_id': None, 'message_id': mid}
     # the policy answer is needed on both passes (escalate marks the task urgent below); it is
     # an in-memory match, cheap enough to make twice
-    pol = evaluate(msg, store.list_policies(), store.known_sender(msg.get('from_email')),
-                   cfg.get('default_action', 'draft'))
+    pol = evaluate(msg, store.list_policies(), store.known_sender(msg.get('from_email'), msg.get('_mid')),
+                   cfg.get('default_action', 'draft'),
+                   store.known_person_sender(msg.get('person_id'), msg.get('_mid')) if msg.get('person_id') else False)
     if fresh:
         if pol['action'] in ('skip', 'ignore'):
             # skip = stored for dedupe but NEVER shown (flood senders); ignore = shown, no task
@@ -226,7 +235,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
                                                    f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                                                    subject=msg.get('subject') or '',
-                                                   source=msg.get('source_name') or '')
+                                                   source=msg.get('source_name') or '', person_id=msg.get('person_id'))
                 thread = others_on_thread(store, msg, mine)
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
                                          learned=injectable(store.doc('learned') or ''),
@@ -393,11 +402,11 @@ def _note_score(n: dict, words: set) -> float:
     overlap = len(nw & words) / len(nw) if nw else 0.0
     # 'subject' ranks with 'sender': a topic note is only a candidate because it already matched
     # the topic, which is as pointed as knowing the person
-    return (4 * overlap + {'sender': 3.0, 'subject': 3.0, 'sender_domain': 1.5, 'source': 1.5}.get(n['Scope'], 0.0)
+    return (4 * overlap + {'person': 3.5, 'sender': 3.0, 'subject': 3.0, 'sender_domain': 1.5, 'source': 1.5}.get(n['Scope'], 0.0)
             + (1.0 if n.get('Source') == 'verdict' else 0.0) + n['MemoryId'] / 1e6)
 
 
-def applicable_notes(store, senders, subject: str = '', text: str = '', source: str = '') -> list:
+def applicable_notes(store, senders, subject: str = '', text: str = '', source: str = '', person_id=None) -> list:
     """Every ACTIVE note that bears on this message - by sender, by their domain, by the topic
     it is about, by the connection it arrived on, or globally. A switched-off note is silent.
 
@@ -408,20 +417,25 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
     who = {(s or '').lower() for s in senders if s}
     doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
     src = (source or '').lower()
-    return [n for n in store.list_memories()
+    people = person_id if isinstance(person_id, (list, tuple, set)) else [person_id]
+    family = {str(x) for pid in people if pid for x in store.person_family_ids(pid)}
+    hits = [n for n in store.list_memories()
             if n['Scope'] == 'global'
             or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
+            or (n['Scope'] == 'person' and str(n.get('ScopeKey') or '') in family)
             or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)
             or (n['Scope'] == 'subject' and topic_hit(n.get('ScopeKey') or '', subject, text))
             or (n['Scope'] == 'source' and src and (n.get('ScopeKey') or '').lower() == src)]
+    if person_id: hits += store.person_notes(person_id)
+    return hits
 
 
 def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET,
-                   subject: str = '', source: str = '') -> tuple:
+                   subject: str = '', source: str = '', person_id=None) -> tuple:
     """(the notes to put in a prompt, most pointed first; how many matched but were left out).
 
     `senders` is every address on the thread - one message's sender, or a whole chain's."""
-    hits = applicable_notes(store, senders, subject, text, source)
+    hits = applicable_notes(store, senders, subject, text, source, person_id)
     words = set(tokens(text))
     hits.sort(key=lambda n: _note_score(n, words), reverse=True)
     out, used = [], 0
@@ -479,7 +493,8 @@ def ruled_on_thread(store, msg: dict) -> str:
     a verdict about a person or a topic is EVIDENCE for the classifier (relevant_notes), because
     the same topic can arrive asking something new, and only a reader can tell."""
     on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'), msg.get('sent_at'),
-                                              sender=msg.get('from_email') or msg.get('from_name'))
+                                              sender=msg.get('from_email') or msg.get('from_name'),
+                                              person_id=msg.get('person_id'))
     return f'you already ruled on this conversation: {on_thread}' if on_thread else ''
 
 
@@ -503,12 +518,23 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
     if not prior: return {}
     me = {(a or '').lower() for a in mine if a} | {(msg.get('source_name') or '').lower()} - {''}
     ident = lambda m: (m.get('FromEmail') or m.get('FromName') or '').strip().lower()
-    is_me = lambda m: ident(m) in me or (m.get('FromName') or '').strip().lower() == 'you'
+    def person_of(m):
+        return (store.identity(m.get('IdentityId')) or {}).get('CanonicalPersonId') if m.get('IdentityId') else None
+    is_me = lambda m: bool((store.identity(m.get('IdentityId')) or {}).get('IsOwner')) if m.get('IdentityId') else \
+                      (ident(m) in me or (m.get('FromName') or '').strip().lower() == 'you')
     sender = {(msg.get('from_email') or '').lower(), (msg.get('from_name') or '').strip().lower()} - {''}
+    sender_person = store.canonical_person_id(msg.get('person_id'))
     who = lambda m: (m.get('FromName') or (m.get('FromEmail') or '').split('@')[0] or 'someone')
     others = []
     for m in prior:
-        if not ident(m) or ident(m) in sender or is_me(m): continue
+        if not ident(m) or is_me(m): continue
+        prior_person = person_of(m)
+        if sender_person and prior_person:
+            if prior_person == sender_person: continue
+        elif ident(m) in sender:
+            # Old/plugin-written rows may not carry IdentityId yet. The raw handle remains the
+            # safe fallback; without it a sender's own earlier line becomes "someone else".
+            continue
         if who(m) not in others: others.append(who(m))
     if not others: return {}
     last = prior[-1]
@@ -520,9 +546,14 @@ def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) 
     learned about this sender or their domain, ranked against what the message actually says.
     Triage reads them, so a verdict given once ("this kind of mail is not ours") applies to
     every message like it afterwards."""
-    return relevant_notes(store, [msg.get('from_email') or ''],
-                          f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000], cap, budget,
-                          subject=msg.get('subject') or '', source=msg.get('source_name') or '')[0]
+    person_id = msg.get('person_id') or msg.get('PersonId')
+    if not person_id and msg.get('IdentityId'):
+        person_id = (store.identity(msg['IdentityId']) or {}).get('CanonicalPersonId')
+    subject, body = msg.get('subject') or msg.get('Subject') or '', msg.get('body') or msg.get('BodyText') or ''
+    source = msg.get('source_name') or msg.get('SourceName') or ''
+    return relevant_notes(store, [msg.get('from_email') or msg.get('FromEmail') or ''],
+                           f"{subject} {body}"[:4000], cap, budget, subject=subject, source=source,
+                           person_id=person_id)[0]
 
 
 def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding', assignee: str = None) -> int:
@@ -663,6 +694,7 @@ def _fields(msg, task_id):
             # normalized HERE, the one gate every channel funnels through: a UTC ISO stamp from
             # any single path sorts the whole timeline out of order (see store.norm_stamp)
             'FromEmail': msg.get('from_email'), 'SentAt': norm_stamp(msg.get('sent_at')),
+            'IdentityId': msg.get('_identity_id'),
             'BodyText': msg.get('body'), 'SourceLink': msg.get('source_link'), 'Status': 'routed',
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)
             'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})

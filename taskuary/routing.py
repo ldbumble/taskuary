@@ -53,7 +53,7 @@ def score_candidate(msg, task):
 
     Args:
         msg: dict with subject, from_email, body, conversation_id.
-        task: dict with task_id, title, subjects (list), senders (list), text (joined bodies),
+        task: dict with task_id, title, subjects (list), senders (list), person_ids (list), text (joined bodies),
               conversation_ids (list).
     Returns:
         dict of signal -> score in [0,1].
@@ -63,7 +63,9 @@ def score_candidate(msg, task):
     ms = norm_subject(msg.get('subject'))
     subs = [norm_subject(s) for s in (task.get('subjects') or [])] + [norm_subject(task.get('title'))]
     sig['subject'] = max([1.0 if ms and ms==s else cosine(tokens(ms), tokens(s)) for s in subs if s] or [0.0])
-    sig['sender'] = 1.0 if (msg.get('from_email') or '').lower() in {(e or '').lower() for e in (task.get('senders') or [])} else 0.0
+    same_handle = (msg.get('from_email') or '').lower() in {(e or '').lower() for e in (task.get('senders') or [])}
+    same_person = bool(msg.get('person_id') and msg.get('person_id') in (task.get('person_ids') or []))
+    sig['sender'] = 1.0 if same_handle or same_person else 0.0
     sig['body'] = cosine(tokens(msg.get('body')), tokens(task.get('text')))
     return sig
 

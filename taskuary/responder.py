@@ -107,7 +107,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
     # the mail's own words rank the notes, so pass them: a note quoting this subject is the
     # one most likely to change how the reply should read
-    notes = notes_for(store, {'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
+    notes = notes_for(store, {**last, 'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
                               'body': last.get('BodyText')}, budget=1500)
     chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
     from .learn import injectable
@@ -199,7 +199,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
                  f'this:\n{sty[:2500]}' if sty else '')
               + (f'\n\nYour learned profile - how you write and work, distilled from your own '
                  f'verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
-    notes = notes_for(store, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'),
+    notes = notes_for(store, {**m, 'from_email': m.get('FromEmail'), 'subject': m.get('Subject'),
                               'body': m.get('BodyText')}, budget=1500)
     if notes:
         # ranked and budgeted by notes_for. The old notes[:20] then [:1500] took them in row

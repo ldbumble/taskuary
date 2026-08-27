@@ -39,7 +39,7 @@ const VIEW_FILTERS = [
 // Everything narrower lives in one grouped picker: category -> channel -> connection.
 const CATEGORIES = [
   { key: "", label: "everything", channels: null, c: PILL_COLORS.pick },
-  { key: "messages", label: "messages", channels: ["email", "teams", "slack", "telegram", "whatsapp", "discord"],
+  { key: "messages", label: "messages", channels: ["email", "teams", "slack", "telegram", "whatsapp", "imessage", "discord"],
     c: PILL_COLORS.pick },
   { key: "code", label: "code", channels: ["github", "gitlab"], c: PILL_COLORS.pick },
   { key: "pm", label: "boards", channels: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion", "azdo"],
@@ -49,7 +49,7 @@ const CATEGORIES = [
   { key: "reports", label: "reports", channels: ["report"], c: PILL_COLORS.pick },
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
-  telegram: "Telegram chats", whatsapp: "WhatsApp chats", discord: "Discord channels",
+  telegram: "Telegram chats", whatsapp: "WhatsApp chats", imessage: "Apple Messages chats", discord: "Discord channels",
   github: "Repositories", gitlab: "GitLab instances", report: "Reports",
   jira: "Jira issues", asana: "Asana tasks", monday: "Monday items", linear: "Linear issues",
   clickup: "ClickUp tasks", todoist: "Todoist tasks",

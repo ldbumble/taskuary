@@ -72,6 +72,16 @@ const META = {
       "Leave the bridge running; Test here confirms the pairing and adds a catch-all source.",
       "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."] },
+  imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
+    fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"]],
+    secretLabel: null,
+    desc: "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats flow through triage, approved replies go back into the same chat through Messages.app. macOS only.",
+    howto: ["No token: Messages.app is the account. Taskuary reads the history macOS already keeps on this Mac (~/Library/Messages/chat.db) and asks Messages.app to send.",
+      "Reading needs Full Disk Access — a macOS permission, granted to the app Taskuary was launched from (Terminal, iTerm, your IDE, or the python binary itself). Test tells you which one it detected, and Settings usually needs that host relaunched before it takes.",
+      "System Settings → Privacy & Security → Full Disk Access → switch on (or + and add) the host Test named, then Test again. A real read of the database is the proof — not the checkbox.",
+      "Sending needs Automation: the first reply makes macOS ask whether that host may control Messages. Allow it. Test never sends anything.",
+      "New messages from the moment of the first sync; the optional look-back here reads a few days of history instead. Chat ids under Sources LIMIT which chats come in — blank means every chat that reaches this Mac.",
+      "macOS 13 and later; macOS 12 best effort. On Linux and Windows the card stays here but Test says it needs a Mac."] },
   gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
     fields: [["mailbox address", "address"]], secretLabel: "App Password (16 characters)",
     desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread.",
@@ -504,7 +514,7 @@ export default function ConnectorsView() {
       ...["anthropic", "openai", "azure_openai", "openrouter", "ollama"].filter((t) => byType[t]).map((t) => chanCard(byType[t])),
       ...PLANNED_AI.map((p) => ({ key: p.name, title: p.name, desc: p.desc, channel: "ai", haystack: `${p.name} ${p.desc}`, planned: true })),
     ]},
-    { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp", "imessage", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Developer", cards: ["github", "gitlab", "azdo", "sentry", "pagerduty"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Project management", cards: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each
@@ -1289,7 +1299,7 @@ const GH_PROMPTS = [
 ];
 const TASK_PROMPT = [["task_prompt", "For every task from this connection",
   "optional — rides into the agent's instructions alongside the message itself; blank = nothing extra"]];
-const PROMPTABLE = new Set(["outlook", "teams", "slack", "telegram", "whatsapp", "gmail", "imap",
+const PROMPTABLE = new Set(["outlook", "teams", "slack", "telegram", "whatsapp", "imessage", "gmail", "imap",
   "jira", "asana", "monday"]);
 const promptsFor = (t) => (t === "github" ? GH_PROMPTS : PROMPTABLE.has(t) ? TASK_PROMPT : []);
 

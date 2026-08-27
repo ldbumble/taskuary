@@ -92,7 +92,7 @@ def send_teams(store, chat_id: str, body: str) -> dict:
 # 'report' and the read-only trackers can never carry a reply: nothing is written back to
 # Jira or Sentry by design. github is gated on its own card switch (a public comment is the
 # owner's call). Everything else is the owner's setting.
-SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'github')
+SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord', 'github')
 NEVER = {'report', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab', 'azdo',
          'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
 
@@ -151,11 +151,15 @@ def send_out(store, channel: str, to, subject: str, body: str) -> dict:
         if not to: raise RuntimeError(f'no chat id - a {ch} message needs one to land in')
         return (messengers.tg_send if ch == 'telegram' else messengers.wa_send)(
             store, to[0], f'{subject}\n\n{body}' if subject else body)
+    if ch == 'imessage':
+        from .imessage import send_text
+        if not to: raise RuntimeError('no chat id - an Apple Messages message needs the chat guid to land in')
+        return send_text(store, to[0], f'{subject}\n\n{body}' if subject else body)
     if ch == 'discord':
         from .devtools import discord_send
         if not to: raise RuntimeError('no channel id - a Discord message needs one to land in')
         return discord_send(store, to[0], f'**{subject}**\n\n{body}' if subject else body)
-    raise RuntimeError(f'cannot send on {ch} - email, Teams, Telegram, WhatsApp and Discord can carry a report out')
+    raise RuntimeError(f'cannot send on {ch} - email, Teams, Telegram, WhatsApp, Apple Messages and Discord can carry a report out')
 
 
 def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
@@ -184,6 +188,11 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'telegram:<id>' / 'whatsapp:<jid>'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
         return (messengers.tg_send if ch == 'telegram' else messengers.wa_send)(store, chat, body)
+    if ch == 'imessage':
+        from .imessage import send_text
+        chat = str(msg.get('ConversationId') or '')[9:]                 # 'imessage:<chat guid>'
+        if not chat: raise RuntimeError('this chat message has no chat id to answer in')
+        return send_text(store, chat, body)
     if ch == 'discord':
         from .devtools import discord_send
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'discord:<channel_id>'

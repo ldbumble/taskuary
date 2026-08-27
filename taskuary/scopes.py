@@ -55,7 +55,7 @@ ACTIONS = {
 DEFAULT_SCOPE = {
     'winrm': 'admin',                                        # its one executor needs admin
     'github': 'write', 'outlook': 'write', 'teams': 'write', 'slack': 'write',
-    'telegram': 'write', 'whatsapp': 'write', 'discord': 'write',
+    'telegram': 'write', 'whatsapp': 'write', 'imessage': 'write', 'discord': 'write',
     'gmail': 'write', 'imap': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
     'intacct': 'read',

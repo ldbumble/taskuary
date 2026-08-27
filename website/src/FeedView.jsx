@@ -92,7 +92,7 @@ const blurb = (r) => {
   const state = r.ReviewStatus === "pending" ? "a reply is drafted — waiting on your review"
       : r.ReviewStatus === "auto" ? "AI answered automatically"
         : r.TaskStatus === "done" ? `completed${r.ReviewStatus ? ` · you said ${r.ReviewStatus.replace("_", " ")}` : ""}`
-          : r.Working ? `${r.Working} is working it right now`
+          : r.Working ? `an agent is working it right now (${r.Working})`
           : needsYou(r) ? "needs you — no agent is working it right now"
             : r.ReviewStatus ? `reviewed (${r.ReviewStatus})` : "an agent is working it";
   return `${routed} · ${state}`;

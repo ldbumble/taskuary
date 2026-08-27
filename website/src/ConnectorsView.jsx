@@ -700,7 +700,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
                 Open Full Disk Access</Button>
               <Button size="small" variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
                 startIcon={busy === "test" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
-                {test ? "I enabled it — test again" : "Test"}</Button>
+                {!test ? "Test" : test.ok ? "Test again" : "I enabled it — test again"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               {setup.breadcrumb || "System Settings → Privacy & Security → Full Disk Access"}
@@ -772,7 +772,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     try {
       const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/test`);
       setTest(data);
-      if (data.ok) setStep(m.srcLabel ? 2 : 3);
+      // Apple Messages has a second card (Automation) on this step - a passing read test must
+      // not whisk the step away before the person can try the send probe
+      if (data.ok && conn.Type !== "imessage") setStep(m.srcLabel ? 2 : 3);
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };

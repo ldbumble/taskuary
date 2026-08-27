@@ -76,6 +76,15 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 
+def _parents(rows) -> dict: return {r['PersonId']: r['MergedIntoPersonId'] for r in rows}
+def _root(parent: dict, pid) -> int:
+    """Follow person links to the one that stands for the family. Links are only ever written
+    root-to-root, so there is no cycle to meet; the `seen` guard covers data that predates that."""
+    cur, seen = int(pid), set()
+    while parent.get(cur) and cur not in seen:
+        seen.add(cur); cur = parent[cur]
+    return cur
+
 
 def norm_handle(channel: str, handle: str) -> str:
     """A connector identity key. Preserve the display handle elsewhere; this is comparison only.
@@ -555,12 +564,7 @@ class SQLiteStore:
     # people / connector identities
     def canonical_person_id(self, person_id):
         if not person_id: return None
-        rows = self._rows('SELECT PersonId, MergedIntoPersonId FROM person')
-        parent = {r['PersonId']: r.get('MergedIntoPersonId') for r in rows}
-        cur, seen = int(person_id), set()
-        while parent.get(cur) and cur not in seen:
-            seen.add(cur); cur = parent[cur]
-        return cur
+        return _root(_parents(self._rows('SELECT PersonId, MergedIntoPersonId FROM person')), person_id)
 
     def person_family_ids(self, person_id) -> set:
         if not person_id: return set()
@@ -635,14 +639,17 @@ class SQLiteStore:
                                   (channel, nk)).fetchone()
             if row:
                 iid, direct = row['IdentityId'], row['PersonId']
-                if person_id and direct != person_id:
-                    direct_owner = self.cx.execute('SELECT IsOwner FROM person WHERE PersonId=?', (direct,)).fetchone()
-                    if direct_owner and direct_owner['IsOwner']:
-                        self.cx.execute('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?',
-                                        (direct, _now(), person_id))
+                # Both sides resolve to their ROOT before linking. person_id may be stale (a person
+                # joined since the page loaded) or already a member; linking raw ids wrote a cycle
+                # (4->5->4) that resolved to two different people and offered no Unjoin.
+                parent = _parents(self.cx.execute('SELECT PersonId, MergedIntoPersonId FROM person').fetchall())
+                target, have = (_root(parent, person_id) if person_id else None), _root(parent, direct)
+                if target and have != target:
+                    if owner and have == owner['PersonId']:
+                        # a handle the owner has verified stays the owner's: the other person joins them
+                        self.cx.execute('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?', (have, _now(), target))
                     else:
-                        self.cx.execute('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?',
-                                        (person_id, _now(), direct))
+                        self.cx.execute('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?', (target, _now(), direct))
                 self.cx.execute('''UPDATE identity SET DisplayName=COALESCE(?,DisplayName),
                     ConnectorId=COALESCE(?,ConnectorId), Verified=MAX(Verified,?), Active=1, UpdatedAt=?
                     WHERE IdentityId=?''', (display_name, connector_id, int(bool(verified)), _now(), iid))

@@ -397,7 +397,10 @@ def ingest_own_message(store, msg: dict, why: str) -> int:
     conv = msg.get('conversation_id')
     tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
     if not tid: return 0
-    ident = store.register_owner_identity(msg.get('channel'), msg.get('from_email'), store.owner()['owner']) if msg.get('from_email') else None
+    # The mailbox a reply went out FROM is not proof of who sent it - a shared mailbox is everyone
+    # with access - so this only looks the handle up; connectors register owner identities at
+    # sign-in, where the account is actually verified.
+    ident = store.identity_for(msg.get('channel'), msg.get('from_email')) if msg.get('from_email') else None
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),

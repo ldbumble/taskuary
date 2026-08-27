@@ -121,6 +121,50 @@ class PeopleTests(unittest.TestCase):
         finally:
             server.store = old
 
+    def test_own_outbound_mail_never_mints_an_owner_identity(self):
+        # the mailbox a reply left FROM is not proof of who sent it: a shared mailbox is everyone with access
+        from taskuary.channels import ingest_outbound_mail
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Refund'}, 'test')
+        s.add_message({'TaskId': tid, 'ExternalId': 'a', 'Channel': 'email', 'ConversationId': 'c1',
+                       'FromEmail': 'res@x.example', 'Status': 'routed'})
+        ingest_outbound_mail(s, 'shared@corp.example', {'id': 'o1', 'subject': 'RE: Refund', 'conversationId': 'c1',
+                                                         'body': {'content': 'done'}})
+        owner = next(p for p in s.list_people() if p['IsOwner'])
+        self.assertEqual(owner['Identities'], [])
+        self.assertNotIn('shared@corp.example', s.get_doc('soul'))
+
+    def test_polled_mailbox_is_still_me_on_a_thread(self):
+        # the person link ADDS to owner_addresses, it does not replace it (the shared-mailbox case)
+        from taskuary.ingest import others_on_thread
+        s = MemoryStore()
+        res = s.ensure_identity('email', 'res@x.example', 'Res')
+        shared = s.ensure_identity('email', 'shared@corp.example', 'Property Mgmt')
+        for i, ident in enumerate((res, shared)):
+            s.add_message({'ExternalId': f'm{i}', 'Channel': 'email', 'ConversationId': 'c1', 'FromEmail': ident['Handle'],
+                           'FromName': ident['DisplayName'], 'IdentityId': ident['IdentityId'], 'SentAt': f'2026-08-0{i+1} 09:00:00', 'Status': 'filed'})
+        msg = {'from_email': 'res@x.example', 'conversation_id': 'c1', 'person_id': res['CanonicalPersonId']}
+        self.assertEqual(others_on_thread(s, msg, {'shared@corp.example'}), {})
+
+    def test_adding_a_handle_to_a_member_cannot_write_a_cycle(self):
+        s = MemoryStore()
+        a = s.ensure_identity('email', 'jane@x.example', 'Jane')
+        b = s.ensure_identity('slack', 'U1', 'jane')
+        root = s.merge_people(a['CanonicalPersonId'], b['CanonicalPersonId'])
+        s.ensure_identity('email', 'jane@x.example', person_id=b['PersonId'])       # a stale page names the member
+        self.assertEqual(s.canonical_person_id(a['PersonId']), root)
+        self.assertEqual(s.canonical_person_id(b['PersonId']), root)
+        self.assertTrue(next(p for p in s.list_people() if p['PersonId'] == root)['Members'])
+
+    def test_owner_verified_handle_stays_the_owners(self):
+        s = MemoryStore()
+        mine = s.register_owner_identity('email', 'uri@example.com', 'Uri', 7, verified=True)
+        jane = s.ensure_identity('email', 'jane@x.example', 'Jane')
+        s.ensure_identity('email', 'uri@example.com', person_id=jane['CanonicalPersonId'])
+        owner = s.owner_person()['PersonId']
+        self.assertEqual(s.identity(mine['IdentityId'])['CanonicalPersonId'], owner)
+        self.assertEqual(s.canonical_person_id(jane['PersonId']), owner)
+
 
 if __name__ == '__main__':
     unittest.main()

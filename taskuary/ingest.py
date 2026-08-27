@@ -520,8 +520,10 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
     ident = lambda m: (m.get('FromEmail') or m.get('FromName') or '').strip().lower()
     def person_of(m):
         return (store.identity(m.get('IdentityId')) or {}).get('CanonicalPersonId') if m.get('IdentityId') else None
-    is_me = lambda m: bool((store.identity(m.get('IdentityId')) or {}).get('IsOwner')) if m.get('IdentityId') else \
-                      (ident(m) in me or (m.get('FromName') or '').strip().lower() == 'you')
+    # the person link ADDS to the raw-handle test, it does not replace it: a polled (shared)
+    # mailbox is 'me' by owner_addresses whether or not its identity was ever joined to the owner
+    owned = lambda m: bool(m.get('IdentityId') and (store.identity(m['IdentityId']) or {}).get('IsOwner'))
+    is_me = lambda m: owned(m) or ident(m) in me or (m.get('FromName') or '').strip().lower() == 'you'
     sender = {(msg.get('from_email') or '').lower(), (msg.get('from_name') or '').strip().lower()} - {''}
     sender_person = store.canonical_person_id(msg.get('person_id'))
     who = lambda m: (m.get('FromName') or (m.get('FromEmail') or '').split('@')[0] or 'someone')

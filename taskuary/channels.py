@@ -75,16 +75,14 @@ def github_discover(store, c: dict, actor='owner') -> dict:
             except ValueError: gc = {}
             if gc.get('private') != rp.get('private', False):
                 store.save_source({'SourceId': s['SourceId'], 'ConfigJson': json.dumps({**gc, 'private': rp.get('private', False)})}, actor)
-    # a repo the CURRENT token cannot see is switched off, not deleted: its pickers survive for
-    # the day the token covers it again, and the list stops promising access this PAT lacks
-    # (a fine-grained PAT scoped to one repo sat over 57 rows another token had discovered)
+    # a repo the CURRENT token cannot see is REMOVED: the list is what this token reaches, period
+    # (owner's call - a fine-grained PAT scoped to one repo sat over 57 rows another token had
+    # found). A repo the token covers again later is rediscovered with fresh pickers.
     seen = {rp['full_name'] for rp in repos}
     gone = 0
     for name, s in have.items():
-        if name not in seen and s.get('Active'):
-            store.save_source({'SourceId': s['SourceId'], 'Active': 0}, actor); gone += 1
-        elif name in seen and not s.get('Active') and (s.get('Owner') or '') == 'discovered':
-            store.save_source({'SourceId': s['SourceId'], 'Active': 1}, actor)
+        if name not in seen:
+            store.delete_source(s['SourceId']); gone += 1
     from .docsync import sync_connections, update_repo_map
     from .llm import build_llm
     try: llm = build_llm(store)
@@ -148,7 +146,7 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'github':
             d = github_discover(store, c)
             detail = (f"authenticated as {d['login']} · {d['repos']} repos reachable · {d['added']} new sources"
-                      + (f" · {d['unreachable']} switched off (this token cannot see them)" if d.get('unreachable') else '')
+                      + (f" · {d['unreachable']} removed (this token cannot see them)" if d.get('unreachable') else '')
                       + ' · repo map written to SOUL.md')
         elif c['Type'] == 'slack':
             if not c.get('Secret'): raise RuntimeError('no bot token saved - paste an xoxb- token under Credentials')

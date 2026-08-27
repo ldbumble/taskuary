@@ -1132,6 +1132,27 @@ def connector_test(cid: int):
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
 
+@app.post('/api/platform/macos/open-settings')
+def macos_open_settings(body: dict):
+    """Open one of two System Settings panes the Apple Messages card walks the owner through.
+    The pane is an enum mapped to a fixed URL on this side - the browser never sends a URL."""
+    from . import imessage
+    pane = (body or {}).get('pane')
+    if pane not in imessage.PANES: raise HTTPException(422, f'unknown pane: {pane}')
+    try: return imessage.open_settings(pane)
+    except imessage.SetupError as e: return {'ok': False, 'detail': str(e), 'setup': e.setup}
+
+@app.post('/api/platform/macos/probe')
+def macos_probe(body: dict):
+    """The Automation consent check: a non-sending Apple Event to Messages.app. Run only after
+    the card has explained that macOS is about to ask - nothing is sent either way."""
+    from . import imessage
+    what = (body or {}).get('what')
+    if what != 'messages_automation': raise HTTPException(422, f'unknown probe: {what}')
+    try: return imessage.automation_probe()
+    except imessage.SetupError as e: return {'ok': False, 'detail': str(e), 'setup': e.setup}
+    except Exception as e: return {'ok': False, 'detail': str(e)[:500]}
+
 @app.post('/api/tools/run')
 def tool_run(body: dict):
     """The agents' hands on your other systems: run ONE query/script through a connection
@@ -1480,19 +1501,42 @@ def poll_forever():
             except (TypeError, ValueError): mins = 10
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
                 _poll_reports(0, what='syncing')
+            else:
+                quick = _quick_due()
+                if quick: _poll_reports(0, what='syncing', only=quick)
         except Exception as e:
             logger.warning(f'scheduled poll failed: {e}')      # a bad cycle must not end the loop
         time.sleep(POLL_TICK)
 
-def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False):
+
+# A chat channel on the ten-minute mailbox clock is a slow conversation. A connector whose
+# config carries poll_seconds asks to be read more often than poll_minutes, on its own - the
+# quick pass polls ONLY those connectors and runs no reports or CI, so the expensive ones stay
+# on the global clock. Granularity is POLL_TICK.
+_QUICK_LAST = {}
+
+def _quick_due() -> list:
+    due = []
+    for c in store.list_connectors():
+        if not c['Active']: continue
+        try: secs = int(json.loads(c.get('ConfigJson') or '{}').get('poll_seconds') or 0)
+        except (TypeError, ValueError): secs = 0
+        if secs > 0 and time.time() - _QUICK_LAST.get(c['Type'], 0) >= secs:
+            due.append(c['Type'])
+    return due
+
+def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None):
     # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
     # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
     # rewriting 'running', and the "catching up" banner never ended.
     if not _POLL_BUSY.acquire(blocking=False):
         logger.info('poll already running - skipped'); return
-    _LAST_POLL[0] = time.time()      # a manual Sync now resets the clock too, so the timer
+    if only is None:
+        _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
                                      # does not fire again moments later over the same watermarks
+    else:
+        for t in only: _QUICK_LAST[t] = time.time()
     store.set_setting('ingest_status', json.dumps(
         {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
     try:
@@ -1510,13 +1554,14 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
         from . import ingest as ingest_mod
         with ingest_mod.deferred():
-            poll_channels(store, backfill_days, progress=_say)
+            poll_channels(store, backfill_days, progress=_say, **({'only': only} if only is not None else {}))
         def _left(n):
             store.set_setting('ingest_status', json.dumps(
                 {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
                  'what': f'{what} · triaging' + (f' · {n} left' if n else '')}), 'system')
         try: ingest_mod.drain(store, _llm(), progress=_left)
         except Exception as e: logger.warning(f'deferred triage drain failed: {e}')
+        if only is not None: return            # a quick pass reads its channels and stops
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         try:

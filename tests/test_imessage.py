@@ -353,3 +353,128 @@ class SendTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OnboardingTests(Base):
+    """PR 1b: the structured half of a setup failure - stable codes, the right pane, the host
+    macOS will list - and the two fixed-URL Settings openers, on every OS."""
+    def test_no_access_carries_code_pane_and_host(self):
+        with mock.patch.object(imessage, 'connect', side_effect=sqlite3.OperationalError('unable to open database file')), \
+             mock.patch.dict(os.environ, {'__CFBundleIdentifier': 'com.apple.Terminal'}):
+            with self.assertRaises(imessage.SetupError) as ctx: imessage.test(self.s, self.conn())
+        s = ctx.exception.setup
+        self.assertEqual((s['code'], s['pane'], s['host_name'], s['restart_may_be_required']),
+                         ('full_disk_access_required', 'full_disk_access', 'Terminal', True))
+        self.assertIsNone(s['host_path'])                         # an app host: no path to drag in
+        self.assertIn('Full Disk Access', s['breadcrumb'])
+
+    def test_bare_python_host_carries_its_path(self):
+        with mock.patch.object(imessage, 'connect', side_effect=sqlite3.OperationalError('unable to open database file')), \
+             mock.patch.dict(os.environ, {'__CFBundleIdentifier': ''}):
+            with self.assertRaises(imessage.SetupError) as ctx: imessage.test(self.s, self.conn())
+        self.assertEqual(ctx.exception.setup['host_path'], os.path.realpath(sys.executable))
+
+    def test_every_setup_failure_has_a_stable_code(self):
+        from taskuary.channels import test_connector
+        cid = self.conn()['ConnectorId']
+        with mock.patch.object(imessage, 'platform_support', return_value={'platform': 'linux', 'support': 'unavailable', 'product_version': None}):
+            self.assertEqual(test_connector(self.s, cid)['setup']['code'], 'macos_required')
+        with mock.patch.object(imessage, 'platform_support', return_value={**DARWIN, 'product_version': '11.6', 'major': 11, 'support': 'unsupported'}):
+            self.assertEqual(test_connector(self.s, cid)['setup']['code'], 'unsupported_macos_version')
+        with mock.patch.object(imessage, 'connect', side_effect=sqlite3.OperationalError('database is locked')):
+            self.assertEqual(test_connector(self.s, cid)['setup']['code'], 'messages_database_busy')
+        self.s.set_connector_config(cid, {'db_path': os.path.join(self.tmp, 'nope.db')})
+        self.assertEqual(test_connector(self.s, cid)['setup']['code'], 'messages_database_missing')
+        # the plain contract every other card uses is untouched
+        out = test_connector(self.s, cid)
+        self.assertEqual(set(out), {'ok', 'ms', 'detail', 'setup'}); self.assertFalse(out['ok'])
+        self.s.set_connector_config(cid, {'db_path': self.fx.path})
+        self.assertNotIn('setup', test_connector(self.s, cid))     # success: no setup half
+
+    def test_settings_urls_by_version_and_only_known_panes(self):
+        self.assertIn('PrivacySecurity.extension?Privacy_AllFiles', imessage.settings_url('full_disk_access'))
+        with mock.patch.object(imessage, 'platform_support', return_value={**DARWIN, 'major': 12}):
+            self.assertIn('preference.security?Privacy_AllFiles', imessage.settings_url('full_disk_access'))
+            self.assertIn('Privacy_Automation', imessage.settings_url('automation'))
+        with self.assertRaises(ValueError): imessage.settings_url('anything_else')
+
+    def test_open_settings_is_open_plus_a_fixed_url(self):
+        with mock.patch.object(sys, 'platform', 'darwin'), mock.patch.object(subprocess, 'run') as run:
+            r = imessage.open_settings('automation')
+        self.assertEqual(run.call_args[0][0], ['open', imessage.SETTINGS_URLS[('automation', 'modern')]])
+        self.assertNotIn('shell', run.call_args[1]); self.assertTrue(r['ok'])
+        with mock.patch.object(sys, 'platform', 'linux'):
+            with self.assertRaises(imessage.SetupError): imessage.open_settings('automation')
+
+    def test_automation_probe_sends_nothing_and_maps_denial(self):
+        with mock.patch.object(sys, 'platform', 'darwin'):
+            with mock.patch.object(subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='Messages\n', stderr='')) as run:
+                self.assertTrue(imessage.automation_probe()['ok'])
+            self.assertEqual(run.call_args[0][0], ['osascript', '-'])
+            self.assertEqual(run.call_args[1]['input'], imessage.PROBE_SCRIPT)
+            self.assertNotIn('send', imessage.PROBE_SCRIPT)
+            with mock.patch.object(subprocess, 'run', return_value=mock.Mock(returncode=1, stdout='', stderr='(-1743)')):
+                with self.assertRaises(imessage.SetupError) as ctx: imessage.automation_probe()
+            self.assertEqual((ctx.exception.setup['code'], ctx.exception.setup['pane']), ('automation_denied', 'automation'))
+
+    def test_a_denied_send_is_a_setup_error_too(self):
+        s = MemoryStore()
+        s.save_connector({'ConnectorId': s.get_connector_by_type('imessage')['ConnectorId'], 'Active': 1}, 'o')
+        with mock.patch.object(sys, 'platform', 'darwin'), \
+             mock.patch.object(subprocess, 'run', return_value=mock.Mock(returncode=1, stderr='(-1743)')):
+            with self.assertRaises(imessage.SetupError) as ctx: imessage.send_text(s, 'chat1', 'hi')
+        self.assertEqual(ctx.exception.setup['code'], 'automation_denied')
+
+
+class ApiTests(unittest.TestCase):
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        self.c = TestClient(server.app)
+
+    def test_open_settings_takes_an_enum_never_a_url(self):
+        self.assertEqual(self.c.post('/api/platform/macos/open-settings', json={'pane': 'x-apple.systempreferences:evil'}).status_code, 422)
+        with mock.patch.object(imessage, 'open_settings', return_value={'ok': True, 'pane': 'automation'}) as op:
+            self.assertTrue(self.c.post('/api/platform/macos/open-settings', json={'pane': 'automation'}).json()['ok'])
+        op.assert_called_once_with('automation')
+        with mock.patch.object(sys, 'platform', 'linux'):
+            r = self.c.post('/api/platform/macos/open-settings', json={'pane': 'automation'}).json()
+        self.assertEqual((r['ok'], r['setup']['code']), (False, 'macos_required'))
+
+    def test_probe_endpoint(self):
+        self.assertEqual(self.c.post('/api/platform/macos/probe', json={'what': 'send_a_message'}).status_code, 422)
+        with mock.patch.object(imessage, 'automation_probe', side_effect=imessage.SetupError('automation_denied', 'no', 'automation')):
+            r = self.c.post('/api/platform/macos/probe', json={'what': 'messages_automation'}).json()
+        self.assertEqual((r['ok'], r['setup']['pane']), (False, 'automation'))
+
+
+class QuickPollTests(unittest.TestCase):
+    """poll_seconds on a connector's config: that one is read on its own faster clock, the
+    rest stay on poll_minutes."""
+    def test_only_filters_poll_channels(self):
+        from taskuary import channels
+        s = MemoryStore()
+        for t in ('imessage', 'telegram'):
+            s.save_connector({'ConnectorId': s.get_connector_by_type(t)['ConnectorId'], 'Active': 1, 'Secret': 'x'}, 'o')
+        seen = []
+        with mock.patch.object(imessage, 'poll', side_effect=lambda *a, **k: seen.append('imessage') or 0), \
+             mock.patch('taskuary.messengers.poll_telegram', side_effect=lambda *a, **k: seen.append('telegram') or 0):
+            channels.poll_channels(s, only=['imessage'])
+            self.assertEqual(seen, ['imessage'])
+            channels.poll_channels(s)
+        self.assertEqual(sorted(seen), ['imessage', 'imessage', 'telegram'])
+
+    def test_quick_due_reads_poll_seconds_and_spaces_itself(self):
+        from taskuary import server
+        cid = server.store.get_connector_by_type('imessage')['ConnectorId']
+        server.store.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': json.dumps({'poll_seconds': 60})}, 'o')
+        try:
+            server._QUICK_LAST.clear()
+            self.assertIn('imessage', server._quick_due())
+            server._QUICK_LAST['imessage'] = __import__('time').time()
+            self.assertNotIn('imessage', server._quick_due())
+            server.store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'poll_seconds': 'lots'})}, 'o')
+            server._QUICK_LAST.clear()
+            self.assertNotIn('imessage', server._quick_due())     # garbage = no fast clock
+        finally:
+            server.store.save_connector({'ConnectorId': cid, 'Active': 0, 'ConfigJson': '{}'}, 'o')

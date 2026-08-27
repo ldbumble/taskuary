@@ -32,6 +32,7 @@ somewhere else on your machine, edit the `executablePath` at the top of the scri
 | path | what lives there |
 |------|------------------|
 | `taskuary/store.py` | SQLite store — schema, seeds, one dict-shaped contract (MemoryStore for tests) |
+| `taskuary/testing.py` | picture factory for regression tests — named Timeline/Board states, `inbound()` for ingest |
 | `taskuary/ingest.py` / `triage.py` / `routing.py` / `policy.py` | the funnel: dedupe → policy → route → AI triage |
 | `taskuary/agents.py` / `coder.py` | CLI agents: live-streamed runs, diffs, the coder report contract |
 | `taskuary/channels.py` | Outlook / Teams / Slack / GitHub connectors + live Test probes |
@@ -66,6 +67,13 @@ Reports wizard, scheduling, AI summaries, and the Timeline all work automaticall
 
 - **Tests must pass offline.** `python -m pytest -q` uses MemoryStore and mocks — never
   real credentials or network. New behavior needs a test.
+- **Timeline / Board / Review chips get a named picture.** `taskuary.testing.Factory`
+  builds the graph the JOINs actually show (`pending_draft`, `running`, `filed_fyi`,
+  `old_done`, ...). Pin the chip in `tests/test_factory.py`; do not INSERT a bare task
+  row and hope the feed agrees. Ingest tests use `inbound()` (the dict
+  `ingest_message` accepts). Load a realistic db with
+  `python -m taskuary.testing desk` or `load 2000` against `TASKUARY_HOME`
+  (`docker compose --profile regression run --rm desk` does the same into `/data`).
 - **Match the code style you see** — dense, screen-fitting, comments say *why* not *how*.
   Don't run black/autopep8; there is no format check on purpose.
 - **`taskuary/web/` is generated** — never hand-edit it; rebuild from `website/` and

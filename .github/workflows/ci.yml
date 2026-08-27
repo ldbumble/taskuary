@@ -25,6 +25,25 @@ jobs:
         if: runner.os == 'Windows'
       - run: pytest -q
 
+  regression:
+    # Named pictures (pending_draft, running, filed_fyi, ...) are the Timeline/Board
+    # JOIN contract. pytest -q already runs them on the matrix; this job also proves
+    # the CLI seeds a real home and the load mix is more than one kind of row.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - run: pip install -e .[dev]
+      - name: Picture contract
+        run: pytest tests/test_factory.py -q
+      - name: Desk and load CLI
+        env:
+          TASKUARY_HOME: ${{ runner.temp }}/taskuary-reg
+        run: |
+          python -m taskuary.testing desk
+          python -m taskuary.testing load 32
+
   build-web:
     # the built UI is committed into taskuary/web; this proves the source still builds,
     # and the node:test suite covers the view logic that has no Python behind it
@@ -42,7 +61,8 @@ jobs:
 
   docker:
     # proves the image builds, serves the UI, persists across restart, and the
-    # token gate still works when TASKUARY_TOKEN is set
+    # token gate still works when TASKUARY_TOKEN is set. The regression desk is
+    # seeded into /data first so /api/feed is a real Timeline, not an empty one.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -50,6 +70,7 @@ jobs:
       - name: Smoke the container
         run: |
           set -euo pipefail
+          docker compose --profile regression run --rm desk
           docker compose up -d
           for i in $(seq 1 40); do
             if curl -sf http://127.0.0.1:7787/api/health | grep -q '"ok": *true'; then break; fi
@@ -61,6 +82,13 @@ jobs:
           test -n "$js"
           curl -sf "http://127.0.0.1:7787/assets/$js" -o /tmp/taskuary-asset.js
           test -s /tmp/taskuary-asset.js
+          python3 - <<'PY'
+          import json, urllib.request
+          data = json.load(urllib.request.urlopen('http://127.0.0.1:7787/api/feed'))['data']
+          assert data, 'desk left the Timeline empty'
+          assert any(r.get('ReviewStatus') == 'pending' for r in data), 'pending_draft missing from the feed'
+          print(len(data), 'feed rows after desk')
+          PY
           tid=$(curl -sf -X POST http://127.0.0.1:7787/api/tasks \
             -H 'content-type: application/json' -d '{"Title":"docker smoke"}' \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['taskId'])")

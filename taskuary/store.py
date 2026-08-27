@@ -170,6 +170,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'owner_name': '', 'owner_email': '',
                     # what gets pushed to notify-role channels: off | needs_me | all
                     'notify_level': 'needs_me',
+                    # the agent raised its hand (a session parked at its prompt, or asked a question):
+                    # a sound in the app and the browser's own desktop notification - each its own switch
+                    'hand_sound': 'chime', 'hand_desktop': '1',
                     # which CLI agent works tasks when nothing names one - pickers list it first
                     'default_agent': 'coder',
                     # may agents open GitHub issues/tracker items for the work itself? Off by

@@ -127,5 +127,22 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.get('/api/tasks').json()['data'][0]['Waiting'], 0)
             self.assertEqual(c.get('/api/tasks/9999/waitroom').status_code, 404)
 
+    def test_live_runs_say_when_a_parked_agent_is_asking(self):
+        """The hand-raise notification reads this: a session quiet past IDLE_WAITING whose last
+        lines are a question is 'asking'; one still printing is neither."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); tid = task(s)
+        asking = FakeTerm(tid, idle=terminal.IDLE_WAITING + 3, tail=['Which repo should I use?'])
+        asking.cwd, asking.agent, asking.label, asking.started = 'x', 'coder', 'coder', ''
+        def info(tail=0): return {'sid': 'a', 'taskId': tid, 'alive': True, 'idle': asking._idle, 'files': [], 'agent': 'coder', 'label': 'coder',
+                                  'started': '', 'tail': asking.tail(tail)}
+        asking.info = info
+        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {'a': asking}, clear=True):
+            rows = TestClient(server.app).get('/api/runs/live').json()['data']
+            self.assertEqual((rows[0]['asking'], rows[0]['Title']), (True, 'PTO import'))
+            asking._idle = 2
+            self.assertFalse(TestClient(server.app).get('/api/runs/live').json()['data'][0]['asking'])
+
 
 if __name__ == '__main__': unittest.main()

@@ -8,6 +8,8 @@ import {
   IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import { SOUNDS, playSound } from "./handraise.js";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SearchIcon from "@mui/icons-material/Search";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
@@ -99,6 +101,11 @@ const KNOB_META = {
     desc: "Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.",
     help: "Give a chat connector the Notifications role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting in Review'. everything = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output." },
 
+  hand_sound: { group: "Notifications", label: "Sound when an agent raises its hand", type: "sound",
+    desc: "A session that stops at its prompt, or asks you a question, plays this - from any tab. Off silences it.",
+    help: "The moment worth a sound: the thing you delegated is now waiting on you. It fires once, on the transition from working to waiting, never while you already have the task open in front of you. Sounds are synthesised in the browser - nothing to download.\n\nThe desktop notification below is separate: it is the browser's own, so it reaches you when Taskuary is behind other windows, and the first time it asks for permission." },
+  hand_desktop: { group: "Notifications", label: "Desktop notification when an agent raises its hand", type: "switch",
+    desc: "The browser's notification, so it reaches you when Taskuary is behind other windows. Click it to jump to the task." },
   phone_approvals: { group: "Notifications", label: "Approve from your phone", type: "switch",
     desc: "Reply to a ping in the notify chat to decide the review — approve, reject, or type the reply yourself.",
     help: "On: every ping about a pending reply carries the DRAFT and an [rvN] tag. Reply in that same chat: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft — exactly like editing in Review. A confirmation comes back into the chat, including when a send fails (the review returns to the queue wearing the error).\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Verdicts typed in the notify chat are intercepted before triage: they never become work, and the chat needs no source row flipped on.\n\nOff (default): pings stay read-only." },
@@ -242,6 +249,19 @@ function SettingsPages({ page, setPage, q, setQ }) {
               <ChannelIcon channel={ch} sx={{ fontSize: 12 }} />{ch}
             </Box>
           ))}
+        </Box>
+      );
+    }
+    if (m.type === "sound") {
+      return (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Select size="small" value={s.Value || "chime"} sx={{ width: 130, bgcolor: "#fff", fontSize: 12.5 }}
+            onChange={(e) => { saveSetting(s.Name, e.target.value); playSound(e.target.value); }}>
+            {SOUNDS.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>{o}</MenuItem>)}
+          </Select>
+          <IconButton size="small" title="Preview" disabled={(s.Value || "chime") === "off"} onClick={() => playSound(s.Value || "chime")}>
+            <PlayArrowIcon sx={{ fontSize: 18 }} />
+          </IconButton>
         </Box>
       );
     }

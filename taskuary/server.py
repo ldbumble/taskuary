@@ -789,8 +789,12 @@ def live_runs(lines: int = 3):
     # whether the agent is thinking or parked at a question waiting for the owner
     for t in hub_term.live_sessions(tail=max(1, min(lines, 10))):
         if t.get('taskId'):
+            # `asking` = the last lines look like a question for the owner (waitroom.looks_like_question):
+            # the hand-raise notification says "asked you something" instead of "stopped"
             out.append({'RunId': None, 'TaskId': t['taskId'], 'AgentName': t['agent'] or t['label'],
                         'kind': 'session', 'StartedAt': t['started'], 'idle': t['idle'],
+                        'asking': t['idle'] >= hub_term.IDLE_WAITING and waitroom.looks_like_question(t.get('tail') or []),
+                        'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
                         'files': t.get('files') or [], 'tail': t.get('tail') or []})
     return {'data': out}
 

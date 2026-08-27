@@ -315,11 +315,16 @@ def normalize_row(row) -> dict | None:
         else: return None
     handle = r.get('sender_handle') or ''
     title = (r.get('display_name') or '').strip()
+    group = bool(title) or (r.get('style') == 43)
+    # iMessage / SMS / RCS - the message's own transport first, the chat's as a fallback
+    service = (r.get('service') or r.get('service_name') or '').strip() or 'Messages'
+    # The Timeline heads a chat row "<sender> in <source>". A named group is its name; an
+    # unnamed group would otherwise be "chat482913..." - the transport says more; and a 1:1 chat
+    # is the transport too, so it does not read "<number> in <number>".
     return {'rowid': r['rowid'], 'message_guid': r['message_guid'], 'chat_guid': r['chat_guid'],
-            'text': text, 'is_from_me': bool(r.get('is_from_me')), 'handle': handle,
-            'group': bool(title) or (r.get('style') == 43),
-            'chat_title': title or r.get('chat_identifier') or handle or 'chat',
-            'sent_at': apple_date(r.get('date')), 'service': r.get('service')}
+            'text': text, 'is_from_me': bool(r.get('is_from_me')), 'handle': handle, 'group': group,
+            'chat_title': title or (f'Group {service}' if group else service),
+            'sent_at': apple_date(r.get('date')), 'service': service}
 
 
 def initial_cursor(cx, lookback_days) -> int:
@@ -395,7 +400,7 @@ def _ingest(store, m, want, llm, file_only, ingest_message, ingest_own_message) 
         'external_id': f"imessage:{m['message_guid']}", 'channel': 'imessage',
         'subject': None, 'body': m['text'], 'from_name': m['handle'] or 'someone',
         'from_email': m['handle'] or None, 'conversation_id': conv, 'sent_at': m['sent_at'],
-        'source_name': m['chat_title'] if m['group'] else (m['handle'] or 'Messages')})
+        'source_name': m['chat_title']})
     return int(r['status'] != 'duplicate')
 
 

@@ -153,6 +153,23 @@ class PollTests(Base):
         r = self.rows()[0]
         self.assertEqual((r['SourceName'], r['FromName']), ('Weekend plans', '+15550004'))
 
+    def test_unnamed_groups_and_one_to_one_chats_are_headed_by_the_transport(self):
+        self.poll()
+        self.fx.chat('chat999', '+15550003', '+15550004', style=43)           # a group nobody named
+        self.fx.msg('lunch?', chat='chat999', sender='+15550004')
+        self.fx.msg('yes', sender='+15550001')                                  # the 1:1 default chat
+        self.poll()
+        by = {r['FromName']: r['SourceName'] for r in self.rows()}
+        self.assertEqual(by['+15550004'], 'Group iMessage')    # not "chat999"
+        self.assertEqual(by['+15550001'], 'iMessage')          # not "+15550001 in +15550001"
+
+    def test_the_transport_is_the_message_service(self):
+        self.assertEqual(imessage.normalize_row({'rowid': 1, 'message_guid': 'g', 'chat_guid': 'c', 'text': 'hi',
+                                                 'service': 'SMS', 'style': 43})['chat_title'], 'Group SMS')
+        self.assertEqual(imessage.normalize_row({'rowid': 1, 'message_guid': 'g', 'chat_guid': 'c', 'text': 'hi',
+                                                 'service_name': 'RCS'})['chat_title'], 'RCS')
+        self.assertEqual(imessage.normalize_row({'rowid': 1, 'message_guid': 'g', 'chat_guid': 'c', 'text': 'hi'})['chat_title'], 'Messages')
+
     def test_specific_sources_limit_which_chats_come_in(self):
         self.poll()
         self.fx.chat('iMessage;-;+15550009', '+15550009')

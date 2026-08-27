@@ -1406,7 +1406,8 @@ const InboundStep = ({ conn, m, mine, reload }) => {
         <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
       ))}
-      {on && <BulkRow conn={conn} reload={reload} />}
+      {/* GitHub's inbound is decided per repo below, so its bulk switch shows regardless */}
+      {(on || gh) && <BulkRow conn={conn} reload={reload} />}
       {/* 2 — github only: what each repo's items do, overriding the switch per repo */}
       {gh && (
         <Box sx={{ mt: 2 }}>

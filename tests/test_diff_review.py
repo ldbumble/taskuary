@@ -237,3 +237,40 @@ class TaskFootprintTests(unittest.TestCase):
         self.assertEqual(r['files'], [])
         self.assertIn('changed no files', r['note']); self.assertIn('1 changed file', r['note'])
         self.assertEqual(r['checkout_files'], 1)
+
+
+class PullRequestTaskTests(unittest.TestCase):
+    """A task that IS a pull request reviews the PR's own diff - the contributor's change - not
+    the agent's checkout."""
+    def _pr_task(self, s):
+        tid = s.create_task({'Title': 'ldbumble/taskuary#28 Speed up the Timeline', 'Kind': 'coding', 'Status': 'open', 'Source': 'github'}, 't')
+        s.add_message({'TaskId': tid, 'ExternalId': 'gh:ldbumble/taskuary#28', 'Channel': 'github', 'Subject': 'ldbumble/taskuary#28 Speed up',
+                       'BodyText': '[pull request by tiwariayush - association: CONTRIBUTOR]\n## Summary\n- WAL', 'Status': 'routed'})
+        return tid
+
+    def test_the_pr_is_recognised_from_its_first_message(self):
+        s = MemoryStore(); tid = self._pr_task(s)
+        self.assertEqual(proof.pr_of(s, tid), ('ldbumble/taskuary', 28))
+        other = s.create_task({'Title': 'x', 'Kind': 'coding'}, 't')
+        s.add_message({'TaskId': other, 'ExternalId': 'gh:ldbumble/taskuary#29', 'Channel': 'github', 'BodyText': '[issue by me - association: OWNER]\nbug', 'Status': 'routed'})
+        self.assertIsNone(proof.pr_of(s, other))                        # an issue is not a PR
+
+    def test_review_shows_the_prs_diff_with_the_checkout_one_click_away(self):
+        from unittest import mock
+        s = MemoryStore(); tid = self._pr_task(s)
+        gh = s.get_connector_by_type('github'); s.save_connector({'ConnectorId': gh['ConnectorId'], 'Secret': 'tok', 'Active': 1}, 't')
+        diff = 'diff --git a/taskuary/store.py b/taskuary/store.py\n--- a/taskuary/store.py\n+++ b/taskuary/store.py\n@@ -1 +1,2 @@\n line\n+PRAGMA journal_mode=WAL\n'
+        with mock.patch('taskuary.github.pr_diff', return_value=diff) as pd, mock.patch('taskuary.terminal.for_task', return_value=None):
+            r = proof.review(s, tid)
+        pd.assert_called_once_with('tok', 'ldbumble/taskuary', 28)
+        self.assertEqual((r['scope'], r['pr']['number'], [f['path'] for f in r['files']], r['added']), ('pr', 28, ['taskuary/store.py'], 1))
+        with mock.patch('taskuary.terminal.for_task', return_value=None):
+            back = proof.review(s, tid, 'checkout')                    # the agent's side, on request
+        self.assertNotEqual(back['scope'], 'pr'); self.assertEqual(back['pr']['number'], 28)
+
+    def test_a_failed_fetch_falls_back_to_the_checkout_and_says_so(self):
+        from unittest import mock
+        s = MemoryStore(); tid = self._pr_task(s)
+        with mock.patch('taskuary.terminal.for_task', return_value=None):
+            r = proof.review(s, tid)                                  # no token on the card
+        self.assertIn('Could not fetch the pull request diff', r['why'])

@@ -42,8 +42,17 @@ def detect(store=None) -> list:
         if not found and k['name'] not in have: continue
         out.append({**k, 'installed': bool(found), 'path': found or '',
                     'configured': k['name'] in have})
+    import json, os
+    labels = {k['cmd']: k['label'] for k in KNOWN}
     for name, row in have.items():
-        if not any(o['name'] == name for o in out):
-            out.append({'name': name, 'cmd': '', 'label': name, 'args': [],
-                        'installed': True, 'path': '', 'configured': True})
+        if any(o['name'] == name for o in out): continue
+        try: prof = json.loads(row.get('Config') or '{}')
+        except ValueError: prof = {}
+        cmd = str(prof.get('cmd') or '')
+        base = os.path.basename(cmd).lower().rsplit('.', 1)[0] if cmd else ''
+        found = shutil.which(cmd) if cmd else None
+        # the row is about the CLI, not the profile's nickname: 'coder' running claude is Claude
+        # Code - and "already configured" said nothing about whether claude is even on this machine
+        out.append({'name': name, 'cmd': cmd, 'label': labels.get(base) or cmd or name, 'profile': name,
+                    'args': list(prof.get('args') or []), 'installed': bool(found), 'path': found or '', 'configured': True})
     return out

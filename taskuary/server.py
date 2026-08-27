@@ -843,7 +843,7 @@ def task_diff(tid: int, scope: str = 'task'):
     `git log` - never `add`, never `stash`."""
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     from . import proof
-    return proof.review(store, tid, 'checkout' if scope == 'checkout' else 'task')
+    return proof.review(store, tid, scope if scope in ('checkout', 'pr') else 'task')
 
 @app.post('/api/tasks/{tid}/land')
 def task_land(tid: int, flow: str = None):

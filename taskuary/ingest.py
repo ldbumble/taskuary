@@ -151,7 +151,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     new_rid = None                       # set when a fresh reply task opens a review below
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
-    mine = owner_addresses(store)        # who "you" is on the To/Cc lines - every mailbox, not just this one
+    mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
+    me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
     def _notes_note():
         # a cap that goes unmentioned reads as "everything you told me was applied". It was
         # not, and only the owner can judge whether the notes that missed out mattered - so
@@ -230,7 +231,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
                                          learned=injectable(store.doc('learned') or ''),
                                          notes=notes, notes_left=notes_left, images=msg.get('images'),
-                                         system=store.doc('triage'), mine=mine)
+                                         system=store.doc('triage'), mine=me)
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic
                     mid = _land(store, msg, None, 'filed')
@@ -451,6 +452,15 @@ def decided_intent(msg: dict, mine=()) -> dict | None:
         return {'intent': 'task', 'why': f'{what} on your own repository is work by construction - no classifier needed'}
     h = heuristic_intent(msg, mine)
     return h if h['intent'] == 'fyi' else None
+
+
+def own_addresses(store) -> set:
+    """The owner's OWN address(es) - what "addressed to you" is measured against. Settings ->
+    owner_email when it is set; otherwise every polled mailbox, which is all we know. Distinct
+    from owner_addresses: a shared log mailbox the funnel polls is a place the owner READS, not a
+    name the owner IS, and mail sent there is not mail sent to them."""
+    own = (store.get_settings().get('owner_email') or '').strip().lower()
+    return {own} if own else owner_addresses(store)
 
 
 def owner_addresses(store) -> set:

@@ -28,7 +28,7 @@ INTENT_SYSTEM = (
     'Chat is not mail (no subject, no recipient lines) but an ask in chat is still an ask - a task for the agent. '
     'reply_only is for what a sentence settles with nothing to do behind it; fyi is thanks, status, and threads '
     'between other people where the owner is neither asked nor named.\n'
-    'addressed_to_you and recipients are SIGNALS to weigh, never rules to obey. "to" = the mail was aimed at the owner; "cc" = they were copied, which OFTEN means somebody else owns the work; "not named" = it arrived through a group alias. But a cc can absolutely be theirs: one that names them, asks them something directly, or that only they can answer is their work, and being on the cc line counts for nothing against that. recipients counts everyone on the mail - a note to thirty people is more likely a broadcast than a job. Weigh these with everything else in the message; never decide on them alone. Both fields are absent on channels with no recipient lines.\n'
+    'addressed_to_you and recipients are SIGNALS to weigh, never rules to obey. "to" = the mail was aimed at the owner; "cc" = they were copied, which OFTEN means somebody else owns the work; "not named" = it arrived through a group alias or a shared mailbox the owner reads - their own address is not on it. But a cc can absolutely be theirs: one that names them, asks them something directly, or that only they can answer is their work, and being on the cc line counts for nothing against that. recipients counts everyone on the mail - a note to thirty people is more likely a broadcast than a job. Weigh these with everything else in the message; never decide on them alone. Both fields are absent on channels with no recipient lines.\n'
     'others_replied names people - other than you and the sender - who have already SENT a message on '
     'this thread, and last_on_thread is whoever spoke most recently. Somebody else answering is the '
     'strongest everyday sign that a request is not waiting on you: when a colleague has replied and the '
@@ -48,7 +48,12 @@ def addressed_to_you(msg: dict, mine=()) -> str:
     # shared or journal mailbox is still addressed to them when their own address is on the Cc
     # line - and comparing only the arrival mailbox called that 'not named', which is exactly
     # backwards for the case the whole signal exists to catch.
-    me = {a for a in ({(msg.get('source_name') or '').strip().lower()} | {str(a).lower() for a in mine}) if a}
+    # `mine` is the owner's OWN address(es) (ingest.own_addresses). When the caller knows them,
+    # the mailbox this copy arrived in is NOT added: a shared or journal mailbox Taskuary polls
+    # receives everybody's mail, and counting it as "me" made every message to it read as
+    # aimed at the owner (2026-08-27: a refund question to devteam-logs@ came out as 'to').
+    # With no `mine` at all, the arrival mailbox is the only "me" there is.
+    me = {str(a).lower() for a in mine if a} or {a for a in {(msg.get('source_name') or '').strip().lower()} if a}
     to = {str(a).lower() for a in (msg.get('to') or [])}
     cc = {str(a).lower() for a in (msg.get('cc') or [])}
     if not me or not (to or cc): return ''
@@ -165,8 +170,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # "judged likeness". No topic is named here: it counts the verdicts it was handed.
                 agree = _agreement(notes)
                 if agree: system += (f'\n\nSETTLED BY YOUR OWNER: all {agree[1]} past verdicts on this sender or topic say '
-                                     f'{agree[0]}. Follow them - the only exception is a message that asks the owner '
-                                     'something NEW and specific; a thread merely continuing is not that.')
+                                     f'{agree[0]}. Answer fyi. A question in the message does not reopen it: mail on a '
+                                     'settled topic always asks somebody something, and that somebody is whoever does '
+                                     'this work - not the owner. The ONLY exception is the owner being asked in person: '
+                                     'addressed_to_you is "to" (their own address) or their name is in the body, AND the '
+                                     'ask is one these verdicts do not cover. Without both, fyi - the owner reads the '
+                                     'timeline and will say so if a thread has become theirs.')
                 system += ('\n\nEVIDENCE - verdicts the owner gave on earlier mail that looks related '
                            '(pulled by sender and by topic; each names the sender and subject it was given on). '
                            'Judge how alike THIS message really is: the same sender asking the same kind of '

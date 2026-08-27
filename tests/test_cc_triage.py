@@ -31,6 +31,34 @@ class AddressingTests(unittest.TestCase):
         self.assertEqual(triage.addressed_to_you({'source_name': ME}), '')               # chat: no lines at all
         self.assertEqual(triage.addressed_to_you({'to': [ME]}), '')                      # no mailbox to compare
 
+    def test_a_shared_mailbox_the_owner_reads_is_not_the_owner(self):
+        # the 2026-08-27 refund case: mail To: devteam-logs@ (a polled log mailbox), cc a colleague,
+        # the owner nowhere on it - it came out 'to' and the model was told it was aimed at him
+        shared = {'source_name': 'devteam-logs@ours.com', 'to': ['devteam-logs@ours.com'], 'cc': ['colleague@theirs.com']}
+        self.assertEqual(triage.addressed_to_you(shared, mine={ME}), 'not named')
+        self.assertEqual(triage.addressed_to_you({**shared, 'cc': [ME]}, mine={ME}), 'cc')
+        self.assertEqual(triage.addressed_to_you(shared), 'to')                          # nobody told us who the owner is
+
+    def test_own_addresses_is_the_owner_not_every_polled_box(self):
+        from taskuary import ingest
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        for a in ('me@ours.com', 'devteam-logs@ours.com'):
+            s.save_source({'Channel': 'email', 'Address': a, 'Active': 1}, 't')
+        self.assertEqual(ingest.own_addresses(s), {'me@ours.com', 'devteam-logs@ours.com'})   # unknown owner: all we have
+        s.set_setting('owner_email', 'Me@ours.com', 't')
+        self.assertEqual(ingest.own_addresses(s), {'me@ours.com'})
+        self.assertEqual(ingest.owner_addresses(s), {'me@ours.com', 'devteam-logs@ours.com'})
+
+    def test_settled_verdicts_leave_no_question_shaped_exit(self):
+        seen = {}
+        def llm(sys_, usr_, **k): seen['sys'] = sys_; return '{"intent": "fyi", "why": "settled"}'
+        notes = ['2026-08-25: "resident refund request" - NOT OURS: other people\'s work', '2026-08-26: "resident refund request approved" - NOT OURS: other people\'s work']
+        triage.classify_intent({'from_email': 'r@ours.com', 'subject': 'Re: Resident Refund Request Approved - Doe', 'body': 'Can you advise when the check was mailed?'}, llm=llm, notes=notes)
+        self.assertIn('SETTLED BY YOUR OWNER: all 2 past verdicts', seen['sys'])
+        self.assertIn('Answer fyi', seen['sys']); self.assertIn('A question in the message does not reopen it', seen['sys'])
+        self.assertNotIn('NEW and specific', seen['sys'])
+
     def test_the_keyword_pass_never_decides_a_cc_by_itself(self):
         """It used to: a quiet cc was FILED as fyi by keyword, before any model saw it. But plenty
         of cc'd mail is genuinely yours - the sender put you in cc and addressed you in the body -

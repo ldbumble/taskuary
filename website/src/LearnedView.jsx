@@ -92,8 +92,13 @@ const Fan = ({ line, promoteAt }) => {
 export default function LearnedView({ onChanged }) {
   const [g, setG] = useState(null);
   const [err, setErr] = useState("");
-  const [open, setOpen] = useState(null);
+  const [open, setOpen] = useState(null);        // the line whose fan is showing
+  const [pinned, setPinned] = useState(null);    // click keeps it open when the pointer leaves
   const [looseOpen, setLooseOpen] = useState(false);
+  const hoverT = React.useRef(null);
+  const enter = (key) => { clearTimeout(hoverT.current); hoverT.current = setTimeout(() => setOpen(key), 140); };
+  const leave = () => { clearTimeout(hoverT.current); hoverT.current = setTimeout(() => setOpen(pinned), 220); };
+  const pin = (key) => { const next = pinned === key ? null : key; setPinned(next); setOpen(next || key); };
   const load = useCallback(async () => {
     try { setG((await api.get("/api/learned/graph")).data); } catch (e) { setErr(e?.response?.data?.detail || "Could not read LEARNED.md"); }
   }, []);
@@ -106,15 +111,17 @@ export default function LearnedView({ onChanged }) {
   const loose = g.loose_evidence || [];
 
   const Card = ({ l }) => {
-    const st = STATUS[l.status]; const isOpen = open === l.key;
+    const st = STATUS[l.status]; const isOpen = open === l.key; const isPinned = pinned === l.key;
     return (
-      <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: st.tint, border: `${isOpen ? 1.5 : 1}px solid ${isOpen ? st.color : st.bd}` }}>
-        <Box onClick={() => setOpen(isOpen ? null : l.key)} sx={{ cursor: "pointer" }}>
+      <Box onMouseEnter={() => enter(l.key)} onMouseLeave={leave}
+        sx={{ p: 1.25, borderRadius: 2, bgcolor: st.tint, border: `${isOpen ? 1.5 : 1}px solid ${isOpen ? st.color : st.bd}`,
+          boxShadow: isPinned ? "0 1px 4px rgba(30,50,38,.14)" : "none" }}>
+        <Box onClick={() => pin(l.key)} sx={{ cursor: "pointer" }} title={isPinned ? "Click to unpin" : "Click to keep this open"}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.4 }}>
             <Score s={l.score} color={st.color} />
             <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>seen {l.seen}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 700 }}>
-              {isOpen ? "▾" : "▸"} {l.evidence.length} verdict{l.evidence.length === 1 ? "" : "s"}
+              {isOpen ? "▾" : "▸"} {l.evidence.length} verdict{l.evidence.length === 1 ? "" : "s"}{isPinned ? " · pinned" : ""}
             </Typography>
             <Box sx={{ flex: 1 }} />
             {l.eligible && l.status === "hypothesis" && <Chip size="small" label="earned it" sx={{ height: 16, fontSize: 9.5, bgcolor: ROLES.handled.tint, color: ROLES.handled.ink }} />}
@@ -134,7 +141,7 @@ export default function LearnedView({ onChanged }) {
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, p: 2, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         <b style={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>WHAT DRIVES WHAT · </b>
-        every line shows how many of your verdicts fed it. Open one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock.
+        every line shows how many of your verdicts fed it. Point at one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock. Click to keep it open.
         {g.history_since ? "" : " History records from now; today's ledgers are reconstructed from the evidence dates."}
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 3, alignItems: "start" }}>

@@ -15,7 +15,88 @@ const S = ({ children, sx }) => (
   </svg>
 );
 
+// Monogram tiles for brands whose marks are wordmarks or too intricate at 20px: the brand's
+// own colour and initial, which is how their favicons read at this size anyway.
+const T = ({ p, bg, fg = "#fff", text, size = 11, weight = 800 }) => (
+  <S {...p}>
+    <rect x="2" y="2" width="20" height="20" rx="5" fill={bg} />
+    <text x="12" y="12" textAnchor="middle" dominantBaseline="central" fontSize={size} fontWeight={weight}
+      fontFamily="IBM Plex Sans, system-ui, sans-serif" fill={fg}>{text}</text>
+  </S>
+);
+
 export const LOGOS = {
+  outlook: (p) => (
+    <S {...p}>
+      <rect x="6" y="4" width="16" height="16" rx="2" fill="#0F6CBD" />
+      <path fill="#fff" d="M9 8.5h10v7a1 1 0 0 1-1 1h-8v-8zm1.2 1.2v5.6h7.6v-5.6l-3.8 2.6-3.8-2.6z" />
+      <rect x="2" y="7" width="10" height="10" rx="1.5" fill="#28A8EA" />
+      <ellipse cx="7" cy="12" rx="2.6" ry="3.1" fill="none" stroke="#fff" strokeWidth="1.6" />
+    </S>
+  ),
+  teams: (p) => (
+    <S {...p}>
+      <rect x="2" y="6" width="13" height="13" rx="2" fill="#5059C9" />
+      <path fill="#fff" d="M5.2 9.5h6.6v1.6H9.6v5.4H7.4v-5.4H5.2z" />
+      <circle cx="18.5" cy="8" r="2.4" fill="#7B83EB" />
+      <path fill="#7B83EB" d="M15.5 11.5h5.2a1.3 1.3 0 0 1 1.3 1.3v3.4a3 3 0 0 1-3 3h-.3a4.6 4.6 0 0 0 .2-1.4v-6.3z" />
+    </S>
+  ),
+  whatsapp: (p) => (
+    <S {...p}>
+      <circle cx="12" cy="12" r="10" fill="#25D366" />
+      <path fill="#fff" d="M6.6 17.6l.9-3.1a6.2 6.2 0 1 1 2.3 2.3l-3.2.8zm3.5-2.1c.6.3 1.2.5 1.9.5a4.5 4.5 0 1 0-4.5-4.5c0 .8.2 1.5.6 2.1l-.5 1.8 1.9-.5zm3.8-1.8c-.1-.1-.7-.4-.8-.4s-.2 0-.3.1l-.4.5c-.1.1-.2.1-.3 0a3.7 3.7 0 0 1-1.8-1.6c-.1-.2 0-.2.1-.3l.3-.4v-.3l-.4-.8c-.1-.2-.2-.2-.3-.2h-.3c-.1 0-.3 0-.4.2-.2.2-.6.6-.6 1.4s.6 1.6.7 1.7c.1.1 1.2 1.8 2.9 2.5.4.2.7.3 1 .3.4.1.7.1 1 0 .3 0 .9-.4 1-.8.1-.4.1-.7.1-.8 0-.1-.1-.1-.2-.2z" />
+    </S>
+  ),
+  gmail: (p) => (
+    <S {...p}>
+      <rect x="2" y="5" width="20" height="14" rx="1.5" fill="#fff" stroke="#e0dcd4" />
+      <path fill="#EA4335" d="M2 6.5v1.6l10 6.6 10-6.6V6.5L12 13z" />
+      <path fill="#4285F4" d="M2 8.1V19h4.2v-8.1z" />
+      <path fill="#34A853" d="M17.8 10.9V19H22V8.1z" />
+      <path fill="#FBBC04" d="M2 6.5 6.2 9.3V5.7z" /><path fill="#C5221F" d="M22 6.5 17.8 9.3V5.7z" />
+    </S>
+  ),
+  imap: (p) => (
+    <S {...p}>
+      <rect x="2" y="5" width="20" height="14" rx="2" fill="#6e685f" />
+      <path fill="none" stroke="#fff" strokeWidth="1.7" strokeLinejoin="round" d="M4 7.5l8 6 8-6" />
+    </S>
+  ),
+  clickup: (p) => (
+    <S {...p}>
+      <path fill="#7B68EE" d="M4 15.5l2.6-2c1.6 2 3.2 3 5.4 3s3.8-1 5.4-3l2.6 2c-2.2 2.9-4.9 4.4-8 4.4s-5.8-1.5-8-4.4z" />
+      <path fill="#FF3E9C" d="M12 4l6.6 5.7-2.1 2.4L12 8.3l-4.5 3.8-2.1-2.4z" />
+    </S>
+  ),
+  todoist: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#E44332" />
+      <path fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" d="M5.5 10.2l4.2 2.3 8.8-5.1M5.5 14.2l4.2 2.3 8.8-5.1" />
+    </S>
+  ),
+  netsuite: (p) => <T p={p} bg="#125580" text="NS" size={9.5} />,
+  quickbooks: (p) => <T p={p} bg="#2CA01C" text="qb" size={10.5} />,
+  sap: (p) => <T p={p} bg="#0FAAFF" text="SAP" size={8.5} />,
+  workday: (p) => <T p={p} bg="#F38B00" text="W" size={12} />,
+  adp: (p) => <T p={p} bg="#D0271D" text="ADP" size={8} />,
+  epic: (p) => <T p={p} bg="#B71C1C" text="E" size={12} />,
+  cerner: (p) => <T p={p} bg="#C74634" text="C" size={12} />,
+  pointclickcare: (p) => <T p={p} bg="#00A3E0" text="PCC" size={7.5} />,
+  gcp: (p) => <T p={p} bg="#4285F4" text="G" size={12} />,
+  kubernetes: (p) => <T p={p} bg="#326CE5" text="k8s" size={8.5} />,
+  grafana: (p) => <T p={p} bg="#F46800" text="G" size={12} />,
+  elastic: (p) => <T p={p} bg="#FEC514" fg="#262521" text="es" size={10.5} />,
+  perplexity: (p) => <T p={p} bg="#20808D" text="P" size={12} />,
+  serpapi: (p) => <T p={p} bg="#3F51B5" text="S" size={12} />,
+  browserbase: (p) => <T p={p} bg="#F45B22" text="bb" size={10.5} />,
+  sqlite: (p) => <T p={p} bg="#0F80CC" text="sql" size={8.5} />,
+  local_file: (p) => (
+    <S {...p}>
+      <path fill="#a09787" d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
+      <path fill="#e9e3d8" d="M14 2v5h5z" />
+    </S>
+  ),
   anthropic: (p) => (
     <S {...p}>
       <rect x="2" y="2" width="20" height="20" rx="5" fill="#D97757" />

@@ -249,7 +249,7 @@ class TestProbeTests(Base):
     def test_version_tiers(self):
         self.p.stop()
         with mock.patch.object(sys, 'platform', 'darwin'):
-            for ver, tier in (('13.6', 'supported'), ('26.5.2', 'supported'), ('27.0', 'experimental_future_version'),
+            for ver, tier in (('13.6', 'supported'), ('27.0', 'supported'), ('28.0', 'experimental_future_version'),
                               ('12.7', 'best_effort'), ('11.2', 'unsupported')):
                 with mock.patch('platform.mac_ver', return_value=(ver, ('', '', ''), '')):
                     self.assertEqual(imessage.platform_support()['support'], tier, ver)

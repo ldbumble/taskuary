@@ -27,7 +27,7 @@ POLL_LIMIT = 500                   # rows per page; the poll loops until caught 
 SEND_MAX = 4000                    # per message; longer replies are split at paragraphs
 SEND_TIMEOUT = 15
 MIN_SUPPORTED = 13                 # the maintained test matrix starts at Ventura
-MAX_KNOWN = 26                     # anything newer is "experimental" until a smoke test passes
+MAX_KNOWN = 27                     # 27.0 beta (26A5421a) smoke-tested 2026-08-27; newer is "experimental"
 MAX_BLOB = 512 * 1024              # attributedBody larger than this is not a text message
 
 # Baseline schema: absent = a database this connector does not understand. Everything else

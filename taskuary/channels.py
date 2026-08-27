@@ -388,19 +388,22 @@ def _mail_msgs(tok, upn, since, folder='inbox'):
     return r.json().get('value', [])
 
 
-def ingest_own_message(store, msg: dict, why: str) -> int:
+def ingest_own_message(store, msg: dict, why: str, own_account: bool = False) -> int:
     """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row
     and never becomes work: when the conversation already has a task it rides along INSIDE
     the chain (a 'context' message + a history entry, so the panel shows it was answered).
-    No matching chain -> nothing stored at all."""
+    No matching chain -> nothing stored at all.
+
+    `own_account` says the CONNECTOR vouches for the handle being the owner's signed-in account
+    (Teams: the Graph user matched `me`); then it is registered as a verified owner identity.
+    A mail reply is not that: the mailbox it left FROM may be shared, so it is only looked up."""
     if store.message_exists(msg['external_id']): return 0
     conv = msg.get('conversation_id')
     tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
     if not tid: return 0
-    # The mailbox a reply went out FROM is not proof of who sent it - a shared mailbox is everyone
-    # with access - so this only looks the handle up; connectors register owner identities at
-    # sign-in, where the account is actually verified.
-    ident = store.identity_for(msg.get('channel'), msg.get('from_email')) if msg.get('from_email') else None
+    ch, handle = msg.get('channel'), msg.get('from_email')
+    ident = (None if not handle else store.register_owner_identity(ch, handle, store.owner()['owner']) if own_account
+             else store.identity_for(ch, handle))
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
@@ -563,7 +566,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
                   'source_name': upn, 'images': images_for_triage(store, atts)}
         if user['id'] == me:                       # your own chat lines are context, never work
             n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
-                                    'your message in this chat - kept for context')
+                                    'your message in this chat - kept for context', own_account=True)
             continue
         out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'

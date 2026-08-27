@@ -134,6 +134,20 @@ class PeopleTests(unittest.TestCase):
         self.assertEqual(owner['Identities'], [])
         self.assertNotIn('shared@corp.example', s.get_doc('soul'))
 
+    def test_own_chat_line_from_the_signed_in_account_is_the_owner(self):
+        # Teams knows the line is from the Graph user it signed in as - that handle IS the owner's
+        from taskuary.channels import ingest_own_message
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Chat'}, 'test')
+        s.add_message({'TaskId': tid, 'ExternalId': 'a', 'Channel': 'teams', 'ConversationId': 'teams:c1',
+                       'FromEmail': 'jane@corp.example', 'Status': 'routed'})
+        ingest_own_message(s, {'external_id': 'teams:c1:2', 'channel': 'teams', 'conversation_id': 'teams:c1',
+                               'from_name': 'You', 'from_email': 'uri@corp.example', 'body': 'on it'},
+                           'your message in this chat', own_account=True)
+        owner = next(p for p in s.list_people() if p['IsOwner'])
+        self.assertEqual([(i['Channel'], i['Handle'], i['Verified']) for i in owner['Identities']], [('teams', 'uri@corp.example', 1)])
+        self.assertIn('(uri@corp.example)', s.get_doc('soul').split('<!-- identities:start -->')[1])
+
     def test_polled_mailbox_is_still_me_on_a_thread(self):
         # the person link ADDS to owner_addresses, it does not replace it (the shared-mailbox case)
         from taskuary.ingest import others_on_thread

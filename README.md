@@ -209,13 +209,17 @@ posture says which kind of work it is rather than making you read a chip. Drag t
 room, scroll to zoom, click a desk to fly to it; raise the limit in Settings and the floor
 widens rather than crowding.
 
-## Bulk processing — rank it, don't clear it
+## Processing — one by one, or ranked together
 
-A worker clears the mailbox: every task is worked in arrival order until the queue is empty.
-An executive is cc'd on most of it, and what matters is how much each item deserves attention
-*relative to the others*. Each connector has a **Bulk processing** switch (Connectors → the
-card → Inbound): **clear** is today's behaviour; **rank** puts that connector's coding tasks
-into one value-ordered queue instead of a race for a session.
+Every inbound connector card has a **Processing** step (Connectors → the card → Inbound) with
+two modes, and it decides how the tasks that connection creates reach the agents:
+
+- **One by one** (default) — every task goes to an agent as it arrives, in arrival order. When
+  all agent slots are busy the next ones queue, first in first out, until the inbox is clear.
+  A worker's mode: the inbox *is* the job.
+- **Ranked together** — tasks from that connection join one queue ordered by *value*, and only
+  the top *K* are worked at once. An executive's mode: cc'd on most of it, a few things matter,
+  and what matters is relative.
 
 - **The funnel.** The top *K* are worked (*K* = **Agents at once**, the same number the floor
   shows). When one finishes, the most valuable waiting task slides in. A new arrival re-ranks

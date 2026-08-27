@@ -396,8 +396,8 @@ const connDot = (c) => ({ planned: "#cfc9bf", failing: "#6b2733", off: "#cfc9bf"
 // border on a faintly tinted ground, a failing one the alert border, an unconfigured one
 // stays paper - so a wall of nine cards reads at a glance which three are actually working
 const CARD_STATE = {
-  on:      { border: "#55697a", bg: "#f6f7f9", width: 1.5 },
-  failing: { border: "#8a3646", bg: "#faf3f4", width: 1.5 },
+  on:      { border: "#6f8a6e", bg: PANEL, width: 1.5 },     // sage: the app's "handled / working" colour
+  failing: { border: "#8a3646", bg: PANEL, width: 1.5 },     // oxblood: the one loud colour, "this is on you"
   off:     { border: BORDER, bg: PANEL, width: 1 },
   planned: { border: BORDER, bg: PANEL, width: 1 },
 };
@@ -1352,34 +1352,52 @@ const BULK_HELP = (
   </Box>
 );
 
-const BulkRow = ({ conn, reload }) => {
+const MODES = [
+  ["clear", "One by one", "Every task from here goes to an agent as it arrives, in arrival order. When all agent slots are busy, the next ones queue - first in, first out - until the inbox is clear. Right when the inbox IS the job."],
+  ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc'd, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
+];
+
+const ProcessingStep = ({ conn, reload, n }) => {
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [anchor, setAnchor] = useState(null);
   useEffect(() => { setCfg(parse(conn.ConfigJson)); }, [conn.ConfigJson]);
+  const mode = cfg.bulk === "rank" ? "rank" : "clear";
   const set = async (v) => {
     const next = { ...cfg, bulk: v }; setCfg(next);
     await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) }); reload();
   };
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 1, borderBottom: `1px solid ${BORDER}` }}>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>Bulk processing</Typography>
-        <Typography variant="caption" sx={{ color: FAINT }}>
-          {cfg.bulk === "rank" ? "rank — the top K by value are worked, the rest wait in order"
-            : "clear — worked in arrival order until the queue is empty"}
+    <Box sx={{ mt: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
+          {n} · PROCESSING — ONE BY ONE, OR RANKED TOGETHER
         </Typography>
+        <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)} title="How the two modes work" sx={{ p: 0.25 }}>
+          <InfoOutlinedIcon sx={{ fontSize: 14, color: FAINT }} />
+        </IconButton>
+        <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "left" }} transformOrigin={{ vertical: "top", horizontal: "left" }}>
+          {BULK_HELP}
+        </Popover>
       </Box>
-      <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)} title="How bulk processing works">
-        <InfoOutlinedIcon sx={{ fontSize: 16 }} />
-      </IconButton>
-      <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}>
-        {BULK_HELP}
-      </Popover>
-      <Select size="small" value={cfg.bulk || "clear"} onChange={(e) => set(e.target.value)}
-        sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}>
-        {["clear", "rank"].map((v) => <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>{v}</MenuItem>)}
-      </Select>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.75 }}>
+        How tasks from this connection reach the agents. Applies to every task it creates; the Timeline's funnel bar and the Board's Queued lane follow it.
+      </Typography>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
+        {MODES.map(([v, title, desc]) => (
+          <Box key={v} onClick={() => set(v)}
+            sx={{ p: 1.25, borderRadius: 2, cursor: "pointer", bgcolor: PANEL,
+              border: `${mode === v ? 1.5 : 1}px solid ${mode === v ? "#6f8a6e" : BORDER}`,
+              "&:hover": { borderColor: "#6f8a6e" } }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Radio size="small" checked={mode === v} sx={{ p: 0 }} />
+              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>{title}</Typography>
+              {v === "clear" && <Typography variant="caption" sx={{ color: FAINT }}>default</Typography>}
+            </Box>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5, lineHeight: 1.5 }}>{desc}</Typography>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 };
@@ -1406,8 +1424,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
         <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
       ))}
-      {/* GitHub's inbound is decided per repo below, so its bulk switch shows regardless */}
-      {(on || gh) && <BulkRow conn={conn} reload={reload} />}
+
       {/* 2 — github only: what each repo's items do, overriding the switch per repo */}
       {gh && (
         <Box sx={{ mt: 2 }}>
@@ -1454,11 +1471,13 @@ const InboundStep = ({ conn, m, mine, reload }) => {
           })}
         </Box>
       )}
-      {/* 3 — the standing prompt, right where inbound is decided */}
+      {/* processing: one by one, or ranked together - every inbound card, whether on or not */}
+      <ProcessingStep conn={conn} reload={reload} n={gh ? "3" : "2"} />
+      {/* the standing prompt, right where inbound is decided */}
       {prompts.length > 0 && (
         <Box sx={{ mt: 2, opacity: on ? 1 : 0.5 }}>
           <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
-            {gh ? "3" : "2"} · WHAT THE AGENT IS TOLD ABOUT WORK FROM HERE
+            {gh ? "4" : "3"} · WHAT THE AGENT IS TOLD ABOUT WORK FROM HERE
             {on ? "" : " — turn inbound on above first"}
           </Typography>
           {prompts.map(([key, label, hint]) => (

@@ -159,6 +159,9 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_conversation ON message(ConversationId, SentAt)',
     'CREATE INDEX IF NOT EXISTS idx_message_task ON message(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_message_status ON message(Status)',
+    'CREATE INDEX IF NOT EXISTS idx_message_sent ON message(SentAt, MessageId)',
+    'CREATE INDEX IF NOT EXISTS idx_message_created ON message(CreatedAt)',
+    'CREATE INDEX IF NOT EXISTS idx_message_from ON message(FromEmail)',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a

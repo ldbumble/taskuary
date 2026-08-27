@@ -102,3 +102,22 @@ class ThreadIndexTests(unittest.TestCase):
         self.assertEqual(len(s.pending_triage()), 1)
         self.assertEqual(len(s.list_messages(tid)), 1)
         s.cx.close()
+
+
+class TimelineIndexTests(unittest.TestCase):
+    def test_feed_order_and_window_use_time_indexes(self):
+        s, _ = _file_store()
+        s.add_message({'ExternalId': 'f1', 'Channel': 'email', 'FromEmail': 'a@b.com',
+                       'SentAt': '2026-08-20 10:00:00', 'Status': 'filed'})
+        self.assertIn('idx_message_sent', _plan(s, 'SELECT * FROM message ORDER BY SentAt DESC, MessageId DESC LIMIT 100'))
+        self.assertIn('idx_message_created', _plan(s, "SELECT * FROM message WHERE CreatedAt >= datetime('now', 'localtime', '-14 days')"))
+        s.cx.close()
+
+    def test_known_sender_uses_the_from_index(self):
+        s, _ = _file_store()
+        s.add_message({'ExternalId': 's1', 'Channel': 'email', 'FromEmail': 'pat@corp.example', 'Status': 'filed'})
+        plan = _plan(s, 'SELECT 1 x FROM message WHERE FromEmail=? LIMIT 1', ('pat@corp.example',))
+        self.assertIn('idx_message_from', plan)
+        self.assertTrue(s.known_sender('pat@corp.example'))
+        self.assertFalse(s.known_sender('nobody@corp.example'))
+        s.cx.close()

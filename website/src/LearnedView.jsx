@@ -6,7 +6,7 @@
 // seventeen-verdict rule is a card that grows, not a column three screens tall.
 // Nothing here is a new source of truth: lines are the doc's own [s:N | ev | seen] tags, the
 // chips its ev ids resolved to real rows, the history the learned_history rows the learn pass writes.
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Box, Button, Chip, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, ROLES, mono } from "./theme.jsx";
@@ -43,7 +43,7 @@ const Ledger = ({ line, promoteAt }) => {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxWidth: W }}>
       <line x1={L} y1={Y(promoteAt)} x2={W - R} y2={Y(promoteAt)} stroke={ROLES.handled.bd} strokeDasharray="3 3" />
-      <text x={L + 4} y={Y(promoteAt) - 4} fontSize="9" fill={ROLES.handled.solid} fontFamily="IBM Plex Mono, monospace">s:{promoteAt} · where a line goes live</text>
+      <text x={W - R} y={Y(promoteAt) - 4} fontSize="9" fill={ROLES.handled.solid} textAnchor="end" fontFamily="IBM Plex Mono, monospace">s:{promoteAt} · live from here</text>
       <path d={d} fill="none" stroke={col} strokeWidth="2" strokeDasharray={dead ? "5 3" : undefined} />
       {dated.map((s, i) => (
         <g key={i}>
@@ -68,39 +68,22 @@ const Evidence = ({ e, contra, innerRef }) => (
   </Box>
 );
 
-// The fan: the line's evidence spread beneath it, each chip on a thread from the card's foot.
+// The fan: the line's evidence laid out beneath it, oldest first, in the same tint as the
+// line. Sitting inside the card is what says "these fed it" - threads drawn to each chip
+// read as spaghetti, and were removed.
 const Fan = ({ line, promoteAt }) => {
-  const wrap = useRef(null), chips = useRef({});
-  const [threads, setThreads] = useState([]);
   const contraIds = new Set((line.steps || []).filter((s) => s.effect < 0 && s.ev).map((s) => s.ev));
   const evs = [...(line.evidence || [])].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-  const measure = useCallback(() => {
-    if (!wrap.current) return;
-    const box = wrap.current.getBoundingClientRect();
-    const x0 = box.width / 2;
-    setThreads(evs.map((e) => {
-      const el = chips.current[e.id]; if (!el) return null;
-      const r = el.getBoundingClientRect();
-      const x = r.left - box.left + r.width / 2, y = r.top - box.top;
-      return { id: e.id, d: `M ${x0} 0 C ${x0} ${y * 0.55}, ${x} ${y * 0.45}, ${x} ${y}`, contra: contraIds.has(e.id) };
-    }).filter(Boolean));
-  }, [line]);
-  useLayoutEffect(() => { measure(); const t = setTimeout(measure, 50); window.addEventListener("resize", measure); return () => { clearTimeout(t); window.removeEventListener("resize", measure); }; }, [measure]);
   return (
     <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px dashed ${BORDER}` }}>
       <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700, mb: 0.5 }}>THE LEDGER · every point gained or lost</Typography>
       <Ledger line={line} promoteAt={promoteAt} />
-      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700, mt: 1.25 }}>
-        WHAT FED IT · {evs.length} verdict{evs.length === 1 ? "" : "s"}{contraIds.size ? ` · ${contraIds.size} against` : ""}
+      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700, mt: 1.25, mb: 0.75 }}>
+        WHAT FED IT · {evs.length} verdict{evs.length === 1 ? "" : "s"}, oldest first{contraIds.size ? ` · ${contraIds.size} against` : ""}
       </Typography>
-      <Box ref={wrap} sx={{ position: "relative", pt: 3 }}>
-        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible" }}>
-          {threads.map((t) => <path key={t.id} d={t.d} fill="none" stroke={t.contra ? RED : STATUS[line.status]?.color || DIM} strokeWidth="1.4" opacity=".55" strokeDasharray={t.contra ? "4 3" : undefined} />)}
-        </svg>
-        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 0.75 }}>
-          {evs.map((e) => <Evidence key={e.id} e={e} contra={contraIds.has(e.id)} innerRef={(el) => { chips.current[e.id] = el; }} />)}
-          {evs.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>no evidence ids on this line</Typography>}
-        </Box>
+      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 0.75 }}>
+        {evs.map((e) => <Evidence key={e.id} e={e} contra={contraIds.has(e.id)} innerRef={() => {}} />)}
+        {evs.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>no evidence ids on this line</Typography>}
       </Box>
     </Box>
   );

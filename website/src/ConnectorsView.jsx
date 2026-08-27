@@ -396,7 +396,7 @@ const connDot = (c) => ({ planned: "#cfc9bf", failing: "#6b2733", off: "#cfc9bf"
 // border on a faintly tinted ground, a failing one the alert border, an unconfigured one
 // stays paper - so a wall of nine cards reads at a glance which three are actually working
 const CARD_STATE = {
-  on:      { border: "#6f8a6e", bg: PANEL, width: 1.5 },     // sage: the app's "handled / working" colour
+  on:      { border: "#47654a", bg: PANEL, width: 2 },       // the deep green the Board uses for done - unmistakable at a glance
   failing: { border: "#8a3646", bg: PANEL, width: 1.5 },     // oxblood: the one loud colour, "this is on you"
   off:     { border: BORDER, bg: PANEL, width: 1 },
   planned: { border: BORDER, bg: PANEL, width: 1 },

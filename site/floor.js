@@ -8,7 +8,7 @@
   const TW = 40, TH = 22, W = 1200, H = 640, DH = 30, WH = 132;
   const SKINS = [
     { body: "#b8b2a9", collar: "#efe9de", skin: "#f0e2d2", hair: "#3e4a3c" },
-    { body: "#6f8a6e", collar: "#e8f1ea", skin: "#eddfcf", hair: "#2c3a31" },
+    { body: "#6f8a6e", collar: "#e8f1ea", skin: "#eddfcf", hair: "#2c3a31", curly: true },
     { body: "#8a6a5c", collar: "#eef1ec", skin: "#eedfcd", hair: "#33403a" },
     { body: "#54707a", collar: "#e6f1ef", skin: "#f2e5d5", hair: "#2e3f3c" },
     { body: "#6a6480", collar: "#f2f4ee", skin: "#f2e5d5", hair: "#4b4636" },
@@ -214,8 +214,14 @@
         rect(z + 0.03, cx - 15, arm, 6, 13, 3, s.body);
         rect(z + 0.03, cx + 9, arm, 6, 13, 3, s.body);
         rect(z + 0.04, cx - 10, cy - 51, 20, 20, 7.5, s.skin);
-        rect(z + 0.05, cx - 11, cy - 53, 22, 10, 5, s.hair);
-        rect(z + 0.06, cx - 11, cy - 49, 4.5, 11, 2.2, s.hair); rect(z + 0.06, cx + 6.5, cy - 49, 4.5, 11, 2.2, s.hair);
+        if (s.curly) {                              // a cloud of curls: two rows of puffs over the crown, one at each temple
+          [-8.5, -4.2, 0, 4.2, 8.5].forEach((dx) => oval(z + 0.05, cx + dx, cy - 50.5, 4.2, 4, s.hair));
+          [-6, -2, 2, 6].forEach((dx) => oval(z + 0.05, cx + dx, cy - 54.5, 3.8, 3.6, s.hair));
+          oval(z + 0.06, cx - 11, cy - 44.5, 3.4, 4, s.hair); oval(z + 0.06, cx + 11, cy - 44.5, 3.4, 4, s.hair);
+        } else {
+          rect(z + 0.05, cx - 11, cy - 53, 22, 10, 5, s.hair);
+          rect(z + 0.06, cx - 11, cy - 49, 4.5, 11, 2.2, s.hair); rect(z + 0.06, cx + 6.5, cy - 49, 4.5, 11, 2.2, s.hair);
+        }
         oval(z + 0.07, cx - 3.6, cy - 39, 1.5, 2, "#2a2b2e"); oval(z + 0.07, cx + 3.6, cy - 39, 1.5, 2, "#2a2b2e");
       };
 

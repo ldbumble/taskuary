@@ -246,7 +246,7 @@ export default function BoardView({ onOpenTask }) {
   const [nt, setNt] = useState({ Title: "", Summary: "", how: "live", repo: "", agent: "coder", model: "" });
 
   const load = useCallback(async () => {
-    try { setTasks(((await api.get("/api/tasks")).data.data || []).filter((t) => t.Status !== "dropped")); }
+    try { setTasks(((await api.get("/api/tasks", { params: { active: 1 } })).data.data || []).filter((t) => t.Status !== "dropped")); }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load the board"); }
   }, []);
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);

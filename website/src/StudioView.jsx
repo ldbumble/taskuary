@@ -81,7 +81,7 @@ export default function StudioView({ onOpenTask }) {
 
   const load = useCallback(async () => {
     const [t, a, cfg] = await Promise.all([
-      api.get("/api/tasks").catch(() => ({ data: {} })),
+      api.get("/api/tasks", { params: { active: 1 } }).catch(() => ({ data: {} })),
       api.get("/api/agents").catch(() => ({ data: {} })),
       api.get("/api/settings").catch(() => ({ data: {} })),
     ]);

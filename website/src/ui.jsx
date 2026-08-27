@@ -125,7 +125,9 @@ export const RefChip = ({ taskId, onClick }) => taskId ? (
 export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, category, working }) => {
   // an agent in a live session on this task: the row says so, by name - not "needs you"
   if (working && taskStatus !== "done" && reviewStatus !== "pending") {
-    return <Chip size="small" label={`${working} working`} title="an agent has this task open in a live session right now"
+    // "agent", not the agent's name: the name is whichever CLI happens to be configured (claude,
+    // codex, a wrapper) and reads as a brand on a status chip; the tooltip still says who
+    return <Chip size="small" label="agent working" title={`${working} has this task open in a live session right now`}
       sx={{ bgcolor: ROLES.working.tint, color: ROLES.working.ink, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
   }
   // a category that is NOT a review state (info, promo, ignored…) is the whole story - a

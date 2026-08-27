@@ -502,16 +502,26 @@ class SQLiteStore:
         self._bump_snapshots()
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
     def list_tasks(self, status=None):
-        q = '''SELECT t.*, (SELECT Status FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
-                      (SELECT Kind FROM review r WHERE r.TaskId=t.TaskId ORDER BY ReviewId DESC LIMIT 1) ReviewKind,
-                      (SELECT Status FROM run r2 WHERE r2.TaskId=t.TaskId ORDER BY RunId DESC LIMIT 1) RunStatus,
-                      (SELECT AgentName FROM run r2 WHERE r2.TaskId=t.TaskId ORDER BY RunId DESC LIMIT 1) RunAgent,
-                      -- the handover note a paused agent left for whoever picks this up. It was
-                      -- only ever read back INTO the next agent's prompt, so the owner could not
-                      -- see the one thing the board is for: what the last agent knew.
-                      (SELECT Body FROM comment c WHERE c.TaskId=t.TaskId AND c.Body LIKE 'HANDOVER NOTE%'
-                        ORDER BY CommentId DESC LIMIT 1) HandoverNote FROM task t'''
-        return self._rows(q + (' WHERE Status=?' if status else '') + ' ORDER BY TaskId DESC', (status,) if status else ())
+        q = '''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
+                      rn.Status RunStatus, rn.AgentName RunAgent,
+                      ho.Body HandoverNote
+               FROM task t
+               LEFT JOIN (
+                   SELECT TaskId, Status, Kind FROM review
+                   WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY TaskId)
+               ) rv ON rv.TaskId=t.TaskId
+               LEFT JOIN (
+                   SELECT TaskId, Status, AgentName FROM run
+                   WHERE RunId IN (SELECT MAX(RunId) FROM run GROUP BY TaskId)
+               ) rn ON rn.TaskId=t.TaskId
+               LEFT JOIN (
+                   SELECT TaskId, Body FROM comment
+                   WHERE CommentId IN (
+                       SELECT MAX(CommentId) FROM comment WHERE Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
+                   )
+               ) ho ON ho.TaskId=t.TaskId'''
+        return self._rows(q + (' WHERE t.Status=?' if status else '') + ' ORDER BY t.TaskId DESC',
+                          (status,) if status else ())
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',

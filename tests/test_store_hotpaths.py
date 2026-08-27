@@ -270,3 +270,24 @@ class FeedJoinTests(unittest.TestCase):
         self.assertNotIn(ids['busy'], pending_ids)
         self.assertNotIn(ids['fyi'], pending_ids)
         self.assertEqual(len(pending_ids), 2)   # the follow-up on the open task is on you too
+
+
+class ListTasksJoinTests(unittest.TestCase):
+    def test_latest_review_run_and_handover_land_on_the_row(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'live', 'Status': 'in_progress'}, 't')
+        s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'approved'})
+        s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending'})
+        s.start_run(tid, 'coder', 'first', 't')
+        rid = s.start_run(tid, 'codex', 'second', 't')
+        s.update_run(rid, {'Status': 'running'})
+        s.add_comment(tid, 'coder', 'agent', 'HANDOVER NOTE found: date parse\ndid: nothing yet\nnext: patch it')
+        s.add_comment(tid, 'coder', 'agent', 'ordinary comment')
+        row = s.list_tasks()[0]
+        self.assertEqual(row['ReviewStatus'], 'pending')
+        self.assertEqual(row['ReviewKind'], 'draft')
+        self.assertEqual(row['RunStatus'], 'running')
+        self.assertEqual(row['RunAgent'], 'codex')
+        self.assertIn('HANDOVER NOTE', row['HandoverNote'])
+        self.assertEqual(s.list_tasks('in_progress')[0]['TaskId'], tid)
+        self.assertEqual(s.list_tasks('open'), [])

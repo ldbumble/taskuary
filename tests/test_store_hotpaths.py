@@ -219,3 +219,54 @@ class SnapshotFreezeTests(unittest.TestCase):
         tasks = s.list_tasks()
         self.assertEqual(len(tasks), 1)
         self.assertEqual(len(s.list_messages(tasks[0]['TaskId'])), 2)
+
+
+class FeedJoinTests(unittest.TestCase):
+    """The Timeline used eight correlated subqueries per row. Same chips, one pass."""
+
+    def _fixture(self):
+        s = MemoryStore()
+        open_tid = s.create_task({'Title': 'open work', 'Status': 'open'}, 't')
+        done_tid = s.create_task({'Title': 'done work', 'Status': 'done'}, 't')
+        busy_tid = s.create_task({'Title': 'busy work', 'Status': 'in_progress'}, 't')
+        m_open = s.add_message({'TaskId': open_tid, 'Channel': 'email', 'Subject': 'please fix',
+                                'FromEmail': 'a@b.com', 'Status': 'routed', 'BodyText': 'x'})
+        m_done = s.add_message({'TaskId': done_tid, 'Channel': 'email', 'Subject': 'thanks',
+                                'FromEmail': 'a@b.com', 'Status': 'routed', 'BodyText': 'y'})
+        m_busy = s.add_message({'TaskId': busy_tid, 'Channel': 'email', 'Subject': 'working',
+                                'FromEmail': 'a@b.com', 'Status': 'routed', 'BodyText': 'z'})
+        m_fyi = s.add_message({'Channel': 'email', 'Subject': 'newsletter', 'FromEmail': 'n@n.com',
+                               'Status': 'filed', 'BodyText': 'fyi'})
+        s.add_route(m_open, open_tid, 'create', None, 'real work', [], 'triage')
+        s.add_route(m_done, done_tid, 'create', None, 'was work', [], 'triage')
+        s.add_route(m_busy, busy_tid, 'create', None, 'real work', [], 'triage')
+        s.add_route(m_fyi, None, 'file', None, 'automated', [], 'triage')
+        s.add_review({'TaskId': open_tid, 'MessageId': m_open, 'Kind': 'draft', 'Status': 'pending'})
+        s.add_review({'TaskId': done_tid, 'MessageId': m_done, 'Kind': 'draft', 'Status': 'approved'})
+        s.start_run(busy_tid, 'coder', 'go', 't')
+        s.add_attachment({'MessageId': m_open, 'Name': 'shot.png', 'ContentType': 'image/png'})
+        s.add_message({'TaskId': open_tid, 'Channel': 'email', 'Subject': 'follow up',
+                       'Status': 'routed', 'BodyText': 'more'})
+        return s, {'open': m_open, 'done': m_done, 'busy': m_busy, 'fyi': m_fyi}
+
+    def test_chips_match_the_latest_route_review_and_run(self):
+        s, ids = self._fixture()
+        by = {r['MessageId']: r for r in s.feed(limit=20)}
+        self.assertEqual(by[ids['open']]['Decision'], 'create')
+        self.assertEqual(by[ids['open']]['ReviewStatus'], 'pending')
+        self.assertEqual(by[ids['open']]['NeedsYou'], 1)
+        self.assertEqual(by[ids['open']]['Attachments'], 1)
+        self.assertEqual(by[ids['open']]['ChainSize'], 2)
+        self.assertEqual(by[ids['done']]['NeedsYou'], 0)
+        self.assertEqual(by[ids['done']]['ReviewStatus'], 'approved')
+        self.assertEqual(by[ids['busy']]['NeedsYou'], 0)   # an agent is running it
+        self.assertEqual(by[ids['fyi']]['Decision'], 'file')
+        self.assertEqual(by[ids['fyi']]['NeedsYou'], 0)
+        self.assertEqual(by[ids['fyi']]['ChainSize'], 0)
+        pending = s.feed(pending_only=True)
+        pending_ids = {r['MessageId'] for r in pending}
+        self.assertIn(ids['open'], pending_ids)
+        self.assertNotIn(ids['done'], pending_ids)
+        self.assertNotIn(ids['busy'], pending_ids)
+        self.assertNotIn(ids['fyi'], pending_ids)
+        self.assertEqual(len(pending_ids), 2)   # the follow-up on the open task is on you too

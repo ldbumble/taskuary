@@ -943,23 +943,41 @@ class SQLiteStore:
     # One definition of "this is on me", used by the chip, the counter and the filter alike:
     # a decision is pending, OR the task is not finished and no agent is working it right
     # now. A task nobody is running is nobody's but yours.
-    NEEDS_YOU = """(CASE WHEN (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1)='pending'
-                          OR (m.TaskId IS NOT NULL AND t.Status NOT IN ('done', 'dropped')
-                              AND NOT EXISTS (SELECT 1 FROM run WHERE TaskId=m.TaskId AND Status='running'))
+    # The aliases (rv, t, rn) are the JOINs in feed() - one pass, not a correlated
+    # subquery per row. The chip and the pending_only filter MUST keep using this
+    # same expression or they will disagree.
+    NEEDS_YOU = """(CASE WHEN rv.Status='pending'
+                          OR (m.TaskId IS NOT NULL AND IFNULL(t.Status,'') NOT IN ('done', 'dropped')
+                              AND rn.TaskId IS NULL)
                     THEN 1 ELSE 0 END)"""
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction,
                        t.Title, t.Status TaskStatus, t.Priority, {self.NEEDS_YOU} NeedsYou,
-                       (SELECT COUNT(*) FROM message x WHERE x.TaskId=m.TaskId AND x.Status<>'context') ChainSize,
-                       (SELECT Decision FROM route WHERE MessageId=m.MessageId ORDER BY RouteId DESC LIMIT 1) Decision,
-                       (SELECT Reason FROM route WHERE MessageId=m.MessageId ORDER BY RouteId DESC LIMIT 1) RouteReason,
-                       (SELECT ReviewId FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewId,
-                       (SELECT Status FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewStatus,
-                       (SELECT Kind FROM review WHERE MessageId=m.MessageId ORDER BY ReviewId DESC LIMIT 1) ReviewKind,
-                       (SELECT COUNT(*) FROM attachment a WHERE a.MessageId=m.MessageId) Attachments
-                FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
+                       IFNULL(ch.n, 0) ChainSize,
+                       rt.Decision, rt.Reason RouteReason,
+                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind,
+                       IFNULL(att.n, 0) Attachments
+                FROM message m
+                LEFT JOIN task t ON t.TaskId=m.TaskId
+                LEFT JOIN (
+                    SELECT MessageId, Decision, Reason FROM route
+                    WHERE RouteId IN (SELECT MAX(RouteId) FROM route GROUP BY MessageId)
+                ) rt ON rt.MessageId=m.MessageId
+                LEFT JOIN (
+                    SELECT MessageId, ReviewId, Status, Kind FROM review
+                    WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)
+                ) rv ON rv.MessageId=m.MessageId
+                LEFT JOIN (
+                    SELECT MessageId, COUNT(*) n FROM attachment GROUP BY MessageId
+                ) att ON att.MessageId=m.MessageId
+                LEFT JOIN (
+                    SELECT TaskId, COUNT(*) n FROM message WHERE Status<>'context' GROUP BY TaskId
+                ) ch ON ch.TaskId=m.TaskId
+                LEFT JOIN (
+                    SELECT DISTINCT TaskId FROM run WHERE Status='running'
+                ) rn ON rn.TaskId=m.TaskId
                 WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped') '''
         p = [f'-{int(days)} days']
         if pending_only: q += f' AND {self.NEEDS_YOU}=1'

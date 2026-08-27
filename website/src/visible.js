@@ -9,15 +9,21 @@
 export function pollWhileVisible(fn, ms) {
   let id = 0;
   const visible = () => typeof document === "undefined" || document.visibilityState !== "hidden";
-  const arm = () => {
+  const arm = (fromVisibility) => {
     clearInterval(id);
     id = 0;
-    if (visible()) id = setInterval(fn, ms);
+    if (visible()) {
+      // Re-arming on hidden->visible used to only start the interval, so the
+      // Timeline could sit on a 30s-stale list until the first tick.
+      if (fromVisibility) fn();
+      id = setInterval(fn, ms);
+    }
   };
-  arm();
-  if (typeof document !== "undefined") document.addEventListener("visibilitychange", arm);
+  arm(false);
+  const onChange = () => arm(true);
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onChange);
   return () => {
     clearInterval(id);
-    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", arm);
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onChange);
   };
 }

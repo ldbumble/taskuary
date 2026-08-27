@@ -30,8 +30,10 @@ test("a hidden document stops the interval and showing it again restarts it", as
   assert.equal(n, atHide, "must not tick while hidden");
   document.visibilityState = "visible";
   listeners.visibilitychange();
+  assert.ok(n > atHide, "must tick as soon as the tab is shown, not wait for the interval");
+  const atShow = n;
   await wait(55);
-  assert.ok(n > atHide, "must tick again once visible");
+  assert.ok(n > atShow, "must keep ticking on the interval once visible");
   stop();
   assert.equal(listeners.visibilitychange, undefined);
   delete globalThis.document;

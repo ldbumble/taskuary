@@ -5,6 +5,7 @@ rewrites - against a real on-disk SQLite file (MemoryStore hides exactly those c
 """
 import os, tempfile, unittest
 from taskuary.store import MemoryStore, SQLiteStore
+from taskuary.testing import Factory
 
 
 def _file_store():
@@ -225,29 +226,9 @@ class FeedJoinTests(unittest.TestCase):
     """The Timeline used eight correlated subqueries per row. Same chips, one pass."""
 
     def _fixture(self):
-        s = MemoryStore()
-        open_tid = s.create_task({'Title': 'open work', 'Status': 'open'}, 't')
-        done_tid = s.create_task({'Title': 'done work', 'Status': 'done'}, 't')
-        busy_tid = s.create_task({'Title': 'busy work', 'Status': 'in_progress'}, 't')
-        m_open = s.add_message({'TaskId': open_tid, 'Channel': 'email', 'Subject': 'please fix',
-                                'FromEmail': 'a@b.com', 'Status': 'routed', 'BodyText': 'x'})
-        m_done = s.add_message({'TaskId': done_tid, 'Channel': 'email', 'Subject': 'thanks',
-                                'FromEmail': 'a@b.com', 'Status': 'routed', 'BodyText': 'y'})
-        m_busy = s.add_message({'TaskId': busy_tid, 'Channel': 'email', 'Subject': 'working',
-                                'FromEmail': 'a@b.com', 'Status': 'routed', 'BodyText': 'z'})
-        m_fyi = s.add_message({'Channel': 'email', 'Subject': 'newsletter', 'FromEmail': 'n@n.com',
-                               'Status': 'filed', 'BodyText': 'fyi'})
-        s.add_route(m_open, open_tid, 'create', None, 'real work', [], 'triage')
-        s.add_route(m_done, done_tid, 'create', None, 'was work', [], 'triage')
-        s.add_route(m_busy, busy_tid, 'create', None, 'real work', [], 'triage')
-        s.add_route(m_fyi, None, 'file', None, 'automated', [], 'triage')
-        s.add_review({'TaskId': open_tid, 'MessageId': m_open, 'Kind': 'draft', 'Status': 'pending'})
-        s.add_review({'TaskId': done_tid, 'MessageId': m_done, 'Kind': 'draft', 'Status': 'approved'})
-        s.start_run(busy_tid, 'coder', 'go', 't')
-        s.add_attachment({'MessageId': m_open, 'Name': 'shot.png', 'ContentType': 'image/png'})
-        s.add_message({'TaskId': open_tid, 'Channel': 'email', 'Subject': 'follow up',
-                       'Status': 'routed', 'BodyText': 'more'})
-        return s, {'open': m_open, 'done': m_done, 'busy': m_busy, 'fyi': m_fyi}
+        fx = Factory()
+        d = fx.timeline()
+        return fx.s, {'open': d.open, 'done': d.done_mid, 'busy': d.busy_mid, 'fyi': d.fyi_mid}
 
     def test_chips_match_the_latest_route_review_and_run(self):
         s, ids = self._fixture()
@@ -282,27 +263,23 @@ class FeedJoinTests(unittest.TestCase):
     def test_rejecting_a_review_changes_the_tag(self):
         """Reject updates the same review row, so MAX(ReviewId) stayed put and the
         Timeline 304'd the pending chip. FeedView.decide() reloads right after."""
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'live'}, 't')
-        mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'please',
-                             'Status': 'routed', 'BodyText': 'x'})
-        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
-        a = s.feed_tag()
-        s.decide_review(rid, 'rejected', '', 't')
-        self.assertEqual(s.get_review(rid)['Status'], 'rejected')
-        self.assertNotEqual(a, s.feed_tag())
+        fx = Factory()
+        p = fx.pending_draft()
+        a = fx.s.feed_tag()
+        fx.s.decide_review(p.rid, 'rejected', '', 't')
+        self.assertEqual(fx.s.get_review(p.rid)['Status'], 'rejected')
+        self.assertNotEqual(a, fx.s.feed_tag())
 
     def test_holding_a_review_changes_the_tag(self):
         """hold_reviews commits without _exec; the counter has to bump there too."""
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'live'}, 't')
-        rid = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending'})
-        a = s.feed_tag()
-        self.assertEqual(s.hold_reviews(tid), 1)
-        self.assertNotEqual(a, s.feed_tag())
-        b = s.feed_tag()
-        s.unhold_review(rid)
-        self.assertNotEqual(b, s.feed_tag())
+        fx = Factory()
+        p = fx.pending_draft()
+        a = fx.s.feed_tag()
+        self.assertEqual(fx.s.hold_reviews(p.tid), 1)
+        self.assertNotEqual(a, fx.s.feed_tag())
+        b = fx.s.feed_tag()
+        fx.s.unhold_review(p.rid)
+        self.assertNotEqual(b, fx.s.feed_tag())
 
     def test_a_second_connection_commit_changes_the_tag(self):
         """Our _writes is per connection; data_version is how a Timeline read sees
@@ -310,8 +287,7 @@ class FeedJoinTests(unittest.TestCase):
         s, path = _file_store()
         other = SQLiteStore(path)
         a = s.feed_tag()
-        other.add_message({'Channel': 'email', 'Subject': 'from-elsewhere', 'Status': 'filed',
-                           'BodyText': 'x', 'ExternalId': 'elsewhere'})
+        Factory(other).message(status='filed', subject='from-elsewhere', external_id='elsewhere')
         self.assertNotEqual(a, s.feed_tag())
         other.cx.close()
         s.cx.close()
@@ -319,34 +295,23 @@ class FeedJoinTests(unittest.TestCase):
 
 class ListTasksJoinTests(unittest.TestCase):
     def test_latest_review_run_and_handover_land_on_the_row(self):
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'live', 'Status': 'in_progress'}, 't')
-        s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'approved'})
-        s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending'})
-        s.start_run(tid, 'coder', 'first', 't')
-        rid = s.start_run(tid, 'codex', 'second', 't')
-        s.update_run(rid, {'Status': 'running'})
-        s.add_comment(tid, 'coder', 'agent', 'HANDOVER NOTE found: date parse\ndid: nothing yet\nnext: patch it')
-        s.add_comment(tid, 'coder', 'agent', 'ordinary comment')
-        row = s.list_tasks()[0]
+        fx = Factory()
+        p = fx.handover()
+        row = fx.s.list_tasks()[0]
         self.assertEqual(row['ReviewStatus'], 'pending')
         self.assertEqual(row['ReviewKind'], 'draft')
         self.assertEqual(row['RunStatus'], 'running')
         self.assertEqual(row['RunAgent'], 'codex')
         self.assertIn('HANDOVER NOTE', row['HandoverNote'])
-        self.assertEqual(s.list_tasks('in_progress')[0]['TaskId'], tid)
-        self.assertEqual(s.list_tasks('open'), [])
+        self.assertEqual(fx.s.list_tasks('in_progress')[0]['TaskId'], p.tid)
+        self.assertEqual(fx.s.list_tasks('open'), [])
 
     def test_active_only_drops_old_done_and_anything_dropped(self):
-        s = MemoryStore()
-        live = s.create_task({'Title': 'live'}, 't')
-        today = s.create_task({'Title': 'finished today'}, 't')
-        s.update_task(today, {'Status': 'done'}, 't')
-        old = s.create_task({'Title': 'finished last week'}, 't')
-        s.update_task(old, {'Status': 'done'}, 't')
-        s._exec("UPDATE task SET ClosedAt='2020-01-01 12:00:00', UpdatedAt='2020-01-01 12:00:00' WHERE TaskId=?", (old,))
-        dropped = s.create_task({'Title': 'dropped'}, 't')
-        s.update_task(dropped, {'Status': 'dropped'}, 't')
-        ids = {t['TaskId'] for t in s.list_tasks(active_only=True)}
-        self.assertEqual(ids, {live, today})
-        self.assertIn(old, {t['TaskId'] for t in s.list_tasks()})
+        fx = Factory()
+        live = fx.open_task()
+        today = fx.approved_done()
+        old = fx.old_done()
+        fx.dropped()
+        ids = {t['TaskId'] for t in fx.s.list_tasks(active_only=True)}
+        self.assertEqual(ids, {live.tid, today.tid})
+        self.assertIn(old.tid, {t['TaskId'] for t in fx.s.list_tasks()})

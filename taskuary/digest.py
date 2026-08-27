@@ -20,6 +20,31 @@ DAYS = 3                 # the window the synthesis reads - matches the startup 
 # A brief that invents work waiting on you is worse than no brief, so a ref must arrive
 # wearing the title the data gave it, and an empty section must stay empty.
 PROMPT = (
+    'Write what the owner, half awake, should hold in mind TODAY, under 400 words, grouped into '
+    'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
+    '(one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these '
+    'sections in this order, and OMIT any with nothing to say:\n'
+    '\U0001f3f7\ufe0f By the tags — the window in numbers: one bullet per tag from THE WINDOW BY TAG '
+    '(coding, to do, review, info, automated, promo, ignored…) with its count and a few words on what '
+    'that bucket was; then one bullet for open tasks by kind\n'
+    '\U0001f680 In flight — what is being worked and who is waiting on whom\n'
+    '⏳ Waiting on you — questions still unanswered, replies still unapproved\n'
+    '\U0001f4ac Info from people — what colleagues told you (the info rows: sender and the gist, one bullet each, '
+    'nothing to do)\n'
+    '\U0001f4cc Keep honoring — verdicts you gave recently that should keep applying\n'
+    '\U0001f4c8 Patterns — heads-ups (a sender getting louder, the same system failing twice)\n'
+    'Every TQ-ref you write must appear in the data, described with the SAME title it has there - '
+    'never restate a task under another subject, and never carry a subject across from one block '
+    'to another. A block whose data reads "(none)" has nothing to say: omit its section entirely '
+    'rather than filling it.\n'
+    'Every TQ-ref keeps the link that follows it in the data, written right after the ref in the '
+    'same bullet, so the reader clicks straight into the task. Lead with what needs the owner NOW.\n'
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
+
+# every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
+# from "the owner wrote this" (never touch) - same deal the template docs get
+OLD_PROMPTS = (
+    (
     'Write what the owner, half awake, should hold in mind TODAY, under 350 words, grouped into '
     'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
     '(one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these '
@@ -34,11 +59,7 @@ PROMPT = (
     'rather than filling it.\n'
     'Every TQ-ref keeps the link that follows it in the data, written right after the ref in the '
     'same bullet, so the reader clicks straight into the task. Lead with what needs the owner NOW.\n'
-    'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
-
-# every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
-# from "the owner wrote this" (never touch) - same deal the template docs get
-OLD_PROMPTS = (
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.'),
     'Write what the owner, half awake, should hold in mind TODAY, under 350 words, grouped into sections. Each section is its emoji header on its own line, then tight "- " bullets under it (one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these sections in this order, and OMIT any with nothing to say:\n🚀 In flight — what is being worked and who is waiting on whom\n⏳ Waiting on you — questions still unanswered, replies still unapproved\n📌 Keep honoring — verdicts you gave recently that should keep applying\n📈 Patterns — heads-ups (a sender getting louder, the same system failing twice)\nEvery TQ-ref you write must appear in the data, described with the SAME title it has there - never restate a task under another subject, and never carry a subject across from one block to another. A block whose data reads "(none)" has nothing to say: omit its section entirely rather than filling it.\nNever invent facts; no preamble, no sign-off, nothing outside the sections.',
 
     'Write what the owner, half awake, should hold in mind TODAY, in plain bullets under 350 words:\n'
@@ -109,8 +130,25 @@ def gather(store, days: int = DAYS) -> str:
     _block(out, 'VERDICTS GIVEN THIS WINDOW (already durable in memory - standing rules, NOT open work,\n'
                 'and the mail they quote is already decided):',
            (f"  [{m.get('Scope')}:{m.get('ScopeKey') or '*'}] {(m.get('Note') or '')[:110]}" for m in notes[:12]))
+    feed = store.feed(limit=500, days=days)
+    # the same one-word tags the Timeline wears (categories.py), counted - the brief opens with
+    # them so "what was the last three days" is a glance, not a reading
+    LABEL = {'coding': 'coding (sent to the agent)', 'todo': 'to do (yours, not code)', 'review': 'review (a reply drafted for you)',
+             'info': 'info (a person told you something)', 'automated': 'automated (a system told you something)',
+             'promo': 'promo (newsletters, marketing)', 'filed': 'filed', 'ignored': 'ignored', 'report': 'report',
+             'feed': 'feed', 'yours': 'your replies', 'triaging': 'still triaging'}
+    counts = {}
+    for m in feed: counts[m.get('Category') or 'filed'] = counts.get(m.get('Category') or 'filed', 0) + 1
+    _block(out, 'THE WINDOW BY TAG (every inbound item, tagged the way the Timeline shows it):',
+           (f"  {LABEL.get(k, k)}: {n}" for k, n in sorted(counts.items(), key=lambda kv: -kv[1])))
+    kinds = {}
+    for t in live: kinds[t.get('Kind') or 'general'] = kinds.get(t.get('Kind') or 'general', 0) + 1
+    _block(out, 'OPEN TASKS BY KIND:', (f"  {k}: {n}" for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])))
+    _block(out, 'INFO FROM PEOPLE (colleagues told you something; nothing to do - the gist, newest first):',
+           (f"  {m.get('FromName') or m.get('FromEmail') or '?'}: {(m.get('Subject') or '(no subject)')[:70]} - "
+            f"{' '.join(str(m.get('Preview') or '').split())[:110]}" for m in [x for x in feed if x.get('Category') == 'info'][:15]))
     senders = {}
-    for m in store.feed(limit=120, days=days):
+    for m in feed[:120]:
         who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or '?'
         senders[who] = senders.get(who, 0) + 1
     loud = sorted(senders.items(), key=lambda kv: -kv[1])[:8]

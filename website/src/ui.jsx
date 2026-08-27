@@ -26,7 +26,7 @@ import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import StorageIcon from "@mui/icons-material/Storage";
 import { Logo, hasLogo } from "./logos.jsx";
-import { ACTION_COLORS, TAGS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
+import { ROLES, ACTION_COLORS, TAGS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.
@@ -122,7 +122,12 @@ export const RefChip = ({ taskId, onClick }) => taskId ? (
     sx={{ ...mono, bgcolor: "#eae4d8", color: "#55697a", height: 19, fontSize: 10.5 }} />
 ) : null;
 
-export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, category }) => {
+export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, category, working }) => {
+  // an agent in a live session on this task: the row says so, by name - not "needs you"
+  if (working && taskStatus !== "done" && reviewStatus !== "pending") {
+    return <Chip size="small" label={`${working} working`} title="an agent has this task open in a live session right now"
+      sx={{ bgcolor: ROLES.working.tint, color: ROLES.working.ink, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+  }
   // a category that is NOT a review state (info, promo, ignored…) is the whole story - a
   // stray review row must not turn a colleague's FYI into "reviewed · edited"
   const cat = category && TAGS[category];

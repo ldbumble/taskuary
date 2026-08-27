@@ -27,7 +27,6 @@ import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import StorageIcon from "@mui/icons-material/Storage";
 import { Logo, hasLogo } from "./logos.jsx";
 import { ACTION_COLORS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
-import { CATPPUCCIN } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
 // teal for scheduled reports.

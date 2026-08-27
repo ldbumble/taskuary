@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from taskuary import blackboard as bb, terminal as term
 from taskuary.ingest import _auto_code, AUTO_SESSIONS
 from taskuary.store import MemoryStore, task_ref
+from taskuary.testing import Factory
 
 
 def fake_session(tid, cwd, agent='coder', alive=True, files=()):
@@ -16,6 +17,7 @@ def fake_session(tid, cwd, agent='coder', alive=True, files=()):
 class BlackboardTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
+        self.fx = Factory(self.s)
         self._sessions = dict(term.SESSIONS)
         term.SESSIONS.clear()
 
@@ -23,7 +25,7 @@ class BlackboardTests(unittest.TestCase):
         term.SESSIONS.clear(); term.SESSIONS.update(self._sessions)
 
     def task(self, title='Fix the cron', summary='reports cron is broken'):
-        return self.s.create_task({'Title': title, 'Summary': summary, 'Kind': 'coding'}, 't')
+        return self.fx.task(title=title, summary=summary, kind='coding')
 
     # ── the queue itself ──────────────────────────────────────────────────────
     def test_enqueue_is_deduped_and_clearable(self):

@@ -426,6 +426,15 @@ export default function BoardView({ onOpenTask }) {
                       border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.7 } }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
+                    {/* the funnel is invisible until it isn't: a queued prompt is a promise the owner made
+                        to this agent, and the card is where they look for it */}
+                    {t.Waiting > 0 && (
+                      <Chip size="small" onClick={(e) => { e.stopPropagation(); setFeedTask(t.TaskId); setFeedOpen(true); }}
+                        label={`✎ ${t.Waiting} queued prompt${t.Waiting === 1 ? "" : "s"}`}
+                        title="waiting in the funnel - lands at the agent's next stop; click to add more"
+                        sx={{ height: 15, fontSize: 8.5, bgcolor: "#f1ead9", border: "1px solid #d8cfbe", color: "#6b5f45", fontWeight: 700,
+                          cursor: "pointer", "& .MuiChip-label": { px: 0.7 } }} />
+                    )}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
                   </Box>

@@ -1331,6 +1331,19 @@ class SQLiteStore:
         team = team_domains_of(self.get_settings())
         self._with_people(rows)
         for r in rows: r['Category'] = category_of(r, team)
+        # NEEDS_YOU (SQL) only sees `run` rows; a coder in a LIVE pty session is working the task
+        # just as much, and the row said "needs you - no agent is working it" over a running
+        # console. Working carries the agent's name so the chip can say who.
+        live = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}
+        try:
+            from . import terminal as hub_term
+            live.update({t['taskId']: t.get('agent') or t.get('label') or 'coder' for t in hub_term.live_sessions(tail=0) if t.get('taskId')})
+        except Exception:
+            pass                                   # no pty support here: runs alone decide
+        for r in rows:
+            if r.get('TaskId') in live and r.get('TaskStatus') not in ('done', 'dropped'):
+                r['Working'] = live[r['TaskId']]
+                if r.get('ReviewStatus') != 'pending': r['NeedsYou'] = 0
         return rows
 
     def feed_tag(self, days=14, pending_only=False, channel=None, source=None):

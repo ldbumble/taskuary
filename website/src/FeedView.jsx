@@ -92,6 +92,7 @@ const blurb = (r) => {
   const state = r.ReviewStatus === "pending" ? "a reply is drafted — waiting on your review"
       : r.ReviewStatus === "auto" ? "AI answered automatically"
         : r.TaskStatus === "done" ? `completed${r.ReviewStatus ? ` · you said ${r.ReviewStatus.replace("_", " ")}` : ""}`
+          : r.Working ? `${r.Working} is working it right now`
           : needsYou(r) ? "needs you — no agent is working it right now"
             : r.ReviewStatus ? `reviewed (${r.ReviewStatus})` : "an agent is working it";
   return `${routed} · ${state}`;
@@ -646,7 +647,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                               <Chip size="small" label="out" title="Taskuary sent this"
                                 sx={{ height: 19, fontSize: 10.5, fontWeight: 700, bgcolor: "#eae4d8", color: "#55697a" }} />
                             )}
-                            <ActionChip action={actionOf(r)} category={r.Category} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
+                            <ActionChip action={actionOf(r)} category={r.Category} working={r.Working} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
                             <ChevronRightIcon className="thubGo" sx={{ fontSize: 16, color: "#55697a",
                               opacity: sel?.MessageId === r.MessageId ? 1 : 0,
                               transform: sel?.MessageId === r.MessageId ? "translateX(0)" : "translateX(-6px)",
@@ -827,7 +828,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             </Typography>
           </Box>
           <RefChip taskId={sel.TaskId} onClick={() => onOpenTask(sel.TaskId)} />
-          <ActionChip action={actionOf(sel)} category={sel.Category} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} needsYou={needsYou(sel)} />
+          <ActionChip action={actionOf(sel)} category={sel.Category} working={sel.Working} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} needsYou={needsYou(sel)} />
           <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
 

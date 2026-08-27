@@ -61,7 +61,9 @@ REFLECT_SYSTEM = (
     '- Promote a hypothesis into the matching section above only at s:4+ with evidence from 3+ '
     'episodes across 2+ different people or threads - one hot thread proves nothing general.\n'
     '- EXCEPTION: a rule whose effect is to hide or auto-file things ("treat X as fyi", "never a '
-    'task") promotes only into "Proposed rules" - hiding is the owner\'s call to approve.\n'
+    'task") promotes only into "Proposed rules" - hiding is the owner\'s call to approve - UNLESS two or '
+    'more of its evidence ids are the owner\'s own explicit verdicts (mem ids whose notes say NOT OURS or '
+    'NOT A TASK): then the owner has already said it, and it goes straight into the matching section.\n'
     '- Add new hypotheses only for patterns 2+ episodes support; singles stay unwritten.\n'
     '- Never contradict SOUL.md (it outranks this file); never invent facts beyond the events.\n'
     '- Keep the section headers, all four <!-- --> marker lines, and every {{owner}}-style '
@@ -211,6 +213,7 @@ def reflect(store, llm=None) -> bool:
     final = new.rstrip('\n') + ('\n\n' + verdicts.strip('\n') + '\n' if verdicts else '')
     store.save_doc(DOC, final, 'reflect')
     from . import learnedgraph; learnedgraph.record(store, doc, final, 'reflect')
+    auto_adopt(store)                              # what the owner already said does not wait for a click
     store.set_setting('learn_pending', '0', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')
     logger.info('LEARNED.md reflected')
@@ -239,6 +242,28 @@ def adopt(store, key: str, actor: str = 'owner') -> dict:
     store.save_doc(DOC, rest, actor)
     learnedgraph.record(store, doc, rest, actor)
     return {'ok': True, 'text': target['text']}
+
+
+OWNER_SAID = 2      # this many of the owner's own explicit verdicts among a proposed rule's evidence = they stated it
+_MARK = re.compile(r'\b(NOT OURS|NOT A TASK|NOT A CODING TASK)\b')
+
+def auto_adopt(store, actor: str = 'owner-verdicts') -> list:
+    """The Proposed gate exists because a hide-rule the model INFERRED can silence the corrections
+    that would revoke it. A hide-rule the owner has already SAID - two or more of their own explicit
+    verdicts (a "Not our task" pressed on the topic, a note they typed) among its evidence - is not
+    an inference, and waiting for a click on it is the owner confirming themselves. Those go live
+    as soon as the reflection proposes them (Uri, 2026-08-27: "anything written in absolute rules
+    should not be in proposed"). Returns the adopted lines' texts."""
+    from . import learnedgraph
+    said = {f"mem{m['MemoryId']}" for m in store.list_memories(active_only=False)
+            if m.get('Source') == 'verdict' and _MARK.search(m.get('Note') or '')}
+    out = []
+    for l in learnedgraph.lines(store.get_doc(DOC) or ''):
+        if l['status'] != 'proposed' or len(said & set(l['ev'])) < OWNER_SAID: continue
+        try: out.append(adopt(store, l['key'], actor)['text'])
+        except ValueError: continue
+    if out: logger.info(f'LEARNED.md: {len(out)} proposed rule(s) the owner had already stated went live')
+    return out
 
 
 def reflect_if_due(store) -> bool:

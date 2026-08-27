@@ -76,6 +76,20 @@ class ParseTests(unittest.TestCase):
         with self.assertRaises(ValueError): learn.adopt(s, key)                           # already live
 
 
+class OwnerSaidItTests(unittest.TestCase):
+    def test_a_proposed_hide_rule_backed_by_the_owners_own_verdicts_goes_live_by_itself(self):
+        s = seeded()                                   # the refund rule's ev mem1..mem3 are NOT OURS verdict notes
+        out = learn.auto_adopt(s)
+        self.assertEqual(len(out), 1); self.assertIn('refund', out[0])
+        self.assertEqual([l['status'] for l in learnedgraph.lines(s.get_doc('learned')) if 'refund' in l['text']], ['live'])
+
+    def test_a_rule_the_model_inferred_still_waits_for_the_click(self):
+        s = MemoryStore()
+        s.save_doc('learned', DOC.replace('ev: mem1, mem2, mem3', 'ev: rv12, rv15, task9'), 'reflect')   # implicit signals only
+        self.assertEqual(learn.auto_adopt(s), [])
+        self.assertEqual([l['status'] for l in learnedgraph.lines(s.get_doc('learned')) if 'refund' in l['text']], ['proposed'])
+
+
 class SettledEvidenceTests(unittest.TestCase):
     def test_unanimous_verdicts_are_declared_settled(self):
         notes = ['2026-08-26: "Re: Refund - A" - NOT OURS: other people\'s work', '2026-08-25: "Refund approved" - NOT OURS: no task']

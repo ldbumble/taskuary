@@ -83,7 +83,7 @@ export default function LearnedView({ onChanged }) {
     });
     setRibbons(out);
   }, [g]);
-  useLayoutEffect(() => { measure(); const t = setTimeout(measure, 60); window.addEventListener("resize", measure); return () => { clearTimeout(t); window.removeEventListener("resize", measure); }; }, [measure]);
+  useLayoutEffect(() => { measure(); const t = setTimeout(measure, 60); window.addEventListener("resize", measure); return () => { clearTimeout(t); window.removeEventListener("resize", measure); }; }, [measure, hover, sel]);
 
   if (err) return <Typography variant="body2" sx={{ color: RED_INK }}>{err}</Typography>;
   if (!g) return <Typography variant="caption" sx={{ color: FAINT }}>Reading LEARNED.md…</Typography>;
@@ -97,20 +97,25 @@ export default function LearnedView({ onChanged }) {
   const adopt = async (key) => { await api.post("/api/learn/adopt", { key }); await load(); onChanged?.(); };
   const groups = ["live", "proposed", "hypothesis"].map((s) => [s, lines.filter((l) => l.status === s)]);
 
+  // the evidence column re-sorts to whatever line you point at (hover) or pinned (click), so
+  // its verdicts sit at the top of the column beside the line - the ribbons used to run to
+  // cards forty rows down, and by the time you scrolled there the hover was gone
+  const focus = hover || sel;
+  const focusIds = new Set(focus ? (lines.find((l) => l.key === focus)?.evidence || []).map((e) => e.id) : []);
+  const ordered = focus ? [...evidence.filter((e) => focusIds.has(e.id)), ...evidence.filter((e) => !focusIds.has(e.id))] : evidence;
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, p: 2, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         <b style={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>WHAT DRIVES WHAT · </b>
-        a ribbon is one of your verdicts feeding a line; red where it contradicted. Click a line for its ledger — every point it gained or lost, on one clock.
+        a ribbon is one of your verdicts feeding a line; red where it contradicted. Point at a line and its verdicts move to the top of the right column; click to pin it and open its ledger — every point it gained or lost, on one clock.
         {g.history_since ? "" : " History starts recording from now; today's ledgers are reconstructed from the evidence dates."}
       </Typography>
       <Box ref={wrap} sx={{ position: "relative", display: "grid", gridTemplateColumns: "200px minmax(0, 1fr) 320px", gap: 3, alignItems: "start" }}>
         <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible" }}>
-          {ribbons.map((r) => {
-            const on = hover ? hover === r.line : sel ? sel === r.line : true;
-            return <path key={r.key} d={r.d} fill="none" stroke={r.contra ? RED : ROLES.handled.solid} strokeWidth={r.contra ? 2 : 3}
-              strokeDasharray={r.contra ? "6 4" : undefined} opacity={on ? (hover || sel ? 0.75 : 0.35) : 0.08} />;
-          })}
+          {ribbons.filter((r) => !focus || r.line === focus).map((r) => (
+            <path key={r.key} d={r.d} fill="none" stroke={r.contra ? RED : ROLES.handled.solid} strokeWidth={r.contra ? 2 : 3}
+              strokeDasharray={r.contra ? "6 4" : undefined} opacity={focus ? 0.7 : 0.22} />
+          ))}
         </svg>
         {/* SOUL */}
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -162,11 +167,12 @@ export default function LearnedView({ onChanged }) {
         {/* evidence */}
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
           <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 700 }}>YOUR VERDICTS · THE EVIDENCE</Typography>
-          {evidence.slice(0, 40).map((e) => {
-            const on = !hover && !sel ? true : lines.some((l) => (l.key === (hover || sel)) && l.evidence.some((x) => x.id === e.id));
+          {ordered.slice(0, 40).map((e) => {
+            const on = !focus ? true : focusIds.has(e.id);
             return (
               <Box key={e.id} ref={(el) => { refs.current[`ev:${e.id}`] = el; }}
-                sx={{ p: 0.8, borderRadius: 1.5, bgcolor: PANEL, border: `1px solid ${BORDER}`, fontSize: 11, lineHeight: 1.35, opacity: on ? 1 : 0.35 }}>
+                sx={{ p: 0.8, borderRadius: 1.5, bgcolor: on && focus ? ROLES.handled.tint : PANEL2, border: `1px solid ${on && focus ? ROLES.handled.bd : BORDER}`,
+                  fontSize: 11, lineHeight: 1.35, opacity: on ? 1 : 0.35, transition: "opacity .15s" }}>
                 <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: FAINT, display: "block" }}>{e.id} · {day(e.date)}{e.loose ? " · not yet in any line" : ""}</Typography>
                 <Box sx={{ color: INK }}>{String(e.label || "").slice(0, 140)}</Box>
               </Box>

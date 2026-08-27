@@ -7,6 +7,7 @@ from unittest import mock
 
 from taskuary import terminal, waitroom
 from taskuary.store import MemoryStore
+from taskuary.testing import Factory
 
 
 class FakeTerm:
@@ -19,7 +20,7 @@ class FakeTerm:
     def typed(self): return ''.join(w for w in self.writes if w not in ('\r', '\n'))
 
 
-def task(s, status='in_progress'): return s.create_task({'Title': 'PTO import', 'Kind': 'coding', 'Status': status}, 't')
+def task(s, status='in_progress'): return Factory(s).task(title='PTO import', kind='coding', status=status)
 
 
 class PhaseTests(unittest.TestCase):

@@ -1,114 +1,119 @@
-"""Seed a believable day-in-the-life into TASKUARY_HOME for the README screenshot."""
+"""Seed a believable day-in-the-life into TASKUARY_HOME for the README screenshot.
+
+Pictures go through taskuary.testing.Factory so the screenshot graph is the same
+graph the regression suite pins - a JOIN rewrite that drops a chip fails both.
+"""
+import json as _json
 from datetime import datetime, timedelta
 from taskuary import config
 from taskuary.store import SQLiteStore
+from taskuary.testing import Factory
 
 s = SQLiteStore(config.db_path())
+fx = Factory(s)
+fx.actor = 'router'
 now = datetime.now()
 t = lambda h, m=0: (now - timedelta(hours=h, minutes=m)).strftime('%Y-%m-%d %H:%M:%S')
 
 # 1. reply-only question -> pending AI draft (the waiting-on-you star of the shot)
-tid1 = s.create_task({'Title': 'Q3 vendor spend report?', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
-m1 = s.add_message({'TaskId': tid1, 'ExternalId': 'demo1', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
-    'Subject': 'Q3 vendor spend report?', 'FromName': 'Sarah Chen', 'FromEmail': 'sarah.chen@example.com',
-    'SentAt': t(0, 25), 'BodyText': 'Hi John, do you have the Q3 vendor spend report handy? Finance wants the top-10 breakdown before the board call on Thursday.', 'Status': 'routed'})
-s.add_route(m1, tid1, 'create', None, 'reply-only question', [], 'router')
-s.add_review({'TaskId': tid1, 'MessageId': m1, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'AI drafted a reply for your review',
-    'DraftText': 'Hi Sarah,\n\nYes - the Q3 vendor spend report is in the shared Finance folder (Q3/vendor-spend-2026.xlsx). The top-10 breakdown is on the second tab; total spend was $2.41M, down 6% from Q2.\n\nBest,\nJohn'})
+tid1 = fx.task(title='Q3 vendor spend report?', kind='reply', source='email')
+m1 = fx.message(task_id=tid1, external_id='demo1', source_name='john.smith@example.com',
+    subject='Q3 vendor spend report?', from_name='Sarah Chen', from_email='sarah.chen@example.com',
+    sent_at=t(0, 25), body='Hi John, do you have the Q3 vendor spend report handy? Finance wants the top-10 breakdown before the board call on Thursday.')
+fx.route(m1, tid1, 'create', 'reply-only question', by='router')
+fx.review(tid1, m1, reason='AI drafted a reply for your review',
+    draft='Hi Sarah,\n\nYes - the Q3 vendor spend report is in the shared Finance folder (Q3/vendor-spend-2026.xlsx). The top-10 breakdown is on the second tab; total spend was $2.41M, down 6% from Q2.\n\nBest,\nJohn')
 
 # 2. coding task worked by the agent, diff attached, done
-tid2 = s.create_task({'Title': 'Nightly export job writes empty CSVs', 'Kind': 'coding', 'Status': 'done', 'Source': 'email', 'Assignee': 'agent:coder'}, 'router')
-m2 = s.add_message({'TaskId': tid2, 'ExternalId': 'demo2', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
-    'Subject': 'Nightly export job writes empty CSVs', 'FromName': 'Marcus Webb', 'FromEmail': 'marcus.webb@example.com',
-    'SentAt': t(3, 10), 'BodyText': 'The nightly export produced empty files again last night. Can you take a look before tonight runs?', 'Status': 'routed'})
-s.add_route(m2, tid2, 'create', None, 'asks the owner to do something', [], 'router')
-rid = s.start_run(tid2, 'coder', 'Work this coding task end to end.', 'owner')
-s.update_run(rid, {'Status': 'done', 'Result': 'Fixed: the exporter swallowed the timezone-aware cutoff. Added regression test.',
+tid2 = fx.task(title='Nightly export job writes empty CSVs', kind='coding', status='done', source='email', Assignee='agent:coder')
+m2 = fx.message(task_id=tid2, external_id='demo2', source_name='john.smith@example.com',
+    subject='Nightly export job writes empty CSVs', from_name='Marcus Webb', from_email='marcus.webb@example.com',
+    sent_at=t(3, 10), body='The nightly export produced empty files again last night. Can you take a look before tonight runs?')
+fx.route(m2, tid2, 'create', 'asks the owner to do something', by='router')
+rid = fx.run(tid2, status='done', agent='coder', instruction='Work this coding task end to end.')
+s.update_run(rid, {'Result': 'Fixed: the exporter swallowed the timezone-aware cutoff. Added regression test.',
     'DiffText': 'diff --git a/export/job.py b/export/job.py\n@@ -41,7 +41,7 @@\n-    cutoff = datetime.utcnow() - timedelta(days=1)\n+    cutoff = datetime.now(timezone.utc) - timedelta(days=1)\n', 'SessionId': 'demo'}, finished=True)
-s.add_comment(tid2, 'coder', 'agent', 'CODER REPORT\nTriage: real bug in export/job.py\nDetermination: naive/aware datetime comparison filtered out every row\nActions: fixed the cutoff, added a regression test, opened PR #142\nSummary: nightly export fixed; the next run will produce data')
-s.add_review({'TaskId': tid2, 'MessageId': m2, 'Kind': 'draft', 'Status': 'approved',
-    'DraftText': 'Hi Marcus - found it and fixed it: a timezone bug filtered out every row. The next run is fine.',
-    'FinalText': 'Hi Marcus - found it and fixed it: a timezone bug filtered out every row. The next run is fine.'})
+fx.comment(tid2, 'CODER REPORT\nTriage: real bug in export/job.py\nDetermination: naive/aware datetime comparison filtered out every row\nActions: fixed the cutoff, added a regression test, opened PR #142\nSummary: nightly export fixed; the next run will produce data', actor='coder')
+fx.review(tid2, m2, status='approved',
+    draft='Hi Marcus - found it and fixed it: a timezone bug filtered out every row. The next run is fine.',
+    final='Hi Marcus - found it and fixed it: a timezone bug filtered out every row. The next run is fine.')
 
 # 3. scheduled report rows (mssql)
 sid = s.save_source({'Channel': 'report', 'Address': 'Nightly census', 'Active': 1,
     'ConfigJson': '{"type": "mssql", "title": "Nightly census", "every_minutes": 480}'}, 'owner')
-m3 = s.add_message({'TaskId': None, 'ExternalId': 'demo3', 'ConversationId': 'report:%d' % sid, 'Channel': 'report',
-    'SourceName': 'Nightly census', 'Subject': 'Nightly census - 4 rows', 'FromName': 'Nightly census',
-    'SentAt': t(7, 45), 'BodyText': '{"facility": "Lakeview", "census": 112}\n{"facility": "Riverside", "census": 98}\n{"facility": "Oak Grove", "census": 87}\n{"facility": "Summit", "census": 64}', 'Status': 'filed'})
-s.add_route(m3, None, 'file', None, 'scheduled report', [], 'report')
+m3 = fx.message(status='filed', external_id='demo3', conversation_id='report:%d' % sid, channel='report',
+    source_name='Nightly census', subject='Nightly census - 4 rows', from_name='Nightly census',
+    sent_at=t(7, 45), body='{"facility": "Lakeview", "census": 112}\n{"facility": "Riverside", "census": 98}\n{"facility": "Oak Grove", "census": 87}\n{"facility": "Summit", "census": 64}')
+fx.route(m3, None, 'file', 'scheduled report', by='report')
 
 # 3b. Teams chat auto-answered - teal "auto" chip + purple channel bar
-tid4 = s.create_task({'Title': 'Standup moved to 10:30?', 'Kind': 'reply', 'Status': 'done', 'Source': 'teams'}, 'router')
-m6 = s.add_message({'TaskId': tid4, 'ExternalId': 'demo6', 'Channel': 'teams', 'SourceName': 'Ops chat',
-    'Subject': 'Priya Nair in Ops chat', 'FromName': 'Priya Nair', 'FromEmail': 'priya.nair@example.com',
-    'SentAt': t(1, 5), 'BodyText': 'Is standup moving to 10:30 today because of the vendor call?', 'Status': 'routed'})
-s.add_route(m6, tid4, 'create', None, 'reply-only question', [], 'router')
-s.add_review({'TaskId': tid4, 'MessageId': m6, 'Kind': 'auto', 'Status': 'auto',
-    'DraftText': 'Yes - 10:30 today only, back to 9:45 tomorrow.', 'FinalText': 'Yes - 10:30 today only, back to 9:45 tomorrow.'})
+tid4 = fx.task(title='Standup moved to 10:30?', kind='reply', status='done', source='teams')
+m6 = fx.message(task_id=tid4, external_id='demo6', channel='teams', source_name='Ops chat',
+    subject='Priya Nair in Ops chat', from_name='Priya Nair', from_email='priya.nair@example.com',
+    sent_at=t(1, 5), body='Is standup moving to 10:30 today because of the vendor call?')
+fx.route(m6, tid4, 'create', 'reply-only question', by='router')
+fx.review(tid4, m6, kind='auto', status='auto',
+    draft='Yes - 10:30 today only, back to 9:45 tomorrow.', final='Yes - 10:30 today only, back to 9:45 tomorrow.')
 
 # 3c. Slack deploy notification, filed
-m7 = s.add_message({'TaskId': None, 'ExternalId': 'demo7', 'Channel': 'slack', 'SourceName': '#deploys',
-    'Subject': 'deploy 2026.8.17-2 finished', 'FromName': 'deploybot',
-    'SentAt': t(2, 40), 'BodyText': 'api v2026.8.17-2 deployed to prod - 0 errors, p95 142ms.', 'Status': 'filed'})
-s.add_route(m7, None, 'file', None, 'automated notification', [], 'router')
+m7 = fx.message(status='filed', external_id='demo7', channel='slack', source_name='#deploys',
+    subject='deploy 2026.8.17-2 finished', from_name='deploybot',
+    sent_at=t(2, 40), body='api v2026.8.17-2 deployed to prod - 0 errors, p95 142ms.')
+fx.route(m7, None, 'file', 'automated notification', by='router')
 
 # 3d. coding task escalated - the amber waiting-on-you dot
-tid5 = s.create_task({'Title': 'PTO import for the 7/26-8/8 payroll period', 'Kind': 'coding',
-    'Status': 'in_progress', 'Source': 'email', 'Assignee': 'agent:coder'}, 'router')
-m8 = s.add_message({'TaskId': tid5, 'ExternalId': 'demo8', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
-    'Subject': 'PTO import - check date 8/17', 'FromName': 'Chana Levine', 'FromEmail': 'chana.levine@example.com',
-    'SentAt': t(4, 55), 'BodyText': 'Please run the PTO import for the 7/26-8/8 pay period, check date 8/17.', 'Status': 'routed'})
-s.add_route(m8, tid5, 'create', None, 'asks the owner to do something', [], 'router')
-s.add_review({'TaskId': tid5, 'MessageId': m8, 'Kind': 'escalation', 'Status': 'pending',
-    'Reason': 'coder needs you: confirm reconciliation=True before the import writes payroll data'})
+tid5 = fx.task(title='PTO import for the 7/26-8/8 payroll period', kind='coding',
+    status='in_progress', source='email', Assignee='agent:coder')
+m8 = fx.message(task_id=tid5, external_id='demo8', source_name='john.smith@example.com',
+    subject='PTO import - check date 8/17', from_name='Chana Levine', from_email='chana.levine@example.com',
+    sent_at=t(4, 55), body='Please run the PTO import for the 7/26-8/8 pay period, check date 8/17.')
+fx.route(m8, tid5, 'create', 'asks the owner to do something', by='router')
+fx.review(tid5, m8, kind='escalation', reason='coder needs you: confirm reconciliation=True before the import writes payroll data')
 
 # 3e. routed, queued for the coder - indigo
-tid6 = s.create_task({'Title': 'Update the on-call rotation page', 'Kind': 'coding', 'Status': 'open', 'Source': 'email'}, 'router')
-m9 = s.add_message({'TaskId': tid6, 'ExternalId': 'demo9', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
-    'Subject': 'On-call rotation page is stale', 'FromName': 'IT Helpdesk', 'FromEmail': 'helpdesk@example.com',
-    'SentAt': t(5, 30), 'BodyText': 'The on-call page still shows July - can it pull from the schedule automatically?', 'Status': 'routed'})
-s.add_route(m9, tid6, 'create', None, 'asks the owner to do something', [], 'router')
+tid6 = fx.task(title='Update the on-call rotation page', kind='coding', source='email')
+m9 = fx.message(task_id=tid6, external_id='demo9', source_name='john.smith@example.com',
+    subject='On-call rotation page is stale', from_name='IT Helpdesk', from_email='helpdesk@example.com',
+    sent_at=t(5, 30), body='The on-call page still shows July - can it pull from the schedule automatically?')
+fx.route(m9, tid6, 'create', 'asks the owner to do something', by='router')
 
 # 4. fyi newsletter, filed
-m4 = s.add_message({'TaskId': None, 'ExternalId': 'demo4', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
-    'Subject': 'Weekly platform digest', 'FromName': 'Platform Updates', 'FromEmail': 'no-reply@vendor.example.com',
-    'SentAt': t(26), 'BodyText': 'This is an automated summary of platform changes this week.', 'Status': 'filed'})
-s.add_route(m4, None, 'file', None, 'automated/informational', [], 'router')
+m4 = fx.message(status='filed', external_id='demo4', source_name='john.smith@example.com',
+    subject='Weekly platform digest', from_name='Platform Updates', from_email='no-reply@vendor.example.com',
+    sent_at=t(26), body='This is an automated summary of platform changes this week.')
+fx.route(m4, None, 'file', 'automated/informational', by='router')
 
 # 5. thread attached to an existing task yesterday
-tid3 = s.create_task({'Title': 'Onboard the new AP clerk', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'email'}, 'router')
-m5 = s.add_message({'TaskId': tid3, 'ExternalId': 'demo5', 'ConversationId': 'c-onboard', 'Channel': 'email',
-    'SourceName': 'john.smith@example.com', 'Subject': 'RE: Onboard the new AP clerk', 'FromName': 'Dana Ruiz',
-    'FromEmail': 'dana.ruiz@example.com', 'SentAt': t(28, 20),
-    'BodyText': 'Adding one more thing - she also needs access to the invoice approval queue.', 'Status': 'routed'})
-s.add_route(m5, tid3, 'attach', 0.81, 'same conversation thread',
-            [{'task_id': tid3, 'score': 0.81, 'signals': {'thread': 1, 'subject': 0.7, 'body': 0.4}}], 'router')
+tid3 = fx.task(title='Onboard the new AP clerk', kind='general', status='in_progress', source='email')
+m5 = fx.message(task_id=tid3, external_id='demo5', conversation_id='c-onboard', source_name='john.smith@example.com',
+    subject='RE: Onboard the new AP clerk', from_name='Dana Ruiz', from_email='dana.ruiz@example.com',
+    sent_at=t(28, 20), body='Adding one more thing - she also needs access to the invoice approval queue.')
+fx.route(m5, tid3, 'attach', 'same conversation thread', score=0.81,
+         candidates=[{'task_id': tid3, 'score': 0.81, 'signals': {'thread': 1, 'subject': 0.7, 'body': 0.4}}], by='router')
 # 6. the personal messengers: a Telegram question with the reply drafted, a WhatsApp task
-tid7 = s.create_task({'Title': 'Can you resend the Q3 numbers?', 'Kind': 'reply', 'Status': 'open', 'Source': 'telegram'}, 'router')
-m10 = s.add_message({'TaskId': tid7, 'ExternalId': 'demo10', 'ConversationId': 'telegram:88214', 'Channel': 'telegram',
-    'SourceName': 'Leah (Telegram)', 'Subject': None, 'FromName': 'Leah Stern', 'FromEmail': '@leahstern',
-    'SentAt': t(0, 55), 'BodyText': 'Hey - can you resend the Q3 numbers? The link from last week expired.', 'Status': 'routed'})
-s.add_route(m10, tid7, 'create', None, 'reply-only question', [], 'router')
-s.add_review({'TaskId': tid7, 'MessageId': m10, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'AI drafted a reply for your review',
-    'DraftText': 'Fresh link: finance.example.com/q3-2026 - this one does not expire.'})
+tid7 = fx.task(title='Can you resend the Q3 numbers?', kind='reply', source='telegram')
+m10 = fx.message(task_id=tid7, external_id='demo10', conversation_id='telegram:88214', channel='telegram',
+    source_name='Leah (Telegram)', subject=None, from_name='Leah Stern', from_email='@leahstern',
+    sent_at=t(0, 55), body='Hey - can you resend the Q3 numbers? The link from last week expired.')
+fx.route(m10, tid7, 'create', 'reply-only question', by='router')
+fx.review(tid7, m10, reason='AI drafted a reply for your review',
+    draft='Fresh link: finance.example.com/q3-2026 - this one does not expire.')
 
-tid8 = s.create_task({'Title': 'Scanner in the mailroom is jamming again', 'Kind': 'coding', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
-m11 = s.add_message({'TaskId': tid8, 'ExternalId': 'demo11', 'ConversationId': 'whatsapp:15550100@s.whatsapp.net',
-    'Channel': 'whatsapp', 'SourceName': 'Rob (WhatsApp)', 'FromName': 'Rob Feld',
-    'SentAt': t(2, 5), 'BodyText': 'the mailroom scanner is jamming on every third page again, same as March. can someone look before the 3pm batch?', 'Status': 'routed'})
-s.add_route(m11, tid8, 'create', None, 'asks the owner to do something', [], 'router')
+tid8 = fx.task(title='Scanner in the mailroom is jamming again', kind='coding', source='whatsapp')
+m11 = fx.message(task_id=tid8, external_id='demo11', conversation_id='whatsapp:15550100@s.whatsapp.net',
+    channel='whatsapp', source_name='Rob (WhatsApp)', from_name='Rob Feld',
+    sent_at=t(2, 5), body='the mailroom scanner is jamming on every third page again, same as March. can someone look before the 3pm batch?')
+fx.route(m11, tid8, 'create', 'asks the owner to do something', by='router')
 
 # 7. the collaboration scene: two agents in the SAME checkout - each card shows the files
 # ITS agent has modified (the other agent is told the same list) - and a third task queued
 # behind the one whose files it would touch (affinity routing).
-import json as _json
-tid9 = s.create_task({'Title': 'Report charts render blank in dark mode', 'Kind': 'coding', 'Status': 'in_progress',
-                      'Source': 'email', 'Assignee': 'agent:claude'}, 'router')
-m12 = s.add_message({'TaskId': tid9, 'ExternalId': 'demo12', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
-    'Subject': 'Dark mode charts are blank', 'FromName': 'Amir Solomon', 'FromEmail': 'amir.solomon@example.com',
-    'SentAt': t(0, 40), 'BodyText': 'Since the theme update, every report chart renders blank when the app is in dark mode.', 'Status': 'routed'})
-s.add_route(m12, tid9, 'create', None, 'asks the owner to do something', [], 'router')
+tid9 = fx.task(title='Report charts render blank in dark mode', kind='coding', status='in_progress',
+               source='email', Assignee='agent:claude')
+m12 = fx.message(task_id=tid9, external_id='demo12', source_name='john.smith@example.com',
+    subject='Dark mode charts are blank', from_name='Amir Solomon', from_email='amir.solomon@example.com',
+    sent_at=t(0, 40), body='Since the theme update, every report chart renders blank when the app is in dark mode.')
+fx.route(m12, tid9, 'create', 'asks the owner to do something', by='router')
 r9 = s.start_run(tid9, 'claude', 'Work this coding task end to end.', 'router')
 s.update_run(r9, {'TraceJson': _json.dumps([
     {'at': t(0, 4), 'kind': 'live', 'name': 'claude', 'detail': '→ Edit: website/src/ReportsView.jsx'},
@@ -117,12 +122,12 @@ s.update_run(r9, {'TraceJson': _json.dumps([
     {'at': t(0, 1), 'kind': 'live', 'name': 'claude', 'detail': '→ Bash: npm run build'}])})
 s._exec('UPDATE run SET StartedAt=? WHERE RunId=?', (t(0, 18), r9))
 
-tid10 = s.create_task({'Title': 'Weekly census report misses one facility', 'Kind': 'coding', 'Status': 'in_progress',
-                       'Source': 'teams', 'Assignee': 'agent:codex'}, 'router')
-m13 = s.add_message({'TaskId': tid10, 'ExternalId': 'demo13', 'Channel': 'teams', 'SourceName': 'Ops chat',
-    'Subject': 'Rina Katz in Ops chat', 'FromName': 'Rina Katz', 'FromEmail': 'rina.katz@example.com',
-    'SentAt': t(1, 10), 'BodyText': 'The weekly census report skips Summit - looks like the new facility never made it into the query.', 'Status': 'routed'})
-s.add_route(m13, tid10, 'create', None, 'asks the owner to do something', [], 'router')
+tid10 = fx.task(title='Weekly census report misses one facility', kind='coding', status='in_progress',
+                source='teams', Assignee='agent:codex')
+m13 = fx.message(task_id=tid10, external_id='demo13', channel='teams', source_name='Ops chat',
+    subject='Rina Katz in Ops chat', from_name='Rina Katz', from_email='rina.katz@example.com',
+    sent_at=t(1, 10), body='The weekly census report skips Summit - looks like the new facility never made it into the query.')
+fx.route(m13, tid10, 'create', 'asks the owner to do something', by='router')
 r10 = s.start_run(tid10, 'codex', 'Work this coding task end to end.', 'router')
 s.update_run(r10, {'TraceJson': _json.dumps([
     {'at': t(0, 6), 'kind': 'live', 'name': 'codex', 'detail': '→ Edit: taskuary/reports.py'},
@@ -130,21 +135,21 @@ s.update_run(r10, {'TraceJson': _json.dumps([
     {'at': t(0, 1), 'kind': 'live', 'name': 'codex', 'detail': '· 14 passed in 2.1s'}])})
 s._exec('UPDATE run SET StartedAt=? WHERE RunId=?', (t(0, 9), r10))
 
-tid11 = s.create_task({'Title': 'Add CSV export to the reports page', 'Kind': 'coding', 'Status': 'open',
-                       'Source': 'email'}, 'router')
-m14 = s.add_message({'TaskId': tid11, 'ExternalId': 'demo14', 'Channel': 'email', 'SourceName': 'john.smith@example.com',
-    'Subject': 'CSV export for reports?', 'FromName': 'Sarah Chen', 'FromEmail': 'sarah.chen@example.com',
-    'SentAt': t(0, 12), 'BodyText': 'Could the reports page get a download-as-CSV button? Finance keeps retyping the numbers.', 'Status': 'routed'})
-s.add_route(m14, tid11, 'create', None, 'asks the owner to do something', [], 'router')
-s.enqueue_dispatch(tid11, tid9, 'claude', 'both would modify website/src/ReportsView.jsx')
-s.add_comment(tid11, 'router', 'agent', 'Queued behind TQ-%04d "Report charts render blank in dark mode" - '
-              'both would modify website/src/ReportsView.jsx. It starts by itself when that agent finishes.' % tid9)
+tid11 = fx.task(title='Add CSV export to the reports page', kind='coding', source='email')
+m14 = fx.message(task_id=tid11, external_id='demo14', source_name='john.smith@example.com',
+    subject='CSV export for reports?', from_name='Sarah Chen', from_email='sarah.chen@example.com',
+    sent_at=t(0, 12), body='Could the reports page get a download-as-CSV button? Finance keeps retyping the numbers.')
+fx.route(m14, tid11, 'create', 'asks the owner to do something', by='router')
+fx.queued(tid11, tid9, agent='claude', reason='both would modify website/src/ReportsView.jsx')
+fx.comment(tid11, 'Queued behind TQ-%04d "Report charts render blank in dark mode" - '
+           'both would modify website/src/ReportsView.jsx. It starts by itself when that agent finishes.' % tid9,
+           actor='router')
 
 # 8. the Morning digest, sectioned - the panel renders the emoji headers as real headings,
 # and the digest screenshot is cropped off this row's open panel
-m15 = s.add_message({'ExternalId': 'demodigest', 'Channel': 'report', 'SourceName': 'Morning digest',
-    'Subject': 'Morning digest — the last 3 days, distilled', 'FromName': 'Morning digest',
-    'SentAt': t(0, 5), 'Status': 'filed', 'BodyText': (
+m15 = fx.message(external_id='demodigest', channel='report', source_name='Morning digest',
+    subject='Morning digest — the last 3 days, distilled', from_name='Morning digest',
+    sent_at=t(0, 5), status='filed', body=(
         '\U0001f680 In flight\n'
         '- TQ-0009 “Report charts render blank in dark mode” — claude is on it; the theme tokens were the culprit.\n'
         '- TQ-0010 “Weekly census report misses one facility” — codex is on it; tests already pass.\n\n'
@@ -155,8 +160,8 @@ m15 = s.add_message({'ExternalId': 'demodigest', 'Channel': 'report', 'SourceNam
         '- Vendor newsletters stay filed — you ruled the last three FYI, and triage remembers.\n\n'
         '\U0001f4c8 Patterns\n'
         '- Sarah Chen wrote twice in a day about Q3 numbers — the board call is Thursday.\n'
-        '- The nightly export failed twice this week before the fix that closed TQ-0002.')})
-s.add_route(m15, None, 'file', None, 'scheduled report - informational, never a task', [], 'report')
+        '- The nightly export failed twice this week before the fix that closed TQ-0002.'))
+fx.route(m15, None, 'file', 'scheduled report - informational, never a task', by='report')
 
 # every report source reads as freshly polled, or the server's STARTUP run files its own
 # rows on top of the fiction (a FAILED census, a raw digest) and they photobomb the shots

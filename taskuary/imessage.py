@@ -236,9 +236,8 @@ def open_db(cfg: dict):
 def _fda_error(path) -> SetupError:
     h = host_process()
     return SetupError('full_disk_access_required',
-                      f'macOS is not letting this process read the Messages database ({path}). It needs Full Disk '
-                      f'Access - {FDA_HINT} - {h["recommendation"]}. This is a macOS permission: Taskuary cannot '
-                      f'grant it, and Settings may only apply after the host is relaunched.', 'full_disk_access')
+                      f'macOS is not letting this process read {path}: it needs Full Disk Access ({FDA_HINT}) - '
+                      f'{h["recommendation"]}', 'full_disk_access')
 
 
 def test(store, c) -> str:

@@ -644,20 +644,20 @@ function MacPermissions({ conn, test, busy, runTest }) {
   const [probe, setProbe] = useState(null);
   const [probing, setProbing] = useState(false);
   const [opened, setOpened] = useState("");
-  const [openErr, setOpenErr] = useState("");
+  const [openErr, setOpenErr] = useState({});      // per pane - a refused link under its own card
   // the host macOS lists comes back on a failed read test, a successful one, or a denied
   // probe - whichever answered last knows it
   const setup = test?.setup || probe?.setup || {};
   const code = test ? (test.ok ? "ready" : setup.code || "error") : null;
   const openPane = async (pane) => {
-    setOpened(""); setOpenErr("");
+    setOpened(""); setOpenErr((o) => ({ ...o, [pane]: "" }));
     try {
       const { data } = await api.post("/api/platform/macos/open-settings", { pane });
-      if (data?.ok) setOpened(pane); else setOpenErr(data?.detail || "Settings did not open");
-    } catch (e) { setOpenErr(e?.response?.data?.detail || "Settings did not open"); }
+      if (data?.ok) setOpened(pane); else setOpenErr((o) => ({ ...o, [pane]: data?.detail || "Settings did not open" }));
+    } catch (e) { setOpenErr((o) => ({ ...o, [pane]: e?.response?.data?.detail || "Settings did not open" })); }
   };
   const runProbe = async () => {
-    setProbing(true); setProbe(null);
+    setProbing(true); setProbe(null); setOpenErr((o) => ({ ...o, automation: "" }));
     try { const { data } = await api.post("/api/platform/macos/probe", { what: "messages_automation" }); setProbe(data); }
     catch (e) { setProbe({ ok: false, detail: e?.response?.data?.detail || "probe call failed" }); }
     setProbing(false);
@@ -708,20 +708,18 @@ function MacPermissions({ conn, test, busy, runTest }) {
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
               {fdaPane && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("full_disk_access")}>
                 Open Full Disk Access</Button>}
-              <Button size="small" variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
+              <Button size="small" variant="contained" disableElevation disabled={busy === "test"} onClick={() => { setOpenErr((o) => ({ ...o, full_disk_access: "" })); runTest(); }}
                 startIcon={busy === "test" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
                 {!test ? "Test" : readNeeds ? "I enabled it — test again" : "Test again"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              {setup.breadcrumb || "System Settings → Privacy & Security → Full Disk Access"}
+              {fdaPane ? (setup.breadcrumb || "System Settings → Privacy & Security → Full Disk Access") : "not a permission problem - see the message below"}
               {readNeeds && setup.restart_may_be_required && " · macOS may only apply it after the host is quit and relaunched"}
               {opened === "full_disk_access" && " · Settings opened"}
-              {openErr && ` · ${openErr}`}
+              {openErr.full_disk_access && ` · ${openErr.full_disk_access}`}
             </Typography>
             {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
-              {test.ok ? "✓" : "✗"} {readNeeds
-                ? `macOS refused the read. Grant Full Disk Access to ${host}, relaunch it, then test again.`
-                : test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+              {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
             {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
           </Card>
           <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>
@@ -739,7 +737,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               System Settings → Privacy & Security → Automation → {host} → Messages
               {opened === "automation" && " · Settings opened"}
-              {openErr && ` · ${openErr}`}
+              {openErr.automation && ` · ${openErr.automation}`}
             </Typography>
             {probe && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: probe.ok ? "#47654a" : "#6b2733" }}>
               {probe.ok ? "✓" : "✗"} {probe.detail}</Typography>}

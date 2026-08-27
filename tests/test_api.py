@@ -7,6 +7,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import config, server
 from taskuary.reports import REGISTRY
+from taskuary.testing import Factory
 
 c = TestClient(server.app)
 
@@ -265,10 +266,9 @@ class ApiTests(unittest.TestCase):
 
     def test_active_tasks_omit_old_done(self):
         """Board/Studio ask ?active=1 so they do not ship every finished task ever."""
-        live = c.post('/api/tasks', json={'Title': 'active-live'}).json()['taskId']
-        old = c.post('/api/tasks', json={'Title': 'active-old'}).json()['taskId']
-        c.patch(f'/api/tasks/{old}', json={'Status': 'done'})
-        server.store._exec("UPDATE task SET ClosedAt='2020-01-01 12:00:00', UpdatedAt='2020-01-01 12:00:00' WHERE TaskId=?", (old,))
+        fx = Factory(server.store)
+        live = fx.open_task().tid
+        old = fx.old_done().tid
         active = {t['TaskId'] for t in c.get('/api/tasks', params={'active': True}).json()['data']}
         all_ids = {t['TaskId'] for t in c.get('/api/tasks').json()['data']}
         self.assertIn(live, active)
@@ -282,8 +282,7 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(tag)
         r2 = c.get('/api/feed', headers={'If-None-Match': tag})
         self.assertEqual(r2.status_code, 304)
-        server.store.add_message({'Channel': 'email', 'Subject': 'etag-new', 'Status': 'filed',
-                                  'BodyText': 'x', 'ExternalId': 'etag-new'})
+        Factory(server.store).filed_fyi(subject='etag-new')
         r3 = c.get('/api/feed', headers={'If-None-Match': tag})
         self.assertEqual(r3.status_code, 200)
         self.assertTrue(any(m['Subject'] == 'etag-new' for m in r3.json()['data']))
@@ -291,13 +290,10 @@ class ApiTests(unittest.TestCase):
     def test_decide_accepts_explicit_null_final_text(self):
         # the UI sends {"verb": "reject", "final_text": null} - pydantic v2 422'd on the
         # explicit null (str = None is not Optional), which blanked the Review screen
-        tid = c.post('/api/tasks', json={'Title': 'a drafted thing'}).json()['taskId']
-        server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r'})
-        rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
-                   if r['TaskId'] == tid)
-        r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'reject', 'final_text': None})
+        p = Factory(server.store).pending_draft()
+        r = c.post(f'/api/reviews/{p.rid}/decide', json={'verb': 'reject', 'final_text': None})
         self.assertEqual(r.status_code, 200)
-        self.assertFalse(any(x['ReviewId'] == rid for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data']))
+        self.assertFalse(any(x['ReviewId'] == p.rid for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data']))
         # explicit nulls must be accepted across the board (create-task dialog sends them)
         self.assertEqual(c.post('/api/tasks', json={'Title': 't2', 'Summary': None, 'Tags': None}).status_code, 200)
 

@@ -1501,7 +1501,8 @@ def poll_forever():
             except (TypeError, ValueError): mins = 10
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
                 _poll_reports(0, what='syncing')
-            else:
+            elif mins > 0:
+                # poll_minutes 0 is "background sync off", and that includes the fast clock
                 quick = _quick_due()
                 if quick: _poll_reports(0, what='syncing', only=quick)
         except Exception as e:
@@ -1519,7 +1520,9 @@ def _quick_due() -> list:
     due = []
     for c in store.list_connectors():
         if not c['Active']: continue
-        try: secs = int(json.loads(c.get('ConfigJson') or '{}').get('poll_seconds') or 0)
+        try:
+            cfg = json.loads(c.get('ConfigJson') or '{}')
+            secs = int(cfg.get('poll_seconds') or 0) if isinstance(cfg, dict) else 0
         except (TypeError, ValueError): secs = 0
         if secs > 0 and time.time() - _QUICK_LAST.get(c['Type'], 0) >= secs:
             due.append(c['Type'])

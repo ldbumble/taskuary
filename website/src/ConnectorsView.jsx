@@ -641,14 +641,20 @@ function RemoveConnection({ conn, reload, onBack }) {
    Settings is not proof, a SELECT on the database is. Sending is probed separately and only
    on request, because the probe is what makes macOS pop the consent prompt. */
 function MacPermissions({ conn, test, busy, runTest }) {
-  const setup = test?.setup || {};
-  const code = test ? (test.ok ? "ready" : setup.code || "error") : null;
   const [probe, setProbe] = useState(null);
   const [probing, setProbing] = useState(false);
   const [opened, setOpened] = useState("");
+  const [openErr, setOpenErr] = useState("");
+  // the host macOS lists comes back on a failed read test, a successful one, or a denied
+  // probe - whichever answered last knows it
+  const setup = test?.setup || probe?.setup || {};
+  const code = test ? (test.ok ? "ready" : setup.code || "error") : null;
   const openPane = async (pane) => {
-    try { await api.post("/api/platform/macos/open-settings", { pane }); setOpened(pane); }
-    catch { setOpened(""); }
+    setOpened(""); setOpenErr("");
+    try {
+      const { data } = await api.post("/api/platform/macos/open-settings", { pane });
+      if (data?.ok) setOpened(pane); else setOpenErr(data?.detail || "Settings did not open");
+    } catch (e) { setOpenErr(e?.response?.data?.detail || "Settings did not open"); }
   };
   const runProbe = async () => {
     setProbing(true); setProbe(null);
@@ -661,6 +667,10 @@ function MacPermissions({ conn, test, busy, runTest }) {
   const notMac = code === "macos_required";
   const readOk = code === "ready";
   const readNeeds = code === "full_disk_access_required";
+  // only a consent failure is fixed in the Full Disk Access pane; a missing database, a locked
+  // one, an unknown schema or an old macOS are not, and the button would send people to the
+  // wrong place
+  const fdaPane = !test || readOk || readNeeds;
   const sendOk = !!probe?.ok;
   const sendDenied = probe && !probe.ok && probe.setup?.code === "automation_denied";
   const Card = ({ title, sub: subtitle, ok, children }) => (
@@ -696,16 +706,17 @@ function MacPermissions({ conn, test, busy, runTest }) {
               </Box>
             )}
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-              <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("full_disk_access")}>
-                Open Full Disk Access</Button>
+              {fdaPane && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("full_disk_access")}>
+                Open Full Disk Access</Button>}
               <Button size="small" variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
                 startIcon={busy === "test" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
-                {!test ? "Test" : test.ok ? "Test again" : "I enabled it — test again"}</Button>
+                {!test ? "Test" : readNeeds ? "I enabled it — test again" : "Test again"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               {setup.breadcrumb || "System Settings → Privacy & Security → Full Disk Access"}
               {readNeeds && setup.restart_may_be_required && " · macOS may only apply it after the host is quit and relaunched"}
               {opened === "full_disk_access" && " · Settings opened"}
+              {openErr && ` · ${openErr}`}
             </Typography>
             {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
               {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
@@ -726,6 +737,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               System Settings → Privacy & Security → Automation → {host} → Messages
               {opened === "automation" && " · Settings opened"}
+              {openErr && ` · ${openErr}`}
             </Typography>
             {probe && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: probe.ok ? "#47654a" : "#6b2733" }}>
               {probe.ok ? "✓" : "✗"} {probe.detail}</Typography>}

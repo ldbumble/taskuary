@@ -261,7 +261,12 @@ def test_connector(store, cid: int) -> dict:
         else:
             raise RuntimeError(f"no test for connector type '{c['Type']}'")
         store.touch_connector(cid)
-        return {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail}
+        out = {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail}
+        if c['Type'] == 'imessage':
+            # the read succeeded, but the send card still needs to name the host macOS will list
+            from .imessage import setup_info
+            out['setup'] = setup_info('ready', None)
+        return out
     except Exception as e:
         store.touch_connector(cid, str(e))
         out = {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': str(e)[:500]}

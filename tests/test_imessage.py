@@ -218,6 +218,13 @@ class TestProbeTests(Base):
         self.assertNotIn('imessage_rowid', self.cfg())
         self.assertTrue(any(s['Address'] == '*' for s in self.s.list_sources()))
 
+    def test_a_passing_test_still_names_the_host_for_the_send_card(self):
+        from taskuary import channels
+        self.fx.msg('hi')
+        with mock.patch.object(imessage, 'host_process', return_value={'name': 'Terminal', 'bundle_id': 'com.apple.Terminal', 'python': '/x', 'recommendation': 'x'}):
+            r = channels.test_connector(self.s, self.conn()['ConnectorId'])
+        self.assertTrue(r['ok']); self.assertEqual((r['setup']['code'], r['setup']['host_name']), ('ready', 'Terminal'))
+
     def test_not_a_mac(self):
         with mock.patch.object(imessage, 'platform_support', return_value={'platform': 'linux', 'support': 'unavailable', 'product_version': None}):
             with self.assertRaisesRegex(RuntimeError, 'needs a Mac'):
@@ -389,7 +396,7 @@ class OnboardingTests(Base):
         out = test_connector(self.s, cid)
         self.assertEqual(set(out), {'ok', 'ms', 'detail', 'setup'}); self.assertFalse(out['ok'])
         self.s.set_connector_config(cid, {'db_path': self.fx.path})
-        self.assertNotIn('setup', test_connector(self.s, cid))     # success: no setup half
+        self.assertEqual(test_connector(self.s, cid)['setup']['code'], 'ready')     # success: the host, for the send card
 
     def test_settings_urls_by_version_and_only_known_panes(self):
         self.assertIn('PrivacySecurity.extension?Privacy_AllFiles', imessage.settings_url('full_disk_access'))
@@ -399,12 +406,19 @@ class OnboardingTests(Base):
         with self.assertRaises(ValueError): imessage.settings_url('anything_else')
 
     def test_open_settings_is_open_plus_a_fixed_url(self):
-        with mock.patch.object(sys, 'platform', 'darwin'), mock.patch.object(subprocess, 'run') as run:
+        with mock.patch.object(sys, 'platform', 'darwin'), mock.patch.object(subprocess, 'run', return_value=mock.Mock(returncode=0, stderr='')) as run:
             r = imessage.open_settings('automation')
         self.assertEqual(run.call_args[0][0], ['open', imessage.SETTINGS_URLS[('automation', 'modern')]])
         self.assertNotIn('shell', run.call_args[1]); self.assertTrue(r['ok'])
         with mock.patch.object(sys, 'platform', 'linux'):
             with self.assertRaises(imessage.SetupError): imessage.open_settings('automation')
+
+    def test_open_settings_reports_when_open_refuses(self):
+        with mock.patch.object(sys, 'platform', 'darwin'), \
+             mock.patch.object(subprocess, 'run', return_value=mock.Mock(returncode=1, stderr='no such scheme')):
+            with self.assertRaises(imessage.SetupError) as cm: imessage.open_settings('full_disk_access')
+        self.assertEqual(cm.exception.code, 'settings_unavailable')
+        self.assertIn('Full Disk Access', str(cm.exception))
 
     def test_automation_probe_sends_nothing_and_maps_denial(self):
         with mock.patch.object(sys, 'platform', 'darwin'):
@@ -476,5 +490,39 @@ class QuickPollTests(unittest.TestCase):
             server.store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'poll_seconds': 'lots'})}, 'o')
             server._QUICK_LAST.clear()
             self.assertNotIn('imessage', server._quick_due())     # garbage = no fast clock
+        finally:
+            server.store.save_connector({'ConnectorId': cid, 'Active': 0, 'ConfigJson': '{}'}, 'o')
+
+    def test_quick_due_survives_config_that_is_json_but_not_an_object(self):
+        from taskuary import server
+        cid = server.store.get_connector_by_type('imessage')['ConnectorId']
+        try:
+            for cfg in ('null', '[]', '"text"', '7'):
+                server.store.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': cfg}, 'o')
+                server._QUICK_LAST.clear()
+                self.assertEqual(server._quick_due(), [], cfg)
+        finally:
+            server.store.save_connector({'ConnectorId': cid, 'Active': 0, 'ConfigJson': '{}'}, 'o')
+
+    def test_poll_minutes_zero_silences_the_fast_clock_too(self):
+        from taskuary import server
+        cid = server.store.get_connector_by_type('imessage')['ConnectorId']
+        server.store.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': json.dumps({'poll_seconds': 60})}, 'o')
+        calls = []
+        class Stop(Exception): pass
+        def tick(_): raise Stop
+        try:
+            server._QUICK_LAST.clear()
+            with mock.patch.object(server.store, 'get_settings', return_value={'poll_minutes': 0}), \
+                 mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: calls.append(k)), \
+                 mock.patch.object(server.time, 'sleep', tick):
+                with self.assertRaises(Stop): server.poll_forever()
+            self.assertEqual(calls, [])
+            with mock.patch.object(server.store, 'get_settings', return_value={'poll_minutes': 10}), \
+                 mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: calls.append(k)), \
+                 mock.patch.object(server.time, 'sleep', tick):
+                server._LAST_POLL[0] = __import__('time').time()      # global clock not due
+                with self.assertRaises(Stop): server.poll_forever()
+            self.assertEqual(calls, [{'what': 'syncing', 'only': ['imessage']}])
         finally:
             server.store.save_connector({'ConnectorId': cid, 'Active': 0, 'ConfigJson': '{}'}, 'o')

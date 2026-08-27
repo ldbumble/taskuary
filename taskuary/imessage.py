@@ -143,7 +143,10 @@ def open_settings(pane: str) -> dict:
     """`open <fixed url>` - argv, no shell, and only the panes above."""
     if sys.platform != 'darwin': raise SetupError('macos_required', 'System Settings only exists on a Mac')
     url = settings_url(pane)
-    subprocess.run(['open', url], check=False, timeout=10)
+    r = subprocess.run(['open', url], capture_output=True, text=True, timeout=10)
+    if r.returncode != 0:
+        raise SetupError('settings_unavailable', f'macOS did not open that Settings pane ({(r.stderr or "").strip() or r.returncode}) - '
+                         f'open it by hand: {BREADCRUMBS[pane]}', pane)
     return {'ok': True, 'pane': pane, 'breadcrumb': BREADCRUMBS[pane]}
 
 

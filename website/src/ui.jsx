@@ -62,6 +62,33 @@ export const ChannelIcon = ({ channel, sx }) => {
    that only says "are you sure?" tells you nothing you did not already know. The failure is
    shown here rather than swallowed: these calls can be refused, and a dialog that closes on a
    failed delete claims the thing is gone. */
+/* One in-app question in the app's own voice. A native confirm() paints the browser's
+   "127.0.0.1:7787 says" box over the page - the one dialog in the product that does not look
+   like the product. */
+export const Confirm = ({ open, title, text, confirmLabel = "OK", onConfirm, onClose }) => {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const go = async () => {
+    setBusy(true); setErr("");
+    try { await onConfirm(); setBusy(false); onClose(); }
+    catch (e) { setErr(e?.response?.data?.detail || e?.message || "that did not work"); setBusy(false); }
+  };
+  return (
+    <Dialog open={!!open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 700, pb: 0.5 }}>{title}</DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ fontSize: 13, color: DIM, whiteSpace: "pre-wrap" }}>{text}</DialogContentText>
+        {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disableElevation onClick={go} disabled={busy}>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : confirmLabel}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete", onConfirm, onClose }) => {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

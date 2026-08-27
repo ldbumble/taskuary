@@ -122,6 +122,17 @@ export const theme = createTheme({
   },
   shape: { borderRadius: 8 },
   components: {
+    MuiCssBaseline: { styleOverrides: {
+      // Windows paints a classic scrollbar - arrow buttons and all - on every box that can
+      // scroll, and a box that overflows by a pixel shows up as a pair of stray arrows at
+      // its edge. Thin, arrowless, the app's own colour, everywhere; nothing else changes.
+      "*": { scrollbarWidth: "thin", scrollbarColor: "#d3ccc1 transparent" },
+      "*::-webkit-scrollbar": { width: 8, height: 8 },
+      "*::-webkit-scrollbar-thumb": { backgroundColor: "#d3ccc1", borderRadius: 8 },
+      "*::-webkit-scrollbar-track": { background: "transparent" },
+      "*::-webkit-scrollbar-button": { display: "none", width: 0, height: 0 },
+      "*::-webkit-scrollbar-corner": { background: "transparent" },
+    } },
     MuiPaper: { styleOverrides: { root: { backgroundImage: "none", border: `1px solid ${BORDER}`, boxShadow: "none" } } },
     MuiButton: {
       styleOverrides: {

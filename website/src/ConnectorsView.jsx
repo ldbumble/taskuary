@@ -20,7 +20,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
 import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
@@ -28,16 +28,13 @@ import { AgentsPage } from "./AgentsPanel.jsx";
 /* ── connector metadata: channel + AI connectors (rows in the connector table) ── */
 const META = {
   outlook: { group: "Messaging", channel: "email", srcLabel: "Mailboxes", srcPh: "someone@yourdomain.com",
-    fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
-],
-    secretLabel: "client secret",
-    desc: "Ingest mailboxes through a Microsoft Graph app - mail lands on the Timeline through triage.",
-    howto: ["Register (or reuse) an Azure app: Azure Portal → App registrations → New registration.",
-      "API permissions → add the APPLICATION permission Mail.Read (Microsoft Graph) → Grant admin consent. Mail.ReadWrite instead if you want Outlook drafts on approve, or 'Mark items read at the source' (Settings → Sync & startup) — both write back to the mailbox.",
-      "Add Calendars.Read (application) too and replies about time check your calendar first — Test reports whether the calendar can be read.",
-      "Enter tenant_id + client_id and paste the app's client secret (write-only). Blank = the server's AZURE_* env vars.",
-      "Add each mailbox to read as a UPN under Sources and flip it on.",
-      "Test acquires a real Graph token and reports exactly what failed if anything. Enable, and mail flows through the same triage funnel as everything else."] },
+    fields: [["tenant_id (tenant app)", "tenant_id"], ["client_id (tenant app)", "client_id"]],
+    secretLabel: "client secret (tenant app)",
+    desc: "Your Microsoft mailbox on the Timeline through triage. Sign in with your own account - no Azure portal - or register a tenant app if you are the admin.",
+    howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → open microsoft.com/devicelogin, enter the code, sign in with your own account and accept. That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). If your organisation answers \"Need admin approval\", your Microsoft 365 admin approves Taskuary once for everyone; no app registration needed.",
+      "Tenant app (admins - and required for Teams chat reading): Azure Portal → App registrations → New registration; API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Mark items read at the source') and Calendars.Read → Grant admin consent. Enter tenant_id + client_id and paste the client secret under the tenant-app fields; blank = the server's AZURE_* env vars.",
+      "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
+      "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
       ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"]],
@@ -797,6 +794,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   };
   // the telegram flow says "hit Sync now" - so the button has to BE here, not on another tab
   const [srcSync, setSrcSync] = useState(false);
+  // the Outlook card leads with the sign-in; the tenant-app fields (an admin's road) fold
+  // away unless they are already what this card runs on
+  const [adminFields, setAdminFields] = useState(conn.Type !== "outlook" || (!!cfg.client_id && cfg.auth !== "user"));
   const syncHere = async () => {
     setSrcSync(true);
     try { await api.post("/api/ingest/poll"); setTimeout(() => { setSrcSync(false); reload(); }, 3000); }
@@ -808,21 +808,37 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   const steps = [
     { label: "Credentials", done: !!conn.HasSecret || !m.secretLabel, body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-        {m.fields.map(([label, key, ph, helper]) => (
-          <TextField key={key} label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
-            helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
-        ))}
-        {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
-        {m.secretLabel && (
-          <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
-            value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-            helperText="Write-only: stored server-side, never returned to the browser." />
+        {conn.Type === "outlook" && <MsSignIn conn={conn} cfg={cfg} reload={reload} />}
+        {conn.Type === "outlook" && !adminFields && (
+          <Button size="small" variant="text" onClick={() => setAdminFields(true)}
+            sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
+            Admin? Use a tenant app registration instead →
+          </Button>
         )}
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-          <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
-            {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-          {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
-        </Box>
+        {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
+          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
+            Microsoft mailboxes no longer accept IMAP passwords — use the Outlook connector and “Sign in with Microsoft”.
+          </Typography>
+        )}
+        {adminFields && (
+          <>
+            {m.fields.map(([label, key, ph, helper]) => (
+              <TextField key={key} label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
+                helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
+            ))}
+            {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
+            {m.secretLabel && (
+              <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
+                value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
+                helperText="Write-only: stored server-side, never returned to the browser." />
+            )}
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
+                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
+              {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
+            </Box>
+          </>
+        )}
       </Box>
     )},
     { label: "Test", done: !!conn.LastSyncAt && !conn.LastError, body: conn.Type === "imessage" ? (
@@ -1478,6 +1494,78 @@ const MODES = [
   ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc'd, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
 ];
 
+/* ── Sign in with Microsoft: Graph for a regular user, no Azure portal (taskuary/msauth.py).
+   A code, microsoft.com/devicelogin, their own account; this box polls until they are done. ── */
+const MsSignIn = ({ conn, cfg, reload }) => {
+  const [flow, setFlow] = useState(null);      // {flow, user_code, verification_uri, interval}
+  const [state, setState] = useState("");      // "" | ok | error
+  const [detail, setDetail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const signedIn = cfg.auth === "user" && conn.HasSecret;
+  useEffect(() => {
+    if (!flow) return undefined;
+    let alive = true;
+    const wait = Math.max(2, flow.interval || 5) * 1000;
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/poll`, { flow: flow.flow });
+        if (!alive) return;
+        if (data.status === "pending") { setTimeout(tick, wait); return; }
+        setFlow(null);
+        if (data.status === "ok") { setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} added under Mailboxes. Test it, then enable.`); reload(); }
+        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); }
+      } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
+    };
+    const id = setTimeout(tick, wait);
+    return () => { alive = false; clearTimeout(id); };
+  }, [flow, conn.ConnectorId, reload]);
+  const start = async () => {
+    setBusy(true); setState(""); setDetail("");
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`); setFlow(data); }
+    catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
+    setBusy(false);
+  };
+  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`); setState(""); setDetail(""); reload(); };
+  const copy = () => { try { navigator.clipboard?.writeText(flow.user_code); } catch { /* the code is on screen anyway */ } };
+  return (
+    <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
+      <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
+      <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
+        Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
+        work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.
+      </Typography>
+      {signedIn ? (
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
+          <Button size="small" variant="outlined" onClick={signout}>Sign out</Button>
+        </Box>
+      ) : flow ? (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+          <Typography variant="body2" sx={{ color: INK }}>
+            1. Open <a href={flow.verification_uri} target="_blank" rel="noreferrer">{String(flow.verification_uri).replace(/^https?:\/\//, "")}</a> and enter this code:
+          </Typography>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
+              bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>{flow.user_code}</Typography>
+            <IconButton size="small" onClick={copy} title="copy the code"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
+            <Button size="small" variant="contained" disableElevation component="a" href={flow.verification_uri} target="_blank" rel="noreferrer"
+              endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}>Open the sign-in page</Button>
+          </Box>
+          <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75 }}>
+            <CircularProgress size={11} /> 2. Sign in with your Microsoft account and accept — this page finishes by itself.
+          </Typography>
+        </Box>
+      ) : (
+        <Button variant="contained" disableElevation disabled={busy} onClick={start} sx={{ alignSelf: "flex-start" }}>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with Microsoft"}</Button>
+      )}
+      {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
+        {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
+    </Box>
+  );
+};
+
 const ProcessingStep = ({ conn, reload, n }) => {
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [anchor, setAnchor] = useState(null);
@@ -1527,6 +1615,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
   const [roles, toggle] = useRoles(conn, reload);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [saved, setSaved] = useState("");
+  const [ask, setAsk] = useState(null);           // the public-repo question, asked in-app
   useEffect(() => { setCfg(parse(conn.ConfigJson)); }, [conn.ConfigJson]);
   const gh = conn.Type === "github";
   const on = roles.has("trigger") || roles.has("feed") || (gh && ghInboundExplicit(mine));
@@ -1568,18 +1657,22 @@ const InboundStep = ({ conn, m, mine, reload }) => {
                 {["issues", "prs", "auto"].map((kind) => (
                   <Select key={kind} size="small" value={gc[kind] || (kind === "issues" ? "tasks" : "off")}
                     sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const v = e.target.value;
+                      const apply = async () => {
+                        await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...gc, [kind]: v }) });
+                        reload();
+                      };
                       // a public repo: anyone on the internet can open a PR, and with this on each one
-                      // may start an agent (the session cap still holds - 4 at once by default)
-                      if (kind === "auto" && v !== "off" && gc.private !== true
-                          && !window.confirm(`${s.Address} is ${gc.private === false ? "a PUBLIC repo" : "not known to be private"}.\n\n`
-                            + `With "${v}" on, ${v === "anyone" ? "any author's" : v === "contributors" ? "any past contributor's" : "any team member's"} `
-                            + `PR or issue can start a coding agent by itself - uncontrolled PRs mean uncontrolled agents, `
-                            + `limited only by the session cap. Turn it on anyway?`)) return;
-                      await api.post("/api/sources", { SourceId: s.SourceId,
-                        ConfigJson: JSON.stringify({ ...gc, [kind]: v }) });
-                      reload();
+                      // may start an agent (the session cap still holds - Settings → Agents at once, 4 by default)
+                      if (kind === "auto" && v !== "off" && gc.private !== true) {
+                        const who = v === "anyone" ? "any author's" : v === "contributors" ? "any past contributor's" : "any team member's";
+                        setAsk({ title: `${s.Address} is ${gc.private === false ? "a public repo" : "not known to be private"}`,
+                          text: `With "${v}" on, ${who} PR or issue can start a coding agent by itself. Uncontrolled PRs mean uncontrolled agents, limited only by the session cap (Settings → Agents at once).`,
+                          label: `Turn on "${v}" anyway`, onConfirm: apply });
+                        return;
+                      }
+                      apply();
                     }}>
                     {(kind === "auto" ? ["off", "team", "contributors", "anyone"] : ["tasks", "feed", "off"]).map((v) => (
                       <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>
@@ -1593,6 +1686,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
         </Box>
       )}
       {/* processing: one by one, or ranked together - every inbound card, whether on or not */}
+      {ask && <Confirm open title={ask.title} text={ask.text} confirmLabel={ask.label} onConfirm={ask.onConfirm} onClose={() => setAsk(null)} />}
       <ProcessingStep conn={conn} reload={reload} n={gh ? "3" : "2"} />
       {/* the standing prompt, right where inbound is decided */}
       {prompts.length > 0 && (

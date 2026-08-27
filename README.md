@@ -100,7 +100,9 @@ Then, in **Connectors** — a minute or two each:
 1. **AI** — paste an Anthropic / OpenAI / Azure OpenAI / OpenRouter key — or no key at
    all: the **Ollama** card runs triage on a local open-source model. Triage is now on.
    (A small, cheap model is the right pick here; the expensive one goes in step 3.)
-2. **A channel** — Outlook, Gmail/IMAP, Teams, Slack, Telegram, WhatsApp or Discord. Mail
+2. **A channel** — Outlook (**Sign in with Microsoft**: your own account, a code, no Azure
+   portal — or a tenant app if you are the admin), Gmail/IMAP, Teams, Slack, Telegram,
+   WhatsApp or Discord. Mail
    starts landing on the Timeline — and Jira/Asana/Monday/ClickUp/Todoist/Linear/Trello/
    GitLab/Azure DevOps items assigned to you, Sentry errors and PagerDuty incidents ride
    the same funnel.
@@ -173,7 +175,7 @@ One tab per question, two lines each; the details live in the app's own help tex
   seeded with. The kind is a control: *"this is not a coding task"* is one dropdown, and
   saying `reply` routes it into Review instead of a repo.
 - **Your calendar** — a reply about time ("are you free Tuesday at 1?") is drafted with your
-  busy slots in view: the Outlook card's calendars (grant `Calendars.Read`) and a Google
+  busy slots in view: the Outlook card's calendar (signed in, or `Calendars.Read` on a tenant app) and a Google
   calendar if its OAuth fields are on the Gmail card. A busy time is never offered; a clash is
   said plainly with the nearest free one; an unreadable calendar makes the draft say it will
   confirm instead of promising. Agents can read the same thing (`calendar` tool).

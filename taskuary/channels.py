@@ -35,11 +35,18 @@ def graph_creds(store, c):
         o = store.get_connector_by_type('outlook', with_secret=True)
         ocfg = _cfg(o) if o else {}
         if o and (ocfg.get('client_id') or o.get('Secret')):
-            return {**ocfg, **{k: v for k, v in cfg.items() if v}}, sec or o.get('Secret'), True
-    return cfg, sec, False
+            # _cid = whose secret this is, so a rotated refresh token is saved on the right card
+            return {**ocfg, **{k: v for k, v in cfg.items() if v}, '_cid': o['ConnectorId']}, sec or o.get('Secret'), True
+    return {**cfg, '_cid': c.get('ConnectorId')}, sec, False
 
 
 def graph_token(cfg: dict, secret: str = None) -> str:
+    """An access token for Graph. Two roads: the card's owner signed in with their own account
+    (auth=user: the secret is a refresh token, msauth turns it into access tokens) or a tenant
+    app registration (client credentials, app-only). The callers cannot tell them apart."""
+    if (cfg or {}).get('auth') == 'user':
+        from . import msauth
+        return msauth.access_token(cfg, secret)
     tid = cfg.get('tenant_id') or os.getenv('AZURE_TENANT_ID')
     cid = cfg.get('client_id') or os.getenv('AZURE_CLIENT_ID')
     sec = secret or os.getenv('AZURE_CLIENT_SECRET')
@@ -115,11 +122,17 @@ def test_connector(store, cid: int) -> dict:
     try:
         if c['Type'] in ('outlook', 'teams'):
             gcfg, gsec, borrowed = graph_creds(store, c)
+            if c['Type'] == 'teams' and gcfg.get('auth') == 'user':
+                # Graph's chat delta (getAllMessages) is app-only; a person's sign-in cannot read it
+                raise RuntimeError('Teams chat reading needs a tenant app registration (application permission '
+                                   'Chat.Read.All) - the Outlook sign-in covers mail, sending and calendar only. '
+                                   'Enter tenant_id + client_id + client secret on this card.')
             own = bool(cfg.get('client_id') and c.get('Secret'))
             tok = graph_token(gcfg, gsec)
-            detail = 'Graph token OK' + ('' if own else
-                                         " (using the Outlook connector's credentials)" if borrowed
-                                         else ' (using server env credentials)')
+            detail = (f"signed in as {gcfg.get('name') or gcfg.get('account')} ({gcfg.get('account')})" if gcfg.get('auth') == 'user'
+                      else 'Graph token OK' + ('' if own else
+                                               " (using the Outlook connector's credentials)" if borrowed
+                                               else ' (using server env credentials)'))
             if c['Type'] == 'outlook':
                 # the calendar rides the same app: one more permission, and the card says whether it is there
                 try:

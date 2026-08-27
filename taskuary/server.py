@@ -2,6 +2,7 @@
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
 import asyncio, json, re, threading, time
+import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,8 @@ async def _lifespan(_app):
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     threading.Thread(target=poll_forever, daemon=True).start()
     waitroom.watch(store)          # notes queued for a working agent land when it stops
+    from . import msauth
+    msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     yield
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
@@ -1131,6 +1134,66 @@ def connector_test(cid: int):
     out = test_connector(store, cid)
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
+
+# ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
+_MSFLOWS = {}   # flow id -> the device code being polled; one browser tab, minutes, then gone
+
+@app.post('/api/connectors/{cid}/ms/signin')
+def ms_signin(cid: int):
+    """Start the device-code sign-in: the code and URL to show, and a flow id to poll with."""
+    import secrets as _secrets
+    from . import msauth
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook card')
+    cfg = json.loads(c.get('ConfigJson') or '{}')
+    try: d = msauth.device_start(cfg)
+    except RuntimeError as e: raise HTTPException(409, str(e))
+    except requests.RequestException as e: raise HTTPException(502, f'could not reach login.microsoftonline.com: {str(e)[:160]}')
+    flow = _secrets.token_urlsafe(12)
+    for k, v in list(_MSFLOWS.items()):
+        if time.time() - v['at'] > 1800: _MSFLOWS.pop(k, None)
+    _MSFLOWS[flow] = {'cid': cid, 'device_code': d.pop('device_code'), 'cfg': cfg, 'at': time.time()}
+    return {'flow': flow, **d}
+
+@app.post('/api/connectors/{cid}/ms/poll')
+def ms_poll(cid: int, body: dict):
+    """One poll of a sign-in. pending until the user finishes in the browser; then the card is
+    connected as them: refresh token saved as the secret, their mailbox added as the source."""
+    from . import msauth
+    flow = (body or {}).get('flow')
+    f = _MSFLOWS.get(flow)
+    if not f or f['cid'] != cid: raise HTTPException(404, 'no such sign-in in progress - start it again')
+    try: t = msauth.device_poll(f['cfg'], f['device_code'])
+    except RuntimeError as e:
+        _MSFLOWS.pop(flow, None)
+        return {'status': 'error', 'detail': str(e)}
+    if t.get('pending'): return {'status': 'pending'}
+    _MSFLOWS.pop(flow, None)
+    if not t.get('refresh_token'):
+        return {'status': 'error', 'detail': 'Microsoft returned no refresh token - the offline_access scope was not granted'}
+    who = msauth.me(t['access_token'])
+    cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name']}
+    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    if who['account'] and not any(s['Channel'] == 'email' and (s['Address'] or '').lower() == who['account'].lower()
+                                  for s in store.list_sources(active_only=False)):
+        store.save_source({'Channel': 'email', 'Address': who['account'], 'ConnectorId': cid, 'Active': 1}, ACTOR)
+    store.audit('connector', cid, 'ms_signin', ACTOR, detail={'account': who['account']})
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
+    return {'status': 'ok', **who}
+
+@app.post('/api/connectors/{cid}/ms/signout')
+def ms_signout(cid: int):
+    """Forget the sign-in: the refresh token goes, the card turns off, admin fields stay."""
+    c = store.get_connector(cid)
+    if not c: raise HTTPException(404, 'connector not found')
+    cfg = json.loads(c.get('ConfigJson') or '{}')
+    for k in ('auth', 'account', 'name'): cfg.pop(k, None)
+    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': '', 'Active': 0}, ACTOR)
+    store.audit('connector', cid, 'ms_signout', ACTOR, detail={'type': c['Type']})
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
+    return {'ok': True}
 
 @app.post('/api/platform/macos/open-settings')
 def macos_open_settings(body: dict):

@@ -1009,6 +1009,30 @@ class SQLiteStore:
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
         return self._rows(q, p)
 
+    def feed_tag(self, days=14, pending_only=False, channel=None, source=None):
+        """Cheap fingerprint of what /api/feed would return, so a 30s refresh can 304.
+
+        Not the page itself: count + newest id in the window, plus the high-water marks
+        that change the chips (route, review, run, task.UpdatedAt). A false miss just
+        reruns the JOIN; a false hit would freeze the Timeline, so the tag is conservative."""
+        q = """SELECT COUNT(*) n, IFNULL(MAX(m.MessageId),0) mid FROM message m
+               WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped')"""
+        p = [f'-{int(days)} days']
+        if channel:
+            chans = [c.strip() for c in str(channel).split(',') if c.strip()]
+            q += f" AND m.Channel IN ({','.join('?' * len(chans))})"
+            p += chans
+        if source: q += ' AND m.SourceName=?'; p.append(source)
+        row = self._one(q, p) or {'n': 0, 'mid': 0}
+        extra = self._one("""SELECT IFNULL((SELECT MAX(RouteId) FROM route),0) rid,
+                                    IFNULL((SELECT MAX(ReviewId) FROM review),0) rvid,
+                                    IFNULL((SELECT MAX(RunId) FROM run),0) runid,
+                                    IFNULL((SELECT MAX(UpdatedAt) FROM task),'') tup""") or {}
+        bits = [row['n'], row['mid'], extra.get('rid') or 0, extra.get('rvid') or 0,
+                extra.get('runid') or 0, extra.get('tup') or '', int(bool(pending_only)),
+                channel or '', source or '', int(days)]
+        return '-'.join(str(b) for b in bits)
+
     def people(self, limit=60):
         """Everyone who has written to you lately - the hand-off picker's address book."""
         return self._rows("""SELECT FromEmail Email, MAX(FromName) Name, COUNT(*) N, MAX(SentAt) Last

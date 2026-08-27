@@ -275,6 +275,19 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn(old, active)
         self.assertIn(old, all_ids)
 
+    def test_feed_304s_when_nothing_changed(self):
+        r1 = c.get('/api/feed')
+        self.assertEqual(r1.status_code, 200)
+        tag = r1.headers.get('etag')
+        self.assertTrue(tag)
+        r2 = c.get('/api/feed', headers={'If-None-Match': tag})
+        self.assertEqual(r2.status_code, 304)
+        server.store.add_message({'Channel': 'email', 'Subject': 'etag-new', 'Status': 'filed',
+                                  'BodyText': 'x', 'ExternalId': 'etag-new'})
+        r3 = c.get('/api/feed', headers={'If-None-Match': tag})
+        self.assertEqual(r3.status_code, 200)
+        self.assertTrue(any(m['Subject'] == 'etag-new' for m in r3.json()['data']))
+
     def test_decide_accepts_explicit_null_final_text(self):
         # the UI sends {"verb": "reject", "final_text": null} - pydantic v2 422'd on the
         # explicit null (str = None is not Optional), which blanked the Review screen

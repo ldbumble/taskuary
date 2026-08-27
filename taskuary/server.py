@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from . import config
@@ -147,12 +147,16 @@ def _can_send(channel, has_message=True, gh_ok=None) -> bool:
 
 
 @app.get('/api/feed')
-def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None):
+def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None,
+         request: Request = None):
     days = int(store.get_settings().get('feed_days', 14))
+    tag = '"' + store.feed_tag(days, pending_only, channel, source) + '"'
+    if request is not None and request.headers.get('if-none-match') == tag:
+        return Response(status_code=304, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
     rows = store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)
     gh_ok = store.github_replies_ok()
     for r in rows: r['CanSend'] = _can_send(r.get('Channel'), True, gh_ok)
-    return {'data': rows}
+    return JSONResponse({'data': rows}, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
 
 
 def _queued_info(q):

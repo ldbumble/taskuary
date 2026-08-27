@@ -271,6 +271,14 @@ class FeedJoinTests(unittest.TestCase):
         self.assertNotIn(ids['fyi'], pending_ids)
         self.assertEqual(len(pending_ids), 2)   # the follow-up on the open task is on you too
 
+    def test_tag_stays_put_until_a_chip_would_change(self):
+        s, ids = self._fixture()
+        a = s.feed_tag()
+        self.assertEqual(a, s.feed_tag())
+        s.add_message({'Channel': 'email', 'Subject': 'new', 'Status': 'filed', 'BodyText': 'x',
+                       'ExternalId': 'brand-new'})
+        self.assertNotEqual(a, s.feed_tag())
+
 
 class ListTasksJoinTests(unittest.TestCase):
     def test_latest_review_run_and_handover_land_on_the_row(self):

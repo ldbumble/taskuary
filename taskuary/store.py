@@ -513,15 +513,34 @@ class SQLiteStore:
                   'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task WHERE TaskId=?'):
             self._exec(q, (task_id,))
     def snapshots(self):
-        snaps = []
-        for t in self._rows("SELECT * FROM task WHERE Status IN ('open','in_progress','waiting')"):
-            ms = self._rows('SELECT * FROM message WHERE TaskId=?', (t['TaskId'],))
-            snaps.append({'task_id': t['TaskId'], 'title': t['Title'],
-                          'subjects': [m['Subject'] for m in ms if m['Subject']],
-                          'senders': [m['FromEmail'] for m in ms if m['FromEmail']],
-                          'conversation_ids': [m['ConversationId'] for m in ms if m['ConversationId']],
-                          'text': ' '.join([t['Title'] or ''] + [str(m['BodyText'] or '')[:2000] for m in ms])})
-        return snaps
+        """Open tasks as the router sees them - one query, not one per task.
+
+        A catch-up used to do SELECT * FROM task then SELECT * FROM message for each,
+        so routing 40 mails against 80 open tasks was 3,200 extra round trips on the
+        lock. LEFT JOIN keeps a hand-typed task (no messages yet) in the picture."""
+        rows = self._rows("""
+            SELECT t.TaskId, t.Title, m.Subject, m.FromEmail, m.ConversationId,
+                   substr(m.BodyText, 1, 2000) BodyText
+            FROM task t
+            LEFT JOIN message m ON m.TaskId = t.TaskId
+            WHERE t.Status IN ('open','in_progress','waiting')
+            ORDER BY t.TaskId, m.MessageId
+        """)
+        out = {}
+        for r in rows:
+            snap = out.get(r['TaskId'])
+            if snap is None:
+                snap = out[r['TaskId']] = {
+                    'task_id': r['TaskId'], 'title': r['Title'],
+                    'subjects': [], 'senders': [], 'conversation_ids': [],
+                    'text': r['Title'] or '',
+                }
+            if r['Subject']: snap['subjects'].append(r['Subject'])
+            if r['FromEmail']: snap['senders'].append(r['FromEmail'])
+            if r['ConversationId']: snap['conversation_ids'].append(r['ConversationId'])
+            if r['BodyText'] is not None:
+                snap['text'] += ' ' + r['BodyText']
+        return list(out.values())
 
     # messages / routes / comments
     def message_exists(self, external_id):

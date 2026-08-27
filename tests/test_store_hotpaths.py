@@ -153,3 +153,36 @@ class RelatedIndexTests(unittest.TestCase):
         self.assertEqual(row['ReviewStatus'], 'pending')
         self.assertEqual(row['Attachments'], 1)
         s.cx.close()
+
+
+class SnapshotJoinTests(unittest.TestCase):
+    def test_one_row_per_open_task_including_ones_with_no_mail(self):
+        s = MemoryStore()
+        empty = s.create_task({'Title': 'typed in by hand'}, 't')
+        mailed = s.create_task({'Title': 'from mail'}, 't')
+        s.create_task({'Title': 'finished', 'Status': 'done'}, 't')
+        s.add_message({'TaskId': mailed, 'Channel': 'email', 'Subject': 'PTO file',
+                       'FromEmail': 'gw@corp.example', 'ConversationId': 'c-pto',
+                       'BodyText': 'Do you have the July file?', 'Status': 'routed'})
+        by = {x['task_id']: x for x in s.snapshots()}
+        self.assertEqual(set(by), {empty, mailed})
+        self.assertEqual(by[empty]['text'], 'typed in by hand')
+        self.assertEqual(by[empty]['subjects'], [])
+        self.assertEqual(by[mailed]['subjects'], ['PTO file'])
+        self.assertEqual(by[mailed]['senders'], ['gw@corp.example'])
+        self.assertEqual(by[mailed]['conversation_ids'], ['c-pto'])
+        self.assertIn('Do you have the July file?', by[mailed]['text'])
+        self.assertTrue(by[mailed]['text'].startswith('from mail'))
+
+    def test_a_follow_up_still_attaches_to_the_open_task(self):
+        """The JOIN must not drop conversation_ids or routing would open a second task."""
+        from taskuary.ingest import ingest_message
+        llm = lambda sys, usr: '{"intent": "task", "why": "t"}'
+        s = MemoryStore()
+        a = ingest_message(s, {'external_id': 'm1', 'channel': 'api', 'subject': 's',
+                               'body': 'please add the new user to the system',
+                               'from_email': 'a@b.com', 'conversation_id': 'c1'}, llm=llm)
+        b = ingest_message(s, {'external_id': 'm2', 'channel': 'api', 'subject': 's',
+                               'body': 'and one more thing', 'from_email': 'a@b.com',
+                               'conversation_id': 'c1'}, llm=llm)
+        self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']))

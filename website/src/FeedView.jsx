@@ -17,6 +17,7 @@ import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import api from "./api";
 import EventIcon from "@mui/icons-material/Event";
 import { pollWhileVisible } from "./visible.js";
+import { feedHeaders, feedOk, takeFeed } from "./feedLoad.js";
 import { ALERT, ALERT_INK, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -222,6 +223,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [err, setErr] = useState("");
   const seen = useRef(new Set());               // MessageIds already animated in
   const rowsLen = useRef(0);
+  const etagRef = useRef("");
   const busyMore = useRef(false);
   const endRef = useRef(null);
 
@@ -262,8 +264,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const load = useCallback(async (span) => {
     try {
       const limit = Math.max(span || 0, PAGE);
-      const { data } = await api.get("/api/feed", { params: { limit, ...fparams() } });
-      const batch = data.data || [];
+      const res = await api.get("/api/feed", {
+        params: { limit, ...fparams() },
+        headers: feedHeaders(etagRef.current),
+        validateStatus: feedOk,
+      });
+      const batch = takeFeed(res, etagRef);
+      if (batch == null) return;                 // 304: the list on screen is still the truth
       setRows(batch); rowsLen.current = batch.length;
       setNoMore(batch.length < limit);
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load the feed"); }
@@ -346,6 +353,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
   useEffect(() => {
     setRows(null); rowsLen.current = 0; setNoMore(false);
+    etagRef.current = "";                        // a new filter is not the same page
     setSel(null); setEditText("");   // filter switch: never leave a stale review panel up
     load();
     // Rows only. The INGEST clock moved to the server (server.poll_forever): living here it

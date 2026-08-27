@@ -13,7 +13,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, TellAgentButton } from "./ui.jsx";
 
 // "coder · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
@@ -360,12 +360,6 @@ export default function BoardView({ onOpenTask }) {
                           color: t.RunStatus === "running" ? "#55697a" : t.RunStatus === "error" ? "#6b2733" : "#47654a" }} />
                     )}
                     {t.HandoverNote && <NoteChip onOpen={() => setNoteFor(t)} />}
-                    {t.Waiting > 0 && (
-                      <Chip size="small" title="Notes queued for the agent - typed in when it stops (Tasks → Waiting room)"
-                        label={`✎ ${t.Waiting} waiting`}
-                        sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
-                          bgcolor: "#f1ead9", color: "#7a5c1e" }} />
-                    )}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{timeAgo(t.CreatedAt)}</Typography>
                   </Box>
@@ -395,6 +389,7 @@ export default function BoardView({ onOpenTask }) {
                       border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.7 } }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
+                    {t.Kind !== "reply" && t.Status !== "done" && <TellAgentButton taskId={t.TaskId} taskRef={t.ref} count={t.Waiting || 0} small />}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
                   </Box>

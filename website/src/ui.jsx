@@ -853,6 +853,92 @@ export const scoreBar = (v) => (
 // Compact filter pill row used across views.
 // Segmented control: one contained housing, obviously interactive; the active segment
 // fills with its muted color pair {bg, fg, bd} (indigo default), the rest stay quiet.
+// THE WAITING ROOM, as a box you can type into from anywhere a task shows. What you think of
+// while the agent works goes in here and is typed into its session as one batch the moment it
+// stops - never mid-turn, never on top of a question it is waiting on you to answer. The same
+// box on the task page, on a Board card and in the Timeline's funnel bar, so the idea goes
+// where you are instead of you going to find the room.
+export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
+  const [wait, setWait] = React.useState({ data: [], state: null });
+  const [text, setText] = React.useState("");
+  const [flash, setFlash] = React.useState("");
+  const load = React.useCallback(async () => {
+    if (!taskId) return;
+    try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
+  }, [taskId]);
+  React.useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  const queue = async () => {
+    if (!text.trim()) return;
+    try {
+      const { data } = await api.post(`/api/tasks/${taskId}/waitroom`, { text });
+      setText("");
+      setFlash(data.delivered ? (data.state === "restarted" ? "session reopened with it" : "typed in — the agent was parked") : "queued — goes in when the agent stops");
+      setTimeout(() => setFlash(""), 4000);
+      load(); onQueued?.(data);
+    } catch (e) { setFlash(e?.response?.data?.detail || "could not queue it"); }
+  };
+  const pending = wait.data.filter((w) => !w.DeliveredAt);
+  const stateLine = wait.state === "working" ? "agent is working — this waits for its next stop"
+    : wait.state === "asking" ? "agent is asking you something — answer it first; this goes in after"
+    : wait.state === "parked" ? "agent is parked — this goes straight in"
+    : wait.state === "no_session" ? "no live session — this reopens one with your note as the ask" : "";
+  return (
+    <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: compact ? 1 : 1.25 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
+        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>
+          ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} waiting` : ""}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {stateLine && <Typography variant="caption" sx={{ color: "#6b5f45", fontSize: 10.5 }}>{stateLine}</Typography>}
+      </Box>
+      <Box sx={{ display: "flex", gap: 1 }}>
+        <TextField fullWidth multiline maxRows={compact ? 3 : 5} size="small" value={text} placeholder="Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line."
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
+          sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: 12.5 } }} />
+        <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim()}
+          sx={{ alignSelf: "flex-end", bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>Queue</Button>
+      </Box>
+      {flash && <Typography variant="caption" sx={{ color: "#47654a", display: "block", mt: 0.5 }}>{flash}</Typography>}
+      {pending.length > 0 && (
+        <Box sx={{ mt: 0.75, display: "flex", flexDirection: "column", gap: 0.35 }}>
+          {pending.map((w, i) => (
+            <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline", fontSize: 11.5 }}>
+              <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
+              <Typography variant="body2" sx={{ fontSize: 11.5, flex: 1, whiteSpace: "pre-wrap", color: INK }}>{w.Note}</Typography>
+              <Typography variant="caption" onClick={async () => { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); load(); }}
+                sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {!compact && wait.data.some((w) => w.DeliveredAt) && (
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+          {wait.data.filter((w) => w.DeliveredAt).length} earlier note{wait.data.filter((w) => w.DeliveredAt).length === 1 ? "" : "s"} already typed in.
+        </Typography>
+      )}
+    </Box>
+  );
+};
+
+// The same box behind one button, for places with no room for it (a Board card, the funnel bar).
+export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) => {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen(true); }} title="Tell the agent something — queued until it stops"
+        sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: small ? 0.6 : 0.9, py: 0.15, borderRadius: 99, cursor: "pointer",
+          bgcolor: "#f1ead9", color: "#6b5f45", border: "1px solid #ddd2b9", fontSize: small ? 9.5 : 10.5, fontWeight: 700, whiteSpace: "nowrap",
+          "&:hover": { bgcolor: "#e9dfc5" } }}>
+        ✎ {count ? `${count} waiting` : "tell the agent"}
+      </Box>
+      <Dialog open={open} onClose={(e) => { e?.stopPropagation?.(); setOpen(false); }} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3, p: 1.5 }, onClick: (e) => e.stopPropagation() }}>
+        <TellAgent taskId={taskId} taskRef={taskRef} />
+      </Dialog>
+    </>
+  );
+};
+
 export const FilterPills = ({ options, value, onChange }) => (
   <Box sx={{ display: "inline-flex", gap: 0.25, p: 0.4, bgcolor: "#e9e3d8",
     border: "1px solid #e1dcd5", borderRadius: 2.5 }}>

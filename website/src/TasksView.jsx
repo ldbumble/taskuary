@@ -17,7 +17,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent } from "./ui.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
@@ -468,6 +468,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     terminal has its own scrollbar for its own scrollback */}
                     <TerminalPane sid={term.sid} height="clamp(300px, calc(100vh - 300px), 820px)"
                       onExit={() => findTerm(selected)} />
+                    {/* the waiting room, right under the session it feeds: type here instead of into the
+                        terminal, and it goes in when the agent stops rather than on top of its work */}
+                    <Box sx={{ mt: 1 }}><TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} /></Box>
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
                         {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."
@@ -594,40 +597,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Fold>
                 )}
 
-                {/* the waiting room: what you think of while the agent works. Queued here, typed
-                    into the session as one batch the moment the agent parks at its prompt - never
-                    mid-edit, and never on top of a question it is waiting on you to answer. */}
-                {detail.task.Kind !== "reply" && (
-                  <Fold title={`Waiting room · ${wait.data.filter((w) => !w.DeliveredAt).length} waiting`}>
-                    <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75, lineHeight: 1.5 }}>
-                      {wait.state === "working" ? "The agent is working - notes queue here and go in as one batch when it stops."
-                        : wait.state === "asking" ? "The agent is waiting on a question for you. Answer it in the terminal; queued notes follow."
-                        : wait.state === "parked" ? "The agent is parked at its prompt - a note goes straight in."
-                        : "No live session - a note reopens one on this task with the notes as the ask."}
-                    </Typography>
-                    {wait.data.map((w) => (
-                      <Box key={w.WId} sx={{ display: "flex", gap: 1, alignItems: "baseline", py: 0.35,
-                        borderTop: `1px solid ${BORDER}`, opacity: w.DeliveredAt ? 0.55 : 1 }}>
-                        <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: w.DeliveredAt ? "#47654a" : "#55697a",
-                          whiteSpace: "nowrap", flexShrink: 0 }}>
-                          {w.DeliveredAt ? (w.How === "seeded" ? "reopened with" : "typed in") : "waiting"}
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontSize: 12, flex: 1, whiteSpace: "pre-wrap" }}>{w.Note}</Typography>
-                        {!w.DeliveredAt && (
-                          <IconButton size="small" title="Withdraw" onClick={async () => {
-                            await api.delete(`/api/tasks/${selected}/waitroom/${w.WId}`); loadDetail(selected); }}>
-                            <CloseIcon sx={{ fontSize: 14 }} />
-                          </IconButton>
-                        )}
-                      </Box>
-                    ))}
-                    <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
-                      <TextField fullWidth multiline maxRows={4} placeholder="Tell the agent, when it stops…" value={waitText}
-                        onChange={(e) => setWaitText(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queueNote(); } }} />
-                      <Button size="small" onClick={queueNote} disabled={!waitText.trim()}>Queue</Button>
-                    </Box>
-                  </Fold>
+                {/* no live session: the same box, so a note left now reopens one with it as the ask */}
+                {detail.task.Kind !== "reply" && !term && (
+                  <Box sx={{ mt: 1.5 }}><TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} /></Box>
                 )}
 
                 <Fold title={`Notes & history · ${detail.comments.length}`}>

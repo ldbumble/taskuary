@@ -22,7 +22,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING } from "./ui.jsx";
+import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton } from "./ui.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
@@ -126,9 +126,14 @@ const FunnelBar = ({ onOpenTask }) => {
           Next up {f.queued.length} {open ? "▾" : "▸"}
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
-          {f.working.slice(0, 4).map((w) => w.ref).join(" · ")}
-        </Typography>
+        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+          {f.working.slice(0, 4).map((w) => (
+            <Box key={w.tid} sx={{ display: "inline-flex", alignItems: "center", gap: 0.4 }}>
+              <Typography variant="caption" onClick={() => onOpenTask && onOpenTask(w.tid)} sx={{ ...{ fontFamily: "ui-monospace, monospace" }, color: "#47654a", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }} title={w.title}>{w.ref}</Typography>
+              <TellAgentButton taskId={w.tid} taskRef={w.ref} small />
+            </Box>
+          ))}
+        </Box>
       </Box>
       {open && (
         <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderTop: "none", borderRadius: "0 0 10px 10px", px: 1.5, py: 0.5 }}>

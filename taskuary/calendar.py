@@ -17,7 +17,7 @@ Two sources, both read-only, both riding credentials already on a connector card
 The same read is a tool (`calendar` in reports.REGISTRY) so an agent can check before it
 commits anyone to a time.
 """
-import json, re
+import json, re, time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import requests
@@ -41,6 +41,13 @@ def tz_of(store):
     except Exception: return datetime.now().astimezone().tzinfo
 
 
+def tz_name(tz) -> str:
+    """What to tell a calendar API: the IANA key when the owner set one (Settings -> Display ->
+    Timezone), else the machine's own zone name - on Windows that is "Eastern Standard Time",
+    which Graph accepts as-is. Blank was sent as UTC and every meeting read five hours late."""
+    return getattr(tz, 'key', None) or (time.tzname[0] if time.tzname and time.tzname[0] else 'UTC')
+
+
 def _iso(d): return d.strftime('%Y-%m-%dT%H:%M:%S')
 
 
@@ -51,7 +58,7 @@ def outlook_events(cfg: dict, secret: str, mailboxes: list, start: datetime, end
     out = []
     for mb in mailboxes:
         r = requests.get(f'{GRAPH}/users/{mb}/calendarView', timeout=20,
-                         headers={'Authorization': f'Bearer {tok}', 'Prefer': f'outlook.timezone="{getattr(tz, "key", None) or "UTC"}"'},
+                         headers={'Authorization': f'Bearer {tok}', 'Prefer': f'outlook.timezone="{tz_name(tz)}"'},
                          params={'startDateTime': _iso(start), 'endDateTime': _iso(end), '$top': MAX_EVENTS,
                                  '$orderby': 'start/dateTime', '$select': 'subject,start,end,isAllDay,showAs,location,organizer'})
         if r.status_code == 403:
@@ -78,7 +85,7 @@ def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
                      headers={'Authorization': f"Bearer {t.json()['access_token']}"},
                      params={'timeMin': start.astimezone(tz).isoformat(), 'timeMax': end.astimezone(tz).isoformat(),
                              'singleEvents': 'true', 'orderBy': 'startTime', 'maxResults': MAX_EVENTS,
-                             'timeZone': getattr(tz, 'key', None) or 'UTC'})
+                             'timeZone': tz_name(tz)})
     if r.status_code != 200: raise RuntimeError(f'Google calendar read failed ({r.status_code}): {r.text[:200]}')
     out = []
     for e in r.json().get('items') or []:
@@ -114,7 +121,7 @@ def agenda(store, days: int = DAYS) -> dict:
             except Exception as e: errors.append(str(e)[:240])
     events.sort(key=lambda e: e['start'])
     return {'events': events[:MAX_EVENTS], 'errors': errors, 'sources': sources, 'start': _iso(start), 'end': _iso(end),
-            'tz': getattr(tz, 'key', None) or str(tz)}
+            'tz': tz_name(tz)}
 
 
 def render(ag: dict) -> str:

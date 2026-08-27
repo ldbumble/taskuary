@@ -165,6 +165,21 @@ class PeopleTests(unittest.TestCase):
         self.assertEqual(s.identity(mine['IdentityId'])['CanonicalPersonId'], owner)
         self.assertEqual(s.canonical_person_id(jane['PersonId']), owner)
 
+    def test_directory_cache_refreshes_after_every_kind_of_write(self):
+        s = MemoryStore()
+        a = s.ensure_identity('email', 'jane@x.example', 'Jane', connector_id=3)
+        self.assertEqual(s.identity(a['IdentityId'])['PersonName'], 'Jane')
+        s.update_person(a['PersonId'], name='Jane Doe')
+        self.assertEqual(s.identity(a['IdentityId'])['PersonName'], 'Jane Doe')
+        b = s.ensure_identity('slack', 'U1', 'jane')                       # new identity appears
+        self.assertEqual(s.identity(b['IdentityId'])['Handle'], 'U1')
+        root = s.merge_people(a['PersonId'], b['PersonId'])                # link is seen
+        self.assertEqual(s.canonical_person_id(b['PersonId']), root)
+        s.unmerge_person(b['PersonId'])                                    # and its undoing
+        self.assertEqual(s.canonical_person_id(b['PersonId']), b['PersonId'])
+        s.deactivate_connector_identities(3)                               # deactivation drops it from the page
+        self.assertNotIn('jane@x.example', {i['Handle'] for p in s.list_people() for i in p['Identities']})
+
 
 if __name__ == '__main__':
     unittest.main()

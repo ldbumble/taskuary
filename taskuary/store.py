@@ -322,6 +322,7 @@ class SQLiteStore:
         self.cx.execute('PRAGMA busy_timeout=5000')
         self._snap_hold = 0
         self._snap_cache = None
+        self._dir_cache = None
         self._writes = 0
         with self.lock:
             self.cx.executescript(SCHEMA)
@@ -546,6 +547,7 @@ class SQLiteStore:
         # The identity block is a materialised, owner-readable view of the structured rows.
         # Do this outside the store lock because docsync uses the public store methods.
         from .docsync import sync_identities
+        self._bump_directory()          # the backfill above wrote person/identity rows directly
         sync_identities(self, 'startup')
 
     def _rows(self, q, p=()):
@@ -564,7 +566,7 @@ class SQLiteStore:
     # people / connector identities
     def canonical_person_id(self, person_id):
         if not person_id: return None
-        return _root(_parents(self._rows('SELECT PersonId, MergedIntoPersonId FROM person')), person_id)
+        return self._identity_maps()[2].get(int(person_id), int(person_id))
 
     def person_family_ids(self, person_id) -> set:
         if not person_id: return set()
@@ -576,12 +578,13 @@ class SQLiteStore:
         return self._one('SELECT * FROM person WHERE IsOwner=1 ORDER BY PersonId LIMIT 1')
 
     def identity(self, identity_id):
-        row = self._one('SELECT * FROM identity WHERE IdentityId=?', (identity_id,))
+        if not identity_id: return None
+        by_person, identities, roots, _ = self._identity_maps()
+        row = identities.get(int(identity_id))
         if not row: return None
-        row['CanonicalPersonId'] = self.canonical_person_id(row['PersonId'])
-        p = self._one('SELECT Name, IsOwner FROM person WHERE PersonId=?', (row['CanonicalPersonId'],)) or {}
-        row['PersonName'], row['IsOwner'] = p.get('Name'), p.get('IsOwner', 0)
-        return row
+        root = roots.get(row['PersonId'], row['PersonId'])
+        p = by_person.get(root) or {}
+        return {**row, 'CanonicalPersonId': root, 'PersonName': p.get('Name'), 'IsOwner': p.get('IsOwner', 0)}
 
     def identity_for(self, channel, handle):
         nk = norm_handle(channel or 'api', handle)
@@ -590,8 +593,13 @@ class SQLiteStore:
                         (channel or 'api', nk))
         return self.identity(row['IdentityId']) if row else None
 
+    def _bump_directory(self): self._dir_cache = None
     def _identity_maps(self):
-        """One-pass directory maps for feed/snapshot reads; avoid queries per message."""
+        """One-pass directory maps for feed/snapshot reads, built once and kept until a person or
+        identity row changes (_bump_directory). Uncached, a mailbox with 4,000 senders re-read both
+        tables on EVERY message read - 24 ms a time, ten times per ingested message - and
+        others_on_thread took a quarter second. Callers get shared dicts: copy before mutating."""
+        if self._dir_cache is not None: return self._dir_cache
         people = self._rows('SELECT * FROM person')
         identities = self._rows('SELECT * FROM identity')
         by_person = {p['PersonId']: p for p in people}
@@ -606,7 +614,8 @@ class SQLiteStore:
             return cur
         families = {}
         for p in people: families.setdefault(root(p['PersonId']), set()).add(p['PersonId'])
-        return by_person, {i['IdentityId']: i for i in identities}, roots, families
+        self._dir_cache = (by_person, {i['IdentityId']: i for i in identities}, roots, families)
+        return self._dir_cache
 
     def _with_people(self, rows):
         """Add resolved identity fields to outward-facing message dicts without rewriting history."""
@@ -667,7 +676,7 @@ class SQLiteStore:
                     (person_id, channel, raw, nk, display_name, connector_id, int(bool(verified)), 1, _now(), _now()))
                 iid = self.cx.execute('SELECT last_insert_rowid()').fetchone()[0]
             self.cx.commit(); self._writes += 1
-        self._bump_snapshots()
+        self._bump_snapshots(); self._bump_directory()
         return self.identity(iid)
 
     def register_owner_identity(self, channel, handle, display_name=None, connector_id=None, verified=True):
@@ -679,6 +688,7 @@ class SQLiteStore:
 
     def deactivate_connector_identities(self, connector_id):
         self._exec('UPDATE identity SET Active=0, UpdatedAt=? WHERE ConnectorId=?', (_now(), connector_id))
+        self._bump_directory()
         from .docsync import sync_identities
         sync_identities(self, 'identity')
 
@@ -715,6 +725,7 @@ class SQLiteStore:
         if notes is not None: sets.append('Notes=?'); args.append(notes[:2000])
         if sets:
             self._exec(f"UPDATE person SET {','.join(sets)}, UpdatedAt=? WHERE PersonId=?", args + [_now(), person_id])
+            self._bump_directory()
         return True
 
     def merge_people(self, target_id, source_id):
@@ -724,14 +735,14 @@ class SQLiteStore:
         sp = self._one('SELECT IsOwner FROM person WHERE PersonId=?', (source,)) or {}
         if sp.get('IsOwner') and not tp.get('IsOwner'): target, source = source, target
         self._exec('UPDATE person SET MergedIntoPersonId=?, UpdatedAt=? WHERE PersonId=?', (target, _now(), source))
-        self._bump_snapshots()
+        self._bump_snapshots(); self._bump_directory()
         return target
 
     def unmerge_person(self, person_id):
         p = self._one('SELECT MergedIntoPersonId FROM person WHERE PersonId=?', (person_id,))
         if not p or not p.get('MergedIntoPersonId'): return False
         self._exec('UPDATE person SET MergedIntoPersonId=NULL, UpdatedAt=? WHERE PersonId=?', (_now(), person_id))
-        self._bump_snapshots()
+        self._bump_snapshots(); self._bump_directory()
         return True
 
     def known_person_sender(self, person_id, exclude_message_id=None):

@@ -10,7 +10,7 @@
     { body: "#b8b2a9", collar: "#efe9de", skin: "#f0e2d2", hair: "#3e4a3c" },
     { body: "#6f8a6e", collar: "#e8f1ea", skin: "#eddfcf", hair: "#2c3a31", curly: true },
     { body: "#8a6a5c", collar: "#eef1ec", skin: "#eedfcd", hair: "#33403a" },
-    { body: "#54707a", collar: "#e6f1ef", skin: "#f2e5d5", hair: "#2e3f3c" },
+    { body: "#54707a", collar: "#e6f1ef", skin: "#f2e5d5", hair: "#cfae6e" },   // blond
     { body: "#6a6480", collar: "#f2f4ee", skin: "#f2e5d5", hair: "#4b4636" },
   ];
   const CODE = ["#8fb3c9", "#a7c79a", "#d9d3c6", "#7f8a96"];

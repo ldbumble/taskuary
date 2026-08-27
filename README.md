@@ -149,7 +149,12 @@ ruled the way it did, the drafted reply waiting for your approval, and every way
 One tab per question, two lines each; the details live in the app's own help text.
 
 - **Timeline** — everything inbound on one day-grouped rail, chips saying what each row IS
-  and whether it needs you. Click a row: the whole message (stored whole, not a preview),
+  and whether it needs you. The chip is triage's verdict in one word — `coding` (sent to the
+  agent), `to do` (yours, not code), `review` (a reply drafted for you), `info` (a **person**
+  told you something — green, worth the eye), `automated` (a system did), `promo` (a newsletter;
+  skim past), `filed`, `ignored`. A colleague's FYI and a vendor's marketing mail are both
+  "nothing to do", and they deliberately do not wear the same tag; your own domain counts as
+  team, add more under Settings → `team_domains`. Click a row: the whole message (stored whole, not a preview),
   its attachments drawn inline — half of "see below" mail is the screenshot — and every way
   out: approve the drafted reply, send it to a coding agent, hand it to a person, split or
   merge, "not our task" (which teaches triage for next time).

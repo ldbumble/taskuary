@@ -59,6 +59,23 @@ export const ACTION_COLORS = {
   task_only: role("working", "task created"),
   triaging: role("muted", "triaging…"),          // shown first, decided next (ingest.deferred)
 };
+// What a message IS - triage's verdict in one word (taskuary/categories.py decides it). 'info'
+// is GREEN because a person told you something; the same "nothing to do" from a mailing list
+// is 'promo' and grey - a colleague's FYI and a vendor's newsletter must not wear the same tag.
+export const TAGS = {
+  coding:    { ...role("working", "coding"),   hint: "sent to the coding agent" },
+  todo:      { ...role("working", "to do"),    hint: "real work, on your own list - not code" },
+  review:    { ...role("you", "review"),       hint: "a reply is drafted for you to send" },
+  info:      { ...role("done", "info"),        hint: "a person told you something; nothing to do" },
+  automated: { ...role("info", "automated"),   hint: "a system told you something; nothing to do" },
+  promo:     { ...role("muted", "promo"),      hint: "marketing or a newsletter - skim past" },
+  filed:     { ...role("muted", "filed"),      hint: "kept; triage found nothing to do" },
+  ignored:   { ...role("muted", "ignored"),    hint: "a policy, or you, said no" },
+  report:    { ...role("info", "report"),      hint: "a scheduled report - hover to read the summary" },
+  feed:      { ...role("info", "feed"),        hint: "shown for information - this connection is a feed" },
+  yours:     { ...role("handled", "your reply"), hint: "you sent this - kept so the thread shows both sides" },
+  triaging:  { ...role("muted", "triaging…"),  hint: "on the timeline first - triage is deciding" },
+};
 
 // Catppuccin Mocha — the palette the Claude Code / Codex theme plugins use, so a session
 // looks the same in Taskuary as it does in your own terminal. Full 16-colour ANSI set:

@@ -84,6 +84,9 @@ const blurb = (r) => {
   if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
   if (r.MsgStatus === "triaging") return "On the timeline first — triage is deciding what it is";
   if (r.MsgStatus === "ignored") return `Ignored by policy — ${r.RouteReason || "no task created"}`;
+  if (r.Category === "info") return `Info from a person, nothing to do — ${r.RouteReason || "informational"}`;
+  if (r.Category === "promo") return `Promotional — a newsletter or marketing mail, nothing to do — ${r.RouteReason || ""}`;
+  if (r.Category === "automated") return `Automated notice, nothing to do — ${r.RouteReason || ""}`;
   if (r.MsgStatus === "filed") return `Filed, nothing to do — ${r.RouteReason || "informational"}`;
   const routed = r.Decision === "attach" ? `Added to ${ref(r.TaskId)} (existing thread)` : `New task ${ref(r.TaskId)} created`;
   const state = r.ReviewStatus === "pending" ? "a reply is drafted — waiting on your review"
@@ -100,6 +103,7 @@ const GUTTER = 70;
 // The rail dot says WHAT STATE it is in. Channel identity is already on the icon beside the
 // sender, and the old row said it three times over (stripe, dot, tinted tile).
 const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
+  : r.Category === "info" ? "#6f8a6e"                      // a person told you something: worth the eye
   : ["ignored", "filed", "triaging"].includes(r.MsgStatus) ? "#cfc9bf"
     : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
       : r.TaskId ? ACCENT2 : "#a7b0a8");
@@ -434,6 +438,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
     { label: "in today", n: todays.length, f: "" },
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
     { label: "needs me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true },
+    { label: "info", n: todays.filter((r) => r.Category === "info").length, f: "" },
+    { label: "promo", n: todays.filter((r) => r.Category === "promo").length, f: "" },
     { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
   ];
 
@@ -640,7 +646,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                               <Chip size="small" label="out" title="Taskuary sent this"
                                 sx={{ height: 19, fontSize: 10.5, fontWeight: 700, bgcolor: "#eae4d8", color: "#55697a" }} />
                             )}
-                            <ActionChip action={actionOf(r)} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
+                            <ActionChip action={actionOf(r)} category={r.Category} reviewStatus={r.ReviewStatus} taskStatus={r.TaskStatus} needsYou={needsYou(r)} />
                             <ChevronRightIcon className="thubGo" sx={{ fontSize: 16, color: "#55697a",
                               opacity: sel?.MessageId === r.MessageId ? 1 : 0,
                               transform: sel?.MessageId === r.MessageId ? "translateX(0)" : "translateX(-6px)",
@@ -821,7 +827,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             </Typography>
           </Box>
           <RefChip taskId={sel.TaskId} onClick={() => onOpenTask(sel.TaskId)} />
-          <ActionChip action={actionOf(sel)} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} needsYou={needsYou(sel)} />
+          <ActionChip action={actionOf(sel)} category={sel.Category} reviewStatus={sel.ReviewStatus} taskStatus={sel.TaskStatus} needsYou={needsYou(sel)} />
           <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
 

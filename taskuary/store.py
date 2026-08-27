@@ -974,7 +974,7 @@ class SQLiteStore:
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction,
-                       t.Title, t.Status TaskStatus, t.Priority, {self.NEEDS_YOU} NeedsYou,
+                       t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,
                        rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind,
@@ -1009,7 +1009,13 @@ class SQLiteStore:
             p += chans
         if source: q += ' AND m.SourceName=?'; p.append(source)   # e.g. one mailbox of several
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
-        return self._rows(q, p)
+        rows = self._rows(q, p)
+        # the one-word tag every row wears (categories.py) - decided here, once, so the feed,
+        # the digest and the task page never disagree about what a message is
+        from .categories import category_of, team_domains_of
+        team = team_domains_of(self.get_settings())
+        for r in rows: r['Category'] = category_of(r, team)
+        return rows
 
     def feed_tag(self, days=14, pending_only=False, channel=None, source=None):
         """Cheap fingerprint of what /api/feed would return, so a 30s refresh can 304.

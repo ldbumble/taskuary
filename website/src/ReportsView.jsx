@@ -514,7 +514,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
                     <Select size="small" value={cfg.deliver.channel || "email"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 130 }}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, channel: e.target.value } })}>
-                      {["email", "teams", "telegram", "whatsapp", "discord"].map((ch) => (
+                      {["email", "teams", "telegram", "whatsapp", "imessage", "discord"].map((ch) => (
                         <MenuItem key={ch} value={ch} sx={{ fontSize: 12 }}>{ch}</MenuItem>
                       ))}
                     </Select>

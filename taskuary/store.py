@@ -77,7 +77,7 @@ def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 
 # conversation ids that name a CHAT rather than a topic - one id for every message ever exchanged
 # there, so an owner verdict on it covers an episode, not the relationship (owner_verdict_on_thread)
-CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:')
+CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:', 'imessage:')
 CHAT_VERDICT_HOURS = 72
 
 def norm_stamp(s) -> str:
@@ -184,7 +184,7 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # which channels Taskuary drafts and sends replies on (csv). github also
                     # needs its card's 'Reply to issue/PR authors'; the read-only trackers
                     # can never carry one - see outbound.can_reply
-                    'reply_channels': 'email,teams,slack,telegram,whatsapp,discord,github',
+                    'reply_channels': 'email,teams,slack,telegram,whatsapp,imessage,discord,github',
                     # watch the CI of a task's pull request and hand red builds back to the
                     # agent that wrote the code: off | watch (status only) | feedback
                     'ci_watch': 'off',
@@ -215,7 +215,7 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
 #             (a Telegram/WhatsApp ping when something needs you) - see outbound.notify
 # Defaults match how each system is usually used; every one is owner-configurable.
 DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 'trigger,tool',
-                 'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool',
+                 'telegram': 'trigger,tool', 'whatsapp': 'trigger,tool', 'imessage': 'trigger,tool',
                  'gmail': 'trigger,tool', 'imap': 'trigger,tool',
                  'github': 'tool', 'mssql': 'report,tool', 'winrm': 'report,tool',
                  'database': 'report,tool',
@@ -282,6 +282,7 @@ class SQLiteStore:
                          ('azure_openai', 'Azure OpenAI'), ('openrouter', 'OpenRouter'),
                          ('ollama', 'Local models (Ollama)'), ('mssql', 'Microsoft SQL Server'),
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
+                         ('imessage', 'Apple Messages'),
                          ('gmail', 'Gmail / Google Workspace'), ('imap', 'Any mailbox (IMAP)'),
                          ('winrm', 'Remote Windows (WinRM)'),
                          ('database', 'Any database (connection string)'),

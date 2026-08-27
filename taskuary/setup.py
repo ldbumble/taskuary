@@ -15,7 +15,7 @@ DISMISSED = 'setup_dismissed'      # the owner's "I know, leave me alone" - a se
 
 # Channels that bring work IN. A report connection or a tool is not a funnel: without one of
 # these the Timeline has nothing to show and never will.
-INBOUND = ('outlook', 'teams', 'slack', 'gmail', 'imap', 'telegram', 'whatsapp', 'discord',
+INBOUND = ('outlook', 'teams', 'slack', 'gmail', 'imap', 'telegram', 'whatsapp', 'imessage', 'discord',
            'github', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab', 'azdo',
            'linear', 'trello', 'notion', 'sentry', 'pagerduty')
 

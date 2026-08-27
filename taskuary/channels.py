@@ -138,6 +138,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'whatsapp':
             from .messengers import wa_test
             detail = wa_test(store, store.get_connector(c['ConnectorId'], with_secret=True))
+        elif c['Type'] == 'imessage':
+            from .imessage import test as imessage_test
+            detail = imessage_test(store, c)
         elif c['Type'] in ('exa', 'tavily', 'firecrawl', 'reader'):
             # a real call, not a key-shape check: these all fail the same way (401) and the
             # owner should find that out here rather than from an empty report on Monday
@@ -515,7 +518,8 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
 
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
-          'telegram': 'telegram', 'whatsapp': 'whatsapp', 'gmail': 'email', 'imap': 'email',
+          'telegram': 'telegram', 'whatsapp': 'whatsapp', 'imessage': 'imessage',
+          'gmail': 'email', 'imap': 'email',
           'jira': 'jira', 'asana': 'asana', 'monday': 'monday',
           'clickup': 'clickup', 'todoist': 'todoist',
           'gitlab': 'gitlab', 'azdo': 'azdo', 'linear': 'linear', 'trello': 'trello',
@@ -529,7 +533,7 @@ CLOUD = ('aws', 'azure')
 # getUpdates offset, whatsapp's bridge seq) or their API is 'assigned to me' with no
 # per-source dimension at all. Their source row is a label, so the poll must not depend
 # on one existing - see poll_channels.
-PER_CONNECTOR = ('telegram', 'whatsapp', 'jira', 'asana', 'monday', 'clickup', 'todoist',
+PER_CONNECTOR = ('telegram', 'whatsapp', 'imessage', 'jira', 'asana', 'monday', 'clickup', 'todoist',
                  'gitlab', 'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty')
 
 def _cloud_explicit(store, channel) -> bool:
@@ -702,6 +706,9 @@ def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
                     from . import messengers
                     poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
                     n += poll(store, full, mine, llm, file_only)
+                elif c['Type'] == 'imessage':
+                    from . import imessage
+                    n += imessage.poll(store, full, mine, llm, file_only)
                 elif c['Type'] in ('jira', 'asana', 'monday', 'clickup', 'todoist'):
                     from . import pm
                     n += pm.poll(store, full, since, llm, file_only)

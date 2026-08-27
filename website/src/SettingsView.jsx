@@ -56,7 +56,7 @@ const KNOB_META = {
 
   // ── Replies: the drafts you approve ──
   reply_channels: { group: "Replies", label: "Draft replies on", type: "channels",
-    options: ["email", "teams", "slack", "telegram", "whatsapp", "discord", "github"],
+    options: ["email", "teams", "slack", "telegram", "whatsapp", "imessage", "discord", "github"],
     desc: "Which channels get a drafted reply at all. Switch one off and its questions just file.",
     help: "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the Review buttons use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them." },
   auto_draft_enabled: { group: "Replies", label: "Draft replies automatically", type: "switch",

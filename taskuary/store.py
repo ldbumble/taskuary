@@ -291,6 +291,7 @@ class SQLiteStore:
         self.cx.execute('PRAGMA busy_timeout=5000')
         self._snap_hold = 0
         self._snap_cache = None
+        self._writes = 0
         with self.lock:
             self.cx.executescript(SCHEMA)
             for ix in INDEXES:
@@ -457,7 +458,7 @@ class SQLiteStore:
         r = self._rows(q, p); return r[0] if r else None
     def _exec(self, q, p=()):
         with self.lock:
-            cur = self.cx.execute(q, p); self.cx.commit(); return cur.lastrowid
+            cur = self.cx.execute(q, p); self.cx.commit(); self._writes += 1; return cur.lastrowid
     def _insert(self, table, fields, allowed, extra=None):
         d = {k: fields[k] for k in allowed if k in fields and fields[k] is not None} | (extra or {})
         cols = list(d)
@@ -828,6 +829,7 @@ class SQLiteStore:
                                   "WHERE TaskId=? AND Status='pending' AND Kind IN ('draft','draft_reply')",
                                   (reason, task_id))
             self.cx.commit()
+            self._writes += 1
             return cur.rowcount                    # lastrowid is meaningless on an UPDATE
     def held_review(self, task_id, mid=None):
         q = "SELECT * FROM review WHERE TaskId=? AND Status='held'" + (' AND MessageId=?' if mid else '') + ' ORDER BY ReviewId DESC LIMIT 1'
@@ -1012,25 +1014,16 @@ class SQLiteStore:
     def feed_tag(self, days=14, pending_only=False, channel=None, source=None):
         """Cheap fingerprint of what /api/feed would return, so a 30s refresh can 304.
 
-        Not the page itself: count + newest id in the window, plus the high-water marks
-        that change the chips (route, review, run, task.UpdatedAt). A false miss just
-        reruns the JOIN; a false hit would freeze the Timeline, so the tag is conservative."""
-        q = """SELECT COUNT(*) n, IFNULL(MAX(m.MessageId),0) mid FROM message m
-               WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped')"""
-        p = [f'-{int(days)} days']
-        if channel:
-            chans = [c.strip() for c in str(channel).split(',') if c.strip()]
-            q += f" AND m.Channel IN ({','.join('?' * len(chans))})"
-            p += chans
-        if source: q += ' AND m.SourceName=?'; p.append(source)
-        row = self._one(q, p) or {'n': 0, 'mid': 0}
-        extra = self._one("""SELECT IFNULL((SELECT MAX(RouteId) FROM route),0) rid,
-                                    IFNULL((SELECT MAX(ReviewId) FROM review),0) rvid,
-                                    IFNULL((SELECT MAX(RunId) FROM run),0) runid,
-                                    IFNULL((SELECT MAX(UpdatedAt) FROM task),'') tup""") or {}
-        bits = [row['n'], row['mid'], extra.get('rid') or 0, extra.get('rvid') or 0,
-                extra.get('runid') or 0, extra.get('tup') or '', int(bool(pending_only)),
-                channel or '', source or '', int(days)]
+        Counts and MAX(id) miss in-place chip changes (reject a review, release a
+        held draft, ignore a message) - the row is the same row. This connection's
+        write counter covers our own UPDATEs; PRAGMA data_version covers a second
+        connection's commits. Filter args stay in the tag so two URLs cannot share
+        a 304. A false miss just reruns the JOIN; a false hit freezes the Timeline."""
+        with self.lock:
+            row = self.cx.execute('PRAGMA data_version').fetchone()
+            ver = int(row[0] if row else 0)
+            n = self._writes
+        bits = [n, ver, int(bool(pending_only)), channel or '', source or '', int(days)]
         return '-'.join(str(b) for b in bits)
 
     def people(self, limit=60):

@@ -279,6 +279,43 @@ class FeedJoinTests(unittest.TestCase):
                        'ExternalId': 'brand-new'})
         self.assertNotEqual(a, s.feed_tag())
 
+    def test_rejecting_a_review_changes_the_tag(self):
+        """Reject updates the same review row, so MAX(ReviewId) stayed put and the
+        Timeline 304'd the pending chip. FeedView.decide() reloads right after."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'live'}, 't')
+        mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'please',
+                             'Status': 'routed', 'BodyText': 'x'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
+        a = s.feed_tag()
+        s.decide_review(rid, 'rejected', '', 't')
+        self.assertEqual(s.get_review(rid)['Status'], 'rejected')
+        self.assertNotEqual(a, s.feed_tag())
+
+    def test_holding_a_review_changes_the_tag(self):
+        """hold_reviews commits without _exec; the counter has to bump there too."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'live'}, 't')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending'})
+        a = s.feed_tag()
+        self.assertEqual(s.hold_reviews(tid), 1)
+        self.assertNotEqual(a, s.feed_tag())
+        b = s.feed_tag()
+        s.unhold_review(rid)
+        self.assertNotEqual(b, s.feed_tag())
+
+    def test_a_second_connection_commit_changes_the_tag(self):
+        """Our _writes is per connection; data_version is how a Timeline read sees
+        a poll process that opened the same file."""
+        s, path = _file_store()
+        other = SQLiteStore(path)
+        a = s.feed_tag()
+        other.add_message({'Channel': 'email', 'Subject': 'from-elsewhere', 'Status': 'filed',
+                           'BodyText': 'x', 'ExternalId': 'elsewhere'})
+        self.assertNotEqual(a, s.feed_tag())
+        other.cx.close()
+        s.cx.close()
+
 
 class ListTasksJoinTests(unittest.TestCase):
     def test_latest_review_run_and_handover_land_on_the_row(self):

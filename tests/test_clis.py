@@ -29,10 +29,11 @@ class StoreAppTests(unittest.TestCase):
         from taskuary import agents
         import os
         pkg = r'C:\\Program Files\\WindowsApps\\OpenAI.Codex_1.0_x64__abc\\app\\resources\\codex.EXE'
-        with mock.patch('shutil.which', return_value=pkg), mock.patch.object(os, 'name', 'nt'), mock.patch('os.path.exists', return_value=False):
+        env = mock.patch.dict(os.environ, {'LOCALAPPDATA': 'X'})
+        with env, mock.patch('shutil.which', return_value=pkg), mock.patch.object(os, 'name', 'nt'), mock.patch('os.path.exists', return_value=False):
             self.assertEqual(agents._resolve_cmd('codex'), ['cmd', '/c', 'codex'])
-        alias = os.path.join(os.environ.get('LOCALAPPDATA', 'X'), 'Microsoft', 'WindowsApps', 'codex.EXE')
-        with mock.patch('shutil.which', return_value=pkg), mock.patch.object(os, 'name', 'nt'), mock.patch('os.path.exists', side_effect=lambda p: p == alias):
+        alias = os.path.join('X', 'Microsoft', 'WindowsApps', 'codex.EXE')
+        with env, mock.patch('shutil.which', return_value=pkg), mock.patch.object(os, 'name', 'nt'), mock.patch('os.path.exists', side_effect=lambda p: p == alias):
             self.assertEqual(agents._resolve_cmd('codex'), [alias])
 
 

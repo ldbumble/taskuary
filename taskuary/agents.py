@@ -88,7 +88,8 @@ def _resolve_cmd(name: str) -> list:
         # folder, which CreateProcess is refused ([WinError 5] Access is denied). The runnable
         # thing is the execution ALIAS in the user's own WindowsApps folder; fall back to the
         # shell, which resolves aliases the way a typed command does.
-        alias = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'WindowsApps', os.path.basename(path))
+        import ntpath   # a Windows path, split as one wherever this runs (CI is Linux and macOS)
+        alias = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'WindowsApps', ntpath.basename(path))
         return [alias] if os.path.exists(alias) else ['cmd', '/c', name]
     return [path]
 

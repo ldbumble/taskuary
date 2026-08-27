@@ -253,9 +253,15 @@ class SQLiteStore:
     """The local-first binding. One connection, a lock (sqlite + threads), rows as dicts."""
 
     def __init__(self, path):
-        self.cx = sqlite3.connect(path, check_same_thread=False)
+        # timeout= is sqlite's lock wait in seconds; WAL below is what actually lets a
+        # Timeline read proceed while a poll is writing. :memory: cannot WAL (it has
+        # nowhere to put the -wal file), so tests keep the default journal.
+        self.cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
         self.cx.row_factory = sqlite3.Row
         self.lock = threading.Lock()
+        if path != ':memory:':
+            self.cx.execute('PRAGMA journal_mode=WAL')
+            self.cx.execute('PRAGMA synchronous=NORMAL')
         with self.lock:
             self.cx.executescript(SCHEMA)
             # columns added after a release: CREATE TABLE IF NOT EXISTS never reaches an

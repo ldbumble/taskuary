@@ -4,15 +4,13 @@ bug: a task removed from the Timeline left its review, with '1' on the tab, fore
 """
 import unittest
 from taskuary.store import MemoryStore
+from taskuary.testing import Factory
 
 
 class ReviewVisibilityTests(unittest.TestCase):
     def seed(self, s):
-        tid = s.create_task({'Title': 't', 'Kind': 'reply', 'Status': 'open'}, 't')
-        mid = s.add_message({'TaskId': tid, 'ExternalId': f'x{tid}', 'Channel': 'email',
-                             'Subject': 's', 'SentAt': '2026-08-23 10:00:00', 'Status': 'routed'})
-        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
-        return tid, mid, rid
+        p = Factory(s).pending_draft()
+        return p.tid, p.mid, p.rid
 
     def pending(self, s): return s.list_reviews('pending')
 

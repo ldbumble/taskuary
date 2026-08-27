@@ -382,6 +382,10 @@ def _research(name):
     return run
 
 
+def _calendar(cfg):
+    from .calendar import run_calendar
+    return run_calendar(cfg)
+
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the web as a source: plain REST, a key on a card, nothing new in the exe
             'exa': _research('exa'), 'tavily': _research('tavily'),
@@ -395,12 +399,13 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
             'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
+            'calendar': _calendar,       # the owner's busy times, off the Outlook (and Google) cards - read-only
             'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
             **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
-CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure',
+CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct'}
 
@@ -487,7 +492,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 
 
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') in ('digest', 'automate', 'agent'): return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile)
+    if cfg.get('type') in ('digest', 'automate', 'agent', 'calendar'): return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards)
     conn = CONNECTION_OF.get(cfg.get('type'))
     if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg

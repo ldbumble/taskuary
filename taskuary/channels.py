@@ -112,6 +112,17 @@ def test_connector(store, cid: int) -> dict:
             detail = 'Graph token OK' + ('' if own else
                                          " (using the Outlook connector's credentials)" if borrowed
                                          else ' (using server env credentials)')
+            if c['Type'] == 'outlook':
+                # the calendar rides the same app: one more permission, and the card says whether it is there
+                try:
+                    from . import calendar as cal
+                    from datetime import datetime as _dt, timedelta as _td
+                    boxes = [x['Address'] for x in store.list_sources() if x.get('Channel') == 'email' and x.get('Address')]
+                    if boxes:
+                        n = len(cal.outlook_events(gcfg, gsec, boxes[:1], _dt.now(), _dt.now() + _td(days=7), cal.tz_of(store)))
+                        detail += f' · calendar read OK ({n} events in the next 7 days)'
+                except Exception as e:
+                    detail += f' · calendar: {str(e)[:160]}'
             if c['Type'] == 'teams':
                 src = next((s for s in store.list_sources(active_only=False)
                             if s['Channel'] == 'teams' and '@' in (s['Address'] or '')), None)

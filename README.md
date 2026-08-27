@@ -167,6 +167,11 @@ One tab per question, two lines each; the details live in the app's own help tex
   after the terminal itself is long gone. Pause keeps a handover note the next session is
   seeded with. The kind is a control: *"this is not a coding task"* is one dropdown, and
   saying `reply` routes it into Review instead of a repo.
+- **Your calendar** — a reply about time ("are you free Tuesday at 1?") is drafted with your
+  busy slots in view: the Outlook card's calendars (grant `Calendars.Read`) and a Google
+  calendar if its OAuth fields are on the Gmail card. A busy time is never offered; a clash is
+  said plainly with the nearest free one; an unreadable calendar makes the draft say it will
+  confirm instead of promising. Agents can read the same thing (`calendar` tool).
 - **Review** — the decision queue. **Approve & send** sends whatever is in the box on the
   channel it arrived on, in-thread; a refused send says so right there and keeps the text.
   A reply drafted before an agent looked at the problem waits as *held* and comes back

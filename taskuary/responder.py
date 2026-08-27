@@ -137,6 +137,12 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
         for m in store.list_messages(task_id)[-6:])
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
+    from . import calendar as cal
+    calendar = cal.context_for(store, f"{last.get('Subject') or ''} {thread}")     # "Tuesday at 1 works" only if Tuesday at 1 is free
+    system += calendar
+    if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
+        store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
+                          + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
@@ -202,6 +208,9 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
         system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes)
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
+    from . import calendar as cal
+    calendar = cal.context_for(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
+    system += calendar
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else out

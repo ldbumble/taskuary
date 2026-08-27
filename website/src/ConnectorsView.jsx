@@ -1481,9 +1481,9 @@ const BULK_HELP = (
       dropped — a low value waits.
     </Typography>
     <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55 }}>
-      Value is <b>words first</b>: addressed to you or merely cc'd, how many people, whether a colleague has
+      Value is <b>words first</b>: addressed to you or merely cc’d, how many people, whether a colleague has
       already replied, urgency, who the author is on a code host. With two or more waiting, one call to the
-      triage brain orders the head of the queue and adds its own reason. You see it on the Timeline's funnel
+      triage brain orders the head of the queue and adds its own reason. You see it on the Timeline’s funnel
       bar and can pin any card to the top or push it back.
     </Typography>
   </Box>
@@ -1491,7 +1491,7 @@ const BULK_HELP = (
 
 const MODES = [
   ["clear", "One by one", "Every task from here goes to an agent as it arrives, in arrival order. When all agent slots are busy, the next ones queue - first in, first out - until the inbox is clear. Right when the inbox IS the job."],
-  ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc'd, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
+  ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc’d, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
 ];
 
 /* ── Sign in with Microsoft: Graph for a regular user, no Azure portal (taskuary/msauth.py).
@@ -1543,7 +1543,7 @@ const MsSignIn = ({ conn, cfg, reload }) => {
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
           <Typography variant="body2" sx={{ color: INK }}>
-            1. Open <a href={flow.verification_uri} target="_blank" rel="noreferrer">{String(flow.verification_uri).replace(/^https?:\/\//, "")}</a> and enter this code:
+            1. Open <a href={flow.verification_uri} target="_blank" rel="noreferrer">{String(flow.verification_uri).replace("https://", "")}</a> and enter this code:
           </Typography>
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
@@ -1590,7 +1590,7 @@ const ProcessingStep = ({ conn, reload, n }) => {
         </Popover>
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.75 }}>
-        How tasks from this connection reach the agents. Applies to every task it creates; the Timeline's funnel bar and the Board's Queued lane follow it.
+        How tasks from this connection reach the agents. Applies to every task it creates; the Timeline’s funnel bar and the Board’s Queued lane follow it.
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
         {MODES.map(([v, title, desc]) => (
@@ -1645,7 +1645,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             <b>tasks</b> = through triage, <b>feed</b> = shown on the Timeline only, <b>off</b> = ignored.
             The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
             owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
-            <b>anyone</b> = every author. Everyone else's items still become tasks for you to promote.
+            <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.
             A picker set here pulls that repo whatever the switches above say; picking saves instantly.
           </Typography>
           {mine.filter((s) => s.Active).map((s) => {

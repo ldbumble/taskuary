@@ -66,7 +66,7 @@ def github_discover(store, c: dict, actor='owner') -> dict:
         s = have.get(rp['full_name'])
         if not s:
             store.save_source({'Channel': 'github', 'Address': rp['full_name'], 'ConnectorId': c['ConnectorId'],
-                               'Active': 1, 'Owner': actor, 'ConfigJson': json.dumps({'private': rp.get('private', False)})}, actor)
+                               'Active': 1, 'Owner': 'discovered', 'ConfigJson': json.dumps({'private': rp.get('private', False)})}, actor)
             added += 1
         else:
             # public or private is what the auto-dispatch picker warns on, so a repo discovered
@@ -75,13 +75,23 @@ def github_discover(store, c: dict, actor='owner') -> dict:
             except ValueError: gc = {}
             if gc.get('private') != rp.get('private', False):
                 store.save_source({'SourceId': s['SourceId'], 'ConfigJson': json.dumps({**gc, 'private': rp.get('private', False)})}, actor)
+    # a repo the CURRENT token cannot see is switched off, not deleted: its pickers survive for
+    # the day the token covers it again, and the list stops promising access this PAT lacks
+    # (a fine-grained PAT scoped to one repo sat over 57 rows another token had discovered)
+    seen = {rp['full_name'] for rp in repos}
+    gone = 0
+    for name, s in have.items():
+        if name not in seen and s.get('Active'):
+            store.save_source({'SourceId': s['SourceId'], 'Active': 0}, actor); gone += 1
+        elif name in seen and not s.get('Active') and (s.get('Owner') or '') == 'discovered':
+            store.save_source({'SourceId': s['SourceId'], 'Active': 1}, actor)
     from .docsync import sync_connections, update_repo_map
     from .llm import build_llm
     try: llm = build_llm(store)
     except Exception: llm = None
     update_repo_map(store, repos, actor, tok=tok, llm=llm)
     sync_connections(store, actor)
-    return {'login': u.json().get('login'), 'repos': len(repos), 'added': added}
+    return {'login': u.json().get('login'), 'repos': len(repos), 'added': added, 'unreachable': gone}
 
 
 def _slack(tok, method, post=False, **params):
@@ -137,7 +147,9 @@ def test_connector(store, cid: int) -> dict:
                     detail += ' - add a Teams source (user UPN) to probe chat access'
         elif c['Type'] == 'github':
             d = github_discover(store, c)
-            detail = f"authenticated as {d['login']} · {d['repos']} repos discovered · {d['added']} new sources · repo map written to SOUL.md"
+            detail = (f"authenticated as {d['login']} · {d['repos']} repos reachable · {d['added']} new sources"
+                      + (f" · {d['unreachable']} switched off (this token cannot see them)" if d.get('unreachable') else '')
+                      + ' · repo map written to SOUL.md')
         elif c['Type'] == 'slack':
             if not c.get('Secret'): raise RuntimeError('no bot token saved - paste an xoxb- token under Credentials')
             a = _slack(c['Secret'], 'auth.test')

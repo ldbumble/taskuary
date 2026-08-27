@@ -388,6 +388,8 @@ export default function StudioView({ onOpenTask }) {
                   <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: st.color, flexShrink: 0 }} />
                   <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{t.ref}</Typography>
                   <Typography noWrap sx={{ fontSize: 10.5, color: st.color, fontWeight: 600, flex: 1, minWidth: 0 }}>{st.label}</Typography>
+                  {t.Waiting > 0 && <Typography sx={{ ...mono, fontSize: 10, color: "#6b5f45", fontWeight: 700, flexShrink: 0 }}
+                    title={`${t.Waiting} queued prompt${t.Waiting === 1 ? "" : "s"} waiting in the funnel`}>✎ {t.Waiting}</Typography>}
                 </Box>
                 <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: INK, pt: 0.3 }}>{t.Title}</Typography>
                 {/* the same git-attributed list the Board card shows: what THIS agent has touched so far */}
@@ -416,7 +418,9 @@ export default function StudioView({ onOpenTask }) {
           {queue.slice(0, 6).map((t) => (
             <Box key={t.TaskId} onClick={() => onOpenTask(t.TaskId)}
               sx={{ px: 1.75, py: 0.9, borderBottom: `1px solid ${BORDER}`, cursor: "pointer", "&:hover": { bgcolor: "#f4f1ec" } }}>
-              <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{t.ref}</Typography>
+              <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>
+                {t.ref}{t.Waiting > 0 ? <Box component="span" sx={{ color: "#6b5f45", fontWeight: 700, ml: 0.75 }}>✎ {t.Waiting}</Box> : null}
+              </Typography>
               <Typography noWrap sx={{ fontSize: 12.5, color: DIM, pt: 0.2 }}>{t.Title}</Typography>
             </Box>
           ))}

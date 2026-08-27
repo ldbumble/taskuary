@@ -69,6 +69,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
+  const [feedOpen, setFeedOpen] = useState(false);   // Feed the agent, for THIS task
+  const waitingN = (tasks || []).find((x) => x.TaskId === selected)?.Waiting || 0;   // prompts in this task's funnel
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
 
@@ -307,6 +309,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                   <StateChip task={{ ...t, ReviewStatus: (detail.reviews || [])[0]?.Status,
                     RunStatus: (detail.runs || [])[0]?.Status, Session: detail.session }} />
+                  {t.Kind !== "reply" && t.Status !== "done" && (
+                    <Tooltip title="Queue prompts for this task's agent - one or a whole list; they land one per stop, never mid-turn">
+                      <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
+                        sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, px: 1.25 }}>
+                        ✎ Feed the agent{waitingN > 0 ? ` · ${waitingN} queued` : ""}
+                      </Button>
+                    </Tooltip>
+                  )}
                   {t.Status !== "done" && (
                     <Tooltip title="I took care of it — close the task and wrap anything running">
                       <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
@@ -688,6 +698,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       </Drawer>
 
       {/* ── new task dialog ───────────────────────────────────────────── */}
+      <Dialog open={feedOpen} onClose={() => setFeedOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ pb: 0.5 }}>Feed the agent · {detail?.ref}
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
+            Queue prompts for this task's agent - one, or a whole list. They land one per stop, in order, never mid-turn.
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          {selected && <TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} />}
+        </DialogContent>
+      </Dialog>
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>New task</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>

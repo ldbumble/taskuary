@@ -81,3 +81,24 @@ class ExternalIdIndexTests(unittest.TestCase):
         s2 = SQLiteStore(path)
         self.assertIn('idx_message_external', _index_names(s2))
         s2.cx.close()
+
+
+class ThreadIndexTests(unittest.TestCase):
+    def test_thread_lookup_uses_the_conversation_index(self):
+        s, _ = _file_store()
+        s.add_message({'ExternalId': 't1', 'ConversationId': 'c-1', 'Channel': 'email',
+                       'SentAt': '2026-08-20 10:00:00', 'Status': 'filed'})
+        plan = _plan(s, 'SELECT * FROM message WHERE ConversationId=? ORDER BY SentAt DESC LIMIT 40', ('c-1',))
+        self.assertIn('idx_message_conversation', plan)
+        self.assertEqual(len(s.thread_messages('c-1')), 1)
+        s.cx.close()
+
+    def test_pending_triage_and_task_messages_use_indexes(self):
+        s, _ = _file_store()
+        tid = s.create_task({'Title': 'x'}, 't')
+        s.add_message({'ExternalId': 'p1', 'TaskId': tid, 'Channel': 'email', 'Status': 'triaging'})
+        self.assertIn('idx_message_status', _plan(s, "SELECT * FROM message WHERE Status='triaging'"))
+        self.assertIn('idx_message_task', _plan(s, 'SELECT * FROM message WHERE TaskId=?', (tid,)))
+        self.assertEqual(len(s.pending_triage()), 1)
+        self.assertEqual(len(s.list_messages(tid)), 1)
+        s.cx.close()

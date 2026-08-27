@@ -156,6 +156,9 @@ CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Te
 # PLAN tests can see them, and so a DROP INDEX in a test is not a mystery.
 INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_external ON message(ExternalId)',
+    'CREATE INDEX IF NOT EXISTS idx_message_conversation ON message(ConversationId, SentAt)',
+    'CREATE INDEX IF NOT EXISTS idx_message_task ON message(TaskId)',
+    'CREATE INDEX IF NOT EXISTS idx_message_status ON message(Status)',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a

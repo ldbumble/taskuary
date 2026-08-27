@@ -16,6 +16,8 @@ import SyncIcon from "@mui/icons-material/Sync";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
@@ -75,7 +77,8 @@ const META = {
       "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
-    fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"]],
+    fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
+      ["Check for new messages every N seconds (blank = the global sync interval)", "poll_seconds", "60", "A chat is slower on the ten-minute mailbox clock; 60 is a good number. Only this connector polls faster"]],
     secretLabel: null,
     desc: "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats flow through triage, approved replies go back into the same chat through Messages.app. macOS only.",
     howto: ["No token: Messages.app is the account. Taskuary reads the history macOS already keeps on this Mac (~/Library/Messages/chat.db) and asks Messages.app to send.",
@@ -631,6 +634,120 @@ function RemoveConnection({ conn, reload, onBack }) {
   );
 }
 
+/* ── Apple Messages: the two macOS permissions, as a walkthrough instead of a paragraph ──
+   Both belong to macOS. Taskuary cannot grant either; what it can do is say which one is
+   missing, which process macOS will list (the app Taskuary was launched from, or the python
+   binary), open the right pane, and test the real operation afterwards - a checkbox in
+   Settings is not proof, a SELECT on the database is. Sending is probed separately and only
+   on request, because the probe is what makes macOS pop the consent prompt. */
+function MacPermissions({ conn, test, busy, runTest }) {
+  const [probe, setProbe] = useState(null);
+  const [probing, setProbing] = useState(false);
+  const [opened, setOpened] = useState("");
+  const [openErr, setOpenErr] = useState({});      // per pane - a refused link under its own card
+  // the host macOS lists comes back on a failed read test, a successful one, or a denied
+  // probe - whichever answered last knows it
+  const setup = test?.setup || probe?.setup || {};
+  const code = test ? (test.ok ? "ready" : setup.code || "error") : null;
+  const openPane = async (pane) => {
+    setOpened(""); setOpenErr((o) => ({ ...o, [pane]: "" }));
+    try {
+      const { data } = await api.post("/api/platform/macos/open-settings", { pane });
+      if (data?.ok) setOpened(pane); else setOpenErr((o) => ({ ...o, [pane]: data?.detail || "Settings did not open" }));
+    } catch (e) { setOpenErr((o) => ({ ...o, [pane]: e?.response?.data?.detail || "Settings did not open" })); }
+  };
+  const runProbe = async () => {
+    setProbing(true); setProbe(null); setOpenErr((o) => ({ ...o, automation: "" }));
+    try { const { data } = await api.post("/api/platform/macos/probe", { what: "messages_automation" }); setProbe(data); }
+    catch (e) { setProbe({ ok: false, detail: e?.response?.data?.detail || "probe call failed" }); }
+    setProbing(false);
+  };
+  const copy = (s) => { try { navigator.clipboard.writeText(s); } catch { /* not in this context */ } };
+  const host = setup.host_name || (setup.host_path ? "the Python executable" : "the process running Taskuary");
+  const notMac = code === "macos_required";
+  const readOk = code === "ready";
+  const readNeeds = code === "full_disk_access_required";
+  // only a consent failure is fixed in the Full Disk Access pane; a missing database, a locked
+  // one, an unknown schema or an old macOS are not, and the button would send people to the
+  // wrong place
+  const fdaPane = !test || readOk || readNeeds;
+  const sendOk = !!probe?.ok;
+  const sendDenied = probe && !probe.ok && probe.setup?.code === "automation_denied";
+  const Card = ({ title, sub: subtitle, ok, children }) => (
+    <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.5, bgcolor: PANEL2, flex: 1, minWidth: 280 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+        <StatusDot ok={!!ok} />
+        <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: INK }}>{title}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{subtitle}</Typography>
+      </Box>
+      {children}
+    </Box>
+  );
+  return (
+    <Box sx={{ mt: 1, maxWidth: 760 }}>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
+        Apple Messages stays on this Mac. Reading the history macOS already keeps needs <b>Full Disk Access</b>;
+        asking Messages.app to send a reply needs <b>Automation</b>. macOS controls both — Taskuary cannot grant or
+        bypass them, and both are granted to <b>{host}</b>, not to "Taskuary".
+      </Typography>
+      {notMac ? (
+        <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>✗ {test.detail}</Typography>
+      ) : (
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+          <Card title="Read Messages" sub="Full Disk Access" ok={readOk}>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
+              Opens the local Messages database read-only so new messages and context can enter Taskuary.
+            </Typography>
+            {(setup.host_name || setup.host_path) && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
+                <Typography variant="caption" sx={{ color: FAINT }}>grant to:</Typography>
+                <Typography sx={{ ...mono, fontSize: 12, color: INK }} noWrap>{setup.host_name || setup.host_path}</Typography>
+                {setup.host_path && <IconButton size="small" onClick={() => copy(setup.host_path)} title="copy path"><ContentCopyIcon sx={{ fontSize: 13 }} /></IconButton>}
+              </Box>
+            )}
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+              {fdaPane && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("full_disk_access")}>
+                Open Full Disk Access</Button>}
+              <Button size="small" variant="contained" disableElevation disabled={busy === "test"} onClick={() => { setOpenErr((o) => ({ ...o, full_disk_access: "" })); runTest(); }}
+                startIcon={busy === "test" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
+                {!test ? "Test" : readNeeds ? "I enabled it — test again" : "Test again"}</Button>
+            </Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+              {fdaPane ? (setup.breadcrumb || "System Settings → Privacy & Security → Full Disk Access") : "not a permission problem - see the message below"}
+              {readNeeds && setup.restart_may_be_required && " · macOS may only apply it after the host is quit and relaunched"}
+              {opened === "full_disk_access" && " · Settings opened"}
+              {openErr.full_disk_access && ` · ${openErr.full_disk_access}`}
+            </Typography>
+            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
+              {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+            {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
+          </Card>
+          <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
+              Lets Taskuary ask Messages.app to send a reply. Testing this makes macOS ask whether {host} may control
+              Messages — allow it. <b>The test sends nothing.</b> Skip it and macOS asks on the first real reply instead.
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+              <Button size="small" variant="contained" disableElevation disabled={probing} onClick={runProbe}
+                startIcon={probing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
+                {probe ? "Test again" : "Test Automation"}</Button>
+              {sendDenied && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("automation")}>
+                Open Automation settings</Button>}
+            </Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+              System Settings → Privacy & Security → Automation → {host} → Messages
+              {opened === "automation" && " · Settings opened"}
+              {openErr.automation && ` · ${openErr.automation}`}
+            </Typography>
+            {probe && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: probe.ok ? "#47654a" : "#6b2733" }}>
+              {probe.ok ? "✓" : "✗"} {probe.detail}</Typography>}
+          </Card>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
 function ChannelDetail({ conn, sources, reload, onBack }) {
   const m = META[conn.Type] || { fields: [], howto: [] };
@@ -667,7 +784,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     try {
       const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/test`);
       setTest(data);
-      if (data.ok) setStep(m.srcLabel ? 2 : 3);
+      // Apple Messages has a second card (Automation) on this step - a passing read test must
+      // not whisk the step away before the person can try the send probe
+      if (data.ok && conn.Type !== "imessage") setStep(m.srcLabel ? 2 : 3);
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };
@@ -706,7 +825,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
         </Box>
       </Box>
     )},
-    { label: "Test", done: !!conn.LastSyncAt && !conn.LastError, body: (
+    { label: "Test", done: !!conn.LastSyncAt && !conn.LastError, body: conn.Type === "imessage" ? (
+      <MacPermissions conn={conn} test={test} busy={busy} runTest={runTest} />
+    ) : (
       <Box sx={{ mt: 1 }}>
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Live probe — token / model / channel read, for real.</Typography>
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}

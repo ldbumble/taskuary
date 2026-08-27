@@ -162,9 +162,12 @@ export const LOGOS = {
       <path fill="#fff" d="M17.4 7.3l-1.9 9.1c-.14.64-.53.8-1.07.5l-2.94-2.17-1.42 1.37c-.16.16-.29.29-.58.29l.21-2.97 5.4-4.88c.23-.2-.05-.32-.36-.12l-6.67 4.2-2.88-.9c-.62-.2-.63-.62.13-.92l11.2-4.32c.52-.19.97.12.8.92z" />
     </S>
   ),
+  // Messages: the bubble on its green rounded square, the same white-glyph-on-brand-shape
+  // as the Telegram and WhatsApp marks beside it, so the row reads at one fidelity at 15px
   imessage: (p) => (
     <S {...p}>
-      <path fill="#34C759" d="M12 3C6.5 3 2 6.7 2 11.3c0 2.5 1.3 4.7 3.4 6.2-.2 1.2-.8 2.4-1.6 3.3 1.9-.2 3.6-.9 4.9-1.9 1 .3 2.1.4 3.3.4 5.5 0 10-3.7 10-8.3S17.5 3 12 3z" />
+      <rect x="2" y="2" width="20" height="20" rx="4.6" fill="#34C759" />
+      <path fill="#fff" d="M12 6.6C8.2 6.6 5.6 8.9 5.6 11.7c0 1.6.85 3 2.2 3.9-.15.8-.55 1.6-1.1 2.2 1.3-.15 2.45-.6 3.35-1.3.6.2 1.25.3 1.95.3 3.8 0 6.4-2.3 6.4-5.1S15.8 6.6 12 6.6z" />
     </S>
   ),
   discord: (p) => (

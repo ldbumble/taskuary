@@ -261,10 +261,19 @@ def test_connector(store, cid: int) -> dict:
         else:
             raise RuntimeError(f"no test for connector type '{c['Type']}'")
         store.touch_connector(cid)
-        return {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail}
+        out = {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail}
+        if c['Type'] == 'imessage':
+            # the read succeeded, but the send card still needs to name the host macOS will list
+            from .imessage import setup_info
+            out['setup'] = setup_info('ready', None)
+        return out
     except Exception as e:
         store.touch_connector(cid, str(e))
-        return {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': str(e)[:500]}
+        out = {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': str(e)[:500]}
+        # a failure the owner fixes in the OS (macOS privacy consent) carries the structured
+        # half too - which pane, which host - so the card can offer the button, not a paragraph
+        if getattr(e, 'setup', None): out['setup'] = e.setup
+        return out
 
 
 _DROP = re.compile(r'(?is)<(script|style|head)[^>]*>.*?</\1>')
@@ -704,7 +713,7 @@ def _since(s, backfill_days: int = 0):
     return min(last, datetime.now() - timedelta(days=backfill_days)) if backfill_days else last
 
 
-def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
+def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> int:
     """Ingest new items for every connection the owner marked as a TRIGGER, through the
     same triage funnel (incl. the configured AI, if any). A connection without the trigger
     role is still usable by agents and reports - it just never creates work on its own.
@@ -718,6 +727,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
     n = 0
     for c in store.list_connectors():
         if not c['Active'] or c['Type'] not in CH2SRC: continue
+        if only is not None and c['Type'] not in only: continue     # a quick poll of the chatty ones
         roles = roles_of(c)
         # trigger = becomes work; feed = shows on the timeline and stops there; neither = never
         # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two

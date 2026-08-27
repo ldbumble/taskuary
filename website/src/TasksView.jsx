@@ -12,6 +12,7 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
+import { pollWhileVisible } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -70,7 +71,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
-  const pollRef = useRef(null);
 
   // fetch everything once and filter on the derived state - the server only knows raw
   // Status, and the state a person cares about is a combination of three columns
@@ -100,8 +100,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Only while this tab is the one on screen: it stays mounted behind the others.
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(loadTasks, 5000);
-    return () => clearInterval(id);
+    return pollWhileVisible(loadTasks, 5000);
   }, [active, loadTasks]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
@@ -113,9 +112,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     // how long the pty has been quiet, so without re-asking it froze on whatever it said
     // when the task was opened - "needs you" over an agent that was mid-thought
     const running = (detail?.runs || []).some((r) => r.Status === "running") || detail?.session?.alive;
-    clearInterval(pollRef.current);
-    if ((running || wrapping) && selected) pollRef.current = setInterval(() => loadDetail(selected), 3000);
-    return () => clearInterval(pollRef.current);
+    if (!((running || wrapping) && selected)) return undefined;
+    return pollWhileVisible(() => loadDetail(selected), 3000);
   }, [detail, selected, loadDetail, wrapping]);
 
   const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };

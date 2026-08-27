@@ -13,7 +13,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgentButton, TellAgent } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent } from "./ui.jsx";
 
 // "coder · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
@@ -292,11 +292,9 @@ export default function BoardView({ onOpenTask }) {
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", mb: 1.25, gap: 1.5 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1 }}>Agent board</Typography>
-        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
-          {view === "columns"
-            ? "Done shows today only — older finished work lives in Tasks, reopenable any time."
-            : "One desk per agent that can run at once — an empty desk is capacity you are not using."}
-        </Typography>
+        {view === "floor" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
+          One desk per agent that can run at once — an empty desk is capacity you are not using.
+        </Typography>}
         {/* the same board, two ways to look at it - columns to move work, the floor to see how
             much of your capacity is actually busy */}
         <Box sx={{ display: "flex", gap: 0.25, bgcolor: "#e7eae2", borderRadius: 2, p: "3px" }}>
@@ -366,6 +364,9 @@ export default function BoardView({ onOpenTask }) {
                 <Chip size="small" label={cards.length} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL,
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
+              {col.key === "done" && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, px: 0.4, mb: 0.85, lineHeight: 1.3 }}>
+                Today only — older finished work lives in Tasks, reopenable any time.
+              </Typography>}
               {!cards.length && <Empty>Nothing here.</Empty>}
               {cards.map((t) => {
                 const badge = agentBadge(live[t.TaskId]?.AgentName || t.RunAgent, t.RunStatus, !!live[t.TaskId], cmds);
@@ -425,7 +426,6 @@ export default function BoardView({ onOpenTask }) {
                       border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.7 } }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
-                    {t.Kind !== "reply" && t.Status !== "done" && <TellAgentButton taskId={t.TaskId} taskRef={t.ref} count={t.Waiting || 0} />}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
                   </Box>

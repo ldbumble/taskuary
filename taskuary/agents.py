@@ -154,10 +154,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False)
     except PermissionError as e:
-        # said in words, not '[WinError 5]': the file is there and Windows will not run it
-        raise RuntimeError(f"Windows refused to run {cmd[0]} (Access is denied). A CLI installed for another user, or a Store "
-                           f"package folder, cannot be run from here - install {name} for this user, or run it once from a "
-                           f"terminal so its alias exists.") from e
+        # to the user this IS "not installed": whatever which() found, it cannot be run from here
+        raise FileNotFoundError(f"'{name}' is not installed or not on PATH - install it, then try again.") from e
     timed = threading.Event()
     killer = threading.Timer(profile.get('timeout', 1200), lambda: (timed.set(), p.kill()))
     killer.start()

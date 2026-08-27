@@ -262,6 +262,10 @@ class SQLiteStore:
         if path != ':memory:':
             self.cx.execute('PRAGMA journal_mode=WAL')
             self.cx.execute('PRAGMA synchronous=NORMAL')
+        # milliseconds. connect(timeout=) is the same wait in seconds; both have to be
+        # set because a second connection (desktop + web, or a stuck poll) otherwise
+        # fails instantly with "database is locked" instead of waiting its turn.
+        self.cx.execute('PRAGMA busy_timeout=5000')
         with self.lock:
             self.cx.executescript(SCHEMA)
             # columns added after a release: CREATE TABLE IF NOT EXISTS never reaches an

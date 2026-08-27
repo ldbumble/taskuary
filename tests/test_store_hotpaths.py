@@ -29,3 +29,17 @@ class WalTests(unittest.TestCase):
         s = MemoryStore()
         mode = s._one('PRAGMA journal_mode')['journal_mode'].lower()
         self.assertIn(mode, ('memory', 'delete', 'off'))
+
+
+class BusyTimeoutTests(unittest.TestCase):
+    def test_connections_wait_instead_of_failing_locked(self):
+        s, _ = _file_store()
+        ms = s._one('PRAGMA busy_timeout')['timeout']
+        self.assertGreaterEqual(int(ms), 5000)
+        s.cx.close()
+
+    def test_memory_store_waits_too(self):
+        """Tests share one process with the fixture store; a zero timeout made
+        'database is locked' a flake rather than a wait."""
+        s = MemoryStore()
+        self.assertGreaterEqual(int(s._one('PRAGMA busy_timeout')['timeout']), 5000)

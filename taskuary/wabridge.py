@@ -30,9 +30,10 @@ def node() -> str:
     return shutil.which('node') or ''
 
 
-def start(force_install: bool = False) -> dict:
+def start(force_install: bool = False, wait: bool = False) -> dict:
     """Kick off install (if needed) + start on a worker thread and return at once; state() tells
-    the rest. A second call while one runs is a no-op that reports the current phase."""
+    the rest. A second call while one runs is a no-op that reports the current phase. `wait` runs
+    the work inline (tests, scripts) instead of on the thread."""
     if not _LOCK.acquire(blocking=False): return {**state(), 'note': 'already in progress'}
     def work():
         try:
@@ -60,6 +61,7 @@ def start(force_install: bool = False) -> dict:
             _set('failed', str(e))
         finally:
             _LOCK.release()
+    if wait: work(); return state()
     threading.Thread(target=work, daemon=True).start()
     return {**state(), 'phase': _STATE['phase'] if _STATE['phase'] != 'idle' else 'starting'}
 

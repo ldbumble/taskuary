@@ -8,21 +8,16 @@ from taskuary import server, wabridge
 c_api = TestClient(server.app)
 
 
-def _wait(fn, secs=5):
-    end = time.time() + secs
-    while time.time() < end:
-        if fn(): return True
-        time.sleep(0.05)
-    return False
-
-
 class BridgeManagerTests(unittest.TestCase):
-    def setUp(self): wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
+    def setUp(self):
+        wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
+        if wabridge._LOCK.locked(): wabridge._LOCK.release()
 
     def test_no_node_is_a_failed_phase_the_owner_can_act_on(self):
+        # wait=True runs the worker inline: a threaded worker outlived its mocks on a slow CI box and
+        # kept the lock, so the next test's start() was a no-op and both went red
         with mock.patch.object(wabridge, 'node', return_value=''):
-            wabridge.start()
-            self.assertTrue(_wait(lambda: wabridge.state()['phase'] == 'failed'))
+            self.assertEqual(wabridge.start(wait=True)['phase'], 'failed')
         self.assertIn('nodejs.org', wabridge.state()['detail'])
 
     def test_install_then_start_detached_and_a_dying_bridge_is_reported(self):
@@ -33,8 +28,7 @@ class BridgeManagerTests(unittest.TestCase):
              mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='', stderr='')) as run, \
              mock.patch.object(wabridge.subprocess, 'Popen', return_value=P()) as pop, mock.patch.object(wabridge.time, 'sleep'), \
              mock.patch('builtins.open', mock.mock_open()):
-            wabridge.start(force_install=True)
-            self.assertTrue(_wait(lambda: wabridge.state()['phase'] == 'running'))
+            self.assertEqual(wabridge.start(force_install=True, wait=True)['phase'], 'running')
         self.assertEqual(run.call_args[0][0][1:], ['install', '--no-audit', '--no-fund'])              # npm install first
         self.assertEqual(pop.call_args[0][0], ['node', 'bridge.mjs']); self.assertEqual(wabridge.state()['pid'], 4242)
         self.assertIn('8977', wabridge.state()['detail'])
@@ -46,9 +40,13 @@ class BridgeManagerTests(unittest.TestCase):
         with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge.subprocess, 'Popen', return_value=Dead()), \
              mock.patch.object(wabridge.time, 'sleep'), mock.patch('builtins.open', mock.mock_open()), \
              mock.patch.object(wabridge.Path, 'exists', return_value=True), mock.patch.object(wabridge.Path, 'read_bytes', return_value=b'Error: EADDRINUSE 8977'):
-            wabridge.start()
-            self.assertTrue(_wait(lambda: wabridge.state()['phase'] == 'failed'))
+            self.assertEqual(wabridge.start(wait=True)['phase'], 'failed')
         self.assertIn('EADDRINUSE', wabridge.state()['detail'])
+        # and the threaded road hands back the phase it is entering, without blocking
+        with mock.patch.object(wabridge.threading, 'Thread') as th:
+            wabridge._STATE.update(phase='idle')
+            self.assertEqual(wabridge.start()['phase'], 'starting'); th.return_value.start.assert_called_once()
+            wabridge._LOCK.release()                         # the mocked thread never ran work(), so the lock is ours to give back
 
     def test_the_card_and_the_agent_have_a_verb_for_it(self):
         wa = next(x for x in server.store.list_connectors() if x['Type'] == 'whatsapp')

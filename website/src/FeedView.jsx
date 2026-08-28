@@ -560,6 +560,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
     clearTimeout(hoverTimer.current);
     if (sel?.MessageId === row.MessageId) return;
     if (sel && ((editText ?? "").trim() || panelLock)) return;   // don't yank an OPEN panel mid-edit
+    if (calSel) return;   // a meeting you CLICKED stays open until you click something else - a hover on the way down must not replace it
     hoverTimer.current = setTimeout(() => drill(row), 260);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);

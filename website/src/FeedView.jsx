@@ -1293,34 +1293,19 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
 
 // Sticky day rail that POPS into a pill the moment you scroll past its date boundary -
 // a 1px sentinel above it leaves the viewport exactly when the header becomes stuck.
-const DayHeader = ({ label, top = 0 }) => {
-  const [stuck, setStuck] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    // stuck the moment the sentinel reaches the frozen dock's lower edge, not the viewport top
-    const obs = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting), { threshold: 0, rootMargin: `-${Math.round(top) + 1}px 0px 0px 0px` });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [top]);
-  return (
-    <>
-      <Box ref={ref} sx={{ height: "1px" }} />
-      {/* z above the dock's dissolve band: rows fade under the band, the date stays sharp on top of it */}
-      <Box sx={{ position: "sticky", top: `${top}px`, zIndex: 25, py: 0.75, display: "flex", justifyContent: "center" }}>
-        <Box sx={{ display: "inline-block", px: stuck ? 1.75 : 1.25, py: stuck ? 0.5 : 0.25,
-          bgcolor: stuck ? PANEL : BG, border: `1px solid ${stuck ? BORDER : "transparent"}`,
-          borderRadius: 99, boxShadow: stuck ? "0 6px 18px rgba(30,50,38,.14)" : "none",
-          transform: stuck ? "scale(1.12)" : "scale(1)", transformOrigin: "center",
-          transition: "all .25s cubic-bezier(.34,1.56,.64,1)" }}>
-          <Typography variant="caption" sx={{ ...mono, color: stuck ? "#55697a" : INK, fontWeight: 800,
-            fontSize: 11.5, letterSpacing: 0.5 }}>
-            {label}
-          </Typography>
-        </Box>
-      </Box>
-    </>
-  );
-};
+// The date never moves and never changes costume: the same black mono label, same space, whether
+// you are at the top or deep in the scroll - the rows slide under it and the label swaps to the
+// day you are in. The old version morphed into a white pill when stuck, which read as a different
+// (and cramped) thing. z above the dissolve band so passing rows fade beneath it, text stays sharp;
+// its own BG backing masks the sliver of row that would otherwise show through the letters.
+const DayHeader = ({ label, top = 0 }) => (
+  <Box sx={{ position: "sticky", top: `${top}px`, zIndex: 25, py: 0.75, display: "flex", justifyContent: "center" }}>
+    <Typography variant="caption" sx={{ ...mono, color: INK, fontWeight: 800, fontSize: 11.5, letterSpacing: 0.5,
+      bgcolor: BG, px: 1.5, py: 0.25, borderRadius: 99 }}>
+      {label}
+    </Typography>
+  </Box>
+);
 
 // A report that writes in sections (the Morning digest's prompt asks for emoji headers)
 // renders AS sections: the emoji-led line becomes a real header, its bullets hang under it.

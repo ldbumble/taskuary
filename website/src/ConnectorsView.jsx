@@ -742,7 +742,10 @@ export default function ConnectorsView() {
       ...PLANNED_AI.map((p) => ({ key: p.name, title: p.name, desc: p.desc, channel: "ai", haystack: `${p.name} ${p.desc}`, planned: true })),
     ]},
     // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic
-    { title: "AI — voice", cards: ["groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    { title: "AI — voice",
+      // what happens with NO card here is not visible anywhere else, and it looked like something was missing
+      note: "Without a card here: the mic buttons still work through your browser's own recognition (Edge and Chrome ship one — free, live microphone only), and voice notes on WhatsApp/Telegram land marked not transcribed, with a Transcribe button for later. A card is what transcribes a voice-note file on the server. Free choices: Groq (free tier) or Local Whisper (no key, on this machine). Edge's voices are text-to-speech — the other direction.",
+      cards: ["groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     // mail and chat are different jobs: one group held nine cards and read as a wall
     { title: "Email", cards: ["outlook", "gmail", "imap"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Messaging", cards: ["teams", "slack", "telegram", "whatsapp", "imessage", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
@@ -818,9 +821,14 @@ export default function ConnectorsView() {
           ))}
         </Box>
       ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", xl: "repeat(3, 1fr)" }, gap: 1.5 }}>
-          {shown.cards.map((c) => <ConnCard key={c.key} c={c} />)}
-        </Box>
+        <>
+          {shown.note && (
+            <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 860, lineHeight: 1.55 }}>{shown.note}</Typography>
+          )}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", xl: "repeat(3, 1fr)" }, gap: 1.5 }}>
+            {shown.cards.map((c) => <ConnCard key={c.key} c={c} />)}
+          </Box>
+        </>
       )}
     </SideRail>
   );

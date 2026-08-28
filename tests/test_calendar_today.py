@@ -47,9 +47,11 @@ class TodayTests(unittest.TestCase):
         d = datetime.now().strftime('%Y-%m-%d')
         evs = [{'start': f'{d} 09:00', 'end': f'{d} 09:30', 'subject': 'Standup', 'all_day': False, 'status': 'busy', 'where': '', 'who': ['Gabi', 'Mindy'], 'about': '', 'join': 'https://t'},
                {'start': '2031-01-01 09:00', 'end': '2031-01-01 10:00', 'subject': 'Far away', 'all_day': False, 'status': 'busy', 'where': '', 'who': [], 'about': '', 'join': ''}]
-        with mock.patch.object(cal, 'upcoming', return_value={'events': evs, 'tz': 'X', 'errors': []}):
+        cal._TODAY.update(at=0.0, day='', data=None)
+        with mock.patch.object(cal, 'agenda', return_value={'events': evs, 'tz': 'X', 'errors': [], 'sources': ['x'], 'start': '', 'end': ''}) as ag:
             t = cal.today(s)
-            self.assertEqual([e['subject'] for e in t['events']], ['Standup'])
+            self.assertEqual([e['subject'] for e in t['events']], ['Standup'])            # a 09:00 meeting is on the list at 17:00 too
+            self.assertEqual(ag.call_args[1]['start'].hour, 0)                             # read from midnight, not from now
             lines = cal.render_today(t)
             self.assertEqual(lines, ['  09:00-09:30 · Standup · with Gabi, Mindy · online'])
             text = digest.gather(s, 1)
@@ -59,7 +61,8 @@ class TodayTests(unittest.TestCase):
 
     def test_a_calendar_that_cannot_be_read_says_so_in_the_digest(self):
         s = MemoryStore()
-        with mock.patch.object(cal, 'upcoming', side_effect=RuntimeError('Graph refused (403)')):
+        cal._TODAY.update(at=0.0, day='', data=None)
+        with mock.patch.object(cal, 'agenda', side_effect=RuntimeError('Graph refused (403)')):
             self.assertIn('COULD NOT READ: Graph refused (403)', digest.gather(s, 1))
 
 

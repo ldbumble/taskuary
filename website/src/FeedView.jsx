@@ -172,7 +172,7 @@ const untilText = (start, end) => {
   const now = Date.now(), s = new Date(String(start).replace(" ", "T")).getTime(), e = end ? new Date(String(end).replace(" ", "T")).getTime() : s;
   if (now >= s && now <= e) return { text: "now", hot: true };
   const m = Math.round((s - now) / 60000);
-  if (m < 0) return { text: "just ended", hot: false };
+  if (m < 0) return { text: now - e < 15 * 60000 ? "just ended" : "ended", hot: false };
   if (m < 60) return { text: `in ${m} min`, hot: m <= 15 };
   if (m < 60 * 24) return { text: `in ${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`, hot: false };
   return { text: `in ${Math.round(m / 1440)} day${Math.round(m / 1440) === 1 ? "" : "s"}`, hot: false };
@@ -189,13 +189,16 @@ const ComingUp = ({ onPick, picked }) => {
     const a = setInterval(load, 300000), b = setInterval(() => setTick((t) => t + 1), 30000);
     return () => { alive = false; clearInterval(a); clearInterval(b); clearTimeout(hover.current); };
   }, []);
+  // every meeting of the day stays on the rail - a finished one is part of what today was, and a
+  // band that empties at 4pm read as "the calendar broke". Past ones are faded and say so.
   const now = Date.now();
-  const live = (cal?.events || []).filter((e) => e.all_day || !e.end || new Date(String(e.end).replace(" ", "T")).getTime() >= now - 15 * 60000);
+  const live = cal?.events || [];
   if (!live.length) return null;
   return (
     <Box sx={{ mb: 0.5 }} data-tick={tick}>
       {live.map((e, i) => {
         const u = untilText(e.start, e.end);
+        const past = !e.all_day && e.end && new Date(String(e.end).replace(" ", "T")).getTime() < now;
         return (
           <Box key={`${e.start}-${i}`} sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "4px" }}>
             <Typography sx={{ ...mono, fontSize: 10.5, color: "#8a7a5c", textAlign: "right", pt: "8px", pr: "11px", whiteSpace: "nowrap" }}>
@@ -213,7 +216,8 @@ const ComingUp = ({ onPick, picked }) => {
               sx={{ bgcolor: picked && picked.start === e.start && picked.subject === e.subject ? "#eee7d6" : "#f5f0e4",
                 border: `1px solid ${picked && picked.start === e.start && picked.subject === e.subject ? "#c9b98f" : "#e3d9c2"}`,
                 borderRadius: "8px", px: "11px", py: "6px", minWidth: 0, display: "flex", gap: 0.85, alignItems: "center",
-                cursor: "pointer", transition: "background .15s, border-color .15s", "&:hover": { bgcolor: "#eee7d6", borderColor: "#d8cba5" } }}>
+                opacity: past ? 0.62 : 1,
+                cursor: "pointer", transition: "background .15s, border-color .15s, opacity .15s", "&:hover": { bgcolor: "#eee7d6", borderColor: "#d8cba5", opacity: 1 } }}>
               <EventIcon sx={{ fontSize: 16, color: "#8a7a5c", flexShrink: 0 }} />
               <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12.5, minWidth: 0 }}>{e.subject}</Typography>
               {!!(e.who || []).length && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 260 }}>· with {e.who.slice(0, 3).map((w) => w.split(" ")[0]).join(", ")}{e.who.length > 3 ? ` +${e.who.length - 3}` : ""}</Typography>}

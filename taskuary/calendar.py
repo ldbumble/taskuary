@@ -131,11 +131,13 @@ def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
     return out
 
 
-def agenda(store, days: int = DAYS) -> dict:
-    """{events, errors, sources, start, end, tz} - every calendar the cards can reach."""
+def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
+    """{events, errors, sources, start, end, tz} - every calendar the cards can reach, from `start`
+    (now, unless a caller wants the whole day) for `days` days."""
     tz = tz_of(store)
     now = datetime.now(tz).replace(second=0, microsecond=0)
-    start, end = now, now + timedelta(days=days)
+    start = start or now
+    end = start + timedelta(days=days)
     events, errors, sources = [], [], []
     ol = store.get_connector_by_type('outlook', with_secret=True)
     if ol and ol.get('Active'):
@@ -213,14 +215,23 @@ def upcoming(store, hours: int = 36, force: bool = False) -> dict:
     return data
 
 
+_TODAY = {'at': 0.0, 'day': '', 'data': None}
+
 def today(store) -> dict:
-    """Today's meetings, in order, with who is in them and what they are about - the digest's
-    calendar section and the panel's strip. Rides the same five-minute cache as `upcoming`."""
-    tz = tz_of(store); now = datetime.now(tz).replace(tzinfo=None)
-    up = upcoming(store, hours=24)
+    """Today's meetings, ALL of them - the ones already over included - in order, with who is in
+    them and what they are about: the digest's calendar section, the Timeline's band, the panel's
+    strip. Read from midnight, not from now: a band that emptied as the day went on read as "the
+    calendar broke". Cached five minutes, per day."""
+    tz = tz_of(store); now = datetime.now(tz)
     d = now.strftime('%Y-%m-%d')
-    evs = [e for e in up['events'] if e['start'][:10] == d]
-    return {'date': d, 'now': now.strftime('%H:%M'), 'events': evs, 'tz': up['tz'], 'errors': up['errors']}
+    if _TODAY['data'] and _TODAY['day'] == d and time.time() - _TODAY['at'] < UPCOMING_TTL: return _TODAY['data']
+    if store.get_settings().get('calendar_enabled', '1') != '1':
+        return {'date': d, 'now': now.strftime('%H:%M'), 'events': [], 'tz': tz_name(tz), 'errors': []}
+    ag = agenda(store, days=1, start=now.replace(hour=0, minute=0, second=0, microsecond=0))
+    evs = [e for e in ag['events'] if e['start'][:10] == d]
+    data = {'date': d, 'now': now.strftime('%H:%M'), 'events': evs, 'tz': ag['tz'], 'errors': ag['errors']}
+    _TODAY.update(at=time.time(), day=d, data=data)
+    return data
 
 
 def render_today(t: dict) -> list:

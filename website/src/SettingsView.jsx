@@ -148,9 +148,6 @@ const KNOB_META = {
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
     help: "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search." },
-  timeline_fade: { group: "Display", label: "Fade older Timeline items", type: "select", options: ["off", "gentle", "normal", "sharp"],
-    desc: "Older rows rest quieter so the eye lands on what's new. Scrolling or hovering brings any row back to full.",
-    help: "How fast a row dims with age. gentle = barely, over most of a day; normal = noticeable within a few hours; sharp = the last hour or two stands out and everything older is clearly quiet. off = every row full brightness.\n\nOn a light palette a subtle fade is hard to see, which is why 'sharp' exists. Purely visual — nothing is hidden, and a row you scroll to or hover returns to full." },
 };
 const GROUPS = ["Triage & routing", "Replies", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
 // Internal state, and settings that live on another page - never shown as knobs. The "Other" tab

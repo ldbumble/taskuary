@@ -198,7 +198,6 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
                     'agent_hooks': '1',           # Claude Code tells the Board what it is doing, through its own hooks (hooks.py)
-                    'timeline_fade': 'sharp',     # older Timeline rows rest quieter - off | gentle | normal | sharp (FeedView ageOpacity)
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
                     'default_agent': 'coder',

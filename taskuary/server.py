@@ -1936,8 +1936,7 @@ def ingest_status():
     return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
             'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
             # the brain's last failure, until it answers again - shown in the caption, not buried in rows
-            'triageError': store.get_settings().get('triage_last_error') or '',
-            'timelineFade': store.get_settings().get('timeline_fade') or 'sharp'}   # how old rows dim (FeedView)
+            'triageError': store.get_settings().get('triage_last_error') or ''}
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
 class TermBody(BaseModel):

@@ -194,15 +194,6 @@ const useCalToday = () => {
   return tick >= 0 ? (cal?.events || []) : [];
 };
 const meetingEnded = (e) => !e.all_day && e.end && tsMs(e.end) < Date.now();
-// the resting opacity of a row by age, by the timeline_fade setting (Settings > Display). On a light
-// palette a gentle fade is nearly invisible, so 'sharp' reaches a low floor within an hour or two;
-// scroll or hover restores any row to full. {grace h before it starts, span h to the floor, floor}.
-const FADE = { off: null, gentle: [2, 20, 0.7], normal: [0.5, 5, 0.5], sharp: [0.33, 2, 0.35] };
-const ageOpacity = (s, mode = "sharp") => {
-  const c = FADE[mode]; if (!c) return 1;
-  const [grace, span, floor] = c, h = (Date.now() - tsMs(s)) / 36e5;
-  return h <= grace ? 1 : Math.max(floor, 1 - (1 - floor) * (h - grace) / span);
-};
 
 // One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it
 // after the same beat a message takes, click opens it now; the panel shows who is in it and why.
@@ -373,17 +364,16 @@ const TodayStrip = () => {
 export default function FeedView({ onOpenTask, onChanged }) {
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const calEvents = useCalToday();
-  // older rows rest a little quieter (never below 60%, and nothing under three hours fades at all);
-  // scrolling or hovering brings every row back to full - the fade is a resting state, not a filter
-  const listRef = useRef(null);
+  // the filter dock freezes at the top (Excel-style); the day header sticks just under it and the
+  // rows dissolve into the top going under, and into nothing at the bottom of the screen. dockH is
+  // measured so the sticky date sits exactly below the frozen dock whatever its wrapped height.
+  const dockRef = useRef(null);
+  const [dockH, setDockH] = useState(120);
   useEffect(() => {
-    let tm = 0;
-    const wake = () => {
-      const el = listRef.current; if (!el) return;
-      el.dataset.live = "1"; clearTimeout(tm); tm = setTimeout(() => { if (listRef.current) listRef.current.dataset.live = "0"; }, 2500);
-    };
-    window.addEventListener("scroll", wake, { passive: true }); window.addEventListener("wheel", wake, { passive: true });
-    return () => { clearTimeout(tm); window.removeEventListener("scroll", wake); window.removeEventListener("wheel", wake); };
+    const el = dockRef.current; if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => setDockH(el.offsetHeight));
+    ro.observe(el); setDockH(el.offsetHeight);
+    return () => ro.disconnect();
   }, []);
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
@@ -475,7 +465,6 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [nextIn, setNextIn] = useState(null);        // seconds until the next background sync, from the server
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
-  const [fade, setFade] = useState("sharp");         // how old rows dim (Settings > Display), from ingest/status
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
@@ -491,7 +480,6 @@ export default function FeedView({ onOpenTask, onChanged }) {
         if (data.lastPollAt) setLastSync(new Date(Date.now() - (data.now - data.lastPollAt) * 1000));
         nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
         setTriageErr(data.triageError || "");
-        if (data.timelineFade) setFade(data.timelineFade);
         // the server's OWN ten-minute sync wears the same face as pressing the button: the
         // button says Syncing…, the caption says what it is reading, rows land as they arrive
         running = data.status?.state === "running";
@@ -679,7 +667,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
           groups, and the stats as a quiet caption line beneath. The old two-row toolbar
           card boxed the controls into the timeline column; the dock frees them to belong
           to the whole page. */}
-      <Box sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75 }}>
+      {/* the frozen top: filters, sync and stats stay put while the timeline scrolls under them.
+          A fade at the dock's lower edge is what makes rows dissolve INTO the top rather than
+          vanish at a hard line. bgcolor so rows never show through the gap between pill and edge. */}
+      <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75,
+        position: "sticky", top: 0, zIndex: 20, bgcolor: BG, pt: 0.5,
+        "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -18, height: 18,
+          background: `linear-gradient(${BG}, transparent)`, pointerEvents: "none" } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 99, px: 1.5, py: 0.6,
           boxShadow: "0 8px 28px rgba(30,50,38,.10)" }}>
@@ -796,7 +790,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       <FunnelBar onOpenTask={onOpenTask} />
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
-      <Box ref={listRef} sx={{ minWidth: 0, "&[data-live='1'] .tqRow, & .tqRow:hover": { opacity: "1 !important" } }}>
+      <Box sx={{ minWidth: 0, position: "relative" }}>
         {/* syncing = the TIMELINE is loading, so the timeline says so: rows dim and a
             spinner sits on the list itself - the old 3px bar over just the left column
             read as a broken artifact, not a state */}
@@ -815,7 +809,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
               : "Nothing in the feed yet — connect a source in Connectors (a mailbox, a chat, a repo, a board…) and hit Sync now."}</Empty>
           ) : Object.entries(days).map(([day, items], di) => (
             <Box key={day} sx={{ mt: 1 }}>
-              <DayHeader label={fmtDay(day)} />
+              <DayHeader label={fmtDay(day)} top={dockH} />
               {di === 0 && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
               <Box>
                 {items.map((r, i) => (
@@ -824,10 +818,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
                       <MeetingRow key={`m-${e.start}-${j}`} e={e} fade picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                     ))}
                     <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                      alignItems: "stretch", mb: "4px", opacity: ageOpacity(r.SentAt, fade), transition: "opacity .9s ease",
-                      // the entrance animation must not PIN opacity afterwards (fill-mode both did, and no row
-                      // ever faded): backwards keeps only the start frame, then the age opacity takes over
-                      ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms`, animationFillMode: "backwards" }) }}>
+                      alignItems: "stretch", mb: "4px",
+                      ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
                       {/* time sits OUTSIDE the card, in its own gutter - wide enough that
                           "12:40 PM" can never wrap onto a second line */}
                       <Typography sx={{ ...mono, fontSize: 10.5, color: "#6e685f", textAlign: "right",
@@ -919,6 +911,14 @@ export default function FeedView({ onOpenTask, onChanged }) {
           <Box ref={endRef} sx={{ height: 8 }} />
           {rows && rows.length > 0 && !noMore && <CircularProgress size={16} sx={{ display: "block", mx: "auto", my: 1 }} />}
         </Box>
+        {/* the bottom dissolve: pinned to the foot of the screen while the column is in view, so the
+            last rows fade into the page - "there is nothing towards the bottom" - column-width only,
+            never over the review panel. height:0 so it adds no space; the gradient hangs above it. */}
+        {rows && rows.length > 0 && (
+          <Box aria-hidden sx={{ position: "sticky", bottom: 0, height: 0, zIndex: 6, pointerEvents: "none" }}>
+            <Box sx={{ height: 84, transform: "translateY(-84px)", background: `linear-gradient(transparent, ${BG})` }} />
+          </Box>
+        )}
       </Box>
 
       {/* ── review panel: pinned to the top of whatever is currently visible. The column
@@ -1277,18 +1277,19 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
 
 // Sticky day rail that POPS into a pill the moment you scroll past its date boundary -
 // a 1px sentinel above it leaves the viewport exactly when the header becomes stuck.
-const DayHeader = ({ label }) => {
+const DayHeader = ({ label, top = 0 }) => {
   const [stuck, setStuck] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting), { threshold: 0 });
+    // stuck the moment the sentinel reaches the frozen dock's lower edge, not the viewport top
+    const obs = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting), { threshold: 0, rootMargin: `-${Math.round(top) + 1}px 0px 0px 0px` });
     if (ref.current) obs.observe(ref.current);
     return () => obs.disconnect();
-  }, []);
+  }, [top]);
   return (
     <>
       <Box ref={ref} sx={{ height: "1px" }} />
-      <Box sx={{ position: "sticky", top: 0, zIndex: 3, py: 0.75, display: "flex", justifyContent: "center" }}>
+      <Box sx={{ position: "sticky", top: `${top}px`, zIndex: 6, py: 0.75, display: "flex", justifyContent: "center" }}>
         <Box sx={{ display: "inline-block", px: stuck ? 1.75 : 1.25, py: stuck ? 0.5 : 0.25,
           bgcolor: stuck ? PANEL : BG, border: `1px solid ${stuck ? BORDER : "transparent"}`,
           borderRadius: 99, boxShadow: stuck ? "0 6px 18px rgba(30,50,38,.14)" : "none",

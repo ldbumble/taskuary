@@ -22,7 +22,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
-from . import learn, learnedgraph, outbound, rank, responder, waitroom
+from . import aisetup, learn, learnedgraph, outbound, rank, responder, waitroom
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -109,6 +109,9 @@ class ConnectorBody(BaseModel):
     ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
     Roles: str | None = None                       # csv of trigger,report,tool - see store.ROLES
     Scope: str | None = None                       # read | write | admin - see scopes.SCOPES
+class AiSetupBody(BaseModel):
+    guide: list[str] = []; fields: list = []; secret_label: str | None = None   # the card's Guide + form, as the UI has them
+    agent: str | None = None; model: str | None = None
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -1135,6 +1138,17 @@ def connector_test(cid: int):
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
 
+# ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
+@app.post('/api/connectors/{cid}/ai-setup')
+def connector_ai_setup(cid: int, body: AiSetupBody):
+    try: return aisetup.start(store, cfg['server'], cid, body.guide, body.fields, body.secret_label, body.agent, body.model, ACTOR)
+    except (ValueError, RuntimeError, FileNotFoundError) as e: raise HTTPException(422, str(e))
+
+@app.get('/api/connectors/{cid}/ai-setup')
+def connector_ai_setup_live(cid: int):
+    """Reattach: the card reloads, the agent is still there."""
+    return {'session': aisetup.live_for(store, cid)}
+
 # ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
 _MSFLOWS = {}   # flow id -> the device code being polled; one browser tab, minutes, then gone
 
@@ -1790,6 +1804,8 @@ class WrapBody(BaseModel): task_id: int | None = None; close: bool = True
 # ends, so these work whether the terminal is live, exited, or long gone.
 def _wrap_task(tid: int, close: bool, sid: str = None):
     if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
+    # a setup session kept no transcript on purpose (secrets were typed into it) and has no report to write
+    if store.get_task(tid).get('Kind') == aisetup.KIND: return aisetup.finish(store, tid, ACTOR)
     text, agent, found = hub_term.transcript_for(store, tid)
     if not text.strip(): raise HTTPException(422, 'nothing to wrap up - this task has no session transcript')
     if found: hub_term.close(found)          # done means done - the pty and its shells go too

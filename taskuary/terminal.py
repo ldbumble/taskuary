@@ -104,6 +104,7 @@ class Term:
         self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
         self.store = store                                # so the pty can file its own transcript when it ends
+        self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
         self.taps = []                                    # plain callables, for server-side readers
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
@@ -148,7 +149,7 @@ class Term:
         reaped, and once the last one was gone the task could no longer be wrapped up at all - the
         buttons had nothing to read and quietly disappeared. Written on exit AND on close, because
         either can come first."""
-        if not (self.store and self.task_id): return
+        if not (self.store and self.task_id and self.keep_transcript): return
         try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd)
         except Exception as e: logger.warning(f'could not file the transcript for {self.sid}: {e}')
 

@@ -24,6 +24,62 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, 
 import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
+import { TerminalPane } from "./TerminalView.jsx";
+
+/* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
+   the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
+   the card through the API and runs Test until it passes - and it is a task on the Board meanwhile. ── */
+const AiSetup = ({ conn, steps, fields = [], secretLabel = "", reload }) => {
+  const [sess, setSess] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {           // the card reloads, the agent is still there: reattach
+    let alive = true;
+    api.get(`/api/connectors/${conn.ConnectorId}/ai-setup`).then(({ data }) => { if (alive && data.session) setSess(data.session); }).catch(() => {});
+    return () => { alive = false; };
+  }, [conn.ConnectorId]);
+  const start = async () => {
+    setBusy(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ai-setup`,
+        { guide: steps || [], fields: (fields || []).map(([l, k]) => [l, k]), secret_label: secretLabel || "" });
+      setSess(data);
+    } catch (e) { setErr(e?.response?.data?.detail || "could not start the agent"); }
+    setBusy(false);
+  };
+  const done = async () => {
+    try { await api.post(`/api/tasks/${sess.taskId}/wrap`, {}); } catch { /* the session may already be gone */ }
+    setSess(null); reload?.();
+  };
+  const ref = sess?.taskId ? `TQ-${String(sess.taskId).padStart(4, "0")}` : "";
+  return (
+    <Box sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+        <TerminalIcon sx={{ fontSize: 18, color: DIM }} />
+        <Box sx={{ flex: 1, minWidth: 240 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Get AI to set it up</Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
+            Your coding agent takes the Guide as its prompt, asks you here for anything only you can fetch, saves it onto this
+            card and runs Test until it passes. It sits on the Board as a task while it works.
+          </Typography>
+        </Box>
+        {sess ? (
+          <>
+            <Typography variant="caption" sx={{ color: FAINT }}>{ref} on the Board</Typography>
+            <Button size="small" variant="outlined" onClick={done}>Done — close the session</Button>
+          </>
+        ) : (
+          <Button variant="contained" disableElevation disabled={busy} onClick={start}
+            startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
+            {busy ? "starting…" : "Get AI to set it up"}
+          </Button>
+        )}
+      </Box>
+      {err && <Alert severity="error" sx={{ fontSize: 12.5 }}>{err}</Alert>}
+      {sess && <TerminalPane sid={sess.sid} height={360} />}
+    </Box>
+  );
+};
 
 /* ── connector metadata: channel + AI connectors (rows in the connector table) ── */
 const META = {
@@ -923,6 +979,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={["Setup", "Guide"]} value={tab} onChange={setTab} />
       {tab === "Setup" && (
@@ -948,6 +1005,7 @@ function MssqlDetail({ conn, drivers, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title="Microsoft SQL Server" />
+      <AiSetup conn={conn} steps={MSSQL_HOWTO} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) on the Reports tab.
       </Typography>
@@ -1058,6 +1116,7 @@ function WinrmDetail({ conn, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title="Remote Windows (WinRM)" />
+      <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
         build the scheduled reports on the Reports tab.
@@ -1264,6 +1323,7 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={meta.title} />
+      <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc} The connection only — build the scheduled reports on the Reports tab.
       </Typography>

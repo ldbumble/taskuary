@@ -1,7 +1,8 @@
-// Real terminals in the app: xterm.js over a websocket over a pty. There is exactly ONE
-// place they live - the task page. No terminal tab, no dock at the bottom of the screen: a
-// session belongs to the task it is working. The pty lives server-side, so leaving the task
-// (or reloading) never kills it - reopening the task re-attaches to the running session.
+// Real terminals in the app: xterm.js over a websocket over a pty. A session belongs to the
+// task it is working, and it is shown where that task is worked: the task page, and - for a
+// "Get AI to set it up" session - the connector card whose guide it is following (still a task
+// on the Board). No terminal tab, no dock at the bottom of the screen. The pty lives
+// server-side, so leaving the page (or reloading) never kills it - coming back re-attaches.
 import React, { useEffect, useRef, useState } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import { Terminal } from "@xterm/xterm";

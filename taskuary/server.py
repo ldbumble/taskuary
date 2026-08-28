@@ -1829,7 +1829,10 @@ def ingest_status():
     # hardcoded "every 10 min" that stayed on screen after somebody set the interval to 0
     try: every = int(store.get_settings().get('poll_minutes') or 0)
     except (TypeError, ValueError): every = 10
-    return {'status': st, 'everyMinutes': every}
+    # and the clock itself: when the last full poll ran and when the next is due, so the caption
+    # can count down instead of asserting a cadence nobody could check
+    return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
+            'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time()}
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
 class TermBody(BaseModel):

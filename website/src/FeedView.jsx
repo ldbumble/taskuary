@@ -305,6 +305,28 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [syncWhat, setSyncWhat] = useState("");
   const [lastSync, setLastSync] = useState(null);
   const [every, setEvery] = useState(10);            // the server's cadence, not a guess
+  // the server's clock, as an offset from OUR clock: nextPollAt is its time, so the countdown
+  // uses (next - serverNow) and never trusts the two machines to agree on the hour
+  const [nextIn, setNextIn] = useState(null);        // seconds until the next background sync, from the server
+  const [tick, setTick] = useState(0);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
+  const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
+  useEffect(() => {
+    let alive = true;
+    const ask = async () => {
+      try {
+        const { data } = await api.get("/api/ingest/status");
+        if (!alive) return;
+        if (data.everyMinutes != null) setEvery(data.everyMinutes);
+        if (data.lastPollAt) setLastSync(new Date(Date.now() - (data.now - data.lastPollAt) * 1000));
+        nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
+      } catch { /* the caption just stops counting */ }
+    };
+    ask();
+    const id = setInterval(ask, 30000);             // re-anchor on the server's clock every half minute
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
   const syncNow = useCallback(async (silent) => {
     if (!silent) setSyncing(true);
     try { await api.post("/api/ingest/poll"); } catch { /* poll failures surface in Connectors */ }
@@ -550,9 +572,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
             ))}
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? "#55697a" : FAINT }}>
               {syncing || bgSync ? `· ${syncWhat || "syncing…"}`
-                : lastSync
-                  ? `· last sync ${lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-                  : every ? `· auto-syncs every ${every} min` : "· background sync is off (Settings)"}
+                : !every ? "· background sync is off (Settings)"
+                : `· last sync ${lastSync ? lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}`
+                  // the subtle proof the clock is alive: a countdown, not a promise
+                  + (nextIn != null ? ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}` : ` · every ${every} min`)}
             </Typography>
           </Box>
         )}

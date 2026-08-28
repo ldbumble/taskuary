@@ -378,7 +378,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                 </Box>
               </Box>
-              <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
+              {/* a flex column so the terminal takes exactly what is left between the strip above and the
+                  waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
+              <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -447,7 +449,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <WorkStrip taskId={selected} live={!!term.alive} />
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
                       {term.alive && term.work && (
-                        <WorkLine work={term.work} who={term.agent || term.label} waiting={isWaiting(term)} startedAt={term.started} />
+                        <WorkLine work={term.work} who={term.cli || term.agent || term.label} waiting={isWaiting(term)} startedAt={term.started} />
                       )}
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
@@ -480,11 +482,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     {/* sized to what is actually left on screen below the header and the button strip, so the
     detail panel does not have to be scrolled to see the bottom of the session - the
     terminal has its own scrollbar for its own scrollback */}
-                    <TerminalPane sid={term.sid} height="clamp(300px, calc(100vh - 300px), 820px)"
-                      onExit={() => findTerm(selected)} />
+                    <Box sx={{ flex: 1, minHeight: 260, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+                      <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
+                    </Box>
                     {/* the waiting room, right under the session it feeds: type here instead of into the
                         terminal, and it goes in when the agent stops rather than on top of its work */}
-                    <Box sx={{ mt: 1 }}><TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} /></Box>
+                    <Box sx={{ mt: 0.75, flexShrink: 0 }}><TellAgent taskId={selected} taskRef={detail?.ref} compact onQueued={() => loadDetail(selected)} /></Box>
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
                         {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."

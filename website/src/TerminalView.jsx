@@ -175,8 +175,10 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
       el.removeEventListener("wheel", trap); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid]);
   return (
+    // height="100%": the pane fills the flex slot its parent gives it (the task page sizes it to
+    // whatever is left on screen); any other value is a fixed height as before
     <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden",
-      bgcolor: THEMES[themeName].background }}>
+      bgcolor: THEMES[themeName].background, ...(height === "100%" ? { display: "flex", flexDirection: "column", minHeight: 0 } : {}) }}>
       {/* the pane's two knobs, discreet until hovered: how it is painted, and how much of the
           run fits in it. Both restyle ANY CLI in the pane - codex and claude included - and
           both stick per browser. */}
@@ -216,7 +218,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           positioned, and simply could not be seen or grabbed; the only scrollbar on screen was the
           page's, which is why reaching the scrollback meant scrolling the whole window instead.
           Colour comes from XTERM_THEME - this keeps the vertical bar on permanently. */}
-      <Box ref={host} sx={{ height, p: 1, "& .xterm": { height: "100%" },
+      <Box ref={host} sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, "& .xterm": { height: "100%" },
         "& .xterm-scrollable-element > .scrollbar.vertical": {
           // pinned visible ONLY while scrollback exists (--sbar, set from the buffer state):
           // an alternate-screen TUI scrolls itself, and a dead full-height slider is a lie

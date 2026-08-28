@@ -318,11 +318,17 @@ class Term:
         # module functions, not methods: the tests' fakes (and any other stand-in) need only tail() and idle()
         files, w = self.files(), getattr(self, 'witness', None)      # fakes in tests carry no witness
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
-                'agent': self.agent, 'alive': self.alive, 'started': self.started,
+                'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase_of(self.tail(4)), 'waiting': waiting_of(self),
                 'cmd': ' '.join(self.argv), 'files': files,
                 'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None,
                 **({'tail': self.tail(tail)} if tail else {})}
+
+
+def cli_of(argv) -> str:
+    """'claude' for C:\\...\\claude.exe or claude.cmd - the CLI a session runs, whatever the profile is
+    called. A profile named codex that runs claude showed 'codex' on the card next to a 'claude' badge."""
+    return re.split(r'[\\/]', str((argv or [''])[0]))[-1].lower().rsplit('.', 1)[0] if argv else ''
 
 
 def default_shell():

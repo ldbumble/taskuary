@@ -1112,7 +1112,8 @@ const workHead = (work, who, waiting, asking, startedAt) => {
 };
 
 export const WorkPane = ({ run, onOpen }) => {
-  const work = run?.work || {}, who = run?.AgentName || run?.agent || "agent";
+  // the CLI it runs, not the profile's nickname: a profile called codex that runs claude is claude here
+  const work = run?.work || {}, who = run?.cli || run?.AgentName || run?.agent || "agent";
   const waiting = run?.kind === "session" && (run.asking || isWaiting(run));
   const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started);
   const todos = work.todos || [];
@@ -1195,6 +1196,10 @@ const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 700, bgcolor: ROLE
 const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
 export const WorkStrip = ({ taskId, live }) => {
   const [d, setD] = useState(null);
+  // one line by default - the terminal is the page, and a strip that pushed its bottom off screen
+  // was worse than no strip; the detail opens on click and stays open for this browser
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem("tq.workstrip") === "1"; } catch { return false; } });
+  const toggle = () => { setOpen((o) => { try { localStorage.setItem("tq.workstrip", o ? "0" : "1"); } catch { /* private window */ } return !o; }); };
   useEffect(() => {
     if (!taskId) return undefined;
     let alive = true;
@@ -1208,18 +1213,25 @@ export const WorkStrip = ({ taskId, live }) => {
   if (!d || (!w && !(d.files || []).length)) return null;
   const todos = w?.todos || [], files = (d.files || []).slice(0, 12);
   const tone = { check: "you", note: "info", ok: "done" };
+  const who = d.session?.cli || d.session?.agent || d.prov?.by || "agent";
+  const checks = (w?.flags || []).filter((f) => f.level === "check").length;
+  const summary = `said ${todos.length ? `${w.n_done}/${w.n_todos}` : "—"} · touched ${(d.files || []).length}`;
   return (
-    <Box sx={{ mb: 1, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden" }}>
-      <Box sx={{ px: 1.5, py: 0.75, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", borderBottom: `1px solid ${BORDER}` }}>
+    <Box sx={{ mb: 0.75, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden" }}>
+      <Box onClick={toggle} title={open ? "Fold the detail away" : "Open: the agent's list beside the files it wrote"}
+        sx={{ px: 1.5, py: 0.5, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", cursor: "pointer", borderBottom: open ? `1px solid ${BORDER}` : 0, "&:hover": { bgcolor: "#faf8f5" } }}>
+        <Typography component="span" sx={{ ...mono, fontSize: 10, color: FAINT, width: 12 }}>{open ? "▾" : "▸"}</Typography>
         {d.prov?.from && <Chip size="small" label={`from: ${d.prov.from}`} sx={pillSx("muted")} />}
         {d.prov?.kind && <Chip size="small" label={`kind: ${d.prov.kind}`} sx={pillSx("working")} />}
-        {d.prov?.by && <Chip size="small" label={`by: ${d.prov.by}`} sx={pillSx("working")} />}
+        {d.prov?.by && <Chip size="small" label={`by: ${who}`} sx={pillSx("working")} />}
         {d.prov?.approved && <Chip size="small" label={`approved by you · ${hhmm(d.prov.approved)}`} sx={pillSx("info")} />}
         {w?.done_at && <Chip size="small" label={`agent said done · ${hhmm(w.done_at)}`} sx={pillSx("done")} />}
+        <Chip size="small" label={summary} sx={pillSx("muted")} />
+        {checks > 0 && <Chip size="small" label={`${checks} to check`} sx={pillSx("you")} />}
         <Box sx={{ flex: 1 }} />
-        {w && <WorkLine work={w} who={d.session?.agent || d.prov?.by || "agent"} waiting={false} startedAt={d.session?.started} />}
+        {w && <WorkLine work={w} who={who} waiting={false} startedAt={d.session?.started} />}
       </Box>
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+      {open && <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
         <Box sx={{ px: 1.5, py: 1, borderRight: { md: `1px solid ${BORDER}` } }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
             <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>said it would</Typography>
@@ -1256,8 +1268,8 @@ export const WorkStrip = ({ taskId, live }) => {
           })}
           {!files.length && <Typography variant="caption" sx={{ color: FAINT }}>nothing written yet</Typography>}
         </Box>
-      </Box>
-      {!!(w?.flags || []).length && (
+      </Box>}
+      {open && !!(w?.flags || []).length && (
         <Box sx={{ px: 1.5, py: 0.75, borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 0.4 }}>
           {w.flags.map((f, i) => (
             <Box key={i} sx={{ display: "flex", gap: 1, alignItems: "flex-start", fontSize: 12 }}>

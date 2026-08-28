@@ -395,7 +395,7 @@ export default function StudioView({ onOpenTask }) {
                 <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: INK, pt: 0.3 }}>{t.Title}</Typography>
                 {/* what the agent holds right now (its hook / rollout), then the same git-attributed
                     file list the Board card shows */}
-                {live[t.TaskId]?.work && <Box sx={{ pt: 0.5 }}><WorkLine work={live[t.TaskId].work} who={cliName(live[t.TaskId].AgentName || "agent")}
+                {live[t.TaskId]?.work && <Box sx={{ pt: 0.5 }}><WorkLine work={live[t.TaskId].work} who={live[t.TaskId].cli || cliName(live[t.TaskId].AgentName || "agent")}
                   waiting={live[t.TaskId].kind === "session" && isWaiting(live[t.TaskId])} asking={live[t.TaskId].asking} startedAt={live[t.TaskId].StartedAt} /></Box>}
                 {live[t.TaskId]?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={live[t.TaskId].files} /></Box>}
                 {on && (

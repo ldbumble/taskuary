@@ -238,8 +238,11 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     from .channels import save_attachments
     from . import voice
     cfg = _cfg(c)
-    want = {s['Address'] for s in sources
-            if s.get('Channel', 'whatsapp') == 'whatsapp' and s['Address'] and s['Address'] != '*'}
+    # '*' means EVERY chat, and it wins even when specific chats are also listed: the owner had
+    # '*' on AND a group on, and only the group came in because '*' was silently dropped from the
+    # wanted set. Filter to specific JIDs ONLY when there is no active '*'.
+    srcs = [s for s in sources if s.get('Channel', 'whatsapp') == 'whatsapp' and s.get('Address')]
+    want = set() if any(s['Address'] == '*' for s in srcs) else {s['Address'] for s in srcs}
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n, took = 0, []
     from . import phone

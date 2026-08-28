@@ -810,7 +810,7 @@ def live_runs(lines: int = 3):
                         'asking': bool(w) and waitroom.looks_like_question(t.get('tail') or []),
                         'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
                         'files': t.get('files') or [], 'tail': t.get('tail') or [],
-                        'work': t.get('work')})            # said and did (witness.py) - the card's pane
+                        'cli': t.get('cli'), 'work': t.get('work')})     # the CLI it runs; said and did (witness.py) - the card's pane
     return {'data': out}
 
 @app.get('/api/runs/{run_id}')
@@ -870,7 +870,7 @@ def task_work(tid: int, diff: bool = True):
             'kind': t.get('Kind') or '', 'by': (sess.agent if sess else '') or t.get('RunAgent') or '',
             'approved': (approved or {}).get('UpdatedAt') or (approved or {}).get('CreatedAt'), 'status': t.get('Status')}
     return {'work': work, 'files': files, 'prov': prov, 'diffstat': {'added': rev.get('added'), 'removed': rev.get('removed')},
-            'session': {'sid': sess.sid, 'alive': sess.alive, 'agent': sess.agent, 'started': sess.started, 'cwd': sess.cwd} if sess else None}
+            'session': {'sid': sess.sid, 'alive': sess.alive, 'agent': sess.agent, 'cli': hub_term.cli_of(sess.argv), 'started': sess.started, 'cwd': sess.cwd} if sess else None}
 
 @app.post('/api/hooks/claude')
 async def claude_hook(request: Request):

@@ -81,7 +81,13 @@ export default function TaskHubPage() {
   // second pass covers a tab that fetches its list on mount: on the switching frame it has
   // no height yet, so the first scrollTo has nothing to scroll to.)
   const scrollAt = useRef({});
-  const go = (t) => { scrollAt.current[tab] = window.scrollY; setTab(t); tabRef.current = t; };
+  // clicking the tab you are already on is "take me back to the top of it": the view remounts
+  // to its landing (Connectors out of a card, Settings to its first page) instead of doing nothing
+  const [reset, setReset] = useState(0);
+  const go = (t) => {
+    if (t === tab) { scrollAt.current[t] = 0; window.scrollTo(0, 0); setReset((r) => r + 1); return; }
+    scrollAt.current[tab] = window.scrollY; setTab(t); tabRef.current = t;
+  };
   useLayoutEffect(() => {
     const y = scrollAt.current[tab] || 0;
     if (!y) return;
@@ -196,10 +202,10 @@ export default function TaskHubPage() {
             </Box>
           )}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
-          {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
-          {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}
-          {tab === "Docs" && <DocsView key={`d${tick}`} />}
-          {tab === "Settings" && <SettingsView key={`s${tick}`} />}
+          {tab === "Reports" && <ReportsView key={`rp${tick}-${reset}`} />}
+          {tab === "Connectors" && <ConnectorsView key={`c${tick}-${reset}`} />}
+          {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
+          {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} />}
         </Box>
       </Box>
     </ThemeProvider>

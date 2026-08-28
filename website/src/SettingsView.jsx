@@ -532,7 +532,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
 const NAV = ["about", "config", "policies", "memory", "agents", "audit"];
 
 export default function SettingsView() {
-  const [page, setPage] = useState("config");
+  const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
   const [q, setQ] = useState("");
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "236px minmax(0,1fr)" },

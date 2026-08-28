@@ -194,11 +194,11 @@ const useCalToday = () => {
   return tick >= 0 ? (cal?.events || []) : [];
 };
 const meetingEnded = (e) => !e.all_day && e.end && tsMs(e.end) < Date.now();
-// the resting opacity of a row by age: full for an hour, a slow slide to 65% over the working day,
-// then on to a 50% floor by two days - visible within one afternoon, never faint
+// the resting opacity of a row by age: full for half an hour, then a steady slide to 55% by six
+// hours and a 45% floor by a day - you can see it across one afternoon, and nothing goes faint
 const ageOpacity = (s) => {
   const h = (Date.now() - tsMs(s)) / 36e5;
-  return h <= 1 ? 1 : h <= 8 ? 1 - 0.35 * (h - 1) / 7 : Math.max(0.5, 0.65 - 0.15 * (h - 8) / 40);
+  return h <= 0.5 ? 1 : h <= 6 ? 1 - 0.45 * (h - 0.5) / 5.5 : Math.max(0.45, 0.55 - 0.1 * (h - 6) / 18);
 };
 
 // One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it

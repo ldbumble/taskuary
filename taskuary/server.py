@@ -1253,6 +1253,16 @@ def wa_bridge_stop(cid: int):
     from . import wabridge
     return wabridge.stop()
 
+@app.post('/api/connectors/{cid}/wa/bridge/restart')
+def wa_bridge_restart(cid: int):
+    """Stop the running bridge (ours or one started by hand - found by its port) and start the one on
+    disk: how a paired bridge picks up newer bridge code without the owner touching a shell."""
+    from . import wabridge
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    store.audit('connector', cid, 'wa_bridge_restart', ACTOR)
+    return wabridge.restart()
+
 @app.get('/api/connectors/{cid}/wa/chats')
 def wa_chats(cid: int):
     """The chats the WhatsApp bridge has seen - to pick 'only these' as sources (messengers.wa_chats)."""

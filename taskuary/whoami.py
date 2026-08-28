@@ -47,12 +47,16 @@ def profile(store) -> dict:
     if wa and wa.get('Active'):
         try:
             from .messengers import wa_status
-            st = wa_status(store.get_connector(wa['ConnectorId'], with_secret=True))
-            if st.get('connected'): add('whatsapp', 'your number', st.get('phone') or st.get('jid'), 'the WhatsApp account paired to the bridge', name=st.get('me'))
+            ws = wa_status(store.get_connector(wa['ConnectorId'], with_secret=True))
+            if ws.get('connected') and (ws.get('phone') or ws.get('jid')): add('whatsapp', 'your number', ws.get('phone') or ws.get('jid'), 'the WhatsApp account paired to the bridge', name=ws.get('me'))
+            # a bridge started before bridge.mjs learned to report the jid answers without one - say so instead of nothing
+            elif ws.get('connected'): add('whatsapp', 'your number', f"paired as {ws.get('me') or 'you'} - restart the bridge (WhatsApp card) to read the number", 'the bridge is running older code than the one on disk')
         except Exception: pass                                   # bridge down: the row is simply absent
     tg = conns.get('telegram')
-    if tg and _cfg(tg).get('bot_username'): add('telegram', 'your bot', '@' + _cfg(tg)['bot_username'], 'the Telegram card (Test saved it)')
+    if tg and tg.get('Active') and not _cfg(tg).get('bot_username'): _learn_telegram(store, tg)
+    if tg and _cfg(tg).get('bot_username'): add('telegram', 'your bot', '@' + _cfg(tg)['bot_username'], 'the Telegram card (getMe)')
     gh = conns.get('github')
+    if gh and gh.get('Active') and not _cfg(gh).get('login'): _learn_github(store, gh)
     if gh and _cfg(gh).get('login'): add('github', 'login', _cfg(gh)['login'], 'the GitHub card - who the PAT authenticates as')
     add('telegram', 'handle', st.get('owner_telegram'), 'you typed it here')
     add('whatsapp', 'phone', st.get('owner_phone'), 'you typed it here')
@@ -63,6 +67,30 @@ def profile(store) -> dict:
     style, seed = st.get('owner_avatar_style') or 'monogram', st.get('owner_avatar_seed') or facts['owner_name'] or 'taskuary'
     return {'facts': facts, 'identities': ids, 'avatar': avatar_svg(facts['owner_name'], seed, style), 'styles': list(STYLES),
             'told_to_agents': _told(store, facts, ids)}
+
+
+# The card learns these on Discover / Test - which a connector set up before those existed never ran.
+# One live call the first time the page asks, then it is on the card like everything else.
+def _learn_github(store, gh):
+    try:
+        import requests
+        from .github import _h
+        tok = (store.get_connector(gh['ConnectorId'], with_secret=True) or {}).get('Secret')
+        if not tok: return
+        r = requests.get('https://api.github.com/user', headers=_h(tok), timeout=8); r.raise_for_status()
+        login = r.json().get('login')
+        if login: store.set_connector_config(gh['ConnectorId'], {**_cfg(gh), 'login': login}); gh['ConfigJson'] = json.dumps({**_cfg(gh), 'login': login})
+    except Exception: pass
+
+
+def _learn_telegram(store, tg):
+    try:
+        from .messengers import tg as _tg
+        tok = (store.get_connector(tg['ConnectorId'], with_secret=True) or {}).get('Secret')
+        if not tok: return
+        me = _tg(tok, 'getMe')
+        if me.get('username'): store.set_connector_config(tg['ConnectorId'], {**_cfg(tg), 'bot_username': me['username']}); tg['ConfigJson'] = json.dumps({**_cfg(tg), 'bot_username': me['username']})
+    except Exception: pass
 
 
 def _told(store, facts, ids) -> str:

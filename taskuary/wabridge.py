@@ -74,8 +74,28 @@ def start(force_install: bool = False, wait: bool = False) -> dict:
     return {**state(), 'phase': _STATE['phase'] if _STATE['phase'] != 'idle' else 'starting'}
 
 
+def port() -> int: return int(os.getenv('WA_BRIDGE_PORT') or 8977)
+
+
+def pid_on_port(p: int = None) -> int:
+    """Who is listening on the bridge port - a bridge the owner started by hand, or one from before
+    a restart of Taskuary, is not in _STATE but is still the process to stop."""
+    p = p or port()
+    try:
+        if os.name == 'nt':
+            out = subprocess.run(['netstat', '-ano', '-p', 'tcp'], capture_output=True, text=True, timeout=10).stdout
+            for l in out.splitlines():
+                cols = l.split()
+                if len(cols) >= 5 and cols[0] == 'TCP' and cols[1].endswith(f':{p}') and cols[3] == 'LISTENING': return int(cols[4])
+        else:
+            out = subprocess.run(['lsof', '-ti', f'tcp:{p}', '-sTCP:LISTEN'], capture_output=True, text=True, timeout=10).stdout
+            return int(out.split()[0]) if out.split() else 0
+    except Exception as e: logger.debug(f'pid_on_port: {e}')
+    return 0
+
+
 def stop() -> dict:
-    pid = _STATE.get('pid')
+    pid = _STATE.get('pid') or pid_on_port()
     if pid:
         try:
             if os.name == 'nt': subprocess.run(['taskkill', '/PID', str(pid), '/T', '/F'], capture_output=True)
@@ -83,3 +103,10 @@ def stop() -> dict:
         except Exception as e: logger.warning(f'wa bridge stop: {e}')
     _set('idle', 'stopped')
     return state()
+
+
+def restart(wait: bool = False) -> dict:
+    """Stop whatever holds the port and start the bridge from the code on disk - the way a bridge
+    picks up a newer bridge.mjs (an old one kept answering /status without the paired number)."""
+    stop(); time.sleep(1.0)
+    return start(wait=wait)

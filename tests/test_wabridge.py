@@ -13,6 +13,16 @@ class BridgeManagerTests(unittest.TestCase):
         wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
         if wabridge._LOCK.locked(): wabridge._LOCK.release()
 
+    def test_a_bridge_started_by_hand_is_found_by_its_port_and_restarted(self):
+        """The owner's bridge predated the code that reports the paired number; only a restart picks the
+        new code up, and the manager never started that process - so it finds it by the port."""
+        netstat = 'Active Connections\n\n  Proto  Local Address          Foreign Address        State           PID\n  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1234\n  TCP    127.0.0.1:8977         0.0.0.0:0              LISTENING       4242\n'
+        with mock.patch.object(wabridge.os, 'name', 'nt'), mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(stdout=netstat)) as run:
+            self.assertEqual(wabridge.pid_on_port(8977), 4242)
+            with mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}) as st, mock.patch.object(wabridge.time, 'sleep'):
+                self.assertEqual(wabridge.restart()['phase'], 'starting')
+            self.assertIn(['taskkill', '/PID', '4242', '/T', '/F'], [c.args[0] for c in run.call_args_list]); st.assert_called_once()
+
     def test_no_node_is_a_failed_phase_the_owner_can_act_on(self):
         # wait=True runs the worker inline: a threaded worker outlived its mocks on a slow CI box and
         # kept the lock, so the next test's start() was a no-op and both went red

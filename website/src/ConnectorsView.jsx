@@ -1857,7 +1857,16 @@ const WaPair = ({ conn, reload }) => {
           </Box>
         )}
         {st.connected ? (
-          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600, mt: 0.5 }}>✓ Paired{st.me ? ` as ${st.me}` : ""} — the bridge is connected. Test, then enable.</Typography>
+          <Box sx={{ mt: 0.5 }}>
+            <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
+            {/* a bridge started before the code on disk changed keeps running the old code - this is how it catches up
+                (the pairing survives: it lives in the auth folder, not the process) */}
+            <Button size="small" sx={{ fontSize: 10.5, color: DIM, mt: 0.25, px: 0.75 }} disabled={["installing", "starting"].includes(st.manager?.phase)}
+              title="Stop the running bridge and start it again from the code on disk. You stay paired."
+              onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}>
+              {st.phone ? "Restart the bridge" : "Restart the bridge — it predates the number readout"}
+            </Button>
+          </Box>
         ) : st.bridge === false && !st.node ? (
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.6, display: "block" }}>
             Node is not installed here, and it is the one thing Taskuary cannot install for you. In a terminal:

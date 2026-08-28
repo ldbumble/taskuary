@@ -51,6 +51,29 @@ class ProfileTests(unittest.TestCase):
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Uri', 'jid': '15550100200:12@s.whatsapp.net', 'qr': '', 'pairingCode': ''}):
             self.assertEqual(messengers.wa_status(wa)['phone'], '+15550100200')
 
+    def test_a_card_set_up_before_discover_and_test_learns_its_login_on_first_look(self):
+        """The GitHub login and the Telegram bot were saved only by Discover / Test; a card connected
+        earlier had neither, and the page read as if the connectors knew nothing about the owner."""
+        s = MemoryStore()
+        gh, tg = s.get_connector_by_type('github'), s.get_connector_by_type('telegram')
+        s.save_connector({'ConnectorId': gh['ConnectorId'], 'Active': 1, 'Secret': 'ghp_x'}, 't')
+        s.save_connector({'ConnectorId': tg['ConnectorId'], 'Active': 1, 'Secret': '123:abc'}, 't')
+        fake = mock.Mock(); fake.json.return_value = {'login': 'ldbumble'}; fake.raise_for_status = lambda: None
+        with mock.patch('requests.get', return_value=fake) as g, mock.patch('taskuary.messengers.tg', return_value={'username': 'uri_hub_bot'}):
+            by = {(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}
+        self.assertEqual(by[('github', 'login')]['value'], 'ldbumble'); self.assertEqual(by[('telegram', 'your bot')]['value'], '@uri_hub_bot')
+        self.assertEqual(json.loads(s.get_connector(gh['ConnectorId'])['ConfigJson'])['login'], 'ldbumble')        # saved on the card: one call, ever
+        with mock.patch('requests.get', side_effect=AssertionError('must not be called again')):
+            self.assertEqual({(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}[('github', 'login')]['value'], 'ldbumble')
+
+    def test_a_bridge_running_old_code_says_so_instead_of_showing_nothing(self):
+        s = MemoryStore()
+        wa = s.get_connector_by_type('whatsapp'); s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 't')
+        from taskuary import messengers
+        with mock.patch.object(messengers, 'wa_status', return_value={'connected': True, 'me': 'Uri', 'jid': '', 'phone': ''}):
+            row = {(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}[('whatsapp', 'your number')]
+        self.assertIn('restart the bridge', row['value']); self.assertIn('older code', row['source'])
+
     def test_the_avatar_is_deterministic_and_every_style_renders(self):
         a, b = whoami.avatar_svg('Uri Nussbaum', 'seed-1'), whoami.avatar_svg('Uri Nussbaum', 'seed-1')
         self.assertEqual(a, b); self.assertNotEqual(a, whoami.avatar_svg('Uri Nussbaum', 'seed-2'))

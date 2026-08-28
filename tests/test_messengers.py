@@ -196,6 +196,7 @@ class NotifyTests(unittest.TestCase):
         from taskuary.ingest import ingest_message
         s, sent = self._store(), []
         s.set_setting('coder_auto_enabled', '1', 'o')
+        s.set_setting('owner_email', 'me@corp.com', 'o')       # marcus is a colleague, not a first-time stranger (senders.py)
         with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)), \
              mock.patch('taskuary.terminal.start_on_task'):
             ingest_message(s, self._msg(), llm=self.TASK_LLM)

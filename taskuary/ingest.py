@@ -11,6 +11,7 @@ from .routing import route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref
+from . import senders
 
 
 # What the agent is TOLD about work from each kind of source. An email needs nothing -
@@ -150,6 +151,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     new_rid = None                       # set when a fresh reply task opens a review below
+    held = ''                            # why the coding agent was NOT auto-started (a first-time email sender)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
     mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
     me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
@@ -299,8 +301,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # editing code. A coding agent belongs on a coding task; the rest is yours to place.
         elif f['kind'] == 'coding' and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
-            # open repo would start an agent per drive-by PR) - the task queues as needs-you
-            _spawn(_auto_code, store, tid)
+            # open repo would start an agent per drive-by PR) - the task queues as needs-you.
+            # And the same gate for email, on the SENDER: a stranger's mail can be a task, it
+            # cannot start an agent on this machine by itself (senders.py). The task is here;
+            # the owner presses the button.
+            ok, who = senders.known(store, msg, exclude_mid=mid, deep=True)
+            if ok: _spawn(_auto_code, store, tid)
+            else:
+                held = who
+                store.add_comment(tid, 'router', 'agent', f'Coding agent not auto-started: {who} - not one of your domains, and this mailbox '
+                                                          'has never written to them. Send it to the coding agent yourself if this is real work.')
+                store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
     # and the tail says what happened NEXT - "it's a task" without "and who is working it"
@@ -311,6 +322,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
                # said per KIND, because the line is read as a promise about what just happened
                else 'no code in it - it waits on your list, no agent dispatched' if f['kind'] != 'coding'
+               else f'not auto-worked: {held} - a first-time sender never starts an agent by itself; send it yourself if real' if held
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
                else 'auto-dispatch is off (Settings) - start the session from the task')
         reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
@@ -324,7 +336,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     lvl = cfg.get('notify_level') or 'needs_me'
     # on an attach there was no fresh triage (`f` only exists on create) - the task itself knows
     kind = f['kind'] if r['decision'] != 'attach' else (store.get_task(tid) or {}).get('Kind')
-    dispatched = kind != 'reply' and cfg.get('coder_auto_enabled') == '1'
+    dispatched = kind != 'reply' and cfg.get('coder_auto_enabled') == '1' and not held
     if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
         _notify_new(store, msg, tid, mid,
                     'a question for you' if kind == 'reply' else 'new task on your list', rid=new_rid)

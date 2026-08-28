@@ -138,6 +138,7 @@ class GithubIngestTests(unittest.TestCase):
         from taskuary.ingest import ingest_message
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('owner_email', 'me@work.example', 't')      # the mail below is from a colleague: a KNOWN sender (senders.py gates strangers)
         spawned = []
         task_llm = lambda *a, **k: '{"intent": "task", "why": "work"}'
         with mock.patch('taskuary.ingest._spawn', side_effect=lambda fn, *a: spawned.append(fn.__name__)):

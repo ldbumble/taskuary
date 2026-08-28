@@ -108,6 +108,49 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
         self.assertIn('sent to the coding agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
+    def test_a_first_time_email_sender_never_starts_the_coder_by_itself(self):
+        """The one road from a stranger's text to an agent on this machine with nobody in between
+        was the auto-start. Email now gates it on the SENDER (senders.py): known = your own
+        domain, has written before, or your mailbox has written to them (Sent Items, asked of the
+        server - Taskuary's table starts the day it was connected, the correspondence did not).
+        The task still lands; only the automatic session waits for the owner."""
+        from unittest import mock
+        from taskuary import senders
+        s = MemoryStore()
+        s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('owner_email', 'uri@mfaheritage.net', 't')
+        # distinct subjects and bodies: a look-alike would ATTACH to the first task and never reach the create path
+        texts = {'e1': ('importer crash', 'the importer throws an exception in jobs/import.py'),
+                 'e2': ('invoice portal login', 'customers cannot log into the invoice portal since friday'),
+                 'e3': ('nightly scheduler', 'the report scheduler silently skipped tuesday night'),
+                 'e4': ('ios signing', 'the mobile build fails at the code signing step on ci')}
+        mail = lambda **kw: self.msg(channel='email', source_name='uri@mfaheritage.net', conversation_id=kw['external_id'],
+                                     subject=texts[kw['external_id']][0], body=texts[kw['external_id']][1], **kw)
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False) as wt:
+            out = ingest_message(s, mail(external_id='e1', from_email='stranger@evil.example'), llm=TASK_LLM)
+        spawn.assert_not_called(); wt.assert_called_once()
+        t = s.get_task(out['task_id'])
+        self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))                      # a task, on the Board, not worked
+        self.assertTrue(any('not auto-started' in c['Body'] for c in s.list_comments(out['task_id'])))
+        self.assertIn('first-time sender never starts an agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        # the same stranger writes again: the table knows them now, no mailbox lookup, agent starts
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+            self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once(); wt.assert_not_called()
+        # your own domain: never a stranger
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+            self.assertEqual(ingest_message(s, mail(external_id='e3', from_email='leah@mfaheritage.net'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once(); wt.assert_not_called()
+        # someone you have written to for years, whom Taskuary has never seen: Sent Items says so
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True):
+            self.assertEqual(ingest_message(s, mail(external_id='e4', from_email='old.client@partner.example'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once()
+        # chat senders are already inside a workspace you control: no gate at all
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+            self.assertEqual(ingest_message(s, self.msg(external_id='e5', channel='teams', from_email='new.colleague@elsewhere.example',
+                                                        conversation_id='c5', subject='teams: the exporter', body='e5: exporter fails in jobs/export.py'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once(); wt.assert_not_called()
+
     def test_no_auto_dispatch_when_disabled(self):
         """Dispatching is ON by default now, so this asserts the SWITCH works - turned off,
         a real task is filed and waits for the owner to start it."""

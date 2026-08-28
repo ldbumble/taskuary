@@ -902,8 +902,12 @@ class SQLiteStore:
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
-    def known_sender(self, email):
-        return bool(email) and self._one('SELECT 1 x FROM message WHERE FromEmail=? LIMIT 1', (email,)) is not None
+    def known_sender(self, email, exclude_mid=None):
+        """Has this address written before? exclude_mid: the message being judged, once it is
+        already landed - otherwise every sender is 'known' by their own first mail."""
+        if not email: return False
+        return self._one('SELECT 1 x FROM message WHERE LOWER(FromEmail)=LOWER(?) AND MessageId<>? LIMIT 1',
+                         (email, exclude_mid or 0)) is not None
     def add_memory(self, fields): return self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')

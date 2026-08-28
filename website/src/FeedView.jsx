@@ -312,19 +312,28 @@ export default function FeedView({ onOpenTask, onChanged }) {
   useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
   useEffect(() => {
-    let alive = true;
+    let alive = true, timer = null, wasRunning = false;
     const ask = async () => {
+      if (!alive) return;
+      let running = false;
       try {
         const { data } = await api.get("/api/ingest/status");
         if (!alive) return;
         if (data.everyMinutes != null) setEvery(data.everyMinutes);
         if (data.lastPollAt) setLastSync(new Date(Date.now() - (data.now - data.lastPollAt) * 1000));
         nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
+        // the server's OWN ten-minute sync wears the same face as pressing the button: the
+        // button says Syncing…, the caption says what it is reading, rows land as they arrive
+        running = data.status?.state === "running";
+        if (running) { setBgSync(true); setSyncWhat(data.status.what || ""); load(rowsLen.current); }
+        else if (wasRunning) { setBgSync(false); setSyncWhat(""); load(rowsLen.current); }
+        wasRunning = running;
       } catch { /* the caption just stops counting */ }
+      timer = setTimeout(ask, running ? 2000 : 30000);   // watch a sync closely; otherwise re-anchor every half minute
     };
     ask();
-    const id = setInterval(ask, 30000);             // re-anchor on the server's clock every half minute
-    return () => { alive = false; clearInterval(id); };
+    return () => { alive = false; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
   const syncNow = useCallback(async (silent) => {

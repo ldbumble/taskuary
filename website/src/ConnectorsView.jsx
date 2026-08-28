@@ -867,7 +867,6 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   const steps = [
     { label: "Credentials", done: !!conn.HasSecret || !m.secretLabel, body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-        {conn.Type === "outlook" && <MsSignIn conn={conn} cfg={cfg} reload={reload} />}
         {conn.Type === "outlook" && !adminFields && (
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
             sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
@@ -980,6 +979,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
       <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} reload={reload} />
+      {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
+          runs on a tenant app opens on Sources, and the one button most people need was folded away */}
+      {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={["Setup", "Guide"]} value={tab} onChange={setTab} />
       {tab === "Setup" && (

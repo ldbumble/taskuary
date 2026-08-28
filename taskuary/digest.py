@@ -8,7 +8,7 @@ whole thing off - and the same run keeps DIGEST.md fresh for the Docs tab.
 """
 from datetime import datetime, timedelta
 
-DAYS = 3                 # the window the synthesis reads - matches the startup catch-up
+DAYS = 1                 # the window the synthesis reads: all of yesterday, plus today so far (gather starts at midnight)
 
 # The seeded report's editable instruction - "configure what goes in there" IS this text,
 # on the Reports tab. reports.AI_SYSTEM wraps it; this is only the ask.
@@ -105,8 +105,10 @@ def task_link(tid: int) -> str:
 
 
 def gather(store, days: int = DAYS) -> str:
-    """The raw material, compact enough to hand an AI whole."""
-    since = (datetime.now() - timedelta(days=days)).isoformat(sep=' ', timespec='seconds')
+    """The raw material, compact enough to hand an AI whole. The window starts at MIDNIGHT `days`
+    days back, not `days`*24h ago: a morning digest with days=1 is "all of yesterday, plus today so
+    far" - run at 07:26 it used to start at yesterday 07:26 and lose yesterday's morning."""
+    since = (datetime.now() - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat(sep=' ', timespec='seconds')
     out = []
     tasks = store.list_tasks()
     live = [t for t in tasks if t.get('Status') in ('open', 'in_progress', 'waiting')]

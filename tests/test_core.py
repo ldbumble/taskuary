@@ -151,6 +151,17 @@ class CoreTests(unittest.TestCase):
                                                         conversation_id='c5', subject='teams: the exporter', body='e5: exporter fails in jobs/export.py'), llm=TASK_LLM)['status'], 'created')
         spawn.assert_called_once(); wt.assert_not_called()
 
+    def test_the_digest_window_starts_at_midnight_so_a_one_day_digest_is_all_of_yesterday(self):
+        from datetime import datetime, timedelta
+        from taskuary.digest import gather
+        from taskuary.reports import run_digest
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'fixed at dawn yesterday', 'Kind': 'coding', 'Status': 'done'}, 't')
+        dawn = (datetime.now() - timedelta(days=1)).replace(hour=6, minute=0, second=0).isoformat(sep=' ', timespec='seconds')
+        s._exec('UPDATE task SET UpdatedAt=? WHERE TaskId=?', (dawn, tid))
+        self.assertIn('fixed at dawn yesterday', gather(s, 1))                  # 24h back from 07:26 would have missed it
+        self.assertEqual(run_digest({'store': s, 'days': 1})[0], 'yesterday and today so far, distilled')
+
     def test_no_auto_dispatch_when_disabled(self):
         """Dispatching is ON by default now, so this asserts the SWITCH works - turned off,
         a real task is filed and waits for the owner to start it."""

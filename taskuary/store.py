@@ -398,7 +398,7 @@ class SQLiteStore:
                 from .digest import PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Morning digest', 'template', 1,
-                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3, 'every_minutes': 180,
+                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'every_minutes': 180,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
             # ...and its sibling: the weekly 'what should you automate next' brief (toil.py) -
@@ -902,6 +902,12 @@ class SQLiteStore:
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
+    def last_report(self, title):
+        """The previous filed run of a report, by title - its shape anchors the next run (reports.run_agent).
+        Failed runs and outbound copies do not count: a table of refusals is not a structure to keep."""
+        return self._one("SELECT * FROM message WHERE Channel='report' AND (SourceName=? OR Subject LIKE ?) "
+                         "AND Subject NOT LIKE '%FAILED' AND COALESCE(Direction, '') <> 'out' ORDER BY SentAt DESC LIMIT 1",
+                         (title, f'{title} —%'))
     def known_sender(self, email, exclude_mid=None):
         """Has this address written before? exclude_mid: the message being judged, once it is
         already landed - otherwise every sender is 'known' by their own first mail."""

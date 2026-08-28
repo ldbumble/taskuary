@@ -91,6 +91,16 @@ AGENT_SYSTEM = ('You are running a SCHEDULED REPORT for a busy operator. Do exac
                 'questions back. If something the instruction asks about cannot be found, say so in the report.')
 
 
+def _outline(body: str) -> str:
+    """Section headings and table header rows of a report body - the shape without the content."""
+    out, lines = [], (body or '').splitlines()
+    for i, l in enumerate(lines):
+        s = l.strip()
+        if s.startswith('#'): out.append(s)
+        elif s.startswith('|') and i + 1 < len(lines) and set(lines[i + 1].strip()) <= set('|-: ') and '-' in lines[i + 1]: out.append(s)
+    return ' / '.join(out[:24])
+
+
 def run_agent(cfg):
     """{"agent": "coder", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
     the AI itself as the source: a coding CLI agent (Connectors -> AI CLI agents) runs your saved
@@ -109,6 +119,13 @@ def run_agent(cfg):
     llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None)
     if llm is None: raise RuntimeError(f'no CLI agent named {name!r} - add one under Connectors -> AI CLI agents')
     ask = (f'/{skill}' + (' ' if prompt else '') if skill else '') + prompt
+    # Two runs twenty minutes apart came back as two different documents - 106 lines with a
+    # fast-risers table, then 83 lines in another shape. A fresh agent has no memory of the last
+    # run, so the last run's SHAPE (headings, table columns - never the content) rides along.
+    prev = store.last_report(cfg.get('title') or '') if cfg.get('title') else None
+    shape = _outline((prev or {}).get('BodyText'))
+    if shape: ask += ('\n\nSTRUCTURE: keep the sections, their order and the table columns of the previous run of this '
+                      f'report so runs stay comparable - change only the content. Previous outline: {shape}')
     out = str(llm(AGENT_SYSTEM, ask) or '').strip()
     if not out: raise RuntimeError(f'{name} answered nothing')
     what = f'/{skill}' if skill else 'a prompt'
@@ -263,14 +280,15 @@ def run_datadog(cfg):
 
 
 def run_digest(cfg):
-    """{"days": 3} - Taskuary's own activity as the data: open work, finished work, pending
+    """{"days": 1} - Taskuary's own activity as the data: open work, finished work, pending
     reviews, fresh verdicts, who wrote how often. The Morning digest ships as a report ON
     PURPOSE: the brief lands on the Timeline like any report, its prompt is edited on the
     Reports tab, deleting the source turns it off - and it demonstrates how reports work
     using data every install already has. `store` arrives via resolve_cfg, never persisted."""
     from .digest import gather
-    days = int(cfg.get('days') or 3)
-    return f'the last {days} days, distilled', gather(cfg['store'], days)
+    days = int(cfg.get('days') or 1)
+    head = 'yesterday and today so far, distilled' if days == 1 else f'the last {days} days, distilled'
+    return head, gather(cfg['store'], days)
 
 
 def run_automate(cfg):

@@ -11,6 +11,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
+import { MicButton } from "./ui.jsx";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -96,6 +97,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   const [size, setSize] = useState(savedSize);
   const termRef = useRef(null);
   const refit = useRef(null);                        // set at mount: refit + tell the pty
+  const sendRef = useRef(null);                      // the socket's send, for the mic: dictated text is typed into the session
   useEffect(() => {                                  // live restyle, no reconnect
     try { localStorage.setItem("tq-term-theme", themeName); } catch { /* private mode */ }
     if (termRef.current) termRef.current.options.theme = THEMES[themeName];
@@ -130,6 +132,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     fit.fit();
     const ws = new WebSocket(wsUrl(sid));
     const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
+    sendRef.current = send;
     ws.onopen = () => { setState("live"); send({ type: "resize", rows: term.rows, cols: term.cols }); };
     // a server that never sends 'ready' (older build, a child that dies mid-redraw) must not
     // leave the curtain down over a working session - the pane opens anyway
@@ -195,6 +198,10 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           sx={{ ...mono, fontSize: 13, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#867f74",
             border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
             "&:hover:not(:disabled)": { color: "#e1dcd5" } }}>A+</Box>
+        {/* dictate to the agent: the words are typed into the session as keystrokes, no Enter -
+            you read them and press it yourself */}
+        <MicButton size={15} sx={{ color: "#867f74", p: 0.25, "&:hover": { color: "#e1dcd5" } }}
+          onText={(t) => { sendRef.current?.({ type: "in", data: t }); termRef.current?.focus(); }} />
         <Box component="select" value={themeName} onChange={(e) => setThemeName(e.target.value)}
           title="terminal palette"
           sx={{ ...mono, fontSize: 10, bgcolor: "transparent", color: "#867f74", border: "none",

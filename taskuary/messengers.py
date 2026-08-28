@@ -10,7 +10,7 @@ Taskuary's side is ~40 lines either way.
 Both are CHAT: messages land with a conversation id per chat, replies go back into the same
 chat, and the responder already knows not to sign chat messages.
 """
-import base64, json
+import base64, json, os
 import requests
 from loguru import logger
 
@@ -63,6 +63,17 @@ def _tg_photo(token: str, m: dict) -> list:
     return out
 
 
+def _tg_file(token: str, f: dict, fallback_name: str):
+    """One Telegram file by file_id -> (bytes, name, mime), or None with a warning."""
+    try:
+        path = tg(token, 'getFile', file_id=f['file_id']).get('file_path') or ''
+        data = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60).content
+        name = f.get('file_name') or (path.rsplit('/', 1)[-1] or fallback_name)
+        return data, name, (f.get('mime_type') or 'audio/ogg').split(';')[0]
+    except Exception as e:
+        logger.warning(f'telegram file fetch failed: {e}'); return None
+
+
 def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     """getUpdates with the offset watermark kept on the connector - Telegram's own cursor, so a
     restart never re-ingests.
@@ -108,16 +119,29 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
             continue
         text = m.get('text') or m.get('caption') or ''
         atts = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else []
+        # a voice message (or an audio file with no caption): fetched, transcribed if a voice
+        # connector exists, filed with the reason if not - and attached either way (voice.py)
+        transcribed, why = True, ''
+        v = m.get('voice') or (m.get('audio') if not text else None)
+        if v and not text:
+            from . import voice
+            got = _tg_file(tok, v, 'voice.ogg')
+            if got:
+                data, name, mime = got
+                text, transcribed, why = voice.note_body(store, data, mime, name, v.get('duration') or 0, 'Telegram')
+                atts.append({'id': v['file_id'][:60], 'name': name, 'contentType': mime, 'size': len(data),
+                             'contentBytes': base64.b64encode(data).decode()})
         if not text and not atts: continue
         who = ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) or frm.get('username') or 'someone'
-        out = ingest_message(store, file_only=file_only, msg={
+        out = ingest_message(store, file_only=file_only or not transcribed, msg={
             'external_id': f"telegram:{cid}:{m.get('message_id')}", 'channel': 'telegram',
             'subject': None, 'body': text or '(no text - see the attachment)',
             'from_name': who, 'from_email': f"@{frm['username']}" if frm.get('username') else None,
             'conversation_id': f'telegram:{cid}',
             'sent_at': datetime.fromtimestamp(m.get('date') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': chat.get('title') or who,
-            'images': images_for_triage(store, atts)}, llm=llm)
+            'images': images_for_triage(store, atts),
+            **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += out['status'] != 'duplicate'
         if atts and out.get('message_id') and out['status'] != 'duplicate':
             try: save_attachments(store, out['message_id'], atts, f"telegram:{cid}:{m.get('message_id')}")
@@ -189,11 +213,25 @@ def wa_chats(c) -> list:
     return rows
 
 
+def _read_media(path: str):
+    """The bridge wrote a voice note to disk beside itself; same machine, so it is read straight
+    off. Missing or oversized (over 25 MB - every transcription API's ceiling) is a warning, not
+    a failed poll."""
+    try:
+        if os.path.getsize(path) > 25 * 1024 * 1024: logger.warning(f'voice note too large to transcribe: {path}'); return None
+        with open(path, 'rb') as f: return f.read()
+    except OSError as e:
+        logger.warning(f'could not read the voice note the bridge saved ({path}): {e}'); return None
+
+
 def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     """The bridge keeps a sequence number per message; ours is on the connector, so nothing is
     read twice and a bridge restart just resets both to live traffic."""
+    import os
     from datetime import datetime
     from .ingest import ingest_message
+    from .channels import save_attachments
+    from . import voice
     cfg = _cfg(c)
     want = {s['Address'] for s in sources
             if s.get('Channel', 'whatsapp') == 'whatsapp' and s['Address'] and s['Address'] != '*'}
@@ -209,14 +247,30 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text']):
             continue
         if m.get('fromMe') or (want and jid not in want): continue
-        if not (m.get('text') or '').strip(): continue
-        r = ingest_message(store, file_only=file_only, msg={
-            'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp',
-            'subject': None, 'body': m['text'], 'from_name': m.get('name') or jid.split('@')[0],
+        body, audio = (m.get('text') or '').strip(), m.get('audio')
+        if not body and not audio: continue
+        # a voice note lands like any message: transcribed when a voice connector exists, and
+        # otherwise filed with the reason and the audio attached (voice.py) - it never vanishes
+        atts, transcribed, why = [], True, ''
+        if audio and not body:
+            data = _read_media(audio)
+            if data is None: continue
+            mime, name = (m.get('mime') or 'audio/ogg').split(';')[0], os.path.basename(audio)
+            body, transcribed, why = voice.note_body(store, data, mime, name, m.get('seconds') or 0, 'WhatsApp')
+            atts = [{'id': f"voice:{m.get('id')}", 'name': name, 'contentType': mime, 'size': len(data),
+                     'contentBytes': base64.b64encode(data).decode()}]
+        ext_id = f"whatsapp:{jid}:{m.get('id')}"
+        r = ingest_message(store, file_only=file_only or not transcribed, msg={
+            'external_id': ext_id, 'channel': 'whatsapp',
+            'subject': None, 'body': body, 'from_name': m.get('name') or jid.split('@')[0],
             'conversation_id': f'whatsapp:{jid}',
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
-            'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp'}, llm=llm)
+            'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp',
+            **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += r['status'] != 'duplicate'
+        if atts and r.get('message_id') and r['status'] != 'duplicate':
+            try: save_attachments(store, r['message_id'], atts, ext_id)
+            except Exception as e: logger.warning(f'whatsapp voice attachment failed: {e}')
         took.append(m.get('id'))
     # blue ticks on what the funnel took, when the owner asked for it - best effort, and
     # never at the cost of the poll: an unpaired or restarted bridge just does not mark

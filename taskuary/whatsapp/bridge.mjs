@@ -10,7 +10,14 @@
 // Auth persists in ./wa-auth, so pairing is a one-time step. The bridge keeps the last
 // MAX_KEPT messages in memory with a sequence number; Taskuary remembers where it got to.
 import http from "node:http";
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
+import fs from "node:fs";
+import path from "node:path";
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
+
+// Voice notes are saved beside the bridge and handed to Taskuary as a PATH (same machine); it
+// transcribes them if a voice connector exists and files them with the reason if not. A
+// message with no text used to be dropped here, so a voice note simply never existed.
+const MEDIA_DIR = path.resolve("wa-media");
 
 const PORT = Number(process.env.WA_BRIDGE_PORT || 8977);
 const PHONE = (process.argv.includes("--phone") && process.argv[process.argv.indexOf("--phone") + 1]) || "";
@@ -50,14 +57,27 @@ async function connect() {
       else console.log("logged out - delete ./wa-auth and pair again");
     }
   });
-  sock.ev.on("messages.upsert", ({ messages: ms, type }) => {
+  sock.ev.on("messages.upsert", async ({ messages: ms, type }) => {
     if (type !== "notify") return;                       // history syncs are not new work
     for (const m of ms) {
       const body = text(m.message || {});
       if (!body && !m.message) continue;
+      const am = m.message?.audioMessage;
+      let audio = "", mime = "", seconds = 0;
+      if (am && !m.key.fromMe) {
+        try {
+          const buf = await downloadMediaMessage(m, "buffer", {}, { reuploadRequest: sock.updateMediaMessage });
+          fs.mkdirSync(MEDIA_DIR, { recursive: true });
+          mime = String(am.mimetype || "audio/ogg").split(";")[0];
+          audio = path.join(MEDIA_DIR, `${m.key.id}.${mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "m4a" : "bin"}`);
+          fs.writeFileSync(audio, buf);
+          seconds = Number(am.seconds) || 0;
+        } catch (e) { console.log("voice note download failed:", e?.message || e); audio = ""; }
+      }
       messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid, group: m.key.remoteJid?.endsWith("@g.us"),
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
-        fromMe: !!m.key.fromMe, key: m.key });   // the whole key: read receipts need participant too
+        fromMe: !!m.key.fromMe, key: m.key,      // the whole key: read receipts need participant too
+        audio, mime, seconds, voice: !!am?.ptt });
       while (messages.length > MAX_KEPT) messages.shift();
     }
   });

@@ -24,7 +24,9 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole } from "./ui.jsx";
+import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useVoiceReady } from "./ui.jsx";
+import MicIcon from "@mui/icons-material/Mic";
+import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 
@@ -972,6 +974,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   icon={<CloseIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
                   label="Not a coding task" hint={`keep ${ref(sel.TaskId)} on your list, take the agent off it — and remember that for mail like this`} />
               )}
+              <VoiceNoteRow sel={sel} onRefresh={onRefresh} />
               <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               {sel.TaskId && (
                 <ChoiceRow tint="#e3e6e1" onClick={() => setReshape(true)}
@@ -1089,6 +1092,32 @@ const SectionedText = ({ text }) => (
         : null))}
   </Box>
 );
+
+// A voice note that landed with nothing to transcribe it: the body is the placeholder voice.py
+// writes and the audio is attached. With a voice connector now present, one click transcribes it
+// here; without one the row says exactly what is missing, in the place the owner is looking.
+const isVoicePlaceholder = (s) => String(s || "").startsWith("🎤 Voice note") && String(s || "").includes(" - not transcribed");
+const VoiceNoteRow = ({ sel, onRefresh }) => {
+  const voice = useVoiceReady();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  if (!isVoicePlaceholder(sel?.BodyText)) return null;
+  const go = async () => {
+    setBusy(true); setErr("");
+    try { await api.post(`/api/messages/${sel.MessageId}/transcribe`); onRefresh?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || "transcription failed"); }
+    setBusy(false);
+  };
+  return voice?.ready ? (
+    <ChoiceRow tint="#e3e6e1" busy={busy} onClick={go} icon={<MicIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />}
+      label={err ? `Transcription failed — ${err}` : "Transcribe this voice note"}
+      hint={`the audio is attached — ${voice.label || voice.provider} turns it into text right here`} />
+  ) : (
+    <ChoiceRow tint="#eee7d6" icon={<MicOffIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
+      label="Voice note — not transcribed: no AI voice connector"
+      hint="add one under Connectors → AI — voice (Groq has a free tier; Local Whisper needs no key), then come back and click Transcribe" />
+  );
+};
 
 // A chain can hold several emails (the inbound thread + your replies). One clean strip
 // of pills above the body flips between them - the clicked timeline row is preselected,

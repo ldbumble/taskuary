@@ -25,6 +25,9 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import StorageIcon from "@mui/icons-material/Storage";
+import MicIcon from "@mui/icons-material/Mic";
+import StopCircleIcon from "@mui/icons-material/StopCircle";
+import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/material";
 import { Logo, hasLogo } from "./logos.jsx";
 import { ROLES, ACTION_COLORS, TAGS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
@@ -407,6 +410,59 @@ const REPORT_COLORS = { Triage: "#6f8a6e", Determination: "#6f8a6e", Actions: "#
 /* The four things you can do with a timeline item were four buttons of four different sizes
    and colours, two rows apart, half of them right-aligned - so the reader had to hunt for
    the set. One list, one shape per row: what it is, and what it does. */
+/* ── Voice into prompts. Is there a speech-to-text connector at all (Connectors → AI — voice)?
+   Asked once per mount; the mic explains itself when there is none. ── */
+export const useVoiceReady = () => {
+  const [v, setV] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    api.get("/api/voice/status").then(({ data }) => alive && setV(data)).catch(() => alive && setV({ ready: false }));
+    return () => { alive = false; };
+  }, []);
+  return v;
+};
+
+// One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
+// raw bytes and the text lands through onText - into a prompt box, or straight into a session.
+export const MicButton = ({ onText, size = 18, sx }) => {
+  const voice = useVoiceReady();
+  const [rec, setRec] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const flash = (s) => { setErr(s); setTimeout(() => setErr(""), 5000); };
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
+      const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+        setBusy(true);
+        try {
+          const { data } = await api.post("/api/voice/transcribe", blob, { headers: { "Content-Type": blob.type || "audio/webm" } });
+          if (data.text) onText?.(data.text); else flash("nothing audible");
+        } catch (e) { flash(e?.response?.data?.detail || "transcription failed"); }
+        setBusy(false);
+      };
+      mr.start(); setRec(mr);
+    } catch { flash("microphone not available in this browser"); }
+  };
+  const stop = () => { rec?.stop(); setRec(null); };
+  const title = err || (!voice ? "" : !voice.ready ? "Dictate — add an AI voice connector first (Connectors → AI — voice; Groq is free)"
+    : rec ? "Stop and transcribe" : `Dictate (${voice.label || voice.provider})`);
+  return (
+    <MuiTooltip title={title}><span>
+      <MuiIconButton size="small" onClick={rec ? stop : start} disabled={busy || (voice && !voice.ready)} sx={sx}
+        aria-label={rec ? "stop recording" : "dictate"}>
+        {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "#8a3646" }} /> : <MicIcon sx={{ fontSize: size }} />}
+      </MuiIconButton>
+    </span></MuiTooltip>
+  );
+};
+
 export const ChoiceRow = ({ icon, label, hint, tint = "#eae4d8", onClick, first, busy }) => (
   <Box onClick={busy ? undefined : onClick}
     sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, py: 0.55, cursor: busy ? "default" : "pointer",
@@ -952,6 +1008,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (!many && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
           sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: 12.5 } }} />
+        <MicButton sx={{ alignSelf: "flex-end", color: "#6b5f45" }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
         <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim()}
           sx={{ alignSelf: "flex-end", bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, whiteSpace: "nowrap" }}>
           {many ? `Queue ${lines || ""} prompt${lines === 1 ? "" : "s"}` : "Queue"}</Button>

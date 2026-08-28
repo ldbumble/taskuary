@@ -130,8 +130,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         return {'status': 'duplicate', 'task_id': None, 'message_id': None}
     if fresh and file_only:
         mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
+        # a voice note nothing could transcribe is filed too - and the reason says so, not "a feed"
         store.add_route(mid, None, 'feed', None,
-                        'shown for information - this connection is a feed, not a task trigger', [], 'feed')
+                        msg.get('file_reason') or 'shown for information - this connection is a feed, not a task trigger', [], 'feed')
         return {'status': 'feed', 'task_id': None, 'message_id': mid}
     # the policy answer is needed on both passes (escalate marks the task urgent below); it is
     # an in-memory match, cheap enough to make twice

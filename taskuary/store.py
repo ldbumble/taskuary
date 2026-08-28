@@ -266,7 +266,9 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
                  # notion edits are information, not assignments; discord is a chat channel
                  'notion': 'feed', 'discord': 'trigger,tool',
-                 'sentry': 'trigger', 'pagerduty': 'trigger'}
+                 'sentry': 'trigger', 'pagerduty': 'trigger',
+                 # speech to text: no role - the funnel and the prompt box ask the first active one
+                 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': ''}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
@@ -345,7 +347,9 @@ class SQLiteStore:
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
-                         ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader')):
+                         ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
+                         ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
+                         ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
@@ -668,6 +672,8 @@ class SQLiteStore:
         return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, SentAt, substr(BodyText, 1, 2000) BodyText '
                           'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
     def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
+    def update_message_body(self, mid, body): self._exec('UPDATE message SET BodyText=? WHERE MessageId=?', (body, mid))   # a voice note, transcribed later
+    def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def place_message(self, mid, task_id, status):
         """A row that was shown first and judged later lands where the judgement puts it (ingest.drain)."""
         self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))

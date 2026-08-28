@@ -271,6 +271,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama'):
             from .llm import test_ai
             detail = test_ai(store, cid)
+        elif c['Type'] in ('groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper'):
+            from . import voice
+            detail = voice.test(store, store.get_connector(cid, with_secret=True))   # a second of silence through the real endpoint
         else:
             raise RuntimeError(f"no test for connector type '{c['Type']}'")
         store.touch_connector(cid)

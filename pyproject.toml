@@ -39,6 +39,7 @@ dependencies = [
 mssql = ["pyodbc>=4"]
 db = ["sqlalchemy>=2"]      # 'any database' URLs; add the engine driver too (psycopg2-binary, pymysql, ...)
 aws = ["boto3>=1.28"]       # azure needs no extra: tokens ride plain requests
+voice = ["faster-whisper>=1.0"]   # Local Whisper: speech to text on this machine, no key, audio never leaves the box
 desktop = ["pywebview>=4"]
 build = ["pyinstaller>=6"]
 dev = ["pytest>=7", "httpx>=0.24", "openpyxl>=3"]   # openpyxl READS xlsx in tests; the writer is ours

@@ -1139,6 +1139,34 @@ def connector_test(cid: int):
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
 
+# ── Voice (taskuary/voice.py): speech to text for the funnel and for the prompt box ──
+@app.get('/api/voice/status')
+def voice_status():
+    from . import voice
+    return voice.ready(store)
+
+@app.post('/api/voice/transcribe')
+async def voice_transcribe(request: Request):
+    """A clip from the browser's microphone, posted as the raw body (no multipart dependency):
+    the text comes back and goes wherever the prompt box goes."""
+    from . import voice
+    data = await request.body()
+    if not data: raise HTTPException(422, 'no audio in the request')
+    mime = (request.headers.get('content-type') or 'audio/webm').split(';')[0].strip()
+    try: return voice.transcribe(store, data, mime, f'clip.{voice.ext_for(mime)}')
+    except RuntimeError as e: raise HTTPException(409, str(e))
+    except requests.RequestException as e: raise HTTPException(502, f'could not reach the transcription service: {str(e)[:160]}')
+
+@app.post('/api/messages/{mid}/transcribe')
+def message_transcribe(mid: int):
+    """A voice note that landed untranscribed (no connector at the time): the audio is attached,
+    so it is transcribed now and the body replaced."""
+    from . import voice
+    try: out = voice.transcribe_message(store, mid)
+    except RuntimeError as e: raise HTTPException(409, str(e))
+    store.audit('message', mid, 'transcribed', ACTOR, detail={'provider': out['provider']})
+    return out
+
 @app.get('/api/connectors/{cid}/wa/status')
 def wa_status(cid: int):
     """Paired or not - and the pairing QR as an SVG for the card to draw (messengers.wa_status)."""

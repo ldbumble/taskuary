@@ -9,6 +9,8 @@ import {
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import StudioView from "./StudioView.jsx";
+import WallView from "./WallView.jsx";
+import GridViewIcon from "@mui/icons-material/GridView";
 import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
@@ -302,7 +304,8 @@ export default function BoardView({ onOpenTask }) {
             much of your capacity is actually busy */}
         <Box sx={{ display: "flex", gap: 0.25, bgcolor: "#e7eae2", borderRadius: 2, p: "3px" }}>
           {[{ k: "columns", label: "Columns", icon: <ViewKanbanIcon sx={{ fontSize: 14 }} /> },
-            { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> }].map((o) => (
+            { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> },
+            { k: "wall", label: "Wall", icon: <GridViewIcon sx={{ fontSize: 14 }} /> }].map((o) => (
               <Box key={o.k} onClick={() => setView(o.k)}
                 sx={{ display: "flex", alignItems: "center", gap: 0.6, height: 24, px: 1.1, borderRadius: 1.5,
                   fontSize: 12, fontWeight: view === o.k ? 700 : 500, cursor: "pointer",
@@ -345,8 +348,9 @@ export default function BoardView({ onOpenTask }) {
       </Dialog>
 
       {view === "studio" && <StudioView onOpenTask={onOpenTask} />}
+      {view === "wall" && <WallView onOpenTask={onOpenTask} />}
 
-      <Box sx={{ display: view === "studio" ? "none" : "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
+      <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
         {COLS.map((col) => {
           const today = localToday();
           // Done is agent work finished today. A reply the owner answered by hand, or a to-do

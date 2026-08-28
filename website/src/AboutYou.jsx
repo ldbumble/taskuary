@@ -13,27 +13,6 @@ const svgUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg || "")
 const CHANNEL_LABEL = { email: "Email", teams: "Microsoft Teams", telegram: "Telegram", whatsapp: "WhatsApp", slack: "Slack", github: "GitHub" };
 // what a connector learned reads GREEN; what you typed here reads grey - honest about the source
 const TYPED = "you typed it here";
-const MANUAL = [["owner_phone", "phone (WhatsApp / SMS)", "+1 555 123 4567"], ["owner_telegram", "Telegram handle", "@you"],
-  ["owner_slack", "Slack handle", "@you"], ["owner_github", "GitHub login", "you"]];
-// which channel each manual field duplicates - if a connector already learned that identity above,
-// don't ask for it again below (the field read as a copy of the card)
-const FIELD_CHANNEL = { owner_phone: "whatsapp", owner_telegram: "telegram", owner_slack: "slack", owner_github: "github" };
-
-// one editable fact: click-to-edit text, saved on blur or Enter, quiet otherwise
-const Fact = ({ label, value, placeholder, onSave, mono: isMono, width = 260 }) => {
-  const [v, setV] = useState(value || "");
-  useEffect(() => setV(value || ""), [value]);
-  const commit = () => { if ((v || "") !== (value || "")) onSave(v.trim()); };
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 1, borderBottom: `1px solid ${BORDER}` }}>
-      <Typography variant="body2" sx={{ color: DIM, width: 200, flexShrink: 0 }}>{label}</Typography>
-      <TextField size="small" value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={commit}
-        onKeyDown={(e) => e.key === "Enter" && e.target.blur()} sx={{ width, bgcolor: "#fff" }}
-        inputProps={{ style: { fontSize: 12.5, padding: "6px 10px", ...(isMono ? mono : {}) } }} />
-    </Box>
-  );
-};
-
 export default function AboutYou() {
   const [p, setP] = useState(null);
   const [err, setErr] = useState("");
@@ -89,6 +68,13 @@ export default function AboutYou() {
             <TextField variant="standard" value={f.owner_company} placeholder="company" onChange={(e) => setP({ ...p, facts: { ...f, owner_company: e.target.value } })}
               onBlur={(e) => save({ owner_company: e.target.value.trim() })} inputProps={{ style: { fontSize: 13, color: DIM } }} sx={{ width: 220 }} />
           </Box>
+          {/* the one owner fact worth editing here - your address, which the docs fill in as {{owner}}.
+              Everything per-channel lives in its own card below, never as a loose field. */}
+          <TextField variant="standard" value={f.owner_email} placeholder="you@yourdomain.com"
+            onChange={(e) => setP({ ...p, facts: { ...f, owner_email: e.target.value } })}
+            onBlur={(e) => saveOwner(f.owner_name, e.target.value.trim())} onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+            inputProps={{ style: { fontSize: 13, color: DIM, ...mono } }} sx={{ width: 300, mt: 0.75 }} />
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>your owner address — agents sign as this</Typography>
           <TextField variant="standard" fullWidth multiline value={f.owner_bio} placeholder="a line about you — what you own, how you like things done; the agents read this"
             onChange={(e) => setP({ ...p, facts: { ...f, owner_bio: e.target.value } })} onBlur={(e) => save({ owner_bio: e.target.value.trim() })}
             inputProps={{ style: { fontSize: 13, color: INK, lineHeight: 1.5 } }} sx={{ mt: 1.5 }} />
@@ -134,13 +120,6 @@ export default function AboutYou() {
           })}
         </Box>
       ))}
-
-      {/* the facts nothing can infer */}
-      {/* only what no connector already knows: a field a card above already fills would read as a copy */}
-      <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mt: 3, mb: 1 }}>ADD WHAT NOTHING CAN INFER</Typography>
-      <Fact label="email (owner address)" value={f.owner_email} placeholder="you@yourdomain.com" mono onSave={(v) => saveOwner(f.owner_name, v)} />
-      {MANUAL.filter(([k]) => !byChannel[FIELD_CHANNEL[k]]).map(([k, label, ph]) =>
-        <Fact key={k} label={label} value={f[k]} placeholder={ph} mono onSave={(v) => save({ [k]: v })} />)}
 
       {/* honesty about the gap between "known here" and "told to the agents" */}
       <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mt: 3, mb: 1 }}>WHAT THE AGENTS ARE TOLD ABOUT YOU</Typography>

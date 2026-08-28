@@ -920,6 +920,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
             one place: the <b>Inbound — what becomes work</b> step below.
           </Typography>
         )}
+        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} />}
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
@@ -1558,6 +1559,45 @@ const MODES = [
   ["clear", "One by one", "Every task from here goes to an agent as it arrives, in arrival order. When all agent slots are busy, the next ones queue - first in, first out - until the inbox is clear. Right when the inbox IS the job."],
   ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc’d, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
 ];
+
+/* ── WhatsApp: the chats the bridge has seen, offered as sources. "Only this group" needs the
+   group's JID and there is no directory to browse - the JID appears the moment someone writes in
+   the chat. With no chat sources every chat comes in; once specific chats are added, only those. ── */
+const WaChats = ({ conn, mine, reload }) => {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr(""); }
+    catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
+  }, [conn.ConnectorId]);
+  useEffect(() => { load(); }, [load]);
+  const have = new Set(mine.map((s) => s.Address));
+  const add = async (jid) => {
+    await api.post("/api/sources", { Channel: "whatsapp", Address: jid, ConnectorId: conn.ConnectorId, Active: true }); reload();
+  };
+  return (
+    <Box sx={{ mb: 1.5, maxWidth: 620 }}>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
+        Chats the bridge has seen since it started — <b>write something in the chat you want</b> (or have someone else), refresh,
+        and add it. With no chats added, every chat comes in; add one or more and <b>only those</b> do.
+        <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
+      </Typography>
+      {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
+      {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>nothing seen yet — send a message in a chat and refresh</Typography>}
+      {(rows || []).map((r) => (
+        <Box key={r.jid} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5, borderBottom: `1px solid ${BORDER}` }}>
+          <Chip size="small" label={r.group ? "group" : "chat"} sx={{ height: 18, fontSize: 10 }} />
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
+            <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
+          </Box>
+          {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ source</Typography>
+            : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
+        </Box>
+      ))}
+    </Box>
+  );
+};
 
 /* ── Sign in with Microsoft: Graph for a regular user, no Azure portal (taskuary/msauth.py).
    A code, microsoft.com/devicelogin, their own account; this box polls until they are done. ── */

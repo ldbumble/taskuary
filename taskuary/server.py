@@ -1138,6 +1138,15 @@ def connector_test(cid: int):
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
 
+@app.get('/api/connectors/{cid}/wa/chats')
+def wa_chats(cid: int):
+    """The chats the WhatsApp bridge has seen - to pick 'only these' as sources (messengers.wa_chats)."""
+    from .messengers import wa_chats as _chats
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    try: return {'data': _chats(c)}
+    except RuntimeError as e: raise HTTPException(409, str(e))
+
 # ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
 @app.post('/api/connectors/{cid}/ai-setup')
 def connector_ai_setup(cid: int, body: AiSetupBody):

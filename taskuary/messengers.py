@@ -158,6 +158,25 @@ def wa_test(store, c) -> str:
     return f"paired as {st.get('me') or 'your account'} - chats flow in on the next sync"
 
 
+def wa_chats(c) -> list:
+    """The chats the bridge has seen since it started - one row per JID, newest first. This is
+    how the owner finds the JID of "only this group": there is no directory to browse, the JID
+    shows up the moment someone writes in the chat, and the card offers it as a source."""
+    from datetime import datetime
+    out = _wa(c, '/messages?after=0')
+    by = {}
+    for m in out.get('messages', []):
+        jid = m.get('jid') or ''
+        if not jid or jid.endswith('@broadcast'): continue
+        r = by.setdefault(jid, {'jid': jid, 'group': bool(m.get('group')), 'name': '', 'n': 0, 'last': 0, 'snippet': ''})
+        r['n'] += 1
+        if not m.get('fromMe') and m.get('name'): r['name'] = m['name']     # the other side's push name, never ours
+        if (m.get('ts') or 0) >= r['last']: r['last'], r['snippet'] = m.get('ts') or 0, (m.get('text') or '')[:80]
+    rows = sorted(by.values(), key=lambda r: -r['last'])
+    for r in rows: r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
+    return rows
+
+
 def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     """The bridge keeps a sequence number per message; ours is on the connector, so nothing is
     read twice and a bridge restart just resets both to live traffic."""

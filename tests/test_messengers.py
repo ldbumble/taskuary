@@ -3,8 +3,11 @@ the HTTP seam, so what is tested is Taskuary's half: watermarks that never re-in
 replies that go back into the SAME chat, and the owner-name flow the docs hang off."""
 import base64, json, unittest
 from unittest import mock
-from taskuary import messengers, outbound
+from fastapi.testclient import TestClient
+from taskuary import messengers, outbound, server
 from taskuary.store import MemoryStore, retoken_doc
+
+c_api = TestClient(server.app)
 
 PNG = base64.b64encode(b'\x89PNG\r\n\x1a\n' + b'x' * 20).decode()
 
@@ -108,6 +111,26 @@ class WhatsAppTests(unittest.TestCase):
         self.assertEqual(m['ConversationId'], 'whatsapp:155@s.whatsapp.net')
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
+
+    def test_the_chats_the_bridge_has_seen_are_offered_as_sources(self):
+        """"Only this group" needs the group's JID, and there is no directory to browse: the JID
+        appears the moment someone writes there. One row per chat, newest first, the other side's
+        name (never ours), broadcast lists dropped."""
+        s, c = self._store()
+        feed = {'seq': 4, 'messages': [
+            {'seq': 1, 'id': 'a', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'export is broken', 'ts': 1755700000},
+            {'seq': 2, 'id': 'b', 'jid': '120363@g.us', 'group': True, 'name': 'Rita', 'text': 'standup moved to 10', 'ts': 1755700100},
+            {'seq': 3, 'id': 'c', 'jid': '120363@g.us', 'group': True, 'name': 'Uri', 'text': 'ok', 'ts': 1755700200, 'fromMe': True},
+            {'seq': 4, 'id': 'd', 'jid': 'status@broadcast', 'name': 'x', 'text': 'story', 'ts': 1755700300}]}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
+            rows = messengers.wa_chats(c)
+        self.assertEqual([r['jid'] for r in rows], ['120363@g.us', '155@s.whatsapp.net'])
+        g = rows[0]
+        self.assertEqual((g['group'], g['name'], g['n'], g['snippet']), (True, 'Rita', 2, 'ok'))
+        self.assertTrue(g['last'].startswith('2025-'))
+        with mock.patch.object(server.store, 'get_connector', return_value={**c, 'Type': 'whatsapp'}), \
+             mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
+            self.assertEqual(len(c_api.get(f"/api/connectors/{c['ConnectorId']}/wa/chats").json()['data']), 2)
 
     def test_the_bridge_being_down_reads_as_instructions_not_a_stack_trace(self):
         s, c = self._store()

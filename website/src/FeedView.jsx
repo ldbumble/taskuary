@@ -368,22 +368,31 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // rows dissolve into the top going under, and into nothing at the bottom of the screen. dockH is
   // measured so the sticky date sits exactly below the frozen dock whatever its wrapped height.
   const dockRef = useRef(null);
-  const [dockH, setDockH] = useState(120);
-  useEffect(() => {
-    const el = dockRef.current; if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => setDockH(el.offsetHeight));
-    ro.observe(el); setDockH(el.offsetHeight);
-    return () => ro.disconnect();
+  // ONE date line, part of the frozen dock: everything from the date up stays exactly the same
+  // regardless of scroll. The rows slide into the date's underside and only the LABEL updates -
+  // a scroll spy reads which day group currently crosses the dock's bottom edge.
+  const dayRefs = useRef({});                        // day (YYYY-MM-DD) -> group element
+  const [curDay, setCurDay] = useState("");
+  const spy = useCallback(() => {
+    const dock = dockRef.current; if (!dock) return;
+    const edge = dock.getBoundingClientRect().bottom + 1;
+    // the current day is the one whose group top sits furthest BELOW all others yet above the edge -
+    // i.e. of the groups already scrolled past the date line, the lowest (most recently entered) one
+    let cur = "", curTop = -Infinity;
+    for (const [d, el] of Object.entries(dayRefs.current)) {
+      if (!el) continue;
+      const top = el.getBoundingClientRect().top;
+      if (top <= edge && top > curTop) { cur = d; curTop = top; }
+    }
+    setCurDay((was) => cur || was);
   }, []);
-  // scrolled = give the timeline the room back: the frozen dock sheds its stats caption and its
-  // padding once you leave the top, so the pinned bar is just the filter pills. rAF-throttled.
-  const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     let raf = 0;
-    const onScroll = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; setScrolled(window.scrollY > 40); }); };
-    window.addEventListener("scroll", onScroll, { passive: true }); onScroll();
-    return () => { window.removeEventListener("scroll", onScroll); if (raf) cancelAnimationFrame(raf); };
-  }, []);
+    const onScroll = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; spy(); }); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, [spy]);
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
   const [cat, setCat] = useState("");                // "" everything | messages | code | reports
@@ -679,13 +688,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
       {/* the frozen top: filters, sync and stats stay put while the timeline scrolls under them.
           A fade at the dock's lower edge is what makes rows dissolve INTO the top rather than
           vanish at a hard line. bgcolor so rows never show through the gap between pill and edge. */}
-      <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: scrolled ? 0 : 0.75,
-        position: "sticky", top: 0, zIndex: 20, bgcolor: BG, pt: scrolled ? 0.25 : 0.5, pb: scrolled ? 0.25 : 0,
-        transition: "padding .18s ease, gap .18s ease",
-        // the dissolve band: rows melt away as they RISE TOWARD the date line, not at a hard edge
-        // above it - the sticky day pill paints over this (its z-index is higher), so it stays crisp
-        "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -56, height: 56,
-          background: `linear-gradient(${BG} 30%, transparent)`, pointerEvents: "none" } }}>
+      <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75,
+        position: "sticky", top: 0, zIndex: 20, bgcolor: BG, pt: 0.5,
+        // the dissolve band right under the date: rows melt away as they rise into its underside
+        "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -44, height: 44,
+          background: `linear-gradient(${BG} 25%, transparent)`, pointerEvents: "none" } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 99, px: 1.5, py: 0.6,
           boxShadow: "0 8px 28px rgba(30,50,38,.10)" }}>
@@ -755,9 +762,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
           )}
         </Box>
         {/* the stats, demoted from tiles to a caption line - still clickable where a tile
-            was ("needs me" filters), and the sync story rides the same line. Hidden once you
-            scroll: the frozen bar shrinks to the filters so the timeline keeps the height. */}
-        {rows && !scrolled && (
+            was ("needs me" filters), and the sync story rides the same line */}
+        {rows && (
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
             {/* one face for the whole line: the mono digits next to Inter labels read as two
                 different UIs stitched together - the numbers are just bolder Inter now */}
@@ -799,6 +805,14 @@ export default function FeedView({ onOpenTask, onChanged }) {
             {err}
           </Alert>
         )}
+        {/* THE date line - one, frozen with everything above it, its space intact; only the words
+            change as the timeline scrolls into its underside */}
+        {rows && rows.length > 0 && (
+          <Typography variant="caption" sx={{ ...mono, color: INK, fontWeight: 800, fontSize: 11.5,
+            letterSpacing: 0.5, pt: 0.75, pb: 0.25 }}>
+            {fmtDay(curDay || Object.keys(days)[0] || "")}
+          </Typography>
+        )}
       </Box>
       <FunnelBar onOpenTask={onOpenTask} />
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
@@ -821,8 +835,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
               ? "Nothing here matches this filter — try “everything”, or widen the Timeline lookback in Settings."
               : "Nothing in the feed yet — connect a source in Connectors (a mailbox, a chat, a repo, a board…) and hit Sync now."}</Empty>
           ) : Object.entries(days).map(([day, items], di) => (
-            <Box key={day} sx={{ mt: 1 }}>
-              <DayHeader label={fmtDay(day)} top={dockH} />
+            // the group's top edge is what the date spy watches - no header row of its own
+            <Box key={day} sx={{ mt: di ? 1.5 : 0 }} ref={(el) => { if (el) dayRefs.current[day] = el; else delete dayRefs.current[day]; }}>
               {di === 0 && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
               <Box>
                 {items.map((r, i) => (
@@ -1290,22 +1304,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     </Box>
   );
 };
-
-// Sticky day rail that POPS into a pill the moment you scroll past its date boundary -
-// a 1px sentinel above it leaves the viewport exactly when the header becomes stuck.
-// The date never moves and never changes costume: the same black mono label, same space, whether
-// you are at the top or deep in the scroll - the rows slide under it and the label swaps to the
-// day you are in. The old version morphed into a white pill when stuck, which read as a different
-// (and cramped) thing. z above the dissolve band so passing rows fade beneath it, text stays sharp;
-// its own BG backing masks the sliver of row that would otherwise show through the letters.
-const DayHeader = ({ label, top = 0 }) => (
-  <Box sx={{ position: "sticky", top: `${top}px`, zIndex: 25, py: 0.75, display: "flex", justifyContent: "center" }}>
-    <Typography variant="caption" sx={{ ...mono, color: INK, fontWeight: 800, fontSize: 11.5, letterSpacing: 0.5,
-      bgcolor: BG, px: 1.5, py: 0.25, borderRadius: 99 }}>
-      {label}
-    </Typography>
-  </Box>
-);
 
 // A report that writes in sections (the Morning digest's prompt asks for emoji headers)
 // renders AS sections: the emoji-led line becomes a real header, its bullets hang under it.

@@ -504,6 +504,22 @@ class CoreTests(unittest.TestCase):
                 run_cli({'cmd': 'claude', 'args': ['-c', "import sys;sys.stdin.read();sys.stderr.write('boom');sys.exit(2)"]}, 'hi', lambda *a: None)
         self.assertEqual(str(e2.exception), 'claude exit 2: boom')
 
+    def test_the_pane_says_it_is_a_real_terminal(self):
+        """codex read TERM=dumb (or none) off a service environment and stopped at 'Continue anyway?
+        [y/N]' before its first prompt - the pane is xterm.js, so the env says so."""
+        from unittest import mock
+        from taskuary.terminal import clean_env
+        with mock.patch.dict('os.environ', {'TERM': 'dumb'}): self.assertEqual(clean_env()['TERM'], 'xterm-256color')
+        with mock.patch.dict('os.environ', {}, clear=True): self.assertEqual((clean_env()['TERM'], clean_env()['COLORTERM']), ('xterm-256color', 'truecolor'))
+        with mock.patch.dict('os.environ', {'TERM': 'screen-256color', 'COLORTERM': 'x'}):
+            self.assertEqual((clean_env()['TERM'], clean_env()['COLORTERM']), ('screen-256color', 'x'))   # a real value is left alone
+
+    def test_a_full_path_to_the_cli_still_finds_its_model_list(self):
+        from taskuary.server import cli_base, CLI_MODELS
+        for cmd in (r'C:\Users\rabbi\AppData\Local\OpenAI\Codex\bin\codex.exe', '/usr/local/bin/codex', 'codex', 'CODEX.CMD'):
+            self.assertEqual(cli_base(cmd), 'codex'); self.assertEqual(CLI_MODELS[cli_base(cmd)], CLI_MODELS['codex'])
+        self.assertEqual(cli_base(r'C:\npm\claude.cmd'), 'claude'); self.assertEqual(cli_base(''), '')
+
     def test_terminal_env_never_inherits_a_session(self):
         from taskuary.terminal import clean_env
         import os

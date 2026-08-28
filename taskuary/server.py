@@ -1093,7 +1093,7 @@ def brains():
         if o['kind'] == 'api': o['models'] = CONN_MODELS.get(o['value'][10:], [])
     def _cli_of(a):
         prof = cfg.get('agents', {}).get(a['Name']) or json.loads(a.get('Config') or '{}')
-        return re.sub(r'\.(cmd|exe|bat|ps1)$', '', Path(str(prof.get('cmd') or a['Name'])).name.lower())
+        return cli_base(prof.get('cmd') or a['Name'])
     out += [{'value': f"cli:{a['Name']}",
              'label': (_cli_of(a) + (f" · {a['Name']}" if _cli_of(a) != a['Name'] else '')) + ' (your CLI)',
              'kind': 'cli', 'ready': True, 'models': CLI_MODELS.get(_cli_of(a), [])}
@@ -1448,14 +1448,19 @@ CLI_MODELS = {
     'gemini': ['gemini-2.5-pro', 'gemini-2.5-flash'],
 }
 
+def cli_base(cmd) -> str:
+    """'C:\\Users\\me\\...\\codex.exe' and 'codex' are the same CLI. A profile saved with the full
+    path (the setup wizard writes what `where` found) offered no model list at all."""
+    return re.sub(r'\.(cmd|exe|bat|ps1)$', '', Path(str(cmd or '')).name.lower())
+
 @app.get('/api/agents')
 def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles;
     models = the quick-pick model list per agent, keyed by agent name."""
     def _models(a):
         prof = json.loads(a.get('Config') or '{}')
-        picks = CLI_MODELS.get((prof.get('cmd') or '').lower(), [])
-        return {'cmd': prof.get('cmd'), 'default': prof.get('model'), 'choices': picks}
+        picks = CLI_MODELS.get(cli_base(prof.get('cmd')), [])
+        return {'cmd': prof.get('cmd'), 'cli': cli_base(prof.get('cmd')), 'default': prof.get('model'), 'choices': picks}
     # the default agent (a setting) comes FIRST: every picker's initial value is the head of
     # this list, so "which CLI opens when I hit Start session" is decided in one place
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != (store.get_settings().get('default_agent') or 'coder'))

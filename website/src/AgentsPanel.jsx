@@ -40,6 +40,8 @@ const MODEL_PICKS = {
 };
 const pickLabel = (v) => v.startsWith("effort:")
   ? `same model, ${v.slice(7)} reasoning effort` : v;
+// "C:\...\OpenAI\Codex\bin\codex.exe" is codex: the picks key on the CLI, not on how the path was typed
+const cliBase = (cmd) => String(cmd || "").trim().replace(/^.*[\\/]/, "").replace(/\.(cmd|exe|bat|ps1)$/i, "").toLowerCase();
 
 const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "", lightModel: "" };
 const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(Boolean);
@@ -222,10 +224,10 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
             <Select size="small" displayEmpty value={draft.lightModel} sx={{ minWidth: 260, bgcolor: "#fff" }}
               onChange={(e) => setDraft({ ...draft, lightModel: e.target.value })}>
               <MenuItem value="" sx={{ fontSize: 12.5 }}>same model as coding (no downshift)</MenuItem>
-              {(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).map((mo) => (
+              {(MODEL_PICKS[cliBase(draft.cmd)] || []).map((mo) => (
                 <MenuItem key={mo} value={mo} sx={{ fontSize: 12.5 }}>{pickLabel(mo)}</MenuItem>
               ))}
-              {draft.lightModel && !(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).includes(draft.lightModel) && (
+              {draft.lightModel && !(MODEL_PICKS[cliBase(draft.cmd)] || []).includes(draft.lightModel) && (
                 <MenuItem value={draft.lightModel} sx={{ fontSize: 12.5 }}>{draft.lightModel}</MenuItem>
               )}
             </Select>

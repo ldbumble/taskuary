@@ -45,7 +45,13 @@ def seed_argv(profile: dict, seed: str):
 _DIRTY = ('CLAUDE_CODE', 'CLAUDECODE', 'CLAUDE_SESSION', 'ANTHROPIC_SESSION', 'CODEX_SESSION', 'GEMINI_SESSION')
 
 def clean_env() -> dict:
-    return {k: v for k, v in os.environ.items() if not k.upper().startswith(_DIRTY)}
+    env = {k: v for k, v in os.environ.items() if not k.upper().startswith(_DIRTY)}
+    # the pane IS a real terminal (xterm.js): say so. A service started with no TERM, or TERM=dumb,
+    # made codex stop at "Codex's interactive TUI may not work in this terminal. Continue? [y/N]"
+    # before a single prompt - the owner typed y into a box that was built for exactly this.
+    if env.get('TERM', 'dumb').lower() in ('', 'dumb'): env['TERM'] = 'xterm-256color'
+    env.setdefault('COLORTERM', 'truecolor')
+    return env
 
 
 class _WinPty:

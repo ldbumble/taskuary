@@ -58,6 +58,8 @@ const FIELDS = {
     ["failed only (1 = just the failures)", "failed_only", "text", "1"], AI_FIELD],
   entra_licenses: [AI_FIELD],
   automate: [["days back", "days", "text", "30"], AI_FIELD],
+  // the window starts at MIDNIGHT that many days back: 1 = all of yesterday plus today so far
+  digest: [["days back (1 = all of yesterday + today so far; counted from midnight)", "days", "text", "1"], AI_FIELD],
   prometheus: [["PromQL query", "query", "multiline", 'up == 0   ·   sum(rate(http_requests_total[5m])) by (service)'], AI_FIELD],
   datadog: [["monitor name filter (blank = all monitors, trouble first)", "name", "text", "prod"], AI_FIELD],
   winrm: [["PowerShell to run on the remote box", "script", "multiline",

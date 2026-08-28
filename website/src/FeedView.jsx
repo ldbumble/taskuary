@@ -322,13 +322,17 @@ const TodayStrip = () => {
         {evs.map((e, i) => {
           const s = hourOf(e.start), en = e.end ? hourOf(e.end) : s + 0.5;
           const live = nowH >= s && nowH <= en, past = nowH > en;
+          // a title only fits a block that is wide enough (~75 min on this track); shorter meetings
+          // carry their number and the list below carries the name - long or short, it always fits
+          const wide = en - s >= 1.25;
           return (
             <Box key={`${e.start}-${i}`} title={`${e.subject}${e.who?.length ? ` · with ${e.who.join(", ")}` : ""}${e.about ? `\n${e.about}` : ""}`}
               sx={{ position: "absolute", left: pct(s), width: `calc(${pct(Math.max(en, s + 0.35))} - ${pct(s)})`, top: 8, height: 28, borderRadius: 1,
                 bgcolor: live ? "#8a3646" : past ? "#d9cfb6" : "#8a7a5c", color: live || !past ? "#fffdfb" : "#6b5f45",
-                px: 0.75, display: "flex", alignItems: "center", overflow: "hidden", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                px: wide ? 0.75 : 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+                fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis",
                 transformOrigin: "left center", animation: `tqSlide .5s ease ${i * 0.08}s both`, cursor: "default" }}>
-              {e.subject}
+              <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{wide ? e.subject : i + 1}</Box>
             </Box>
           );
         })}
@@ -340,11 +344,13 @@ const TodayStrip = () => {
       </Box>
       <Box sx={{ mt: 2.25, display: "flex", flexDirection: "column", gap: 0.35 }}>
         {evs.map((e, i) => (
-          <Typography key={`${e.start}-l${i}`} variant="caption" sx={{ color: INK, display: "flex", gap: 0.75, alignItems: "baseline", animation: `tqSlide .4s ease ${0.3 + i * 0.06}s both` }}>
+          <Typography key={`${e.start}-l${i}`} variant="caption" sx={{ color: INK, display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap", animation: `tqSlide .4s ease ${0.3 + i * 0.06}s both` }}>
+            {/* the number is the block on the track: a short meeting cannot hold its own name up there */}
+            <Box component="span" sx={{ ...mono, color: "#6b5f45", fontSize: 10, minWidth: 16, textAlign: "right" }}>{i + 1}.</Box>
             <Box component="span" sx={{ ...mono, color: "#6b5f45", fontSize: 10.5, minWidth: 62 }}>{fmtTime12(e.start)}</Box>
-            <Box component="span" sx={{ fontWeight: 600 }}>{e.subject}</Box>
+            <Box component="span" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>{e.subject}</Box>
             {!!(e.who || []).length && <Box component="span" sx={{ color: DIM }}>with {e.who.slice(0, 4).map((w) => w.split(" ")[0]).join(", ")}{e.who.length > 4 ? ` +${e.who.length - 4}` : ""}</Box>}
-            {e.about && <Box component="span" sx={{ color: FAINT }} noWrap>— {e.about.length > 90 ? `${e.about.slice(0, 90)}…` : e.about}</Box>}
+            {e.about && <Box component="span" sx={{ color: FAINT }}>— {e.about.length > 90 ? `${e.about.slice(0, 90)}…` : e.about}</Box>}
           </Typography>
         ))}
       </Box>

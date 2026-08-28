@@ -384,6 +384,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [curDay, setCurDay] = useState("");
   const spy = useCallback(() => {
     const dock = dockRef.current; if (!dock) return;
+    // the dissolve band only exists once something can actually slide under the date - at rest
+    // it was washing out the first row before any scrolling happened
+    dock.dataset.sc = window.scrollY > 8 ? "1" : "0";
     const edge = dock.getBoundingClientRect().bottom + 1;
     // the current day is the one whose group top sits furthest BELOW all others yet above the edge -
     // i.e. of the groups already scrolled past the date line, the lowest (most recently entered) one
@@ -703,9 +706,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
       <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75,
         position: "sticky", top: `${navH}px`, zIndex: 20, bgcolor: BG,
         mt: { xs: -1.5, md: -2.25 }, pt: { xs: 2, md: 2.75 },
-        // the dissolve band right under the date: rows melt away as they rise into its underside
+        // the dissolve band right under the date: rows melt away as they rise into its underside -
+        // but only once you scroll (data-sc, set by the spy); at rest the first row is untouched
         "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -44, height: 44,
-          background: `linear-gradient(${BG} 25%, transparent)`, pointerEvents: "none" } }}>
+          background: `linear-gradient(${BG} 25%, transparent)`, pointerEvents: "none",
+          opacity: 0, transition: "opacity .25s" },
+        "&[data-sc='1']::after": { opacity: 1 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 99, px: 1.5, py: 0.6,
           boxShadow: "0 8px 28px rgba(30,50,38,.10)" }}>

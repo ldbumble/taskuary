@@ -53,7 +53,7 @@ class TodayTests(unittest.TestCase):
             self.assertEqual([e['subject'] for e in t['events']], ['Standup'])            # a 09:00 meeting is on the list at 17:00 too
             self.assertEqual(ag.call_args[1]['start'].hour, 0)                             # read from midnight, not from now
             lines = cal.render_today(t)
-            self.assertEqual(lines, ['  09:00-09:30 · Standup · with Gabi, Mindy · online'])
+            self.assertEqual(lines, ['  9:00-9:30 AM · Standup · with Gabi, Mindy · online'])       # the owner's clock, not the server's
             text = digest.gather(s, 1)
         self.assertTrue(text.startswith('MEETINGS TODAY')); self.assertIn('Standup · with Gabi, Mindy', text)
         self.assertIn("Today's meetings", digest.PROMPT); self.assertIn('MEETINGS TODAY', digest.PROMPT)

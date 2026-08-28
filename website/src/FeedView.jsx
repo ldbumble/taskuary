@@ -194,8 +194,12 @@ const useCalToday = () => {
   return tick >= 0 ? (cal?.events || []) : [];
 };
 const meetingEnded = (e) => !e.all_day && e.end && tsMs(e.end) < Date.now();
-// the resting opacity of a row by age: full for three hours, then a slow slide to 60% by a day, never lower
-const ageOpacity = (s) => { const h = (Date.now() - tsMs(s)) / 36e5; return h <= 3 ? 1 : Math.max(0.6, 1 - 0.4 * (h - 3) / 21); };
+// the resting opacity of a row by age: full for an hour, a slow slide to 65% over the working day,
+// then on to a 50% floor by two days - visible within one afternoon, never faint
+const ageOpacity = (s) => {
+  const h = (Date.now() - tsMs(s)) / 36e5;
+  return h <= 1 ? 1 : h <= 8 ? 1 - 0.35 * (h - 1) / 7 : Math.max(0.5, 0.65 - 0.15 * (h - 8) / 40);
+};
 
 // One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it
 // after the same beat a message takes, click opens it now; the panel shows who is in it and why.
@@ -816,7 +820,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     ))}
                     <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
                       alignItems: "stretch", mb: "4px", opacity: ageOpacity(r.SentAt), transition: "opacity .9s ease",
-                      ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
+                      // the entrance animation must not PIN opacity afterwards (fill-mode both did, and no row
+                      // ever faded): backwards keeps only the start frame, then the age opacity takes over
+                      ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms`, animationFillMode: "backwards" }) }}>
                       {/* time sits OUTSIDE the card, in its own gutter - wide enough that
                           "12:40 PM" can never wrap onto a second line */}
                       <Typography sx={{ ...mono, fontSize: 10.5, color: "#6e685f", textAlign: "right",

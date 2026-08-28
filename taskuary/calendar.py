@@ -159,6 +159,22 @@ def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
             'tz': tz_name(tz)}
 
 
+def _h12(hhmm: str, meridiem: bool = True) -> str:
+    """'13:30' -> '1:30 PM' (or '1:30' when the span's other end carries the PM). The digest copied
+    the prompt's 24-hour times into what the owner reads; nobody here tells time that way."""
+    try: h, m = int(hhmm[:2]), int(hhmm[3:5])
+    except ValueError: return hhmm
+    return f"{h % 12 or 12}:{m:02d}" + (f" {'AM' if h < 12 else 'PM'}" if meridiem else '')
+
+
+def span(start: str, end: str) -> str:
+    """'2026-08-28 13:30', '2026-08-28 14:00' -> '1:30-2:00 PM'; the AM/PM is written once when both ends share it."""
+    a, b = (start or '')[11:16], (end or '')[11:16]
+    if not b: return _h12(a)
+    same = (int(a[:2]) < 12) == (int(b[:2]) < 12) if a and b else False
+    return f"{_h12(a, not same)}-{_h12(b)}"
+
+
 def render(ag: dict) -> str:
     """The agenda as a prompt reads it: one line per event, grouped by day, free days named."""
     if not ag['sources']: return ''
@@ -172,7 +188,7 @@ def render(ag: dict) -> str:
         if not evs: lines.append(f'  {dow} {d}: free all day'); continue
         lines.append(f'  {dow} {d}:')
         for e in evs:
-            when = 'all day' if e['all_day'] else f"{e['start'][11:16]}-{e['end'][11:16]}"
+            when = 'all day' if e['all_day'] else span(e['start'], e['end'])
             lines.append(f"    {when} · {e['subject']}" + (f" ({e['status']})" if e['status'] not in ('busy', '') else '') + (f" · {e['where']}" if e['where'] else ''))
     for err in ag['errors']: lines.append(f'  COULD NOT READ: {err}')
     return '\n'.join(lines)
@@ -238,7 +254,7 @@ def render_today(t: dict) -> list:
     """One line per meeting, the way the digest prompt reads it: time, title, who, what it is about."""
     out = []
     for e in t.get('events') or []:
-        when = 'all day' if e.get('all_day') else f"{e['start'][11:16]}-{(e.get('end') or '')[11:16]}"
+        when = 'all day' if e.get('all_day') else span(e['start'], e.get('end') or '')
         who = ', '.join(e.get('who') or [])
         out.append(f"  {when} · {e['subject']}" + (f" · with {who}" if who else '') + (f" · where: {e['where']}" if e.get('where') else '')
                    + (f" · about: {e['about']}" if e.get('about') else '') + (' · online' if e.get('join') else ''))

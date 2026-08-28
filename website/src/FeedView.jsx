@@ -682,8 +682,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
       <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: scrolled ? 0 : 0.75,
         position: "sticky", top: 0, zIndex: 20, bgcolor: BG, pt: scrolled ? 0.25 : 0.5, pb: scrolled ? 0.25 : 0,
         transition: "padding .18s ease, gap .18s ease",
-        "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -18, height: 18,
-          background: `linear-gradient(${BG}, transparent)`, pointerEvents: "none" } }}>
+        // the dissolve band: rows melt away as they RISE TOWARD the date line, not at a hard edge
+        // above it - the sticky day pill paints over this (its z-index is higher), so it stays crisp
+        "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -56, height: 56,
+          background: `linear-gradient(${BG} 30%, transparent)`, pointerEvents: "none" } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 99, px: 1.5, py: 0.6,
           boxShadow: "0 8px 28px rgba(30,50,38,.10)" }}>
@@ -926,8 +928,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
             last rows fade into the page - "there is nothing towards the bottom" - column-width only,
             never over the review panel. height:0 so it adds no space; the gradient hangs above it. */}
         {rows && rows.length > 0 && (
+          // tall enough that the LAST FEW rows dissolve, each more than the one above it -
+          // "there is nothing towards the bottom", not one half-faded row at a hard line
           <Box aria-hidden sx={{ position: "sticky", bottom: 0, height: 0, zIndex: 6, pointerEvents: "none" }}>
-            <Box sx={{ height: 84, transform: "translateY(-84px)", background: `linear-gradient(transparent, ${BG})` }} />
+            <Box sx={{ height: 190, transform: "translateY(-190px)",
+              background: `linear-gradient(transparent, ${BG} 88%)` }} />
           </Box>
         )}
       </Box>
@@ -1300,7 +1305,8 @@ const DayHeader = ({ label, top = 0 }) => {
   return (
     <>
       <Box ref={ref} sx={{ height: "1px" }} />
-      <Box sx={{ position: "sticky", top: `${top}px`, zIndex: 6, py: 0.75, display: "flex", justifyContent: "center" }}>
+      {/* z above the dock's dissolve band: rows fade under the band, the date stays sharp on top of it */}
+      <Box sx={{ position: "sticky", top: `${top}px`, zIndex: 25, py: 0.75, display: "flex", justifyContent: "center" }}>
         <Box sx={{ display: "inline-block", px: stuck ? 1.75 : 1.25, py: stuck ? 0.5 : 0.25,
           bgcolor: stuck ? PANEL : BG, border: `1px solid ${stuck ? BORDER : "transparent"}`,
           borderRadius: 99, boxShadow: stuck ? "0 6px 18px rgba(30,50,38,.14)" : "none",

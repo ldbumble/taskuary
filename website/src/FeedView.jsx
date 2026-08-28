@@ -25,6 +25,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole } from "./ui.jsx";
+import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
@@ -1155,7 +1156,7 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
             {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
           </Box>
         )}
-        {cur?.Channel === "report" ? <SectionedText text={text} />
+        {cur?.Channel === "report" ? (looksMd(text) ? <Md text={text} /> : <SectionedText text={text} />)
           : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
               {shown}
             </Typography>}

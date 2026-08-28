@@ -19,6 +19,7 @@ import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent } from "./ui.jsx";
+import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
@@ -574,11 +575,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           )}
                         </Box>
                         <Typography variant="body2" sx={{ color: INK }}>{m.Subject}</Typography>
-                        <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block",
-                          maxHeight: 220, overflowY: "auto", "&::-webkit-scrollbar": { width: 8 },
+                        <Box sx={{ maxHeight: 220, overflowY: "auto", "&::-webkit-scrollbar": { width: 8 },
                           "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
-                          {cleanText(m.BodyText)}
-                        </Typography>
+                          {m.Channel === "report" && looksMd(m.BodyText)
+                            ? <Md text={cleanText(m.BodyText)} />
+                            : <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{cleanText(m.BodyText)}</Typography>}
+                        </Box>
                         <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} dense />
                       </Box>
                     );

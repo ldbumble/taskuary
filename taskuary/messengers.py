@@ -238,11 +238,12 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     from .channels import save_attachments
     from . import voice
     cfg = _cfg(c)
-    # '*' means EVERY chat, and it wins even when specific chats are also listed: the owner had
-    # '*' on AND a group on, and only the group came in because '*' was silently dropped from the
-    # wanted set. Filter to specific JIDs ONLY when there is no active '*'.
+    # '*' means every DIRECT chat; a GROUP comes in only when its JID is added as a source. Both
+    # earlier readings were wrong ways: '*' silently dropped meant a listed group muted every DM,
+    # and '*' as admit-everything flooded the timeline with every group the owner is in.
     srcs = [s for s in sources if s.get('Channel', 'whatsapp') == 'whatsapp' and s.get('Address')]
-    want = set() if any(s['Address'] == '*' for s in srcs) else {s['Address'] for s in srcs}
+    star = any(s['Address'] == '*' for s in srcs)
+    want = {s['Address'] for s in srcs if s['Address'] != '*'}
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n, took = 0, []
     from . import phone
@@ -254,7 +255,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # recognizes and swallows our own pings echoing back through the bridge)
         if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text']):
             continue
-        if m.get('fromMe') or (want and jid not in want): continue
+        if m.get('fromMe'): continue
+        if m.get('group') or jid.endswith('@g.us'):
+            if jid not in want: continue                      # groups are opt-in, always
+        elif not (star or jid in want): continue              # direct chats ride on '*'
         body, audio = (m.get('text') or '').strip(), m.get('audio')
         if not body and not audio: continue
         # a voice note lands like any message: transcribed when a voice connector exists, and

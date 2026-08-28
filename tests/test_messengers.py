@@ -112,6 +112,21 @@ class WhatsAppTests(unittest.TestCase):
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
 
+    def test_star_covers_direct_chats_and_groups_are_opt_in(self):
+        """Both earlier readings went wrong: '*' silently dropped meant one listed group muted every
+        DM; '*' as admit-everything flooded the timeline with every group the owner is in. The rule:
+        '*' = every DIRECT chat; a group only once its JID is a source."""
+        s, c = self._store()
+        s.save_source({'Channel': 'whatsapp', 'Address': '4242@g.us', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+        feed = {'seq': 4, 'messages': [
+            {'seq': 1, 'id': 'a', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'dm comes in', 'ts': 1755700000},
+            {'seq': 2, 'id': 'b', 'jid': '4242@g.us', 'group': True, 'name': 'Rita', 'text': 'picked group comes in', 'ts': 1755700001},
+            {'seq': 3, 'id': 'c', 'jid': '9999@g.us', 'group': True, 'name': 'Rick', 'text': 'unpicked group stays out', 'ts': 1755700002}]}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
+            n = messengers.poll_whatsapp(s, c, s.list_sources(), llm=None)
+        got = {m['BodyText'] for m in s._rows("SELECT * FROM message WHERE Channel='whatsapp'")}
+        self.assertEqual((n, got), (2, {'dm comes in', 'picked group comes in'}))
+
     def test_the_pairing_qr_is_drawn_for_the_card_and_a_down_bridge_is_a_state(self):
         s, c = self._store()
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': False, 'me': '', 'qr': '2@abc,def,ghi', 'pairingCode': ''}):

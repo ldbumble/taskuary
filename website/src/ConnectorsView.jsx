@@ -136,7 +136,7 @@ const META = {
       "Chat ids are discovered, never typed: ask the owner to send any message to the bot (or add it to the group and post there), then run a sync yourself with POST {base}/api/ingest/poll{hdr} and GET {base}/api/sources{hdr} - the chat appears as a telegram source, switched OFF.",
       "Read the new sources back to the owner and ask which are theirs; flip those on with POST {base}/api/sources{hdr} and JSON {\"SourceId\": <id>, \"Active\": true}. Never flip on a chat the owner did not name - a bot is public and strangers must not be able to put tasks on the board.",
       "For a group, remind them to disable the bot's privacy mode (@BotFather > /setprivacy) or it will not see messages. Turn the connector on and say SETUP DONE."] },
-  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (optional — blank takes every chat)", srcPh: "15551234567@s.whatsapp.net",
+  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (blank = every direct chat; group chats only when added here)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
        "Only for the Notifications role — the WhatsApp JID of the chat to ping"]],
@@ -145,13 +145,13 @@ const META = {
     howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
       "2 - The bridge starts by itself once Node is there (first time it fetches its dependency, Baileys - a minute or two). 3 - The QR appears; on your phone: WhatsApp → Linked devices → Link a device → scan. The box turns green when the phone accepts.",
       "Leave the bridge running (it survives closing the browser; a reboot stops it - the box starts it again when you open this card). Test here confirms the pairing and adds a catch-all source.",
-      "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
+      "The catch-all covers DIRECT chats. Group chats are opt-in: add a group's JID under Sources and only that group comes in - groups you never picked stay out of the funnel.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."],
     // written FOR the agent: the machine-side work is its own; the phone is the owner's
     agent: ["Do NOT run node bridge.mjs yourself: it is a server and never returns - an agent that ran it in the foreground sat on it for five minutes. Taskuary starts it: POST {base}/api/connectors/{cid}/wa/bridge/start{hdr}. It installs the bridge's dependency when missing (a few minutes on a slow line) and launches the bridge detached.",
       "Poll GET {base}/api/connectors/{cid}/wa/status{hdr} every 5 seconds and read manager.phase: installing → starting → running; bridge becomes true when it answers. If phase is failed, read manager.detail - node missing means the owner installs Node 18+ from nodejs.org (the one install that is theirs); anything else, report it and stop.",
       "If connected is false: do NOT print the QR here (a terminal QR is too big to scan) and do NOT ask for a phone number. The card above this terminal draws the bridge's QR itself and redraws it as it rotates - tell the owner to scan it from the phone: WhatsApp > Linked devices > Link a device. Poll GET http://127.0.0.1:8977/status every 5 seconds until connected is true. Only if the owner SAYS they would rather type a code: ask for the number, restart the bridge with --phone <digits only>, and relay pairingCode from /status.",
-      "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}) - it confirms the pairing and adds the catch-all source, meaning every chat comes in.",
+      "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}) - it confirms the pairing and adds the catch-all source: every DIRECT chat comes in; group chats only when their JID is added as a source.",
       "Ask the owner whether every chat should come in or only specific ones. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Once specific chats exist, only those come in.",
       "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
@@ -1905,7 +1905,7 @@ const WaPair = ({ conn, reload }) => {
 
 /* ── WhatsApp: the chats the bridge has seen, offered as sources. "Only this group" needs the
    group's JID and there is no directory to browse - the JID appears the moment someone writes in
-   the chat. With no chat sources every chat comes in; once specific chats are added, only those. ── */
+   the chat. The catch-all covers direct chats; a group only comes in once its JID is added. ── */
 const WaChats = ({ conn, mine, reload }) => {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
@@ -1922,7 +1922,7 @@ const WaChats = ({ conn, mine, reload }) => {
     <Box sx={{ mb: 1.5, maxWidth: 620 }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
         Chats the bridge has seen since it started — <b>write something in the chat you want</b> (or have someone else), refresh,
-        and add it. With no chats added, every chat comes in; add one or more and <b>only those</b> do.
+        and add it. Direct chats come in on their own; a <b>group</b> joins the funnel only when you add it here.
         <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
       </Typography>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}

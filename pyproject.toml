@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taskuary"
-version = "0.3.0"
+version = "0.3.1"
 description = "Automate your job - the local-first operating system for your work: AI triage in, coding agents out."
 readme = "README.md"
 license = { text = "MIT" }

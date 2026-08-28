@@ -15,7 +15,7 @@ you already use does it; you approve the result. Runs entirely on your machine.
 
 ![The Taskuary Studio on taskuary.com: mail, chats and reports arrive beside the door and are triaged; each one that is work sends an agent through the door to a desk, where its screen shows what it is doing. An empty desk is capacity you are not using.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
 
-**Where it is:** early — **v0.3.0**, and moving fast. The funnel, the review queue, the agent
+**Where it is:** early — **v0.3.1**, and moving fast. The funnel, the review queue, the agent
 sessions and the reports pipeline are all real and in daily use on my own inbox; the edges are
 still being knocked off, and breaking changes are possible before 1.0. Issues get answered.
 [Full status and roadmap ↓](#status--roadmap)
@@ -412,7 +412,7 @@ exe is built on push to master.
 
 ## Status / roadmap
 
-Early (v0.3.0) and moving fast — said up top too, because it should not be something you find
+Early (v0.3.1) and moving fast — said up top too, because it should not be something you find
 out at the bottom.
 
 - [x] AI-gated triage, review queue, resumable agent sessions, hash-chained audit

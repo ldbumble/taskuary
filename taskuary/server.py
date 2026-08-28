@@ -1190,12 +1190,29 @@ def mail_folder_list(cid: int, mailbox: str):
 
 @app.get('/api/connectors/{cid}/wa/status')
 def wa_status(cid: int):
-    """Paired or not - and the pairing QR as an SVG for the card to draw (messengers.wa_status)."""
+    """Paired or not - the pairing QR as an SVG for the card to draw (messengers.wa_status), and
+    what Taskuary's own bridge manager is doing (installing, starting, running, failed)."""
     from .messengers import wa_status as _status
+    from . import wabridge
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
-    try: return _status(c)
-    except RuntimeError as e: return {'connected': False, 'bridge': False, 'detail': str(e)}   # bridge down is a state, not a 500
+    try: return {**_status(c), 'bridge': True, 'manager': wabridge.state()}
+    except RuntimeError as e: return {'connected': False, 'bridge': False, 'detail': str(e), 'manager': wabridge.state()}   # bridge down is a state, not a 500
+
+@app.post('/api/connectors/{cid}/wa/bridge/start')
+def wa_bridge_start(cid: int, force_install: bool = False):
+    """Install the bridge's dependency if needed and start it detached - the card's button and the
+    setup agent's verb, instead of a shell command that never returns (wabridge.py)."""
+    from . import wabridge
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    store.audit('connector', cid, 'wa_bridge_start', ACTOR)
+    return wabridge.start(force_install)
+
+@app.post('/api/connectors/{cid}/wa/bridge/stop')
+def wa_bridge_stop(cid: int):
+    from . import wabridge
+    return wabridge.stop()
 
 @app.get('/api/connectors/{cid}/wa/chats')
 def wa_chats(cid: int):

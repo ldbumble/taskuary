@@ -142,15 +142,14 @@ const META = {
        "Only for the Notifications role — the WhatsApp JID of the chat to ping"]],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
-    howto: ["The heavy dependency is deliberately NOT bundled: in the Taskuary folder run `cd taskuary/whatsapp && npm install && node bridge.mjs` (Node 18+).",
-      "Pair once: scan the QR the bridge prints (WhatsApp → Linked devices), or run it with --phone 1555… and enter the code it gives you.",
-      "Leave the bridge running; Test here confirms the pairing and adds a catch-all source.",
+    howto: ["The bridge is a small Node program beside Taskuary (Node 18+ on this machine). Click Start the bridge in the Pair with your phone box: Taskuary installs its dependency (Baileys, deliberately not bundled) and starts it for you. By hand: `cd taskuary/whatsapp && npm install && node bridge.mjs`.",
+      "Pair once: the QR appears in that same box - WhatsApp → Linked devices → Link a device → scan. It refreshes by itself and the box turns green when the phone accepts.",
+      "Leave the bridge running (it survives closing the browser; a reboot stops it - Start the bridge again). Test here confirms the pairing and adds a catch-all source.",
       "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."],
     // written FOR the agent: the machine-side work is its own; the phone is the owner's
-    agent: ["Check `node --version` (18 or newer). If node is missing, tell the owner to install it from nodejs.org and stop - that is the one install that is theirs.",
-      "In Taskuary's package folder (given in your prompt) go to the whatsapp subfolder and run `npm install` yourself - the bridge's dependency (Baileys) is deliberately not bundled.",
-      "Start the bridge from that folder as a BACKGROUND process that outlives your command (PowerShell: Start-Process node -ArgumentList bridge.mjs -WorkingDirectory <folder>; bash: nohup node bridge.mjs &). Then GET http://127.0.0.1:8977/status until it answers.",
+    agent: ["Do NOT run node bridge.mjs yourself: it is a server and never returns - an agent that ran it in the foreground sat on it for five minutes. Taskuary starts it: POST {base}/api/connectors/{cid}/wa/bridge/start{hdr}. It installs the bridge's dependency when missing (a few minutes on a slow line) and launches the bridge detached.",
+      "Poll GET {base}/api/connectors/{cid}/wa/status{hdr} every 5 seconds and read manager.phase: installing → starting → running; bridge becomes true when it answers. If phase is failed, read manager.detail - node missing means the owner installs Node 18+ from nodejs.org (the one install that is theirs); anything else, report it and stop.",
       "If connected is false: do NOT print the QR here (a terminal QR is too big to scan) and do NOT ask for a phone number. The card above this terminal draws the bridge's QR itself and redraws it as it rotates - tell the owner to scan it from the phone: WhatsApp > Linked devices > Link a device. Poll GET http://127.0.0.1:8977/status every 5 seconds until connected is true. Only if the owner SAYS they would rather type a code: ask for the number, restart the bridge with --phone <digits only>, and relay pairingCode from /status.",
       "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}) - it confirms the pairing and adds the catch-all source, meaning every chat comes in.",
       "Ask the owner whether every chat should come in or only specific ones. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Once specific chats exist, only those come in.",
@@ -1823,10 +1822,19 @@ const WaPair = ({ conn, reload }) => {
         {st.connected ? (
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600, mt: 0.5 }}>✓ Paired{st.me ? ` as ${st.me}` : ""} — the bridge is connected. Test, then enable.</Typography>
         ) : st.bridge === false ? (
-          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mt: 0.5 }}>
-            The bridge is not running. Start it (<b>Get AI to set it up</b> above does that for you, or run <code>node bridge.mjs</code> in
-            the whatsapp folder) and the QR appears here.
-          </Typography>
+          <Box sx={{ mt: 0.5 }}>
+            <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
+              {st.manager?.phase === "installing" ? `Installing the bridge — ${st.manager.detail}`
+                : st.manager?.phase === "starting" ? "Starting the bridge…"
+                : st.manager?.phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
+                : "The bridge is not running. Taskuary can install and start it for you; the QR appears here the moment it is up."}
+            </Typography>
+            <Button size="small" variant="contained" disableElevation disabled={["installing", "starting"].includes(st.manager?.phase)}
+              startIcon={["installing", "starting"].includes(st.manager?.phase) ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <PlayArrowIcon sx={{ fontSize: 15 }} />}
+              onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/start`); } catch { /* status polling shows the failure */ } }}>
+              {st.manager?.phase === "failed" ? "Try again" : "Start the bridge"}
+            </Button>
+          </Box>
         ) : st.pairing_code ? (
           <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}>
             Enter this code on your phone — WhatsApp → Linked devices → Link a device → Link with phone number:

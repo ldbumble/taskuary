@@ -431,7 +431,23 @@ export const MicButton = ({ onText, size = 18, sx }) => {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const flash = (s) => { setErr(s); setTimeout(() => setErr(""), 5000); };
+  // No voice connector? Edge and Chrome ship their own recogniser (the Web Speech API) - free,
+  // decent for dictation, nothing to set up. It cannot transcribe a voice-note FILE, so the
+  // connectors still matter for the funnel; here it means the mic always works.
+  const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const viaBrowser = !!(voice && !voice.ready && SR);
   const start = async () => {
+    if (viaBrowser) {
+      try {
+        const r = new SR(); r.lang = navigator.language || "en-US"; r.continuous = true; r.interimResults = false;
+        let heard = "";
+        r.onresult = (e) => { heard = Array.from(e.results).filter((x) => x.isFinal).map((x) => x[0].transcript.trim()).join(" "); };
+        r.onerror = (e) => flash(e.error === "not-allowed" ? "microphone blocked in this browser" : `recognition ${e.error}`);
+        r.onend = () => { setRec(null); if (heard) onText?.(heard); else flash("nothing heard"); };
+        r.start(); setRec(r);
+      } catch { flash("this browser cannot dictate here"); }
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
@@ -451,12 +467,15 @@ export const MicButton = ({ onText, size = 18, sx }) => {
       mr.start(); setRec(mr);
     } catch { flash("microphone not available in this browser"); }
   };
-  const stop = () => { rec?.stop(); setRec(null); };
-  const title = err || (!voice ? "" : !voice.ready ? "Dictate — add an AI voice connector first (Connectors → AI — voice; Groq is free)"
-    : rec ? "Stop and transcribe" : `Dictate (${voice.label || voice.provider})`);
+  const stop = () => { rec?.stop(); if (!viaBrowser) setRec(null); };   // the browser recogniser reports back through onend
+  const title = err || (!voice ? ""
+    : rec ? "Stop and transcribe"
+    : voice.ready ? `Dictate (${voice.label || voice.provider})`
+    : viaBrowser ? "Dictate — your browser's own recogniser (free). Add an AI voice connector for voice notes and better accuracy."
+    : "Dictate — add an AI voice connector first (Connectors → AI — voice; Groq is free)");
   return (
     <MuiTooltip title={title}><span>
-      <MuiIconButton size="small" onClick={rec ? stop : start} disabled={busy || (voice && !voice.ready)} sx={sx}
+      <MuiIconButton size="small" onClick={rec ? stop : start} disabled={busy || (voice && !voice.ready && !viaBrowser)} sx={sx}
         aria-label={rec ? "stop recording" : "dictate"}>
         {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "#8a3646" }} /> : <MicIcon sx={{ fontSize: size }} />}
       </MuiIconButton>

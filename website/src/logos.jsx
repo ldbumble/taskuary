@@ -138,6 +138,47 @@ export const LOGOS = {
       <path fill="#262521" d="M8.2 5.4c.7 0 1.2 1.1 1.3 2.5a3.9 3.9 0 0 1 5 0c.1-1.4.6-2.5 1.3-2.5.8 0 1.3 1.6 1.1 3.4 1 .9 1.6 2.1 1.6 3.4 0 .8-.2 1.5-.6 2.1.4.6.6 1.4.6 2.2v2h-1.8v-2c0-.6-.2-1.1-.5-1.5-.9.8-2.2 1.3-3.7 1.3s-2.8-.5-3.7-1.3c-.3.4-.5.9-.5 1.5v2H6.5v-2c0-.8.2-1.6.6-2.2-.4-.6-.6-1.3-.6-2.1 0-1.3.6-2.5 1.6-3.4-.2-1.8.3-3.4 1.1-3.4zm3.8 4.2c-1.9 0-3.4 1.2-3.4 2.7s1.5 2.7 3.4 2.7 3.4-1.2 3.4-2.7-1.5-2.7-3.4-2.7zm-1.2 1.6a.7.7 0 1 1 0 1.4.7.7 0 0 1 0-1.4zm2.4 0a.7.7 0 1 1 0 1.4.7.7 0 0 1 0-1.4z" />
     </S>
   ),
+  // ── AI — voice: speech to text. Brand tiles where the brand has a mark; a waveform for the
+  //    two that are "a Whisper somewhere" - one with a plug (a server), one with a house (local).
+  groq_stt: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#F55036" />
+      <path fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" d="M15.6 10.2A4 4 0 1 0 12 15.9h2.4a1.6 1.6 0 0 1 1.6 1.6V19" />
+    </S>
+  ),
+  openai_stt: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#0f0f0f" />
+      <circle cx="12" cy="12" r="5.6" fill="none" stroke="#fff" strokeWidth="1.8" />
+      <path fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" d="M12 6.4v3.2M12 14.4v3.2M6.9 9.2l2.8 1.6M14.3 13.2l2.8 1.6M6.9 14.8l2.8-1.6M14.3 10.8l2.8-1.6" />
+    </S>
+  ),
+  deepgram: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#13EF93" />
+      <path fill="#0b1f19" d="M8 6.5h4.2c3.2 0 5.3 2.2 5.3 5.5s-2.1 5.5-5.3 5.5H8V6.5zm2.6 2.4v6.2h1.5c1.7 0 2.7-1.2 2.7-3.1s-1-3.1-2.7-3.1h-1.5z" />
+    </S>
+  ),
+  elevenlabs_stt: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#000" />
+      <rect x="8" y="6.5" width="2.6" height="11" rx=".6" fill="#fff" />
+      <rect x="13.4" y="6.5" width="2.6" height="11" rx=".6" fill="#fff" />
+    </S>
+  ),
+  stt_server: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#55697a" />
+      <path fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" d="M5.5 12h1.2M8.4 9v6M11.2 6.5v11M14 8.5v7M16.8 10.5v3M19 12h-.6" />
+    </S>
+  ),
+  local_whisper: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#6f8a6e" />
+      <path fill="#fff" d="M12 5.2l6.2 5.2h-1.7v2.2h-9v-2.2H5.8z" opacity=".95" />
+      <path fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" d="M7.4 16.5v2M9.7 14.8v3.7M12 13.6v4.9M14.3 14.8v3.7M16.6 16.5v2" />
+    </S>
+  ),
   cli: (p) => (
     <S {...p}>
       <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e1e2e" />

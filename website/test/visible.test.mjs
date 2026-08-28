@@ -6,8 +6,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("with no document the interval just runs (node tests, no window)", async () => {
   let n = 0;
+  // a generous window: with a 20ms interval and 55ms of waiting this test starved to one tick
+  // whenever a build or pytest ran beside it - the assertion is "it keeps ticking", not "on time"
   const stop = pollWhileVisible(() => { n += 1; }, 20);
-  await wait(55);
+  await wait(250);
   stop();
   assert.ok(n >= 2, `expected a few ticks, got ${n}`);
 });

@@ -670,7 +670,9 @@ export default function ConnectorsView() {
     const status = `${c.Active ? "on" : "off"}`
       + (roles.length ? ` · ${roles.map((r) => r === "notify" ? "notifications" : r).join(" + ")}` : "")
       + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
-        : c.HasSecret ? " · key saved" : c.Type === "ollama" ? " · local — no key needed" : " · no key yet")
+        : c.HasSecret ? " · key saved"
+          : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
+          : c.Type === "stt_server" ? " · your server — key optional" : " · no key yet")
       + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
     // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
     // or Jira and Linear both wearing 'boards', tells you nothing about which is which

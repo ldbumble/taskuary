@@ -26,5 +26,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7787/api/health', timeout=4)"
 
 # --no-browser: there is no display in the container. Host/port come from env.
-# python -m taskuary.testing desk|load seeds /data with the regression pictures.
+# python -m taskuary.testing desk|load seeds TASKUARY_HOME (compose regression
+# profile uses a separate volume, never the live one).
 CMD ["taskuary", "--no-browser"]

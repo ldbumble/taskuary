@@ -5,8 +5,11 @@
 # Publish past localhost only with TASKUARY_TOKEN set:
 #   TASKUARY_TOKEN=... docker compose up
 #
-# Seed /data with the regression desk (the same pictures tests/test_factory.py pins):
+# Regression uses its own volume, never the live taskuary-data:
 #   docker compose --profile regression run --rm desk
+#   docker compose --profile regression up -d taskuary-reg
+# Pass --force if the regression volume already has tasks:
+#   docker compose --profile regression run --rm desk --force
 services:
   taskuary:
     build: .
@@ -31,10 +34,26 @@ services:
     build: .
     user: "1000:1000"
     volumes:
-      - taskuary-data:/data
+      - taskuary-regression:/data
     environment:
       TASKUARY_HOME: /data
     command: ["python", "-m", "taskuary.testing", "desk"]
 
+  taskuary-reg:
+    profiles: ["regression"]
+    image: taskuary:local
+    build: .
+    init: true
+    ports:
+      - "127.0.0.1:7787:7787"
+    volumes:
+      - taskuary-regression:/data
+    environment:
+      - TASKUARY_HOST=0.0.0.0
+      - TASKUARY_TOKEN
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   taskuary-data:
+  taskuary-regression:

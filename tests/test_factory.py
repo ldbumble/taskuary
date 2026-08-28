@@ -4,7 +4,9 @@ These are the regression fixtures. Each picture is one Timeline/Board state the
 owner can actually see. They run on MemoryStore (the suite) and on a file
 (WAL, second connection, load shape).
 """
-import os, tempfile, unittest
+import json, os, tempfile, unittest
+from unittest import mock
+from taskuary.reports import is_due
 from taskuary.store import SQLiteStore
 from taskuary.testing import Factory, inbound, main
 
@@ -74,6 +76,20 @@ class PictureTests(unittest.TestCase):
         p = self.fx.report_row()
         row = self.fx.row(p)
         self.assertEqual((row['Channel'], row['Decision'], row['NeedsYou']), ('report', 'file', 0))
+
+    def test_report_source_is_not_due_after_the_picture(self):
+        p = self.fx.report_row()
+        src = self.fx.s.get_source(p.sid)
+        self.assertTrue(src['LastPolledAt'])
+        self.assertFalse(is_due(json.loads(src['ConfigJson']), src['LastPolledAt'], startup=True))
+
+    def test_omitted_from_email_and_draft_stay_null(self):
+        mid = self.fx.message()
+        self.assertIsNone(self.fx.s.get_message(mid).get('FromEmail'))
+        rid = self.fx.review(self.fx.task())
+        self.assertIsNone(self.fx.s.get_review(rid).get('DraftText'))
+        p = self.fx.pending_draft()
+        self.assertEqual(self.fx.s.get_review(p.rid)['DraftText'], 'Hi - done.')
 
     def test_auto_reply_wears_the_auto_chip(self):
         p = self.fx.auto_replied()
@@ -152,6 +168,16 @@ class TimelineDeskTests(unittest.TestCase):
         self.assertGreaterEqual(len(d), 20)
         self.assertTrue(fx.s.feed(limit=100))
 
+    def test_desk_stamps_every_report_source(self):
+        fx, path = _file_fx()
+        fx.desk()
+        reports = [s for s in fx.s.list_sources() if s['Channel'] == 'report']
+        self.assertGreaterEqual(len(reports), 3)  # census picture + digest + automate
+        for src in reports:
+            self.assertTrue(src['LastPolledAt'], src['Address'])
+            self.assertFalse(is_due(json.loads(src['ConfigJson'] or '{}'), src['LastPolledAt'], startup=True))
+        fx.s.cx.close()
+
 
 class FileAndLoadTests(unittest.TestCase):
     def test_pictures_survive_a_file_backed_store(self):
@@ -175,6 +201,15 @@ class FileAndLoadTests(unittest.TestCase):
     def test_cli_help_is_offline(self):
         self.assertEqual(main(['help']), 0)
         self.assertEqual(main(['nope']), 2)
+
+    def test_cli_refuses_a_home_that_already_has_tasks(self):
+        home = tempfile.mkdtemp()
+        with mock.patch.dict(os.environ, {'TASKUARY_HOME': home}):
+            self.assertEqual(main(['desk']), 0)
+            self.assertEqual(main(['desk']), 1)
+            self.assertEqual(main(['load', '4']), 1)
+            self.assertEqual(main(['desk', '--force']), 0)
+            self.assertEqual(main(['--force', 'load', '4']), 0)
 
 
 def test_the_fx_fixture_is_a_factory(fx):

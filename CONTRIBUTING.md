@@ -73,7 +73,9 @@ Reports wizard, scheduling, AI summaries, and the Timeline all work automaticall
   row and hope the feed agrees. Ingest tests use `inbound()` (the dict
   `ingest_message` accepts). Load a realistic db with
   `python -m taskuary.testing desk` or `load 2000` against `TASKUARY_HOME`
-  (`docker compose --profile regression run --rm desk` does the same into `/data`).
+  (`docker compose --profile regression run --rm desk` seeds a separate
+  `taskuary-regression` volume, never the live `taskuary-data`). The CLI
+  refuses a home that already has tasks unless you pass `--force`.
 - **Match the code style you see** — dense, screen-fitting, comments say *why* not *how*.
   Don't run black/autopep8; there is no format check on purpose.
 - **`taskuary/web/` is generated** — never hand-edit it; rebuild from `website/` and

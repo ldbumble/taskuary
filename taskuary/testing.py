@@ -64,8 +64,8 @@ class Factory:
         fields = {'TaskId': task_id, 'Status': status, 'Channel': channel,
                   'ExternalId': kw.pop('external_id', None) or self._xid(),
                   'Subject': kw.pop('subject', 'please look'),
-                  'FromName': kw.pop('from_name', 'Sam Okafor'),
-                  'FromEmail': kw.pop('from_email', 'sam@example.com'),
+                  'FromName': kw.pop('from_name', None),
+                  'FromEmail': kw.pop('from_email', None),
                   'BodyText': kw.pop('body', 'x'),
                   'SentAt': kw.pop('sent_at', None) or self.ago(),
                   'SourceName': kw.pop('source_name', None),
@@ -80,7 +80,7 @@ class Factory:
         return self.s.add_route(mid, tid, decision, score, reason, candidates or [], by)
 
     def review(self, task_id, message_id=None, status='pending', kind='draft',
-               reason='AI drafted a reply', draft='Hi - done.', final=None, **kw):
+               reason='AI drafted a reply', draft=None, final=None, **kw):
         fields = {'TaskId': task_id, 'MessageId': message_id, 'Status': status, 'Kind': kind,
                   'Reason': reason, 'DraftText': draft, 'FinalText': final}
         fields.update(kw)
@@ -202,6 +202,7 @@ class Factory:
     def report_row(self, title='Nightly census'):
         sid = self.s.save_source({'Channel': 'report', 'Address': title, 'Active': 1,
                                   'ConfigJson': '{"type": "mssql", "title": "%s"}' % title}, self.actor)
+        self.s.touch_source(sid)  # otherwise is_due fires on the next server start
         mid = self.message(task_id=None, status='filed', channel='report', subject=f'{title} - 4 rows',
                            source_name=title, from_name=title, conversation_id=f'report:{sid}',
                            body='{"facility": "Lakeview", "census": 112}')
@@ -308,6 +309,12 @@ class Factory:
         out = {}
         for name in names:
             out[name] = getattr(self, name)()
+        # SQLiteStore also seeds Morning digest + Automation ideas with a NULL
+        # watermark. Stamp every report so the next server start does not file
+        # a failed mssql row (or a real digest) on top of the fixtures.
+        for src in self.s.list_sources():
+            if src['Channel'] == 'report' and not src.get('LastPolledAt'):
+                self.s.touch_source(src['SourceId'])
         return out
 
     def fill(self, n=200):
@@ -328,25 +335,38 @@ def _open_home():
 def main(argv=None):
     import sys
     argv = list(sys.argv[1:] if argv is None else argv)
+    force = '--force' in argv
+    argv = [a for a in argv if a != '--force']
     cmd = (argv[0] if argv else 'help').lower()
     if cmd in ('-h', '--help', 'help'):
-        print('usage: python -m taskuary.testing desk|load [N]\n'
-              '  desk  one of each picture into TASKUARY_HOME\n'
-              '  load  N rows of the live mix (default 2000)')
+        print('usage: python -m taskuary.testing desk|load [N] [--force]\n'
+              '  desk   one of each picture into TASKUARY_HOME\n'
+              '  load   N rows of the live mix (default 2000)\n'
+              '  refuses a home that already has tasks unless --force')
         return 0
-    fx = Factory(_open_home())
-    if cmd == 'desk':
-        d = fx.desk()
-        print(f'desk: {len(d)} pictures, feed {len(fx.s.feed(limit=500))} rows, '
-              f'tasks {len(fx.s.list_tasks())}')
-        return 0
-    if cmd == 'load':
+    if cmd not in ('desk', 'load'):
+        print(f'unknown command: {cmd}', file=sys.stderr)
+        return 2
+    store = _open_home()
+    try:
+        n = len(store.list_tasks())
+        if n and not force:
+            from . import config
+            print(f'refusing: {config.home()} already has {n} tasks. pass --force to write anyway.',
+                  file=sys.stderr)
+            return 1
+        fx = Factory(store)
+        if cmd == 'desk':
+            d = fx.desk()
+            print(f'desk: {len(d)} pictures, feed {len(fx.s.feed(limit=500))} rows, '
+                  f'tasks {len(fx.s.list_tasks())}')
+            return 0
         n = int(str(argv[1]).rstrip('kK')) * (1000 if str(argv[1]).lower().endswith('k') else 1) if len(argv) > 1 else 2000
         fx.fill(n)
         print(f'load: {n} pictures, feed {len(fx.s.feed(limit=500))} (capped), tasks {len(fx.s.list_tasks())}')
         return 0
-    print(f'unknown command: {cmd}', file=sys.stderr)
-    return 2
+    finally:
+        store.cx.close()
 
 
 if __name__ == '__main__':

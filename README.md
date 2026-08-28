@@ -385,6 +385,7 @@ taskuary --debug            # verbose console; every run also logs to ~/.taskuar
 pytest -q                   # offline, no credentials; named pictures in taskuary.testing
 python -m taskuary.testing desk    # one of each Timeline/Board picture into TASKUARY_HOME
 python -m taskuary.testing load 2k # the same mix, many times, for a load db
+                                   # both refuse a home that already has tasks unless --force
 
 cd website                  # the React UI (React 18 + MUI, Vite)
 npm install

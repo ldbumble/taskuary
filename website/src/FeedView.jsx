@@ -24,7 +24,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useVoiceReady } from "./ui.jsx";
+import { ChannelIcon, RefChip, ActionChip, ChoiceRow, ChoiceList, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useVoiceReady } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -177,61 +177,64 @@ const untilText = (start, end) => {
   if (m < 60 * 24) return { text: `in ${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`, hot: false };
   return { text: `in ${Math.round(m / 1440)} day${Math.round(m / 1440) === 1 ? "" : "s"}`, hot: false };
 };
-const ComingUp = ({ onPick, picked }) => {
+// Today's meetings, fetched once for the whole Timeline and re-rendered every 30 s so countdowns
+// move. Upcoming ones go in the band above the newest message (the list is newest-first, so the
+// future belongs on top); a meeting that has ENDED is history and takes its place in the stream at
+// its own time - a 1:30 meeting sat above a 3:07 mail and read as "the clock is wrong".
+const useCalToday = () => {
   const [cal, setCal] = useState(null);
-  const [tick, setTick] = useState(0);            // re-render every 30 s so the countdowns move
-  const hover = useRef(null);
+  const [tick, setTick] = useState(0);          // only read to force the 30 s re-render (the scope test needs it named)
   useEffect(() => {
     let alive = true;
-    // TODAY's meetings, the ones not over yet - a meeting three days out is the calendar's business, not the Timeline's
     const load = async () => { try { const { data } = await api.get("/api/calendar/today"); if (alive) setCal(data); } catch { /* no calendar */ } };
     load();
     const a = setInterval(load, 300000), b = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => { alive = false; clearInterval(a); clearInterval(b); clearTimeout(hover.current); };
+    return () => { alive = false; clearInterval(a); clearInterval(b); };
   }, []);
-  // every meeting of the day stays on the rail - a finished one is part of what today was, and a
-  // band that empties at 4pm read as "the calendar broke". Past ones are faded and say so.
-  const now = Date.now();
-  const live = cal?.events || [];
-  if (!live.length) return null;
+  return tick >= 0 ? (cal?.events || []) : [];
+};
+const meetingEnded = (e) => !e.all_day && e.end && tsMs(e.end) < Date.now();
+
+// One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it
+// after the same beat a message takes, click opens it now; the panel shows who is in it and why.
+const MeetingRow = ({ e, onPick, picked, fade }) => {
+  const hover = useRef(null);
+  useEffect(() => () => clearTimeout(hover.current), []);
+  const u = untilText(e.start, e.end), isPicked = picked && picked.start === e.start && picked.subject === e.subject;
   return (
-    <Box sx={{ mb: 0.5 }} data-tick={tick}>
-      {live.map((e, i) => {
-        const u = untilText(e.start, e.end);
-        const past = !e.all_day && e.end && new Date(String(e.end).replace(" ", "T")).getTime() < now;
-        return (
-          <Box key={`${e.start}-${i}`} sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "4px" }}>
-            <Typography sx={{ ...mono, fontSize: 10.5, color: "#8a7a5c", textAlign: "right", pt: "8px", pr: "11px", whiteSpace: "nowrap" }}>
-              {e.all_day ? "all day" : fmtTime12(e.start)}
-            </Typography>
-            <Box sx={{ position: "relative" }}>
-              <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
-              <Box sx={{ position: "absolute", left: "2.5px", top: "11px", width: 8, height: 8, borderRadius: "50%", bgcolor: u.hot ? "#8a3646" : "#8a7a5c", boxShadow: `0 0 0 3.5px ${BG}` }} />
-            </Box>
-            {/* a row you can open, like every other row - hover opens it after the same beat a
-                message takes, click opens it now; the panel shows who is in it and what it is about */}
-            <Box onClick={() => { clearTimeout(hover.current); onPick?.({ ...e, pinned: true }); }}
-              onMouseEnter={() => { clearTimeout(hover.current); hover.current = setTimeout(() => onPick?.({ ...e, pinned: false }), 260); }}
-              onMouseLeave={() => clearTimeout(hover.current)}
-              sx={{ bgcolor: picked && picked.start === e.start && picked.subject === e.subject ? "#eee7d6" : "#f5f0e4",
-                border: `1px solid ${picked && picked.start === e.start && picked.subject === e.subject ? "#c9b98f" : "#e3d9c2"}`,
-                borderRadius: "8px", px: "11px", py: "6px", minWidth: 0, display: "flex", gap: 0.85, alignItems: "center",
-                opacity: past ? 0.62 : 1,
-                cursor: "pointer", transition: "background .15s, border-color .15s, opacity .15s", "&:hover": { bgcolor: "#eee7d6", borderColor: "#d8cba5", opacity: 1 } }}>
-              <EventIcon sx={{ fontSize: 16, color: "#8a7a5c", flexShrink: 0 }} />
-              <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12.5, minWidth: 0 }}>{e.subject}</Typography>
-              {!!(e.who || []).length && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 260 }}>· with {e.who.slice(0, 3).map((w) => w.split(" ")[0]).join(", ")}{e.who.length > 3 ? ` +${e.who.length - 3}` : ""}</Typography>}
-              {e.where && !(e.who || []).length && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 200 }}>· {e.where}</Typography>}
-              {e.status === "tentative" && <Typography variant="caption" sx={{ color: FAINT }}>· tentative</Typography>}
-              <Box sx={{ flex: 1 }} />
-              <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
-                color: u.hot ? "#fffdfb" : "#6b5f45", bgcolor: u.hot ? "#8a3646" : "#eee7d6", px: 0.8, py: 0.15, borderRadius: 99 }}>{u.text}</Typography>
-            </Box>
-          </Box>
-        );
-      })}
+    <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "4px" }}>
+      <Typography sx={{ ...mono, fontSize: 10.5, color: "#8a7a5c", textAlign: "right", pt: "8px", pr: "11px", whiteSpace: "nowrap" }}>
+        {e.all_day ? "all day" : fmtTime12(e.start)}
+      </Typography>
+      <Box sx={{ position: "relative" }}>
+        <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
+        <Box sx={{ position: "absolute", left: "2.5px", top: "11px", width: 8, height: 8, borderRadius: "50%", bgcolor: u.hot ? "#8a3646" : "#8a7a5c", boxShadow: `0 0 0 3.5px ${BG}` }} />
+      </Box>
+      <Box onClick={() => { clearTimeout(hover.current); onPick?.({ ...e, pinned: true }); }}
+        onMouseEnter={() => { clearTimeout(hover.current); hover.current = setTimeout(() => onPick?.({ ...e, pinned: false }), 260); }}
+        onMouseLeave={() => clearTimeout(hover.current)}
+        sx={{ bgcolor: isPicked ? "#eee7d6" : "#f5f0e4", border: `1px solid ${isPicked ? "#c9b98f" : "#e3d9c2"}`,
+          borderRadius: "8px", px: "11px", py: "6px", minWidth: 0, display: "flex", gap: 0.85, alignItems: "center",
+          opacity: fade ? 0.62 : 1,
+          cursor: "pointer", transition: "background .15s, border-color .15s, opacity .15s", "&:hover": { bgcolor: "#eee7d6", borderColor: "#d8cba5", opacity: 1 } }}>
+        <EventIcon sx={{ fontSize: 16, color: "#8a7a5c", flexShrink: 0 }} />
+        <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12.5, minWidth: 0 }}>{e.subject}</Typography>
+        {!!(e.who || []).length && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 260 }}>· with {e.who.slice(0, 3).map((w) => w.split(" ")[0]).join(", ")}{e.who.length > 3 ? ` +${e.who.length - 3}` : ""}</Typography>}
+        {e.where && !(e.who || []).length && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 200 }}>· {e.where}</Typography>}
+        {e.status === "tentative" && <Typography variant="caption" sx={{ color: FAINT }}>· tentative</Typography>}
+        <Box sx={{ flex: 1 }} />
+        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
+          color: u.hot ? "#fffdfb" : "#6b5f45", bgcolor: u.hot ? "#8a3646" : "#eee7d6", px: 0.8, py: 0.15, borderRadius: 99 }}>{u.text}</Typography>
+      </Box>
     </Box>
   );
+};
+
+// The band above today's newest message: what is still ahead (and all-day items). Ended meetings
+// are not here - they are rendered in the stream by the Timeline itself, at their time.
+const ComingUp = ({ events, onPick, picked }) => {
+  if (!events.length) return null;
+  return <Box sx={{ mb: 0.5 }}>{events.map((e, i) => <MeetingRow key={`${e.start}-${i}`} e={e} onPick={onPick} picked={picked} />)}</Box>;
 };
 
 // A meeting, opened: the right panel's answer to "who is in it and what is it about" - the
@@ -360,6 +363,7 @@ const TodayStrip = () => {
 
 export default function FeedView({ onOpenTask, onChanged }) {
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
+  const calEvents = useCalToday();
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
   const [cat, setCat] = useState("");                // "" everything | messages | code | reports
@@ -606,6 +610,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
     (acc[d] = acc[d] || []).push(r);
     return acc;
   }, {});
+  // an ended meeting is placed in the stream on its own day; one whose day has no messages yet
+  // stays in the band, so it is never lost
+  const inStream = (e) => meetingEnded(e) && !!days[localDay(e.start)];
+  const upcoming = calEvents.filter((e) => !inStream(e)), pastMeetings = calEvents.filter(inStream);
+  // the ended meetings that belong between message i-1 and message i of a day (newest-first), or
+  // after the oldest message of the day when i === items.length
+  const meetingsAt = (day, items, i) => {
+    const hi = i === 0 ? Infinity : tsMs(items[i - 1].SentAt), lo = i >= items.length ? -Infinity : tsMs(items[i].SentAt);
+    return pastMeetings.filter((e) => localDay(e.start) === day && tsMs(e.start) < hi && tsMs(e.start) >= lo);
+  };
 
   // only offer channels that actually have a connection behind them. With no category
   // picked, EVERY connected channel is offered - a hardcoded five-channel list here
@@ -779,10 +793,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
           ) : Object.entries(days).map(([day, items], di) => (
             <Box key={day} sx={{ mt: 1 }}>
               <DayHeader label={fmtDay(day)} />
-              {di === 0 && !cat && !pick && <ComingUp picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
+              {di === 0 && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
               <Box>
                 {items.map((r, i) => (
                   <React.Fragment key={r.MessageId}>
+                    {!cat && !pick && meetingsAt(day, items, i).map((e, j) => (
+                      <MeetingRow key={`m-${e.start}-${j}`} e={e} fade picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                    ))}
                     <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
                       alignItems: "stretch", mb: "4px",
                       ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
@@ -865,6 +882,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
                       </Box>
                     </Box>
                   </React.Fragment>
+                ))}
+                {/* meetings that ended before the oldest message of the day shown so far */}
+                {!cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
+                  <MeetingRow key={`m-${e.start}-${j}`} e={e} fade picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                 ))}
               </Box>
             </Box>

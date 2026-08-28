@@ -868,6 +868,7 @@ export const tzLabel = () => {
 };
 const tzOpt = () => (TZ ? { timeZone: TZ } : {});   // format in the configured zone, so digits match the label
 export const fmtTime12 = (s) => s ? asUtc(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "";
+export const tsMs = (s) => s ? asUtc(s).getTime() : 0;      // one clock for everything the Timeline orders (messages, meetings)
 export const fmtDateTime = (s) => {
   if (!s) return "";
   const base = asUtc(s).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...tzOpt() });

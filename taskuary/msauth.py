@@ -18,6 +18,7 @@ Teams chat reading (getAllMessages) is app-only in Graph, so the sign-in covers 
 and calendar; Teams still needs the tenant app.
 """
 import os, time, threading
+from urllib.parse import quote
 import requests
 from loguru import logger
 
@@ -26,7 +27,7 @@ GRAPH = 'https://graph.microsoft.com/v1.0'
 SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Read'
 # Taskuary's own registration (multi-tenant + personal accounts, public client, device code
 # on). Overridable per install with TASKUARY_MS_CLIENT_ID, or per card with client_id.
-PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', '')
+PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', 'd32e53c9-f00d-49fc-8b93-227b3e0190f0')
 
 _CACHE, _LOCK = {}, threading.Lock()      # refresh token -> (access, expires_at, current refresh token)
 on_rotate = None                          # set by the server: (connector id, new refresh token) -> None
@@ -35,6 +36,20 @@ on_rotate = None                          # set by the server: (connector id, ne
 def client_id(cfg: dict) -> str: return (cfg.get('client_id') or PUBLIC_CLIENT_ID or '').strip()
 def tenant(cfg: dict) -> str: return (cfg.get('tenant_id') or 'common').strip()   # common = work + personal
 def is_user(cfg: dict) -> bool: return (cfg or {}).get('auth') == 'user'
+
+
+class AdminConsent(RuntimeError):
+    """The tenant wants an admin to approve Taskuary before its people may sign in."""
+
+
+def admin_consent_url(cfg: dict) -> str:
+    """The link the user forwards to their Microsoft 365 admin. One click + Accept grants the
+    delegated scopes for the whole organisation - a consent grant on OUR app id, so nobody on
+    their side registers anything. The redirect is the public-client stock URI every such
+    registration carries; the admin lands on a blank page saying admin_consent=True."""
+    t = tenant(cfg); t = 'organizations' if t == 'common' else t     # personal accounts have no admin
+    return (f'{AUTH}/{t}/v2.0/adminconsent?client_id={_need_client(cfg)}&scope={quote(SCOPES)}'
+            f'&redirect_uri={quote(f"{AUTH}/common/oauth2/nativeclient", safe="")}')
 
 
 def _need_client(cfg):
@@ -66,7 +81,8 @@ def device_poll(cfg: dict, device_code: str) -> dict:
     if err in ('authorization_pending', 'slow_down'): return {'pending': True, 'slow': err == 'slow_down'}
     if err == 'expired_token': raise RuntimeError('the code expired before you finished - start the sign-in again')
     if err == 'authorization_declined': raise RuntimeError('you declined the sign-in')
-    raise RuntimeError(_friendly(_err(r)))
+    desc = _err(r)
+    raise (AdminConsent if _needs_admin(desc) else RuntimeError)(_friendly(desc))
 
 
 def refresh(cfg: dict, refresh_token: str) -> dict:
@@ -114,12 +130,17 @@ def _err(r) -> str:
     except ValueError: return r.text[:300]
 
 
+def _needs_admin(desc: str) -> bool:
+    d = desc or ''
+    return 'AADSTS65001' in d or 'AADSTS90094' in d or ('consent' in d.lower() and 'admin' in d.lower())
+
+
 def _friendly(desc: str) -> str:
     """Entra's error prose, said the way the card should say it."""
     d = desc or ''
-    if 'AADSTS65001' in d or 'consent' in d.lower() and 'admin' in d.lower():
+    if _needs_admin(d):
         return ('your organisation requires an admin to approve Taskuary once ("Need admin approval") - '
-                'ask your Microsoft 365 admin to grant it, then sign in again')
+                'forward the approval link below to your Microsoft 365 admin, then sign in again')
     if 'AADSTS700016' in d or 'AADSTS90002' in d:
         return "Taskuary's Microsoft app is not visible to this account's tenant - check TASKUARY_MS_CLIENT_ID"
     if 'AADSTS50076' in d or 'AADSTS50079' in d: return 'your organisation needs multi-factor sign-in - complete it in the browser and try again'

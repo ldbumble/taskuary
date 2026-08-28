@@ -41,8 +41,15 @@ class DeviceFlowTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as e: msauth.device_poll(CFG, 'D')
         self.assertIn('expired', str(e.exception))
         with mock.patch('requests.post', return_value=R(400, {'error': 'invalid_grant', 'error_description': 'AADSTS65001: The user or administrator has not consented'})):
-            with self.assertRaises(RuntimeError) as e: msauth.device_poll(CFG, 'D')
-        self.assertIn('admin', str(e.exception))
+            with self.assertRaises(msauth.AdminConsent) as e: msauth.device_poll(CFG, 'D')   # its own kind: the server attaches the link
+        self.assertIn('approval link', str(e.exception))
+
+    def test_the_admin_link_is_a_consent_grant_on_our_app_id(self):
+        u = msauth.admin_consent_url(CFG)
+        self.assertTrue(u.startswith('https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=app-1&'))   # common -> organizations: personal accounts have no admin
+        self.assertIn('Mail.ReadWrite', u); self.assertIn('redirect_uri=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon%2Foauth2%2Fnativeclient', u)
+        self.assertIn('/contoso.example/v2.0/adminconsent', msauth.admin_consent_url({**CFG, 'tenant_id': 'contoso.example'}))
+        with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''), self.assertRaises(RuntimeError): msauth.admin_consent_url({})
 
     def test_access_token_is_cached_and_a_rotated_refresh_token_is_persisted(self):
         msauth._CACHE.clear(); saved = []
@@ -91,6 +98,18 @@ class EndpointTests(unittest.TestCase):
         with mock.patch.object(msauth, 'device_poll', side_effect=RuntimeError('you declined the sign-in')):
             r = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': flow}).json()
         self.assertEqual((r['status'], r['detail']), ('error', 'you declined the sign-in'))
+
+    def test_need_admin_approval_hands_the_user_the_link_to_forward(self):
+        cid = self._outlook()['ConnectorId']
+        with mock.patch.object(msauth, 'device_start', return_value={'device_code': 'D', 'user_code': 'X', 'verification_uri': 'u', 'expires_in': 9, 'interval': 1, 'message': ''}):
+            flow = c.post(f'/api/connectors/{cid}/ms/signin').json()['flow']
+        with mock.patch.object(msauth, 'device_poll', side_effect=msauth.AdminConsent('needs an admin')), mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):
+            r = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': flow}).json()
+        self.assertEqual(r['status'], 'error'); self.assertIn('adminconsent?client_id=app-1', r['admin_consent_url'])
+        with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):                       # and on request, before anyone fails
+            self.assertIn('adminconsent', c.get(f'/api/connectors/{cid}/ms/adminlink').json()['url'])
+        with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''):
+            self.assertEqual(c.get(f'/api/connectors/{cid}/ms/adminlink').status_code, 409)   # no app id yet: said, not a 500
 
     def test_teams_cannot_ride_a_personal_sign_in(self):
         from taskuary.store import MemoryStore

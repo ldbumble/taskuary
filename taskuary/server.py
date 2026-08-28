@@ -1164,6 +1164,9 @@ def ms_poll(cid: int, body: dict):
     f = _MSFLOWS.get(flow)
     if not f or f['cid'] != cid: raise HTTPException(404, 'no such sign-in in progress - start it again')
     try: t = msauth.device_poll(f['cfg'], f['device_code'])
+    except msauth.AdminConsent as e:
+        _MSFLOWS.pop(flow, None)
+        return {'status': 'error', 'detail': str(e), 'admin_consent_url': msauth.admin_consent_url(f['cfg'])}
     except RuntimeError as e:
         _MSFLOWS.pop(flow, None)
         return {'status': 'error', 'detail': str(e)}
@@ -1181,6 +1184,15 @@ def ms_poll(cid: int, body: dict):
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
     return {'status': 'ok', **who}
+
+@app.get('/api/connectors/{cid}/ms/adminlink')
+def ms_adminlink(cid: int):
+    """The admin-approval link on demand - for the person who knows in advance that IT has to say yes."""
+    from . import msauth
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook card')
+    try: return {'url': msauth.admin_consent_url(json.loads(c.get('ConfigJson') or '{}'))}
+    except RuntimeError as e: raise HTTPException(409, str(e))
 
 @app.post('/api/connectors/{cid}/ms/signout')
 def ms_signout(cid: int):

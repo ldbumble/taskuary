@@ -28,11 +28,14 @@ import { AgentsPage } from "./AgentsPanel.jsx";
 /* ── connector metadata: channel + AI connectors (rows in the connector table) ── */
 const META = {
   outlook: { group: "Messaging", channel: "email", srcLabel: "Mailboxes", srcPh: "someone@yourdomain.com",
-    fields: [["tenant_id (tenant app)", "tenant_id"], ["client_id (tenant app)", "client_id"]],
-    secretLabel: "client secret (tenant app)",
-    desc: "Your Microsoft mailbox on the Timeline through triage. Sign in with your own account - no Azure portal - or register a tenant app if you are the admin.",
-    howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → open microsoft.com/devicelogin, enter the code, sign in with your own account and accept. That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). If your organisation answers \"Need admin approval\", your Microsoft 365 admin approves Taskuary once for everyone; no app registration needed.",
-      "Tenant app (admins - and required for Teams chat reading): Azure Portal → App registrations → New registration; API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Mark items read at the source') and Calendars.Read → Grant admin consent. Enter tenant_id + client_id and paste the client secret under the tenant-app fields; blank = the server's AZURE_* env vars.",
+    fields: [["tenant_id (tenant app only)", "tenant_id"], ["client_id (your own app - sign-in or tenant app)", "client_id"]],
+    secretLabel: "client secret (tenant app only)",
+    desc: "Your Microsoft mailbox on the Timeline through triage. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
+    howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → open microsoft.com/devicelogin, enter the code, sign in with your own account and accept. That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). Nobody registers anything.",
+      "\"Need admin approval\": some organisations let only an admin say yes to a new app. The card then shows an approval link - forward it to your Microsoft 365 admin. They sign in, click Accept once, and everyone in the organisation can sign in from then on. It is a consent grant on Taskuary's app id, not an app registration on their side; the yellow \"unverified publisher\" note on their screen is expected.",
+      "Register your own Microsoft app (optional - if your organisation only approves apps it registered itself, or you want your own name on the consent screen). portal.azure.com → Microsoft Entra ID → App registrations → New registration: name it Taskuary; Supported account types: \"Accounts in any organizational directory and personal Microsoft accounts\" (or just your organisation); Redirect URI: platform \"Mobile and desktop applications\", tick https://login.microsoftonline.com/common/oauth2/nativeclient → Register.",
+      "Then: Authentication → Advanced settings → Allow public client flows = Yes → Save. API permissions → Add a permission → Microsoft Graph → Delegated permissions: offline_access, User.Read, Mail.ReadWrite, Mail.Send, Calendars.Read → Add. No client secret - a sign-in app is public by design. Copy the Application (client) ID into client_id here (under Admin?) and sign in above - or set TASKUARY_MS_CLIENT_ID on the server so every install uses it. No Partner Center and no publisher verification: those only remove the \"unverified\" label on the consent screen.",
+      "Tenant app (admins - required for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Mark items read at the source') and Calendars.Read → Grant admin consent; Certificates & secrets → New client secret. Enter tenant_id + client_id and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
       "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
       "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
@@ -1501,6 +1504,7 @@ const MsSignIn = ({ conn, cfg, reload }) => {
   const [state, setState] = useState("");      // "" | ok | error
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adminUrl, setAdminUrl] = useState("");   // the link IT clicks once; shown when Microsoft says "Need admin approval" or on request
   const signedIn = cfg.auth === "user" && conn.HasSecret;
   useEffect(() => {
     if (!flow) return undefined;
@@ -1514,7 +1518,7 @@ const MsSignIn = ({ conn, cfg, reload }) => {
         if (data.status === "pending") { setTimeout(tick, wait); return; }
         setFlow(null);
         if (data.status === "ok") { setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} added under Mailboxes. Test it, then enable.`); reload(); }
-        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); }
+        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); if (data.admin_consent_url) setAdminUrl(data.admin_consent_url); }
       } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
     };
     const id = setTimeout(tick, wait);
@@ -1526,8 +1530,12 @@ const MsSignIn = ({ conn, cfg, reload }) => {
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
     setBusy(false);
   };
-  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`); setState(""); setDetail(""); reload(); };
-  const copy = () => { try { navigator.clipboard?.writeText(flow.user_code); } catch { /* the code is on screen anyway */ } };
+  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`); setState(""); setDetail(""); setAdminUrl(""); reload(); };
+  const copy = (s) => { try { navigator.clipboard?.writeText(s); } catch { /* it is on screen anyway */ } };
+  const adminLink = async () => {
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/ms/adminlink`); setAdminUrl(data.url); }
+    catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not build the approval link"); }
+  };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
@@ -1548,7 +1556,7 @@ const MsSignIn = ({ conn, cfg, reload }) => {
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
               bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>{flow.user_code}</Typography>
-            <IconButton size="small" onClick={copy} title="copy the code"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
+            <IconButton size="small" onClick={() => copy(flow.user_code)} title="copy the code"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
             <Button size="small" variant="contained" disableElevation component="a" href={flow.verification_uri} target="_blank" rel="noreferrer"
               endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}>Open the sign-in page</Button>
           </Box>
@@ -1557,11 +1565,28 @@ const MsSignIn = ({ conn, cfg, reload }) => {
           </Typography>
         </Box>
       ) : (
-        <Button variant="contained" disableElevation disabled={busy} onClick={start} sx={{ alignSelf: "flex-start" }}>
-          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with Microsoft"}</Button>
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          <Button variant="contained" disableElevation disabled={busy} onClick={start}>
+            {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with Microsoft"}</Button>
+          {!adminUrl && <Button size="small" onClick={adminLink} sx={{ fontSize: 11.5, textTransform: "none", color: DIM }}>Does IT have to approve apps? Get the admin link</Button>}
+        </Box>
       )}
       {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
+      {adminUrl && !signedIn && (
+        <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", display: "flex", flexDirection: "column", gap: 0.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: INK }}>Approval link for your Microsoft 365 admin</Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
+            Forward this to whoever runs your Microsoft 365. They sign in, click Accept once, and everyone in your organisation can
+            sign in above. It is a consent grant, not an app registration - nothing to build on their side. Then click Sign in with Microsoft again.
+          </Typography>
+          <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+            <Typography sx={{ ...mono, fontSize: 11, color: INK, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adminUrl}</Typography>
+            <IconButton size="small" onClick={() => copy(adminUrl)} title="copy the link"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
+            <IconButton size="small" component="a" href={adminUrl} target="_blank" rel="noreferrer" title="open it (if you are the admin)"><OpenInNewIcon sx={{ fontSize: 15 }} /></IconButton>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 };

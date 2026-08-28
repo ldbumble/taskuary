@@ -530,6 +530,42 @@ const DATA_META = {
       "Test reads a page for real, key or no key.",
       "Paste a key from jina.ai only if you hit the anonymous rate limit.",
       "On the REPORTS tab, give it a URL — same shape as Firecrawl, no account required."] },
+  /* Files & sheets people already keep. Both cards borrow: SharePoint the Outlook card's tenant
+     app (one registration, Graph mail AND Sites), Sheets the Gmail card's Google OAuth client. The
+     offer appears only when there is something to borrow - `reuse.ok` reads the other card. */
+  sharepoint: { title: "SharePoint", types: ["sharepoint_list", "sharepoint_file"],
+    fields: [["tenant_id (blank = reuse the Outlook card's app)", "tenant_id"], ["client_id (blank = reuse the Outlook card's app)", "client_id"],
+      ["default site (optional) — e.g. contoso.sharepoint.com/sites/Ops", "site"]],
+    secretLabel: "client secret (write-only; blank = reuse the Outlook card's tenant app)",
+    desc: "SharePoint lists and files in document libraries as scheduled reports and agent tools, over Graph — a list's items as rows, a csv/xlsx in a library parsed to rows.",
+    howto: ["One app registration with the Sites.Read.All APPLICATION permission (admin-consented) is all it needs. If the Outlook card already runs on a tenant app, leave the fields blank and it is borrowed - just add Sites.Read.All to that app in Azure Portal → App registrations → API permissions → Grant admin consent.",
+      "Otherwise register one: Azure Portal → App registrations → New registration; API permissions → Microsoft Graph → Application → Sites.Read.All → Grant admin consent; Certificates & secrets → New client secret. Enter tenant_id + client_id here and paste the secret (write-only).",
+      "Optionally name a default site (contoso.sharepoint.com/sites/Ops). Test authenticates, reaches the root site and, with a default site, counts its lists.",
+      "Build the reports on the REPORTS tab: 'SharePoint list' (a list's items) or 'SharePoint file' (a csv/xlsx in Shared Documents; a path ending in / lists the folder)."],
+    agent: ["GET {base}/api/connectors{hdr} and read the outlook card's config. If it has tenant_id, client_id and a saved secret and its auth is not 'user', this card can borrow it: leave tenant_id/client_id blank, tell the owner the app needs the Sites.Read.All application permission with admin consent (their admin adds it in Azure Portal → the app → API permissions), and Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 means that permission is missing - say so, do not retry.",
+      "If Outlook is a personal sign-in or absent, the owner (or their admin) registers an app with Sites.Read.All; ask for tenant_id, client_id (ConfigJson) and the client secret (Secret).",
+      "Ask for a default site URL, save it as site, Test, turn the connector on, SETUP DONE - reports are built on the Reports tab."],
+    reuse: { from: "outlook", title: "Reuse the Outlook card's Microsoft app",
+      text: "Outlook runs on a tenant app registration already. One registration can hold mail permissions and Sites.Read.All at once — leave the app fields blank and this card uses it. Make sure Sites.Read.All (application) is granted and admin-consented on that app.",
+      clear: ["tenant_id", "client_id"],
+      ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && c.HasSecret && k.client_id && k.auth !== "user"); } } },
+  google_sheets: { title: "Google Sheets", types: ["google_sheets"],
+    fields: [["Google OAuth client id (blank = reuse the Gmail card's)", "google_client_id"],
+      ["Google OAuth client secret (blank = reuse the Gmail card's)", "google_client_secret"],
+      ["default spreadsheet (optional) — URL or id", "spreadsheet"]],
+    secretLabel: "refresh token (write-only) — minted with spreadsheets.readonly",
+    desc: "A Google Sheet's cells as rows, on a schedule or as an agent tool — the first row as the column names.",
+    howto: ["Google Cloud console → APIs & Services → enable the Google Sheets API (and the Google Drive API, so Test can list your sheets) → Credentials → OAuth client ID, type Desktop app. If the Gmail card already carries a Google client (its calendar fields), leave id and secret blank here and it is reused.",
+      "Mint a refresh token WITH the Sheets scope: OAuth 2.0 Playground (developers.google.com/oauthplayground) → gear icon → use your own OAuth credentials → scopes https://www.googleapis.com/auth/spreadsheets.readonly and https://www.googleapis.com/auth/drive.metadata.readonly → Authorize APIs → Exchange authorization code → copy the refresh token. A token minted for the calendar does not cover spreadsheets, which is why this card holds its own.",
+      "Paste the refresh token (write-only). Share the sheets you want with the Google account you authorized as. Optionally set a default spreadsheet. Test checks the token's scopes and lists a few visible spreadsheets.",
+      "Build the reports on the REPORTS tab: 'Google Sheet' with a URL or id and a range (Sheet1!A:F); blank range = the first tab."],
+    agent: ["GET {base}/api/connectors{hdr} and read the gmail card's config: with google_client_id and google_client_secret present, leave those blank here - they are reused. Otherwise the owner creates an OAuth client (Desktop app) in Google Cloud console; ask for id and secret and save them in ConfigJson.",
+      "The refresh token is the owner's to mint in the OAuth Playground with the spreadsheets.readonly and drive.metadata.readonly scopes (walk them through: gear → own credentials → the two scopes → Authorize → Exchange → copy refresh token). Save it as Secret; never echo it.",
+      "Ask which spreadsheet is the usual one, save its URL as spreadsheet, Test (POST {base}/api/connectors/{cid}/test{hdr}) - a 403 or a scope complaint means the token was minted without the Sheets scope; mint again. Turn it on, SETUP DONE."],
+    reuse: { from: "gmail", title: "Reuse the Gmail card's Google client",
+      text: "The Gmail card already carries a Google OAuth client id and secret (its calendar fields). Leave those blank here and they are reused — you still mint a refresh token with the Sheets scope, because the calendar one does not cover spreadsheets.",
+      clear: ["google_client_id", "google_client_secret"],
+      ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && k.google_client_id && k.google_client_secret); } } },
   azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"], discovers: true,
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
     secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
@@ -657,7 +693,7 @@ export default function ConnectorsView() {
     return <WinrmDetail conn={byType.winrm} reload={load} onBack={() => setOpen(null)} />;
   }
   if (open?.kind === "data") {
-    return <DataDetail conn={byType[open.type]} meta={DATA_META[open.type]} sources={sources}
+    return <DataDetail conn={byType[open.type]} meta={DATA_META[open.type]} sources={sources} byType={byType}
       reload={load} onBack={() => setOpen(null)} />;
   }
 
@@ -744,7 +780,7 @@ export default function ConnectorsView() {
     // the web as a source: one REST call and a key each. What is deliberately NOT here is
     // anything that drives a browser - logging in, clicking - which needs CDP, not an API.
     { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "firecrawl", "reader"]), ...plannedCards(["perplexity", "serpapi", "browserbase"])] },
-    { title: "Files & sheets", cards: plannedCards(["google_sheets", "sharepoint_list", "smb_file", "local_file"]) },
+    { title: "Files & sheets", cards: [...dataCards(["sharepoint", "google_sheets"]), ...plannedCards(["smb_file", "local_file"])] },
     { title: "Everything else", cards: plannedCards(KNOWN_PLANNED, true) },
   ];
   const hits = q ? groups.flatMap((g) => g.cards.filter((c) => !c.planned && c.haystack.toLowerCase().includes(q.toLowerCase()))
@@ -1419,7 +1455,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
 
 /* ── shared detail for the DATA_META cards (database / aws / azure): fields + write-only
    secret + live Test; the connection only - reports are built on the Reports tab. ── */
-function DataDetail({ conn, meta, sources, reload, onBack }) {
+function DataDetail({ conn, meta, sources, reload, onBack, byType = {} }) {
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [secret, setSecret] = useState("");
@@ -1428,6 +1464,20 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
   const [msg, setMsg] = useState("");
   if (!conn) return null;
   const objects = (sources || []).filter((s) => s.Channel === conn.Type);
+  // the borrow offer: only when the OTHER card actually has something to lend (a tenant app, a
+  // Google client) - an offer to reuse nothing is worse than no offer
+  const canReuse = !!(meta.reuse && meta.reuse.ok(byType[meta.reuse.from]));
+  const useShared = async () => {
+    const next = { ...cfg }; (meta.reuse.clear || []).forEach((k) => { delete next[k]; });
+    setCfg(next); setBusy("save"); setMsg("");
+    try {
+      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next), Active: true });
+      setMsg(`saved — using the ${meta.reuse.from} card's app ✓`);
+      setBusy("test");
+      setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data);
+    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "could not switch to the shared app" }); }
+    setBusy(""); reload();
+  };
 
   const save = async () => {
     setBusy("save"); setMsg("");
@@ -1458,6 +1508,13 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
       {tab === "Agent" && <AgentTab steps={meta.agent} />}
       {tab === "Connection" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 560, mt: 1 }}>
+          {canReuse && (
+            <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: INK }}>{meta.reuse.title}</Typography>
+              <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mb: 0.75 }}>{meta.reuse.text}</Typography>
+              <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>Use it — save and test</Button>
+            </Box>
+          )}
           {meta.fields.map(([label, key, ph]) => (
             <TextField key={key} label={label} placeholder={ph} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
               multiline={key === "conn_str"} minRows={key === "conn_str" ? 2 : undefined}

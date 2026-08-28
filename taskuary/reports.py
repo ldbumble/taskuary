@@ -11,7 +11,7 @@ import io, json, re, sqlite3
 from datetime import datetime, timedelta
 from loguru import logger
 
-PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file',
+PLANNED = ['graphql', 'smb_file',
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
            # the category is the question people arrive with - "does this reach our ERP / our
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
@@ -404,6 +404,16 @@ def _calendar(cfg):
     from .calendar import run_calendar
     return run_calendar(cfg)
 
+
+def _lazy(module, fn):
+    """An executor that lives in its own module, imported on first use - and the composer's
+    catalog still sees the real docstring (compose._keys_doc reads it off the wrapper)."""
+    import importlib
+    def run(cfg): return getattr(importlib.import_module(f'.{module}', __package__), fn)(cfg)
+    try: run.__doc__ = getattr(importlib.import_module(f'.{module}', __package__), fn).__doc__
+    except Exception: run.__doc__ = f'{module}.{fn}'
+    return run
+
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the web as a source: plain REST, a key on a card, nothing new in the exe
             'exa': _research('exa'), 'tavily': _research('tavily'),
@@ -419,13 +429,16 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
             'calendar': _calendar,       # the owner's busy times, off the Outlook (and Google) cards - read-only
             'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
+            # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
+            'google_sheets': _lazy('sheets', 'run_google_sheets'),
+            'sharepoint_list': _lazy('sharepoint', 'run_sharepoint_list'), 'sharepoint_file': _lazy('sharepoint', 'run_sharepoint_file'),
             **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
-           'intacct_fields': 'intacct'}
+           'intacct_fields': 'intacct', 'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint'}
 
 def card_of(t): return CARD_OF.get(t, t)
 
@@ -493,6 +506,16 @@ def datadog_connection(store) -> dict:
     return _card(store, 'datadog', 'api_key')
 
 
+def _sharepoint_connection(store) -> dict:
+    from .sharepoint import sharepoint_connection
+    return sharepoint_connection(store)
+
+
+def _sheets_connection(store) -> dict:
+    from .sheets import google_sheets_connection
+    return google_sheets_connection(store)
+
+
 def _apikey_card(typ):
     """A card whose whole configuration is one key: the secret arrives as `api_key`."""
     return lambda store: _card(store, typ, 'api_key')
@@ -506,7 +529,10 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'entra_users': azure_connection, 'entra_groups': azure_connection,
                  'entra_signins': azure_connection, 'entra_licenses': azure_connection,
                  'prometheus': prometheus_connection, 'datadog': datadog_connection,
-                 'intacct': intacct_connection, 'intacct_fields': intacct_connection}
+                 'intacct': intacct_connection, 'intacct_fields': intacct_connection,
+                 # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
+                 'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
+                 'google_sheets': _sheets_connection}
 
 
 def resolve_cfg(store, cfg: dict) -> dict:

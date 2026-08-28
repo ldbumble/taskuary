@@ -425,5 +425,6 @@ export const LOGOS = {
   ),
 };
 
+LOGOS.sharepoint = LOGOS.sharepoint_list;      // the card is "SharePoint"; the list mark is the brand mark
 export const hasLogo = (k) => !!LOGOS[k];
 export const Logo = ({ name, sx }) => (LOGOS[name] ? LOGOS[name]({ sx }) : null);

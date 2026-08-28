@@ -67,6 +67,15 @@ const FIELDS = {
   mcp: [["command", "cmd", "text", "npx / uvx / path to the MCP server"], ["args (one per line)", "args", "multiline", ""],
     ["tool", "tool", "text", "query"], ["tool args (JSON)", "tool_args", "multiline", '{"sql": "SELECT ..."}'], AI_FIELD],
   sqlite: [["db path", "db", "text", "C:/data/app.db"], ["query", "query", "multiline", "SELECT ..."], AI_FIELD],
+  google_sheets: [["spreadsheet (URL or id)", "spreadsheet", "text", "https://docs.google.com/spreadsheets/d/…"],
+    ["range (blank = the first sheet)", "range", "text", "Sheet1!A:F"], AI_FIELD],
+  sharepoint_list: [["site", "site", "text", "contoso.sharepoint.com/sites/Ops"],
+    ["list (its title in SharePoint)", "list", "text", "Requests"],
+    ["max items", "top", "text", "200"], AI_FIELD],
+  sharepoint_file: [["site", "site", "text", "contoso.sharepoint.com/sites/Ops"],
+    ["path in the library (end with / to list a folder)", "path", "text", "Shared Documents/Reports/latest.xlsx"],
+    ["sheet name (xlsx only, blank = the first)", "sheet", "text", ""],
+    ["last N lines (text files only)", "tail", "text", "50"], AI_FIELD],
   local_file: [["file, folder, or a pattern", "path", "text", "C:/exports/sales-*.csv"],
     ["which one, when the pattern matches several", "pick", "pick_file", ""],
     ["last N lines (text and log files only)", "tail", "text", "50"],
@@ -113,6 +122,7 @@ const TYPE_LABELS = {
   digest: "Taskuary digest", automate: "Automation ideas (own data)",
   agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
+  google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",
   exa: "Exa — search the web", tavily: "Tavily — search + answer",
   firecrawl: "Firecrawl — read a page", reader: "Jina Reader — read a page (no key)",
 };
@@ -123,6 +133,7 @@ const TYPE_LABELS = {
    Microsoft, somewhere on the web. Anything new falls into "Other" rather than vanishing. */
 const TYPE_GROUPS = [
   ["This computer", ["local_file", "sqlite", "mcp"]],
+  ["Files & sheets", ["google_sheets", "sharepoint_list", "sharepoint_file"]],
   ["Databases", ["mssql", "database"]],
   ["AWS", ["aws", "s3_object", "cloudwatch_logs"]],
   ["Azure", ["azure", "azure_blob", "azure_logs"]],
@@ -138,8 +149,9 @@ const TYPE_GROUPS = [
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
-  intacct_fields: "intacct" };
+  intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
+  sharepoint: "SharePoint", google_sheets: "Google Sheets",
   prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl",
   intacct: "Sage Intacct" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };

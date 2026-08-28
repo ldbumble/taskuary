@@ -261,6 +261,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # aws/azure: the per-OBJECT picker carries the intent (report by default,
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
+                 'sharepoint': 'report,tool', 'google_sheets': 'report,tool',
                  'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger',
                  'clickup': 'trigger', 'todoist': 'trigger',
                  'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
@@ -339,6 +340,7 @@ class SQLiteStore:
                          ('winrm', 'Remote Windows (WinRM)'),
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
+                         ('sharepoint', 'SharePoint'), ('google_sheets', 'Google Sheets'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
                          ('clickup', 'ClickUp'), ('todoist', 'Todoist'),
                          ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),

@@ -6,11 +6,13 @@ import { Box, Button, CircularProgress, TextField, Typography } from "@mui/mater
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import CheckIcon from "@mui/icons-material/Check";
 import api from "./api";
-import { PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
 
 const svgUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg || "")}`;
 const CHANNEL_LABEL = { email: "Email", teams: "Microsoft Teams", telegram: "Telegram", whatsapp: "WhatsApp", slack: "Slack", github: "GitHub" };
+// what a connector learned reads GREEN; what you typed here reads grey - honest about the source
+const TYPED = "you typed it here";
 const MANUAL = [["owner_phone", "phone (WhatsApp / SMS)", "+1 555 123 4567"], ["owner_telegram", "Telegram handle", "@you"],
   ["owner_slack", "Slack handle", "@you"], ["owner_github", "GitHub login", "you"]];
 
@@ -97,20 +99,36 @@ export default function AboutYou() {
         typed under Sources, or set as the chat that pings you.
       </Typography>
       {!p.identities.length && <Typography variant="body2" sx={{ color: FAINT, mb: 2 }}>Nothing yet — connect a mailbox or a chat and it shows up here.</Typography>}
+      {/* one card per channel: the value leads, the kind is a small label, and where it came from
+          is a quiet chip right beside it - green when read live off a connector, grey when typed */}
       {Object.entries(byChannel).map(([ch, rows]) => (
-        <Box key={ch} sx={{ mb: 1.5 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-            <ChannelIcon channel={ch} sx={{ fontSize: 15 }} />
-            <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>{CHANNEL_LABEL[ch] || ch}</Typography>
+        <Box key={ch} sx={{ mb: 1.5, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2.5, overflow: "hidden",
+          boxShadow: "0 1px 2px rgba(30,50,38,.04)" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.1, borderBottom: `1px solid ${BORDER}`,
+            background: "linear-gradient(180deg,#fffefc,#fbf9f6)" }}>
+            <ChannelIcon channel={ch} sx={{ fontSize: 17 }} />
+            <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: INK }}>{CHANNEL_LABEL[ch] || ch}</Typography>
+            <Box sx={{ flex: 1 }} />
+            <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{rows.length}</Typography>
           </Box>
-          {rows.map((r, i) => (
-            <Box key={i} sx={{ display: "flex", gap: 2, alignItems: "baseline", py: 0.6, pl: 3, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
-              <Typography variant="caption" sx={{ color: DIM, width: 150, flexShrink: 0 }}>{r.kind}</Typography>
-              <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: r.primary ? 700 : 500 }}>{r.value}{r.name ? `  ·  ${r.name}` : ""}</Typography>
-              <Box sx={{ flex: 1 }} />
-              <Typography variant="caption" sx={{ color: FAINT }}>{r.source}</Typography>
-            </Box>
-          ))}
+          {rows.map((r, i) => {
+            const live = r.source !== TYPED;
+            return (
+              <Box key={i} sx={{ display: "grid", gridTemplateColumns: "96px minmax(0,1fr) auto", gap: 1.75, alignItems: "center",
+                px: 2, py: 1, borderTop: i ? "1px solid #efeae2" : 0 }}>
+                <Typography sx={{ ...mono, fontSize: 10.5, letterSpacing: ".04em", textTransform: "uppercase", color: FAINT }}>{r.kind}</Typography>
+                <Typography noWrap sx={{ ...mono, fontSize: 13, color: INK, fontWeight: r.primary ? 700 : 500 }}
+                  title={r.value + (r.name ? ` · ${r.name}` : "")}>
+                  {r.value}{r.name ? <Box component="span" sx={{ color: FAINT }}>{`  ·  ${r.name}`}</Box> : null}
+                  {r.primary ? <Box component="span" sx={{ color: "#6b5f45", fontSize: 11, ml: 0.75 }}>★ owner</Box> : null}
+                </Typography>
+                <Typography title={r.source} sx={{ justifySelf: "end", fontSize: 11, whiteSpace: "nowrap", maxWidth: 220,
+                  overflow: "hidden", textOverflow: "ellipsis", borderRadius: 99, px: 1, py: 0.25,
+                  color: live ? "#4c6450" : FAINT, bgcolor: live ? "#eef3ec" : "#f4f1ec",
+                  border: `1px solid ${live ? "#cddac9" : BORDER}` }}>{r.source}</Typography>
+              </Box>
+            );
+          })}
         </Box>
       ))}
 

@@ -194,11 +194,14 @@ const useCalToday = () => {
   return tick >= 0 ? (cal?.events || []) : [];
 };
 const meetingEnded = (e) => !e.all_day && e.end && tsMs(e.end) < Date.now();
-// the resting opacity of a row by age: full for 20 minutes, then an unmistakable slide to a 40%
-// floor by three hours - old rows read as clearly quieter; scroll or hover brings them all back
-const ageOpacity = (s) => {
-  const h = (Date.now() - tsMs(s)) / 36e5;
-  return h <= 0.33 ? 1 : Math.max(0.4, 1 - 0.6 * (h - 0.33) / 2.67);
+// the resting opacity of a row by age, by the timeline_fade setting (Settings > Display). On a light
+// palette a gentle fade is nearly invisible, so 'sharp' reaches a low floor within an hour or two;
+// scroll or hover restores any row to full. {grace h before it starts, span h to the floor, floor}.
+const FADE = { off: null, gentle: [2, 20, 0.7], normal: [0.5, 5, 0.5], sharp: [0.33, 2, 0.35] };
+const ageOpacity = (s, mode = "sharp") => {
+  const c = FADE[mode]; if (!c) return 1;
+  const [grace, span, floor] = c, h = (Date.now() - tsMs(s)) / 36e5;
+  return h <= grace ? 1 : Math.max(floor, 1 - (1 - floor) * (h - grace) / span);
 };
 
 // One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it
@@ -472,6 +475,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [nextIn, setNextIn] = useState(null);        // seconds until the next background sync, from the server
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
+  const [fade, setFade] = useState("sharp");         // how old rows dim (Settings > Display), from ingest/status
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
@@ -487,6 +491,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
         if (data.lastPollAt) setLastSync(new Date(Date.now() - (data.now - data.lastPollAt) * 1000));
         nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
         setTriageErr(data.triageError || "");
+        if (data.timelineFade) setFade(data.timelineFade);
         // the server's OWN ten-minute sync wears the same face as pressing the button: the
         // button says Syncing…, the caption says what it is reading, rows land as they arrive
         running = data.status?.state === "running";
@@ -819,7 +824,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                       <MeetingRow key={`m-${e.start}-${j}`} e={e} fade picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                     ))}
                     <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                      alignItems: "stretch", mb: "4px", opacity: ageOpacity(r.SentAt), transition: "opacity .9s ease",
+                      alignItems: "stretch", mb: "4px", opacity: ageOpacity(r.SentAt, fade), transition: "opacity .9s ease",
                       // the entrance animation must not PIN opacity afterwards (fill-mode both did, and no row
                       // ever faded): backwards keeps only the start frame, then the age opacity takes over
                       ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms`, animationFillMode: "backwards" }) }}>

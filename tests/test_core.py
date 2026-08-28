@@ -412,6 +412,23 @@ class CoreTests(unittest.TestCase):
                     pass
             self.assertEqual(pop2.call_args[0][0][-2:], ['-m', 'gpt-5-codex'])   # flag name is per-CLI
 
+    def test_run_cli_names_a_lapsed_login_and_says_how_to_fix_it(self):
+        from unittest import mock
+        import sys
+        from taskuary.agents import run_cli
+        # the exact stderr claude prints when its OAuth session has lapsed - the raw line told the user nothing they could act on
+        script = "import sys;sys.stdin.read();sys.stderr.write('Failed to authenticate: OAuth session expired and could not be refreshed');sys.exit(1)"
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
+            with self.assertRaises(RuntimeError) as e:
+                run_cli({'cmd': 'claude', 'args': ['-c', script]}, 'hi', lambda *a: None)
+        msg = str(e.exception)
+        self.assertIn('signed out', msg); self.assertIn('/login', msg); self.assertIn('come back here', msg)
+        self.assertIn('OAuth session expired', msg)                      # the original reason still travels with it
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):   # any other failure keeps the plain exit line
+            with self.assertRaises(RuntimeError) as e2:
+                run_cli({'cmd': 'claude', 'args': ['-c', "import sys;sys.stdin.read();sys.stderr.write('boom');sys.exit(2)"]}, 'hi', lambda *a: None)
+        self.assertEqual(str(e2.exception), 'claude exit 2: boom')
+
     def test_terminal_env_never_inherits_a_session(self):
         from taskuary.terminal import clean_env
         import os

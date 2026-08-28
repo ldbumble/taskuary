@@ -136,6 +136,15 @@ def _live_line(j):
     return None
 
 
+# the CLI's own login has lapsed - nothing in Taskuary can renew it, only the user at a terminal can
+_SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logged in|Not logged in|please (?:run )?[`\']?(?:claude )?/?login|codex login|401 Unauthorized', re.I)
+_LOGIN_HOW = {'claude': "run `claude`, type `/login` and finish the sign-in", 'codex': "run `codex login` and finish the sign-in"}
+
+def signed_out_msg(name: str, why: str) -> str:
+    how = _LOGIN_HOW.get(name, f"run `{name}` and sign in again")
+    return f"{name} is signed out on this machine ({why.strip()[:160]}). Open a terminal, {how}, then come back here and try again."
+
+
 def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     """One headless invocation of the configured CLI, output STREAMED line by line into
     the run trace so the Board shows the agent working live. claude's stream-json events
@@ -186,6 +195,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     if p.returncode != 0:
         why = f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else \
             ((err_buf[0] if err_buf else '') or '\n'.join(raw[-5:]) or 'no output')[:500]
+        if _SIGNED_OUT.search(why): raise RuntimeError(signed_out_msg(name, why))
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     if final is not None: out, sid = str(final.get('result') or '').strip(), final.get('session_id')
     else: out, sid = parse_cli_json('\n'.join(raw))

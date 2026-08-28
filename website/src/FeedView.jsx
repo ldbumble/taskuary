@@ -375,6 +375,15 @@ export default function FeedView({ onOpenTask, onChanged }) {
     ro.observe(el); setDockH(el.offsetHeight);
     return () => ro.disconnect();
   }, []);
+  // scrolled = give the timeline the room back: the frozen dock sheds its stats caption and its
+  // padding once you leave the top, so the pinned bar is just the filter pills. rAF-throttled.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    let raf = 0;
+    const onScroll = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; setScrolled(window.scrollY > 40); }); };
+    window.addEventListener("scroll", onScroll, { passive: true }); onScroll();
+    return () => { window.removeEventListener("scroll", onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, []);
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
   const [cat, setCat] = useState("");                // "" everything | messages | code | reports
@@ -670,8 +679,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
       {/* the frozen top: filters, sync and stats stay put while the timeline scrolls under them.
           A fade at the dock's lower edge is what makes rows dissolve INTO the top rather than
           vanish at a hard line. bgcolor so rows never show through the gap between pill and edge. */}
-      <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75,
-        position: "sticky", top: 0, zIndex: 20, bgcolor: BG, pt: 0.5,
+      <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: scrolled ? 0 : 0.75,
+        position: "sticky", top: 0, zIndex: 20, bgcolor: BG, pt: scrolled ? 0.25 : 0.5, pb: scrolled ? 0.25 : 0,
+        transition: "padding .18s ease, gap .18s ease",
         "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -18, height: 18,
           background: `linear-gradient(${BG}, transparent)`, pointerEvents: "none" } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center",
@@ -743,8 +753,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
           )}
         </Box>
         {/* the stats, demoted from tiles to a caption line - still clickable where a tile
-            was ("needs me" filters), and the sync story rides the same line */}
-        {rows && (
+            was ("needs me" filters), and the sync story rides the same line. Hidden once you
+            scroll: the frozen bar shrinks to the filters so the timeline keeps the height. */}
+        {rows && !scrolled && (
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
             {/* one face for the whole line: the mono digits next to Inter labels read as two
                 different UIs stitched together - the numbers are just bolder Inter now */}

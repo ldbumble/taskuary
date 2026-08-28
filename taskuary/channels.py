@@ -66,6 +66,12 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     if not tok: raise RuntimeError('no PAT saved yet - paste one under Credentials')
     u = requests.get('https://api.github.com/user', headers=gh_headers(tok), timeout=20)
     u.raise_for_status()
+    # who the PAT is: kept on the card so About you can say it without another API call
+    login = u.json().get('login')
+    if login:
+        try: cfg0 = json.loads(c.get('ConfigJson') or '{}')
+        except ValueError: cfg0 = {}
+        if cfg0.get('login') != login: store.set_connector_config(c['ConnectorId'], {**cfg0, 'login': login})
     repos = list_accessible_repos(tok)
     have = {s['Address']: s for s in store.list_sources(active_only=False) if s['Channel'] == 'github'}
     added = 0

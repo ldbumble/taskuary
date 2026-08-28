@@ -23,7 +23,7 @@ const PORT = Number(process.env.WA_BRIDGE_PORT || 8977);
 const PHONE = (process.argv.includes("--phone") && process.argv[process.argv.indexOf("--phone") + 1]) || "";
 const MAX_KEPT = 500;
 
-let sock = null, connected = false, me = "", qr = "", pairingCode = "", seq = 0;
+let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = "", seq = 0;
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
 
 const text = (m) => m.conversation || m.extendedTextMessage?.text
@@ -48,6 +48,7 @@ async function connect() {
     if (u.connection === "open") {
       connected = true; qr = ""; pairingCode = "";
       me = sock.user?.name || sock.user?.id || "";
+      meJid = sock.user?.id || "";                       // 15551234567:12@s.whatsapp.net - the number is who the owner IS here
       console.log(`connected as ${me}`);
     }
     if (u.connection === "close") {
@@ -89,7 +90,7 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   try {
     if (req.method === "GET" && url.pathname === "/status")
-      return json(res, 200, { connected, me, qr, pairingCode, seq, kept: messages.length });
+      return json(res, 200, { connected, me, jid: meJid, qr, pairingCode, seq, kept: messages.length });
     if (req.method === "GET" && url.pathname === "/messages") {
       const after = Number(url.searchParams.get("after") || 0);
       return json(res, 200, { seq, messages: messages.filter((m) => m.seq > after) });

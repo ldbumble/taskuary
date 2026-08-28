@@ -37,6 +37,8 @@ def tg_test(store, c) -> str:
     OFF under Sources with their chat id; only the ones the owner flips on become work."""
     if not c.get('Secret'): raise RuntimeError('no bot token saved - paste the token @BotFather gave you under Credentials')
     me = tg(c['Secret'], 'getMe')
+    # the bot's handle is part of who the owner is on Telegram (About you reads it back)
+    if me.get('username'): store.set_connector_config(c['ConnectorId'], {**_cfg(c), 'bot_username': me['username']})
     if not any(s['Channel'] == 'telegram' for s in store.list_sources(active_only=False)):
         store.save_source({'Channel': 'telegram', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
     return (f"authenticated as @{me.get('username')} - message the bot (or add it to a group), Sync, "
@@ -187,7 +189,10 @@ def wa_status(c) -> dict:
     mean reading a QR off the bridge's own terminal or typing a phone number into a chat; WhatsApp
     rotates the QR every ~20s, so the card polls this and redraws - nobody relays anything."""
     st = _wa(c, '/status')
-    out = {'connected': bool(st.get('connected')), 'me': st.get('me') or '', 'pairing_code': st.get('pairingCode') or '', 'qr_svg': ''}
+    jid = str(st.get('jid') or '')
+    out = {'connected': bool(st.get('connected')), 'me': st.get('me') or '', 'jid': jid,
+           'phone': ('+' + jid.split('@')[0].split(':')[0]) if jid and jid.split(':')[0].split('@')[0].isdigit() else '',   # the paired number, from the account jid
+           'pairing_code': st.get('pairingCode') or '', 'qr_svg': ''}
     if st.get('qr') and not out['connected']:
         import segno
         out['qr_svg'] = segno.make(st['qr'], error='m').svg_data_uri(scale=5, border=2, dark='#1e1e2e', light='#ffffff')

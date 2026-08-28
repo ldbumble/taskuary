@@ -42,6 +42,18 @@ def profile(store) -> dict:
     for t, kind in (('telegram', 'your chat id'), ('whatsapp', 'your chat (JID)'), ('teams', 'notify chat id')):
         c = conns.get(t)
         if c and _cfg(c).get('notify_chat'): add(t, kind, _cfg(c)['notify_chat'], f'notify chat on the {t} card - where pings and your verdicts go')
+    # the paired WhatsApp account IS a phone number - read live off the bridge, best effort
+    wa = conns.get('whatsapp')
+    if wa and wa.get('Active'):
+        try:
+            from .messengers import wa_status
+            st = wa_status(store.get_connector(wa['ConnectorId'], with_secret=True))
+            if st.get('connected'): add('whatsapp', 'your number', st.get('phone') or st.get('jid'), 'the WhatsApp account paired to the bridge', name=st.get('me'))
+        except Exception: pass                                   # bridge down: the row is simply absent
+    tg = conns.get('telegram')
+    if tg and _cfg(tg).get('bot_username'): add('telegram', 'your bot', '@' + _cfg(tg)['bot_username'], 'the Telegram card (Test saved it)')
+    gh = conns.get('github')
+    if gh and _cfg(gh).get('login'): add('github', 'login', _cfg(gh)['login'], 'the GitHub card - who the PAT authenticates as')
     add('telegram', 'handle', st.get('owner_telegram'), 'you typed it here')
     add('whatsapp', 'phone', st.get('owner_phone'), 'you typed it here')
     add('slack', 'handle', st.get('owner_slack'), 'you typed it here')

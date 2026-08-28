@@ -32,6 +32,25 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(p['facts']['owner_name'], 'Uri Nussbaum'); self.assertTrue(p['avatar'].startswith('<svg'))
         self.assertIn('UN', p['avatar'])                                       # the monogram: first and last initials
 
+    def test_the_paired_whatsapp_number_the_bot_and_the_pat_login_come_from_the_cards(self):
+        """These three were never recorded anywhere: the bridge knows the paired number, Test knows
+        the bot, discovery knows the PAT's login - so the page read as if the connectors knew nothing."""
+        s = MemoryStore()
+        wa = s.get_connector_by_type('whatsapp'); s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 't')
+        s.save_connector({'ConnectorId': s.get_connector_by_type('telegram')['ConnectorId'], 'ConfigJson': json.dumps({'bot_username': 'uri_hub_bot'})}, 't')
+        s.save_connector({'ConnectorId': s.get_connector_by_type('github')['ConnectorId'], 'ConfigJson': json.dumps({'login': 'ldbumble'})}, 't')
+        from taskuary import messengers
+        with mock.patch.object(messengers, 'wa_status', return_value={'connected': True, 'me': 'Uri', 'jid': '15550100200:12@s.whatsapp.net', 'phone': '+15550100200'}):
+            by = {(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}
+        self.assertEqual((by[('whatsapp', 'your number')]['value'], by[('whatsapp', 'your number')]['name']), ('+15550100200', 'Uri'))
+        self.assertEqual(by[('telegram', 'your bot')]['value'], '@uri_hub_bot')
+        self.assertEqual(by[('github', 'login')]['value'], 'ldbumble')
+        with mock.patch.object(messengers, 'wa_status', side_effect=RuntimeError('bridge down')):
+            self.assertNotIn(('whatsapp', 'your number'), {(i['channel'], i['kind']) for i in whoami.profile(s)['identities']})   # absent, not an error
+        # the bridge's jid becomes a phone in wa_status itself
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Uri', 'jid': '15550100200:12@s.whatsapp.net', 'qr': '', 'pairingCode': ''}):
+            self.assertEqual(messengers.wa_status(wa)['phone'], '+15550100200')
+
     def test_the_avatar_is_deterministic_and_every_style_renders(self):
         a, b = whoami.avatar_svg('Uri Nussbaum', 'seed-1'), whoami.avatar_svg('Uri Nussbaum', 'seed-1')
         self.assertEqual(a, b); self.assertNotEqual(a, whoami.avatar_svg('Uri Nussbaum', 'seed-2'))

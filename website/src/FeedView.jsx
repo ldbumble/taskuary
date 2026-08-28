@@ -479,8 +479,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
               background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{syncing || bgSync ? "Syncing…" : "Sync now"}</Button>
           <Box sx={{ width: "1px", height: 20, bgcolor: BORDER, flexShrink: 0 }} />
           <FilterPills options={CATEGORIES} value={cat} onChange={setCat} />
-          {pickerChannels.length > 0 && (
-            <Select size="small" value={pick} displayEmpty onChange={(e) => setPick(e.target.value)}
+          {/* ALWAYS drawn: the dock must not change shape as you click across categories. A
+              category with no sources under it just offers "all sources" and nothing to narrow. */}
+          {(
+            <Select size="small" value={pickerChannels.length ? pick : ""} displayEmpty onChange={(e) => setPick(e.target.value)}
               onClose={() => setSrcQ("")}
               MenuProps={{ PaperProps: { sx: { maxHeight: 440, maxWidth: 460 } } }}
               renderValue={(v) => (!v ? "all sources"

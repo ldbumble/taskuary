@@ -517,7 +517,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
 
 // One page, a rail, and a search box that is always reachable. The landing grid meant every
 // trip between two settings went section → back → section; these five are edited together.
-const NAV = ["config", "policies", "memory", "agents", "audit"];
+const NAV = ["about", "config", "policies", "memory", "agents", "audit"];
 
 export default function SettingsView() {
   const [page, setPage] = useState("config");

@@ -7,7 +7,7 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![GitHub stars](https://img.shields.io/github/stars/ldbumble/taskuary?style=social)](https://github.com/ldbumble/taskuary/stargazers)
 
-## Automate your job.
+## Your work assistant that is awesome.
 
 **Your inbox and your coding agents in one place.** Email, Teams, Slack, GitHub issues and
 scheduled reports land on one timeline; AI triage says what is real work; the coding CLI

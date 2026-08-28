@@ -26,10 +26,11 @@ const T = ({ p, bg, fg = "#fff", text, size = 11, weight = 800 }) => (
 );
 
 export const LOGOS = {
+  // dark slate, not the brand mid-tone: on oat paper the lighter envelope read as disabled
   email: (p) => (
     <S {...p}>
-      <rect x="2" y="5" width="20" height="14" rx="2.5" fill="#55697a" />
-      <path fill="none" stroke="#fffdfb" strokeWidth="1.8" strokeLinejoin="round" d="M4.2 7.6l7.8 5.9 7.8-5.9" />
+      <rect x="1.5" y="4.5" width="21" height="15" rx="2.5" fill="#3a4a58" />
+      <path fill="none" stroke="#fffdfb" strokeWidth="1.9" strokeLinejoin="round" d="M3.8 7.3l8.2 6.2 8.2-6.2" />
     </S>
   ),
   outlook: (p) => (
@@ -50,8 +51,10 @@ export const LOGOS = {
   ),
   whatsapp: (p) => (
     <S {...p}>
-      <circle cx="12" cy="12" r="10" fill="#25D366" />
-      <path fill="#fff" d="M6.6 17.6l.9-3.1a6.2 6.2 0 1 1 2.3 2.3l-3.2.8zm3.5-2.1c.6.3 1.2.5 1.9.5a4.5 4.5 0 1 0-4.5-4.5c0 .8.2 1.5.6 2.1l-.5 1.8 1.9-.5zm3.8-1.8c-.1-.1-.7-.4-.8-.4s-.2 0-.3.1l-.4.5c-.1.1-.2.1-.3 0a3.7 3.7 0 0 1-1.8-1.6c-.1-.2 0-.2.1-.3l.3-.4v-.3l-.4-.8c-.1-.2-.2-.2-.3-.2h-.3c-.1 0-.3 0-.4.2-.2.2-.6.6-.6 1.4s.6 1.6.7 1.7c.1.1 1.2 1.8 2.9 2.5.4.2.7.3 1 .3.4.1.7.1 1 0 .3 0 .9-.4 1-.8.1-.4.1-.7.1-.8 0-.1-.1-.1-.2-.2z" />
+      {/* the familiar mark: a speech bubble with a tail at lower-left and a handset inside - the
+          old path was a blob at 17px */}
+      <circle cx="12" cy="12" r="11" fill="#25D366" />
+      <path fill="#fff" d="M12 4.6a7.3 7.3 0 0 0-6.3 11l-1.1 4 4.1-1.1A7.3 7.3 0 1 0 12 4.6zm0 1.5a5.8 5.8 0 1 1-3 10.8l-.3-.2-2.4.6.6-2.3-.2-.3A5.8 5.8 0 0 1 12 6.1zm-2.4 2.8c-.2 0-.5.1-.8.4-.3.3-.8.8-.8 1.8s.8 2.1.9 2.3c.1.1 1.6 2.5 3.8 3.4 1.9.8 2.3.6 2.7.6.4-.1 1.3-.6 1.5-1.1.2-.6.2-1 .1-1.1l-.5-.3-1.5-.7c-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.7-.3-1.4-.8-2-1.3-.5-.5-1-1.2-1.2-1.7-.1-.2 0-.3.1-.4l.4-.4.3-.5c.1-.2 0-.3 0-.5l-.7-1.6c-.1-.3-.3-.3-.5-.3h-.4z" />
     </S>
   ),
   gmail: (p) => (

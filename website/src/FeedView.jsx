@@ -242,7 +242,7 @@ const EventPanel = ({ e, onClose }) => {
       </Box>
       <Box sx={{ px: 2, py: 1.5, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1.5 }}>
         <Box>
-          <PanelLabel>Who's in it</PanelLabel>
+          <PanelLabel>Who’s in it</PanelLabel>
           {(e.who || []).length ? (
             <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}>
               {e.who.map((w) => (
@@ -257,7 +257,7 @@ const EventPanel = ({ e, onClose }) => {
           ) : <Typography variant="body2" sx={{ color: FAINT }}>{e.organizer ? `organized by ${e.organizer} — no other attendees listed` : "no attendees listed — just you"}</Typography>}
         </Box>
         <Box>
-          <PanelLabel>What it's about</PanelLabel>
+          <PanelLabel>What it’s about</PanelLabel>
           {e.about ? <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{e.about}</Typography>
             : <Typography variant="body2" sx={{ color: FAINT }}>The invite says nothing beyond its title{e.subject ? ` — “${e.subject}”` : ""}.</Typography>}
         </Box>
@@ -298,7 +298,7 @@ const TodayStrip = () => {
       "@keyframes tqSlide": { from: { opacity: 0, transform: "translateY(6px) scaleX(.6)" }, to: { opacity: 1, transform: "none" } },
       "@keyframes tqPulse": { "0%": { boxShadow: "0 0 0 0 rgba(138,54,70,.45)" }, "100%": { boxShadow: "0 0 0 8px rgba(138,54,70,0)" } } }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.75 }}>
-        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>📅 TODAY'S MEETINGS · {t.events.length}</Typography>
+        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>📅 TODAY’S MEETINGS · {t.events.length}</Typography>
         {allDay.map((e) => <Typography key={e.subject} variant="caption" sx={{ color: FAINT }}>· all day: {e.subject}</Typography>)}
       </Box>
       {/* the track */}

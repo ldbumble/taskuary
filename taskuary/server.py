@@ -1451,7 +1451,8 @@ CLI_MODELS = {
 def cli_base(cmd) -> str:
     """'C:\\Users\\me\\...\\codex.exe' and 'codex' are the same CLI. A profile saved with the full
     path (the setup wizard writes what `where` found) offered no model list at all."""
-    return re.sub(r'\.(cmd|exe|bat|ps1)$', '', Path(str(cmd or '')).name.lower())
+    # both separators: a Windows path in a profile is still codex when the tests run on Linux CI
+    return re.sub(r'\.(cmd|exe|bat|ps1)$', '', re.split(r'[\\/]', str(cmd or ''))[-1].lower())
 
 @app.get('/api/agents')
 def agents():

@@ -86,14 +86,17 @@ def outlook_events(cfg: dict, secret: str, mailboxes: list, start: datetime, end
 
 # invite bodies are mostly plumbing - the Teams block, dial-ins, "join on your computer" - and the
 # one useful sentence, when there is one, sits above it
-_BOILER = re.compile(r'(microsoft teams|join on your computer|meeting id:|passcode:|dial in|dial-in|conference id|find a local number|'
-                     r'click here to join|join the meeting|zoom\.us|teams\.microsoft\.com|google meet|meet\.google\.com|'
-                     r'^_+$|^-{3,}$|reset pin|learn more|help |need help|organizer|this is a recurring)', re.I)
+_BOILER = re.compile(r'(microsoft teams|join on your computer|join on the web|download teams|meeting id:|passcode:|dial in|dial-in|'
+                     r'conference id|find a local number|click here to join|join the meeting|join with a video|meeting options|'
+                     r'video conferencing device|tenant id|video id|or call in|phone conference|more info|learn more|reset pin|'
+                     r'help |need help|organizer|this is a recurring|zoom\.us|teams\.microsoft\.com|google meet|meet\.google\.com|'
+                     r'https?://|^\+?[\d\s(),.#*-]{7,}$|^[_\-=|\s]+$)', re.I)
 
 
 def about_text(preview: str, limit: int = 240) -> str:
     """The invite's own words about what the meeting is - or '' when the body is only plumbing."""
-    lines = [l.strip() for l in str(preview or '').replace('\r', '\n').split('\n')]
+    # Teams lays its plumbing out with pipes on one line ("Download Teams | Join on the web") - split there too
+    lines = [p.strip() for l in str(preview or '').replace('\r', '\n').split('\n') for p in l.split(' | ')]
     keep = [l for l in lines if l and not _BOILER.search(l) and len(l) > 3]
     text = ' '.join(' '.join(keep).split())
     return text[:limit].rstrip() + ('…' if len(text) > limit else '')

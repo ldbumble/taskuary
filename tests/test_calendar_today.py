@@ -18,6 +18,10 @@ class AboutTests(unittest.TestCase):
                 'Meeting ID: 123 456 789\nPasscode: abc\nDial in by phone\n')
         self.assertEqual(cal.about_text(body), 'Quick sync on the Elkton refund backlog before Friday.')
         self.assertEqual(cal.about_text('Microsoft Teams meeting\nJoin on your computer'), '')
+        # the newer Teams layout: plumbing on one line, pipes between - and a real sentence above it
+        body2 = 'Target numbers for Q4, bring the census sheet.\nDownload Teams | Join on the web\nJoin with a video conferencing device\nVideo ID: 112 233\nMore info\n+1 555-010-0100,,123#'
+        self.assertEqual(cal.about_text(body2), 'Target numbers for Q4, bring the census sheet.')
+        self.assertEqual(cal.about_text('Download Teams | Join on the web\nMeeting options'), '')
         self.assertTrue(cal.about_text('x' * 300).endswith('…'))
 
     def test_graph_events_carry_who_about_and_join(self):

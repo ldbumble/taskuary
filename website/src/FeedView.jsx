@@ -180,17 +180,21 @@ const untilText = (start, end) => {
 const ComingUp = ({ onPick, picked }) => {
   const [cal, setCal] = useState(null);
   const [tick, setTick] = useState(0);            // re-render every 30 s so the countdowns move
+  const hover = useRef(null);
   useEffect(() => {
     let alive = true;
-    const load = async () => { try { const { data } = await api.get("/api/calendar/upcoming", { params: { hours: 72 } }); if (alive) setCal(data); } catch { /* no calendar */ } };
+    // TODAY's meetings, the ones not over yet - a meeting three days out is the calendar's business, not the Timeline's
+    const load = async () => { try { const { data } = await api.get("/api/calendar/today"); if (alive) setCal(data); } catch { /* no calendar */ } };
     load();
     const a = setInterval(load, 300000), b = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => { alive = false; clearInterval(a); clearInterval(b); };
+    return () => { alive = false; clearInterval(a); clearInterval(b); clearTimeout(hover.current); };
   }, []);
-  if (!cal || !cal.events?.length) return null;
+  const now = Date.now();
+  const live = (cal?.events || []).filter((e) => e.all_day || !e.end || new Date(String(e.end).replace(" ", "T")).getTime() >= now - 15 * 60000);
+  if (!live.length) return null;
   return (
     <Box sx={{ mb: 0.5 }} data-tick={tick}>
-      {cal.events.map((e, i) => {
+      {live.map((e, i) => {
         const u = untilText(e.start, e.end);
         return (
           <Box key={`${e.start}-${i}`} sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "4px" }}>
@@ -201,8 +205,11 @@ const ComingUp = ({ onPick, picked }) => {
               <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
               <Box sx={{ position: "absolute", left: "2.5px", top: "11px", width: 8, height: 8, borderRadius: "50%", bgcolor: u.hot ? "#8a3646" : "#8a7a5c", boxShadow: `0 0 0 3.5px ${BG}` }} />
             </Box>
-            {/* a row you can open, like every other row: the panel shows who is in it and what it is about */}
-            <Box onClick={() => onPick?.(e)}
+            {/* a row you can open, like every other row - hover opens it after the same beat a
+                message takes, click opens it now; the panel shows who is in it and what it is about */}
+            <Box onClick={() => { clearTimeout(hover.current); onPick?.(e); }}
+              onMouseEnter={() => { clearTimeout(hover.current); hover.current = setTimeout(() => onPick?.(e), 260); }}
+              onMouseLeave={() => clearTimeout(hover.current)}
               sx={{ bgcolor: picked && picked.start === e.start && picked.subject === e.subject ? "#eee7d6" : "#f5f0e4",
                 border: `1px solid ${picked && picked.start === e.start && picked.subject === e.subject ? "#c9b98f" : "#e3d9c2"}`,
                 borderRadius: "8px", px: "11px", py: "6px", minWidth: 0, display: "flex", gap: 0.85, alignItems: "center",

@@ -412,6 +412,27 @@ class CoreTests(unittest.TestCase):
                     pass
             self.assertEqual(pop2.call_args[0][0][-2:], ['-m', 'gpt-5-codex'])   # flag name is per-CLI
 
+    def test_a_profile_with_only_a_cmd_gets_the_known_headless_flags(self):
+        from unittest import mock
+        from taskuary.agents import run_cli
+        from taskuary.clis import preset_args
+        from taskuary.terminal import agent_argv
+        # config.toml said [agents.coder] cmd = "claude" and nothing else -> bare `claude -p`, and a
+        # non-interactive claude with no permission flag denied every tool call of a scheduled report
+        for cmd in ('claude', r'C:\Users\me\AppData\Roaming\npm\claude.cmd', '/usr/local/bin/claude'):
+            with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), \
+                 mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+                with self.assertRaises(RuntimeError): run_cli({'cmd': cmd}, 'hi', lambda *a: None)
+            self.assertIn('--dangerously-skip-permissions', pop.call_args[0][0]); self.assertIn('-p', pop.call_args[0][0])
+        self.assertEqual(preset_args('codex.exe')[0], 'exec'); self.assertEqual(preset_args('mycli'), [])
+        with mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+            with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), self.assertRaises(RuntimeError):
+                run_cli({'cmd': 'mycli'}, 'hi', lambda *a: None)
+        self.assertEqual(pop.call_args[0][0], ['X', '-p'])                       # an unknown CLI keeps the old bare pipe
+        with mock.patch('taskuary.agents._resolve_cmd', side_effect=lambda n: ['X']):   # and the watched session gets the same trust, minus the pipe flags
+            self.assertEqual(agent_argv({'cmd': 'claude'}), ['X', '--dangerously-skip-permissions', '--verbose'])
+            self.assertEqual(agent_argv({'cmd': 'claude', 'args': ['-p', '--foo']}), ['X', '--foo'])   # args the owner wrote stay theirs
+
     def test_run_cli_names_a_lapsed_login_and_says_how_to_fix_it(self):
         from unittest import mock
         import sys
@@ -500,8 +521,10 @@ class CoreTests(unittest.TestCase):
         with mock.patch('taskuary.agents._resolve_cmd', side_effect=lambda n: [n]):
             self.assertEqual(agent_argv({'cmd': 'claude', 'args': ['-p', '--output-format', 'json']}, 'opus'),
                              ['claude', '--model', 'opus'])
+            # no args at all -> the known preset stands in (minus its `exec` pipe subcommand), so a
+            # cmd-only profile is as unattended in a session as it is headless
             self.assertEqual(agent_argv({'cmd': 'codex', 'model_arg': '-m', 'model': 'gpt-5-codex'}),
-                             ['codex', '-m', 'gpt-5-codex'])
+                             ['codex', '--dangerously-bypass-approvals-and-sandbox', '-m', 'gpt-5-codex'])
             self.assertEqual(agent_argv({'cmd': 'gemini', 'interactive_args': ['chat']}), ['gemini', 'chat'])
 
     def test_wrap_up_reads_the_screen_and_asks_the_agent_nothing(self):

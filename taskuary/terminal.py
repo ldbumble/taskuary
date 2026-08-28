@@ -374,8 +374,9 @@ def agent_argv(profile: dict, model: str = None) -> list:
     ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
     `interactive_args` in the profile replaces the lot, for CLIs that need a subcommand."""
     from .agents import _resolve_cmd
+    from .clis import preset_args
     argv = _resolve_cmd(profile.get('cmd') or 'claude')
-    argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args'))
+    argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args') or preset_args(profile.get('cmd') or 'claude'))
     model = model or profile.get('model')
     return _codex_windows_auto(argv + ([profile.get('model_arg') or '--model', str(model)] if model else []))
 

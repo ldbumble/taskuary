@@ -9,6 +9,7 @@ from datetime import datetime
 from loguru import logger
 
 from .store import task_ref
+from .clis import preset_args
 
 
 def _git(cwd, *args):
@@ -151,7 +152,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     render as readable tool/text lines; any other CLI's plain stdout streams as-is.
     Returns (result, session_id, diff)."""
     name = profile.get('cmd', 'claude')
-    cmd = _resolve_cmd(name) + list(profile.get('args') or ['-p'])
+    cmd = _resolve_cmd(name) + list(profile.get('args') or preset_args(name) or ['-p'])
     # which model works it: profile default, or a per-run override from the UI. The flag
     # name is configurable because every CLI spells it differently (claude/codex: --model).
     if profile.get('model'): cmd += [profile.get('model_arg') or '--model', str(profile['model'])]

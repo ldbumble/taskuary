@@ -20,10 +20,13 @@ DAYS = 1                 # the window the synthesis reads: all of yesterday, plu
 # A brief that invents work waiting on you is worse than no brief, so a ref must arrive
 # wearing the title the data gave it, and an empty section must stay empty.
 PROMPT = (
-    'Write what the owner, half awake, should hold in mind TODAY, under 400 words, grouped into '
+    'Write what the owner, half awake, should hold in mind TODAY, under 450 words, grouped into '
     'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
     '(one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these '
     'sections in this order, and OMIT any with nothing to say:\n'
+    '\U0001f4c5 Today\'s meetings — one bullet per meeting from MEETINGS TODAY, in time order: the time, '
+    'the title, who is in it (first names, never the owner), and what it is about in a few words when the '
+    'invite says (the "about:" text) - never guess a purpose from a title alone\n'
     '\U0001f3f7\ufe0f By the tags — the window in numbers: one bullet per tag from THE WINDOW BY TAG '
     '(coding, to do, review, info, automated, promo, ignored…) with its count and a few words on what '
     'that bucket was; then one bullet for open tasks by kind\n'
@@ -44,6 +47,27 @@ PROMPT = (
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
+    (
+    'Write what the owner, half awake, should hold in mind TODAY, under 400 words, grouped into '
+    'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
+    '(one fact per bullet, tasks named by their TQ-refs), then a blank line. Use exactly these '
+    'sections in this order, and OMIT any with nothing to say:\n'
+    '\U0001f3f7️ By the tags — the window in numbers: one bullet per tag from THE WINDOW BY TAG '
+    '(coding, to do, review, info, automated, promo, ignored…) with its count and a few words on what '
+    'that bucket was; then one bullet for open tasks by kind\n'
+    '\U0001f680 In flight — what is being worked and who is waiting on whom\n'
+    '⏳ Waiting on you — questions still unanswered, replies still unapproved\n'
+    '\U0001f4ac Info from people — what colleagues told you (the info rows: sender and the gist, one bullet each, '
+    'nothing to do)\n'
+    '\U0001f4cc Keep honoring — verdicts you gave recently that should keep applying\n'
+    '\U0001f4c8 Patterns — heads-ups (a sender getting louder, the same system failing twice)\n'
+    'Every TQ-ref you write must appear in the data, described with the SAME title it has there - '
+    'never restate a task under another subject, and never carry a subject across from one block '
+    'to another. A block whose data reads "(none)" has nothing to say: omit its section entirely '
+    'rather than filling it.\n'
+    'Every TQ-ref keeps the link that follows it in the data, written right after the ref in the '
+    'same bullet, so the reader clicks straight into the task. Lead with what needs the owner NOW.\n'
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.'),
     (
     'Write what the owner, half awake, should hold in mind TODAY, under 350 words, grouped into '
     'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
@@ -110,6 +134,15 @@ def gather(store, days: int = DAYS) -> str:
     far" - run at 07:26 it used to start at yesterday 07:26 and lose yesterday's morning."""
     since = (datetime.now() - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat(sep=' ', timespec='seconds')
     out = []
+    # the day's meetings lead: who the owner will sit with and what each is about (calendar.today
+    # reads every card that can reach a calendar; an unreadable one says so instead of vanishing)
+    try:
+        from . import calendar as cal
+        t = cal.today(store)
+        lines = cal.render_today(t) + [f'  COULD NOT READ: {e}' for e in t.get('errors') or []]
+    except Exception as e:
+        lines = [f'  COULD NOT READ: {str(e)[:160]}']
+    _block(out, "MEETINGS TODAY (in order; 'with' = the other people, 'about' = the invite's own words):", lines)
     tasks = store.list_tasks()
     live = [t for t in tasks if t.get('Status') in ('open', 'in_progress', 'waiting')]
     # waiting-on-you first, then in progress, then open: the order the owner should read in

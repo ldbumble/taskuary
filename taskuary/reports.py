@@ -663,7 +663,11 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     # on_startup is local-first scheduling: the app is a window you open, so "when I open
     # it" is a real schedule. Due exactly once per launch - never on the 10-minute auto-sync,
     # and a cron time it would have missed while closed is not its problem.
-    if cfg.get('on_startup'): return startup
+    # on_startup ALONE is "once per launch, never on the clock"; on_startup beside a schedule is
+    # BOTH - the Morning digest runs when the app opens and again on its interval
+    if cfg.get('on_startup'):
+        if startup: return True
+        if not any(cfg.get(k) for k in ('cron', 'every_minutes', 'daily_at')): return False
     now = datetime.now()
     if not last_polled: return True
     try: last = datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))

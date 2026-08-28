@@ -177,7 +177,7 @@ const untilText = (start, end) => {
   if (m < 60 * 24) return { text: `in ${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`, hot: false };
   return { text: `in ${Math.round(m / 1440)} day${Math.round(m / 1440) === 1 ? "" : "s"}`, hot: false };
 };
-const ComingUp = () => {
+const ComingUp = ({ onPick, picked }) => {
   const [cal, setCal] = useState(null);
   const [tick, setTick] = useState(0);            // re-render every 30 s so the countdowns move
   useEffect(() => {
@@ -201,11 +201,16 @@ const ComingUp = () => {
               <Box sx={{ position: "absolute", left: "6px", top: "-6px", bottom: "-6px", width: "1px", bgcolor: BORDER }} />
               <Box sx={{ position: "absolute", left: "2.5px", top: "11px", width: 8, height: 8, borderRadius: "50%", bgcolor: u.hot ? "#8a3646" : "#8a7a5c", boxShadow: `0 0 0 3.5px ${BG}` }} />
             </Box>
-            <Box sx={{ bgcolor: "#f5f0e4", border: "1px solid #e3d9c2", borderRadius: "8px", px: "11px", py: "6px", minWidth: 0,
-              display: "flex", gap: 0.85, alignItems: "center" }}>
+            {/* a row you can open, like every other row: the panel shows who is in it and what it is about */}
+            <Box onClick={() => onPick?.(e)}
+              sx={{ bgcolor: picked && picked.start === e.start && picked.subject === e.subject ? "#eee7d6" : "#f5f0e4",
+                border: `1px solid ${picked && picked.start === e.start && picked.subject === e.subject ? "#c9b98f" : "#e3d9c2"}`,
+                borderRadius: "8px", px: "11px", py: "6px", minWidth: 0, display: "flex", gap: 0.85, alignItems: "center",
+                cursor: "pointer", transition: "background .15s, border-color .15s", "&:hover": { bgcolor: "#eee7d6", borderColor: "#d8cba5" } }}>
               <EventIcon sx={{ fontSize: 16, color: "#8a7a5c", flexShrink: 0 }} />
               <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12.5, minWidth: 0 }}>{e.subject}</Typography>
-              {e.where && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 200 }}>· {e.where}</Typography>}
+              {!!(e.who || []).length && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 260 }}>· with {e.who.slice(0, 3).map((w) => w.split(" ")[0]).join(", ")}{e.who.length > 3 ? ` +${e.who.length - 3}` : ""}</Typography>}
+              {e.where && !(e.who || []).length && <Typography variant="caption" noWrap sx={{ color: FAINT, maxWidth: 200 }}>· {e.where}</Typography>}
               {e.status === "tentative" && <Typography variant="caption" sx={{ color: FAINT }}>· tentative</Typography>}
               <Box sx={{ flex: 1 }} />
               <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
@@ -218,7 +223,126 @@ const ComingUp = () => {
   );
 };
 
+// A meeting, opened: the right panel's answer to "who is in it and what is it about" - the
+// invite's own words when it has any, the people (never you), where, and the way in.
+const EventPanel = ({ e, onClose }) => {
+  const u = untilText(e.start, e.end);
+  const when = e.all_day ? "all day" : `${fmtTime12(e.start)} – ${fmtTime12(e.end)}`;
+  return (
+    <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 3, overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 80px)" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${BORDER}`, bgcolor: "#f5f0e4" }}>
+        <EventIcon sx={{ fontSize: 18, color: "#8a7a5c" }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 700, color: INK, fontSize: 14.5, lineHeight: 1.25 }} noWrap>{e.subject}</Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>{when}{e.where ? ` · ${e.where}` : ""}{e.status === "tentative" ? " · tentative" : ""}</Typography>
+        </Box>
+        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
+          color: u.hot ? "#fffdfb" : "#6b5f45", bgcolor: u.hot ? "#8a3646" : "#eee7d6", px: 0.8, py: 0.15, borderRadius: 99 }}>{u.text}</Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+      </Box>
+      <Box sx={{ px: 2, py: 1.5, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1.5 }}>
+        <Box>
+          <PanelLabel>Who's in it</PanelLabel>
+          {(e.who || []).length ? (
+            <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}>
+              {e.who.map((w) => (
+                <Box key={w} sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, px: 1, py: 0.35, borderRadius: 99, bgcolor: "#eee7d6", border: "1px solid #ddd2b9", fontSize: 12, color: INK }}>
+                  <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#8a7a5c", color: "#fffdfb", fontSize: 9.5, fontWeight: 800, display: "grid", placeItems: "center" }}>
+                    {w.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
+                  </Box>
+                  {w}{e.organizer === w ? <Typography component="span" variant="caption" sx={{ color: FAINT }}>· organizer</Typography> : null}
+                </Box>
+              ))}
+            </Box>
+          ) : <Typography variant="body2" sx={{ color: FAINT }}>{e.organizer ? `organized by ${e.organizer} — no other attendees listed` : "no attendees listed — just you"}</Typography>}
+        </Box>
+        <Box>
+          <PanelLabel>What it's about</PanelLabel>
+          {e.about ? <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{e.about}</Typography>
+            : <Typography variant="body2" sx={{ color: FAINT }}>The invite says nothing beyond its title{e.subject ? ` — “${e.subject}”` : ""}.</Typography>}
+        </Box>
+        {(e.join || e.link) && (
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {e.join && <Button size="small" variant="contained" disableElevation component="a" href={e.join} target="_blank" rel="noreferrer"
+              sx={{ bgcolor: "#55697a", "&:hover": { bgcolor: "#41525f" } }}>Join the meeting</Button>}
+            {e.link && <Button size="small" variant="outlined" component="a" href={e.link} target="_blank" rel="noreferrer">Open in calendar</Button>}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
+// The day's meetings as one strip above the Morning digest: a track from 7 to 7, each meeting a
+// block at its hour, sliding into place; a pulsing mark for now. The digest's words are below it;
+// this is the shape of the day at a glance.
+const TodayStrip = () => {
+  const [t, setT] = useState(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    api.get("/api/calendar/today").then(({ data }) => alive && setT(data)).catch(() => alive && setT({ events: [] }));
+    const id = setInterval(() => setTick((x) => x + 1), 60000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  if (!t) return null;
+  const evs = (t.events || []).filter((e) => !e.all_day);
+  const allDay = (t.events || []).filter((e) => e.all_day);
+  if (!t.events?.length) return null;
+  const H0 = 7, H1 = 19, span = H1 - H0;
+  const hourOf = (s) => { const d = new Date(String(s).replace(" ", "T")); return d.getHours() + d.getMinutes() / 60; };
+  const now = new Date(); const nowH = now.getHours() + now.getMinutes() / 60;
+  const pct = (h) => `${Math.max(0, Math.min(100, ((h - H0) / span) * 100))}%`;
+  return (
+    <Box data-tick={tick} sx={{ mb: 1.5, p: 1.25, bgcolor: "#f5f0e4", border: "1px solid #e3d9c2", borderRadius: 2,
+      "@keyframes tqSlide": { from: { opacity: 0, transform: "translateY(6px) scaleX(.6)" }, to: { opacity: 1, transform: "none" } },
+      "@keyframes tqPulse": { "0%": { boxShadow: "0 0 0 0 rgba(138,54,70,.45)" }, "100%": { boxShadow: "0 0 0 8px rgba(138,54,70,0)" } } }}>
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.75 }}>
+        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>📅 TODAY'S MEETINGS · {t.events.length}</Typography>
+        {allDay.map((e) => <Typography key={e.subject} variant="caption" sx={{ color: FAINT }}>· all day: {e.subject}</Typography>)}
+      </Box>
+      {/* the track */}
+      <Box sx={{ position: "relative", height: 44, borderTop: "1px solid #ddd2b9", borderBottom: "1px solid #ddd2b9" }}>
+        {Array.from({ length: span + 1 }, (_, i) => H0 + i).map((h) => (
+          <Box key={h} sx={{ position: "absolute", left: pct(h), top: 0, bottom: 0, borderLeft: `1px dotted ${h % 3 === 0 ? "#c9b98f" : "#e6dcc3"}` }}>
+            {h % 3 === 0 && <Typography sx={{ ...mono, fontSize: 8.5, color: FAINT, position: "absolute", top: 46, left: -8 }}>{h > 12 ? `${h - 12}p` : h === 12 ? "12p" : `${h}a`}</Typography>}
+          </Box>
+        ))}
+        {evs.map((e, i) => {
+          const s = hourOf(e.start), en = e.end ? hourOf(e.end) : s + 0.5;
+          const live = nowH >= s && nowH <= en, past = nowH > en;
+          return (
+            <Box key={`${e.start}-${i}`} title={`${e.subject}${e.who?.length ? ` · with ${e.who.join(", ")}` : ""}${e.about ? `\n${e.about}` : ""}`}
+              sx={{ position: "absolute", left: pct(s), width: `calc(${pct(Math.max(en, s + 0.35))} - ${pct(s)})`, top: 8, height: 28, borderRadius: 1,
+                bgcolor: live ? "#8a3646" : past ? "#d9cfb6" : "#8a7a5c", color: live || !past ? "#fffdfb" : "#6b5f45",
+                px: 0.75, display: "flex", alignItems: "center", overflow: "hidden", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
+                transformOrigin: "left center", animation: `tqSlide .5s ease ${i * 0.08}s both`, cursor: "default" }}>
+              {e.subject}
+            </Box>
+          );
+        })}
+        {nowH >= H0 && nowH <= H1 && (
+          <Box sx={{ position: "absolute", left: pct(nowH), top: -4, bottom: -4, width: 2, bgcolor: "#8a3646", borderRadius: 1 }}>
+            <Box sx={{ position: "absolute", top: -5, left: -4, width: 10, height: 10, borderRadius: "50%", bgcolor: "#8a3646", animation: "tqPulse 1.6s ease-out infinite" }} />
+          </Box>
+        )}
+      </Box>
+      <Box sx={{ mt: 2.25, display: "flex", flexDirection: "column", gap: 0.35 }}>
+        {evs.map((e, i) => (
+          <Typography key={`${e.start}-l${i}`} variant="caption" sx={{ color: INK, display: "flex", gap: 0.75, alignItems: "baseline", animation: `tqSlide .4s ease ${0.3 + i * 0.06}s both` }}>
+            <Box component="span" sx={{ ...mono, color: "#6b5f45", fontSize: 10.5, minWidth: 62 }}>{fmtTime12(e.start)}</Box>
+            <Box component="span" sx={{ fontWeight: 600 }}>{e.subject}</Box>
+            {!!(e.who || []).length && <Box component="span" sx={{ color: DIM }}>with {e.who.slice(0, 4).map((w) => w.split(" ")[0]).join(", ")}{e.who.length > 4 ? ` +${e.who.length - 4}` : ""}</Box>}
+            {e.about && <Box component="span" sx={{ color: FAINT }} noWrap>— {e.about.length > 90 ? `${e.about.slice(0, 90)}…` : e.about}</Box>}
+          </Typography>
+        ))}
+      </Box>
+    </Box>
+  );
+};
+
 export default function FeedView({ onOpenTask, onChanged }) {
+  const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
   const [cat, setCat] = useState("");                // "" everything | messages | code | reports
@@ -415,6 +539,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
   const drill = async (row) => {
+    setCalSel(null);   // a message row takes the panel back from an opened meeting
     setSel(row); setDetail(null); setEditText(null); setSendErr(""); setPanelLock(false); want.current = row.MessageId;
     // no task = report / filed / ignored: fetch the message itself so the panel shows the
     // WHOLE body (the feed row only carries a truncated preview)
@@ -625,7 +750,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
           ) : Object.entries(days).map(([day, items], di) => (
             <Box key={day} sx={{ mt: 1 }}>
               <DayHeader label={fmtDay(day)} />
-              {di === 0 && !cat && !pick && <ComingUp onOpen={() => {}} />}
+              {di === 0 && !cat && !pick && <ComingUp picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
               <Box>
                 {items.map((r, i) => (
                   <React.Fragment key={r.MessageId}>
@@ -724,16 +849,18 @@ export default function FeedView({ onOpenTask, onChanged }) {
       {/* ── review panel: pinned to the top of whatever is currently visible. The column
           MUST stretch the full grid height - sticky needs that track to slide in (a
           content-height column leaves sticky stranded at the page top). ── */}
-      {sel && (
+      {(sel || calSel) && (
         // pushed DOWN so the panel's top edge lines up with the first timeline card (past
         // the day-group margin + day header + row margin ≈ 44px), instead of floating
         // above the list it annotates. Sticky still takes over once you scroll.
         <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch", mt: "34px" }}>
           <Box sx={{ position: "sticky", top: 62 }}>
-            <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
-              decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
-              onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
-              sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
+            {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} /> : (
+              <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
+                decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
+                onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
+                sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
+            )}
           </Box>
         </Box>
       )}
@@ -880,6 +1007,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   <Box component="b" sx={{ color: DIM }}>Why it's here:</Box> {sel.RouteReason}
                 </Typography>
               )}
+              {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayStrip />}
               <PanelLabel>{(detail?.messages || []).length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}</PanelLabel>
               <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
 

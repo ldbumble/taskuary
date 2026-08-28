@@ -885,6 +885,13 @@ def answer_to_agent(tid: int, body: dict):
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
     return {'ok': True}
 
+@app.get('/api/calendar/today')
+def calendar_today():
+    """Today's meetings with who is in them and what they are about - the digest panel's strip."""
+    from . import calendar as cal
+    try: return cal.today(store)
+    except Exception as e: return {'date': None, 'now': None, 'events': [], 'tz': None, 'errors': [str(e)[:200]]}
+
 @app.get('/api/calendar/upcoming')
 def calendar_upcoming(hours: int = 72, force: bool = False):
     """The Timeline's 'coming up' band: the owner's next events, cached five minutes."""

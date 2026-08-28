@@ -404,7 +404,7 @@ class SQLiteStore:
                 from .digest import PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Morning digest', 'template', 1,
-                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'every_minutes': 180,
+                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'every_minutes': 180, 'on_startup': True,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
             # ...and its sibling: the weekly 'what should you automate next' brief (toil.py) -

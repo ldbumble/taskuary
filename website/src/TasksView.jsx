@@ -18,7 +18,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
@@ -443,7 +443,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Box>
                 ) : term ? (
                   <>
+                    {/* said and did, above the session: the agent's own list beside the files it wrote */}
+                    <WorkStrip taskId={selected} live={!!term.alive} />
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+                      {term.alive && term.work && (
+                        <WorkLine work={term.work} who={term.agent || term.label} waiting={isWaiting(term)} startedAt={term.started} />
+                      )}
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
                       </Typography>

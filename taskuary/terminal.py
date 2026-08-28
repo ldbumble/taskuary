@@ -115,9 +115,10 @@ class Term:
         self.taps = []                                    # plain callables, for server-side readers
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
-        from . import blackboard as _bb
+        from . import blackboard as _bb, witness as _w
         self.dirty0 = _bb.dirty(cwd) if task_id else set()
         self._files = ([], 0.0)
+        self.witness, self.ext_id = _w.Witness(), ''     # what the agent said and did (hooks / rollout), and the CLI's own session id once a hook names it
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols)
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
@@ -315,10 +316,12 @@ class Term:
 
     def info(self, tail=0):
         # module functions, not methods: the tests' fakes (and any other stand-in) need only tail() and idle()
+        files, w = self.files(), getattr(self, 'witness', None)      # fakes in tests carry no witness
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase_of(self.tail(4)), 'waiting': waiting_of(self),
-                'cmd': ' '.join(self.argv), 'files': self.files(),
+                'cmd': ' '.join(self.argv), 'files': files,
+                'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None,
                 **({'tail': self.tail(tail)} if tail else {})}
 
 
@@ -435,8 +438,18 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                      os.path.basename(str(a)).lower() in ('cmd', 'cmd.exe') for a in argv):
         extra = None
     if extra: argv = list(argv) + extra
+    # the agent tells the Board what it is doing: Claude through its own hooks in this checkout
+    # (hooks.py), Codex through the rollout it writes as it works (witness.RolloutTail)
+    if agent and task_id:
+        from . import hooks as _hooks
+        try:
+            if _hooks.wanted(store, profile): _hooks.install(cwd)
+        except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    if agent and task_id and 'codex' in os.path.basename(str(argv[0])).lower():
+        from .witness import RolloutTail
+        RolloutTail(t).start()
     if seed:
         if extra: t.seeded = seed        # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified

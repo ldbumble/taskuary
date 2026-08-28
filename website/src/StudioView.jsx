@@ -9,6 +9,7 @@ import api from "./api";
 import { pollWhileVisible } from "./visible.js";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, ROLES, mono } from "./theme.jsx";
 import { cliName, FileChips } from "./BoardView.jsx";
+import { WorkLine, isWaiting } from "./ui.jsx";
 
 // Logical drawing space; the SVG scales it, so every number below is layout, not pixels.
 const W = 1200, H = 640, TW = 40, TH = 22;
@@ -392,7 +393,10 @@ export default function StudioView({ onOpenTask }) {
                     title={`${t.Waiting} queued prompt${t.Waiting === 1 ? "" : "s"} waiting in the funnel`}>✎ {t.Waiting}</Typography>}
                 </Box>
                 <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600, color: INK, pt: 0.3 }}>{t.Title}</Typography>
-                {/* the same git-attributed list the Board card shows: what THIS agent has touched so far */}
+                {/* what the agent holds right now (its hook / rollout), then the same git-attributed
+                    file list the Board card shows */}
+                {live[t.TaskId]?.work && <Box sx={{ pt: 0.5 }}><WorkLine work={live[t.TaskId].work} who={cliName(live[t.TaskId].AgentName || "agent")}
+                  waiting={live[t.TaskId].kind === "session" && isWaiting(live[t.TaskId])} asking={live[t.TaskId].asking} startedAt={live[t.TaskId].StartedAt} /></Box>}
                 {live[t.TaskId]?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={live[t.TaskId].files} /></Box>}
                 {on && (
                   <Typography onClick={(e) => { e.stopPropagation(); onOpenTask(t.TaskId); }}

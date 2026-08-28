@@ -809,7 +809,8 @@ def live_runs(lines: int = 3):
                         'waiting': (w := t['waiting'] if t.get('waiting') is not None else t['idle'] >= hub_term.IDLE_WAITING), 'phase': t.get('phase'),
                         'asking': bool(w) and waitroom.looks_like_question(t.get('tail') or []),
                         'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
-                        'files': t.get('files') or [], 'tail': t.get('tail') or []})
+                        'files': t.get('files') or [], 'tail': t.get('tail') or [],
+                        'work': t.get('work')})            # said and did (witness.py) - the card's pane
     return {'data': out}
 
 @app.get('/api/runs/{run_id}')
@@ -844,6 +845,43 @@ def task_proof(tid: int):
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     from . import proof
     return proof.gather(store, tid)
+
+@app.get('/api/tasks/{tid}/work')
+def task_work(tid: int, diff: bool = True):
+    """Said and did, for the task page: the agent's own list and tool in hand (witness), the files
+    it wrote with git's +/- per file (proof.review), and where the task came from - the two
+    halves side by side so a disagreement is seen BEFORE the review, not after."""
+    t = store.get_task(tid)
+    if not t: raise HTTPException(404, 'task not found')
+    from . import proof
+    sess = hub_term.session_for(tid)
+    work = sess.witness.snapshot(sess.files(), sess.cwd, (sess.tail(1) or [''])[-1]) if sess else None
+    rev = {}
+    if diff:
+        try: rev = proof.review(store, tid) or {}
+        except Exception as e: logger.debug(f'work review for {tid}: {e}')
+    by_path = {f.get('path'): f for f in (rev.get('files') or [])}
+    files = [{**f, 'added': by_path.get(f['path'], {}).get('added'), 'removed': by_path.get(f['path'], {}).get('removed')} for f in (work or {}).get('files', [])]
+    for p, f in by_path.items():                        # git saw it, the witness did not: still DID
+        if p not in {x['path'] for x in files}: files.append({'path': p, 'n': 0, 'last': None, 'stray': False, 'late': False, 'added': f.get('added'), 'removed': f.get('removed')})
+    d = store.task_detail(tid); m0 = (d.get('messages') or [None])[0] or {}
+    approved = next((r for r in d.get('reviews') or [] if r.get('Status') in ('approved', 'sent')), None)
+    prov = {'from': ' · '.join(x for x in (m0.get('Channel'), m0.get('FromName') or m0.get('FromEmail')) if x) or t.get('Source') or '',
+            'kind': t.get('Kind') or '', 'by': (sess.agent if sess else '') or t.get('RunAgent') or '',
+            'approved': (approved or {}).get('UpdatedAt') or (approved or {}).get('CreatedAt'), 'status': t.get('Status')}
+    return {'work': work, 'files': files, 'prov': prov, 'diffstat': {'added': rev.get('added'), 'removed': rev.get('removed')},
+            'session': {'sid': sess.sid, 'alive': sess.alive, 'agent': sess.agent, 'started': sess.started, 'cwd': sess.cwd} if sess else None}
+
+@app.post('/api/hooks/claude')
+async def claude_hook(request: Request):
+    """Claude Code's hook fired in a checkout a session of ours works in (hooks.py wires it): the
+    event's JSON comes in on the body. Always 200 and quiet - a hook must never trouble the agent."""
+    from . import hooks
+    try: payload = json.loads((await request.body()) or b'{}')
+    except ValueError: return {'bound': False}
+    try: return hooks.receive(payload if isinstance(payload, dict) else {})
+    except Exception as e:
+        logger.debug(f'claude hook ignored: {e}'); return {'bound': False}
 
 @app.get('/api/tasks/{tid}/diff')
 def task_diff(tid: int, scope: str = 'task'):

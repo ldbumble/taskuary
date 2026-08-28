@@ -194,6 +194,8 @@ const useCalToday = () => {
   return tick >= 0 ? (cal?.events || []) : [];
 };
 const meetingEnded = (e) => !e.all_day && e.end && tsMs(e.end) < Date.now();
+// the resting opacity of a row by age: full for three hours, then a slow slide to 60% by a day, never lower
+const ageOpacity = (s) => { const h = (Date.now() - tsMs(s)) / 36e5; return h <= 3 ? 1 : Math.max(0.6, 1 - 0.4 * (h - 3) / 21); };
 
 // One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it
 // after the same beat a message takes, click opens it now; the panel shows who is in it and why.
@@ -364,6 +366,18 @@ const TodayStrip = () => {
 export default function FeedView({ onOpenTask, onChanged }) {
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const calEvents = useCalToday();
+  // older rows rest a little quieter (never below 60%, and nothing under three hours fades at all);
+  // scrolling or hovering brings every row back to full - the fade is a resting state, not a filter
+  const listRef = useRef(null);
+  useEffect(() => {
+    let tm = 0;
+    const wake = () => {
+      const el = listRef.current; if (!el) return;
+      el.dataset.live = "1"; clearTimeout(tm); tm = setTimeout(() => { if (listRef.current) listRef.current.dataset.live = "0"; }, 2500);
+    };
+    window.addEventListener("scroll", wake, { passive: true }); window.addEventListener("wheel", wake, { passive: true });
+    return () => { clearTimeout(tm); window.removeEventListener("scroll", wake); window.removeEventListener("wheel", wake); };
+  }, []);
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
   const [cat, setCat] = useState("");                // "" everything | messages | code | reports
@@ -773,7 +787,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       <FunnelBar onOpenTask={onOpenTask} />
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
-      <Box sx={{ minWidth: 0 }}>
+      <Box ref={listRef} sx={{ minWidth: 0, "&[data-live='1'] .tqRow, & .tqRow:hover": { opacity: "1 !important" } }}>
         {/* syncing = the TIMELINE is loading, so the timeline says so: rows dim and a
             spinner sits on the list itself - the old 3px bar over just the left column
             read as a broken artifact, not a state */}
@@ -800,8 +814,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     {!cat && !pick && meetingsAt(day, items, i).map((e, j) => (
                       <MeetingRow key={`m-${e.start}-${j}`} e={e} fade picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                     ))}
-                    <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                      alignItems: "stretch", mb: "4px",
+                    <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
+                      alignItems: "stretch", mb: "4px", opacity: ageOpacity(r.SentAt), transition: "opacity .9s ease",
                       ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 45, 400)}ms` }) }}>
                       {/* time sits OUTSIDE the card, in its own gutter - wide enough that
                           "12:40 PM" can never wrap onto a second line */}

@@ -1083,6 +1083,194 @@ const _elapsed = (since) => {
   const sec = Math.max(0, (Date.now() - new Date(String(since).replace(" ", "T"))) / 1000);
   return sec < 90 ? `${Math.round(sec)}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${(sec / 3600).toFixed(1)}h`;
 };
+/* ── Said and did: what the agent HOLDS, in the terminal's own colours ─────────────────────
+   The Board pane used to show two raw trace lines - nobody read them. This is the same dark pane
+   with lines a person checks: the tool in hand (agent · tool · file · seconds), the agent's own
+   list with the current item lit, the files it has written hottest first. Fed by /api/runs/live
+   -> session.work (taskuary/witness.py: Claude hooks, Codex rollout, git). A pane always says
+   which rung it stands on: tool line -> last screen line -> files only. Red is spent on exactly
+   one thing: a file written after the agent said done. ── */
+const fileName = (p) => String(p || "").split(/[\\/]/).pop();
+const secsAgo = (at) => { if (!at) return ""; const s = Math.max(0, (Date.now() - new Date(String(at).replace(" ", "T"))) / 1000); return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`; };
+const isHot = (at) => at && Date.now() - new Date(String(at).replace(" ", "T")) < 20000;
+// up to `max` list lines: everything when it fits; otherwise the current item with what is around it
+const todoWindow = (todos, max = 4) => {
+  if (todos.length <= max) return { rows: todos, hidden: 0 };
+  const i = Math.max(0, todos.findIndex((t) => t.status === "now"));
+  const start = Math.max(0, Math.min(i - 1, todos.length - max));
+  return { rows: todos.slice(start, start + max), hidden: todos.length - max, before: start };
+};
+const TERM_MARK = { done: "✓", now: "▸", todo: "○" };
+const TERM_TONE = { done: CATPPUCCIN.faint, now: CATPPUCCIN.yellow, todo: CATPPUCCIN.faint };
+
+// the one header line, shared by the pane and the compact WorkLine
+const workHead = (work, who, waiting, asking, startedAt) => {
+  if (waiting) return { tone: CATPPUCCIN.yellow, mark: "⏸", text: `${who} ${asking ? "asked you something" : "stopped - waiting on you"}`, tool: "", t: "" };
+  if (work?.tool?.name) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `${work.tool.name} ${fileName(work.tool.target) || work.tool.target || ""}`.trim(), t: secsAgo(work.tool.at), blink: true };
+  if (work?.last_line) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `last line: ${work.last_line}`, t: startedAt ? secsAgo(startedAt) : "", blink: true, muted: true };
+  return { tone: CATPPUCCIN.cyan, mark: "▮", text: `${who} working`, tool: "", t: startedAt ? secsAgo(startedAt) : "", blink: true };
+};
+
+export const WorkPane = ({ run, onOpen }) => {
+  const work = run?.work || {}, who = run?.AgentName || run?.agent || "agent";
+  const waiting = run?.kind === "session" && (run.asking || isWaiting(run));
+  const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started);
+  const todos = work.todos || [];
+  const files = (work.files?.length ? work.files : (run?.files || []).map((p) => ({ path: p, n: 0 }))).slice(0, 4);
+  const more = Math.max(0, (work.files?.length || run?.files?.length || 0) - files.length);
+  const { rows, hidden, before } = todoWindow(todos);
+  const flag = (work.flags || []).find((f) => f.level === "check");
+  const fin = !!work.done_at && !work.tool;
+  return (
+    <Box onClick={onOpen} sx={{ mt: 0.6, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 0.85, py: 0.55,
+      ...mono, fontSize: 9.5, lineHeight: 1.6, color: CATPPUCCIN.dim, cursor: onOpen ? "pointer" : "default" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, whiteSpace: "nowrap", overflow: "hidden", color: h.tone, fontWeight: 600 }}>
+        <Box component="span" sx={h.blink && !waiting ? { "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" } : {}}>{h.mark}</Box>
+        <span>{h.text}</span>
+        {h.tool && <Box component="span" noWrap sx={{ color: h.muted ? CATPPUCCIN.faint : CATPPUCCIN.blue, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.tool}</Box>}
+        <Box sx={{ flex: 1 }} />
+        {h.t && <Box component="span" sx={{ color: CATPPUCCIN.faint, fontWeight: 400 }}>{h.t}</Box>}
+      </Box>
+      {!!todos.length && (
+        <Box sx={{ borderTop: `1px dashed ${CATPPUCCIN.surface}`, mt: 0.4, pt: 0.35 }}>
+          {fin ? (
+            <Box sx={{ color: CATPPUCCIN.green }}>✓ {work.n_done} of {work.n_todos} done{work.said ? <Box component="span" sx={{ color: CATPPUCCIN.faint }}> · {work.said.slice(0, 60)}</Box> : null}</Box>
+          ) : (
+            <>
+              {before > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>✓ {before} done</Box>}
+              {rows.map((t, i) => (
+                <Box key={i} sx={{ display: "grid", gridTemplateColumns: "12px 1fr auto", gap: "0 6px", whiteSpace: "nowrap", overflow: "hidden",
+                  color: t.status === "now" ? CATPPUCCIN.fg : CATPPUCCIN.faint, opacity: t.status === "todo" ? 0.8 : 1 }}>
+                  <Box component="span" sx={{ textAlign: "center", color: t.status === "done" ? CATPPUCCIN.green : TERM_TONE[t.status] }}>{TERM_MARK[t.status] || "○"}</Box>
+                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", color: t.status === "now" ? CATPPUCCIN.yellow : "inherit" }}>{t.text}</Box>
+                  <Box component="span" sx={{ color: CATPPUCCIN.faint, fontSize: 9 }}>{t.status === "now" ? `${work.n_done + 1}/${work.n_todos}` : ""}</Box>
+                </Box>
+              ))}
+              {hidden - (before || 0) > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>+{hidden - (before || 0)} more</Box>}
+            </>
+          )}
+        </Box>
+      )}
+      {!!files.length && (
+        <Box sx={{ borderTop: `1px dashed ${CATPPUCCIN.surface}`, mt: 0.4, pt: 0.4, display: "flex", flexWrap: "wrap", gap: "3px 4px", alignItems: "center" }}>
+          <Box component="span" sx={{ color: CATPPUCCIN.faint, mr: 0.25 }}>{fin ? "touched" : "holding"}</Box>
+          {files.map((f) => (
+            <Tooltip key={f.path} title={f.path} arrow>
+              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.6, borderRadius: 0.75, lineHeight: 1.5,
+                bgcolor: isHot(f.last) ? "#2a2f4a" : CATPPUCCIN.surface, color: f.late ? CATPPUCCIN.peach : isHot(f.last) ? CATPPUCCIN.blue : CATPPUCCIN.dim }}>
+                {isHot(f.last) && <Box component="span" sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: CATPPUCCIN.blue, "@keyframes tqPulse": { "50%": { opacity: 0.25 } }, animation: "tqPulse 1.4s ease-in-out infinite" }} />}
+                {fileName(f.path)}{f.n > 0 && <Box component="span" sx={{ color: CATPPUCCIN.faint }}>×{f.n}</Box>}
+              </Box>
+            </Tooltip>
+          ))}
+          {more > 0 && <Box component="span" sx={{ color: CATPPUCCIN.faint }}>+{more}</Box>}
+        </Box>
+      )}
+      {flag && <Box sx={{ color: CATPPUCCIN.red, whiteSpace: "normal", lineHeight: 1.45, mt: 0.35 }}>✗ {flag.text}</Box>}
+    </Box>
+  );
+};
+
+// one line, for a header: ● agent · Edit server.py · 4s  |  ● agent · last line: "…"
+export const WorkLine = ({ work, who = "agent", waiting = false, asking = false, startedAt }) => {
+  const h = workHead(work, who, waiting, asking, startedAt);
+  if (!h.tool && !waiting) return null;
+  return (
+    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, minWidth: 0, maxWidth: "100%", ...mono, fontSize: 10.5 }}>
+      <Box component="span" sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, bgcolor: waiting ? ROLES.you.solid : ROLES.working.solid,
+        ...(waiting ? {} : { "@keyframes tqPulse2": { "50%": { opacity: 0.25 } }, animation: "tqPulse2 1.4s ease-in-out infinite" }) }} />
+      <Box component="span" sx={{ fontWeight: 700, color: waiting ? ROLES.you.ink : INK, whiteSpace: "nowrap" }}>{waiting ? h.text : who}</Box>
+      {h.tool && <Box component="span" noWrap sx={{ px: 0.6, borderRadius: 0.75, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0,
+        bgcolor: h.muted ? ROLES.muted.tint : ROLES.working.tint, color: h.muted ? ROLES.muted.ink : ROLES.working.ink }}>{h.tool}</Box>}
+      {h.t && <Box component="span" sx={{ color: FAINT, flexShrink: 0 }}>{h.t}</Box>}
+    </Box>
+  );
+};
+
+/* The task page's strip: the agent's own list beside the files it wrote, with git's +/- per file,
+   reconciled in plain sentences (taskuary/witness.py decides "late" and "stray"; nothing is
+   inferred). Provenance pills say where the task came from and who worked it - facts the audit
+   chain already held and the card never showed. Polls only while the session is alive. */
+const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 700, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
+const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+export const WorkStrip = ({ taskId, live }) => {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    if (!taskId) return undefined;
+    let alive = true;
+    const load = async (diff) => { try { const { data } = await api.get(`/api/tasks/${taskId}/work`, { params: { diff } }); if (alive) setD(data); } catch { /* no session yet */ } };
+    load(true);
+    // the witness is cheap and polled; git's per-file diff is not, so it refreshes only when the session ends
+    const id = live ? setInterval(() => load(false), 5000) : 0;
+    return () => { alive = false; clearInterval(id); };
+  }, [taskId, live]);
+  const w = d?.work;
+  if (!d || (!w && !(d.files || []).length)) return null;
+  const todos = w?.todos || [], files = (d.files || []).slice(0, 12);
+  const tone = { check: "you", note: "info", ok: "done" };
+  return (
+    <Box sx={{ mb: 1, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden" }}>
+      <Box sx={{ px: 1.5, py: 0.75, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", borderBottom: `1px solid ${BORDER}` }}>
+        {d.prov?.from && <Chip size="small" label={`from: ${d.prov.from}`} sx={pillSx("muted")} />}
+        {d.prov?.kind && <Chip size="small" label={`kind: ${d.prov.kind}`} sx={pillSx("working")} />}
+        {d.prov?.by && <Chip size="small" label={`by: ${d.prov.by}`} sx={pillSx("working")} />}
+        {d.prov?.approved && <Chip size="small" label={`approved by you · ${hhmm(d.prov.approved)}`} sx={pillSx("info")} />}
+        {w?.done_at && <Chip size="small" label={`agent said done · ${hhmm(w.done_at)}`} sx={pillSx("done")} />}
+        <Box sx={{ flex: 1 }} />
+        {w && <WorkLine work={w} who={d.session?.agent || d.prov?.by || "agent"} waiting={false} startedAt={d.session?.started} />}
+      </Box>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+        <Box sx={{ px: 1.5, py: 1, borderRight: { md: `1px solid ${BORDER}` } }}>
+          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
+            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>said it would</Typography>
+            <Typography variant="caption" sx={{ color: DIM }}>{todos.length ? `the agent's own list · ${w.n_done} of ${w.n_todos}` : w?.source ? "no list reported by this agent" : "no signal from this CLI - files only"}</Typography>
+          </Box>
+          {todos.map((t, i) => (
+            <Box key={i} sx={{ display: "flex", gap: 1, alignItems: "flex-start", py: 0.35, borderBottom: i < todos.length - 1 ? `1px dashed ${BORDER}` : 0, color: t.status === "todo" ? FAINT : INK, fontSize: 12.5 }}>
+              <Box sx={{ ...mono, fontSize: 10, width: 15, height: 15, borderRadius: "50%", display: "grid", placeItems: "center", flex: "none", mt: "2px",
+                bgcolor: t.status === "done" ? ROLES.done.solid : t.status === "now" ? ROLES.working.solid : "transparent", color: t.status === "todo" ? FAINT : "#fff",
+                border: t.status === "todo" ? `1.5px solid ${BORDER}` : 0 }}>{t.status === "done" ? "✓" : t.status === "now" ? "▸" : ""}</Box>
+              <span>{t.text}</span>
+            </Box>
+          ))}
+          {!todos.length && w?.said && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>last said: “{w.said.slice(0, 200)}”</Typography>}
+        </Box>
+        <Box sx={{ px: 1.5, py: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
+            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>touched</Typography>
+            <Typography variant="caption" sx={{ color: DIM }}>{files.length} file{files.length === 1 ? "" : "s"}{d.diffstat?.added != null ? ` · +${d.diffstat.added} −${d.diffstat.removed}` : ""}</Typography>
+          </Box>
+          {files.map((f) => {
+            const top = Math.max(1, ...files.map((x) => x.n || 1));
+            return (
+              <Box key={f.path} title={f.path} sx={{ display: "grid", gridTemplateColumns: "1fr auto auto 64px", gap: 1, alignItems: "center", py: 0.35, borderBottom: `1px dashed ${BORDER}`,
+                "&:last-of-type": { borderBottom: 0 }, color: f.stray ? ROLES.info.ink : INK, opacity: f.late || isHot(f.last) || f.n > 0 ? 1 : 0.7 }}>
+                <Typography noWrap sx={{ ...mono, fontSize: 11.5 }}>{f.path}</Typography>
+                <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, fontVariantNumeric: "tabular-nums" }}>{f.n ? `×${f.n}` : ""}</Typography>
+                <Typography sx={{ ...mono, fontSize: 10.5, color: f.late ? ROLES.you.ink : FAINT, fontVariantNumeric: "tabular-nums" }}>
+                  {f.added != null ? <><span style={{ color: ROLES.done.solid }}>+{f.added}</span> <span style={{ color: ROLES.you.solid }}>−{f.removed}</span></> : hhmm(f.last)}
+                </Typography>
+                <Box sx={{ height: 4, borderRadius: 2, bgcolor: PANEL2 }}><Box sx={{ height: "100%", borderRadius: 2, width: `${Math.round(100 * (f.n || 0.3) / top)}%`, bgcolor: f.late ? ROLES.you.solid : ROLES.working.solid, opacity: isHot(f.last) ? 1 : 0.7 }} /></Box>
+              </Box>
+            );
+          })}
+          {!files.length && <Typography variant="caption" sx={{ color: FAINT }}>nothing written yet</Typography>}
+        </Box>
+      </Box>
+      {!!(w?.flags || []).length && (
+        <Box sx={{ px: 1.5, py: 0.75, borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 0.4 }}>
+          {w.flags.map((f, i) => (
+            <Box key={i} sx={{ display: "flex", gap: 1, alignItems: "flex-start", fontSize: 12 }}>
+              <Chip size="small" label={f.level} sx={{ ...pillSx(tone[f.level] || "info"), mt: "1px" }} />
+              <span>{f.text}</span>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
 export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
   const waiting = run ? (run.kind === "session" && (run.asking || isWaiting(run))) : false;
   const tail = (run?.tail || []).slice(-lines);

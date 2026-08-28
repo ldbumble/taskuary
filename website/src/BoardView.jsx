@@ -14,7 +14,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
 import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent, WorkPane } from "./ui.jsx";
 
 // "coder · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
@@ -68,6 +68,9 @@ export const FileChips = ({ files }) => (files || []).length === 0 ? null : (
 
 const LiveTail = ({ run }) => {
   const waiting = run.kind === "session" && isWaiting(run);
+  // a session reports what the agent HOLDS (ui.WorkPane); the raw-tail pane below stays only for
+  // a run with no witness at all
+  if (run.work) return <WorkPane run={run} />;
   return (
   <Box sx={{ mt: 0.6, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 0.85, py: 0.5 }}>
     <FileChips files={run.files} />

@@ -158,6 +158,18 @@ def wa_test(store, c) -> str:
     return f"paired as {st.get('me') or 'your account'} - chats flow in on the next sync"
 
 
+def wa_status(c) -> dict:
+    """The bridge's state, with the pairing QR drawn as an SVG the card can show. Pairing used to
+    mean reading a QR off the bridge's own terminal or typing a phone number into a chat; WhatsApp
+    rotates the QR every ~20s, so the card polls this and redraws - nobody relays anything."""
+    st = _wa(c, '/status')
+    out = {'connected': bool(st.get('connected')), 'me': st.get('me') or '', 'pairing_code': st.get('pairingCode') or '', 'qr_svg': ''}
+    if st.get('qr') and not out['connected']:
+        import segno
+        out['qr_svg'] = segno.make(st['qr'], error='m').svg_data_uri(scale=5, border=2, dark='#1e1e2e', light='#ffffff')
+    return out
+
+
 def wa_chats(c) -> list:
     """The chats the bridge has seen since it started - one row per JID, newest first. This is
     how the owner finds the JID of "only this group": there is no directory to browse, the JID

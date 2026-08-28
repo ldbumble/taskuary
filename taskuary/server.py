@@ -1139,6 +1139,15 @@ def connector_test(cid: int):
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
 
+@app.get('/api/connectors/{cid}/wa/status')
+def wa_status(cid: int):
+    """Paired or not - and the pairing QR as an SVG for the card to draw (messengers.wa_status)."""
+    from .messengers import wa_status as _status
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    try: return _status(c)
+    except RuntimeError as e: return {'connected': False, 'bridge': False, 'detail': str(e)}   # bridge down is a state, not a 500
+
 @app.get('/api/connectors/{cid}/wa/chats')
 def wa_chats(cid: int):
     """The chats the WhatsApp bridge has seen - to pick 'only these' as sources (messengers.wa_chats)."""

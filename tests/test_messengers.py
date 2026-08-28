@@ -112,6 +112,19 @@ class WhatsAppTests(unittest.TestCase):
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
 
+    def test_the_pairing_qr_is_drawn_for_the_card_and_a_down_bridge_is_a_state(self):
+        s, c = self._store()
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': False, 'me': '', 'qr': '2@abc,def,ghi', 'pairingCode': ''}):
+            st = messengers.wa_status(c)
+        self.assertFalse(st['connected']); self.assertTrue(st['qr_svg'].startswith('data:image/svg+xml'))
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Uri', 'qr': '', 'pairingCode': ''}):
+            st = messengers.wa_status(c)
+        self.assertEqual((st['connected'], st['me'], st['qr_svg']), (True, 'Uri', ''))
+        with mock.patch.object(server.store, 'get_connector', return_value={**c, 'Type': 'whatsapp'}), \
+             mock.patch.object(messengers.requests, 'get', side_effect=messengers.requests.ConnectionError('refused')):
+            r = c_api.get(f"/api/connectors/{c['ConnectorId']}/wa/status")
+        self.assertEqual(r.status_code, 200); self.assertEqual((r.json()['connected'], r.json()['bridge']), (False, False))
+
     def test_the_chats_the_bridge_has_seen_are_offered_as_sources(self):
         """"Only this group" needs the group's JID, and there is no directory to browse: the JID
         appears the moment someone writes there. One row per chat, newest first, the other side's

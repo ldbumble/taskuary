@@ -151,7 +151,7 @@ const META = {
     agent: ["Check `node --version` (18 or newer). If node is missing, tell the owner to install it from nodejs.org and stop - that is the one install that is theirs.",
       "In Taskuary's package folder (given in your prompt) go to the whatsapp subfolder and run `npm install` yourself - the bridge's dependency (Baileys) is deliberately not bundled.",
       "Start the bridge from that folder as a BACKGROUND process that outlives your command (PowerShell: Start-Process node -ArgumentList bridge.mjs -WorkingDirectory <folder>; bash: nohup node bridge.mjs &). Then GET http://127.0.0.1:8977/status until it answers.",
-      "If connected is false: ask the owner for the WhatsApp phone number with country code, stop the bridge, restart it with --phone <digits only>, read pairingCode from /status and tell the owner to enter that code on the phone: WhatsApp > Linked devices > Link a device > Link with phone number instead. Poll /status every 5 seconds until connected (a code expires after a while - request a fresh one if it does).",
+      "If connected is false: do NOT print the QR here (a terminal QR is too big to scan) and do NOT ask for a phone number. The card above this terminal draws the bridge's QR itself and redraws it as it rotates - tell the owner to scan it from the phone: WhatsApp > Linked devices > Link a device. Poll GET http://127.0.0.1:8977/status every 5 seconds until connected is true. Only if the owner SAYS they would rather type a code: ask for the number, restart the bridge with --phone <digits only>, and relay pairingCode from /status.",
       "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}) - it confirms the pairing and adds the catch-all source, meaning every chat comes in.",
       "Ask the owner whether every chat should come in or only specific ones. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Once specific chats exist, only those come in.",
       "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
@@ -1044,6 +1044,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
           runs on a tenant app opens on Sources, and the one button most people need was folded away */}
       {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
+      {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Agent" && <AgentTab steps={m.agent} />}
@@ -1624,6 +1625,58 @@ const MODES = [
   ["clear", "One by one", "Every task from here goes to an agent as it arrives, in arrival order. When all agent slots are busy, the next ones queue - first in, first out - until the inbox is clear. Right when the inbox IS the job."],
   ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc’d, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
 ];
+
+/* ── WhatsApp pairing, on the card. The bridge serves its QR at /status and WhatsApp rotates it
+   every ~20 seconds, so this polls and redraws; a terminal QR is too big to scan and a phone
+   number is nothing to type into a chat. Paired = the box says who, and stops polling. ── */
+const WaPair = ({ conn, reload }) => {
+  const [st, setSt] = useState(null);
+  useEffect(() => {
+    let alive = true, wasConnected = null;
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/status`);
+        if (!alive) return;
+        setSt(data);
+        if (data.connected && wasConnected === false) reload?.();     // just paired: the card's status line changes
+        wasConnected = !!data.connected;
+        setTimeout(tick, data.connected ? 30000 : data.bridge === false ? 8000 : 4000);
+      } catch { if (alive) { setSt({ connected: false, bridge: false }); setTimeout(tick, 8000); } }
+    };
+    tick();
+    return () => { alive = false; };
+  }, [conn.ConnectorId, reload]);
+  if (!st) return null;
+  return (
+    <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", gap: 2, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <Box sx={{ flex: 1, minWidth: 240 }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+        {st.connected ? (
+          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600, mt: 0.5 }}>✓ Paired{st.me ? ` as ${st.me}` : ""} — the bridge is connected. Test, then enable.</Typography>
+        ) : st.bridge === false ? (
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mt: 0.5 }}>
+            The bridge is not running. Start it (<b>Get AI to set it up</b> above does that for you, or run <code>node bridge.mjs</code> in
+            the whatsapp folder) and the QR appears here.
+          </Typography>
+        ) : st.pairing_code ? (
+          <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}>
+            Enter this code on your phone — WhatsApp → Linked devices → Link a device → Link with phone number:
+            <Box component="span" sx={{ ...mono, fontSize: 22, fontWeight: 800, letterSpacing: 3, display: "block", mt: 0.5 }}>{st.pairing_code}</Box>
+          </Typography>
+        ) : (
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mt: 0.5 }}>
+            On your phone: <b>WhatsApp → Linked devices → Link a device</b>, and scan this. It refreshes by itself as WhatsApp rotates it;
+            this box turns green the moment the phone accepts. Nothing to type, no phone number to share.
+          </Typography>
+        )}
+      </Box>
+      {!st.connected && st.qr_svg && (
+        <Box component="img" src={st.qr_svg} alt="WhatsApp pairing QR" sx={{ width: 220, height: 220, borderRadius: 1, bgcolor: "#fff", border: `1px solid ${BORDER}` }} />
+      )}
+    </Box>
+  );
+};
 
 /* ── WhatsApp: the chats the bridge has seen, offered as sources. "Only this group" needs the
    group's JID and there is no directory to browse - the JID appears the moment someone writes in

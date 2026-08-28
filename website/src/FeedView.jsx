@@ -210,8 +210,8 @@ const ComingUp = ({ onPick, picked }) => {
             </Box>
             {/* a row you can open, like every other row - hover opens it after the same beat a
                 message takes, click opens it now; the panel shows who is in it and what it is about */}
-            <Box onClick={() => { clearTimeout(hover.current); onPick?.(e); }}
-              onMouseEnter={() => { clearTimeout(hover.current); hover.current = setTimeout(() => onPick?.(e), 260); }}
+            <Box onClick={() => { clearTimeout(hover.current); onPick?.({ ...e, pinned: true }); }}
+              onMouseEnter={() => { clearTimeout(hover.current); hover.current = setTimeout(() => onPick?.({ ...e, pinned: false }), 260); }}
               onMouseLeave={() => clearTimeout(hover.current)}
               sx={{ bgcolor: picked && picked.start === e.start && picked.subject === e.subject ? "#eee7d6" : "#f5f0e4",
                 border: `1px solid ${picked && picked.start === e.start && picked.subject === e.subject ? "#c9b98f" : "#e3d9c2"}`,
@@ -573,7 +573,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
     clearTimeout(hoverTimer.current);
     if (sel?.MessageId === row.MessageId) return;
     if (sel && ((editText ?? "").trim() || panelLock)) return;   // don't yank an OPEN panel mid-edit
-    if (calSel) return;   // a meeting you CLICKED stays open until you click something else - a hover on the way down must not replace it
+    // a meeting you CLICKED stays until you click something else; one that opened on hover gives
+    // way to the next hover like any row - otherwise the panel stuck on the first meeting
+    if (calSel?.pinned) return;
     hoverTimer.current = setTimeout(() => drill(row), 260);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);

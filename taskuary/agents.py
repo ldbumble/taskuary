@@ -155,7 +155,12 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     cmd = _resolve_cmd(name) + list(profile.get('args') or preset_args(name) or ['-p'])
     # which model works it: profile default, or a per-run override from the UI. The flag
     # name is configurable because every CLI spells it differently (claude/codex: --model).
-    if profile.get('model'): cmd += [profile.get('model_arg') or '--model', str(profile['model'])]
+    if profile.get('model'):
+        # 'gpt-5.4@high' spells a codex model and its reasoning level in one pick (climodels)
+        from .climodels import split_pick
+        m, eff = split_pick(profile['model'])
+        cmd += [profile.get('model_arg') or '--model', m]
+        if eff: cmd += ['-c', f'model_reasoning_effort={eff}']
     if resume and profile.get('resume_args'): cmd += list(profile['resume_args']) + [resume]
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')

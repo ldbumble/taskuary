@@ -1476,9 +1476,12 @@ def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles;
     models = the quick-pick model list per agent, keyed by agent name."""
     def _models(a):
+        from . import climodels
         prof = json.loads(a.get('Config') or '{}')
-        picks = CLI_MODELS.get(cli_base(prof.get('cmd')), [])
-        return {'cmd': prof.get('cmd'), 'cli': cli_base(prof.get('cmd')), 'default': prof.get('model'), 'choices': picks}
+        cli = cli_base(prof.get('cmd'))
+        cat = climodels.catalog(cli)                       # codex: its own /model list off disk; others: the built-in aliases
+        return {'cmd': prof.get('cmd'), 'cli': cli, 'default': prof.get('model'), 'choices': cat['choices'] or CLI_MODELS.get(cli, []),
+                'models': cat['models'], 'current': cat['current'], 'source': cat['source']}
     # the default agent (a setting) comes FIRST: every picker's initial value is the head of
     # this list, so "which CLI opens when I hit Start session" is decided in one place
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != (store.get_settings().get('default_agent') or 'coder'))

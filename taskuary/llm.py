@@ -67,7 +67,11 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None):
         # model_reasoning_effort=low answers in a fraction of the tokens)
         prof['args'] = list(prof.get('args') or []) + ['-c', f"model_reasoning_effort={light.split(':', 1)[1].strip()}"]
     elif light:
-        prof['model'] = light
+        # 'gpt-5.4-mini@low' - a model from codex's own /model list and one of its reasoning levels
+        from .climodels import split_pick
+        m, eff = split_pick(light)
+        prof['model'] = m
+        if eff: prof['args'] = list(prof.get('args') or []) + ['-c', f'model_reasoning_effort={eff}']
     if model: prof['model'] = model     # an explicit per-job model outranks the light gear
     if cwd: prof['cwd'] = cwd           # a scheduled skill that lives in a repo runs from that repo (reports.run_agent)
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)

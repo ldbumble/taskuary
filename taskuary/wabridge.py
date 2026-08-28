@@ -26,8 +26,15 @@ def _set(phase, detail='', pid=None): _STATE.update(phase=phase, detail=detail[:
 
 
 def node() -> str:
-    """The node binary, or ''. Windows keeps npm's node next to the CLI shims; a plain which() finds it."""
-    return shutil.which('node') or ''
+    """The node binary, or ''. which() first; then the usual Windows homes, because a Taskuary
+    started from a shortcut can have a PATH older than the Node install."""
+    found = shutil.which('node')
+    if found: return found
+    for c in (Path(os.getenv('ProgramFiles', r'C:\Program Files')) / 'nodejs' / 'node.exe',
+              Path(os.getenv('LOCALAPPDATA', '')) / 'Programs' / 'nodejs' / 'node.exe',
+              Path(os.getenv('APPDATA', '')) / 'nvm' / 'current' / 'node.exe', Path('/usr/local/bin/node'), Path('/opt/homebrew/bin/node')):
+        if str(c) not in ('node.exe', 'nodejs') and c.exists(): return str(c)
+    return ''
 
 
 def start(force_install: bool = False, wait: bool = False) -> dict:
@@ -38,7 +45,8 @@ def start(force_install: bool = False, wait: bool = False) -> dict:
     def work():
         try:
             if not node():
-                _set('failed', 'node is not installed - install Node 18+ from nodejs.org, then try again'); return
+                _set('failed', 'node is not installed - install Node 18+ (Windows: winget install OpenJS.NodeJS.LTS, or nodejs.org), '
+                               'restart Taskuary so it sees the new PATH, then Try again'); return
             if not DIR.exists():
                 _set('failed', f'the bridge folder is missing ({DIR})'); return
             if force_install or not (DIR / 'node_modules' / '@whiskeysockets').exists():

@@ -1176,6 +1176,18 @@ def message_transcribe(mid: int):
     store.audit('message', mid, 'transcribed', ACTOR, detail={'provider': out['provider']})
     return out
 
+@app.get('/api/connectors/{cid}/mail/folders')
+def mail_folder_list(cid: int, mailbox: str):
+    """A mailbox's folders, for the Mailboxes step: which ones this source reads (Inbox by default)."""
+    from .channels import graph_token, mail_folders
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'folders are an Outlook card thing')
+    try:
+        tok = graph_token({**json.loads(c.get('ConfigJson') or '{}'), '_cid': cid}, c.get('Secret'))
+        return {'data': mail_folders(tok, mailbox)}
+    except requests.HTTPError as e: raise HTTPException(502, f'Graph refused the folder list: {str(e)[:160]}')
+    except RuntimeError as e: raise HTTPException(409, str(e))
+
 @app.get('/api/connectors/{cid}/wa/status')
 def wa_status(cid: int):
     """Paired or not - and the pairing QR as an SVG for the card to draw (messengers.wa_status)."""
@@ -1253,7 +1265,10 @@ def ms_poll(cid: int, body: dict):
     store.audit('connector', cid, 'ms_signin', ACTOR, detail={'account': who['account']})
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
-    return {'status': 'ok', **who}
+    # signed in = connected: the first sync starts now, so mail is on the Timeline by the time
+    # the card has finished saying "signed in" - not ten minutes later, or never until Sync now
+    threading.Thread(target=_poll_reports, kwargs={'what': 'syncing'}, daemon=True).start()
+    return {'status': 'ok', **who, 'syncing': True}
 
 @app.get('/api/connectors/{cid}/ms/adminlink')
 def ms_adminlink(cid: int):
@@ -1841,7 +1856,9 @@ def ingest_status():
     # and the clock itself: when the last full poll ran and when the next is due, so the caption
     # can count down instead of asserting a cadence nobody could check
     return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
-            'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time()}
+            'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
+            # the brain's last failure, until it answers again - shown in the caption, not buried in rows
+            'triageError': store.get_settings().get('triage_last_error') or ''}
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
 class TermBody(BaseModel):

@@ -112,6 +112,7 @@ def drain(store, llm=None, progress=None, limit: int = 500) -> int:
                 logger.warning(f'deferred triage failed for message {mid}: {e}')
                 store.place_message(mid, None, 'filed')
                 store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
+                store.set_setting('triage_last_error', str(e)[:200], 'system')
             if progress: progress(len(rows) - i - 1)
     return len(rows)
 
@@ -236,12 +237,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                          notes=notes, notes_left=notes_left, images=msg.get('images'),
                                          system=store.doc('triage'), mine=me)
                 if fail:
-                    # the AI errored - filing beats the old default-to-task heuristic
+                    # the AI errored - filing beats the old default-to-task heuristic. The error is
+                    # also kept as a setting so the Timeline's caption can say the brain is failing:
+                    # a codex profile carrying a flag its codex does not know failed every call,
+                    # and the only sign was rows that stayed on "triaging…"
                     mid = _land(store, msg, None, 'filed')
                     store.add_route(mid, None, 'file', None,
                                     f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail", [], 'triage')
+                    store.set_setting('triage_last_error', fail['err'][:200], 'system')
                     logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
                     return {'status': 'filed', 'task_id': None, 'message_id': mid}
+                if cfg.get('triage_last_error'): store.set_setting('triage_last_error', '', 'system')   # it answered: the brain is back
                 if intent.get('degraded'):
                     # the call SUCCEEDED and came back unusable, so `fail` is empty and the old
                     # code sailed on with a keyword guess that reads none of the standing notes

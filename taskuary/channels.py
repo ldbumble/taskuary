@@ -389,6 +389,29 @@ def _local(iso):
     except ValueError: return iso
 
 
+def mail_folders(tok, upn) -> list:
+    """The mailbox's folders, for the card's chooser: id + name, the well-known ones first. Only the
+    Inbox was ever read; a rule that files vendor mail into 'Vendors' made that mail invisible here."""
+    r = requests.get(f'{GRAPH}/users/{upn}/mailFolders', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
+                     params={'$top': 100, '$select': 'id,displayName,totalItemCount,wellKnownName'})
+    r.raise_for_status()
+    skip = {'sentitems', 'deleteditems', 'drafts', 'junkemail', 'outbox', 'conversationhistory', 'syncissues', 'recoverableitemsdeletions'}
+    out = []
+    for f in r.json().get('value', []):
+        wk = (f.get('wellKnownName') or '').lower()
+        if wk in skip: continue
+        out.append({'id': 'inbox' if wk == 'inbox' else f['id'], 'name': f.get('displayName') or '', 'count': f.get('totalItemCount') or 0, 'well_known': wk})
+    out.sort(key=lambda f: (f['id'] != 'inbox', f['name'].lower()))
+    return out
+
+
+def source_folders(s: dict) -> list:
+    """Which folders a mailbox source reads - its ConfigJson `folders`, default the Inbox alone."""
+    try: fs = json.loads(s.get('ConfigJson') or '{}').get('folders') or []
+    except ValueError: fs = []
+    return [f for f in fs if f] or ['inbox']
+
+
 def _mail_msgs(tok, upn, since, folder='inbox'):
     # folder-scoped - a bare /messages spans every folder including Sent Items, which made
     # the owner's own replies come back through the funnel as inbound work
@@ -815,7 +838,10 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
                     # visible on the timeline, never triaged into work
                     for m in reversed(_mail_msgs(tok, s['Address'], since_iso, folder='sentitems')):
                         n += ingest_outbound_mail(store, s['Address'], m)
-                    for m in reversed(_mail_msgs(tok, s['Address'], since_iso)):
+                    # every folder the source asks for (the Inbox alone unless the card says otherwise), oldest first
+                    inbound = [m for f in source_folders(s) for m in _mail_msgs(tok, s['Address'], since_iso, folder=f)]
+                    inbound.sort(key=lambda m: m.get('receivedDateTime') or '')
+                    for m in inbound:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
                         if (frm.get('address') or '').lower() == s['Address'].lower():
                             continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work

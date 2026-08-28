@@ -744,7 +744,9 @@ export default function ConnectorsView() {
     ]},
     // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic
     { title: "AI — voice", cards: ["groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp", "imessage", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    // mail and chat are different jobs: one group held nine cards and read as a wall
+    { title: "Email", cards: ["outlook", "gmail", "imap"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    { title: "Messaging", cards: ["teams", "slack", "telegram", "whatsapp", "imessage", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Developer", cards: ["github", "gitlab", "azdo", "sentry", "pagerduty"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Project management", cards: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each
@@ -1091,9 +1093,10 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
           </>
         )}
         {mine.filter((s) => !(conn.Type === "telegram" && s.Address === "*")).map((s) => (
-          <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+          <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
             <StatusDot ok={!!s.Active} />
             <Typography sx={{ ...mono, color: INK, fontSize: 13 }} noWrap>{s.Address}</Typography>
+            {conn.Type === "outlook" && <MailFolders conn={conn} s={s} reload={reload} />}
             {String(s.Owner || "").startsWith("discovered:") && (
               <Typography variant="caption" sx={{ color: FAINT }} noWrap>
                 {s.Owner.replace("discovered:", "").trim()}
@@ -1120,13 +1123,19 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     ]),
     ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
         <Switch checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
         <Typography variant="body2" sx={{ color: DIM }}>
           {conn.Active
             ? (isAI ? "On — wired into intent triage (the first active AI connector wins)." : "On — polling on schedule and via Sync now.")
             : "Off — flip on once Test passes."}
         </Typography>
+        {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock */}
+        {conn.Active && !isAI && (
+          <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
+            startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
+            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : "Sync now — see it on the Timeline"}</Button>
+        )}
       </Box>
     )},
   ];
@@ -1137,7 +1146,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
       <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
           runs on a tenant app opens on Sources, and the one button most people need was folded away */}
-      {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
+      {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
@@ -1741,6 +1750,50 @@ const MODES = [
   ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc’d, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
 ];
 
+/* ── Which folders a mailbox reads. Only the Inbox was ever read, and a rule that files vendor mail
+   into "Vendors" made that mail invisible here. The chooser lists the mailbox's folders (Graph) and
+   keeps the picks on the source; the Inbox alone is the default. ── */
+const MailFolders = ({ conn, s, reload }) => {
+  const cfg = parse(s.ConfigJson);
+  const chosen = new Set((cfg.folders || []).length ? cfg.folders : ["inbox"]);
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    setOpen(true);
+    if (list) return;
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/mail/folders`, { params: { mailbox: s.Address } }); setList(data.data); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not list folders"); setList([]); }
+  };
+  const toggle = async (id) => {
+    const next = new Set(chosen); next.has(id) ? next.delete(id) : next.add(id);
+    if (!next.size) return;                                       // a mailbox that reads nothing is a switched-off mailbox
+    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...cfg, folders: [...next] }) }); reload();
+  };
+  const label = chosen.size === 1 && chosen.has("inbox") ? "Inbox only" : `${chosen.size} folder${chosen.size === 1 ? "" : "s"}`;
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
+      <Button size="small" onClick={() => (open ? setOpen(false) : load())} sx={{ fontSize: 11, textTransform: "none", color: DIM, py: 0, minWidth: 0 }}>
+        {label} {open ? "▴" : "▾"}
+      </Button>
+      {open && (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
+          {list === null && <CircularProgress size={11} />}
+          {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
+          {(list || []).map((f) => (
+            <Box key={f.id} onClick={() => toggle(f.id)}
+              sx={{ px: 0.9, py: 0.2, borderRadius: 99, cursor: "pointer", fontSize: 11, userSelect: "none",
+                fontWeight: chosen.has(f.id) ? 700 : 500, bgcolor: chosen.has(f.id) ? "#eae4d8" : "#fff",
+                color: chosen.has(f.id) ? "#55697a" : DIM, border: `1px solid ${chosen.has(f.id) ? "#d8cfbe" : BORDER}` }}>
+              {f.name}{f.count ? <Box component="span" sx={{ color: FAINT, ml: 0.5 }}>{f.count}</Box> : null}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
 /* ── WhatsApp pairing, on the card. The bridge serves its QR at /status and WhatsApp rotates it
    every ~20 seconds, so this polls and redraws; a terminal QR is too big to scan and a phone
    number is nothing to type into a chat. Paired = the box says who, and stops polling. ── */
@@ -1834,7 +1887,7 @@ const WaChats = ({ conn, mine, reload }) => {
 
 /* ── Sign in with Microsoft: Graph for a regular user, no Azure portal (taskuary/msauth.py).
    A code, microsoft.com/devicelogin, their own account; this box polls until they are done. ── */
-const MsSignIn = ({ conn, cfg, reload }) => {
+const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
   const [flow, setFlow] = useState(null);      // {flow, user_code, verification_uri, interval}
   const [state, setState] = useState("");      // "" | ok | error
   const [detail, setDetail] = useState("");
@@ -1852,7 +1905,10 @@ const MsSignIn = ({ conn, cfg, reload }) => {
         if (!alive) return;
         if (data.status === "pending") { setTimeout(tick, wait); return; }
         setFlow(null);
-        if (data.status === "ok") { setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} added under Mailboxes. Test it, then enable.`); reload(); }
+        if (data.status === "ok") {
+          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under Mailboxes below and the first sync is running; mail lands on the Timeline in a minute.`);
+          reload(); onSignedIn?.();
+        }
         else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); if (data.admin_consent_url) setAdminUrl(data.admin_consent_url); }
       } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
     };

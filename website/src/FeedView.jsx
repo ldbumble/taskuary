@@ -432,6 +432,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // the server's clock, as an offset from OUR clock: nextPollAt is its time, so the countdown
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [nextIn, setNextIn] = useState(null);        // seconds until the next background sync, from the server
+  const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
@@ -446,6 +447,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
         if (data.everyMinutes != null) setEvery(data.everyMinutes);
         if (data.lastPollAt) setLastSync(new Date(Date.now() - (data.now - data.lastPollAt) * 1000));
         nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
+        setTriageErr(data.triageError || "");
         // the server's OWN ten-minute sync wears the same face as pressing the button: the
         // button says Syncing…, the caption says what it is reading, rows land as they arrive
         running = data.status?.state === "running";
@@ -705,6 +707,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, transition: "color .15s" }}>{s.label}</Typography>
               </Box>
             ))}
+            {/* a brain that errors on every call used to look like slow triage: rows parked on
+                "triaging…" and nothing saying why. The last error stays here until it answers again. */}
+            {triageErr && !syncing && !bgSync && (
+              <Typography variant="caption" noWrap title={triageErr} sx={{ color: ALERT_INK, fontWeight: 700, maxWidth: 420 }}>
+                · triage brain failing — {triageErr}
+              </Typography>
+            )}
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? "#55697a" : FAINT }}>
               {syncing || bgSync ? `· ${syncWhat || "syncing…"}`
                 : !every ? "· background sync is off (Settings)"

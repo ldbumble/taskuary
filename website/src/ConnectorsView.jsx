@@ -108,7 +108,10 @@ const META = {
       "App-only chat reading is a Microsoft PROTECTED API: the tenant needs Microsoft-approved Chat.Read.All - until that approval is granted, Test shows the 403 telling you so.",
       "Add the user whose chats to ingest as a UPN under Sources. Your UPN (User Principal Name) is your Microsoft 365 sign-in address - usually just your work email. Find it in Teams: click your profile picture, it's the address under your name. Or run `whoami /upn` in a terminal on a work Windows machine, or check Azure Portal → Users → your account → User principal name.",
       "A specific chat id works too (Teams web: open the chat, the 19:...@thread.v2 part of the URL).",
-      "Test probes an actual chat read for the first Teams source, not just the token."] },
+      "Test probes an actual chat read for the first Teams source, not just the token."],
+    agent: ["GET {base}/api/connectors{hdr} and look at the outlook card: Teams reuses its app. If that card has tenant_id and client_id and a secret (a tenant app), leave this card's credentials blank. If it only carries a personal sign-in (auth = user) or nothing, say plainly that Teams chat reading needs a tenant app with the Microsoft-approved Chat.Read.All application permission, ask whether the owner is a Microsoft 365 admin who has one, and stop if not - do not invent a registration.",
+      "Find the owner's UPN yourself when you can: on a domain-joined Windows machine run `whoami /upn`; otherwise ask - it is usually their work email. Add it with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"teams\", \"Address\": \"<upn>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
     fields: [], secretLabel: "bot token (xoxb-…)",
     desc: "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
@@ -116,7 +119,10 @@ const META = {
       "Install the app to your workspace and invite the bot to the channels to ingest (/invite @yourbot).",
       "Paste the xoxb- bot token under Credentials (write-only).",
       "Add each channel ID under Sources (channel → View details → ID at the bottom).",
-      "Test authenticates and probes a real channel read."] },
+      "Test authenticates and probes a real channel read."],
+    agent: ["The Slack app is the owner's to create (api.slack.com/apps: bot token scopes channels:history and channels:read, install to the workspace). Ask them for the xoxb- bot token and save it as Secret.",
+      "List the channels yourself instead of asking for IDs: GET https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200 with header Authorization: Bearer <token>. Show the owner names, ask which to watch, and add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"slack\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Remind the owner the bot must be invited into each of those channels (/invite @bot) or the read will fail; then Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
     fields: [["Notify chat id", "notify_chat", "", "Only for the Notifications role — same id the chat's Source card shows"]],
     secretLabel: "bot token (from @BotFather)",
@@ -125,7 +131,11 @@ const META = {
       "Paste the token under Credentials (write-only) and Test.",
       "Finding a chat id is automatic: message your bot (or add it to a group) and Sync — the chat appears under Sources with its chat id, switched OFF. Flip on the ones that are yours; messages flow from then on.",
       "Everything else stays out by design — anyone can find and message a public bot, and an unapproved stranger must never be able to put tasks on your board.",
-      "For a group: add the bot to it and disable its privacy mode (@BotFather → /setprivacy) so it sees messages."] },
+      "For a group: add the bot to it and disable its privacy mode (@BotFather → /setprivacy) so it sees messages."],
+    agent: ["Ask the owner for the bot token from @BotFather (/newbot, or /token for an existing bot) and save it as Secret; Test (POST {base}/api/connectors/{cid}/test{hdr}).",
+      "Chat ids are discovered, never typed: ask the owner to send any message to the bot (or add it to the group and post there), then run a sync yourself with POST {base}/api/ingest/poll{hdr} and GET {base}/api/sources{hdr} - the chat appears as a telegram source, switched OFF.",
+      "Read the new sources back to the owner and ask which are theirs; flip those on with POST {base}/api/sources{hdr} and JSON {\"SourceId\": <id>, \"Active\": true}. Never flip on a chat the owner did not name - a bot is public and strangers must not be able to put tasks on the board.",
+      "For a group, remind them to disable the bot's privacy mode (@BotFather > /setprivacy) or it will not see messages. Turn the connector on and say SETUP DONE."] },
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (optional — blank takes every chat)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
@@ -155,7 +165,10 @@ const META = {
       "System Settings → Privacy & Security → Full Disk Access → switch on (or + and add) the host Test named, then Test again. A real read of the database is the proof — not the checkbox.",
       "Sending needs Automation: the first reply makes macOS ask whether that host may control Messages. Allow it. Test never sends anything.",
       "New messages from the moment of the first sync; the optional look-back here reads a few days of history instead. Chat ids under Sources LIMIT which chats come in — blank means every chat that reaches this Mac.",
-      "macOS 13 and later; macOS 12 best effort. On Linux and Windows the card stays here but Test says it needs a Mac."] },
+      "macOS 13 and later; macOS 12 best effort. On Linux and Windows the card stays here but Test says it needs a Mac."],
+    agent: ["Check the platform first (`uname -s`). Not a Mac: say so and stop - there is nothing to set up here.",
+      "Run Test (POST {base}/api/connectors/{cid}/test{hdr}) and read detail: it names the HOST that needs Full Disk Access (Terminal, iTerm, the IDE, or the python binary). That permission is the owner's to grant: System Settings > Privacy & Security > Full Disk Access, switch on (or + and add) exactly that host, then relaunch it. Ask them to do that and Test again until the read succeeds.",
+      "Ask whether every chat should come in or only some; for some, add chat ids as sources (POST {base}/api/sources{hdr}, Channel imessage). Ask if they want history: lookback_days in ConfigJson reads that many days on the first sync; blank is from now on. Turn the connector on, SETUP DONE - and tell them the first reply will make macOS ask for Automation permission, which they should allow."] },
   gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
     fields: [["mailbox address", "address"],
       ["Google OAuth client id (optional — calendar)", "google_client_id", "", "Only for calendar access: an OAuth client from Google Cloud with the Calendar API enabled"],
@@ -167,7 +180,10 @@ const META = {
       "Create an App Password: myaccount.google.com -> Security -> App passwords -> app: Mail.",
       "Enter the mailbox address under Credentials and paste the 16-character App Password (write-only).",
       "Test logs in and adds the mailbox as a source; new mail flows in on the next sync.",
-      "Replies you approve are sent from this same address over SMTP, threaded into the conversation."] },
+      "Replies you approve are sent from this same address over SMTP, threaded into the conversation."],
+    agent: ["Ask for the Gmail address and save it as address in ConfigJson.",
+      "The App Password is the owner's to create (myaccount.google.com > Security > 2-Step Verification on, then App passwords > Mail). Ask them to paste the 16 characters here, save it as Secret, and never echo it back.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}) logs in and adds the mailbox as a source. Turn the connector on, SETUP DONE. The Google calendar fields are optional and rarely wanted - skip them unless asked."] },
   imap: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@yourdomain.com",
     fields: [["mailbox address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
              ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"]],
@@ -176,7 +192,10 @@ const META = {
     howto: ["Find your provider's IMAP and SMTP hostnames (usually imap./smtp. + your domain; ports 993/587).",
       "Enter the address and IMAP host under Credentials; SMTP host only if it does not follow the imap->smtp pattern.",
       "Paste the mailbox password (write-only). Providers with app passwords (Yahoo, iCloud) want those.",
-      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync."] },
+      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync."],
+    agent: ["Ask for the mailbox address. Find the hosts yourself: GET https://autoconfig.thunderbird.net/v1.1/<domain> (it returns the IMAP and SMTP hostnames for most providers), and otherwise try imap.<domain> / mail.<domain> on port 993 and smtp.<domain> on 587 with a socket probe. Only ask the owner if none answers.",
+      "Microsoft-hosted mailbox (outlook.com, hotmail, Microsoft 365)? IMAP passwords no longer work there - point the owner at the Outlook card and stop.",
+      "Ask for the mailbox password (Yahoo and iCloud want an app password instead) and save it as Secret; save address, imap_host and, only if it breaks the imap->smtp pattern, smtp_host in ConfigJson. Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
     fields: [], secretLabel: "fine-grained PAT",
     desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
@@ -186,7 +205,10 @@ const META = {
       "Everything inbound lives on ONE step — Inbound, what becomes work: the trigger/feed switch, a per-repo picker for what issues and PRs do (tasks = through triage, feed = timeline only, off = ignored), and the agent prompts. Triage sees each item's author and GitHub association, so a stranger's PR on a public repo files as FYI instead of becoming work — and github items never auto-start a coding agent; you promote the ones that deserve one.",
       "When you DO send a PR or issue to the agent, its prompt carries the standing rules you set on that same Inbound step — the PR default says judge it (useful? safe? minimal?), run the tests, report a verdict, and never merge.",
       "Test re-runs discovery and reports who it's authenticated as.",
-      "Coding tasks then open an issue first, the agent works it, and closing the task closes the issue."] },
+      "Coding tasks then open an issue first, the agent works it, and closing the task closes the issue."],
+    agent: ["The fine-grained PAT is the owner's to mint (GitHub > Settings > Developer settings > Fine-grained tokens: the repos the agent may touch; Issues Read+Write, Pull requests Read+Write, Metadata Read). Ask for it and save it as Secret - saving runs discovery: every reachable repo is added under Sources and the repo map is written into SOUL.md.",
+      "Read the discovery result back (who it authenticated as, how many repos). If `gh` is installed here, `gh auth status` tells you which account the machine already uses - mention a mismatch.",
+      "Ask which repos should make work: per repo, issues and PRs can be tasks, feed or off - the owner sets that on the Inbound step of the card; you only report what exists. Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   jira: { group: "Project management", channel: "jira", srcLabel: "Site", srcPh: "yourteam.atlassian.net",
     fields: [["site URL (https://yourteam.atlassian.net)", "base_url"], ["account email (the one the token belongs to)", "email"]],
     secretLabel: "API token",
@@ -301,7 +323,10 @@ const META = {
       "Invite the bot to your server with permission to read (and send, for replies in) the channels you'll watch.",
       "Paste the bot token under Credentials (write-only).",
       "Add each channel ID under Sources (Discord → Settings → Advanced → Developer Mode, then right-click a channel → Copy Channel ID).",
-      "Approving a drafted reply posts it into the same channel as the bot."] },
+      "Approving a drafted reply posts it into the same channel as the bot."],
+    agent: ["The Discord app and bot are the owner's to create (discord.com/developers > Bot > Reset Token, Message Content intent ON, invited to the server). Ask for the bot token and save it as Secret.",
+      "List the channels yourself: GET https://discord.com/api/v10/users/@me/guilds with header Authorization: Bot <token>, then GET https://discord.com/api/v10/guilds/<id>/channels for each server; text channels have type 0. Show names, ask which to watch, add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"discord\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   anthropic: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default claude-opus-5)", "model"]], secretLabel: "API key",
     desc: "Claude via the Anthropic API - powers intent triage (task / reply-only / FYI) once enabled.",
@@ -334,7 +359,10 @@ const META = {
     howto: ["Install Ollama (ollama.com) and pull a model: ollama pull llama3.2 — or point base_url at LM Studio (http://127.0.0.1:1234), llama.cpp or vLLM.",
       "Enter the model name (ollama list shows what's installed). No key needed for a local server.",
       "Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under Settings → Triage & routing.",
-      "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."] },
+      "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."],
+    agent: ["Check for a local server yourself: GET http://127.0.0.1:11434/api/tags (Ollama) - and http://127.0.0.1:1234/v1/models for LM Studio. If Ollama is not installed, ask the owner once whether to install it, then do it (winget install Ollama.Ollama on Windows, brew install ollama on a Mac, the ollama.com script on Linux) and start it.",
+      "If /api/tags lists no models, ask which to pull (suggest llama3.2 for a laptop, qwen2.5 for more headroom) and run `ollama pull <model>` yourself - it downloads gigabytes, so say so and wait for it.",
+      "Save model (and base_url only if not the default) in ConfigJson; no Secret. Test (POST {base}/api/connectors/{cid}/test{hdr}) runs a real round trip. Turn the connector on and say SETUP DONE - and that the owner can pick it as the triage brain under Settings."] },
 };
 
 const PLANNED_AI = [
@@ -347,6 +375,12 @@ const MSSQL_HOWTO = [
   "Local SQL Server: keep auth on Windows (trusted) - server + database is all the config. Named instance? Use HOST\INSTANCE, e.g. localhost\SQLEXPRESS.",
   "Driver auto-picks the newest installed 'ODBC Driver NN for SQL Server'; SQL logins go under auth.",
   "Build the actual reports (query + AI summary + schedule) on the REPORTS tab.",
+];
+const MSSQL_AGENT = [
+  "Check the machine yourself first: `Get-OdbcDriver -Name '*SQL Server*'` (Windows) or `odbcinst -q -d` lists the ODBC drivers; none installed means the owner needs 'ODBC Driver 18 for SQL Server' from Microsoft - offer to install it (winget install Microsoft.msodbcsql.18) and do it if they agree.",
+  "Ask for the server (HOST or HOST\\INSTANCE) and database. Probe reachability yourself (Test-NetConnection <host> -Port 1433, or the instance's port) before saving.",
+  "Try Windows authentication first - auth 'windows' in ConfigJson, no Secret - because on a domain-joined machine it usually just works. Only if Test says the login failed, ask for a SQL login: auth 'sql', username in ConfigJson, the password as Secret.",
+  "Save server, database, auth (and driver only to override the auto-pick) in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}) - it connects for real and reports the server version - then SETUP DONE; reports are built on the Reports tab.",
 ];
 
 /* ── data-connection cards that share one field-driven detail page (mssql keeps its
@@ -361,7 +395,10 @@ const DATA_META = {
       "Keep the password OUT of the string: write {password} where it goes and paste the real one below (stored write-only, never shown again).",
       "URL engines need their Python driver on the server: pip install taskuary[db] plus e.g. psycopg2-binary (postgres) or pymysql (mysql).",
       "Test connects for real and runs a probe (SELECT 1 — engines that need FROM DUAL can set test_query in the config).",
-      "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."] },
+      "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."],
+    agent: ["Ask what database it is and where (engine, host, port, database name, user). Build the connection string yourself with {password} where the password goes - never the real one - and save it as conn_str in ConfigJson; ask for the password and save it as Secret.",
+      "Install the Python driver yourself in the environment Taskuary runs in: `pip install taskuary[db]` plus psycopg2-binary (Postgres), pymysql (MySQL), snowflake-sqlalchemy (Snowflake) as needed; check with `pip show`. Then Test (POST {base}/api/connectors/{cid}/test{hdr}) - it runs SELECT 1; an engine that wants FROM DUAL gets test_query in ConfigJson.",
+      "Say SETUP DONE and that reports are built on the Reports tab."] },
   aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"], discovers: true,
     fields: [["access key id", "access_key_id"], ["region(s), comma-separated (e.g. us-east-2, us-east-1)", "region"]],
     secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
@@ -372,7 +409,10 @@ const DATA_META = {
       "The server needs boto3: pip install taskuary[aws].",
       "Test & discover calls STS (reporting which account/ARN you are) and then asks the keys what they can SEE: every S3 bucket and CloudWatch log group is listed under 'What you have access to'.",
       "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines appear on the Timeline), tasks (they go through triage), or off.",
-      "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."] },
+      "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."],
+    agent: ["Look for credentials this machine already has before asking: `aws sts get-caller-identity` (if the CLI is installed), ~/.aws/credentials, AWS_* environment variables. If they exist and the owner agrees to use them, leave the key fields blank - the server uses its own credentials.",
+      "Otherwise the IAM user and keys are the owner's to create (read-only policies such as AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess); ask for the access key id and region(s), save them in ConfigJson, and the secret access key as Secret.",
+      "Install boto3 yourself: `pip install taskuary[aws]`. Test & discover (POST {base}/api/connectors/{cid}/test{hdr}) reports the account and lists buckets and log groups; read that back, then SETUP DONE - what each object does (report, feed, tasks) is picked on the card."] },
   intacct: { title: "Sage Intacct", types: ["intacct", "intacct_fields"],
     fields: [["sender id (the integration's, issued by Sage)", "sender_id"],
       ["sender password", "sender_password"],
@@ -445,7 +485,10 @@ const DATA_META = {
       "No extra installs — tokens ride the same client-credentials road the Outlook connector uses.",
       "Test & discover authenticates (naming the subscriptions the app can see — a token with no roles is called out) and then enumerates what those roles reach: every blob container and Log Analytics workspace is listed under 'What you have access to'.",
       "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new blobs / new query rows appear on the Timeline), tasks (they go through triage), or off.",
-      "Reports tab then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."] },
+      "Reports tab then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."],
+    agent: ["GET {base}/api/connectors{hdr} and check the outlook card: if it carries a tenant app (tenant_id, client_id, a secret) this card can reuse it with everything blank. If `az` is installed, `az account show` tells you which tenant and subscription this machine is already signed into - useful to confirm ids.",
+      "Otherwise the registration and its RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader) are the owner's admin work in the Azure portal; ask for tenant_id and client_id (ConfigJson) and the client secret (Secret) once that exists.",
+      "Test & discover (POST {base}/api/connectors/{cid}/test{hdr}) names the subscriptions the app can see - none means no roles yet, say so - and lists containers and workspaces. Read it back, SETUP DONE."] },
 };
 
 const WINRM_HOWTO = [
@@ -453,6 +496,11 @@ const WINRM_HOWTO = [
   "A box you can RDP into (like AZWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
   "If Test fails with 'WinRM unreachable', enable PS remoting on the remote box once: open an elevated PowerShell THERE and run Enable-PSRemoting -Force.",
   "Reports then run any PowerShell you write ON that machine (read a log, query a service, export a CSV) and the output - optionally AI-summarized - lands on the Timeline.",
+];
+const WINRM_AGENT = [
+  "Ask for the machine name. Probe it yourself from here: `Test-WSMan <host>` (and Test-NetConnection <host> -Port 5985). Reachable: save host in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}), SETUP DONE.",
+  "Unreachable: remoting has to be enabled ON the remote box, by someone with an admin session there - `Enable-PSRemoting -Force` in an elevated PowerShell on that machine. You cannot do that from here without remoting; ask the owner (or their admin) to run it, then probe and Test again.",
+  "Runs use the Windows login Taskuary itself runs under - if Test fails with access denied, that account needs rights on the remote box; say so rather than asking for a password, the card has none.",
 ];
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -998,17 +1046,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
       {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
-      {tab === "Agent" && (
-        <Box>
-          <Typography variant="body2" sx={{ color: DIM, mb: 1, maxWidth: 720, mx: "auto" }}>
-            What <b>Get AI to set it up</b> hands your coding agent, on top of one standing rule: anything on this machine —
-            installs, starting processes, commands, config, the API — is the agent's own job; only your accounts, phone,
-            browser or admin console are yours to do. {m.agent?.length ? "These steps are written for the agent:" :
-              "This connector has no agent-specific steps yet, so the agent works from the Guide under that rule."}
-          </Typography>
-          {!!m.agent?.length && <Steps steps={m.agent} />}
-        </Box>
-      )}
+      {tab === "Agent" && <AgentTab steps={m.agent} />}
       {tab === "Setup" && (
         <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
           {steps.map((s, i) => (
@@ -1032,11 +1070,12 @@ function MssqlDetail({ conn, drivers, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title="Microsoft SQL Server" />
-      <AiSetup conn={conn} steps={MSSQL_HOWTO} reload={reload} />
+      <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) on the Reports tab.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      {tab === "Agent" && <AgentTab steps={MSSQL_AGENT} />}
       {tab === "Connection" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
@@ -1143,13 +1182,14 @@ function WinrmDetail({ conn, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title="Remote Windows (WinRM)" />
-      <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} reload={reload} />
+      <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
         build the scheduled reports on the Reports tab.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={WINRM_HOWTO} />}
+      {tab === "Agent" && <AgentTab steps={WINRM_AGENT} />}
       {tab === "Connection" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
           <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
@@ -1350,12 +1390,13 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={meta.title} />
-      <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} reload={reload} />
+      <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} agentSteps={meta.agent || []} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc} The connection only — build the scheduled reports on the Reports tab.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={meta.howto} />}
+      {tab === "Agent" && <AgentTab steps={meta.agent} />}
       {tab === "Connection" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 560, mt: 1 }}>
           {meta.fields.map(([label, key, ph]) => (
@@ -1860,6 +1901,21 @@ const InboundStep = ({ conn, m, mine, reload }) => {
     </Box>
   );
 };
+
+/* What "Get AI to set it up" hands the coding agent. The Guide is written for a person; these
+   steps are written for the agent - and where a card has none, the agent works from the Guide
+   under the one standing rule the caption states. */
+const AgentTab = ({ steps }) => (
+  <Box>
+    <Typography variant="body2" sx={{ color: DIM, mb: 1, maxWidth: 720, mx: "auto" }}>
+      What <b>Get AI to set it up</b> hands your coding agent, on top of one standing rule: anything on this machine —
+      installs, starting processes, commands, config, the API — is the agent's own job; only your accounts, phone,
+      browser or admin console are yours to do. {steps?.length ? "These steps are written for the agent:" :
+        "This connector has no agent-specific steps yet, so the agent works from the Guide under that rule."}
+    </Typography>
+    {!!steps?.length && <Steps steps={steps} />}
+  </Box>
+);
 
 const Steps = ({ steps }) => (
   <Box sx={{ maxWidth: 720, mx: "auto" }}>

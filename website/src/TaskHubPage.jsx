@@ -138,8 +138,10 @@ export default function TaskHubPage() {
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to
             drag to reach Settings - and pushed the whole page into horizontal scroll with it. A
             nav bar is chrome; it spans. */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2.5, py: 1,
-          bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 10 }}>
+        {/* id + top z: the Timeline's frozen dock pins itself right below this bar (it measures
+            the height by id) - z above the dock so nothing ever slides over the tabs */}
+        <Box id="tqTopNav" sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2.5, py: 1,
+          bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
           <Box sx={{ width: 26, height: 26, borderRadius: 1.5, background: GRADIENT, display: "flex",
             alignItems: "center", justifyContent: "center" }}>
             <HubIcon sx={{ color: "#fff", fontSize: 17 }} />

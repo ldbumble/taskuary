@@ -368,6 +368,15 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // rows dissolve into the top going under, and into nothing at the bottom of the screen. dockH is
   // measured so the sticky date sits exactly below the frozen dock whatever its wrapped height.
   const dockRef = useRef(null);
+  // the dock pins BELOW the app's top bar, never over it - the tabs stay put; height measured by id
+  const [navH, setNavH] = useState(49);
+  useEffect(() => {
+    const el = document.getElementById("tqTopNav");
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => setNavH(el.offsetHeight));
+    ro.observe(el); setNavH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
   // ONE date line, part of the frozen dock: everything from the date up stays exactly the same
   // regardless of scroll. The rows slide into the date's underside and only the LABEL updates -
   // a scroll spy reads which day group currently crosses the dock's bottom edge.
@@ -688,8 +697,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
       {/* the frozen top: filters, sync and stats stay put while the timeline scrolls under them.
           A fade at the dock's lower edge is what makes rows dissolve INTO the top rather than
           vanish at a hard line. bgcolor so rows never show through the gap between pill and edge. */}
+      {/* the drop above the filter pill is part of the frozen block: the page's own top padding is
+          swallowed (negative margin) and re-issued as the dock's padding, so the gap under the nav
+          is identical at the top of the page and mid-scroll */}
       <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75,
-        position: "sticky", top: 0, zIndex: 20, bgcolor: BG, pt: 0.5,
+        position: "sticky", top: `${navH}px`, zIndex: 20, bgcolor: BG,
+        mt: { xs: -1.5, md: -2.25 }, pt: { xs: 2, md: 2.75 },
         // the dissolve band right under the date: rows melt away as they rise into its underside
         "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -44, height: 44,
           background: `linear-gradient(${BG} 25%, transparent)`, pointerEvents: "none" } }}>
@@ -806,12 +819,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
           </Alert>
         )}
         {/* THE date line - one, frozen with everything above it, its space intact; only the words
-            change as the timeline scrolls into its underside */}
+            change as the timeline scrolls into its underside. Centred over the TIMELINE column
+            (the inner grid mirrors the page's tracks), not over the whole page. */}
         {rows && rows.length > 0 && (
-          <Typography variant="caption" sx={{ ...mono, color: INK, fontWeight: 800, fontSize: 11.5,
-            letterSpacing: 0.5, pt: 0.75, pb: 0.25 }}>
-            {fmtDay(curDay || Object.keys(days)[0] || "")}
-          </Typography>
+          <Box sx={{ width: "100%", display: "grid", columnGap: 2,
+            gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(520px, 44%)" } }}>
+            <Typography variant="caption" sx={{ ...mono, color: INK, fontWeight: 800, fontSize: 11.5,
+              letterSpacing: 0.5, pt: 0.75, pb: 0.25, textAlign: "center" }}>
+              {fmtDay(curDay || Object.keys(days)[0] || "")}
+            </Typography>
+          </Box>
         )}
       </Box>
       <FunnelBar onOpenTask={onOpenTask} />

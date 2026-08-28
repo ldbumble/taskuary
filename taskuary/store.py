@@ -700,6 +700,10 @@ class SQLiteStore:
         self._exec('DELETE FROM transcript WHERE Sid=?', (sid,))      # one row per session, always the latest
         return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,CreatedAt) VALUES (?,?,?,?,?,?)',
                           (task_id, sid, agent, cwd, text, _now()))
+    def agented_task_ids(self) -> set:
+        """Every task an agent has ever touched - a live-session transcript or a headless run. The
+        Board is the agents' board: a reply the owner answered by hand is finished work, not board work."""
+        return {r['TaskId'] for r in self._rows('SELECT DISTINCT TaskId FROM transcript UNION SELECT DISTINCT TaskId FROM run') if r['TaskId']}
     def last_transcript(self, task_id):
         return self._one('SELECT * FROM transcript WHERE TaskId=? ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
 

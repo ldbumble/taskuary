@@ -180,8 +180,10 @@ def tasks(status: str = None, active: bool = False):
     live CLI on it reads as 'queued' while the agent sits there asking a question."""
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
+    agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
     return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId']),
-                      'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0)}
+                      'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
+                      'HadAgent': t['TaskId'] in agented}
                      for t in store.list_tasks(status, active_only=active)]}
 
 @app.post('/api/tasks')

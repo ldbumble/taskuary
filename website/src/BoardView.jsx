@@ -346,8 +346,11 @@ export default function BoardView({ onOpenTask }) {
       <Box sx={{ display: view === "studio" ? "none" : "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
         {COLS.map((col) => {
           const today = localToday();
+          // Done is agent work finished today. A reply the owner answered by hand, or a to-do
+          // ticked off in Tasks, never came through here - it lives in Tasks, not on this board.
+          const agentWork = (t) => t.HadAgent || t.Kind === "coding" || t.Kind === "setup" || !!t.Session;
           const cards = tasks.filter((t) => laneOf(t, live) === col.key
-            && (col.key !== "done" || String(t.ClosedAt || t.UpdatedAt || "").startsWith(today)));
+            && (col.key !== "done" || (String(t.ClosedAt || t.UpdatedAt || "").startsWith(today) && t.Kind !== "reply" && agentWork(t))));
           // rank mode: the Queued lane reads top-down in the order the funnel will take them
           if (col.key === "queued") cards.sort((a, b) => (b.Queued?.value ?? 0.5) - (a.Queued?.value ?? 0.5));
           return (

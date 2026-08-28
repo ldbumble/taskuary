@@ -709,12 +709,29 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     # the CHART: line is an instruction to Taskuary about what to draw, not prose for the reader:
     # artifacts reads it off `body`, and what gets filed is the summary without it
     from .artifacts import strip_directive
-    mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}',
-                             'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
-                             'SourceName': title, 'Subject': subject, 'FromName': title,
-                             'SentAt': stamp, 'BodyText': strip_directive(body),
-                             'SourceLink': cfg.get('link'), 'Status': 'feed'})
-    store.add_route(mid, None, 'feed', None, 'scheduled report - informational, never a task', [], 'report')
+    failed = subject.endswith('— FAILED')
+    if cfg.get('triage') and not failed:
+        # the report is a MESSAGE like any other: triage reads it under TRIAGE.md, and a task is what
+        # TRIAGE.md says - so an agent's research report can hand its findings to the coding agent.
+        # A failed run is never work; it files with its error like before.
+        from .ingest import ingest_message
+        out = ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
+                                         'subject': subject, 'body': strip_directive(body), 'from_name': title,
+                                         'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
+                                         'source_link': cfg.get('link'), 'source_name': title}, llm=llm)
+        mid = out.get('message_id')
+        if not mid:
+            mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed', 'ConversationId': f'report:{src["SourceId"]}',
+                                     'Channel': 'report', 'SourceName': title, 'Subject': subject, 'FromName': title, 'SentAt': stamp,
+                                     'BodyText': strip_directive(body), 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+    else:
+        mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}',
+                                 'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
+                                 'SourceName': title, 'Subject': subject, 'FromName': title,
+                                 'SentAt': stamp, 'BodyText': strip_directive(body),
+                                 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+        store.add_route(mid, None, 'feed', None,
+                        'scheduled report - informational, never a task' + ('' if not cfg.get('triage') else ' (this run failed, so it was not triaged)'), [], 'report')
     # the rows are the report: hand back the spreadsheet to open and the chart to look at, not
     # just prose about them. Prose-only reports (an AI summary, a failure) produce neither.
     try:

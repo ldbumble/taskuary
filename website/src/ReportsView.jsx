@@ -611,6 +611,14 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     ...(e.target.checked ? { every_minutes: "", daily_at: "", cron: "" } : {}) })} />
                 <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
               </Box>
+              {/* a report is informational by default. On, each run goes through triage like an inbound
+                  message and TRIAGE.md decides whether it is work - an agent's research can then be handed
+                  to the coding agent. A failed run is never triaged. */}
+              <Box sx={{ display: "flex", alignItems: "center", ml: { sm: 1 } }}
+                title="Send each run through triage like an inbound message. TRIAGE.md decides whether it becomes a task - so a report one agent researched can be handed to the coding agent. Off: informational, never a task.">
+                <Switch checked={!!cfg.triage} onChange={(e) => setCfg({ ...cfg, triage: e.target.checked })} />
+                <Typography variant="caption" sx={{ color: DIM }}>can become work (triage decides)</Typography>
+              </Box>
               <Button variant="contained" disableElevation onClick={save} disabled={!cfg.title}
                 title={cfg.title ? "" : "the report needs a title - step 1"}>Save report</Button>
             </Box>

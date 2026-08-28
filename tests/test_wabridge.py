@@ -59,3 +59,4 @@ class BridgeManagerTests(unittest.TestCase):
         with mock.patch.object(messengers.requests, 'get', side_effect=messengers.requests.ConnectionError('refused')):
             r = c_api.get(f"/api/connectors/{wa['ConnectorId']}/wa/status").json()
         self.assertEqual(r['bridge'], False); self.assertIn('phase', r['manager'])                    # the manager's phase rides along
+        self.assertIn(r['node'], (True, False))                                                        # step 1 of the pairing box: is Node here

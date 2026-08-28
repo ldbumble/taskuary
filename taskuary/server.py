@@ -1196,8 +1196,9 @@ def wa_status(cid: int):
     from . import wabridge
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
-    try: return {**_status(c), 'bridge': True, 'manager': wabridge.state()}
-    except RuntimeError as e: return {'connected': False, 'bridge': False, 'detail': str(e), 'manager': wabridge.state()}   # bridge down is a state, not a 500
+    # node: the one thing the card cannot install for the owner - step 1 of the pairing box turns on it
+    try: return {**_status(c), 'bridge': True, 'node': True, 'manager': wabridge.state()}
+    except RuntimeError as e: return {'connected': False, 'bridge': False, 'node': bool(wabridge.node()), 'detail': str(e), 'manager': wabridge.state()}   # bridge down is a state, not a 500
 
 @app.post('/api/connectors/{cid}/wa/bridge/start')
 def wa_bridge_start(cid: int, force_install: bool = False):
@@ -1226,6 +1227,9 @@ def wa_chats(cid: int):
 # ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
 @app.post('/api/connectors/{cid}/ai-setup')
 def connector_ai_setup(cid: int, body: AiSetupBody):
+    c = store.get_connector(cid)
+    # WhatsApp pairs itself (Node check, bridge auto-start, QR on the card); an agent here only sat on the bridge process
+    if c and c['Type'] == 'whatsapp': raise HTTPException(422, 'WhatsApp needs no agent: the Pair with your phone box does the setup itself')
     try: return aisetup.start(store, cfg['server'], cid, body.guide, body.fields, body.secret_label, body.agent, body.model, ACTOR, body.agent_steps)
     except (ValueError, RuntimeError, FileNotFoundError) as e: raise HTTPException(422, str(e))
 

@@ -3,7 +3,7 @@
 // setup WIZARD (stepper) plus Sources/management. All connectors live here - channel
 // connectors (Outlook, Teams, Slack, GitHub), cloud AI APIs (Anthropic, OpenAI, Azure
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step, StepButton,
   StepContent, Stepper, Switch, TextField, Typography,
@@ -142,9 +142,9 @@ const META = {
        "Only for the Notifications role — the WhatsApp JID of the chat to ping"]],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
-    howto: ["The bridge is a small Node program beside Taskuary (Node 18+ on this machine). Click Start the bridge in the Pair with your phone box: Taskuary installs its dependency (Baileys, deliberately not bundled) and starts it for you. By hand: `cd taskuary/whatsapp && npm install && node bridge.mjs`.",
-      "Pair once: the QR appears in that same box - WhatsApp → Linked devices → Link a device → scan. It refreshes by itself and the box turns green when the phone accepts.",
-      "Leave the bridge running (it survives closing the browser; a reboot stops it - Start the bridge again). Test here confirms the pairing and adds a catch-all source.",
+    howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
+      "2 - The bridge starts by itself once Node is there (first time it fetches its dependency, Baileys - a minute or two). 3 - The QR appears; on your phone: WhatsApp → Linked devices → Link a device → scan. The box turns green when the phone accepts.",
+      "Leave the bridge running (it survives closing the browser; a reboot stops it - the box starts it again when you open this card). Test here confirms the pairing and adds a catch-all source.",
       "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."],
     // written FOR the agent: the machine-side work is its own; the phone is the owner's
@@ -1150,13 +1150,16 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
-      <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />
+      {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
+          itself (install Node is the owner's; the bridge starts on its own; the QR is scanned from a phone).
+          An agent handed this setup sat on the bridge process for five minutes on a tester's machine. */}
+      {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
           runs on a tenant app opens on Sources, and the one button most people need was folded away */}
       {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
-      <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Agent" && <AgentTab steps={m.agent} />}
       {tab === "Setup" && (
         <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
@@ -1804,8 +1807,14 @@ const MailFolders = ({ conn, s, reload }) => {
 /* ── WhatsApp pairing, on the card. The bridge serves its QR at /status and WhatsApp rotates it
    every ~20 seconds, so this polls and redraws; a terminal QR is too big to scan and a phone
    number is nothing to type into a chat. Paired = the box says who, and stops polling. ── */
+/* ── WhatsApp pairing: three steps that drive themselves. 1 Node on the machine (the only thing the
+   owner installs - the box says how and re-checks on its own); 2 the bridge, which the box starts the
+   moment Node is there (no button to find, no agent to wait on); 3 the QR, scanned from the phone.
+   A tester's agent-driven setup spun for five minutes on step 2; a person should never see that. ── */
 const WaPair = ({ conn, reload }) => {
   const [st, setSt] = useState(null);
+  const kicked = useRef(false);
+  const startBridge = useCallback(async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/start`); } catch { /* status polling shows the failure */ } }, [conn.ConnectorId]);
   useEffect(() => {
     let alive = true, wasConnected = null;
     const tick = async () => {
@@ -1816,32 +1825,55 @@ const WaPair = ({ conn, reload }) => {
         setSt(data);
         if (data.connected && wasConnected === false) reload?.();     // just paired: the card's status line changes
         wasConnected = !!data.connected;
-        setTimeout(tick, data.connected ? 30000 : data.bridge === false ? 8000 : 4000);
+        // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair
+        if (data.bridge === false && data.node && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
+        setTimeout(tick, data.connected ? 30000 : data.bridge === false ? (data.node ? 3000 : 6000) : 4000);
       } catch { if (alive) { setSt({ connected: false, bridge: false }); setTimeout(tick, 8000); } }
     };
     tick();
     return () => { alive = false; };
-  }, [conn.ConnectorId, reload]);
+  }, [conn.ConnectorId, reload, startBridge]);
   if (!st) return null;
+  const phase = st.manager?.phase, busy = ["installing", "starting"].includes(phase);
+  const stepNo = st.connected ? 4 : st.bridge === false ? (st.node ? 2 : 1) : 3;
+  const StepLine = ({ n, label, state }) => (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
+      <Box sx={{ width: 18, height: 18, borderRadius: "50%", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center",
+        bgcolor: state === "done" ? "#47654a" : state === "now" ? "#55697a" : "#e6e2dc", color: state === "todo" ? DIM : "#fff" }}>{state === "done" ? "✓" : n}</Box>
+      <Typography variant="body2" sx={{ fontSize: 13, fontWeight: state === "now" ? 700 : 500, color: state === "todo" ? DIM : INK }}>{label}</Typography>
+      {state === "now" && busy && <CircularProgress size={11} sx={{ color: DIM }} />}
+    </Box>
+  );
+  const stateOf = (n) => (n < stepNo ? "done" : n === stepNo ? "now" : "todo");
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", gap: 2, alignItems: "flex-start", flexWrap: "wrap" }}>
       <Box sx={{ flex: 1, minWidth: 240 }}>
         <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+        {!st.connected && (
+          <Box sx={{ mb: 1 }}>
+            <StepLine n={1} label="Node 18+ on this machine" state={stateOf(1)} />
+            <StepLine n={2} label={phase === "installing" ? "Fetching the bridge (a minute or two, first time only)" : "The bridge is running"} state={stateOf(2)} />
+            <StepLine n={3} label="Scan the QR from your phone" state={stateOf(3)} />
+          </Box>
+        )}
         {st.connected ? (
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600, mt: 0.5 }}>✓ Paired{st.me ? ` as ${st.me}` : ""} — the bridge is connected. Test, then enable.</Typography>
+        ) : st.bridge === false && !st.node ? (
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.6, display: "block" }}>
+            Node is not installed here, and it is the one thing Taskuary cannot install for you. In a terminal:
+            <Box component="code" sx={{ ...mono, display: "block", my: 0.5, p: 0.75, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, fontSize: 12 }}>winget install OpenJS.NodeJS.LTS</Box>
+            (or download the LTS from nodejs.org and run the installer). This box re-checks every few seconds and moves on by itself once Node is there.
+          </Typography>
         ) : st.bridge === false ? (
-          <Box sx={{ mt: 0.5 }}>
-            <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
-              {st.manager?.phase === "installing" ? `Installing the bridge — ${st.manager.detail}`
-                : st.manager?.phase === "starting" ? "Starting the bridge…"
-                : st.manager?.phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
-                : "The bridge is not running. Taskuary can install and start it for you; the QR appears here the moment it is up."}
+          <Box>
+            <Typography variant="caption" sx={{ color: phase === "failed" ? "#a33" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
+              {phase === "installing" ? "Fetching the bridge's dependency (Baileys, not bundled on purpose). The QR appears here the moment the bridge is up."
+                : phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
+                : "Starting the bridge…"}
             </Typography>
-            <Button size="small" variant="contained" disableElevation disabled={["installing", "starting"].includes(st.manager?.phase)}
-              startIcon={["installing", "starting"].includes(st.manager?.phase) ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <PlayArrowIcon sx={{ fontSize: 15 }} />}
-              onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/start`); } catch { /* status polling shows the failure */ } }}>
-              {st.manager?.phase === "failed" ? "Try again" : "Start the bridge"}
-            </Button>
+            {phase === "failed" && (
+              <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Try again</Button>
+            )}
           </Box>
         ) : st.pairing_code ? (
           <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}>

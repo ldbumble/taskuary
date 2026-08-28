@@ -18,7 +18,9 @@ import TuneIcon from "@mui/icons-material/Tune";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { AgentsPage } from "./AgentsPanel.jsx";
+import AboutYou from "./AboutYou.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, Empty, FilterPills } from "./ui.jsx";
@@ -161,6 +163,7 @@ const SECTION_HELP = {
 };
 
 const PAGES = {
+  about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
   config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
   memory: { title: "Agent memory", icon: PsychologyIcon, desc: "Standing notes learned from your verdicts, injected into every draft." },
@@ -450,6 +453,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
       </Box>
     );
   }
+
+  if (page === "about") return <AboutYou />;
 
   if (page === "agents") {
     return <AgentsPage onBack={() => setPage(null)} />;

@@ -1533,6 +1533,30 @@ class OwnerBody(BaseModel): name: str; email: str | None = None
 @app.get('/api/owner')
 def get_owner(): return {**store.owner(), 'tokens': list(store_mod.DOC_TOKENS)}
 
+# ── About you (taskuary/whoami.py): what the system knows about its owner, in one place ──
+@app.get('/api/whoami')
+def whoami():
+    from . import whoami as _w
+    return _w.profile(store)
+
+@app.patch('/api/whoami')
+def whoami_save(body: dict):
+    """The manual facts (phone, handles, title, bio, avatar choice) - plain whitelisted settings.
+    Name and email keep going through PUT /api/owner, which retokens the docs."""
+    from . import whoami as _w
+    try: out = _w.save(store, body or {}, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'profile', ACTOR, detail={'fields': sorted((body or {}).keys())})
+    return out
+
+@app.get('/api/whoami/avatar')
+def whoami_avatar(style: str = 'monogram', seed: str = '', name: str = ''):
+    """A preview: the same deterministic SVG the profile shows, for a style and seed not saved yet."""
+    from . import whoami as _w
+    if style not in _w.STYLES: raise HTTPException(422, f'style must be one of {", ".join(_w.STYLES)}')
+    nm = name or (store.owner().get('owner') if store.owner().get('owner') != 'the owner' else '')
+    return {'svg': _w.avatar_svg(nm, seed or nm or 'taskuary', style), 'style': style, 'seed': seed or nm or 'taskuary'}
+
 @app.put('/api/owner')
 def put_owner(body: OwnerBody):
     """Your name, in ONE place. SOUL.md and CODER.md refer to the owner nine times between them,

@@ -29,7 +29,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
    the card through the API and runs Test until it passes - and it is a task on the Board meanwhile. ── */
-const AiSetup = ({ conn, steps, fields = [], secretLabel = "", reload }) => {
+const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], reload }) => {
   const [sess, setSess] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -42,7 +42,7 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", reload }) => {
     setBusy(true); setErr("");
     try {
       const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ai-setup`,
-        { guide: steps || [], fields: (fields || []).map(([l, k]) => [l, k]), secret_label: secretLabel || "" });
+        { guide: steps || [], fields: (fields || []).map(([l, k]) => [l, k]), secret_label: secretLabel || "", agent_steps: agentSteps || [] });
       setSess(data);
     } catch (e) { setErr(e?.response?.data?.detail || "could not start the agent"); }
     setBusy(false);
@@ -93,7 +93,12 @@ const META = {
       "Then: Authentication → Advanced settings → Allow public client flows = Yes → Save. API permissions → Add a permission → Microsoft Graph → Delegated permissions: offline_access, User.Read, Mail.ReadWrite, Mail.Send, Calendars.Read → Add. No client secret - a sign-in app is public by design. Copy the Application (client) ID into client_id here (under Admin?) and sign in above - or set TASKUARY_MS_CLIENT_ID on the server so every install uses it. No Partner Center and no publisher verification: those only remove the \"unverified\" label on the consent screen.",
       "Tenant app (admins - required for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Mark items read at the source') and Calendars.Read → Grant admin consent; Certificates & secrets → New client secret. Enter tenant_id + client_id and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
       "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
-      "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."] },
+      "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."],
+    // written FOR the agent: it drives the device-code sign-in through the API and relays the code
+    agent: ["Preferred road, no Azure portal: POST {base}/api/connectors/{cid}/ms/signin{hdr}. It returns user_code, verification_uri and a flow id. Tell the owner: open <verification_uri>, enter <user_code>, sign in with their own Microsoft account and Accept.",
+      "Poll POST {base}/api/connectors/{cid}/ms/poll{hdr} with JSON {\"flow\": \"<flow>\"} every 5 seconds. status pending = keep waiting; status ok = the card is connected as them and their mailbox was added as a source; status error = read detail. If the error carries admin_consent_url, give the owner that link to forward to their Microsoft 365 admin, and start again at step 1 once the admin has approved.",
+      "Only if the owner says they are an admin who wants a tenant app (needed for Teams chat reading or for mailboxes other than their own): ask for tenant_id, client_id and the client secret, save tenant_id and client_id in ConfigJson and the client secret as Secret.",
+      "Run Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}) and say SETUP DONE."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
       ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"]],
@@ -131,7 +136,15 @@ const META = {
       "Pair once: scan the QR the bridge prints (WhatsApp → Linked devices), or run it with --phone 1555… and enter the code it gives you.",
       "Leave the bridge running; Test here confirms the pairing and adds a catch-all source.",
       "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
-      "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."] },
+      "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."],
+    // written FOR the agent: the machine-side work is its own; the phone is the owner's
+    agent: ["Check `node --version` (18 or newer). If node is missing, tell the owner to install it from nodejs.org and stop - that is the one install that is theirs.",
+      "In Taskuary's package folder (given in your prompt) go to the whatsapp subfolder and run `npm install` yourself - the bridge's dependency (Baileys) is deliberately not bundled.",
+      "Start the bridge from that folder as a BACKGROUND process that outlives your command (PowerShell: Start-Process node -ArgumentList bridge.mjs -WorkingDirectory <folder>; bash: nohup node bridge.mjs &). Then GET http://127.0.0.1:8977/status until it answers.",
+      "If connected is false: ask the owner for the WhatsApp phone number with country code, stop the bridge, restart it with --phone <digits only>, read pairingCode from /status and tell the owner to enter that code on the phone: WhatsApp > Linked devices > Link a device > Link with phone number instead. Poll /status every 5 seconds until connected (a code expires after a while - request a fresh one if it does).",
+      "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}) - it confirms the pairing and adds the catch-all source, meaning every chat comes in.",
+      "Ask the owner whether every chat should come in or only specific ones. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Once specific chats exist, only those come in.",
+      "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
     fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
       ["Check for new messages every N seconds (blank = the global sync interval)", "poll_seconds", "60", "A chat is slower on the ten-minute mailbox clock; 60 is a good number. Only this connector polls faster"]],
@@ -979,12 +992,23 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
-      <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} reload={reload} />
+      <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
           runs on a tenant app opens on Sources, and the one button most people need was folded away */}
       {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
-      <UnderTabs tabs={["Setup", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      {tab === "Agent" && (
+        <Box>
+          <Typography variant="body2" sx={{ color: DIM, mb: 1, maxWidth: 720, mx: "auto" }}>
+            What <b>Get AI to set it up</b> hands your coding agent, on top of one standing rule: anything on this machine —
+            installs, starting processes, commands, config, the API — is the agent's own job; only your accounts, phone,
+            browser or admin console are yours to do. {m.agent?.length ? "These steps are written for the agent:" :
+              "This connector has no agent-specific steps yet, so the agent works from the Guide under that rule."}
+          </Typography>
+          {!!m.agent?.length && <Steps steps={m.agent} />}
+        </Box>
+      )}
       {tab === "Setup" && (
         <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
           {steps.map((s, i) => (

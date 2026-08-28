@@ -33,20 +33,36 @@ def live_for(store, cid: int):
     return None
 
 
-def prompt(c: dict, server: dict, guide: list, fields: list, secret_label: str) -> str:
-    """One flattened line (a newline submits in a TUI): who the owner is connecting, the guide in
-    order, the card's fields and which are still empty, how to save and test through the API, and
-    the rules. Config VALUES stay out - only the keys - so nothing on the card is echoed into the
-    CLI's own logs; the agent reads them back itself if it needs them."""
+def prompt(c: dict, server: dict, guide: list, fields: list, secret_label: str, agent_steps: list = None) -> str:
+    """One flattened line (a newline submits in a TUI): who the owner is connecting, the steps, the
+    card's fields and which are still empty, how to save and test through the API, and the rules.
+
+    Two kinds of steps. The GUIDE is the card's human guide - "run npm install, scan the QR" -
+    and handed over raw it made the agent a narrator: it told the owner to run npm install. So the
+    standing rule says machine-side work is the agent's own, and a card can carry AGENT STEPS
+    written for the agent (the card's Agent tab), with {base} and {cid} filled in here.
+    Config VALUES stay out - only the keys - so nothing on the card is echoed into the CLI's logs."""
+    import os
     cfg = json.loads(c.get('ConfigJson') or '{}')
     have, keys = [k for k, v in cfg.items() if v not in (None, '', [], {})], [str(f[1]) for f in (fields or []) if len(f) > 1]
     empty = [k for k in keys if k not in have]
     base = f"http://{server.get('host') or '127.0.0.1'}:{server.get('port') or 7787}"
     tok = server.get('token')
     hdr = f" with header X-Taskuary-Token: {tok}" if tok else ''
+    fill = lambda s: str(s).replace('{base}', base).replace('{cid}', str(c['ConnectorId'])).replace('{hdr}', hdr)
+    steps = [fill(s) for s in (agent_steps or []) if str(s).strip()]
     parts = [f"You are helping the owner connect {c.get('Name') or c.get('Type')} (a {c.get('Type')} connector, id {c['ConnectorId']}) "
-             "in Taskuary, the app this terminal belongs to. The owner is watching this terminal and answers you here.",
-             'GUIDE (Taskuary\'s own, follow it in order): ' + ' '.join(f'{i + 1}. {s}' for i, s in enumerate(guide or [])),
+             "in Taskuary, the app this terminal belongs to. The owner is watching this terminal and answers you here. "
+             f"Taskuary's package folder on this machine is {os.path.dirname(os.path.abspath(__file__))}.",
+             'WHO DOES WHAT: anything that happens on THIS machine - installing packages, starting or restarting processes, running '
+             'commands, checking ports, reading or writing config files, calling the API - is YOUR job: do it yourself and report what '
+             'happened; never hand the owner a command to run. Only what needs the owner\'s own accounts, phone, browser or admin '
+             'console is theirs, and you ask for exactly that.',
+             ('STEPS FOR YOU (written for you, the agent - do these yourself, in order): ' + ' '.join(f'{i + 1}. {s}' for i, s in enumerate(steps))
+              if steps else ''),
+             ("OWNER GUIDE (what a person would do by hand - for reference; the machine-side parts of it are yours): " if steps else
+              "GUIDE (Taskuary's own, written for a person - follow it in order, doing the machine-side parts yourself): ")
+             + ' '.join(f'{i + 1}. {s}' for i, s in enumerate(guide or [])),
              'FIELDS on the card: ' + ('; '.join(f"{f[0]} (key {f[1]})" for f in (fields or []) if len(f) > 1) or 'none') + '.'
              + (f" The card's secret field is \"{secret_label}\" - it is write-only; save it as Secret, never inside ConfigJson." if secret_label else ''),
              f"CURRENTLY SET: {', '.join(have) or 'nothing'}. EMPTY: {', '.join(empty) or 'nothing'}. Secret: {'set' if c.get('HasSecret') else 'not set'}.",
@@ -59,11 +75,11 @@ def prompt(c: dict, server: dict, guide: list, fields: list, secret_label: str) 
              'Never invent or guess credentials, ids or hostnames. Once you hold a secret, never print it back to the screen. '
              'Touch nothing in Taskuary beyond this one connector: no other endpoints, no settings, no files, no other cards. '
              'When the test passes, say SETUP DONE and what now works in one line; if it cannot pass, say exactly what is missing and stop.']
-    return ' '.join(' '.join(parts).split())
+    return ' '.join(' '.join(p for p in parts if p).split())
 
 
 def start(store, server: dict, cid: int, guide: list, fields: list = None, secret_label: str = '',
-          agent: str = None, model: str = None, actor: str = 'owner') -> dict:
+          agent: str = None, model: str = None, actor: str = 'owner', agent_steps: list = None) -> dict:
     from . import terminal as term
     c = store.get_connector(cid)
     if not c: raise ValueError('connector not found')
@@ -75,7 +91,7 @@ def start(store, server: dict, cid: int, guide: list, fields: list = None, secre
                              'Summary': f"{agent} walks the owner through the {c.get('Type')} guide in a live session on the card and saves what they give it."}, actor)
     # no repo: the session sits in Taskuary's own data folder, where there is no checkout to attribute dirt to
     t = term.open_session(store, agent, tid, None, str(config.home()), 32, 110, actor, model,
-                          seed_fn=lambda cwd: prompt(c, server, guide, fields or [], secret_label or ''))
+                          seed_fn=lambda cwd: prompt(c, server, guide, fields or [], secret_label or '', agent_steps))
     t.keep_transcript = False
     store.add_comment(tid, actor, 'human', f"{agent} is helping set up {c.get('Name') or c.get('Type')} in a live session on its card.")
     store.audit('connector', cid, 'ai_setup', actor, detail={'task': tid, 'agent': agent})

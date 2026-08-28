@@ -134,7 +134,9 @@ class WhatsAppTests(unittest.TestCase):
 
     def test_the_bridge_being_down_reads_as_instructions_not_a_stack_trace(self):
         s, c = self._store()
-        with self.assertRaises(RuntimeError) as e:
+        # the bridge is a real localhost service: when a developer HAS one running, this test must still see it down
+        with mock.patch.object(messengers.requests, 'get', side_effect=messengers.requests.ConnectionError('refused')), \
+             self.assertRaises(RuntimeError) as e:
             messengers.wa_test(s, c)
         self.assertIn('npm install', str(e.exception))
         self.assertIn('bridge.mjs', str(e.exception))

@@ -33,6 +33,20 @@ class PromptTests(unittest.TestCase):
         self.assertNotIn('X-Taskuary-Token', aisetup.prompt(conn, {'host': 'h', 'port': 1}, GUIDE, FIELDS, ''))   # no token configured: no header
 
 
+    def test_agent_steps_are_written_for_the_agent_and_the_machine_side_is_its_job(self):
+        """Handed the human guide raw, the agent told the owner to run npm install. The card's Agent
+        tab carries steps written for the agent, with {base}/{cid}/{hdr} filled in, and the standing
+        rule makes the machine-side work the agent's whether or not such steps exist."""
+        conn = {**_slack(), 'ConfigJson': '{}', 'HasSecret': False}
+        p = aisetup.prompt(conn, SERVER, GUIDE, FIELDS, '', ['Run `npm install` yourself.', 'POST {base}/api/connectors/{cid}/test{hdr} and read ok.'])
+        self.assertIn('STEPS FOR YOU (written for you, the agent', p)
+        self.assertIn(f"2. POST http://127.0.0.1:7787/api/connectors/{conn['ConnectorId']}/test with header X-Taskuary-Token: tok-1 and read ok.", p)
+        self.assertIn('OWNER GUIDE (what a person would do by hand - for reference', p); self.assertIn('1. Create a Slack app', p)
+        self.assertIn('never hand the owner a command to run', p); self.assertIn("Taskuary's package folder on this machine is", p)
+        q = aisetup.prompt(conn, SERVER, GUIDE, FIELDS, '')                        # no agent steps: the guide, under the same rule
+        self.assertNotIn('STEPS FOR YOU', q); self.assertIn('doing the machine-side parts yourself', q); self.assertIn('never hand the owner a command', q)
+
+
 class EndpointTests(unittest.TestCase):
     def setUp(self): terminal.SESSIONS.clear()
     def tearDown(self): terminal.SESSIONS.clear()

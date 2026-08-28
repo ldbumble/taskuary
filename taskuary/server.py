@@ -111,6 +111,7 @@ class ConnectorBody(BaseModel):
     Scope: str | None = None                       # read | write | admin - see scopes.SCOPES
 class AiSetupBody(BaseModel):
     guide: list[str] = []; fields: list = []; secret_label: str | None = None   # the card's Guide + form, as the UI has them
+    agent_steps: list[str] = []                                                  # the card's Agent tab: steps written FOR the agent
     agent: str | None = None; model: str | None = None
 
 
@@ -1150,7 +1151,7 @@ def wa_chats(cid: int):
 # ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
 @app.post('/api/connectors/{cid}/ai-setup')
 def connector_ai_setup(cid: int, body: AiSetupBody):
-    try: return aisetup.start(store, cfg['server'], cid, body.guide, body.fields, body.secret_label, body.agent, body.model, ACTOR)
+    try: return aisetup.start(store, cfg['server'], cid, body.guide, body.fields, body.secret_label, body.agent, body.model, ACTOR, body.agent_steps)
     except (ValueError, RuntimeError, FileNotFoundError) as e: raise HTTPException(422, str(e))
 
 @app.get('/api/connectors/{cid}/ai-setup')

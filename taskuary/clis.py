@@ -32,8 +32,9 @@ def preset_args(cmd: str) -> list:
     saved as just `cmd = "claude"` used to run bare `claude -p`: no permission flag, so a
     non-interactive claude denied every tool call and a scheduled report came back as a table
     of refusals. `claude`, `C:\\...\\claude.cmd` and `claude.exe` all resolve to the same preset."""
-    import os
-    base = os.path.basename(str(cmd or '')).lower().rsplit('.', 1)[0]
+    import re
+    # both separators on purpose: a Windows path in config.toml is still a claude on a Linux host's CI
+    base = re.split(r'[\\/]', str(cmd or ''))[-1].lower().rsplit('.', 1)[0]
     return next((list(k['args']) for k in KNOWN if k['cmd'] == base), [])
 
 

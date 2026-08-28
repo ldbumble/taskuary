@@ -171,7 +171,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     killer = threading.Timer(profile.get('timeout', 1200), lambda: (timed.set(), p.kill()))
     killer.start()
     err_buf = []
-    threading.Thread(target=lambda: err_buf.append(p.stderr.read()), daemon=True).start()
+    err_t = threading.Thread(target=lambda: err_buf.append(p.stderr.read()), daemon=True)
+    err_t.start()
     # stdin feed on its own thread: writing a big prompt while the child is already
     # emitting output can deadlock both pipes otherwise
     def _feed():
@@ -193,6 +194,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
         p.wait()
     finally:
         killer.cancel()
+    err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
     if p.returncode != 0:
         why = f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else \
             ((err_buf[0] if err_buf else '') or '\n'.join(raw[-5:]) or 'no output')[:500]

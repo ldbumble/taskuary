@@ -93,7 +93,9 @@ const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
   // viewport following along - so you watched the session scroll from its first line down to
   // the bottom, every time. The pane stays curtained until the server says the live screen is
   // up (see the 'ready' frame); nobody needs to watch their own history rewind.
-  const [restoring, setRestoring] = useState(false);
+  // Start covered. Waiting for the first replay frame before raising the curtain lets the
+  // first chunk visibly paint from row one; the whole point is that reopening looks settled.
+  const [restoring, setRestoring] = useState(true);
   const [themeName, setThemeName] = useState(savedTheme);
   const [size, setSize] = useState(savedSize);
   const termRef = useRef(null);
@@ -148,17 +150,28 @@ const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
     };
     sendRef.current = send;
     ws.onopen = () => { setState("live"); sendSize(); };
-    // a server that never sends 'ready' (older build, a child that dies mid-redraw) must not
-    // leave the curtain down over a working session - the pane opens anyway
-    let bail = null;
-    const lift = () => { clearTimeout(bail); term.scrollToBottom(); setRestoring(false); };
+    // Two things finish independently on a reattach: the server triggers the live TUI redraw,
+    // and xterm parses the old scrollback. 'ready' used to lift the curtain while that parse was
+    // still running, which is exactly the visible top-to-bottom rewind. Wait for BOTH. A server
+    // that never says ready still gets a four-second escape hatch.
+    let bail = null, revealFrame = null, replayPending = false, readySeen = false;
+    const lift = () => {
+      clearTimeout(bail); cancelAnimationFrame(revealFrame);
+      term.scrollToBottom(); setRestoring(false); term.focus();
+    };
+    const maybeLift = () => {
+      if (readySeen && !replayPending) revealFrame = requestAnimationFrame(lift);
+    };
+    bail = setTimeout(lift, 4000);
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === "out") {
-        if (m.replay) { setRestoring(true); bail = setTimeout(lift, 4000); }
-        term.write(m.data, m.replay ? () => term.scrollToBottom() : undefined);
+        if (m.replay) {
+          replayPending = true; setRestoring(true);
+          term.write(m.data, () => { replayPending = false; term.scrollToBottom(); maybeLift(); });
+        } else term.write(m.data);
       }
-      else if (m.type === "ready") lift();
+      else if (m.type === "ready") { readySeen = true; maybeLift(); }
       else if (m.type === "exit") { setState("exited"); term.write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); lift(); }
     };
     ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
@@ -185,7 +198,7 @@ const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     term.focus();
-    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail);
+    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); cancelAnimationFrame(revealFrame);
       el.removeEventListener("wheel", trap); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid]);
   return (
@@ -236,7 +249,8 @@ const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
           height, and under the app's border-box default that height INCLUDED this padding - so
           it sized one row too many and the bottom row (claude's "bypass permissions" status line)
           was drawn under the edge and clipped. Content-box reports the inner height, rows fit. */}
-      <Box ref={host} sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, boxSizing: "content-box", "& .xterm": { height: "100%" },
+      <Box ref={host} onMouseDown={() => requestAnimationFrame(() => termRef.current?.focus())}
+        sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, boxSizing: "content-box", "& .xterm": { height: "100%" },
         "& .xterm-scrollable-element > .scrollbar.vertical": {
           // pinned visible ONLY while scrollback exists (--sbar, set from the buffer state):
           // an alternate-screen TUI scrolls itself, and a dead full-height slider is a lie
@@ -251,7 +265,7 @@ const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
           simply already there - and it lifts on the live screen, scrolled to the bottom */}
       {restoring && (
         <Box sx={{ position: "absolute", inset: 0, zIndex: 1, display: "flex", alignItems: "center",
-          justifyContent: "center", gap: 1, bgcolor: THEMES[themeName].background }}>
+          justifyContent: "center", gap: 1, bgcolor: THEMES[themeName].background, pointerEvents: "none" }}>
           <CircularProgress size={13} sx={{ color: CATPPUCCIN.yellow }} />
           <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.yellow }}>
             restoring the session…

@@ -737,8 +737,11 @@ def assistant_ideas(status: str = None, mid: int = None):
 
 @app.post('/api/assistant/run')
 def assistant_run():
-    """Post now, cadence or not - the card's 'Ask now'. Nothing new to say posts nothing."""
-    return assistant.run(store, force=True)
+    """Post now, schedule or not - the card's 'ask now'. Nothing new to say posts nothing."""
+    out = assistant.run(store, force=True)
+    src = assistant.source(store)
+    if src: store.touch_source(src['SourceId'])                 # the Reports tab shows this as the last run
+    return out
 
 class IdeaBody(BaseModel): days: int = 1
 
@@ -1900,10 +1903,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             ci.poll(store)
         except Exception as e:
             logger.warning(f'CI poll failed: {e}')
-        run_due_reports(store, startup)
-        # the assistant's own clock rides the poll: hourly by default, on top of whatever arrived
-        try: assistant.run(store)
-        except Exception as e: logger.warning(f'assistant post failed: {e}')
+        run_due_reports(store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
     finally:
         try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
         finally: _POLL_BUSY.release()

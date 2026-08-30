@@ -58,6 +58,8 @@ const FIELDS = {
     ["failed only (1 = just the failures)", "failed_only", "text", "1"], AI_FIELD],
   entra_licenses: [AI_FIELD],
   automate: [["days back", "days", "text", "30"], AI_FIELD],
+  // the assistant's post: the prompt IS the configuration (what it watches for); thresholds live in Settings -> Assistant
+  assistant: [AI_FIELD],
   // the window starts at MIDNIGHT that many days back: 1 = all of yesterday plus today so far
   digest: [["days back (1 = all of yesterday + today so far; counted from midnight)", "days", "text", "1"], AI_FIELD],
   prometheus: [["PromQL query", "query", "multiline", 'up == 0   ·   sum(rate(http_requests_total[5m])) by (service)'], AI_FIELD],
@@ -119,7 +121,7 @@ const TYPE_LABELS = {
   entra_signins: "Entra ID — sign-ins", entra_licenses: "Entra ID — licence seats",
   prometheus: "Prometheus", datadog: "Datadog monitors",
   intacct: "Sage Intacct", intacct_fields: "Intacct \u2014 what fields exist",
-  digest: "Taskuary digest", automate: "Automation ideas (own data)",
+  digest: "Taskuary digest", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline",
   agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
   google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",
@@ -144,7 +146,7 @@ const TYPE_GROUPS = [
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],
   ["Windows", ["winrm"]],
-  ["Taskuary's own data", ["digest", "automate"]],
+  ["Taskuary's own data", ["digest", "automate", "assistant"]],
 ];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",

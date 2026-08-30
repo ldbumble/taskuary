@@ -25,14 +25,33 @@ from loguru import logger
 from .store import task_ref
 
 CHANNEL = 'assistant'
-PRODUCERS = ('followup', 'prep', 'cold', 'idea')
-DAYS = 30                  # how far back followups are read
-MAX_SAY = 6                # lines per post - a post nobody reads to the end is a post that failed
+PRODUCERS = ('followup', 'promise', 'prep', 'cold', 'idea')
+DAYS = 30                  # how far back followups and promises are read
+MAX_LINES = 5              # lines per post by default - a post nobody reads to the end is a post that failed
 POST_TOKENS = 700
-# the owner's last word on a thread asked or promised something - that is what a chase is for
+# the owner's last word on a thread ASKED for something - that is what a chase is for...
 _ASKS = re.compile(r'\?|\b(let me know|could you|can you|would you|please (send|confirm|share|advise|review|check)|get back to me|'
-                   r'by (monday|tuesday|wednesday|thursday|friday|eod|end of (day|week)|tomorrow|next week)|'
-                   r'i will (send|get|have|follow|circle))\b', re.I)
+                   r'by (monday|tuesday|wednesday|thursday|friday|eod|end of (day|week)|tomorrow|next week))\b', re.I)
+# ...or PROMISED something, which is the owner's own open item, not the other side's
+_PROMISE = re.compile(r"\b(i('ll| will)|i'?m going to|let me) (send|get|have|follow|circle|check|share|update|confirm|look|review|come back|revert)\b", re.I)
+
+# The editable instruction - what a real assistant watches for. Seeded as the 'Assistant' report
+# on the Reports tab (store.__init__), so the owner edits it there like the Morning digest's;
+# this copy is the default and the fallback. CONTRACT (the JSON shape) stays in code.
+PROMPT = (
+    'You are my assistant. Once an hour, tell me only what a sharp human assistant would lean over and say - '
+    'nothing I can already see in my inbox. Watch for, in this order of worth:\n'
+    '1. What I am waiting on from others and have not chased (the CANDIDATES marked followup): name who and what, and '
+    'whether it is worth a nudge yet - a vendor who always takes a week is not news at day two.\n'
+    '2. What I promised and have not done (promise): the date I gave, and whether it has passed.\n'
+    '3. Meetings in the next day (prep): who is in the room, the last exchange I had with each, the one open item, and '
+    'the question worth asking. A recurring standup with nothing new needs no line.\n'
+    '4. Work that has gone quiet (cold): push it or drop it - say which I would do.\n'
+    '5. Dates and deadlines buried in what arrived today - a renewal, a due date, an RSVP - that nobody made a task.\n'
+    '6. Patterns: the same person asking twice, a thread past six messages with no decision, two people asking me '
+    'the same thing, a system failing twice this week.\n'
+    '7. Getting ahead: the thing to do now so the next ask never comes.\n'
+    'Be useful, not busy: a quiet day gets no post. Never repeat anything under ALREADY SAID, reworded or not.')
 
 
 def cfg(store) -> dict:
@@ -42,9 +61,19 @@ def cfg(store) -> dict:
         except (TypeError, ValueError): return d
     raw = s.get('assistant_producers')
     prod = {p.strip() for p in (raw if raw is not None else ','.join(PRODUCERS)).split(',') if p.strip()}
-    return {'on': s.get('assistant_enabled', '1') == '1', 'every': n('assistant_every_minutes', 60),
-            'followup_h': n('assistant_followup_hours', 24), 'cold_d': n('assistant_cold_days', 3),
+    return {'followup_h': n('assistant_followup_hours', 24), 'cold_d': n('assistant_cold_days', 3), 'max': max(1, n('assistant_max_lines', MAX_LINES)),
             'card': s.get('assistant_card', '1') == '1', 'producers': prod, 'last': s.get('assistant_last_run') or ''}
+
+
+def source(store) -> dict | None:
+    """The 'Assistant' row on the Reports tab: its schedule, its instruction, and whether it is on at
+    all - the same three things the Morning digest keeps there. None when the owner deleted it."""
+    for src in store.list_sources(active_only=False):
+        if src.get('Channel') != 'report': continue
+        try: c = json.loads(src.get('ConfigJson') or '{}')
+        except ValueError: continue
+        if c.get('type') == 'assistant': return src | {'cfg': c}
+    return None
 
 
 def _ts(s): return str(s or '')[:19].replace('T', ' ')
@@ -56,25 +85,34 @@ def _dt(s):
 
 
 # ── the candidates: facts the hub can find without a model ───────────────────────────────────
-def followups(store, hours: int) -> list:
-    """Threads where the last word is the owner's, `hours` old or more, and that word asked for
-    or promised something. Silence after a plain "thanks" is not a followup."""
+def followups(store, hours: int, want=('followup', 'promise')) -> list:
+    """Threads where the last word is the owner's, `hours` old or more, and that word ASKED for
+    something (followup - theirs to answer, ours to chase) or PROMISED something (promise - the
+    owner's own open item). Silence after a plain "thanks" is neither."""
     from .triage import strip_boilerplate
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     out = []
     for r in store.owner_last_words(_since(DAYS), cut):
         body = strip_boilerplate(str(r.get('BodyText') or ''))
-        if not _ASKS.search(body): continue
+        kind = 'promise' if _PROMISE.search(body) else 'followup' if _ASKS.search(body) else None
+        if not kind or kind not in want: continue
         inbound = store.last_inbound_in(r['ConversationId'])
         if not inbound: continue                                    # nothing of theirs to answer under
         who = inbound.get('FromName') or inbound.get('FromEmail') or 'them'
         sent = _dt(r['SentAt']) or datetime.now()
         days = max(1, int((datetime.now() - sent).total_seconds() // 86400))
-        out.append({'key': f"followup:{r['ConversationId']}", 'kind': 'followup', 'sig': _ts(r['SentAt']),
-                    'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
-                              f"- nothing has come back in {days} day(s)."),
-                    'text': f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{_short(inbound.get('Subject'), 60)}\" - follow up?",
-                    'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
+        subj = _short(inbound.get('Subject'), 60)
+        if kind == 'promise':
+            out.append({'key': f"promise:{r['ConversationId']}", 'kind': 'promise', 'sig': _ts(r['SentAt']),
+                        'facts': f"You told {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" - {days} day(s) ago, and the thread has not moved.",
+                        'text': f"You told {who} you would - \"{_short(body, 70)}\" - {days} day{'s' if days != 1 else ''} ago on \"{subj}\". Done?",
+                        'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
+        else:
+            out.append({'key': f"followup:{r['ConversationId']}", 'kind': 'followup', 'sig': _ts(r['SentAt']),
+                        'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
+                                  f"- nothing has come back in {days} day(s)."),
+                        'text': f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - follow up?",
+                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
     return out
 
 
@@ -127,9 +165,10 @@ def prep(store) -> list:
 
 def candidates(store, c: dict) -> list:
     out = []
-    for name, fn in (('followup', lambda: followups(store, c['followup_h'])), ('prep', lambda: prep(store)),
-                     ('cold', lambda: cold(store, c['cold_d']))):
-        if name not in c['producers']: continue
+    want = tuple(k for k in ('followup', 'promise') if k in c['producers'])
+    for name, fn in (('followup/promise', lambda: followups(store, c['followup_h'], want) if want else []),
+                     ('prep', lambda: prep(store) if 'prep' in c['producers'] else []),
+                     ('cold', lambda: cold(store, c['cold_d']) if 'cold' in c['producers'] else [])):
         try: out += fn()
         except Exception as e: logger.warning(f'assistant: {name} candidates failed - {e}')
     return out
@@ -150,7 +189,7 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'Answer JSON only: {"say": [{"key": "<a candidate key, or idea:<short-slug> for a thought of your own>", '
             '"text": "<one line, under 30 words, first person: the fact and what I would do>", "mid": <the message id it is '
             'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>"}]}.\n'
-            f'At most {MAX_SAY} entries. Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
+            'At most {max_lines} entries. Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
             'one-day silence from someone who always takes a week is not news) - skipping is free, repeating is not: never say '
             'again, reworded or not, anything under ALREADY SAID. Your own ideas are the point: a thread going in circles, a '
             'promise buried in a mail, two people asking the same thing, the thing to do now so the next ask never comes. '
@@ -174,7 +213,7 @@ def _said(store) -> str:
     return '\n'.join(f"- ({i['Status']}) {i['Text']}" for i in rows) or '(nothing yet)'
 
 
-def parse(text: str, cands: list) -> list:
+def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     """The model's list, kept honest: a key it invents must be idea:*, a candidate key keeps its
     kind and its buttons, and the text is the model's when it gave one."""
     try: j = json.loads(re.sub(r'^```(json)?|```$', '', (text or '').strip(), flags=re.M))
@@ -194,37 +233,47 @@ def parse(text: str, cands: list) -> list:
             out.append({'key': key[:120], 'kind': 'idea', 'sig': txt[:60], 'text': txt, 'action': act})
         else: continue
         seen.add(key)
-        if len(out) >= MAX_SAY: break
+        if len(out) >= max_lines: break
     return out
 
 
-def think(store, cands: list, llm) -> list:
-    """One call: COUNSEL.md's voice, the candidates, the day, what was already said."""
+def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES) -> list:
+    """One call: COUNSEL.md's voice, the owner's instruction (the Reports tab), the candidates, the
+    day, what was already said."""
     doc = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
     soul = store.doc('soul') or ''
-    system = doc + CONTRACT + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else '')
+    system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{(instruction or PROMPT).strip()}" + CONTRACT.replace('{max_lines}', str(max_lines))
+              + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
     user = ('CANDIDATES:\n' + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
             + f"\n\nARRIVED TODAY:\n{_today(store)}\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}")
-    return parse(llm(system, user, max_tokens=POST_TOKENS), cands)
+    return parse(llm(system, user, max_tokens=POST_TOKENS), cands, max_lines)
+
+
+def facts(store) -> str:
+    """What a run would hand the model, as text - the Reports tab's Preview (reports.run_assistant)."""
+    c = cfg(store); now = datetime.now()
+    state = {i['Key']: i for i in store.list_ideas()}
+    cands = [x for x in candidates(store, c) if fresh(state, x, now)]
+    return ('CANDIDATES (new since the last post):\n' + ('\n'.join(f"[{c_['key']}] {c_['facts']}" for c_ in cands) or '(none)')
+            + f"\n\nARRIVED TODAY:\n{_today(store)}\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID:\n{_said(store)}")
 
 
 # ── the post ─────────────────────────────────────────────────────────────────────────────────
-def due(c: dict, now: datetime) -> bool:
-    last = _dt(c['last'])
-    return not last or (now - last).total_seconds() >= c['every'] * 60
-
-
 def _public(i: dict) -> dict:
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'action': a, 'status': i.get('Status')}
 
 
-def run(store, llm=None, force: bool = False) -> dict:
-    """The clock's entry (server._poll_reports) and the panel's "Ask now". Gated by the switch and
-    the cadence unless forced; never raises out of the poll. Posts nothing when nothing is new."""
+def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
+    """One post. The Reports tab's scheduler calls this when the 'Assistant' report is due
+    (reports.run_report_source), the card's "ask now" calls it forced; the instruction is the
+    report's editable prompt. Deleting or switching off that report is the off switch - a forced
+    run still answers, so "ask now" works with it off. Posts nothing when nothing is new."""
     c = cfg(store); now = datetime.now()
-    if not c['on'] or (not force and not due(c, now)): return {'ran': False, 'said': 0}
+    src = source(store)
+    if not force and not (src and src.get('Active')): return {'ran': False, 'said': 0}
+    if instruction is None and src: instruction = (src['cfg'].get('ai_prompt') or '').strip() or None
     store.set_setting('assistant_last_run', now.isoformat(timespec='seconds'), 'assistant')
     state = {i['Key']: i for i in store.list_ideas()}
     cands = [x for x in candidates(store, c) if fresh(state, x, now)]
@@ -234,10 +283,10 @@ def run(store, llm=None, force: bool = False) -> dict:
         except Exception as e:
             logger.debug(f'assistant: no model - {e}'); llm = None
     if llm and 'idea' in c['producers']:
-        try: say = think(store, cands, llm)
+        try: say = think(store, cands, llm, instruction, c['max'])
         except Exception as e:
-            logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say = cands[:MAX_SAY]
-    else: say = cands[:MAX_SAY]           # no model: the facts still stand, in the hub's own words
+            logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say = cands[:c['max']]
+    else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
     say = [s for s in say if fresh(state, s, now)]         # a model echoing a dismissed key changes nothing
     if not say: return {'ran': True, 'said': 0}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
@@ -327,6 +376,9 @@ def status(store) -> dict:
         meetings = (cal.upcoming(store, hours=36).get('events') or [])[:3]
     except Exception:
         pass
-    return {'card': c['card'], 'enabled': c['on'], 'every': c['every'], 'last_run': c['last'],
+    src = source(store); sc = (src or {}).get('cfg') or {}
+    every = (f"every {sc['every_minutes']} min" if sc.get('every_minutes') else f"cron {sc['cron']}" if sc.get('cron')
+             else f"daily at {sc['daily_at']}" if sc.get('daily_at') else 'daily') if src else 'no schedule - the Assistant report was deleted'
+    return {'card': c['card'], 'enabled': bool(src and src.get('Active')), 'every': every, 'last_run': c['last'], 'max': c['max'],
             'working': working, 'waiting': waiting, 'open': len([t for t in act_ if t['TaskId'] not in live]),
             'reviews': len(store.list_reviews('pending')), 'meetings': meetings, 'ideas': len(store.list_ideas('open'))}

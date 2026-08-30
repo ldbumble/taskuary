@@ -35,14 +35,14 @@ import { ROLES, ACTION_COLORS, TAGS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BOR
 // amber for scheduled reports, the one row that is ours and not a person, so it has to read
 // from across the room rather than blend into the paper the way sage did.
 export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b2a26", report: "#c47d1a", assistant: "#6f8a6e",
-  followup: "#6f8a6e", prep: "#8a7a5c", cold: "#8a3646", idea: "#55697a",     // the assistant's producers (Settings)
+  followup: "#6f8a6e", promise: "#55697a", prep: "#8a7a5c", cold: "#8a3646", idea: "#55697a",     // the assistant's producers (Settings)
   slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", imessage: "#34C759", ai: "#55697a",
   jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF", clickup: "#7b68ee", todoist: "#e44332",
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
   aws: "#ff9900", azure: "#0078d4", database: "#6b6459", smb_file: "#6b6459" };
 const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon, assistant: SmartToyIcon,
-  followup: SendIcon, prep: GroupsIcon, cold: ErrorOutlineIcon, idea: AutoAwesomeIcon,
+  followup: SendIcon, promise: ChecklistIcon, prep: GroupsIcon, cold: ErrorOutlineIcon, idea: AutoAwesomeIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon, imessage: SendIcon,
   ai: AutoAwesomeIcon, jira: BugReportIcon, asana: ChecklistIcon, monday: ViewKanbanIcon,
   clickup: ViewKanbanIcon, todoist: ChecklistIcon,

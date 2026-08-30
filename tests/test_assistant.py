@@ -107,15 +107,45 @@ class PostTests(unittest.TestCase):
         self.assertEqual(out['said'], 1)
         self.assertIn('No answer from Dana', s.get_message(out['message_id'])['BodyText'])
 
-    def test_the_clock_and_the_switch(self):
+    def test_the_reports_tab_is_the_switch_the_clock_and_the_instruction(self):
+        """The 'Assistant' report ships seeded like the Morning digest: hourly, on startup, its prompt the
+        editable instruction. Deleting it (or switching it off) turns the post off - except for 'ask now'."""
         s = self._seed()
-        s.set_setting('assistant_enabled', '0', 't')
-        self.assertEqual(assistant.run(s, llm=lambda *a, **k: '{"say": []}', force=True), {'ran': False, 'said': 0})
-        s.set_setting('assistant_enabled', '1', 't')
-        s.set_setting('assistant_last_run', datetime.now().isoformat(timespec='seconds'), 't')
-        self.assertFalse(assistant.run(s, llm=lambda *a, **k: '{"say": []}')['ran'])           # not due yet
-        s.set_setting('assistant_last_run', (datetime.now() - timedelta(hours=2)).isoformat(timespec='seconds'), 't')
-        self.assertTrue(assistant.run(s, llm=lambda *a, **k: '{"say": []}')['ran'])
+        src = assistant.source(s)
+        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Assistant', 'assistant', 60, 1))
+        self.assertIn('What I promised', src['cfg']['ai_prompt'])
+        seen = []
+        def llm(system, user, **k): seen.append(system); return '{"say": []}'
+        # a due run through the report machinery, with an edited instruction
+        c = src['cfg'] | {'ai_prompt': 'Only chase vendors. Never mention meetings.'}
+        s._exec('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), src['SourceId']))
+        from taskuary.reports import run_report_source
+        out = run_report_source(s, s.get_source(src['SourceId']), llm)
+        self.assertTrue(out['ran']); self.assertIn('Only chase vendors', seen[0]); self.assertIn('At most 5 entries', seen[0])
+        self.assertEqual([r for r in s.feed(limit=10) if r['Channel'] == 'report'], [])           # no report row - the assistant posts its own kind
+        # switched off on the Reports tab: the scheduler's call does nothing, 'ask now' still answers
+        s._exec('UPDATE source SET Active=0 WHERE SourceId=?', (src['SourceId'],))
+        self.assertEqual(assistant.run(s, llm=llm), {'ran': False, 'said': 0})
+        self.assertTrue(assistant.run(s, llm=llm, force=True)['ran'])
+        self.assertFalse(assistant.status(s)['enabled'])
+        s.delete_source(src['SourceId'])
+        self.assertIsNone(assistant.source(s)); self.assertIn('deleted', assistant.status(s)['every'])
+
+    def test_lines_per_post_is_a_setting(self):
+        s = self._seed()
+        s.set_setting('assistant_max_lines', '2', 't')
+        say = [{'key': f'idea:n{i}', 'text': f'idea number {i}', 'mid': None, 'task': None} for i in range(5)]
+        out = assistant.run(s, llm=lambda *a, **k: json.dumps({'say': say}), force=True)
+        self.assertEqual(out['said'], 2)
+
+    def test_a_promise_you_made_is_your_own_open_item_not_a_chase(self):
+        s = _store()
+        _mail(s, DANA, 'Contract', 'Can you send the signed copy?', days=4, conv='p1')
+        _mine(s, 'Re: Contract', "Yes - I'll send it over by Friday.", days=3, conv='p1')
+        got = assistant.followups(s, hours=24)
+        self.assertEqual([c['kind'] for c in got], ['promise'])
+        self.assertIn('You told Dana you would', got[0]['text']); self.assertEqual(got[0]['action']['type'], 'message')
+        self.assertEqual(assistant.followups(s, hours=24, want=('followup',)), [])                # the producer is a switch
 
     def test_producers_are_switches(self):
         s = self._seed()

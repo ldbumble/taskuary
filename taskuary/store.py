@@ -201,10 +201,12 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
-                    # the assistant's POST on the Timeline (assistant.py): its clock, what it looks for, the
-                    # silence and quiet that count as news, and whether the status card shows at the top
-                    'assistant_enabled': '1', 'assistant_every_minutes': '60', 'assistant_followup_hours': '24',
-                    'assistant_cold_days': '3', 'assistant_card': '1', 'assistant_producers': 'followup,prep,cold,idea',
+                    # the assistant's POST on the Timeline (assistant.py): what it looks for, the silence and
+                    # quiet that count as news, how much it says, and whether the status card shows at the
+                    # top. Its clock and its instruction live on the Reports tab (the seeded 'Assistant' report).
+                    'assistant_followup_hours': '24',
+                    'assistant_cold_days': '3', 'assistant_card': '1', 'assistant_producers': 'followup,promise,prep,cold,idea',
+                    'assistant_max_lines': '5',
                     # the coder's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'coder_context_file': '1',
@@ -431,6 +433,15 @@ class SQLiteStore:
                                  json.dumps({'type': 'automate', 'title': 'Automation ideas', 'days': 30,
                                              'cron': '0 8 * * 1', 'ai_prompt': AUTOMATE_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('automate_report_seeded', '1', 'template')")
+            # ...and the Assistant (assistant.py): its post on the Timeline is scheduled and worded HERE
+            # too - hourly by default, the instruction editable, deleting the row is the off switch
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='assistant_report_seeded'").fetchone():
+                from .assistant import PROMPT as ASSISTANT_PROMPT
+                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
+                                ('report', 'Assistant', 'template', 1,
+                                 json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 60, 'on_startup': True,
+                                             'ai_prompt': ASSISTANT_PROMPT})))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT

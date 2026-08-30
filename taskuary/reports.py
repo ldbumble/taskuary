@@ -291,6 +291,15 @@ def run_digest(cfg):
     return head, gather(cfg['store'], days)
 
 
+def run_assistant(cfg):
+    """The 'Assistant' report - the post on the Timeline (assistant.py). Scheduled and worded on the
+    Reports tab like the Morning digest, but it does not file prose: run_report_source hands the
+    due run to assistant.run, which posts ideas with buttons and state. This executor is what
+    PREVIEW shows - the facts a run would hand the model. `store` arrives via resolve_cfg."""
+    from .assistant import facts
+    return 'what the assistant would read right now', facts(cfg['store'])
+
+
 def run_automate(cfg):
     """{"days": 30} - Taskuary's own traffic as the data: what repeats often enough to
     automate, and the concrete policy/report/switch that would kill it. Ships seeded as
@@ -426,7 +435,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
-            'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
+            'rss': run_rss, 'digest': run_digest, 'automate': run_automate, 'assistant': run_assistant,
             'calendar': _calendar,       # the owner's busy times, off the Outlook (and Google) cards - read-only
             'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
             # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
@@ -699,6 +708,12 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     cfg = json.loads(src.get('ConfigJson') or '{}')
     title = cfg.get('title') or src['Address']
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
+    if cfg.get('type') == 'assistant':
+        # not a report row: the assistant posts its own kind of row (ideas with buttons and state),
+        # on this report's schedule and with this report's prompt as its instruction
+        from . import assistant
+        out = assistant.run(cfg['store'] if cfg.get('store') else store, llm, force=True, instruction=cfg.get('ai_prompt'))
+        return {'message_id': out.get('message_id'), 'subject': f"{title} - {out.get('said', 0)} line(s)", 'files': 0, **out}
     try:
         head, summary = render_report(store, cfg, llm)
         subject, body = f'{title} — {head}', summary

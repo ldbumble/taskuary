@@ -78,12 +78,9 @@ const KNOB_META = {
     help: "An earlier design had a separate send gate. Sending is now simply what Approve & send does, so this switch controls nothing." },
 
   // ── Assistant: the voice on the Timeline (assistant.py) ──
-  assistant_enabled: { group: "Assistant", label: "The assistant posts on the Timeline", type: "switch",
-    desc: "On its own clock it says what it noticed: the reply you sent and never heard back on, the meeting coming up and what came before it, the task gone quiet, its own ideas from the day's mail — one row, each line with its buttons.",
-    help: "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice: dismissed stays dismissed until the facts change, snoozed sleeps. 'Follow up' drafts the chase in your voice into Review — nothing is sent by itself; 'Make it a task' starts the agent; 'Not this' teaches LEARNED.md which nudges you never want. Voice and rules: COUNSEL.md → The post (Docs tab). Without an AI connector the facts still post, in the hub's own words." },
-  assistant_every_minutes: { group: "Assistant", label: "Minutes between posts", type: "number",
-    desc: "How often it looks — it posts only when something is new. 60 by default.",
-    help: "The clock rides the background sync (Sync & startup → poll interval), so a value under that interval means 'every sync'. 'Ask now' on the status card posts regardless of the clock." },
+  assistant_max_lines: { group: "Assistant", label: "Lines per post, at most", type: "number",
+    desc: "The assistant posts on the Timeline on the schedule and with the instruction of the 'Assistant' report (Reports tab — edit the prompt there, change the cadence, delete it to turn it off). This caps how much one post says. 5 by default.",
+    help: "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice: dismissed stays dismissed until the facts change, snoozed sleeps. 'Follow up' drafts the chase in your voice into Review — nothing is sent by itself; 'Make it a task' starts the agent; 'Not this' teaches LEARNED.md which nudges you never want. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Ask now' on the status card posts regardless of the schedule." },
   assistant_followup_hours: { group: "Assistant", label: "Silence before a follow-up", type: "number",
     desc: "Hours after your last reply on a thread — one that asked for or promised something — before 'no answer yet, follow up?' appears. 24 by default.",
     help: "Only your own last word counts, and only when it asked or promised something ('could you send', 'by Friday', a question mark). A plain thanks that goes unanswered is not a follow-up. The chase itself is drafted only when you click." },
@@ -93,8 +90,8 @@ const KNOB_META = {
   assistant_card: { group: "Assistant", label: "Status card at the top of the Timeline", type: "switch",
     desc: "One quiet line: agents working, tasks waiting on you, drafts to review, the next meeting — and 'ask now'. Status, not advice: the recommendations are the rows.",
     help: "Off hides the card; the posts keep coming. The card refreshes every minute while the tab is visible." },
-  assistant_producers: { group: "Assistant", label: "What it looks for", type: "channels", options: ["followup", "prep", "cold", "idea"],
-    desc: "followup = your unanswered asks · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · idea = the model's own thoughts from the day's mail.",
+  assistant_producers: { group: "Assistant", label: "What it looks for", type: "channels", options: ["followup", "promise", "prep", "cold", "idea"],
+    desc: "followup = your unanswered asks · promise = what you said you would do and have not · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · idea = the model's own thoughts from the day's mail, guided by the report's prompt.",
     help: "Switch a kind off and it never appears in a post again; lines already posted keep their buttons. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words." },
 
   // ── Coder agent: who works the tasks, and how eagerly ──

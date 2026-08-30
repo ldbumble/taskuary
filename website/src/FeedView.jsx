@@ -1555,7 +1555,7 @@ const AssistantCard = ({ onOpenTask }) => {
             sx={{ textTransform: "none", fontSize: 11.5, color: "#55697a", minWidth: 0, px: 0.75 }}>open {st.waiting[0].ref}</Button>
         )}
         <Button size="small" disabled={busy || !st.enabled} onClick={now}
-          title={st.last_run ? `last post ${fmtDateTime(st.last_run)} · every ${st.every} min` : "the assistant has not posted yet"}
+          title={`${st.last_run ? `last post ${fmtDateTime(st.last_run)}` : "no post yet"} · ${st.every} · schedule and instruction: Reports tab → Assistant`}
           sx={{ textTransform: "none", fontSize: 11.5, color: "#4f6b4e", minWidth: 0, px: 0.75 }}>{busy ? "thinking…" : "ask now"}</Button>
       </Box>
     </Box>

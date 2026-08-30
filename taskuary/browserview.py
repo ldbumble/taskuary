@@ -152,5 +152,4 @@ def hint() -> str:
     seed rides a tty line with a hard cap, and the CLI documents its own commands
     (`agent-browser skills get core`)."""
     if not shutil.which('agent-browser'): return ''
-    return ('BROWSER: agent-browser is installed and the owner watches it live beside this terminal. Never type passwords '
-            'or login codes yourself - say so and wait for the owner to take over the page.')
+    return 'BROWSER: agent-browser is installed; Never type passwords/codes.'

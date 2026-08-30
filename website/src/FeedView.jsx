@@ -29,6 +29,7 @@ import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
+import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -654,6 +655,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
     if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
     setDetail(d);
   };
+  // Transcription replaces the message body in place. Reflect the returned body immediately,
+  // and invalidate the minute-long detail cache so reopening cannot resurrect the placeholder.
+  const messageBodyChanged = useCallback((mid, body) => {
+    cache.current.delete(mid);
+    setRows((cur) => (cur || []).map((r) => r.MessageId === mid ? { ...r, Preview: body } : r));
+    setSel((cur) => cur?.MessageId === mid ? { ...cur, Preview: body } : cur);
+    setDetail((cur) => cur ? { ...cur, messages: (cur.messages || []).map((m) =>
+      m.MessageId === mid ? { ...m, BodyText: body } : m) } : cur);
+    load(rowsLen.current);
+  }, [load]);
   // leaving: a hover-opened row and its panel close 400ms after the cursor has left both the list
   // and the panel (the gap between them is crossed in well under that); a clicked one stays
   const leaveTimer = useRef(null);
@@ -1052,6 +1063,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
               <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
                 decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
                 onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
+                onMessageChanged={messageBodyChanged}
                 sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
             )}
           </Box>
@@ -1105,7 +1117,7 @@ const PanelLabel = ({ children }) => (
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
 const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh,
-                        sendErr, clearSendErr, onLock }) => {
+                        onMessageChanged, sendErr, clearSendErr, onLock }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
@@ -1335,7 +1347,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   icon={<CloseIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
                   label="Not a coding task" hint={`keep ${ref(sel.TaskId)} on your list, take the agent off it — and remember that for mail like this`} />
               )}
-              <VoiceNoteRow sel={sel} onRefresh={onRefresh} />
+              <VoiceNoteRow sel={sel}
+                body={voiceNoteBody(sel, (detail?.messages || []).find((m) => m.MessageId === sel.MessageId))}
+                onRefresh={onRefresh} onMessageChanged={onMessageChanged} />
               <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               {sel.TaskId && (
                 <ChoiceRow tint="#e3e6e1" onClick={() => setReshape(true)}
@@ -1428,18 +1442,25 @@ const SectionedText = ({ text }) => (
 // A voice note that landed with nothing to transcribe it: the body is the placeholder voice.py
 // writes and the audio is attached. With a voice connector now present, one click transcribes it
 // here; without one the row says exactly what is missing, in the place the owner is looking.
-const isVoicePlaceholder = (s) => String(s || "").startsWith("🎤 Voice note") && String(s || "").includes(" - not transcribed");
-const VoiceNoteRow = ({ sel, onRefresh }) => {
+const VoiceNoteRow = ({ sel, body, onRefresh, onMessageChanged }) => {
   const voice = useVoiceReady();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  if (!isVoicePlaceholder(sel?.BodyText)) return null;
+  if (!isVoicePlaceholder(body)) return null;
   const go = async () => {
     setBusy(true); setErr("");
-    try { await api.post(`/api/messages/${sel.MessageId}/transcribe`); onRefresh?.(); }
+    try {
+      const { data } = await api.post(`/api/messages/${sel.MessageId}/transcribe`);
+      if (onMessageChanged) onMessageChanged(sel.MessageId, data.body);
+      else onRefresh?.();
+    }
     catch (e) { setErr(e?.response?.data?.detail || "transcription failed"); }
     setBusy(false);
   };
+  if (!voice) return (
+    <ChoiceRow tint="#e3e6e1" busy icon={<MicIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />}
+      label="Checking voice provider…" hint="the saved audio is ready to transcribe" />
+  );
   return voice?.ready ? (
     <ChoiceRow tint="#e3e6e1" busy={busy} onClick={go} icon={<MicIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />}
       label={err ? `Transcription failed — ${err}` : "Transcribe this voice note"}

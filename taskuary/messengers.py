@@ -179,9 +179,10 @@ def wa_test(store, c) -> str:
         raise RuntimeError('bridge is running but WhatsApp is not paired yet - '
                            + (f"enter code {st['pairingCode']} on your phone (Linked devices)" if st.get('pairingCode')
                               else 'scan the QR the bridge printed in its own terminal'))
-    if not any(s['Channel'] == 'whatsapp' for s in store.list_sources(active_only=False)):
-        store.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
-    return f"paired as {st.get('me') or 'your account'} - chats flow in on the next sync"
+    # no catch-all is created here: only the chats the owner (or the setup agent) adds come in.
+    # '*' - every direct chat - is a row they add themselves. A '*' that appeared by itself was a
+    # timeline full of chats nobody asked for (the owner, 2026-08-30).
+    return f"paired as {st.get('me') or 'your account'} - add the chats you want under Chat JIDs; they flow in on the next sync"
 
 
 def wa_status(c) -> dict:
@@ -238,9 +239,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     from .channels import save_attachments
     from . import voice
     cfg = _cfg(c)
-    # '*' means every DIRECT chat; a GROUP comes in only when its JID is added as a source. Both
-    # earlier readings were wrong ways: '*' silently dropped meant a listed group muted every DM,
-    # and '*' as admit-everything flooded the timeline with every group the owner is in.
+    # '*' means every DIRECT chat and is itself opt-in (never created by default); a GROUP comes in
+    # only when its JID is added as a source. Both earlier readings were wrong ways: '*' silently
+    # dropped meant a listed group muted every DM, and '*' as admit-everything flooded the timeline
+    # with every group the owner is in.
     srcs = [s for s in sources if s.get('Channel', 'whatsapp') == 'whatsapp' and s.get('Address')]
     star = any(s['Address'] == '*' for s in srcs)
     want = {s['Address'] for s in srcs if s['Address'] != '*'}

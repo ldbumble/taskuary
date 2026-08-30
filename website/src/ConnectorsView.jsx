@@ -15,6 +15,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import SyncIcon from "@mui/icons-material/Sync";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -136,7 +137,7 @@ const META = {
       "Chat ids are discovered, never typed: ask the owner to send any message to the bot (or add it to the group and post there), then run a sync yourself with POST {base}/api/ingest/poll{hdr} and GET {base}/api/sources{hdr} - the chat appears as a telegram source, switched OFF.",
       "Read the new sources back to the owner and ask which are theirs; flip those on with POST {base}/api/sources{hdr} and JSON {\"SourceId\": <id>, \"Active\": true}. Never flip on a chat the owner did not name - a bot is public and strangers must not be able to put tasks on the board.",
       "For a group, remind them to disable the bot's privacy mode (@BotFather > /setprivacy) or it will not see messages. Turn the connector on and say SETUP DONE."] },
-  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (blank = every direct chat; group chats only when added here)", srcPh: "15551234567@s.whatsapp.net",
+  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID; add * to take every direct chat)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
        "Only for the Notifications role — the WhatsApp JID of the chat to ping"]],
@@ -772,6 +773,18 @@ export default function ConnectorsView() {
   };
 
   const byType = Object.fromEntries((connectors || []).map((c) => [c.Type, c]));
+  // #connector=<type> opens that card on arrival - the bell's Fix button lands here, and so can any
+  // link. Consumed once, so Back does not reopen it.
+  useEffect(() => {
+    const m = /connector=([\w-]+)/.exec(window.location.hash || "");
+    if (!m || !connectors) return;
+    const t = m[1];
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (t === "mssql" || t === "winrm") setOpen({ kind: t });
+    else if (DATA_META[t]) setOpen({ kind: "data", type: t });
+    else if (byType[t]) setOpen({ kind: "channel", id: byType[t].ConnectorId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectors]);
 
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
@@ -1129,6 +1142,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     catch { setSrcSync(false); }
   };
   const toggleSource = async (s) => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); reload(); };
+  const [delSrc, setDelSrc] = useState(null);      // a source being removed for good - off was the only option before
   const setActive = async (on) => { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Active: on }); reload(); };
 
   const steps = [
@@ -1215,8 +1229,14 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
             <Box sx={{ flex: 1 }} />
             {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>polled {timeAgo(s.LastPolledAt)}</Typography>}
             <Switch checked={!!s.Active} onChange={() => toggleSource(s)} />
+            <IconButton size="small" title="Remove it for good (off keeps it listed)" onClick={() => setDelSrc(s)}>
+              <DeleteOutlineIcon sx={{ fontSize: 16, color: "#867f74" }} />
+            </IconButton>
           </Box>
         ))}
+        <ConfirmDelete open={!!delSrc} what={delSrc ? `"${delSrc.Address}"` : ""} confirmLabel="Remove"
+          consequence="It is removed from this connection - nothing from it comes in until you add it again. What already arrived stays on the Timeline."
+          onClose={() => setDelSrc(null)} onConfirm={async () => { await api.delete(`/api/sources/${delSrc.SourceId}`); reload(); }} />
         <Box sx={{ display: "flex", gap: 1, mt: 1.5, maxWidth: 460 }}>
           <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setNewSrc(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSource()} />
@@ -1959,16 +1979,26 @@ const WaPair = ({ conn, reload }) => {
             <StepLine n={3} label="Scan the QR from your phone" state={stateOf(3)} />
           </Box>
         )}
+        {/* the bridge's own controls, whatever state it is in. A bridge that wedged, or one started before
+            the code on disk changed, is fixed HERE - the log's "start it: cd taskuary/whatsapp && node bridge.mjs"
+            sent people to a shell for a button's worth of work. The pairing survives a restart: it lives in
+            the auth folder, not the process. */}
+        <Box sx={{ display: "flex", gap: 1, mt: 0.75, mb: 0.75, flexWrap: "wrap", alignItems: "center" }}>
+          <Button size="small" variant="outlined" startIcon={<RestartAltIcon sx={{ fontSize: 15 }} />} disabled={busy}
+            title="Stop the running bridge (ours, or one started by hand - found by its port) and start it again from the code on disk. You stay paired."
+            onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}>
+            Restart bridge
+          </Button>
+          {st.bridge === false && st.node && !busy && phase !== "failed" && (
+            <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Start bridge</Button>
+          )}
+          <Typography variant="caption" sx={{ color: FAINT }}>
+            {st.connected ? "connected" : st.bridge === false ? "bridge not running" : "bridge up, not paired"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
+          </Typography>
+        </Box>
         {st.connected ? (
           <Box sx={{ mt: 0.5 }}>
             <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
-            {/* a bridge started before the code on disk changed keeps running the old code - this is how it catches up
-                (the pairing survives: it lives in the auth folder, not the process) */}
-            <Button size="small" sx={{ fontSize: 10.5, color: DIM, mt: 0.25, px: 0.75 }} disabled={["installing", "starting"].includes(st.manager?.phase)}
-              title="Stop the running bridge and start it again from the code on disk. You stay paired."
-              onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}>
-              {st.phone ? "Restart the bridge" : "Restart the bridge — it predates the number readout"}
-            </Button>
           </Box>
         ) : st.bridge === false && !st.node ? (
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.6, display: "block" }}>

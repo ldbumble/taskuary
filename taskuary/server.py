@@ -1135,6 +1135,12 @@ def run_source_now(sid: int):
 def report_types():
     return {'data': [{'type': t, 'status': 'planned' if t in PLANNED else 'builtin'} for t in REGISTRY]}
 
+@app.get('/api/problems')
+def problems_now():
+    """What is failing right now, for the bell in the top bar (problems.py): each with where to fix it."""
+    from . import problems
+    return {'data': problems.collect(store)}
+
 @app.get('/api/connectors')
 def connectors():
     """Channel connector cards (outlook / teams / github). Secrets are write-only.

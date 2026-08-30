@@ -12,7 +12,7 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
-import { pollWhileVisible } from "./visible.js";
+import { pollWhileActive, pollWhileVisible } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -73,6 +73,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // one you had moved to, while the funnel below still belonged to the new one - two tasks
   // in one pane, and "Done" a click away from the wrong session.
   const selRef = useRef(selected); selRef.current = selected;
+  // A refresh already in flight when the tab is left can finish after the refresh
+  // fired on return. Only the newest request is allowed to repaint the list.
+  const taskLoadSeq = useRef(0);
   const stale = (id) => selRef.current !== id;
   const { agents, models } = useAgents();
   const [err, setErr] = useState("");
@@ -94,8 +97,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // fetch everything once and filter on the derived state - the server only knows raw
   // Status, and the state a person cares about is a combination of three columns
   const loadTasks = useCallback(async () => {
-    try { setTasks((await api.get("/api/tasks")).data.data || []); }
-    catch (e) { setErr(e?.response?.data?.detail || "Failed to load tasks"); }
+    const seq = ++taskLoadSeq.current;
+    try {
+      const next = (await api.get("/api/tasks")).data.data || [];
+      if (seq === taskLoadSeq.current) setTasks(next);
+    } catch (e) {
+      if (seq === taskLoadSeq.current) setErr(e?.response?.data?.detail || "Failed to load tasks");
+    }
   }, []);
 
   const loadDetail = useCallback(async (id) => {
@@ -112,15 +120,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => { if (active) { setFilter("live"); setOlder(false); } }, [active]);
   useEffect(() => { setOlder(false); }, [filter]);
 
-  useEffect(() => { loadTasks(); }, [loadTasks]);
   // ...and keep it honest. The list was fetched ONCE, so a task whose agent picked it up
   // kept wearing "needs you" - and the pill counts kept agreeing with it - until something
   // else happened to reload. "Agent working" is a fact with a 45-second shelf life (a live
   // session that goes quiet is waiting on you); a row that states it has to be re-asked.
   // Only while this tab is the one on screen: it stays mounted behind the others.
   useEffect(() => {
-    if (!active) return;
-    return pollWhileVisible(loadTasks, 5000);
+    // Refresh now as well as polling: otherwise returning from Board shows the hidden
+    // tab's old list for five seconds.
+    return pollWhileActive(active, loadTasks, 5000);
   }, [active, loadTasks]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {

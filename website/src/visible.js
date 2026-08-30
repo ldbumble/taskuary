@@ -27,3 +27,11 @@ export function pollWhileVisible(fn, ms) {
     if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onChange);
   };
 }
+
+// Views kept mounted behind another tab need a fresh read at the moment they become
+// active, not only when their next interval happens to fire.
+export function pollWhileActive(active, fn, ms) {
+  if (!active) return undefined;
+  if (typeof document === "undefined" || document.visibilityState !== "hidden") fn();
+  return pollWhileVisible(fn, ms);
+}

@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, re, threading, time
+import asyncio, json, re, secrets, threading, time
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -723,7 +723,25 @@ def _learn_promotion(m: dict, background):
                             f"{m.get('FromEmail') or m.get('SourceName') or '?'} as fyi, but the owner made it a task - "
                             'triage under-reached')
 
-class MineBody(BaseModel): kind: str = 'general'
+@app.post('/api/messages/{mid}/brief')
+def brief_message(mid: int):
+    """The assistant's private read on this message, written now - for mail that arrived before
+    the brief existed, or when the owner wants a second look. Same road as ingest (counsel.brief):
+    the sender's recent mail, your replies to them, the topic elsewhere, open tasks, the calendar."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    from . import counsel
+    t = store.get_task(m['TaskId']) if m.get('TaskId') else None
+    intent = 'reply_only' if (t or {}).get('Kind') == 'reply' else 'task' if t else 'fyi'
+    try: b = counsel.brief(store, counsel.msg_of(m), mid, intent, invite=counsel.is_invite(m))
+    except RuntimeError as e: raise HTTPException(422, str(e))
+    if not b: raise HTTPException(502, 'no brief - either no AI connector is set up, or the AI answered in a shape that could not be read')
+    if t: store.add_comment(t['TaskId'], 'counsel', 'agent', 'ASSISTANT BRIEF\n' + counsel.render(b))
+    return {'brief': b}
+
+class MineBody(BaseModel):
+    kind: str = 'general'
+    title: str | None = None        # the assistant's suggested title, accepted as-is from the panel
 
 @app.post('/api/messages/{mid}/mine')
 def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = None):
@@ -737,6 +755,7 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     _learn_promotion(m, background)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'general', ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
+    if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
     return {'taskId': tid, 'ref': task_ref(tid)}
 
@@ -981,6 +1000,29 @@ def waitroom_bulk(tid: int, body: dict):
     (Settings -> Coder agent) each lands as its own turn when the agent stops."""
     try: return waitroom.add_many(store, tid, str((body or {}).get('text') or ''), ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
+
+_IMG_EXT = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp'}
+IMG_MAX = 12 * 1024 * 1024
+
+@app.post('/api/tasks/{tid}/waitroom/image')
+async def waitroom_image(tid: int, request: Request):
+    """A screenshot pasted into the Tell-the-agent box, posted as the raw body (no multipart
+    dependency, like /api/voice/transcribe). The pty carries text only, so the image goes to
+    disk under ~/.taskuary/attachments/waitroom/<task>/ and the NOTE names the file - a coding
+    CLI reads images from a path (Claude Code's Read does), which is how it gets to see it."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    mime = (request.headers.get('content-type') or '').split(';')[0].strip().lower()
+    ext = _IMG_EXT.get(mime)
+    if not ext: raise HTTPException(415, 'paste a PNG, JPEG, GIF or WebP image')
+    data = await request.body()
+    if not data: raise HTTPException(422, 'no image in the request')
+    if len(data) > IMG_MAX: raise HTTPException(413, 'image over 12 MB - crop it')
+    d = config.home() / 'attachments' / 'waitroom' / str(tid)
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}.{ext}'
+    p.write_bytes(data)
+    store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
+    return {'path': str(p), 'size': len(data)}
 
 @app.delete('/api/tasks/{tid}/waitroom/{wid}')
 def waitroom_drop(tid: int, wid: int):
@@ -1672,7 +1714,7 @@ def put_owner(body: OwnerBody):
     # 'the owner' is the fallback when no name is known, and real prose says those words -
     # retokenizing them would punch {{owner}} holes all over a doc that never had a name in it
     if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
+    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
@@ -1889,7 +1931,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
+        for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')

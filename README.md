@@ -265,7 +265,9 @@ other's way with three light moves. No locks, no worktrees, no manager agent:
   **✎ Tell the agent** box instead — under the terminal on the task page, on any Board card, in
   the Timeline's funnel bar. Nothing is typed mid-turn: each note lands the moment the agent
   parks at its prompt, and never on top of a question it is waiting on *you* to answer; that
-  comes first. **Paste a list** and twenty prompts become twenty notes, in order, and they
+  comes first. **Paste a screenshot** into the box and it goes along: the file is saved under
+  `~/.taskuary/attachments/waitroom/` and the note names it, so the agent opens it from disk
+  (the pty carries text only). **Paste a list** and twenty prompts become twenty notes, in order, and they
   **drip**: one per stop, each with the agent's full attention, the agent told how many wait
   behind it so it never goes looking. A session that already ended reopens with the next note
   as the ask. Withdraw any note until it has gone in. (Settings → Coder agent turns the drip

@@ -985,19 +985,34 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   const [text, setText] = React.useState("");
   const [flash, setFlash] = React.useState("");
   const [many, setMany] = React.useState(false);      // paste a list: one prompt per line, queued in order
+  const [imgs, setImgs] = React.useState([]);         // screenshots pasted into the box, going with the note
+  const [showQ, setShowQ] = React.useState(!compact); // compact folds the queued notes behind their count
   const load = React.useCallback(async () => {
     if (!taskId) return;
     try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
   }, [taskId]);
   React.useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
   const lines = text.split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).length;
+  // A screenshot pasted in: held here as a thumbnail, uploaded when you queue. The pty carries
+  // text only, so the file goes to disk and the note names it - the agent opens it from there.
+  const onPaste = (e) => {
+    const files = [...(e.clipboardData?.items || [])].filter((i) => i.kind === "file" && /^image\//.test(i.type)).map((i) => i.getAsFile()).filter(Boolean);
+    if (!files.length) return;
+    e.preventDefault();
+    setImgs((s) => [...s, ...files.map((f) => ({ id: Math.random().toString(36).slice(2), file: f, url: URL.createObjectURL(f) }))]);
+  };
+  const dropImg = (id) => setImgs((s) => { const g = s.find((x) => x.id === id); if (g) URL.revokeObjectURL(g.url); return s.filter((x) => x.id !== id); });
   const queue = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() && !imgs.length) return;
     try {
+      const paths = [];
+      for (const im of imgs) paths.push((await api.post(`/api/tasks/${taskId}/waitroom/image`, im.file, { headers: { "Content-Type": im.file.type } })).data.path);
+      const ref = !paths.length ? "" : `${paths.length === 1 ? "Pasted image - open it with your image/Read tool:" : "Pasted images - open them with your image/Read tool:"} ${paths.map((x) => `"${x}"`).join(" ")}`;
+      const body = [text.trim(), ref].filter(Boolean).join(many ? "\n" : " ");
       const { data } = many
-        ? await api.post(`/api/tasks/${taskId}/waitroom/bulk`, { text })
-        : await api.post(`/api/tasks/${taskId}/waitroom`, { text });
-      setText(""); setMany(false);
+        ? await api.post(`/api/tasks/${taskId}/waitroom/bulk`, { text: body })
+        : await api.post(`/api/tasks/${taskId}/waitroom`, { text: body });
+      imgs.forEach((im) => URL.revokeObjectURL(im.url)); setImgs([]); setText(""); setMany(false);
       if (many) { setFlash(`${data.queued} prompts queued — they drip in one per stop`); setTimeout(() => setFlash(""), 5000); load(); onQueued?.(data); return; }
       setFlash(data.delivered ? (data.state === "restarted" ? "session reopened with it" : "typed in — the agent was parked") : "queued — goes in when the agent stops");
       setTimeout(() => setFlash(""), 4000);
@@ -1009,8 +1024,71 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     : wait.state === "asking" ? "agent is asking you something — answer it first; this goes in after"
     : wait.state === "parked" ? "agent is parked — this goes straight in"
     : wait.state === "no_session" ? "no live session — this reopens one with your note as the ask" : "";
+  // compact has no room for a header line, so the placeholder carries the state instead
+  const ph = many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
+    : !compact ? "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line. Paste a screenshot to send it along."
+    : wait.state === "asking" ? "It asked you something — answer that first; this goes in after"
+    : wait.state === "parked" ? "Tell the agent — goes straight in. Enter to send, paste a screenshot to attach it"
+    : wait.state === "no_session" ? "Tell the agent — reopens a session with this as the ask"
+    : "Tell the agent — queued, typed in when it stops. Enter to send, paste a screenshot to attach it";
+  const input = (
+    <TextField fullWidth multiline minRows={many ? 6 : 1} maxRows={many ? 14 : (compact ? 2 : 5)} size="small" value={text} placeholder={ph}
+      onChange={(e) => setText(e.target.value)} onPaste={onPaste}
+      onKeyDown={(e) => { if (!many && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
+      sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: compact ? 11.5 : 12.5 },
+        ...(compact ? { "& .MuiInputBase-root": { py: "3px", px: 1 } } : {}) }} />
+  );
+  const thumbs = imgs.length > 0 && (
+    <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", mt: 0.5 }}>
+      {imgs.map((im) => (
+        <Box key={im.id} sx={{ position: "relative" }}>
+          <Box component="img" src={im.url} alt="" sx={{ height: compact ? 28 : 40, borderRadius: 0.75, border: "1px solid #ddd2b9", display: "block" }} />
+          <Box onClick={() => dropImg(im.id)} title="remove" sx={{ position: "absolute", top: -5, right: -5, width: 14, height: 14, borderRadius: 99,
+            bgcolor: "#6b5f45", color: "#fff", fontSize: 9, lineHeight: "14px", textAlign: "center", cursor: "pointer" }}>×</Box>
+        </Box>
+      ))}
+      <Typography variant="caption" sx={{ color: "#6b5f45", fontSize: 10 }}>
+        {imgs.length === 1 ? "goes with the note, as a file the agent opens" : `${imgs.length} images go with the note`}
+      </Typography>
+    </Box>
+  );
+  const queued = showQ && pending.length > 0 && (
+    <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
+      {pending.map((w, i) => (
+        <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
+          <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
+          <Typography variant="body2" noWrap={compact} title={w.Note}
+            sx={{ fontSize: compact ? 11 : 11.5, flex: 1, minWidth: 0, whiteSpace: compact ? "nowrap" : "pre-wrap", color: INK }}>{w.Note}</Typography>
+          <Typography variant="caption" onClick={async () => { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); load(); }}
+            sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+  // Compact (the wall): ONE row - the terminal is the view, this is a slot under it. The count
+  // chip is the only sign of what waits; click it to see (and withdraw) the notes.
+  if (compact) {
+    return (
+      <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 1.5, px: 0.75, py: 0.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Typography onClick={() => pending.length && setShowQ((v) => !v)}
+            title={pending.length ? `${pending.length} note${pending.length === 1 ? "" : "s"} waiting for the agent's next stop — click to ${showQ ? "hide" : "see"} them` : stateLine}
+            sx={{ ...mono, fontSize: 9.5, fontWeight: 700, color: "#6b5f45", flexShrink: 0, minWidth: 16, cursor: pending.length ? "pointer" : "default", userSelect: "none" }}>
+            ✎{pending.length ? ` ${pending.length}` : ""}
+          </Typography>
+          {input}
+          <MicButton size={15} sx={{ color: "#6b5f45", p: 0.25 }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
+          <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim() && !imgs.length}
+            sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, minWidth: 0, px: 1, py: 0.2, fontSize: 11, lineHeight: 1.4, whiteSpace: "nowrap" }}>Queue</Button>
+        </Box>
+        {thumbs}
+        {flash && <Typography variant="caption" sx={{ color: "#47654a", display: "block", mt: 0.25, fontSize: 10.5 }}>{flash}</Typography>}
+        {queued}
+      </Box>
+    );
+  }
   return (
-    <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: compact ? 1 : 1.25 }}>
+    <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
         <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>
           ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} in the funnel` : ""}
@@ -1023,31 +1101,16 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
         </Typography>
       </Box>
       <Box sx={{ display: "flex", gap: 1 }}>
-        <TextField fullWidth multiline minRows={many ? 6 : 1} maxRows={many ? 14 : (compact ? 3 : 5)} size="small" value={text}
-          placeholder={many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
-            : "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line."}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (!many && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
-          sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: 12.5 } }} />
+        {input}
         <MicButton sx={{ alignSelf: "flex-end", color: "#6b5f45" }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
-        <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim()}
+        <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim() && !imgs.length}
           sx={{ alignSelf: "flex-end", bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, whiteSpace: "nowrap" }}>
           {many ? `Queue ${lines || ""} prompt${lines === 1 ? "" : "s"}` : "Queue"}</Button>
       </Box>
+      {thumbs}
       {flash && <Typography variant="caption" sx={{ color: "#47654a", display: "block", mt: 0.5 }}>{flash}</Typography>}
-      {pending.length > 0 && (
-        <Box sx={{ mt: 0.75, display: "flex", flexDirection: "column", gap: 0.35 }}>
-          {pending.map((w, i) => (
-            <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline", fontSize: 11.5 }}>
-              <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
-              <Typography variant="body2" sx={{ fontSize: 11.5, flex: 1, whiteSpace: "pre-wrap", color: INK }}>{w.Note}</Typography>
-              <Typography variant="caption" onClick={async () => { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); load(); }}
-                sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
-            </Box>
-          ))}
-        </Box>
-      )}
-      {!compact && wait.data.some((w) => w.DeliveredAt) && (
+      {queued}
+      {wait.data.some((w) => w.DeliveredAt) && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
           {wait.data.filter((w) => w.DeliveredAt).length} earlier note{wait.data.filter((w) => w.DeliveredAt).length === 1 ? "" : "s"} already typed in.
         </Typography>

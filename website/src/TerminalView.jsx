@@ -218,7 +218,11 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           positioned, and simply could not be seen or grabbed; the only scrollbar on screen was the
           page's, which is why reaching the scrollback meant scrolling the whole window instead.
           Colour comes from XTERM_THEME - this keeps the vertical bar on permanently. */}
-      <Box ref={host} sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, "& .xterm": { height: "100%" },
+      {/* content-box, deliberately: FitAddon divides the host's computed `height` by the cell
+          height, and under the app's border-box default that height INCLUDED this padding - so
+          it sized one row too many and the bottom row (claude's "bypass permissions" status line)
+          was drawn under the edge and clipped. Content-box reports the inner height, rows fit. */}
+      <Box ref={host} sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, boxSizing: "content-box", "& .xterm": { height: "100%" },
         "& .xterm-scrollable-element > .scrollbar.vertical": {
           // pinned visible ONLY while scrollback exists (--sbar, set from the buffer state):
           // an alternate-screen TUI scrolls itself, and a dead full-height slider is a lie

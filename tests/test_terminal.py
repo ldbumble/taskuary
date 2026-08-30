@@ -1,7 +1,7 @@
 """Interactive terminals: a real pty around a process, its bytes fanned out to sockets.
 Spawns python itself (no CLI agent required), so it runs the same on every OS in CI.
 """
-import json, os, sys, time, unittest
+import json, os, sys, tempfile, threading, time, unittest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -218,6 +218,30 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_fast_keystrokes_are_coalesced_while_conpty_is_busy(self):
+        """A synchronous pywinpty write can stall while Codex repaints. The socket must keep
+        receiving so the rest of a quickly typed sentence crosses in one later PTY write, rather
+        than paying that stall once per character."""
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(8)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        calls, first_started, release = [], threading.Event(), threading.Event()
+        def slow_write(data):
+            calls.append(data)
+            if len(calls) == 1:
+                first_started.set(); release.wait(2)
+        try:
+            with mock.patch.object(t, 'write', side_effect=slow_write):
+                with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
+                    ws.send_json({'type': 'in', 'data': 'a'})
+                    self.assertTrue(first_started.wait(1))
+                    for ch in 'bcdef': ws.send_json({'type': 'in', 'data': ch})
+                    time.sleep(.1)                         # socket drains while the first PTY call waits
+                    release.set()
+                    self.assertTrue(_wait(lambda: ''.join(calls) == 'abcdef'))
+            self.assertEqual(calls, ['a', 'bcdef'])
+        finally:
+            release.set(); terminal.close(t.sid)
+
     def test_ready_follows_the_resize_repaint_on_the_wire(self):
         """resize() only requests a Codex redraw. The curtain barrier belongs after the PTY
         output caused by that request, or the owner sees the redraw flash line by line."""
@@ -287,6 +311,35 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(c.post('/api/terminals', json={'cwd': os.path.join(os.getcwd(), 'no-such-dir')}).status_code, 422)
         self.assertEqual(c.delete('/api/terminals/nope').status_code, 404)
         self.assertEqual(c.get('/api/terminals').json()['data'], [])
+
+    def test_starting_a_session_reopens_a_done_task(self):
+        tid = c.post('/api/tasks', json={'Title': 'finished but needs another pass', 'Kind': 'coding'}).json()['taskId']
+        server.store.update_task(tid, {'Status': 'done'}, 'test')
+        class Fake:
+            cwd, sid, label = os.getcwd(), 'reopened-session', 'coder'
+            def info(self): return {'sid': self.sid, 'cwd': self.cwd, 'alive': True}
+        # Exercise the exact door used by TasksView's Start session button, not dispatch's
+        # start_on_task wrapper; both must promote a closed task independently.
+        with mock.patch.object(server.hub_term, 'open_session', return_value=Fake()):
+            self.assertEqual(c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid}).status_code, 200)
+        self.assertEqual(server.store.get_task(tid)['Status'], 'in_progress')
+
+    def test_an_image_pasted_into_a_task_terminal_is_saved_for_its_prompt(self):
+        tid = c.post('/api/tasks', json={'Title': 'inspect this screenshot', 'Kind': 'coding'}).json()['taskId']
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(5)'], os.getcwd(), 'test', tid)
+        terminal.SESSIONS[t.sid] = t
+        try:
+            with tempfile.TemporaryDirectory() as tmp, mock.patch.object(server.config, 'home', return_value=Path(tmp)):
+                r = c.post(f'/api/terminals/{t.sid}/image', content=b'not-a-real-png-but-the-browser-sent-it',
+                           headers={'Content-Type': 'image/png'})
+                self.assertEqual(r.status_code, 200)
+                p = Path(r.json()['path'])
+                self.assertTrue(p.is_file())
+                self.assertEqual(p.read_bytes(), b'not-a-real-png-but-the-browser-sent-it')
+                self.assertEqual(c.post(f'/api/terminals/{t.sid}/image', content=b'x',
+                                        headers={'Content-Type': 'text/plain'}).status_code, 415)
+        finally:
+            terminal.close(t.sid)
 
     def test_wrapping_up_reads_the_screen_then_closes_everything(self):
         """"Done - wrap it up" asks the agent NOTHING. It takes the transcript that is already on

@@ -932,10 +932,12 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
     agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
     import json
-    live = for_task(tid)
-    if live: return {**live, 'existing': True}
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
+    live = for_task(tid)
+    if live:
+        if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
+        return {**live, 'existing': True}
     row = store.get_agent(agent or '')
     if not row: raise ValueError(f'unknown agent: {agent}')
     repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
@@ -946,7 +948,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
         store.add_comment(tid, actor, 'human', f'Session opened in {repo} - {why}.')
     store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',
                       f'{agent} started on this task in a live session ({term.cwd}).')
-    if t.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)
+    if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
     return {**term.info(), 'existing': False}
 
 

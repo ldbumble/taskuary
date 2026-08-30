@@ -247,7 +247,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   }, []);
   useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
   const openTerm = useCallback(async (body) => {
-    try { const { data } = await api.post("/api/terminals", body); setTerm(data); }
+    try {
+      const { data } = await api.post("/api/terminals", body); setTerm(data);
+      // Starting a session reopens a completed task. Refresh both surfaces immediately so the
+      // chip and buckets say in progress on the same click that makes the terminal appear.
+      loadDetail(body.task_id); loadTasks(); onChanged?.();
+    }
     catch (e) {
       const msg = e?.response?.data?.detail || "Could not start a terminal";
       setErr(msg);
@@ -255,7 +260,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       // here instead of sending the user off to read the error's directions
       if (/no local path/i.test(msg)) setRepoPick(true);
     }
-  }, []);
+  }, [loadDetail, loadTasks, onChanged]);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one
   useEffect(() => {

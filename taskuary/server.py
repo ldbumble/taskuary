@@ -1032,6 +1032,11 @@ async def waitroom_image(tid: int, request: Request):
     dependency, like /api/voice/transcribe). The pty carries text only, so the image goes to
     disk under ~/.taskuary/attachments/waitroom/<task>/ and the NOTE names the file - a coding
     CLI reads images from a path (Claude Code's Read does), which is how it gets to see it."""
+    return await _save_prompt_image(tid, request)
+
+
+async def _save_prompt_image(tid: int, request: Request):
+    """Store an image that will be named in a CLI prompt, from either prompt surface."""
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     mime = (request.headers.get('content-type') or '').split(';')[0].strip().lower()
     ext = _IMG_EXT.get(mime)
@@ -1045,6 +1050,15 @@ async def waitroom_image(tid: int, request: Request):
     p.write_bytes(data)
     store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
     return {'path': str(p), 'size': len(data)}
+
+
+@app.post('/api/terminals/{sid}/image')
+async def terminal_image(sid: str, request: Request):
+    """Paste a screenshot into xterm's prompt: save it and return the local path to type."""
+    t = hub_term.get(sid)
+    if not t: raise HTTPException(404, 'terminal not found')
+    if not t.task_id: raise HTTPException(422, 'this terminal is not attached to a task')
+    return await _save_prompt_image(t.task_id, request)
 
 @app.delete('/api/tasks/{tid}/waitroom/{wid}')
 def waitroom_drop(tid: int, wid: int):
@@ -2097,6 +2111,11 @@ def open_terminal(body: TermBody):
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         # a CLI you configured but never installed is the common one - say which, don't 500
         raise HTTPException(422, str(e))
+    # This is the task page's Start session door (dispatch uses terminal.start_on_task). Opening
+    # a real session is an explicit restart: the live agent belongs in progress even when this
+    # task had already been marked done, waiting or dropped.
+    if tk and tk.get('Status') != 'in_progress':
+        store.update_task(body.task_id, {'Status': 'in_progress'}, ACTOR)
     if seed_fn:
         store.add_comment(body.task_id, ACTOR, 'human',
                           f'Opened an interactive {t.label} session in {t.cwd}' + (f' - {why}.' if why else '.'))
@@ -2196,6 +2215,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
     await ws.accept()
     q = asyncio.Queue()
     t.subscribe(asyncio.get_running_loop(), q)
+    input_q = asyncio.Queue()
     send_lock = asyncio.Lock()
     delivered, inflight = 0, 0
     redraw_boundary = None
@@ -2234,6 +2254,23 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 if redraw_quiet: redraw_quiet.cancel()
                 redraw_quiet = asyncio.create_task(finish_redraw(.09))
     pump = asyncio.create_task(to_browser())
+
+    async def to_pty():
+        """Drain the socket independently of ConPTY and fold its queued keystrokes into one write.
+
+        pywinpty writes are synchronous and can take a visible beat while Codex is repainting.
+        Calling one directly from the receive loop made a fast sentence arrive one character per
+        beat. The first character may still be in flight, but the rest collect here and cross the
+        PTY in one ordered byte stream instead of paying that cost for every key.
+        """
+        while True:
+            data = await input_q.get()
+            chunks = [data]
+            while True:
+                try: chunks.append(input_q.get_nowait())
+                except asyncio.QueueEmpty: break
+            await asyncio.to_thread(t.write, ''.join(chunks))
+    input_pump = asyncio.create_task(to_pty())
     try:
         # scrubbed: a replayed scrollback that still contains the TUI's terminal queries makes
         # xterm answer them AGAIN, and the answers land in the CLI as typed junk - see terminal.py
@@ -2245,7 +2282,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
         first_resize = True
         while True:
             m = await ws.receive_json()
-            if m.get('type') == 'in': t.write(m.get('data') or '')
+            if m.get('type') == 'in': input_q.put_nowait(m.get('data') or '')
             elif m.get('type') == 'resize':
                 rows, cols = m.get('rows') or 32, m.get('cols') or 110
                 # a full-screen TUI (codex) paints with absolute cursor moves, so the raw
@@ -2265,7 +2302,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:
-        t.unsubscribe(q); pump.cancel()
+        t.unsubscribe(q); pump.cancel(); input_pump.cancel()
         if redraw_quiet: redraw_quiet.cancel()
         if redraw_cap: redraw_cap.cancel()
 

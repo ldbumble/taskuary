@@ -13,6 +13,7 @@ import "@xterm/xterm/css/xterm.css";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
 import { canRevealTerminal, changedTerminalSize, usableTerminalBox } from "./terminalSizing.js";
+import { pastedImageFiles, pastedImagePrompt } from "./terminalInput.js";
 import api from "./api.js";
 import BrowserPane from "./BrowserPane.jsx";
 import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl } from "./browserSplit.js";
@@ -210,6 +211,21 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
     const el = host.current;
     const trap = (e) => e.preventDefault();
     el.addEventListener("wheel", trap, { passive: false });
+    // xterm forwards text paste through onData, but clipboard images have no text for it to send.
+    // Save each image on this task and type the returned local paths into the CLI's own prompt.
+    const pasteImages = async (e) => {
+      const files = pastedImageFiles(e.clipboardData);
+      if (!files.length) return;
+      e.preventDefault();
+      try {
+        const paths = [];
+        for (const file of files) paths.push((await api.post(`/api/terminals/${sid}/image`, file,
+          { headers: { "Content-Type": file.type } })).data.path);
+        send({ type: "in", data: pastedImagePrompt(paths) });
+      } catch { /* leave the current prompt untouched when an upload is rejected */ }
+      term.focus();
+    };
+    el.addEventListener("paste", pasteImages, true);       // capture before xterm discards a file-only paste
     // ...and the scrollbar only shows when there is genuinely something behind it: a TUI in the
     // alternate buffer scrolls ITSELF (the wheel is forwarded to it), so xterm's own bar would be
     // a full-height slider that drags nothing.
@@ -221,7 +237,8 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     term.focus();
     return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame);
-      el.removeEventListener("wheel", trap); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
+      el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
+      d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid]);
   return (
     // height="100%": the pane fills the flex slot its parent gives it (the task page sizes it to

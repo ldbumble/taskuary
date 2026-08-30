@@ -27,6 +27,23 @@ KNOWN = [
 ]
 
 
+# Optional TOOLS a coding agent may use - not agents, so the wizard never offers them as one, and
+# none is a pip package, so pyproject's extras cannot name them. Declared here so the app can say
+# "installed / not installed - here is the one-liner" (the owner, 2026-08-30: browser use is an
+# optional dependency for now; the side-by-side UI for agent + browser is a later decision).
+TOOLS = [
+    {'name': 'agent-browser', 'cmd': 'agent-browser', 'label': 'agent-browser (Vercel)', 'license': 'Apache-2.0',
+     'install': 'npm install -g agent-browser', 'url': 'https://github.com/vercel-labs/agent-browser',
+     'why': 'a local headless Chromium the coding agent drives from the terminal, with a WebSocket screencast a panel could show live',
+     'status': 'planned'},
+]
+
+
+def tools() -> list:
+    """Every optional tool, with whether it resolves on PATH - the install hint is for the ones that do not."""
+    return [{**t, 'installed': bool(shutil.which(t['cmd'])), 'path': shutil.which(t['cmd']) or ''} for t in TOOLS]
+
+
 def preset_args(cmd: str) -> list:
     """The known CLI's headless flags, for a profile that names a cmd and nothing else. A profile
     saved as just `cmd = "claude"` used to run bare `claude -p`: no permission flag, so a

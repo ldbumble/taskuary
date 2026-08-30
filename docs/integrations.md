@@ -41,6 +41,7 @@ Nothing is polled without an enabled role.
 | OpenRouter | Available | Hosted open and closed models through one API |
 | Ollama | Available | Local models with no API key; the compatible base URL also supports LM Studio, llama.cpp, and vLLM |
 | Claude Code, Codex, Gemini, Cursor, Copilot | Available | Presets for live coding sessions; custom stdin-based CLIs are supported too |
+| agent-browser (Vercel) | Optional, planned | A local headless Chromium the coding agent drives from its terminal (`npm install -g agent-browser`, Apache-2.0); a live view of the browser beside the session is planned, not built |
 
 ## Data and report sources
 

@@ -37,4 +37,23 @@ class StoreAppTests(unittest.TestCase):
             self.assertEqual(agents._resolve_cmd('codex'), [alias])
 
 
+class OptionalToolTests(unittest.TestCase):
+    """agent-browser is an OPTIONAL dependency (the owner, 2026-08-30): a tool the coding agent may use,
+    declared so the app can say installed-or-not with the install line - never offered as an agent."""
+    def test_agent_browser_is_a_tool_with_an_install_hint_not_an_agent(self):
+        with mock.patch('shutil.which', return_value=None):
+            t = {x['name']: x for x in clis.tools()}['agent-browser']
+            self.assertEqual((t['installed'], t['path'], t['install'], t['license']), (False, '', 'npm install -g agent-browser', 'Apache-2.0'))
+            self.assertEqual([r['name'] for r in clis.detect(MemoryStore()) if r['name'] == 'agent-browser'], [])   # not a wizard row
+        with mock.patch('shutil.which', return_value=r'C:\\npm\\agent-browser.cmd'):
+            self.assertTrue(clis.tools()[0]['installed'])
+        self.assertEqual(clis.preset_args('agent-browser'), [])                        # no headless agent flags: it is not run as one
+
+    def test_the_detect_endpoint_carries_the_tools(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        j = TestClient(server.app).get('/api/cli/detect').json()
+        self.assertIn('data', j); self.assertEqual([t['name'] for t in j['tools']], ['agent-browser'])
+
+
 if __name__ == '__main__': unittest.main()

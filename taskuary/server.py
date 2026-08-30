@@ -1560,7 +1560,7 @@ def cli_detect():
     """The AI CLIs on this machine. Most people already pay for one and have no separate API key,
     so the wizard offers what they have before it asks for a key."""
     from . import clis
-    return {'data': clis.detect(store)}
+    return {'data': clis.detect(store), 'tools': clis.tools()}    # tools: optional helpers (agent-browser), never offered as agents
 
 @app.get('/api/setup')
 def setup_state():

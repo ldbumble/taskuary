@@ -991,12 +991,14 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   const [flash, setFlash] = React.useState("");
   const [many, setMany] = React.useState(false);      // paste a list: one prompt per line, queued in order
   const [imgs, setImgs] = React.useState([]);         // screenshots pasted into the box, going with the note
-  const [showQ, setShowQ] = React.useState(!compact); // compact folds the queued notes behind their count
+  const [showQ, setShowQ] = React.useState(false);    // Wall badge peeks at the queue, then folds itself away
+  const peekTimer = React.useRef(null);
   const load = React.useCallback(async () => {
     if (!taskId) return;
     try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
   }, [taskId]);
   React.useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  React.useEffect(() => () => clearTimeout(peekTimer.current), []);
   const lines = text.split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).length;
   // A screenshot pasted in: held here as a thumbnail, uploaded when you queue. The pty carries
   // text only, so the file goes to disk and the note names it - the agent opens it from there.
@@ -1007,6 +1009,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     setImgs((s) => [...s, ...files.map((f) => ({ id: Math.random().toString(36).slice(2), file: f, url: URL.createObjectURL(f) }))]);
   };
   const dropImg = (id) => setImgs((s) => { const g = s.find((x) => x.id === id); if (g) URL.revokeObjectURL(g.url); return s.filter((x) => x.id !== id); });
+  const dropImgs = () => setImgs((s) => { s.forEach((x) => URL.revokeObjectURL(x.url)); return []; });
   const queue = async () => {
     if (!text.trim() && !imgs.length) return;
     try {
@@ -1025,6 +1028,11 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     } catch (e) { setFlash(e?.response?.data?.detail || "could not queue it"); }
   };
   const pending = wait.data.filter((w) => !w.DeliveredAt);
+  const peekQueue = () => {
+    if (!pending.length) return;
+    clearTimeout(peekTimer.current); setShowQ(true);
+    peekTimer.current = setTimeout(() => setShowQ(false), 3000);
+  };
   const stateLine = wait.state === "working" ? "agent is working — this waits for its next stop"
     : wait.state === "asking" ? "agent is asking you something — answer it first; this goes in after"
     : wait.state === "parked" ? "agent is parked — this goes straight in"
@@ -1037,7 +1045,8 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     : wait.state === "no_session" ? "Tell the agent — reopens a session with this as the ask"
     : "Tell the agent — queued, typed in when it stops. Enter to send, paste a screenshot to attach it";
   const input = (
-    <TextField fullWidth multiline minRows={many ? 6 : 1} maxRows={many ? 14 : (compact ? 2 : 5)} size="small" value={text} placeholder={ph}
+    <TextField fullWidth multiline minRows={many ? 6 : 1} maxRows={many ? 14 : (compact ? 1 : 5)} size="small" value={text}
+      placeholder={compact && flash ? flash : ph}
       onChange={(e) => setText(e.target.value)} onPaste={onPaste}
       onKeyDown={(e) => { if (!many && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
       sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: compact ? 11.5 : 12.5 },
@@ -1057,11 +1066,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
       </Typography>
     </Box>
   );
-  // compact: the open list is capped at about three lines and scrolls - the terminal above is
-  // the view, and a long funnel must not eat it a line at a time
-  const queued = showQ && pending.length > 0 && (
-    <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25, ...(compact ? { maxHeight: 58, overflowY: "auto" } : {}) }}>
-      {pending.map((w, i) => (
+  const queueRows = pending.map((w, i) => (
         <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
           <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
           <Typography variant="body2" noWrap={compact} title={w.Note}
@@ -1069,28 +1074,60 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
           <Typography variant="caption" onClick={async () => { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); load(); }}
             sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
         </Box>
-      ))}
+  ));
+  // The full task page keeps the durable queue list open. The Wall gets the same list only as a
+  // three-second overlay, so checking it never changes the terminal's geometry.
+  const queued = !compact && pending.length > 0 && (
+    <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
+      {queueRows}
     </Box>
   );
-  // Compact (the wall): ONE row - the terminal is the view, this is a slot under it. The count
-  // chip is the only sign of what waits; click it to see (and withdraw) the notes.
+  // Compact (the Wall): exactly one fixed-height row. The corner badge is the only queue-size
+  // change; clicking it briefly overlays the list without moving or resizing the terminal.
   if (compact) {
     return (
-      <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 1.5, px: 0.75, py: 0.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Typography onClick={() => pending.length && setShowQ((v) => !v)}
-            title={pending.length ? `${pending.length} note${pending.length === 1 ? "" : "s"} waiting for the agent's next stop — click to ${showQ ? "hide" : "see"} them` : stateLine}
-            sx={{ ...mono, fontSize: 9.5, fontWeight: 700, color: "#6b5f45", flexShrink: 0, minWidth: 16, cursor: pending.length ? "pointer" : "default", userSelect: "none" }}>
-            ✎{pending.length ? ` ${pending.length}` : ""}
-          </Typography>
+      <Box sx={{ position: "relative", height: 40 }}>
+        {showQ && pending.length > 0 && (
+          <Box sx={{ position: "absolute", zIndex: 5, left: 0, right: 0, bottom: "calc(100% + 4px)",
+            maxHeight: 104, overflowY: "auto", display: "flex", flexDirection: "column", gap: 0.3,
+            bgcolor: "#fffdfb", border: "1px solid #ddd2b9", borderRadius: 1.5, p: 0.75,
+            boxShadow: "0 5px 16px rgba(60,50,35,.14)" }}>
+            {queueRows}
+          </Box>
+        )}
+        <Box sx={{ height: 40, boxSizing: "border-box", overflow: "hidden", bgcolor: "#f1ead9",
+          border: "1px solid #ddd2b9", borderRadius: 1.5, px: 0.75, py: 0.45 }}>
+          <Box sx={{ height: "100%", display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Box title={pending.length ? `${pending.length} prompt${pending.length === 1 ? "" : "s"} waiting in the funnel — click to peek for 3 seconds; open the full task to withdraw them` : stateLine}
+            onClick={peekQueue}
+            sx={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+              width: 20, height: 24, color: "#6b5f45", flexShrink: 0, userSelect: "none",
+              cursor: pending.length ? "pointer" : "default" }}>
+            <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: "inherit" }}>✎</Typography>
+            {pending.length > 0 && (
+              <Box sx={{ position: "absolute", top: -4, right: -5, minWidth: 14, height: 14, px: 0.3,
+                display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99,
+                bgcolor: "#6b5f45", color: "#fffdfb", border: "1px solid #f1ead9",
+                ...mono, fontSize: 8, fontWeight: 800, lineHeight: 1 }}>
+                {pending.length > 99 ? "99+" : pending.length}
+              </Box>
+            )}
+          </Box>
           {input}
+          {imgs.length > 0 && (
+            <Tooltip title={`${imgs.length} image${imgs.length === 1 ? "" : "s"} attached — click to remove`}>
+              <Box component="button" onClick={dropImgs}
+                sx={{ ...mono, height: 24, px: 0.6, borderRadius: 1, border: "1px solid #ddd2b9",
+                  bgcolor: "#fffdfb", color: "#6b5f45", cursor: "pointer", fontSize: 9.5, whiteSpace: "nowrap" }}>
+                ▧ {imgs.length} ×
+              </Box>
+            </Tooltip>
+          )}
           <MicButton size={15} sx={{ color: "#6b5f45", p: 0.25 }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
           <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim() && !imgs.length}
             sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, minWidth: 0, px: 1, py: 0.2, fontSize: 11, lineHeight: 1.4, whiteSpace: "nowrap" }}>Queue</Button>
+          </Box>
         </Box>
-        {thumbs}
-        {flash && <Typography variant="caption" sx={{ color: "#47654a", display: "block", mt: 0.25, fontSize: 10.5 }}>{flash}</Typography>}
-        {queued}
       </Box>
     );
   }

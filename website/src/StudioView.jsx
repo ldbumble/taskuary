@@ -53,7 +53,7 @@ const stateOf = (t, l) => {
   return { label: "open", color: ROLES.muted.solid };
 };
 
-export default function StudioView({ onOpenTask }) {
+export default function StudioView({ onOpenTask, refresh = 0 }) {
   const [tasks, setTasks] = useState(null);
   const [agents, setAgents] = useState([]);
   const [cam, setCam] = useState({ yaw: 0, zoom: 1.1, px: 0, py: 0 });
@@ -93,6 +93,7 @@ export default function StudioView({ onOpenTask }) {
     setCap((c) => (c == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : c));
   }, []);
   useEffect(() => { load(); return pollWhileVisible(load, 15000); }, [load]);
+  useEffect(() => { if (refresh) load(); }, [refresh, load]); // the Board just started a session: seat it now, not in 15s
   // the tails poll fast, exactly as the Board's do: a screen you are watching is a status wall
   useEffect(() => {
     const tick = () => api.get("/api/runs/live").then(({ data }) =>

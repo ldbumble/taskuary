@@ -233,7 +233,7 @@ export default function BoardView({ onOpenTask }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
   const [view, setView] = useState("columns");   // columns | studio | wall - three looks at one board
-  const [wallTick, setWallTick] = useState(0);   // bumped when a session was started from here: the wall reloads at once
+  const [boardTick, setBoardTick] = useState(0); // bumped when a session starts here: the active board view reloads at once
   const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [noteFor, setNoteFor] = useState(null);   // the task whose handover note is open
@@ -287,18 +287,17 @@ export default function BoardView({ onOpenTask }) {
     const { data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: "coding",
       Tags: nt.repo ? `repo:${nt.repo}` : null });
     setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "" }));
-    // the details field IS the prompt - it gets typed into the session
+    // The details field IS the prompt - it gets typed into the session. A task born on the
+    // Board stays on the Board: start its terminal here, whichever board view is showing.
     if (nt.how === "live") {
-      // On the wall the new session belongs on the wall, next to the others - start it here and
-      // stay. Only if the start is refused (no local path for the repo, say) do we go to the
-      // task page, because that is where the repo picker that fixes it lives.
-      if (view === "wall") {
-        try {
-          await api.post("/api/terminals", { agent: nt.agent, model: nt.model || null, task_id: data.taskId, repo: nt.repo || null, seed: true });
-          setWallTick((n) => n + 1); load(); return;
-        } catch { /* fall through to the task page, which retries and shows why */ }
+      try {
+        await api.post("/api/terminals", { agent: nt.agent, model: nt.model || null, task_id: data.taskId, repo: nt.repo || null, seed: true });
+        setBoardTick((n) => n + 1);
+      } catch (e) {
+        // The task was created successfully, so keep it visible on the Board and explain only
+        // the part that failed instead of navigating away and silently retrying elsewhere.
+        setErr(e?.response?.data?.detail || "Task created, but the agent could not be started");
       }
-      return onOpenTask(data.taskId, { start: true, agent: nt.agent, model: nt.model });
     }
     load();
   };
@@ -359,8 +358,8 @@ export default function BoardView({ onOpenTask }) {
         </DialogContent>
       </Dialog>
 
-      {view === "studio" && <StudioView onOpenTask={onOpenTask} />}
-      {view === "wall" && <WallView onOpenTask={onOpenTask} refresh={wallTick} />}
+      {view === "studio" && <StudioView onOpenTask={onOpenTask} refresh={boardTick} />}
+      {view === "wall" && <WallView onOpenTask={onOpenTask} refresh={boardTick} />}
 
       <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
         {COLS.map((col) => {
@@ -506,7 +505,7 @@ export default function BoardView({ onOpenTask }) {
               How it gets worked — one agent, one way
             </Typography>
             <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}>
-              <MenuItem value="live" sx={{ fontSize: 12.5 }}>Start {nt.agent} on it — opens the task, prompt typed in, you can talk to it</MenuItem>
+              <MenuItem value="live" sx={{ fontSize: 12.5 }}>Start {nt.agent} on it — stays on the board with the prompt typed in</MenuItem>
               <MenuItem value="file" sx={{ fontSize: 12.5 }}>Just file it — nobody starts working yet</MenuItem>
             </Select>
           </Box>

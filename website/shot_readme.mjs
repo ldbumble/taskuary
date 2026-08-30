@@ -1,5 +1,5 @@
 // README shots against the demo server: the Timeline scrolled (fade band on, panel on the
-// assistant's post), the Wall with three live sessions, and COUNSEL.md on the Docs tab.
+// assistant's post), a tight Assistant crop, the Wall with three live sessions, and COUNSEL.md.
 // Plus the hover test: scrolling under a still cursor must not change the panel.
 //   node shot_readme.mjs http://127.0.0.1:PORT <repo-root> [timeline|wall|counsel|hover|all]
 import { launch } from "./browser.mjs";
@@ -16,8 +16,21 @@ const clickRow = (needle) => p.evaluate((needle) => {
 }, needle);
 const panelText = () => p.evaluate(() => { const ps = [...document.querySelectorAll("[data-tq-keep]")]; return (ps.find((d) => d.textContent.includes("Why it's here")) || {}).textContent?.slice(0, 80) || ""; });
 const shot = (name, clip) => p.screenshot({ path: `${root}/docs/${name}`, clip: clip || { x: 0, y: 0, width: 1846, height: 1020 } });
+// The app palette is intentionally quiet; at README scale its screenshot used to wash into
+// the GitHub page. Tone the captured pixels, not the product theme. Keeping this here makes
+// every regenerated README image match, and unlike an image-model edit every glyph stays real.
+const applyReadmeTone = () => p.evaluate(() => {
+  const app = document.getElementById("root");
+  app.style.filter = "contrast(1.16) saturate(1.08) brightness(.985)";
+  app.style.transformOrigin = "top left";
+});
 
 await p.goto(url, { waitUntil: "networkidle0" }); await wait(1200);
+// A fresh demo home opens the first-run checklist. It is useful in the product, but README
+// shots are of the workspace behind it; put it away just as a returning user would.
+await p.evaluate(() => [...document.querySelectorAll("button")]
+  .find((b) => b.textContent.trim() === "Put it away")?.click());
+await wait(500);
 
 if (what === "all" || what === "timeline") {
   await clickTab("Timeline"); await wait(1500);
@@ -27,7 +40,11 @@ if (what === "all" || what === "timeline") {
   await p.mouse.move(600, 60); await wait(400);
   console.log("assistant row:", await clickRow("Summit is missing"));
   await wait(1800);
+  await applyReadmeTone();
   await shot("screenshot-timeline.png");
+  // Tight panel crop in CSS pixels. It is captured from the same live DOM as the Timeline,
+  // so its text and colors cannot drift into a separately reconstructed mockup.
+  await shot("screenshot-assistant.png", { x: 1028.5, y: 181, width: 786, height: 466.5 });
   console.log("timeline shot ok");
 }
 if (what === "all" || what === "hover") {

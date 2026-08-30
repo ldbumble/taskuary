@@ -755,12 +755,12 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.
     issues_ok, push_ok = store.github_permissions()
-    parts.append('WHAT TO DO: work it from THIS message alone - diagnose, fix it if fixable, else say plainly '
+    parts.append('WHAT TO DO: work it from THIS message alone - diagnose, fix it if it is fixable, else say plainly '
                  'what the problem is and what it would take. Do NOT call the Taskuary API, read its database or '
                  'hunt for this task elsewhere - everything known about it is above' + (' and in the context file. ' if cpath else '. ')
                  + ('GitHub is the issue tracker here: open and update issues for the work as the team expects. '
                     if issues_ok else
-                    'Do NOT open GitHub issues, PRs or other tracker items unless this message asks for one - '
+                    'Do NOT create GitHub issues, PRs or other tracker items unless this message asks for one - '
                     'Taskuary IS the tracker and this task is the record. ')
                  + ('You may push and deploy as the work needs. ' if push_ok else
                     'Do NOT push, deploy, publish or release - commit locally and stop; the owner reviews and pushes. ')

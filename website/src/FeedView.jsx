@@ -380,6 +380,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
     ro.observe(el); setNavH(el.offsetHeight);
     return () => ro.disconnect();
   }, []);
+  // ...and the dock's own height: the panel sticks just under it, so a scrolled panel never
+  // slides up behind the frozen filters (a fixed 62px did exactly that)
+  const [dockH, setDockH] = useState(150);
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => setDockH(el.offsetHeight));
+    ro.observe(el); setDockH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
   // ONE date line, part of the frozen dock: everything from the date up stays exactly the same
   // regardless of scroll. The rows slide into the date's underside and only the LABEL updates -
   // a scroll spy reads which day group currently crosses the dock's bottom edge.
@@ -633,6 +643,20 @@ export default function FeedView({ onOpenTask, onChanged }) {
     hoverTimer.current = setTimeout(() => drill(row), 260);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
+  // Clicking the page ground closes the panel AND collapses the selected row. Whatever was
+  // last opened used to stay up until you opened something else - there was no way to just
+  // put it down. Rows, the panel, the dock and any popover/dialog are exempt (they handle
+  // their own clicks); a draft or verdict mid-edit holds the panel like it holds against hover.
+  useEffect(() => {
+    if (!sel && !calSel) return undefined;
+    const h = (e) => {
+      if (e.target.closest?.("[data-tq-keep], .MuiPopover-root, .MuiModal-root, #tqTopNav")) return;
+      if (panelLock || (editText ?? "").trim()) return;
+      clearTimeout(hoverTimer.current); setSel(null); setCalSel(null);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [sel, calSel, panelLock, editText]);
 
   // Approving IS sending, so a refusal has to land in front of you now - not as a NOT SENT line
   // in the task history that you find tomorrow. The panel stays open when the send failed.
@@ -706,7 +730,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       {/* the drop above the filter pill is part of the frozen block: the page's own top padding is
           swallowed (negative margin) and re-issued as the dock's padding, so the gap under the nav
           is identical at the top of the page and mid-scroll */}
-      <Box ref={dockRef} sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75,
+      <Box ref={dockRef} data-tq-keep sx={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", gap: 0.75,
         position: "sticky", top: `${navH}px`, zIndex: 20, bgcolor: BG,
         mt: { xs: -1.5, md: -2.25 }, pt: { xs: 2, md: 2.75 },
         // the dissolve band right under the date: rows melt away as they rise into its underside -
@@ -888,7 +912,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                       </Box>
                       {/* one DEFINED object per message: who and what on top, what the hub did
                           underneath. Hover adds the message gist; click opens the panel. */}
-                      <Box onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
+                      <Box data-tq-keep onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
                         sx={{ bgcolor: r.Channel === "assistant" ? "#eef3ea" : ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
                           border: `1px solid ${r.Channel === "assistant" ? "#cfd8c8" : BORDER}`, borderRadius: "8px", px: "11px", pt: "5px", pb: "6px",
                           minWidth: 0, overflow: "hidden",
@@ -981,11 +1005,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
           MUST stretch the full grid height - sticky needs that track to slide in (a
           content-height column leaves sticky stranded at the page top). ── */}
       {(sel || calSel) && (
-        // pushed DOWN so the panel's top edge lines up with the first timeline card (past
-        // the day-group margin + day header + row margin ≈ 44px), instead of floating
-        // above the list it annotates. Sticky still takes over once you scroll.
-        <Box sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch", mt: "34px" }}>
-          <Box sx={{ position: "sticky", top: 62 }}>
+        // its top edge IS the first card's top edge: both columns start on the same grid row,
+        // and the date line lives in the dock above, so there is nothing left to push past.
+        // (The 34px that used to be here compensated a day header the column no longer has.)
+        <Box data-tq-keep sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch" }}>
+          <Box sx={{ position: "sticky", top: `${navH + dockH + 6}px` }}>
             {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} /> : (
               <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
                 decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}

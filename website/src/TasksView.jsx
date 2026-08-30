@@ -18,7 +18,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
@@ -38,11 +38,17 @@ const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
 // picked it up vanished out of the bucket you were watching - and a task sitting in "needs
 // you" WITH an agent thinking on it read as a contradiction, because it was one. One
 // in-progress bucket holds everything still open; the label inside it is what changes.
+// the pills wear the same colours as the chips on the rows they hold: "in progress" in the
+// slate-blue brand chrome next to a sage "agent working" chip read as two different states
+const ST_C = Object.fromEntries(TASK_STATES.map((s) => [s.key, s.c]));
 const STATE_FILTERS = [
   { key: "", label: "all" },
-  { key: "live", label: "in progress", c: PILL_COLORS.working },
-  { key: "done", label: "done", c: PILL_COLORS.done },
+  { key: "live", label: "in progress", c: ST_C.working },
+  { key: "done", label: "done", c: ST_C.done },
 ];
+// "today" as the person reading the list means it - the server's clock, in local terms
+const isToday = (s) => !!s && asUtc(String(s)).toDateString() === new Date().toDateString();
+const touchedToday = (t) => isToday(t.ClosedAt) || isToday(t.UpdatedAt) || isToday(t.CreatedAt);
 // everything still on somebody's plate - yours or an agent's. Dropped is neither, and only
 // ever shows under "all".
 const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key)
@@ -57,7 +63,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // "live" on arrival: what is still on somebody's plate is what you came here for. "all"
   // opens on a list whose top is whatever finished most recently. ("" = all; the rest derive.)
   const [filter, setFilter] = useState("live");
+  // "all" and "done" pile up for months; today's are the ones you came to look at, the rest
+  // wait behind one button. In progress is never cut: what is still on a plate must show.
+  const [older, setOlder] = useState(false);
   const [detail, setDetail] = useState(null);
+  // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
+  // keyed to a task, and a response that lands after you clicked another one must be dropped:
+  // a wrap-up finishing 8 seconds later used to paint ITS task's header and report over the
+  // one you had moved to, while the funnel below still belonged to the new one - two tasks
+  // in one pane, and "Done" a click away from the wrong session.
+  const selRef = useRef(selected); selRef.current = selected;
+  const stale = (id) => selRef.current !== id;
   const { agents, models } = useAgents();
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
@@ -86,14 +102,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (!id) { setDetail(null); return; }
     try {
       const { data } = await api.get(`/api/tasks/${id}`);
+      if (stale(id)) return;
       setDetail(data);
-      try { setWait((await api.get(`/api/tasks/${id}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
-      // opened a task the current filter hides (e.g. from the Board)? widen to "all" so
-      // the list and the detail never contradict each other
-      setFilter((f) => (f && !inBucket({ ...data.task, Session: data.session,
-                                         ReviewStatus: (data.reviews || [])[0]?.Status }, f) ? "" : f));
-    } catch (e) { setErr(e?.response?.data?.detail || "Failed to load task"); }
+      try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) setWait(w); }
+      catch { if (!stale(id)) setWait({ data: [], state: null }); }
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Failed to load task"); }
   }, []);
+  // the tab always lands on what is still in progress - whatever it was left on last time
+  useEffect(() => { if (active) { setFilter("live"); setOlder(false); } }, [active]);
+  useEffect(() => { setOlder(false); }, [filter]);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
   // ...and keep it honest. The list was fetched ONCE, so a task whose agent picked it up
@@ -123,7 +140,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const create = async () => {
     const { data } = await api.post("/api/tasks", nt);
     setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
-    setFilter(""); loadTasks(); onSelect(data.taskId);
+    setFilter("live"); loadTasks(); onSelect(data.taskId);
   };
   const queueNote = async () => {
     if (!waitText.trim() || !selected) return;
@@ -145,26 +162,32 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // result lands right here under where the terminal was.
   const wrapUp = async () => {
     if (!canWrap) return;
+    const id = selected;
     setWrapping("wrap"); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${selected}/wrap`, { close: true });
+      const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: true });
+      loadTasks(); onChanged?.();
+      if (stale(id)) return;                    // moved on meanwhile: the report is on the task's history
       setWrapped({ report: data.report, drafting: data.drafting });
-      setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
-    setWrapping(false);
+      setTerm(null); loadDetail(id);
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
+    if (!stale(id)) setWrapping(false);
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
   // resumable id - killing the session used to throw all of that away.
   const pause = async () => {
     if (!canWrap) return;
+    const id = selected;
     setWrapping("pause"); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${selected}/pause`, {});
+      const { data } = await api.post(`/api/tasks/${id}/pause`, {});
+      loadTasks(); onChanged?.();
+      if (stale(id)) return;
       setWrapped({ note: data.note });
-      setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not pause the session"); }
-    setWrapping(false);
+      setTerm(null); loadDetail(id);
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not pause the session"); }
+    if (!stale(id)) setWrapping(false);
   };
   useEffect(() => { setWrapping(false); setWrapped(null); }, [selected]);
 
@@ -207,11 +230,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (!tid) { setTerm(null); return; }
     try {
       const rows = (await api.get("/api/terminals")).data.data || [];
+      if (stale(tid)) return;
       // an exited session still holds its scrollback (they stay listed ~10 min), and that
       // transcript is exactly what Done and Pause need - dropping it left a task you could
       // not close out because the CLI had finished on its own
       setTerm(rows.find((x) => x.taskId === tid && x.alive) || rows.find((x) => x.taskId === tid) || null);
-    } catch { setTerm(null); }
+    } catch { if (!stale(tid)) setTerm(null); }
   }, []);
   useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
   const openTerm = useCallback(async (body) => {
@@ -234,8 +258,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   }, [autostart, selected, term, detail, openTerm, onAutostarted, run.agent]);
 
 
-  const t = detail?.task;
-  const shown = (tasks || []).filter((x) => !filter || inBucket(x, filter));
+  // the pane shows the selected task or nothing - never the previous one while this loads
+  const t = detail?.task?.TaskId === selected ? detail.task : null;
+  const bucket = (tasks || []).filter((x) => !filter || inBucket(x, filter));
+  const cut = filter !== "live" && !older;
+  const shown = cut ? bucket.filter(touchedToday) : bucket;
+  const nOlder = bucket.length - shown.length;
   const report = [...(detail?.comments || [])].reverse().find(
     (c) => c.ActorType === "agent" && String(c.Body || "").replace("CODER REPORT", "").trim()
       && String(c.Body || "").startsWith("CODER REPORT"));
@@ -270,13 +298,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           {/* rows as separated cards on a soft ground - air between tasks instead of a ruled
               ledger, selection said with the border alone. Scandinavian: fewer lines, calmer. */}
           <Box sx={{ overflowY: "auto", flex: 1, bgcolor: "#f1ede7", px: 1, py: 1 }}>
-            {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length ? <Empty>No tasks here.</Empty> : shown.map((task) => (
+            {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length && !nOlder ? <Empty>No tasks here.</Empty> : shown.map((task) => (
+              // the selected row is outlined in its STATE's colour - a working task in the same sage as
+              // its chip - not in the brand slate, which read as a fourth state nobody could name
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
                 sx={{ px: 1.25, py: 1, mb: 0.75, cursor: "pointer", bgcolor: "#fff", borderRadius: 1.75,
-                  border: `1px solid ${selected === task.TaskId ? "#55697a" : BORDER}`,
+                  border: `1px solid ${selected === task.TaskId ? stateOf(task).c.fg : BORDER}`,
                   boxShadow: selected === task.TaskId ? "0 1px 8px rgba(47,107,79,.14)" : "none",
                   transition: "border-color .12s, box-shadow .12s",
-                  "&:hover": { borderColor: selected === task.TaskId ? "#55697a" : "#d8cfbe" } }}>
+                  "&:hover": { borderColor: selected === task.TaskId ? stateOf(task).c.fg : "#d8cfbe" } }}>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700 }}>{task.ref}</Typography>
                   <StateChip task={task} />
@@ -288,6 +318,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.4 }}>{task.Title}</Typography>
               </Box>
             ))}
+            {tasks && nOlder > 0 && (
+              <Button size="small" fullWidth onClick={() => setOlder(true)} sx={{ color: DIM, fontSize: 11.5, mt: 0.25 }}>
+                {shown.length ? `show ${nOlder} more from before today` : `nothing from today — show ${nOlder} older`}
+              </Button>
+            )}
           </Box>
         </Box>
       </Box>
@@ -295,7 +330,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       {/* ── detail ────────────────────────────────────────────────────── */}
       <Box sx={{ ...frame, flex: 1, minWidth: 0, height: "calc(100vh - 118px)", minHeight: 420 }}>
         <Box sx={{ ...frameInner, height: "100%", display: "flex", flexDirection: "column" }}>
-          {!t ? <Empty>Select a task to see its full story.</Empty> : (
+          {!t ? (selected ? <CircularProgress size={20} sx={{ m: 2 }} /> : <Empty>Select a task to see its full story.</Empty>) : (
             <>
               {/* header strip: identity + controls. Calm on purpose - white ground, one quiet
                   outlined action, ghost icons: the loud green block + boxed dots read as three

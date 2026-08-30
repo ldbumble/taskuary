@@ -860,7 +860,7 @@ const tzOffsetMin = (d) => {
   const m = part.replace("GMT", "").match(/([+-]?)(\d+)(?::(\d+))?/) || [0, "+", "0"];
   return (m[1] === "-" ? -1 : 1) * (parseInt(m[2] || 0) * 60 + parseInt(m[3] || 0));
 };
-const asUtc = (s) => {
+export const asUtc = (s) => {
   const iso = s.replace(" ", "T");
   if (!TZ) return new Date(iso);                       // blank = this browser IS the server's zone
   try { return new Date(Date.parse(iso + "Z") - tzOffsetMin(new Date(iso + "Z")) * 60000); }

@@ -1,7 +1,8 @@
 // The wall: every live coding session as a real terminal, side by side, so you work several
 // agents at once the way you watch several screens. Each pane is one task - its ref on top, the
 // session in the middle, its prompt queue at the bottom. Choose how many across (1 / 2 / 3 / 4)
-// and drag a pane by its header to rearrange. The terminals are the same pty as the task page;
+// drag a pane by its header to rearrange, and drag the bar under any pane to make them all taller
+// or shorter. The terminals are the same pty as the task page;
 // a pane keeps its key=sid, so reordering moves it without tearing the session down.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Button, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
@@ -17,12 +18,22 @@ import { cliName } from "./BoardView.jsx";
 
 const COLS = [1, 2, 3, 4];
 const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols")) || 2; } catch { return 2; } };
+// Pane height is yours to drag (the bar under each pane), and it sticks per browser PER column
+// count - the height that suits one pane across is not the one that suits four. 0 = never
+// dragged, use the formula below. The panes always share one height: a grid of ragged
+// terminals reads as a mistake, so the bar under any pane resizes them all.
+const MIN_H = 240;
+const hKey = (c) => `tq.wall.h.${c}`;
+const savedH = (c) => { try { return Number(localStorage.getItem(hKey(c))) || 0; } catch { return 0; } };
+const storeH = (c, h) => { try { h ? localStorage.setItem(hKey(c), String(h)) : localStorage.removeItem(hKey(c)); } catch { /* private */ } };
 
-export default function WallView({ onOpenTask }) {
+export default function WallView({ onOpenTask, refresh = 0 }) {
   const [sessions, setSessions] = useState(null);   // alive pty sessions with a task
   const [tasks, setTasks] = useState({});           // TaskId -> task row (title, ref)
   const [live, setLive] = useState({});             // TaskId -> {work, StartedAt, ...} from runs/live
   const [cols, setCols] = useState(savedCols);
+  const [paneHpx, setPaneHpx] = useState(() => savedH(savedCols()));   // 0 = default formula
+  useEffect(() => { setPaneHpx(savedH(cols)); }, [cols]);
   const [order, setOrder] = useState([]);           // sids, the display order you drag into
   const drag = useRef(null);
 
@@ -35,6 +46,7 @@ export default function WallView({ onOpenTask }) {
     setTasks(Object.fromEntries((tk.data.data || []).map((t) => [t.TaskId, t])));
   }, []);
   useEffect(() => { load(); return pollWhileVisible(load, 8000); }, [load]);
+  useEffect(() => { if (refresh) load(); }, [refresh, load]);   // the Board just started a session: show it now, not in 8s
   useEffect(() => {   // the work line (tool in hand, its list) ticks fast, like the Board's
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
@@ -57,15 +69,29 @@ export default function WallView({ onOpenTask }) {
   };
   const wrap = async (tid) => { try { await api.post(`/api/tasks/${tid}/wrap`, {}); load(); } catch { /* already gone */ } };
 
+  // The bar under a pane: drag it and every pane follows, live - the terminal inside refits
+  // itself (TerminalPane watches its box and tells the pty). Frames are coalesced so a fast
+  // drag does not fire a resize per pixel. Double-click puts the default height back.
+  const onGrab = (e) => {
+    const h0 = e.currentTarget.parentElement.getBoundingClientRect().height, y0 = e.clientY, el = e.currentTarget;
+    let raf = 0, h = Math.round(h0);
+    el.setPointerCapture(e.pointerId);
+    const move = (ev) => { h = Math.max(MIN_H, Math.round(h0 + ev.clientY - y0)); if (!raf) raf = requestAnimationFrame(() => { raf = 0; setPaneHpx(h); }); };
+    const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up);
+      cancelAnimationFrame(raf); raf = 0; setPaneHpx(h); storeH(cols, h); };
+    el.addEventListener("pointermove", move); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  };
+  const resetH = () => { setPaneHpx(0); storeH(cols, 0); };
+
   if (!sessions) return <CircularProgress size={22} sx={{ m: 4 }} />;
-  // two rows of panes should sit in view at a glance; more than that scrolls
-  const paneH = cols === 1 ? "min(70vh, 680px)" : `max(300px, calc((100vh - 250px) / 2))`;
+  // default: two rows of panes sit in view at a glance; more than that scrolls
+  const paneH = paneHpx ? `${paneHpx}px` : cols === 1 ? "min(70vh, 680px)" : `max(300px, calc((100vh - 250px) / 2))`;
   return (
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>The wall</Typography>
         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, flex: 1 }}>
-          Every live session, side by side — code several agents at once. Drag a pane by its handle to rearrange.
+          Every live session, side by side — code several agents at once. Drag a pane by its handle to rearrange; drag the bar under it to resize.
         </Typography>
         <Box sx={{ display: "flex", gap: 0.25, bgcolor: "#e7eae2", borderRadius: 2, p: "3px" }}>
           {COLS.map((n) => (
@@ -93,7 +119,7 @@ export default function WallView({ onOpenTask }) {
             const waiting = isWaiting(s);
             return (
               <Box key={s.sid} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(s.sid)}
-                sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: 300 }}>
+                sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H }}>
                 {/* header: task ref + title + what it is doing; the handle drags the whole pane */}
                 <Box draggable onDragStart={() => { drag.current = s.sid; }} onDragEnd={() => { drag.current = null; }}
                   sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1, py: 0.6, borderBottom: `1px solid ${BORDER}`,
@@ -111,8 +137,14 @@ export default function WallView({ onOpenTask }) {
                   <TerminalPane sid={s.sid} height="100%" onExit={load} />
                 </Box>
                 {/* the queue, at the bottom of its own pane */}
-                <Box sx={{ px: 0.75, pb: 0.75, flexShrink: 0 }}>
+                <Box sx={{ px: 0.75, pb: 0.25, flexShrink: 0 }}>
                   <TellAgent taskId={s.taskId} taskRef={t.ref} compact onQueued={load} />
+                </Box>
+                {/* the grab bar: taller or shorter panes, all of them at once; double-click resets */}
+                <Box onPointerDown={onGrab} onDoubleClick={resetH} title="Drag to resize the panes — double-click for the default height"
+                  sx={{ height: 10, flexShrink: 0, cursor: "ns-resize", touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center",
+                    "&:hover > span, &:active > span": { bgcolor: DIM, width: 56 } }}>
+                  <Box component="span" sx={{ width: 36, height: 3, borderRadius: 99, bgcolor: BORDER, transition: "all .15s" }} />
                 </Box>
               </Box>
             );

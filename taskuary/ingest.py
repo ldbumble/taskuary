@@ -11,7 +11,7 @@ from .routing import route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref
-from . import senders
+from . import senders, counsel
 
 
 # What the agent is TOLD about work from each kind of source. An email needs nothing -
@@ -155,6 +155,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     new_rid = None                       # set when a fresh reply task opens a review below
     held = ''                            # why the coding agent was NOT auto-started (a first-time email sender)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
+    brief_ok = False                     # a model (or an invite) judged this: worth the assistant's private brief (counsel.py)
     mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
     me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
     def _notes_note():
@@ -210,6 +211,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # short-circuit the obvious fyi noise before spending an AI call.
         if cfg.get('intent_classify_enabled', '1') == '1':
             pre = decided_intent(msg, mine)              # tracker items and obvious noise: no AI call needed
+            # a calendar invite is never work to triage - it is a meeting to be READY for. The
+            # assistant writes the prep note (who is in the room, what is open with them); the
+            # owner promotes it by hand if the meeting itself needs preparing something.
+            if msg.get('invite'): pre, brief_ok = {'intent': 'fyi', 'why': 'a calendar invite - the assistant writes the prep note, no task'}, True
             if pre:
                 intent = pre
             elif llm is None:
@@ -248,6 +253,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
                     return {'status': 'filed', 'task_id': None, 'message_id': mid}
                 if cfg.get('triage_last_error'): store.set_setting('triage_last_error', '', 'system')   # it answered: the brain is back
+                brief_ok = not intent.get('degraded')
                 if intent.get('degraded'):
                     # the call SUCCEEDED and came back unusable, so `fail` is empty and the old
                     # code sailed on with a keyword guess that reads none of the standing notes
@@ -264,6 +270,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
                             f"triage: fyi - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage')
+            # filed is not forgotten: the assistant still reads it against what it knows and
+            # says so when there is something to get ahead of (counsel.after_triage)
+            if brief_ok: counsel.later(counsel.after_triage, store, msg, mid, None, 'fyi', None, bool(msg.get('invite')))
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         from .outbound import can_reply
         if intent['intent'] == 'reply_only' and not can_reply(store, msg.get('channel')):
@@ -292,6 +301,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  'SourceRef': msg.get('source_link')}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         mid = _land(store, msg, tid, 'routed')
+        if brief_ok: counsel.later(counsel.after_triage, store, msg, mid, tid, intent['intent'])
         # the agents actually pick work up here:
         # - reply tasks ALWAYS enter the review queue ("needs me"); auto_draft_enabled
         #   additionally has the responder write the draft in the background

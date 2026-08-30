@@ -9,6 +9,7 @@ import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import RateReviewIcon from "@mui/icons-material/RateReview";
+import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import api from "./api";
 import LearnedView from "./LearnedView.jsx";
 import { FAINT, INK, mono } from "./theme.jsx";
@@ -20,6 +21,8 @@ const DOCS = {
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "How you write replies — greeting, tone, length, phrasing — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
+  counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+    blurb: "How the assistant briefs YOU — privately, on every message it judged: what it's really about, what it would do, what to get ahead of, and the task nobody named yet. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#55697a" }} />,

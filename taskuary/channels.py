@@ -12,6 +12,7 @@ from loguru import logger
 
 from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message
+from .counsel import is_invite
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 MAIL_SELECT = 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments,isRead'
@@ -858,7 +859,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
                             'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address'],
-                            'images': images_for_triage(store, atts)}, llm=llm)
+                            'images': images_for_triage(store, atts), 'invite': is_invite(m)}, llm=llm)
                         n += out['status'] != 'duplicate'
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")

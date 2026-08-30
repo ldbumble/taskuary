@@ -197,6 +197,7 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
+                    'counsel_enabled': '1',       # the assistant's private brief on every judged message (counsel.py)
                     'agent_hooks': '1',           # Claude Code tells the Board what it is doing, through its own hooks (hooks.py)
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
@@ -314,6 +315,9 @@ class SQLiteStore:
             # against them - "was this cc'd mail really mine?" had no evidence left (evalset.py)
             if 'RecipientsJson' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN RecipientsJson TEXT')
+            # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
+            if 'Brief' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
             # WHERE an approved outbound draft goes. A reply knows its recipient from the
             # message it answers; an outbound report has no such message, so the review has to
             # carry the address itself or approving it would have nowhere to send.
@@ -386,7 +390,7 @@ class SQLiteStore:
                          else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
                 line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
                 self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
-            for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
+            for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     txt = f.read_text(encoding='utf-8')
@@ -613,6 +617,20 @@ class SQLiteStore:
             self._bump_snapshots()
         return mid
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
+    # ── what the hub knows about a sender / a topic (counsel.dossier, responder) ─────────────
+    def messages_from(self, email, since, limit=8):
+        return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','skipped') AND SentAt>=? "
+                          'ORDER BY SentAt DESC LIMIT ?', (email.lower(), since, limit))
+    def own_replies_to(self, email, since, limit=5):
+        """The owner's own words on this sender's threads - 'context' rows ride inside the chains."""
+        return self._rows("SELECT * FROM message WHERE Status='context' AND SentAt>=? AND ConversationId IN "
+                          '(SELECT ConversationId FROM message WHERE lower(FromEmail)=? AND ConversationId IS NOT NULL) '
+                          'ORDER BY SentAt DESC LIMIT ?', (since, email.lower(), limit))
+    def recent_messages(self, since, limit=300):
+        return self._rows("SELECT MessageId, ConversationId, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
+                          "FROM message WHERE Status NOT IN ('context','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
+    def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
+
     def thread_messages(self, conversation_id=None, subject=None, limit=40):
         """Every message already on this thread, oldest last - by ConversationId where the channel
         gives us one, else by normalised subject for the channels that do not.
@@ -996,7 +1014,7 @@ class SQLiteStore:
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
-                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction,
+                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,

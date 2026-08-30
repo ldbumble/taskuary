@@ -80,6 +80,22 @@ def style_doc(store) -> str:
     meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
     return t.strip() if len(meat) > 40 else ''
 
+def history_block(store, m: dict) -> str:
+    """What this mailbox already knows about the sender and the topic BEYOND this thread - their
+    other recent mail, what you last wrote them, the same matter elsewhere, open tasks. The draft
+    used to see six thread messages and nothing else, and answered last week's question as if it
+    had never been asked (counsel.dossier; the thread itself is excluded - it is in the prompt)."""
+    from .counsel import dossier
+    try:
+        dos = dossier(store, {'from_email': m.get('FromEmail'), 'from_name': m.get('FromName'), 'subject': m.get('Subject'),
+                              'conversation_id': m.get('ConversationId')}, exclude_mid=m.get('MessageId'), skip_conv=True)
+    except Exception as e:
+        logger.debug(f'history block skipped: {e}'); return ''
+    return ('\n\nWHAT YOU ALREADY KNOW - your recent history with this sender and this topic, outside this '
+            'thread. Use it: never contradict what you already told them, never ask what they already answered, '
+            'and mention an open matter only when it bears on this reply.\n' + dos[:2500]) if dos else ''
+
+
 def strip_signoff(text: str) -> str:
     lines = [l for l in (text or '').rstrip().splitlines()]
     while lines:
@@ -139,7 +155,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     from . import calendar as cal
     calendar = cal.context_for(store, f"{last.get('Subject') or ''} {thread}")     # "Tuesday at 1 works" only if Tuesday at 1 is free
-    system += calendar
+    system += calendar + history_block(store, last)
     if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
         store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
@@ -210,7 +226,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
             f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
     from . import calendar as cal
     calendar = cal.context_for(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
-    system += calendar
+    system += calendar + history_block(store, m)
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else out

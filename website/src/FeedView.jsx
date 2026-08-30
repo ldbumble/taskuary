@@ -18,7 +18,7 @@ import api from "./api";
 import EventIcon from "@mui/icons-material/Event";
 import { pollWhileVisible } from "./visible.js";
 import { feedHeaders, feedOk, takeFeed } from "./feedLoad.js";
-import { ALERT, ALERT_INK, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
+import { ALERT, ALERT_INK, ASSISTANT, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, card, frame, frameInner, hoverable, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
@@ -109,7 +109,7 @@ const GUTTER = 70;
 // The rail dot says WHAT STATE it is in. Channel identity is already on the icon beside the
 // sender, and the old row said it three times over (stripe, dot, tinted tile).
 const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
-  : r.Channel === "assistant" ? "#6f8a6e"                  // the assistant speaking up
+  : r.Channel === "assistant" ? ASSISTANT.solid             // the assistant speaking up
   : r.Category === "info" ? "#6f8a6e"                      // a person told you something: worth the eye
   : ["ignored", "filed", "triaging"].includes(r.MsgStatus) ? "#cfc9bf"
     : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
@@ -952,8 +952,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
                       {/* one DEFINED object per message: who and what on top, what the hub did
                           underneath. Hover adds the message gist; click opens the panel. */}
                       <Box data-tq-keep onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseMove={() => hoverSelect(r)} onMouseLeave={hoverCancel}
-                        sx={{ bgcolor: r.Channel === "assistant" ? "#eef3ea" : ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
-                          border: `1px solid ${r.Channel === "assistant" ? "#cfd8c8" : BORDER}`, borderRadius: "8px", px: "11px", pt: "5px", pb: "6px",
+                        sx={{ bgcolor: r.Channel === "assistant" ? ASSISTANT.tint : ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
+                          border: `1px solid ${r.Channel === "assistant" ? ASSISTANT.bd : BORDER}`, borderRadius: "8px", px: "11px", pt: "5px", pb: "6px",
                           minWidth: 0, overflow: "hidden",
                           transition: "box-shadow .18s, border-color .18s",
                           ...(sel?.MessageId === r.MessageId
@@ -1615,25 +1615,25 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
     setBusy(null); load(); onChanged?.();
   };
   const btn = { textTransform: "none", fontSize: 11.5, minWidth: 0 };
-  const green = { bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b745a" } };
+  const primary = { bgcolor: ASSISTANT.solid, "&:hover": { bgcolor: "#465866" } };
   return (
     <Box sx={{ mb: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6 }}>
-        <SmartToyIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />
-        <Typography variant="caption" sx={{ color: "#4f6b4e", fontWeight: 700, letterSpacing: 0.3 }}>WHAT I NOTICED</Typography>
+        <SmartToyIcon sx={{ fontSize: 14, color: ASSISTANT.solid }} />
+        <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 700, letterSpacing: 0.3 }}>WHAT I NOTICED</Typography>
         {err && <Typography variant="caption" sx={{ color: ALERT_INK }}>· {err}</Typography>}
       </Box>
       {ideas.map((i) => {
         const a = i.action || {}, open = i.status === "open", ev = a.event;
         return (
-          <Box key={i.id} sx={{ px: 1.25, py: 0.85, mb: 0.6, borderRadius: 1.5, border: "1px solid #cfd8c8", bgcolor: open ? "#eef3ea" : "#f4f3ef", opacity: open ? 1 : 0.72 }}>
+          <Box key={i.id} sx={{ px: 1.25, py: 0.85, mb: 0.6, borderRadius: 1.5, border: `1px solid ${ASSISTANT.bd}`, bgcolor: open ? ASSISTANT.tint : "#f4f3ef", opacity: open ? 1 : 0.72 }}>
             <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
-              <Typography variant="caption" sx={{ color: "#4f6b4e", fontWeight: 700, flexShrink: 0 }}>{IDEA_KIND[i.kind] || i.kind}</Typography>
+              <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 700, flexShrink: 0 }}>{IDEA_KIND[i.kind] || i.kind}</Typography>
               <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>{i.text}</Typography>
             </Box>
             {i.why && (
               <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.35, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
-                <Box component="span" sx={{ fontWeight: 700, color: "#6f8a6e" }}>why · </Box>{i.why}
+                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>why · </Box>{i.why}
               </Typography>
             )}
             {ev && (
@@ -1644,12 +1644,12 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
             {open ? (
               <Box sx={{ mt: 0.6, display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
                 {a.type === "followup" && (
-                  <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "followup")} sx={{ ...btn, ...green }}>
+                  <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "followup")} sx={{ ...btn, ...primary }}>
                     {busy === `${i.id}:followup` ? "drafting…" : "Follow up — draft the chase"}</Button>
                 )}
                 {a.mid && (
                   <Button size="small" variant={a.type === "task" ? "contained" : "outlined"} disableElevation disabled={!!busy} onClick={() => act(i, "task")}
-                    sx={{ ...btn, ...(a.type === "task" ? green : { color: "#4f6b4e", borderColor: "#cfd8c8" }) }}>
+                    sx={{ ...btn, ...(a.type === "task" ? primary : { color: ASSISTANT.ink, borderColor: ASSISTANT.bd }) }}>
                     {busy === `${i.id}:task` ? "starting…" : a.title ? `Make it a task: ${a.title}` : "Make it a task"}</Button>
                 )}
                 {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, color: "#55697a", borderColor: BORDER }}>Open {ref(a.tid)}</Button>}

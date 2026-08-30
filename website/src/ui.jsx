@@ -29,12 +29,12 @@ import MicIcon from "@mui/icons-material/Mic";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
 import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/material";
 import { Logo, hasLogo } from "./logos.jsx";
-import { ROLES, ACTION_COLORS, TAGS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
+import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue - and
 // amber for scheduled reports, the one row that is ours and not a person, so it has to read
 // from across the room rather than blend into the paper the way sage did.
-export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b2a26", report: "#c47d1a", assistant: "#6f8a6e",
+export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b2a26", report: "#c47d1a", assistant: ASSISTANT.solid,
   followup: "#6f8a6e", promise: "#55697a", prep: "#8a7a5c", cold: "#8a3646", idea: "#55697a",     // the assistant's producers (Settings)
   slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", imessage: "#34C759", ai: "#55697a",
   jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF", clickup: "#7b68ee", todoist: "#e44332",

@@ -16,6 +16,10 @@ export const FAINT = "#6e685f";        // tertiary (timestamps, rails) - twice d
                                        // passes still read as fog against oat paper
 export const ACCENT = "#55697a";       // slate blue - the brand: chrome, links, buttons
 export const ACCENT2 = "#6f8a6e";      // sage - section labels, secondary emphasis
+// The assistant is a voice/source, not a success state. Its old pale green made every post
+// look auto-completed and was surprisingly loud across a whole Timeline row. Cool slate keeps
+// it distinct from mail without competing with the needs-you color or the content itself.
+export const ASSISTANT = { solid: ACCENT, ink: "#465664", tint: "#f0f2f4", bd: "#d8dde2" };
 
 /* The one loud colour, and the whole point of this palette: ALERT means "this is on you" and
    is spent on nothing else. It is deliberately COOLER than the paper - a warm red on warm oat
@@ -75,7 +79,8 @@ export const TAGS = {
   feed:      { ...role("info", "feed"),        hint: "shown for information - this connection is a feed" },
   yours:     { ...role("handled", "your reply"), hint: "you sent this - kept so the thread shows both sides" },
   triaging:  { ...role("muted", "triaging…"),  hint: "on the timeline first - triage is deciding" },
-  assistant: { ...role("handled", "assistant"), hint: "the assistant's own post - what it noticed and what it would do; open it for the buttons" },
+  assistant: { bg: ASSISTANT.tint, fg: ASSISTANT.ink, label: "assistant",
+    hint: "the assistant's own post - what it noticed and what it would do; open it for the buttons" },
 };
 
 // Catppuccin Mocha — the palette the Claude Code / Codex theme plugins use, so a session

@@ -18,7 +18,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
-import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
+import { ASSISTANT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -988,14 +988,14 @@ function LastRun({ r, sid, embedded }) {
       {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)} />}
       {open && !!r.lines?.length && (
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5 }}>
-          <Typography variant="caption" sx={{ fontWeight: 700, color: "#4f6b4e" }}>what it said, and why</Typography>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>what it said, and why</Typography>
           {r.lines.map((l) => (
-            <Box key={l.id ?? l.key} sx={{ mt: 0.35, px: 1, py: 0.5, borderRadius: 1, border: "1px solid #cfd8c8", bgcolor: "#eef3ea" }}>
+            <Box key={l.id ?? l.key} sx={{ mt: 0.35, px: 1, py: 0.5, borderRadius: 1, border: `1px solid ${ASSISTANT.bd}`, bgcolor: ASSISTANT.tint }}>
               <Typography variant="caption" sx={{ display: "block", color: INK, lineHeight: 1.45 }}>
-                <Box component="span" sx={{ fontWeight: 700, color: "#4f6b4e" }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
+                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
               </Typography>
               {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
-                <Box component="span" sx={{ fontWeight: 700, color: "#6f8a6e" }}>why · </Box>{l.why}</Typography>}
+                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>why · </Box>{l.why}</Typography>}
             </Box>
           ))}
         </Box>

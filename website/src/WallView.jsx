@@ -129,10 +129,13 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
           </Typography>
         </Box>
       ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: `repeat(${cols}, minmax(0, 1fr))` }, gap: 1.5, alignItems: "start" }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(${cols > 2 ? "260px" : "0px"}, 1fr))`,
+          gap: 1.5, alignItems: "start", overflowX: "auto", pb: 0.5 }}>
           {panes.map((s) => {
             const t = tasks[s.taskId] || {}, l = live[s.taskId];
-            const waiting = isWaiting(s);
+            const wallRun = l || s, statusWork = l?.work || s.work;
+            const waiting = isWaiting(wallRun);
+            const who = s.cli || cliName(s.agent || "agent");
             return (
               <Box key={s.sid} onDragEnter={() => enterPane(s.sid)}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
@@ -160,12 +163,17 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
                     <Tooltip title="Done — close the session and wrap up the task"><IconButton aria-label="Wrap up task" size="small" onClick={() => wrap(s.taskId)}><DoneAllIcon sx={{ fontSize: 15, color: "#47654a" }} /></IconButton></Tooltip>
                     <Tooltip title="Close session — stop the agent; keep the task and transcript"><IconButton aria-label="Close session" size="small" onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
                   </Box>
-                  {(l?.work || s.work) && (
-                    <Box sx={{ minWidth: 0, overflow: "hidden", px: 1, pb: 0.55, pl: 4.75 }}>
-                      <WorkLine work={l?.work || s.work} who={s.cli || cliName(s.agent || "agent")}
-                        waiting={isWaiting(l || s)} asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started} />
-                    </Box>
-                  )}
+                  {/* Always reserve the status row. A tool starting/stopping used to add/remove
+                      this row, resize xterm, and make full-screen CLIs repaint in a visible jump. */}
+                  <Box sx={{ height: 20, minWidth: 0, overflow: "hidden", px: 1, pb: 0.55, pl: 4.75,
+                    display: "flex", alignItems: "center" }}>
+                    {(statusWork || waiting) ? (
+                      <WorkLine work={statusWork} who={who} waiting={waiting}
+                        asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started} />
+                    ) : (
+                      <Typography noWrap sx={{ ...mono, fontSize: 10, color: FAINT }}>● {who} session</Typography>
+                    )}
+                  </Box>
                 </Box>
                 {/* the session itself fills the middle */}
                 <Box sx={{ flex: 1, minHeight: 0, p: 0.75, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>

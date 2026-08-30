@@ -12,6 +12,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
+import { changedTerminalSize } from "./terminalSizing.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -83,7 +84,7 @@ const wsUrl = (sid) => {
 // The effect keys on `sid` ALONE: the task page re-renders every few seconds while a run
 // polls, and taking a fresh callback identity as a dependency tore the terminal down and
 // rebuilt it on every one of those renders - which is what "it just flashes" was.
-export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
+const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
   const host = useRef(null);
   const exit = useRef(onExit);
   exit.current = onExit;
@@ -132,8 +133,21 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     fit.fit();
     const ws = new WebSocket(wsUrl(sid));
     const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
+    // ResizeObserver may fire several times for one unchanged box (and every parent poll used
+    // to render this component again). Sending the same rows/cols still makes a full-screen TUI
+    // repaint; Codex visibly flashed even though no dimensions changed. Only real size changes
+    // belong on the wire. Do not remember a size before the socket opens, or the initial resize
+    // would be swallowed.
+    let sentSize = "";
+    const sendSize = () => {
+      if (ws.readyState !== 1) return;
+      const sizeNow = changedTerminalSize(sentSize, term.rows, term.cols);
+      if (!sizeNow) return;
+      sentSize = sizeNow;
+      send({ type: "resize", rows: term.rows, cols: term.cols });
+    };
     sendRef.current = send;
-    ws.onopen = () => { setState("live"); send({ type: "resize", rows: term.rows, cols: term.cols }); };
+    ws.onopen = () => { setState("live"); sendSize(); };
     // a server that never sends 'ready' (older build, a child that dies mid-redraw) must not
     // leave the curtain down over a working session - the pane opens anyway
     let bail = null;
@@ -149,7 +163,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     };
     ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
     term.onData((d) => send({ type: "in", data: d }));
-    const onResize = () => { fit.fit(); send({ type: "resize", rows: term.rows, cols: term.cols }); };
+    const onResize = () => { fit.fit(); sendSize(); };
     refit.current = onResize;                       // the size picker drives the same path
     window.addEventListener("resize", onResize);
     const ro = new ResizeObserver(onResize);
@@ -253,6 +267,11 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     </Box>
   );
 };
+
+// Wall status polls should update the header, not ask React to reconcile xterm's DOM. xterm owns
+// everything inside its host after mount; sid/height are the only props that change its surface.
+export const TerminalPane = React.memo(TerminalPaneInner, (a, b) => a.sid === b.sid && a.height === b.height);
+TerminalPane.displayName = "TerminalPane";
 
 // Taskuary's terminals default to Catppuccin Mocha, switchable per pane (top-right picker)
 // - that palette is what styles codex and every other CLI, since a TUI paints with the

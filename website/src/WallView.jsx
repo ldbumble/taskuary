@@ -5,16 +5,18 @@
 // or shorter. The terminals are the same pty as the task page;
 // a pane keeps its key=sid, so reordering moves it without tearing the session down.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Button, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, mono } from "./theme.jsx";
+import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, mono } from "./theme.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
-import { TellAgent, WorkLine, isWaiting } from "./ui.jsx";
+import { Confirm, TellAgent, WorkLine, isWaiting } from "./ui.jsx";
 import { cliName } from "./BoardView.jsx";
+import { movePane, resizedPaneHeight } from "./wallLayout.js";
 
 const COLS = [1, 2, 3, 4];
 const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols")) || 2; } catch { return 2; } };
@@ -35,6 +37,8 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
   const [paneHpx, setPaneHpx] = useState(() => savedH(savedCols()));   // 0 = default formula
   useEffect(() => { setPaneHpx(savedH(cols)); }, [cols]);
   const [order, setOrder] = useState([]);           // sids, the display order you drag into
+  const [dragging, setDragging] = useState(null);   // rendered too: the pane visibly lifts while moving
+  const [closing, setClosing] = useState(null);     // session awaiting an explicit stop confirmation
   const drag = useRef(null);
 
   const load = useCallback(async () => {
@@ -62,12 +66,23 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
   const panes = order.map((sid) => bySid[sid]).filter(Boolean);
 
   const setColsP = (n) => { setCols(n); try { localStorage.setItem("tq.wall.cols", String(n)); } catch { /* private */ } };
-  const onDrop = (target) => {
-    const from = drag.current; drag.current = null;
-    if (!from || from === target) return;
-    setOrder((o) => { const a = [...o], i = a.indexOf(from), j = a.indexOf(target); if (i < 0 || j < 0) return o; a.splice(j, 0, a.splice(i, 1)[0]); return a; });
+  // Reorder as the handle crosses another pane instead of waiting for an invisible drop result.
+  // Firefox also requires dataTransfer data before it will emit drop; Chromium does not, so the
+  // old ref-only drag appeared to work in one engine and did nothing in another.
+  const startDrag = (e, sid) => {
+    drag.current = sid; setDragging(sid);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", sid);
   };
+  const enterPane = (target) => { if (drag.current) setOrder((o) => movePane(o, drag.current, target)); };
+  const finishDrag = () => { drag.current = null; setDragging(null); };
   const wrap = async (tid) => { try { await api.post(`/api/tasks/${tid}/wrap`, {}); load(); } catch { /* already gone */ } };
+  const closeSession = async () => {
+    if (!closing?.sid) return;
+    await api.delete(`/api/terminals/${closing.sid}`);
+    setSessions((ss) => (ss || []).filter((s) => s.sid !== closing.sid));
+    setOrder((o) => o.filter((sid) => sid !== closing.sid));
+  };
 
   // The bar under a pane: drag it and every pane follows, live - the terminal inside refits
   // itself (TerminalPane watches its box and tells the pty). Frames are coalesced so a fast
@@ -75,11 +90,12 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
   const onGrab = (e) => {
     const h0 = e.currentTarget.parentElement.getBoundingClientRect().height, y0 = e.clientY, el = e.currentTarget;
     let raf = 0, h = Math.round(h0);
+    e.preventDefault();
     el.setPointerCapture(e.pointerId);
-    const move = (ev) => { h = Math.max(MIN_H, Math.round(h0 + ev.clientY - y0)); if (!raf) raf = requestAnimationFrame(() => { raf = 0; setPaneHpx(h); }); };
-    const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up);
+    const move = (ev) => { h = resizedPaneHeight(h0, y0, ev.clientY, MIN_H); if (!raf) raf = requestAnimationFrame(() => { raf = 0; setPaneHpx(h); }); };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
       cancelAnimationFrame(raf); raf = 0; setPaneHpx(h); storeH(cols, h); };
-    el.addEventListener("pointermove", move); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
   };
   const resetH = () => { setPaneHpx(0); storeH(cols, 0); };
 
@@ -118,19 +134,38 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
             const t = tasks[s.taskId] || {}, l = live[s.taskId];
             const waiting = isWaiting(s);
             return (
-              <Box key={s.sid} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(s.sid)}
-                sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H }}>
-                {/* header: task ref + title + what it is doing; the handle drags the whole pane */}
-                <Box draggable onDragStart={() => { drag.current = s.sid; }} onDragEnd={() => { drag.current = null; }}
-                  sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1, py: 0.6, borderBottom: `1px solid ${BORDER}`,
-                    bgcolor: waiting ? "#f3e6e8" : "#faf8f5", cursor: "grab", "&:active": { cursor: "grabbing" }, flexShrink: 0 }}>
-                  <DragIndicatorIcon sx={{ fontSize: 15, color: FAINT }} />
-                  <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${s.taskId}`}</Typography>
-                  <Typography noWrap sx={{ fontSize: 12, fontWeight: 600, color: INK, minWidth: 0, flexShrink: 1 }}>{t.Title || s.cwd}</Typography>
-                  <Box sx={{ flex: 1, minWidth: 8 }} />
-                  {s.work && <WorkLine work={s.work} who={s.cli || cliName(s.agent || "agent")} waiting={waiting} asking={s.asking} startedAt={s.started} />}
-                  <Tooltip title="Open the full task page"><IconButton size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
-                  <Tooltip title="Done — wrap this session up"><IconButton size="small" onClick={() => wrap(s.taskId)}><DoneAllIcon sx={{ fontSize: 15, color: "#47654a" }} /></IconButton></Tooltip>
+              <Box key={s.sid} onDragEnter={() => enterPane(s.sid)}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                onDrop={(e) => { e.preventDefault(); finishDrag(); }}
+                sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,
+                  opacity: dragging === s.sid ? 0.62 : 1, transform: dragging === s.sid ? "scale(.995)" : "none",
+                  boxShadow: dragging === s.sid ? "0 7px 20px rgba(30,50,38,.16)" : pane0.boxShadow,
+                  transition: "transform .12s, opacity .12s, box-shadow .12s" }}>
+                {/* Title owns the first row; live-agent status gets a second row and can never
+                    squeeze the task name out. Only the handle is draggable, so the action buttons
+                    remain buttons instead of occasionally starting a pane drag. */}
+                <Box sx={{ borderBottom: `1px solid ${BORDER}`, bgcolor: waiting ? "#f3e6e8" : "#faf8f5", flexShrink: 0 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.75, py: 0.35 }}>
+                    <Box draggable onDragStart={(e) => startDrag(e, s.sid)} onDragEnd={finishDrag}
+                      role="button" aria-label={`Drag ${t.ref || `TQ-${s.taskId}`} to reorder`} tabIndex={0}
+                      title="Drag to reorder this pane"
+                      sx={{ width: 24, height: 26, display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0, borderRadius: 1, cursor: "grab", "&:hover": { bgcolor: "#e7eae2" }, "&:active": { cursor: "grabbing" } }}>
+                      <DragIndicatorIcon sx={{ fontSize: 16, color: FAINT }} />
+                    </Box>
+                    <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${s.taskId}`}</Typography>
+                    <Typography noWrap title={t.Title || s.cwd}
+                      sx={{ fontSize: 12, fontWeight: 650, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
+                    <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
+                    <Tooltip title="Done — close the session and wrap up the task"><IconButton aria-label="Wrap up task" size="small" onClick={() => wrap(s.taskId)}><DoneAllIcon sx={{ fontSize: 15, color: "#47654a" }} /></IconButton></Tooltip>
+                    <Tooltip title="Close session — stop the agent; keep the task and transcript"><IconButton aria-label="Close session" size="small" onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
+                  </Box>
+                  {(l?.work || s.work) && (
+                    <Box sx={{ minWidth: 0, overflow: "hidden", px: 1, pb: 0.55, pl: 4.75 }}>
+                      <WorkLine work={l?.work || s.work} who={s.cli || cliName(s.agent || "agent")}
+                        waiting={isWaiting(l || s)} asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started} />
+                    </Box>
+                  )}
                 </Box>
                 {/* the session itself fills the middle */}
                 <Box sx={{ flex: 1, minHeight: 0, p: 0.75, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
@@ -151,6 +186,9 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
           })}
         </Box>
       )}
+      <Confirm open={!!closing} title="Close this session?" confirmLabel="Close session"
+        text={`This stops ${closing?.cli || cliName(closing?.agent || "the agent")} now and removes its pane from the wall. The task stays open, and the session transcript stays with it.`}
+        onClose={() => setClosing(null)} onConfirm={closeSession} />
     </Box>
   );
 }

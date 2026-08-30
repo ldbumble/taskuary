@@ -2196,11 +2196,43 @@ async def terminal_ws(ws: WebSocket, sid: str):
     await ws.accept()
     q = asyncio.Queue()
     t.subscribe(asyncio.get_running_loop(), q)
+    send_lock = asyncio.Lock()
+    delivered, inflight = 0, 0
+    redraw_boundary = None
+    redraw_quiet = None
+    redraw_cap = None
+
+    async def send_frame(frame):
+        # Output and the ready barrier come from separate tasks. One lock makes their order on
+        # the wire exactly the order expressed below.
+        async with send_lock: await ws.send_json(frame)
+
+    async def finish_redraw(delay: float):
+        """Send ready after the resize-driven repaint goes quiet, not after resize() returns."""
+        nonlocal redraw_boundary, redraw_quiet, redraw_cap
+        try: await asyncio.sleep(delay)
+        except asyncio.CancelledError: return
+        if redraw_boundary is None: return
+        redraw_boundary = None
+        if redraw_quiet and redraw_quiet is not asyncio.current_task(): redraw_quiet.cancel()
+        if redraw_cap and redraw_cap is not asyncio.current_task(): redraw_cap.cancel()
+        redraw_quiet = redraw_cap = None
+        await send_frame({'type': 'ready'})
+
     async def to_browser():
+        nonlocal delivered, inflight, redraw_quiet
         while True:
             data = await q.get()
-            if data is None: return await ws.send_json({'type': 'exit'})
-            await ws.send_json({'type': 'out', 'data': data})
+            if data is None: return await send_frame({'type': 'exit'})
+            inflight += 1
+            try: await send_frame({'type': 'out', 'data': data})
+            finally: inflight -= 1
+            delivered += 1
+            # Ignore output that was already queued when the resize began. The first new chunk
+            # and every repaint chunk after it move the quiet barrier; ready follows the burst.
+            if redraw_boundary is not None and delivered >= redraw_boundary:
+                if redraw_quiet: redraw_quiet.cancel()
+                redraw_quiet = asyncio.create_task(finish_redraw(.09))
     pump = asyncio.create_task(to_browser())
     try:
         # scrubbed: a replayed scrollback that still contains the TUI's terminal queries makes
@@ -2209,7 +2241,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
         # scrollback runs the viewport from the top of the session down to the bottom, and
         # watching a week of coding scroll past every time you reopen a task is not a feature
         if t.scrollback():
-            await ws.send_json({'type': 'out', 'replay': True, 'data': hub_term.scrub_queries(t.scrollback())})
+            await send_frame({'type': 'out', 'replay': True, 'data': hub_term.scrub_queries(t.scrollback())})
         first_resize = True
         while True:
             m = await ws.receive_json()
@@ -2221,19 +2253,47 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 # nothing repaints until the CHILD is told to. A one-column wiggle on the
                 # first resize makes ConPTY signal a window change: a full redraw, the live
                 # screen instead of the replay's debris.
-                wiggled = first_resize
                 if first_resize:
                     first_resize = False
+                    # The child repaints asynchronously. Mark the queue boundary before the
+                    # wiggle; output beyond it is evidence of the live Codex screen arriving.
+                    redraw_boundary = delivered + inflight + q.qsize() + 1
+                    redraw_cap = asyncio.create_task(finish_redraw(1.5))
                     t.resize(rows, max(2, cols - 1))
                     await asyncio.sleep(0.05)
                 t.resize(rows, cols)
-                # the replay is debris until that redraw lands - THIS is the moment the pane
-                # is showing the live screen, and the only honest time to lift the curtain
-                if wiggled: await ws.send_json({'type': 'ready'})
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:
         t.unsubscribe(q); pump.cancel()
+        if redraw_quiet: redraw_quiet.cancel()
+        if redraw_cap: redraw_cap.cancel()
+
+# ── the agent's browser, beside its terminal (browserview.py) ──
+@app.get('/api/terminals/{sid}/browser')
+def terminal_browser(sid: str):
+    """Is a browser open for this session, and on what page - read from agent-browser's state
+    files, so the pane can appear when the agent opens a page and fold when it closes."""
+    from . import browserview
+    return browserview.state(sid)
+
+class SnapBody(BaseModel): task_id: int | None = None
+
+@app.post('/api/terminals/{sid}/browser/snapshot')
+def terminal_browser_snapshot(sid: str, body: SnapBody):
+    """Keep the frame on the task record: a JPEG attachment plus a comment naming the page."""
+    from . import browserview
+    try: return browserview.snapshot(store, sid, ACTOR, body.task_id)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.websocket('/api/terminals/{sid}/browser/ws')
+async def terminal_browser_ws(ws: WebSocket, sid: str):
+    """agent-browser's screencast, relayed: frames out, the owner's input back when they take over.
+    Same token rule as the terminal socket - it rides on the query string."""
+    from . import browserview
+    tok = cfg['server'].get('token')
+    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    await browserview.relay(ws, sid)
 
 @app.get('/api/health')
 def health():

@@ -13,6 +13,9 @@ import "@xterm/xterm/css/xterm.css";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
 import { changedTerminalSize } from "./terminalSizing.js";
+import api from "./api.js";
+import BrowserPane from "./BrowserPane.jsx";
+import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -84,7 +87,7 @@ const wsUrl = (sid) => {
 // The effect keys on `sid` ALONE: the task page re-renders every few seconds while a run
 // polls, and taking a fresh callback identity as a dependency tore the terminal down and
 // rebuilt it on every one of those renders - which is what "it just flashes" was.
-const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
+const TermOnly = ({ sid, height = "70vh", onExit }) => {
   const host = useRef(null);
   const exit = useRef(onExit);
   exit.current = onExit;
@@ -278,6 +281,81 @@ const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
           {state}
         </Typography>
       )}
+    </Box>
+  );
+};
+
+// The session and, when the agent opens a page, its browser beside it - the Split the owner chose
+// (2026-08-30): terminal narrower, browser the larger share, a drag handle between, the pane
+// appearing when a page opens and folding when it closes. Whether a browser is open comes from the
+// server (agent-browser's own state files), polled - nothing here asks the agent. A slot too
+// narrow for two panes (a Wall tile three across) gets a chip instead, which opens the browser
+// OVER the terminal until dismissed.
+const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
+  const slot = useRef(null);
+  const [browser, setBrowser] = useState({ open: false, url: "" });
+  const [width, setWidth] = useState(0);
+  const [folded, setFolded] = useState(savedFold);
+  const [ratio, setRatio] = useState(savedRatio);
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try { const r = await api.get(`/api/terminals/${sid}/browser`); if (!stop) setBrowser(r.data || { open: false }); }
+      catch { /* server away for a moment: keep showing what we had */ }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => { stop = true; clearInterval(id); };
+  }, [sid]);
+  useEffect(() => {
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    ro.observe(slot.current);
+    return () => ro.disconnect();
+  }, []);
+  const layout = layoutFor(width, browser.open, folded);
+  const fold = (f) => { setFolded(f); rememberFold(f); };
+  // the handle: the pointer's place across the slot IS the split, remembered on release
+  const startDrag = (e) => {
+    e.preventDefault();
+    const rect = slot.current.getBoundingClientRect();
+    let r = ratio;
+    const move = (ev) => { r = ratioFromPointer(ev.clientX, rect.left, rect.width); setRatio(r); };
+    const up = () => { rememberRatio(r); window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+    window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+  };
+  const fixed = height !== "100%";
+  const chip = (layout === "chip" || layout === "folded") && !peek && (
+    <Box component="button" onClick={() => (layout === "chip" ? setPeek(true) : fold(false))}
+      title={layout === "chip" ? "the agent has a browser open - show it" : "unfold the browser"}
+      sx={{ ...mono, position: "absolute", top: 5, left: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 0.6,
+        fontSize: 10.5, px: 0.9, py: 0.35, borderRadius: 99, cursor: "pointer", border: `1px solid ${BORDER}`,
+        bgcolor: "#1a1a1acc", color: "#c9c3b9", "&:hover": { color: "#e1dcd5", borderColor: "#6b655c" } }}>
+      <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: CATPPUCCIN.green }} />
+      browser · {shortUrl(browser.url, 36) || "open"}
+    </Box>
+  );
+  return (
+    <Box ref={slot} sx={{ display: "flex", flexDirection: "row", position: "relative", minHeight: 0, minWidth: 0,
+      ...(fixed ? { height } : { flex: 1 }) }}>
+      <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - ratio) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
+        display: "flex", flexDirection: "column", position: "relative", "& > *": { flex: 1, minHeight: 0 } }}>
+        <TermOnly sid={sid} height="100%" onExit={onExit} />
+        {chip}
+      </Box>
+      {layout === "split" && (
+        <>
+          <Box onMouseDown={startDrag} title="drag to resize"
+            sx={{ flex: "0 0 8px", cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center",
+              "&:hover > *": { bgcolor: "#6b655c" } }}>
+            <Box sx={{ width: 2, height: 36, borderRadius: 99, bgcolor: BORDER, transition: "background .15s" }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+            <BrowserPane sid={sid} url={browser.url} onFold={() => fold(true)} />
+          </Box>
+        </>
+      )}
+      {peek && browser.open && <BrowserPane sid={sid} url={browser.url} overlay onFold={() => setPeek(false)} />}
     </Box>
   );
 };

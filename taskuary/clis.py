@@ -34,8 +34,8 @@ KNOWN = [
 TOOLS = [
     {'name': 'agent-browser', 'cmd': 'agent-browser', 'label': 'agent-browser (Vercel)', 'license': 'Apache-2.0',
      'install': 'npm install -g agent-browser', 'url': 'https://github.com/vercel-labs/agent-browser',
-     'why': 'a local headless Chromium the coding agent drives from the terminal, with a WebSocket screencast a panel could show live',
-     'status': 'planned'},
+     'why': 'a local headless Chromium the coding agent drives from the terminal, shown live beside the session (browserview.py)',
+     'status': 'available'},
 ]
 
 

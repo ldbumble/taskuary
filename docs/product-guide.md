@@ -31,7 +31,13 @@ The rest of the workspace answers a specific question:
   running task, and a raised hand for a session waiting on you.
 - **Wall** puts every live terminal side by side, with a prompt box under each session.
 - **Tasks** is the full interactive terminal for one task. Pause preserves a handoff; Done
-  reads the transcript, writes the report, and prepares the reply.
+  reads the transcript, writes the report, and prepares the reply. When the agent opens a web
+  page (through the optional `agent-browser` tool), the page appears live beside the terminal:
+  the browser takes the larger share, a handle between the two resizes it, and it folds away
+  when the browser closes. **Take over** gives you the mouse and keyboard for a password or a
+  2FA code the agent must never type; **Snapshot** keeps the frame on the task as an
+  attachment. On the Wall, a narrow tile shows a "browser" chip that opens the page over the
+  session.
 - **Review** is the outbound decision queue. Approved replies go back through the channel
   where the conversation started.
 - **Reports** turns connected data into scheduled Timeline items, spreadsheets, charts, and

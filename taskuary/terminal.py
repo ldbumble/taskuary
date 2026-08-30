@@ -45,8 +45,11 @@ def seed_argv(profile: dict, seed: str):
 # inherit the parent's conversation - strip anything that would carry that in.
 _DIRTY = ('CLAUDE_CODE', 'CLAUDECODE', 'CLAUDE_SESSION', 'ANTHROPIC_SESSION', 'CODEX_SESSION', 'GEMINI_SESSION')
 
-def clean_env() -> dict:
+def clean_env(extra: dict = None) -> dict:
     env = {k: v for k, v in os.environ.items() if not k.upper().startswith(_DIRTY)}
+    # per-session additions: the browser session name that ties an agent's agent-browser to
+    # its pane (browserview) - set after the strip, so it wins over an inherited one
+    env.update(extra or {})
     # the pane IS a real terminal (xterm.js): say so. A service started with no TERM, or TERM=dumb,
     # made codex stop at "Codex's interactive TUI may not work in this terminal. Continue? [y/N]"
     # before a single prompt - the owner typed y into a box that was built for exactly this.
@@ -56,12 +59,12 @@ def clean_env() -> dict:
 
 
 class _WinPty:
-    def __init__(self, argv, cwd, rows, cols):
+    def __init__(self, argv, cwd, rows, cols, env=None):
         try:
             from winpty import PtyProcess
         except ImportError:
             raise RuntimeError('the interactive terminal needs pywinpty on Windows - pip install pywinpty')
-        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env())
+        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env(env))
     def read(self):
         try: return self.p.read(65536)
         except EOFError: return ''
@@ -74,12 +77,12 @@ class _WinPty:
 
 
 class _UnixPty:
-    def __init__(self, argv, cwd, rows, cols):
+    def __init__(self, argv, cwd, rows, cols, env=None):
         import fcntl, pty, struct, termios
         self.fd, slave = pty.openpty()
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
         self.p = subprocess.Popen(argv, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
-                                  close_fds=True, start_new_session=True, env=clean_env())
+                                  close_fds=True, start_new_session=True, env=clean_env(env))
         os.close(slave)
         import codecs
         self.dec = codecs.getincrementaldecoder('utf-8')(errors='replace')
@@ -120,7 +123,9 @@ class Term:
         self.dirty0 = _bb.dirty(cwd) if task_id else set()
         self._files = ([], 0.0)
         self.witness, self.ext_id = _w.Witness(), ''     # what the agent said and did (hooks / rollout), and the CLI's own session id once a hook names it
-        self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols)
+        # the browser this session may open is named after it, so the pane can find it (browserview)
+        from . import browserview as _bv
+        self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols, _bv.env(self.sid))
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself
@@ -147,6 +152,8 @@ class Term:
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self.keep()                                       # the transcript must outlive the pty
         self._emit(None)
+        from . import browserview as _bv
+        _bv.close(self.sid)                               # its browser goes with it, not into an hour of idling
         if self.store and self.task_id:                   # whoever queued behind this session gets its turn
             from . import blackboard, waitroom
             blackboard.drain_later(self.store)
@@ -318,10 +325,11 @@ class Term:
     def info(self, tail=0):
         # module functions, not methods: the tests' fakes (and any other stand-in) need only tail() and idle()
         files, w = self.files(), getattr(self, 'witness', None)      # fakes in tests carry no witness
+        from . import browserview as _bv
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase_of(self.tail(4)), 'waiting': waiting_of(self),
-                'cmd': ' '.join(self.argv), 'files': files,
+                'cmd': ' '.join(self.argv), 'files': files, 'browser': _bv.state(self.sid),
                 'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None,
                 **({'tail': self.tail(tail)} if tail else {})}
 
@@ -751,6 +759,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # tty caps a line at 1024 bytes (CI's fake TUI; macOS temp paths are long) - a wordy sentence here
     # pushed the seed over and the prompt arrived clipped
     if cpath: parts.append(f'CONTEXT FILE: {cpath} - read it FIRST: this sender, this topic, past tasks and how they ended.')
+    # a browser the owner can WATCH exists only if the agent is told so - and told who types passwords
+    from . import browserview as _bv
+    if _bv.hint(): parts.append(_bv.hint())
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.

@@ -13,10 +13,11 @@ It never repeats itself: every idea has a key and a state (idea table). Said onc
 facts is said; dismissed stays dismissed until the facts change; snoozed sleeps. Not this / Snooze
 are verdicts, so LEARNED.md hears which kinds of nudges this owner never wants.
 
-The pinned card at the top of the Timeline is deliberately NOT this: it is a quiet status line
-(status()) - what is being worked, what waits on the owner, what is next on the calendar. The
-recommendations live in the rows, where they can scroll away. Everything here is a setting
-(assistant_*): the clock, the producers, the thresholds, the card.
+Nothing sits pinned above the Timeline: the assistant IS its rows, each posted for something
+specific, and what is open, in flight and waiting on the owner is the Morning digest's job on its
+own clock (the owner, 2026-08-30: the status strip with its counts and 'ask now' was noise). The
+thresholds and the producers are settings (assistant_*); the clock and the instruction are the
+'Assistant' report on the Reports tab.
 """
 import json, re
 from datetime import datetime, timedelta
@@ -62,7 +63,7 @@ def cfg(store) -> dict:
     raw = s.get('assistant_producers')
     prod = {p.strip() for p in (raw if raw is not None else ','.join(PRODUCERS)).split(',') if p.strip()}
     return {'followup_h': n('assistant_followup_hours', 24), 'cold_d': n('assistant_cold_days', 3), 'max': max(1, n('assistant_max_lines', MAX_LINES)),
-            'card': s.get('assistant_card', '1') == '1', 'producers': prod, 'last': s.get('assistant_last_run') or ''}
+            'producers': prod, 'last': s.get('assistant_last_run') or ''}
 
 
 def source(store) -> dict | None:
@@ -187,7 +188,9 @@ def fresh(state: dict, cand: dict, now: datetime) -> bool:
 CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short list of things worth saying right now. You get '
             'CANDIDATES the hub found itself (each with a key), what arrived today, what is open, and WHAT YOU ALREADY SAID. '
             'Answer JSON only: {"say": [{"key": "<a candidate key, or idea:<short-slug> for a thought of your own>", '
-            '"text": "<one line, under 30 words, first person: the fact and what I would do>", "mid": <the message id it is '
+            '"text": "<one line, under 30 words, first person: the fact and what I would do>", '
+            '"why": "<one line: what this rests on - the mail, the date, the silence, the pattern - named as it appears in what you '
+            'were given (sender, subject, mid, TQ-ref), so the owner can check it>", "mid": <the message id it is '
             'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>"}]}.\n'
             'At most {max_lines} entries. Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
             'one-day silence from someone who always takes a week is not news) - skipping is free, repeating is not: never say '
@@ -215,22 +218,26 @@ def _said(store) -> str:
 
 def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     """The model's list, kept honest: a key it invents must be idea:*, a candidate key keeps its
-    kind and its buttons, and the text is the model's when it gave one."""
+    kind and its buttons, and the text is the model's when it gave one. Every line keeps its WHY -
+    the hub's facts for a candidate (plus the model's read on them), the model's own for an idea -
+    so the owner can see what it rests on (the owner, 2026-08-30: "why it brings up something,
+    what is driving it")."""
     try: j = json.loads(re.sub(r'^```(json)?|```$', '', (text or '').strip(), flags=re.M))
     except ValueError: return []
     by = {c['key']: c for c in cands}
     out, seen = [], set()
     for s in (j.get('say') or []) if isinstance(j, dict) else []:
         if not isinstance(s, dict): continue
-        key, txt = str(s.get('key') or '').strip(), _short(s.get('text'), 240)
+        key, txt, why = str(s.get('key') or '').strip(), _short(s.get('text'), 240), _short(s.get('why'), 400)
         if not key or key in seen or not txt: continue
         if key in by:
-            out.append({**by[key], 'text': txt})
+            out.append({**by[key], 'text': txt, 'why': by[key]['facts'] + (f"\nThe model's read: {why}" if why else '')})
         elif key.startswith('idea:') and len(key) > 5:
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
             act = {'type': 'task', 'mid': mid, 'title': title} if title and mid else {'type': 'message', 'mid': mid} if mid else {'type': 'note'}
-            out.append({'key': key[:120], 'kind': 'idea', 'sig': txt[:60], 'text': txt, 'action': act})
+            out.append({'key': key[:120], 'kind': 'idea', 'sig': txt[:60], 'text': txt, 'action': act,
+                        'why': why or 'the model gave no reason - treat it as a hunch' + (f' (about mid {mid})' if mid else '')})
         else: continue
         seen.add(key)
         if len(out) >= max_lines: break
@@ -262,14 +269,34 @@ def facts(store) -> str:
 def _public(i: dict) -> dict:
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
-    return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'action': a, 'status': i.get('Status')}
+    return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'why': a.pop('why', ''), 'action': a, 'status': i.get('Status')}
+
+
+def reviewed(cands: list, say: list, today: str, open_: str, said: str, model: bool) -> dict:
+    """What this post was built from, so the owner can judge it: the candidates by kind, the ones it
+    looked at and let go (with their facts), how much of the day and the open work it read, how many
+    of its own lines it was told not to repeat. Stored on the post (Brief.reviewed) and written
+    under it in plain text."""
+    kept = {s_['key'] for s_ in say}
+    n = lambda txt: 0 if txt.startswith('(') else txt.count('\n') + 1
+    by = {}
+    for c in cands: by[c['kind']] = by.get(c['kind'], 0) + 1
+    return {'candidates': by, 'skipped': [{'key': c['key'], 'kind': c['kind'], 'facts': c['facts']} for c in cands if c['key'] not in kept],
+            'today': n(today), 'open': n(open_), 'said': n(said), 'model': model}
+
+
+def _footer(r: dict) -> str:
+    kinds = ', '.join(f"{v} {k}" for k, v in r['candidates'].items()) or 'no candidates'
+    skip = f"; let go: {len(r['skipped'])}" if r['skipped'] else ''
+    return (f"Reviewed: {kinds}{skip} - {r['today']} message(s) from today, {r['open']} open task(s), {r['said']} line(s) already said"
+            + ('' if r['model'] else " - no model: the facts in the hub's own words"))
 
 
 def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
     """One post. The Reports tab's scheduler calls this when the 'Assistant' report is due
-    (reports.run_report_source), the card's "ask now" calls it forced; the instruction is the
-    report's editable prompt. Deleting or switching off that report is the off switch - a forced
-    run still answers, so "ask now" works with it off. Posts nothing when nothing is new."""
+    (reports.run_report_source) and its "Run now" calls it forced; the instruction is the report's
+    editable prompt. Deleting or switching off that report is the off switch - a forced run still
+    answers. Posts nothing when nothing is new."""
     c = cfg(store); now = datetime.now()
     src = source(store)
     if not force and not (src and src.get('Active')): return {'ran': False, 'said': 0}
@@ -282,27 +309,29 @@ def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
         try: llm = build_llm(store)
         except Exception as e:
             logger.debug(f'assistant: no model - {e}'); llm = None
-    if llm and 'idea' in c['producers']:
+    used = bool(llm and 'idea' in c['producers'])
+    if used:
         try: say = think(store, cands, llm, instruction, c['max'])
         except Exception as e:
-            logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say = cands[:c['max']]
+            logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
-    say = [s for s in say if fresh(state, s, now)]         # a model echoing a dismissed key changes nothing
-    if not say: return {'ran': True, 'said': 0}
+    say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say if fresh(state, s, now)]   # a model echoing a dismissed key changes nothing
+    rv = reviewed(cands, say, _today(store), _open(store), _said(store), used)
+    if not say: return {'ran': True, 'said': 0, 'reviewed': rv}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
-    rows = [store.upsert_idea(s, stamp) for s in say]
-    body = '\n'.join(f"- {i['Text']}" for i in rows)
+    rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}}, stamp) for s in say]
+    body = '\n'.join(f"- {i['Text']}\n    why: {s_['why']}" for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
     subj = rows[0]['Text'][:90] + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
     mid = store.add_message({'TaskId': None, 'ExternalId': f'assistant:{stamp}', 'ConversationId': 'assistant', 'Channel': CHANNEL,
                              'SourceName': 'Assistant', 'Subject': subj, 'FromName': 'Assistant', 'SentAt': stamp,
                              'BodyText': body, 'Status': 'feed'})
     store.add_route(mid, None, 'feed', None, "the assistant's post: what it noticed and what it would do - each line has its buttons on the panel",
                     [], 'assistant')
-    store.set_brief(mid, json.dumps({'ideas': [_public(i) for i in rows]}))
+    store.set_brief(mid, json.dumps({'ideas': [_public(i) for i in rows], 'reviewed': rv}))
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
-    return {'ran': True, 'said': len(rows), 'message_id': mid}
+    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv}
 
 
 # ── the buttons ──────────────────────────────────────────────────────────────────────────────
@@ -356,29 +385,3 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
     store.audit('idea', idea_id, verb, actor, detail={'kind': i.get('Kind')})
     return out
 
-
-# ── the pinned card: status, not advice ──────────────────────────────────────────────────────
-def status(store) -> dict:
-    c = cfg(store)
-    live = {r['TaskId']: r.get('AgentName') or 'agent' for r in store.running_runs()}
-    try:
-        from . import terminal as term
-        live.update({t['taskId']: t.get('agent') or t.get('label') or 'coder' for t in term.live_sessions(tail=0) if t.get('taskId')})
-    except Exception:
-        pass
-    act_ = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')]
-    row = lambda t: {'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title')}
-    working = [row(t) | {'agent': live[t['TaskId']]} for t in act_ if t['TaskId'] in live]
-    waiting = [row(t) for t in act_ if t['TaskId'] not in live and (t.get('Status') == 'waiting' or t.get('ReviewStatus') == 'pending')]
-    meetings = []
-    try:
-        from . import calendar as cal
-        meetings = (cal.upcoming(store, hours=36).get('events') or [])[:3]
-    except Exception:
-        pass
-    src = source(store); sc = (src or {}).get('cfg') or {}
-    every = (f"every {sc['every_minutes']} min" if sc.get('every_minutes') else f"cron {sc['cron']}" if sc.get('cron')
-             else f"daily at {sc['daily_at']}" if sc.get('daily_at') else 'daily') if src else 'no schedule - the Assistant report was deleted'
-    return {'card': c['card'], 'enabled': bool(src and src.get('Active')), 'every': every, 'last_run': c['last'], 'max': c['max'],
-            'working': working, 'waiting': waiting, 'open': len([t for t in act_ if t['TaskId'] not in live]),
-            'reviews': len(store.list_reviews('pending')), 'meetings': meetings, 'ideas': len(store.list_ideas('open'))}

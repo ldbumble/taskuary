@@ -202,10 +202,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
                     # the assistant's POST on the Timeline (assistant.py): what it looks for, the silence and
-                    # quiet that count as news, how much it says, and whether the status card shows at the
-                    # top. Its clock and its instruction live on the Reports tab (the seeded 'Assistant' report).
+                    # quiet that count as news, how much it says. Its clock and its instruction live on the
+                    # Reports tab (the seeded 'Assistant' report).
                     'assistant_followup_hours': '24',
-                    'assistant_cold_days': '3', 'assistant_card': '1', 'assistant_producers': 'followup,promise,prep,cold,idea',
+                    'assistant_cold_days': '3', 'assistant_producers': 'followup,promise,prep,cold,idea',
                     'assistant_max_lines': '5',
                     # the coder's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it

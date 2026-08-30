@@ -100,6 +100,34 @@ class PostTests(unittest.TestCase):
         self.assertIn('ALREADY SAID (never repeat):', seen[1]); self.assertIn('- (open) Dana owes you', seen[1])
         self.assertEqual(len([r for r in s.feed(limit=10) if r['Channel'] == 'assistant']), 1)
 
+    def test_every_line_carries_its_why_and_the_post_says_what_it_reviewed(self):
+        """The owner (2026-08-30): "we need more context like what it reviewed, why it brings up something,
+        what is driving it". A candidate's why is the hub's facts plus the model's read; an idea's why is
+        the model's own; the post records what it was built from and what it let go."""
+        s = self._seed()
+        _mail(s, 'lee@x.com', 'Invoice 88', 'Attached.', days=5, conv='c2')
+        _mine(s, 'Re: Invoice 88', 'Can you confirm the PO number?', days=3, conv='c2')
+        def llm(system, user, **k):
+            self.assertIn('"why":', system)
+            return json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the ledger - I'd nudge.", 'why': 'four days is long for her', 'mid': None},
+                                       {'key': 'idea:po-numbers', 'text': 'Two PO questions this week - I would keep a PO sheet.', 'why': 'mails on "Invoice 88" and "Q3 ledger" both circle a reference number', 'mid': None, 'task': None},
+                                       {'key': 'idea:hunch', 'text': 'Something feels off with the close.', 'mid': None, 'task': None}]})
+        out = assistant.run(s, llm=llm, force=True)
+        row = s.get_message(out['message_id']); brief = json.loads(row['Brief'])
+        ideas = brief['ideas']
+        self.assertTrue(ideas[0]['why'].startswith('You wrote Dana on')); self.assertIn("The model's read: four days is long", ideas[0]['why'])
+        self.assertEqual(ideas[1]['why'], 'mails on "Invoice 88" and "Q3 ledger" both circle a reference number')
+        self.assertIn('gave no reason', ideas[2]['why'])
+        self.assertNotIn('why', ideas[0]['action'])                          # rides in ActionJson, lifted out for the API
+        rv = brief['reviewed']
+        self.assertEqual(rv['candidates'], {'followup': 2}); self.assertTrue(rv['model'])
+        self.assertEqual([c['key'] for c in rv['skipped']], ['followup:c2']); self.assertIn('Can you confirm the PO', rv['skipped'][0]['facts'])
+        self.assertEqual(rv['said'], 0); self.assertTrue(all(isinstance(rv[k], int) for k in ('today', 'open')))
+        self.assertIn('    why: You wrote Dana', row['BodyText']); self.assertIn('Reviewed: 2 followup; let go: 1', row['BodyText'])
+        self.assertEqual(out['reviewed'], rv)
+        # nothing to say still reports what it read - the Reports tab's run result carries it
+        self.assertEqual([c['key'] for c in assistant.run(s, llm=lambda *a, **k: '{"say": []}', force=True)['reviewed']['skipped']], ['followup:c2'])
+
     def test_no_model_still_posts_the_facts(self):
         s = self._seed()
         with mock.patch('taskuary.llm.build_llm', return_value=None):
@@ -127,9 +155,9 @@ class PostTests(unittest.TestCase):
         s._exec('UPDATE source SET Active=0 WHERE SourceId=?', (src['SourceId'],))
         self.assertEqual(assistant.run(s, llm=llm), {'ran': False, 'said': 0})
         self.assertTrue(assistant.run(s, llm=llm, force=True)['ran'])
-        self.assertFalse(assistant.status(s)['enabled'])
+        self.assertFalse(assistant.source(s)['Active'])
         s.delete_source(src['SourceId'])
-        self.assertIsNone(assistant.source(s)); self.assertIn('deleted', assistant.status(s)['every'])
+        self.assertIsNone(assistant.source(s))
 
     def test_lines_per_post_is_a_setting(self):
         s = self._seed()
@@ -225,19 +253,6 @@ class ButtonTests(unittest.TestCase):
         with self.assertRaises(ValueError): assistant.act(s, row['IdeaId'], 'nonsense')
 
 
-class StatusCardTests(unittest.TestCase):
-    def test_status_is_a_quiet_summary_not_advice(self):
-        s = _store()
-        tid = s.create_task({'Title': 'Waiting one', 'Kind': 'coding', 'Status': 'waiting'}, 't')
-        s.create_task({'Title': 'Open one', 'Kind': 'coding', 'Status': 'open'}, 't')
-        st = assistant.status(s)
-        self.assertTrue(st['card'] and st['enabled'])
-        self.assertEqual([w['tid'] for w in st['waiting']], [tid])
-        self.assertEqual((st['open'], st['working'], st['meetings'], st['ideas']), (2, [], [], 0))
-        s.set_setting('assistant_card', '0', 't')
-        self.assertFalse(assistant.status(s)['card'])
-
-
 class ApiTests(unittest.TestCase):
     def test_the_endpoints_round_trip(self):
         from fastapi.testclient import TestClient
@@ -247,13 +262,15 @@ class ApiTests(unittest.TestCase):
         _mail(s, DANA, 'API ledger', 'Here.', days=6, conv='api-c1')
         _mine(s, 'Re: API ledger', 'Could you send the reconciled version?', days=4, conv='api-c1')
         c = TestClient(server.app)
+        sid = assistant.source(s)['SourceId']
         with mock.patch('taskuary.llm.build_llm', return_value=None):
-            r = c.post('/api/assistant/run')
+            r = c.post(f'/api/sources/{sid}/run')                   # the Reports tab's "Run now" - the only manual trigger left
         self.assertEqual(r.status_code, 200); self.assertGreaterEqual(r.json()['said'], 1)
         mid = r.json()['message_id']
+        self.assertEqual(c.get('/api/assistant/status').status_code, 404)   # the pinned card is gone (2026-08-30)
         ideas = c.get(f'/api/assistant/ideas?mid={mid}').json()['data']
         self.assertTrue(ideas and ideas[0]['status'] == 'open')
-        self.assertEqual(c.get('/api/assistant/status').json()['ideas'], len(c.get('/api/assistant/ideas?status=open').json()['data']))
+        self.assertEqual(len(s.list_ideas('open')), len(c.get('/api/assistant/ideas?status=open').json()['data']))
         r = c.post(f"/api/assistant/ideas/{ideas[0]['id']}/snooze", json={'days': 2})
         self.assertEqual(r.status_code, 200); self.assertEqual(r.json()['verb'], 'snooze')
         self.assertEqual(c.post(f"/api/assistant/ideas/{ideas[0]['id']}/nonsense").status_code, 422)

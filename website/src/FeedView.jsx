@@ -863,7 +863,6 @@ export default function FeedView({ onOpenTask, onChanged }) {
           ) : Object.entries(days).map(([day, items], di) => (
             // the group's top edge is what the date spy watches - no header row of its own
             <Box key={day} sx={{ mt: di ? 1.5 : 0 }} ref={(el) => { if (el) dayRefs.current[day] = el; else delete dayRefs.current[day]; }}>
-              {di === 0 && !cat && !pick && <AssistantCard onOpenTask={onOpenTask} />}
               {di === 0 && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
               <Box>
                 {items.map((r, i) => (
@@ -1521,52 +1520,22 @@ const pendingDraft = (detail, open) => {
 const briefOf = (b) => { if (!b) return null; if (typeof b === "object") return b; try { return JSON.parse(b); } catch { return null; } };
 
 // ── the assistant on the Timeline (assistant.py) ────────────────────────────────────────────
-// The pinned card is STATUS, not advice - one quiet line: what is being worked, what waits on
-// you, what is next on the calendar. The recommendations live in the rows below, where they can
-// scroll away (the owner, 2026-08-29: "a pinned card of ideas might be too much"). Settings →
-// Assistant hides it. Refreshes every minute while the tab is visible.
-const AssistantCard = ({ onOpenTask }) => {
-  const [st, setSt] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => { try { setSt((await api.get("/api/assistant/status")).data); } catch { setSt(null); } }, []);
-  useEffect(() => { load(); return pollWhileVisible(load, 60000); }, [load]);
-  if (!st || !st.card) return null;
-  const now = async () => { setBusy(true); try { await api.post("/api/assistant/run"); } catch { /* nothing to say, or no AI */ } setBusy(false); load(); };
-  const next = st.meetings?.[0];
-  const parts = [
-    st.working.length ? `${st.working.length} agent${st.working.length === 1 ? "" : "s"} working` : null,
-    st.waiting.length ? `${st.waiting.length} waiting on you` : null,
-    st.reviews ? `${st.reviews} to review` : null,
-    st.open ? `${st.open} open` : null,
-    next ? `next: ${next.all_day ? "all day" : fmtTime12(next.start)} ${next.subject}` : null,
-  ].filter(Boolean);
-  const detail = [...st.working.map((w) => `${w.ref} ${w.title} — ${w.agent}`), ...st.waiting.map((w) => `${w.ref} ${w.title} — waiting on you`)].join("\n");
-  return (
-    <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "6px" }}>
-      <Box /><Box />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: "11px", py: "4px", borderRadius: "8px",
-        bgcolor: PANEL, border: `1px solid ${BORDER}`, borderLeft: "3px solid #6f8a6e", minWidth: 0 }}>
-        <SmartToyIcon sx={{ fontSize: 15, color: "#6f8a6e", flexShrink: 0 }} />
-        <Typography variant="body2" noWrap title={detail} sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0 }}>
-          {parts.length ? parts.join(" · ") : "Nothing in flight, nothing waiting on you."}
-        </Typography>
-        {!!st.waiting.length && (
-          <Button size="small" onClick={() => onOpenTask?.(st.waiting[0].tid)}
-            sx={{ textTransform: "none", fontSize: 11.5, color: "#55697a", minWidth: 0, px: 0.75 }}>open {st.waiting[0].ref}</Button>
-        )}
-        <Button size="small" disabled={busy || !st.enabled} onClick={now}
-          title={`${st.last_run ? `last post ${fmtDateTime(st.last_run)}` : "no post yet"} · ${st.every} · schedule and instruction: Reports tab → Assistant`}
-          sx={{ textTransform: "none", fontSize: 11.5, color: "#4f6b4e", minWidth: 0, px: 0.75 }}>{busy ? "thinking…" : "ask now"}</Button>
-      </Box>
-    </Box>
-  );
-};
-
-// One post, opened: each line with its buttons. State comes from the server (a line acted on from
-// another tab shows as done here too); the buttons are the ones the line's action allows.
+// The assistant is its ROWS: a post lands on the Timeline only when it has something specific
+// to say (a reply never answered, a promise unkept, a meeting ahead, a task gone quiet, an
+// idea of its own). Nothing is pinned above the feed - the owner (2026-08-30): "don't like the
+// 2 open tab on top of the timeline and ask now button". What is open, in flight and waiting on
+// you is the Morning digest's job, on its own clock (Reports tab).
+// One post, opened: each line with its buttons AND its why - the facts it rests on (the mail, the
+// date, the silence; the model's own reason for an idea) - and under them what the post was built
+// from: candidates by kind, the ones it looked at and let go, how much of the day it read (the
+// owner, 2026-08-30: "we need more context like what it reviewed, why it brings up something").
+// State comes from the server (a line acted on from another tab shows as done here too); the
+// buttons are the ones the line's action allows.
 const IDEA_KIND = { followup: "follow up", prep: "prep", cold: "gone quiet", ahead: "coming up", idea: "idea" };
 const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
   const [ideas, setIdeas] = useState(() => briefOf(sel.Brief)?.ideas || []);
+  const rv = briefOf(sel.Brief)?.reviewed;
+  const [showSkipped, setShowSkipped] = useState(false);
   const [busy, setBusy] = useState(null);
   const [notes, setNotes] = useState({});
   const [err, setErr] = useState("");
@@ -1600,6 +1569,11 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
               <Typography variant="caption" sx={{ color: "#4f6b4e", fontWeight: 700, flexShrink: 0 }}>{IDEA_KIND[i.kind] || i.kind}</Typography>
               <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>{i.text}</Typography>
             </Box>
+            {i.why && (
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.35, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
+                <Box component="span" sx={{ fontWeight: 700, color: "#6f8a6e" }}>why · </Box>{i.why}
+              </Typography>
+            )}
             {ev && (
               <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.3 }}>
                 {ev.who?.length ? `with ${ev.who.join(", ")}` : ""}{ev.where ? ` · ${ev.where}` : ""}{ev.about ? ` · ${ev.about}` : ""}
@@ -1630,6 +1604,27 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
           </Box>
         );
       })}
+      {rv && (
+        <Box sx={{ mt: 0.75, px: 1.25, py: 0.7, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
+          <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
+            <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>
+            {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
+            {` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}
+            {rv.model ? " · the model chose the lines" : " · no model — the hub's facts in its own words"}
+          </Typography>
+          {!!rv.skipped?.length && (
+            <>
+              <Typography variant="caption" onClick={() => setShowSkipped((v) => !v)}
+                sx={{ display: "block", mt: 0.3, color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                {showSkipped ? "hide" : "show"} what it looked at and let go — {rv.skipped.length} {showSkipped ? "↑" : "↓"}</Typography>
+              {showSkipped && rv.skipped.map((c) => (
+                <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, mt: 0.3, pl: 1, borderLeft: `2px solid ${BORDER}`, whiteSpace: "pre-wrap" }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>{IDEA_KIND[c.kind] || c.kind} · </Box>{c.facts}</Typography>
+              ))}
+            </>
+          )}
+        </Box>
+      )}
     </Box>
   );
 };

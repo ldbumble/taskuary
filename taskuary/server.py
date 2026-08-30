@@ -723,25 +723,12 @@ def _learn_promotion(m: dict, background):
                             f"{m.get('FromEmail') or m.get('SourceName') or '?'} as fyi, but the owner made it a task - "
                             'triage under-reached')
 
-# ── the assistant on the Timeline (assistant.py): its post, its buttons, the status card ──────
-@app.get('/api/assistant/status')
-def assistant_status():
-    """The pinned card's line: what is being worked, what waits on you, what is next. Status, not advice."""
-    return assistant.status(store)
-
+# ── the assistant on the Timeline (assistant.py): its post and its buttons ───────────────────
 @app.get('/api/assistant/ideas')
 def assistant_ideas(status: str = None, mid: int = None):
     """What the assistant has said, with what became of each line - by state, or the lines of one post."""
     return {'data': [assistant._public(i) | {'firstSeen': i.get('FirstSeen'), 'lastSaid': i.get('LastSaid'), 'messageId': i.get('MessageId')}
                      for i in store.list_ideas(status or None, mid)]}
-
-@app.post('/api/assistant/run')
-def assistant_run():
-    """Post now, schedule or not - the card's 'ask now'. Nothing new to say posts nothing."""
-    out = assistant.run(store, force=True)
-    src = assistant.source(store)
-    if src: store.touch_source(src['SourceId'])                 # the Reports tab shows this as the last run
-    return out
 
 class IdeaBody(BaseModel): days: int = 1
 

@@ -26,7 +26,7 @@ def live_for(store, cid: int):
     """The live setup session for this card, if one is open - the button reattaches instead of
     starting a second agent on the same form."""
     from . import terminal as term
-    for t in term.SESSIONS.values():
+    for t in list(term.SESSIONS.values()):
         if not (t.alive and t.task_id): continue
         tk = store.get_task(t.task_id) or {}
         if tk.get('Kind') == KIND and tag(cid) in str(tk.get('Tags') or ''): return {**t.info(), 'taskId': t.task_id}

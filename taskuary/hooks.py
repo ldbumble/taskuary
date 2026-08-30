@@ -72,7 +72,7 @@ def receive(payload: dict) -> dict:
     from . import terminal as term, witness
     cwd = os.path.normcase(os.path.normpath(str(payload.get('cwd') or '')))
     sid = str(payload.get('session_id') or '')
-    mine = [t for t in term.SESSIONS.values() if t.alive and t.task_id and 'claude' in os.path.basename(str(t.argv[0])).lower()
+    mine = [t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and 'claude' in os.path.basename(str(t.argv[0])).lower()
             and os.path.normcase(os.path.normpath(t.cwd)) == cwd]
     if not mine: return {'bound': False}
     t = next((x for x in mine if getattr(x, 'ext_id', '') == sid), None)

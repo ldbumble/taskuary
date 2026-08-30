@@ -641,7 +641,7 @@ def _auto_code(store, tid):
     # the note belongs INSIDE the worker: written before the thread started, a task could
     # claim "auto-dispatched" with no session behind it whenever the process died first
     cap = auto_sessions(store)
-    if len([t for t in term.SESSIONS.values() if t.alive]) >= cap:
+    if len([t for t in list(term.SESSIONS.values()) if t.alive]) >= cap:
         store.enqueue_dispatch(tid, None, agent, f'{cap} agent sessions are already live')
         store.add_comment(tid, 'router', 'agent',
                           f'Queued: {cap} agent sessions are already live - '

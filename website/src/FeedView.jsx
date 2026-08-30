@@ -1614,8 +1614,11 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
     } catch (e) { setErr(e?.response?.data?.detail || "That did not work"); }
     setBusy(null); load(); onChanged?.();
   };
-  const btn = { textTransform: "none", fontSize: 11.5, minWidth: 0 };
-  const primary = { bgcolor: ASSISTANT.solid, "&:hover": { bgcolor: "#465866" } };
+  const btn = { textTransform: "none", fontSize: 11.5, minWidth: 0, minHeight: 27, px: 1.1, lineHeight: 1.2 };
+  const primary = { color: "#fff", background: ASSISTANT.gradient,
+    "&:hover": { background: "linear-gradient(90deg, #465866, #698368)" } };
+  const quiet = { color: DIM, borderColor: BORDER, bgcolor: PANEL,
+    "&:hover": { borderColor: ASSISTANT.solid, bgcolor: "#f7f8f4" } };
   return (
     <Box sx={{ mb: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6 }}>
@@ -1642,21 +1645,21 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
               </Typography>
             )}
             {open ? (
-              <Box sx={{ mt: 0.6, display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
+              <Box sx={{ mt: 0.75, display: "flex", gap: 0.6, flexWrap: "wrap", alignItems: "center" }}>
                 {a.type === "followup" && (
                   <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "followup")} sx={{ ...btn, ...primary }}>
-                    {busy === `${i.id}:followup` ? "drafting…" : "Follow up — draft the chase"}</Button>
+                    {busy === `${i.id}:followup` ? "drafting…" : "Draft follow-up"}</Button>
                 )}
                 {a.mid && (
                   <Button size="small" variant={a.type === "task" ? "contained" : "outlined"} disableElevation disabled={!!busy} onClick={() => act(i, "task")}
-                    sx={{ ...btn, ...(a.type === "task" ? primary : { color: ASSISTANT.ink, borderColor: ASSISTANT.bd }) }}>
-                    {busy === `${i.id}:task` ? "starting…" : a.title ? `Make it a task: ${a.title}` : "Make it a task"}</Button>
+                    title={a.title ? `Make it a task: ${a.title}` : "Make it a task"}
+                    sx={{ ...btn, ...(a.type === "task" ? primary : quiet) }}>
+                    {busy === `${i.id}:task` ? "starting…" : "Make it a task"}</Button>
                 )}
-                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, color: "#55697a", borderColor: BORDER }}>Open {ref(a.tid)}</Button>}
-                <Box sx={{ flex: 1 }} />
-                <Button size="small" disabled={!!busy} onClick={() => act(i, "done")} sx={{ ...btn, color: DIM }}>Done</Button>
-                <Button size="small" disabled={!!busy} onClick={() => act(i, "snooze")} sx={{ ...btn, color: DIM }}>Snooze a day</Button>
-                <Button size="small" disabled={!!busy} onClick={() => act(i, "dismiss")} title="teaches the assistant this kind of nudge is not for you" sx={{ ...btn, color: DIM }}>Not this</Button>
+                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
+                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "done")} sx={{ ...btn, ...quiet }}>Done</Button>
+                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "snooze")} sx={{ ...btn, ...quiet }}>Snooze a day</Button>
+                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "dismiss")} title="teaches the assistant this kind of nudge is not for you" sx={{ ...btn, ...quiet }}>Not this</Button>
               </Box>
             ) : (
               <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.4 }}>

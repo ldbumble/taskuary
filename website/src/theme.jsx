@@ -16,10 +16,12 @@ export const FAINT = "#6e685f";        // tertiary (timestamps, rails) - twice d
                                        // passes still read as fog against oat paper
 export const ACCENT = "#55697a";       // slate blue - the brand: chrome, links, buttons
 export const ACCENT2 = "#6f8a6e";      // sage - section labels, secondary emphasis
-// The assistant is a voice/source, not a success state. Its old pale green made every post
-// look auto-completed and was surprisingly loud across a whole Timeline row. Cool slate keeps
-// it distinct from mail without competing with the needs-you color or the content itself.
-export const ASSISTANT = { solid: ACCENT, ink: "#465664", tint: "#f0f2f4", bd: "#d8dde2" };
+export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7d9a7c)`;
+// The assistant shares the sync control's slate-to-sage family: the sage end identifies its
+// posts without the old light-blue wash, and primary actions use the exact same gradient.
+export const ASSISTANT = {
+  solid: "#7d9a7c", ink: "#526b53", tint: "#edf1ea", bd: "#cfd8c8", gradient: GRADIENT,
+};
 
 /* The one loud colour, and the whole point of this palette: ALERT means "this is on you" and
    is spent on nothing else. It is deliberately COOLER than the paper - a warm red on warm oat
@@ -32,7 +34,6 @@ export const ALERT = "#8a3646";        // oxblood - solid: dots, badges, the nee
 export const ALERT_INK = "#7a2f3c";    // text on a tint
 export const ALERT_TINT = "#f3e6e8";   // the tint, mixed toward the paper
 export const ALERT_BD = "#e0c6cb";
-export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7d9a7c)`;
 
 /* ── ROLES: one colour per MEANING, and nothing else decides a colour ────────────────────
    The bug this fixes is not any single hex. It is that "in progress" was wearing the

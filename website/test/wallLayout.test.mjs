@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultPaneHeight, movePane, resizedPaneHeight } from "../src/wallLayout.js";
+import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, withoutWallSession } from "../src/wallLayout.js";
 
 test("dragging a wall pane moves it to the pane entered", () => {
   assert.deepEqual(movePane(["one", "two", "three"], "one", "three"), ["two", "three", "one"]);
@@ -26,4 +26,15 @@ test("one row of wall panes fills the available screen", () => {
 test("additional wall rows share two screenful rows before scrolling", () => {
   assert.equal(defaultPaneHeight(4, 3), "max(300px, calc((100vh - 116px) / 2))");
   assert.equal(defaultPaneHeight(9, 3), "max(300px, calc((100vh - 116px) / 2))");
+});
+
+test("a wrapping pane stays visible after its pty exits until close-out answers", () => {
+  const one = { sid: "one" }, two = { sid: "two" };
+  assert.deepEqual(holdWrappingSessions([two], [one, two], { one: true }), [two, one]);
+  assert.deepEqual(holdWrappingSessions([two], [one, two], {}), [two]);
+  assert.deepEqual(holdWrappingSessions([one, two], [one, two], { one: true }), [one, two]);
+});
+
+test("successful close-out removes only the pane that answered", () => {
+  assert.deepEqual(withoutWallSession([{ sid: "one" }, { sid: "two" }], "one"), [{ sid: "two" }]);
 });

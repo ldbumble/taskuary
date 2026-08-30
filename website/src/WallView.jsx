@@ -5,7 +5,7 @@
 // or shorter. The terminals are the same pty as the task page;
 // a pane keeps its key=sid, so reordering moves it without tearing the session down.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
@@ -16,7 +16,7 @@ import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ROLES, mono } from "./theme.jsx
 import { TerminalPane } from "./TerminalView.jsx";
 import { Confirm, TellAgent, WorkLine, isWaiting } from "./ui.jsx";
 import { cliName } from "./BoardView.jsx";
-import { defaultPaneHeight, movePane, resizedPaneHeight } from "./wallLayout.js";
+import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, withoutWallSession } from "./wallLayout.js";
 
 const COLS = [1, 2, 3, 4];
 const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols")) || 2; } catch { return 2; } };
@@ -39,6 +39,10 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
   const [order, setOrder] = useState([]);           // sids, the display order you drag into
   const [dragging, setDragging] = useState(null);   // rendered too: the pane visibly lifts while moving
   const [closing, setClosing] = useState(null);     // session awaiting an explicit stop confirmation
+  const [wrapping, setWrapping] = useState({});     // sid -> true; several panes can finish independently
+  const wrappingRef = useRef({});                   // load() must see this inside its stable callback
+  const [wrapErrors, setWrapErrors] = useState({}); // sid -> visible reason the checkmark did not finish
+  const [wrapNotice, setWrapNotice] = useState(""); // survives when the server already closed the failed pane
   const drag = useRef(null);
 
   const load = useCallback(async () => {
@@ -46,7 +50,8 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
       api.get("/api/terminals").catch(() => ({ data: {} })),
       api.get("/api/tasks", { params: { active: 1 } }).catch(() => ({ data: {} })),
     ]);
-    setSessions((tm.data.data || []).filter((s) => s.alive && s.taskId));
+    const fresh = (tm.data.data || []).filter((s) => s.alive && s.taskId);
+    setSessions((current) => holdWrappingSessions(fresh, current, wrappingRef.current));
     setTasks(Object.fromEntries((tk.data.data || []).map((t) => [t.TaskId, t])));
   }, []);
   useEffect(() => { load(); return pollWhileVisible(load, 8000); }, [load]);
@@ -76,7 +81,29 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
   };
   const enterPane = (target) => { if (drag.current) setOrder((o) => movePane(o, drag.current, target)); };
   const finishDrag = () => { drag.current = null; setDragging(null); };
-  const wrap = async (tid) => { try { await api.post(`/api/tasks/${tid}/wrap`, {}); load(); } catch { /* already gone */ } };
+  const wrap = async (s) => {
+    if (!s?.sid || wrappingRef.current[s.sid]) return;
+    wrappingRef.current = { ...wrappingRef.current, [s.sid]: true };
+    setWrapping({ ...wrappingRef.current });
+    setWrapNotice("");
+    setWrapErrors((errs) => { const next = { ...errs }; delete next[s.sid]; return next; });
+    try {
+      await api.post(`/api/tasks/${s.taskId}/wrap`, { close: true });
+      // Do not wait for the eight-second Wall poll to prove a successful response meant success.
+      // Remove this exact pane now; other agents on the Wall keep their place and keep working.
+      setSessions((rows) => withoutWallSession(rows, s.sid));
+      setOrder((rows) => rows.filter((sid) => sid !== s.sid));
+      setLive((rows) => { const next = { ...rows }; delete next[s.taskId]; return next; });
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || "the session could not be wrapped up";
+      setWrapErrors((errs) => ({ ...errs, [s.sid]: msg }));
+      setWrapNotice(`Could not finish ${tasks[s.taskId]?.ref || `TQ-${s.taskId}`}: ${msg}`);
+    } finally {
+      const next = { ...wrappingRef.current }; delete next[s.sid]; wrappingRef.current = next;
+      setWrapping(next);
+      await load();
+    }
+  };
   const closeSession = async () => {
     if (!closing?.sid) return;
     await api.delete(`/api/terminals/${closing.sid}`);
@@ -104,6 +131,7 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
   const paneH = paneHpx ? `${paneHpx}px` : defaultPaneHeight(panes.length, cols);
   return (
     <Box>
+      {wrapNotice && <Alert severity="error" onClose={() => setWrapNotice("")} sx={{ mb: 1 }}>{wrapNotice}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>The wall</Typography>
         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, flex: 1 }}>
@@ -137,20 +165,21 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
             const t = tasks[s.taskId] || {}, l = live[s.taskId];
             const wallRun = l || s, statusWork = l?.work || s.work;
             const waiting = isWaiting(wallRun);
+            const wrapBusy = !!wrapping[s.sid], wrapError = wrapErrors[s.sid];
             const who = s.cli || cliName(s.agent || "agent");
             return (
               <Box key={s.sid} onDragEnter={() => enterPane(s.sid)}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
                 onDrop={(e) => { e.preventDefault(); finishDrag(); }}
                 sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,
-                  borderColor: waiting ? ROLES.you.bd : BORDER,
+                  borderColor: wrapBusy ? ROLES.working.bd : waiting ? ROLES.you.bd : BORDER,
                   opacity: dragging === s.sid ? 0.62 : 1, transform: dragging === s.sid ? "scale(.995)" : "none",
                   boxShadow: dragging === s.sid ? "0 7px 20px rgba(30,50,38,.16)" : pane0.boxShadow,
                   transition: "border-color .2s, transform .12s, opacity .12s, box-shadow .12s" }}>
                 {/* Title owns the first row; live-agent status gets a second row and can never
                     squeeze the task name out. Only the handle is draggable, so the action buttons
                     remain buttons instead of occasionally starting a pane drag. */}
-                <Box sx={{ borderBottom: `1px solid ${BORDER}`, bgcolor: waiting ? ROLES.you.tint : "#faf8f5", flexShrink: 0 }}>
+                <Box sx={{ borderBottom: `1px solid ${BORDER}`, bgcolor: wrapBusy ? ROLES.working.tint : waiting ? ROLES.you.tint : "#faf8f5", flexShrink: 0 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.75, py: 0.35 }}>
                     <Box draggable onDragStart={(e) => startDrag(e, s.sid)} onDragEnd={finishDrag}
                       role="button" aria-label={`Drag ${t.ref || `TQ-${s.taskId}`} to reorder`} tabIndex={0}
@@ -163,14 +192,29 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
                     <Typography noWrap title={t.Title || s.cwd}
                       sx={{ fontSize: 12, fontWeight: 650, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
                     <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
-                    <Tooltip title="Done — close the session and wrap up the task"><IconButton aria-label="Wrap up task" size="small" onClick={() => wrap(s.taskId)}><DoneAllIcon sx={{ fontSize: 15, color: "#47654a" }} /></IconButton></Tooltip>
-                    <Tooltip title="Close session — stop the agent; keep the task and transcript"><IconButton aria-label="Close session" size="small" onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>
+                    <Tooltip title={wrapBusy ? "Closing the session and writing its report…" : "Done — close the session and wrap up the task"}>
+                      <IconButton aria-label={wrapBusy ? "Wrapping up task" : "Wrap up task"} size="small" disabled={wrapBusy} onClick={() => wrap(s)}>
+                        {wrapBusy ? <CircularProgress size={14} /> : <DoneAllIcon sx={{ fontSize: 15, color: "#47654a" }} />}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Close session — stop the agent; keep the task and transcript"><span><IconButton aria-label="Close session" size="small" disabled={wrapBusy} onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
                   </Box>
                   {/* Always reserve the status row. A tool starting/stopping used to add/remove
                       this row, resize xterm, and make full-screen CLIs repaint in a visible jump. */}
                   <Box sx={{ height: 20, minWidth: 0, overflow: "hidden", px: 1, pb: 0.55, pl: 4.75,
                     display: "flex", alignItems: "center" }}>
-                    {(statusWork || waiting) ? (
+                    {wrapBusy ? (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+                        <CircularProgress size={10} />
+                        <Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.working.ink }}>
+                          closing session · writing report and reply draft…
+                        </Typography>
+                      </Box>
+                    ) : wrapError ? (
+                      <Tooltip title={wrapError}><Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.bad.ink }}>
+                        could not finish · {wrapError}
+                      </Typography></Tooltip>
+                    ) : (statusWork || waiting) ? (
                       <WorkLine work={statusWork} who={who} waiting={waiting}
                         asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started} />
                     ) : (

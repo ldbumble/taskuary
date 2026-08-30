@@ -16,7 +16,7 @@ import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, mono } from "./theme.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { Confirm, TellAgent, WorkLine, isWaiting } from "./ui.jsx";
 import { cliName } from "./BoardView.jsx";
-import { movePane, resizedPaneHeight } from "./wallLayout.js";
+import { defaultPaneHeight, movePane, resizedPaneHeight } from "./wallLayout.js";
 
 const COLS = [1, 2, 3, 4];
 const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols")) || 2; } catch { return 2; } };
@@ -100,8 +100,8 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
   const resetH = () => { setPaneHpx(0); storeH(cols, 0); };
 
   if (!sessions) return <CircularProgress size={22} sx={{ m: 4 }} />;
-  // default: two rows of panes sit in view at a glance; more than that scrolls
-  const paneH = paneHpx ? `${paneHpx}px` : cols === 1 ? "min(70vh, 680px)" : `max(300px, calc((100vh - 250px) / 2))`;
+  // One row fills the screen. If the wall wraps, two rows share it; anything beyond scrolls.
+  const paneH = paneHpx ? `${paneHpx}px` : defaultPaneHeight(panes.length, cols);
   return (
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>

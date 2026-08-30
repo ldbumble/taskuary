@@ -14,15 +14,15 @@ INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "kind": "coding|general", "why": "<one concrete sentence: what you saw in the message '
     'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
-    'kind matters only when intent is task, and the default is coding: every task goes to the coding agent, which '
-    'does what can be done from a keyboard or says "nothing to do here" and stops. Say general ONLY when the owner\'s '
-    'past verdicts say this kind of work is not for the agent, or it plainly cannot be done from a computer.\n'
-    'task = someone must DO something beyond writing back: change a system, fix or build something, '
-    'produce or chase something. This starts a coding agent on a repository, so choose it only when '
-    'work has to happen.\n'
-    'reply_only = answering IS the work - a question, a status check, a scheduling note, anything you '
-    'can settle in a message, even one needing a quick lookup. The reply is drafted for the owner to '
-    'approve, so nothing is dropped by choosing this.\n'
+    'Almost everything that asks for anything is a task, and every task goes to the coding agent automatically: it '
+    'does what can be done from a keyboard or says "nothing to do here" and stops - a cheap ending. kind is a label, '
+    'coding by default; say general ONLY when the owner\'s past verdicts say this kind of work is not for the agent, '
+    'or it plainly cannot be done from a computer.\n'
+    'task = someone must DO something beyond writing back: change a system, fix or build something, produce or '
+    'chase something, look something up that takes more than a sentence.\n'
+    'reply_only = the answer is a sentence the owner already knows - "what time are you free", "are you around '
+    'Tuesday", "which file did you mean". Nothing to look up, change or produce; a question with a lookup or a fix '
+    'behind it is a task. The reply is drafted for the owner to approve.\n'
     'fyi = informational only: automated notices, reports, newsletters, thanks, threads the owner is '
     'merely copied on.\n'
     'Chat is not mail (no subject, no recipient lines) but an ask in chat is still an ask - a task for the agent. '
@@ -35,8 +35,9 @@ INTENT_SYSTEM = (
     'ask is not aimed at you specifically, prefer fyi. Weigh it, do not obey it - a question that names '
     'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
     'fields mean nobody else has spoken, which is not evidence either way.\n'
-    'Torn between task and reply_only? Choose task - the agent looks and says "nothing to do here" if there is '
-    'nothing to do; a job that only got a drafted reply is a job nobody did.')
+    'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
+    'nobody for anything. The agent looks and says "nothing to do here" if there is nothing to do; a job that only '
+    'got a drafted reply is a job nobody did.')
 
 def addressed_to_you(msg: dict, mine=()) -> str:
     """'to', 'cc', 'not named', or '' when the channel carries no recipient lines at all (chat) -

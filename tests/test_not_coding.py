@@ -67,21 +67,24 @@ class DispatchGateTests(unittest.TestCase):
         started = [c for c in spawn.call_args_list if getattr(c[0][0], '__name__', '') == '_auto_code']
         return s, out, started
 
-    def test_a_task_with_no_code_in_it_never_opens_a_coding_session(self):
+    def test_a_task_with_no_code_in_it_still_reaches_the_coder(self):
+        """The owner's rule (2026-08-29): every task goes to the agent, general ones included - it
+        looks and says "nothing to do here", which is cheap; a job sitting on a list is not. The
+        KIND still records what triage saw, so the Board can tell the two apart."""
         s, out, started = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        self.assertEqual(started, [])                                  # nobody was dispatched
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # but it IS still a task
+        self.assertEqual(len(started), 1)                              # dispatched like any other task
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # and still labelled honestly
 
     def test_a_real_bug_report_still_reaches_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.')
         self.assertEqual(len(started), 1)
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
 
-    def test_the_route_line_stops_promising_an_agent_that_was_never_sent(self):
+    def test_the_route_line_says_the_agent_was_sent(self):
         s, out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
         reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertIn('no agent dispatched', reason)
-        self.assertNotIn('sent to the coding agent', reason)
+        self.assertIn('sent to the coding agent', reason)
+        self.assertNotIn('no agent dispatched', reason)
 
 
 class HarmlessExitTests(unittest.TestCase):

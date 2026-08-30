@@ -289,9 +289,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # 'escalate' was declared in the policy precedence and then read by nobody. It IS
         # the urgency rule: the owner names the senders whose mail jumps the queue, and that
         # is the only thing that marks a task urgent.
-        # a task the model did not label 'general' goes to the coding agent - the owner's call
-        # (2026-08-27): an agent on a non-coding task says "nothing to do here" and stops, a job left
-        # on a list does not. The keyword scan in draft_task_fields only decides with triage off.
+        # every task goes to the coding agent, `general` included - the owner's call (2026-08-27,
+        # restated 2026-08-29): an agent on a non-coding task says "nothing to do here" and stops, a
+        # job left on a list does not. The keyword scan in draft_task_fields only decides with triage off.
         judged = cfg.get('intent_classify_enabled', '1') == '1'       # a brain (or a by-construction rule) said 'task'
         f = draft_task_fields(msg, urgent=pol['action'] == 'escalate',
                               kind=intent.get('kind') or ('coding' if judged and intent['intent'] == 'task' else None))
@@ -312,11 +312,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                               'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
             if cfg.get('auto_draft_enabled') == '1':
                 _spawn(_auto_draft, store, tid, rid)
-        # KIND is the gate, not "anything that is not a reply". This used to dispatch a coding
-        # agent at every non-reply task, so a Teams message about someone's job scope - real
-        # work, no repository anywhere in it - opened a CLI session on a checkout and started
-        # editing code. A coding agent belongs on a coding task; the rest is yours to place.
-        elif f['kind'] == 'coding' and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
+        # EVERY task goes to the agent - the owner's rule (2026-08-29): "almost everything should
+        # be the coding agent automatically; it does what it is supposed to, or says nothing to do
+        # here". `general` is a label the agent confirms, not a reason to leave a job on a list;
+        # what the agent must not touch is said in SOUL.md and the standing notes it is handed.
+        elif f['kind'] in ('coding', 'general') and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you.
             # And the same gate for email, on the SENDER: a stranger's mail can be a task, it
@@ -337,8 +337,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     if r['decision'] != 'attach':
         act = ('a reply draft goes to Review for you' if f['kind'] == 'reply'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
-               # said per KIND, because the line is read as a promise about what just happened
-               else 'no code in it - it waits on your list, no agent dispatched' if f['kind'] != 'coding'
                else f'not auto-worked: {held} - a first-time sender never starts an agent by itself; send it yourself if real' if held
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
                else 'auto-dispatch is off (Settings) - start the session from the task')

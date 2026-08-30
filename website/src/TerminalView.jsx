@@ -12,7 +12,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
-import { changedTerminalSize } from "./terminalSizing.js";
+import { canRevealTerminal, changedTerminalSize, usableTerminalBox } from "./terminalSizing.js";
 import api from "./api.js";
 import BrowserPane from "./BrowserPane.jsx";
 import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl } from "./browserSplit.js";
@@ -153,33 +153,52 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
     };
     sendRef.current = send;
     ws.onopen = () => { setState("live"); sendSize(); };
-    // Two things finish independently on a reattach: the server triggers the live TUI redraw,
-    // and xterm parses the old scrollback. 'ready' used to lift the curtain while that parse was
-    // still running, which is exactly the visible top-to-bottom rewind. Wait for BOTH. A server
-    // that never says ready still gets a four-second escape hatch.
-    let bail = null, revealFrame = null, replayPending = false, readySeen = false;
+    // Every xterm write is asynchronous. The replay can finish while live redraw frames are still
+    // queued behind it, so one replayPending boolean was not enough: the curtain lifted between
+    // those writes and exposed Codex repainting from top to bottom. Count ALL queued writes and
+    // reveal only after the server's redraw barrier and xterm's final write callback both land.
+    let bail = null, revealFrame = null, pendingWrites = 0, readySeen = false;
     const lift = () => {
       clearTimeout(bail); cancelAnimationFrame(revealFrame);
+      revealFrame = null;
       term.scrollToBottom(); setRestoring(false); term.focus();
     };
     const maybeLift = () => {
-      if (readySeen && !replayPending) revealFrame = requestAnimationFrame(lift);
+      if (canRevealTerminal(readySeen, pendingWrites) && !revealFrame) revealFrame = requestAnimationFrame(lift);
     };
-    bail = setTimeout(lift, 4000);
+    const write = (data) => {
+      if (revealFrame) { cancelAnimationFrame(revealFrame); revealFrame = null; }
+      pendingWrites += 1;
+      term.write(data, () => { pendingWrites -= 1; term.scrollToBottom(); maybeLift(); });
+    };
+    // Compatibility with an older server: this marks the barrier seen, but still NEVER uncovers
+    // an unfinished replay. The old escape hatch called lift() directly at four seconds.
+    bail = setTimeout(() => { readySeen = true; maybeLift(); }, 4000);
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === "out") {
-        if (m.replay) {
-          replayPending = true; setRestoring(true);
-          term.write(m.data, () => { replayPending = false; term.scrollToBottom(); maybeLift(); });
-        } else term.write(m.data);
+        if (m.replay) setRestoring(true);
+        write(m.data);
       }
       else if (m.type === "ready") { readySeen = true; maybeLift(); }
-      else if (m.type === "exit") { setState("exited"); term.write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); lift(); }
+      else if (m.type === "exit") {
+        setState("exited"); readySeen = true;
+        write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); maybeLift();
+      }
     };
     ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
     term.onData((d) => send({ type: "in", data: d }));
-    const onResize = () => { fit.fit(); sendSize(); };
+    let resizeTimer = null;
+    const onResize = () => {
+      const box = host.current?.getBoundingClientRect();
+      if (!box || !usableTerminalBox(box.width, box.height)) return;
+      fit.fit();
+      // Flex layout, tab visibility and the browser split can report several intermediate
+      // boxes in one gesture. Codex redraws its whole TUI for every PTY resize; send only the
+      // settled geometry while still fitting xterm locally on each frame.
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(sendSize, 90);
+    };
     refit.current = onResize;                       // the size picker drives the same path
     window.addEventListener("resize", onResize);
     const ro = new ResizeObserver(onResize);
@@ -201,7 +220,7 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     term.focus();
-    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); cancelAnimationFrame(revealFrame);
+    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame);
       el.removeEventListener("wheel", trap); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid]);
   return (

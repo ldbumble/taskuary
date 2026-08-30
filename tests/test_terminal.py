@@ -218,6 +218,32 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_ready_follows_the_resize_repaint_on_the_wire(self):
+        """resize() only requests a Codex redraw. The curtain barrier belongs after the PTY
+        output caused by that request, or the owner sees the redraw flash line by line."""
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(8)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        sizes = []
+        try:
+            def repaint(rows, cols):
+                sizes.append((rows, cols))
+                if len(sizes) == 2:
+                    t._append('\x1b[Hlive codex screen')
+                    t._emit('\x1b[Hlive codex screen')
+            with mock.patch.object(t, 'resize', side_effect=repaint):
+                with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
+                    ws.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
+                    frames = []
+                    for _ in range(8):
+                        frames.append(ws.receive_json())
+                        if frames[-1]['type'] == 'ready': break
+            kinds = [m['type'] for m in frames]
+            self.assertIn('ready', kinds)
+            live_at = next(i for i, m in enumerate(frames) if 'live codex screen' in m.get('data', ''))
+            self.assertLess(live_at, kinds.index('ready'))
+        finally:
+            terminal.close(t.sid)
+
     def test_replay_never_asks_the_terminal_questions(self):
         """The scrollback replay carried the TUI's own terminal queries (ESC[c, ESC[6n...), and
         xterm answered each one AGAIN on every reattach - '[?1;2c' typed into codex's input box.

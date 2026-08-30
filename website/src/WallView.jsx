@@ -12,7 +12,7 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
-import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, mono } from "./theme.jsx";
+import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ROLES, mono } from "./theme.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { Confirm, TellAgent, WorkLine, isWaiting } from "./ui.jsx";
 import { cliName } from "./BoardView.jsx";
@@ -141,13 +141,14 @@ export default function WallView({ onOpenTask, refresh = 0 }) {
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
                 onDrop={(e) => { e.preventDefault(); finishDrag(); }}
                 sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,
+                  borderColor: waiting ? ROLES.you.bd : BORDER,
                   opacity: dragging === s.sid ? 0.62 : 1, transform: dragging === s.sid ? "scale(.995)" : "none",
                   boxShadow: dragging === s.sid ? "0 7px 20px rgba(30,50,38,.16)" : pane0.boxShadow,
-                  transition: "transform .12s, opacity .12s, box-shadow .12s" }}>
+                  transition: "border-color .2s, transform .12s, opacity .12s, box-shadow .12s" }}>
                 {/* Title owns the first row; live-agent status gets a second row and can never
                     squeeze the task name out. Only the handle is draggable, so the action buttons
                     remain buttons instead of occasionally starting a pane drag. */}
-                <Box sx={{ borderBottom: `1px solid ${BORDER}`, bgcolor: waiting ? "#f3e6e8" : "#faf8f5", flexShrink: 0 }}>
+                <Box sx={{ borderBottom: `1px solid ${BORDER}`, bgcolor: waiting ? ROLES.you.tint : "#faf8f5", flexShrink: 0 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.75, py: 0.35 }}>
                     <Box draggable onDragStart={(e) => startDrag(e, s.sid)} onDragEnd={finishDrag}
                       role="button" aria-label={`Drag ${t.ref || `TQ-${s.taskId}`} to reorder`} tabIndex={0}

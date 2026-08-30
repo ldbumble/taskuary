@@ -54,7 +54,7 @@ if (what === "all" || what === "timeline") {
     window.scrollTo(0, 0);
   });
   await wait(500); // ResizeObserver moves the sticky Timeline dock to the vacated top edge.
-  await shot("screenshot-timeline.png", { x: 0, y: 0, width: 1280, height: 620 });
+  await shot("screenshot-timeline-crop.png", { x: 0, y: 0, width: 1280, height: 620 });
   await p.evaluate(() => { document.getElementById("tqTopNav").style.display = ""; });
   await p.setViewport({ width: 1846, height: 1080, deviceScaleFactor: 2 });
   console.log("timeline shot ok");

@@ -17,7 +17,7 @@ Nothing leaves the machine except calls to services you explicitly configure.
 
 ## Timeline and workspace
 
-![The Timeline: mail, chats, reports, and an Assistant post on one day-grouped rail.](screenshot-timeline.png)
+![The Timeline: mail, chats, reports, and an Assistant post on one day-grouped rail.](screenshot-timeline-crop.png)
 
 The Timeline is the front door. Its chips distinguish work that needs you from completed,
 filed, informational, promotional, and automated items. Open a row to see the complete

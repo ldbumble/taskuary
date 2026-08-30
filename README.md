@@ -24,7 +24,7 @@ arrive on the same day-grouped rail. Each row says what it is and whether it nee
 Open one to see the full message, its attachments, why triage ruled that way, the drafted
 reply, and every available next step.
 
-![The Timeline with mail, chats, reports, active tasks, and an Assistant post on one rail.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline.png)
+![The Timeline with mail, chats, reports, active tasks, and an Assistant post on one rail.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline-crop.png)
 
 Real work can go straight to Claude Code, Codex, Gemini, Cursor, Copilot, or any CLI that
 accepts a prompt on stdin. You watch the live terminal, answer questions, review the diff,

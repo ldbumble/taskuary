@@ -1,6 +1,5 @@
 // The README hero: the triaged timeline with the review panel open on the pending draft.
-// Shot at real desktop width (1846) so the layout is exactly what a user sees - one-row
-// toolbar, the panel at its natural wide proportion - at 2x for crispness.
+// Reflow and crop the live UI so labels stay legible in GitHub's narrower README column.
 import { fileURLToPath } from "node:url";
 import { launch } from "./browser.mjs";
 const b = await launch();
@@ -17,9 +16,21 @@ await p.evaluate(() => {
   rows[rows.length - 1]?.click();
 });
 await new Promise((r) => setTimeout(r, 1500));
+await p.evaluate(() => {
+  const app = document.getElementById("root");
+  app.style.filter = "contrast(1.16) saturate(1.08) brightness(.985)";
+  app.style.transformOrigin = "top left";
+});
+await p.setViewport({ width: 1280, height: 820, deviceScaleFactor: 2 });
+await new Promise((r) => setTimeout(r, 900));
+await p.evaluate(() => {
+  document.getElementById("tqTopNav").style.display = "none";
+  window.scrollTo(0, 0);
+});
+await new Promise((r) => setTimeout(r, 500));
 // a plain path, not a URL object: puppeteer sniffs the type off the extension with
 // lastIndexOf, which a URL does not have
-await p.screenshot({ path: fileURLToPath(new URL("../docs/screenshot-timeline.png", import.meta.url)),
-                    clip: { x: 0, y: 0, width: 1846, height: 1020 } });
+await p.screenshot({ path: fileURLToPath(new URL("../docs/screenshot-timeline-crop.png", import.meta.url)),
+                    clip: { x: 0, y: 0, width: 1280, height: 620 } });
 await b.close();
 console.log("timeline shot ok");

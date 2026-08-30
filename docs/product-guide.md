@@ -148,7 +148,7 @@ Taskuary's behavior is governed by plain Markdown on the Docs tab:
 | `LEARNED.md` | The profile learned from verdicts; always subordinate to `SOUL.md` | Triage, replies, coding agents |
 | `DIGEST.md` | The current morning brief written by the Morning digest report | You |
 
-![The operator documents and the parts of Taskuary they guide.](six-docs.svg)
+![The seven operator documents and the parts of Taskuary they guide.](seven-docs.svg)
 
 Each coding session also receives a context file under `~/.taskuary/context/`. It contains
 the task thread, relevant sender and topic history, the learned profile, and reports from

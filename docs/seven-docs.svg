@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 520" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <title>The seven operator documents and who reads them: TRIAGE, STYLE, COUNSEL, SOUL, CODER, LEARNED, and DIGEST.</title>
+  <desc>TRIAGE, STYLE, SOUL, COUNSEL, and LEARNED guide triage or reply drafts. COUNSEL guides the Assistant. SOUL, CODER, and LEARNED guide coding agents. DIGEST is the owner's morning brief. TRIAGE and STYLE can be generated from mail history.</desc>
+  <!-- The app palette: oat paper, slate brand, sage second, warm ink. -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6e685f"/>
+    </marker>
+  </defs>
+
+  <rect width="760" height="520" rx="14" fill="#f6f4f1"/>
+
+  <!-- Documents you write or generate from mailbox history. -->
+  <rect x="18" y="16" width="200" height="142" rx="10" fill="none" stroke="#a09787" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="34" y="35" font-size="9" letter-spacing="1" fill="#6e685f">YOU WRITE — OR GENERATE</text>
+  <text x="34" y="47" font-size="9" letter-spacing="1" fill="#6e685f">FROM 3 MONTHS OF YOUR MAIL</text>
+  <rect x="34" y="62" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="118" y="86" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">TRIAGE.md</text>
+  <rect x="34" y="110" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="118" y="134" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">STYLE.md</text>
+
+  <!-- Documents you write directly. -->
+  <rect x="18" y="170" width="200" height="176" rx="10" fill="none" stroke="#a09787" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="34" y="192" font-size="10" letter-spacing="1.5" fill="#6e685f">YOU WRITE</text>
+  <rect x="34" y="204" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="118" y="228" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">SOUL.md</text>
+  <rect x="34" y="252" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="118" y="276" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">CODER.md</text>
+  <rect x="34" y="300" width="168" height="38" rx="7" fill="#fffdfb" stroke="#6f8a6e" stroke-width="1.3"/>
+  <text x="118" y="324" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">COUNSEL.md</text>
+
+  <!-- Documents Taskuary writes. -->
+  <rect x="18" y="358" width="200" height="130" rx="10" fill="none" stroke="#a09787" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="34" y="380" font-size="10" letter-spacing="1.5" fill="#6e685f">WRITE THEMSELVES</text>
+  <rect x="34" y="392" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3" stroke-dasharray="5 4"/>
+  <text x="118" y="416" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">LEARNED.md</text>
+  <rect x="34" y="440" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3" stroke-dasharray="5 4"/>
+  <text x="118" y="464" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">DIGEST.md</text>
+
+  <!-- Consumers. -->
+  <rect x="536" y="42" width="208" height="62" rx="31" fill="#55697a"/>
+  <text x="640" y="68" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fffdfb">triage &amp; reply drafts</text>
+  <text x="640" y="87" text-anchor="middle" font-size="11" fill="#dfe6ea">the cheap model, every message</text>
+
+  <rect x="536" y="158" width="208" height="62" rx="31" fill="#6f8a6e"/>
+  <text x="640" y="184" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fffdfb">the Assistant</text>
+  <text x="640" y="203" text-anchor="middle" font-size="11" fill="#e4ebe2">its private voice to you</text>
+
+  <rect x="536" y="286" width="208" height="62" rx="31" fill="#55697a"/>
+  <text x="640" y="312" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fffdfb">coding agents</text>
+  <text x="640" y="331" text-anchor="middle" font-size="11" fill="#dfe6ea">your CLI, its full model</text>
+
+  <rect x="536" y="428" width="208" height="62" rx="31" fill="#6f8a6e"/>
+  <text x="640" y="454" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fffdfb">you</text>
+  <text x="640" y="473" text-anchor="middle" font-size="11" fill="#e4ebe2">the morning read</text>
+
+  <!-- Document-to-consumer edges. -->
+  <path d="M202 81 C350 81, 390 58, 532 58" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 129 C350 129, 396 72, 532 72" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 216 C360 194, 404 87, 532 86" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 230 C370 242, 408 301, 532 303" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 271 C360 271, 410 315, 532 317" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 313 C354 294, 408 100, 532 100" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 325 C350 325, 398 189, 532 189" fill="none" stroke="#6f8a6e" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M202 405 C380 365, 410 111, 532 100" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 417 C370 417, 404 331, 532 331" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <path d="M202 459 C350 459, 410 459, 532 459" fill="none" stroke="#6e685f" stroke-width="1.4" marker-end="url(#arrow)"/>
+</svg>

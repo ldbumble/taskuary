@@ -211,7 +211,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (r?.dropped === selected) onSelect(r.merged); else loadDetail(selected);
   };
   // one click, inside a MENU, where the pointer is already moving - and it deletes the task and
-  // writes a standing rule about its sender. The two sharpest things in the app were the two
+  // writes a standing verdict triage reads. The two sharpest things in the app were the two
   // easiest to hit by accident.
   const [confirmNAT, setConfirmNAT] = useState(false);
   const notATask = async () => {
@@ -394,7 +394,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Divider />
                     <MenuItem onClick={() => { setMenuEl(null); setConfirmNAT(true); }} sx={{ color: "#6b2733" }}>
                       <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#6b2733" }} /></ListItemIcon>
-                      <ListItemText primary="Not a task" secondary="delete it and teach triage why" />
+                      <ListItemText primary="Not a task" secondary="delete it and teach triage why — the sender keeps writing to you" />
                     </MenuItem>
                   </Menu>
                   <Tooltip title="Close — back to the list (the task stays)">
@@ -781,8 +781,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         </DialogActions>
       </Dialog>
       <ConfirmDelete open={confirmNAT} what={t ? `"${(t.Title || "this task").slice(0, 60)}"` : "this task"}
-        consequence={"It is deleted, and its sender is taught that mail like this is never a task — so their future messages file themselves. "
-          + "Its messages stay on the Timeline."}
+        consequence={"It is deleted, and triage is taught that this topic is never a task. Its messages stay on the Timeline, "
+          + "and the sender is not muted — that is \"Skip this sender\"."}
         onClose={() => setConfirmNAT(false)} onConfirm={notATask} />
     </Box>
   );

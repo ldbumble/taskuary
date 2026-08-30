@@ -60,7 +60,7 @@ export const ChannelIcon = ({ channel, sx }) => {
 /* One dialog for everything that destroys something.
 
    Deleting a report, an agent or a connection, and "Not a task" - which deletes the task AND
-   writes a rule about its sender - were all a single unconfirmed click; "Not a task" was one
+   writes a verdict triage reads on every later message - were all a single unconfirmed click; "Not a task" was one
    click inside a MENU, where the pointer is already moving. None of it is undoable.
 
    `what` names the thing in the user's own words, `consequence` says what actually happens

@@ -321,6 +321,36 @@ def set_task_repo(task_id: int, body: RepoBody):
 
 class NotATaskBody(BaseModel): learn: bool = True
 
+def _teach_not_a_task(m: dict, background=None):
+    """The NOT A TASK verdict, written the SAME way whichever door it came through - the task
+    list's "Not a task" and the timeline's "Not a task - just conversation" are one judgement
+    and used to teach two different things (owner, 2026-08-30).
+
+    It writes a memory note and NOTHING else. It used to also save a sender `ignore` POLICY,
+    which quietly muted that address for good - a second, wider verdict the owner never asked
+    for, hidden inside a button whose label says "not a task". Silencing a sender has its own
+    button and always did ("Skip this sender"), where it is undoable and says what it does.
+
+    Keyed on the topic where there is one and on the sender otherwise. With neither - a Teams
+    chat has no address, and a two-word subject has no topic - there is nothing to key a note
+    to, and a note keyed to nothing is a verdict against everyone, so none is written. The
+    thread is still ruled either way: that is the ignore route the callers add."""
+    em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
+    if not (em or topic): return None
+    mid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
+                            'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                            'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or '')[:90]}\""
+                                    + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
+                                    + ' - NOT A TASK: the owner filed it, no task, no reply'})
+    learn.note_verdicts(store)
+    # the sender note is durable already; the GENERAL lesson (what kinds of mail are not tasks
+    # for this owner) is LEARNED.md's to distill
+    if background is not None:
+        background.add_task(learn.learn_from, store,
+                            f"mem{mid}: owner said NOT A TASK: \"{(m.get('Subject') or '')[:80]}\""
+                            + (f' from {em}' if em else '') + ' should never have opened a task')
+    return mid
+
 @app.post('/api/tasks/{task_id}/not-coding')
 def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
     """Owner verdict: real work, but not for the coding agent. The default is the other way
@@ -355,35 +385,17 @@ def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTa
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
-    """Owner verdict: never needed to be a task. Teaches (sender ignore policy + memory
-    note), then deletes the task - its messages stay in the feed as 'filed'.
+    """Owner verdict: never needed to be a task. Writes the verdict to memory (_teach_not_a_task
+    - a note, never a policy: muting a sender is "Skip this sender", not a side effect of this),
+    then deletes the task - its messages stay in the feed as 'filed'.
 
-    learn=false is the lighter verdict: THIS one is just chatter (someone answered "yes"),
-    with nothing to conclude about the sender - delete the task, teach nothing, keep their
-    future messages flowing exactly as before."""
+    learn=false is the lighter verdict: THIS one is just chatter (someone answered "yes"), with
+    nothing to conclude - delete the task and teach nothing."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     msgs, learned = store.list_messages(task_id), None
-    em = (msgs[0].get('FromEmail') or '').lower() if msgs else ''
-    if em and (body is None or body.learn):
-        store.save_policy({'Name': f'not-a-task: {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'ignore',
-                           'Reason': 'owner said not a task', 'SortOrder': 50, 'Active': 1}, ACTOR)
-        # the same generalisation as "Not our task": this verdict is about a kind of work, and
-        # keyed to one sender it stops applying the moment a colleague forwards the same thing.
-        # (The sender ignore POLICY above stays per-sender - that one really is about them.)
-        topic = _topic_key(msgs[0])
-        mid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
-                                'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                                'Note': f"{str(msgs[0].get('SentAt') or '')[:10]}: \"{(msgs[0].get('Subject') or '')[:90]}\" from {em}"
-                                        + (f' - the topic "{topic}"' if topic else '')
-                                        + ' - NOT A TASK: the owner filed it, no task, no reply'})
-        learned = {'policy': em, 'memory_id': mid}
-        learn.note_verdicts(store)
-        # the sender note is durable already; the GENERAL lesson (what kinds of mail are not
-        # tasks for this owner) is LEARNED.md's to distill. learn=false teaches nothing, as asked.
-        if background is not None:
-            background.add_task(learn.learn_from, store,
-                                f"mem{mid}: owner said NOT A TASK: \"{(msgs[0].get('Subject') or '')[:80]}\" from {em} "
-                                'should never have opened a task')
+    if msgs and (body is None or body.learn):
+        mid = _teach_not_a_task(msgs[0], background)
+        if mid: learned = {'memory_id': mid}
     # whatever was (or was not) learned about the sender, THIS conversation has been ruled on:
     # the owner's ignore route is what ingest.veto reads before the next message on it can open
     # a task (store.owner_verdict_on_thread) - the six-tasks-from-one-chat failure
@@ -662,25 +674,28 @@ def _also_covered(scope: str, key: str, dropped_tid) -> list:
     return out[:20]
 
 @app.post('/api/messages/{mid}/file')
-def file_message(mid: int):
-    """"Nothing to do here" - the harmless exit, and the one that was MISSING. A message
-    triage filed with no task offered only "Not our task", which writes a durable verdict
-    against the sender (and against EVERY sender when the channel has no address to key on,
-    like Teams) - so getting one chat off the timeline could quietly teach the funnel to stop
-    listening to a colleague. This teaches nothing about the SENDER or the topic: the item
-    stops being work, its task goes if it had one, and their next message on another thread
-    arrives exactly as before. The rest of THIS conversation is filed with it, though - the
-    owner ignore route below is what ingest.veto reads (store.owner_verdict_on_thread), because
-    "not a task" said on a thread and then a task from its next reply is the funnel arguing."""
+def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTasks = None):
+    """"Not a task - just conversation" / "Nothing to do here" - the timeline's door onto the
+    SAME verdict the task list's "Not a task" gives, and now teaching the same thing through it
+    (owner, 2026-08-30). It used to teach nothing at all, which was the right answer to the wrong
+    problem: what made the old exit dangerous was "Not our task" writing a verdict against the
+    SENDER - and against every sender at once on a channel with no address, like Teams. A
+    NOT A TASK note keyed to the topic is not that, and _teach_not_a_task writes nothing when
+    there is nothing to key it to. No sender is ever muted here; that is "Skip this sender".
+
+    Either way the rest of THIS conversation is filed with it - the owner ignore route below is
+    what ingest.veto reads (store.owner_verdict_on_thread), because "not a task" said on a thread
+    and then a task from its next reply is the funnel arguing with itself."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     tid = m.get('TaskId')
     if tid and store.get_task(tid):
         store.audit('task', tid, 'filed_not_work', ACTOR, detail={'message_id': mid})
         _drop_task(tid)                              # its messages revert to 'filed'
+    learned = _teach_not_a_task(m, background) if (body is None or body.learn) else None
     store.set_message_status(mid, 'ignored')
-    store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], ACTOR)
-    return {'ok': True, 'taskDeleted': bool(tid)}
+    store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner', [], ACTOR)
+    return {'ok': True, 'taskDeleted': bool(tid), 'memoryId': learned}
 
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int, scope: str = None, topic: str = None):

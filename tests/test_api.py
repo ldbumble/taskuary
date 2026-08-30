@@ -618,15 +618,22 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post('/api/memory', json={'note': 'x', 'scope': 'weird'}).status_code, 422)
 
     def test_not_a_task_learns_and_deletes(self):
+        """It writes the verdict to MEMORY and nothing else. It used to also save a sender
+        ignore POLICY, muting that address for good - a second, wider verdict hidden inside a
+        button that says "not a task" (owner, 2026-08-30). Silencing a sender is its own
+        button, "Skip this sender", where it is undoable and says what it does."""
         with mock.patch('taskuary.server._llm', return_value=lambda s_, u_: '{"intent": "task", "why": "x"}'):
             out = c.post('/api/ingest/push', json={'subject': 'please fix the export', 'body': 'please fix the export job',
                                                    'from_email': 'noise@vendor.com', 'channel': 'api'}).json()
         tid = out['task_id']
+        before = len(c.get('/api/policies').json()['data'])
         r = c.post(f'/api/tasks/{tid}/not-a-task').json()
-        self.assertEqual(r['learned']['policy'], 'noise@vendor.com')
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)
-        self.assertTrue(any(p['Pattern'] == 'noise@vendor.com' and p['Action'] == 'ignore'
-                            for p in c.get('/api/policies').json()['data']))
+        note = next(m for m in c.get('/api/memory').json()['data'] if m['MemoryId'] == r['learned']['memory_id'])
+        self.assertIn('NOT A TASK', note['Note'])
+        self.assertNotIn('policy', r['learned'])
+        self.assertEqual(len(c.get('/api/policies').json()['data']), before)      # nobody was muted
+        self.assertFalse(any(p['Pattern'] == 'noise@vendor.com' for p in c.get('/api/policies').json()['data']))
 
     def test_push_without_ai_files(self):
         out = c.post('/api/ingest/push', json={'subject': 'automated provisioning notice 77', 'body': 'please add the new user',

@@ -923,14 +923,16 @@ export default function ConnectorsView() {
 
       {q ? (
         <Box>
-          {!hits.length && <Empty>Nothing matches.</Empty>}
-          {hits.map((r) => (
-            <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-              "&:hover": { bgcolor: "#faf8f4" } }}>
-              <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.title}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb} · {r.desc}</Typography>
-            </Box>
-          ))}
+          {!hits.length ? <Empty>Nothing matches “{q}”. Try a product, channel, or connection name.</Empty> : (
+            <>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
+                {hits.length} {hits.length === 1 ? "result" : "results"}
+              </Typography>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" }, gap: 1.5 }}>
+                {hits.map((r) => <ConnCard key={r.key} c={r} />)}
+              </Box>
+            </>
+          )}
         </Box>
       ) : (
         <>

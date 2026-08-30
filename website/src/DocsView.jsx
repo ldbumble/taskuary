@@ -69,8 +69,8 @@ const OwnerCard = () => {
       <Box sx={{ minWidth: 260, flex: 1 }}>
         <Typography variant="body2" sx={{ color: INK, fontWeight: 700 }}>Who the documents speak for</Typography>
         <Typography variant="caption" sx={{ color: FAINT }}>
-          One field, every mention: the docs say {"{{owner}}"} and this fills it in — signatures, escalation
-          rules, the coder's instructions. Saving also converts any name still typed into them.
+          Set your identity once and Taskuary uses it everywhere it speaks for you — signatures,
+          escalation rules, and the coder's instructions. Saving also updates older documents that spell out your name.
         </Typography>
       </Box>
       <TextField size="small" label="Your name" value={name} onChange={(e) => setName(e.target.value)}

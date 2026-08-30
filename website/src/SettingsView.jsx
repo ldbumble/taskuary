@@ -379,7 +379,17 @@ function SettingsPages({ page, setPage, q, setQ }) {
           <Box sx={{ flex: 1 }} />
           <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setDraft({ ...NEW_POLICY })}>Add rule</Button>
         </Box>
-        {!(policies || []).length && <Empty>No rules yet.</Empty>}
+        {!(policies || []).length && !draft && (
+          <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>No routing rules yet</Typography>
+            <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5, maxWidth: 560 }}>
+              Rules are optional. Add one when a sender, domain, or message type should always be drafted,
+              filed, made into a task, or sent to you for a decision.
+            </Typography>
+            <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+              onClick={() => setDraft({ ...NEW_POLICY })}>Add your first rule</Button>
+          </Box>
+        )}
         {(policies || []).map((p) => (
           <Box key={p.PolicyId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: p.Active ? 1 : 0.55 }}>
             <Chip size="small" label={p.Action.replace("_", " ")}
@@ -535,14 +545,23 @@ function SettingsPages({ page, setPage, q, setQ }) {
   return (
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      {!results.length && <Empty>Nothing matches.</Empty>}
-      {results.map((r) => (
-        <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-          "&:hover": { bgcolor: "#f4f1ec" } }}>
-          <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
-          <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb}</Typography>
-        </Box>
-      ))}
+      {!results.length ? <Empty>Nothing matches “{q}”. Try a setting, rule, or memory keyword.</Empty> : (
+        <>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
+            {results.length} {results.length === 1 ? "result" : "results"}
+          </Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 1 }}>
+            {results.map((r) => (
+              <Box key={r.key} onClick={r.go}
+                sx={{ ...card, p: 1.5, cursor: "pointer", transition: "border-color .15s, box-shadow .15s",
+                  "&:hover": { borderColor: "#c8c0b3", boxShadow: "0 2px 8px rgba(47,56,64,.08)" } }}>
+                <Typography sx={{ color: "#55697a", fontWeight: 650, fontSize: 13.5 }}>{r.label}</Typography>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.35 }}>{r.crumb}</Typography>
+              </Box>
+            ))}
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

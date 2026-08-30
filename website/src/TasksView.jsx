@@ -264,6 +264,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const cut = filter !== "live" && !older;
   const shown = cut ? bucket.filter(touchedToday) : bucket;
   const nOlder = bucket.length - shown.length;
+  // The desktop page is a master/detail workspace. Opening it with a populated list but no
+  // detail selected leaves most of the screen as a dead blank panel and makes the first click
+  // compulsory. Follow the visible list to its first task on arrival (and after removing the
+  // selected task); an explicitly selected task is never replaced when filters change.
+  const firstShownId = shown[0]?.TaskId;
+  useEffect(() => {
+    if (active && !selected && firstShownId) onSelect(firstShownId);
+  }, [active, selected, firstShownId, onSelect]);
   const report = [...(detail?.comments || [])].reverse().find(
     (c) => c.ActorType === "agent" && String(c.Body || "").replace("CODER REPORT", "").trim()
       && String(c.Body || "").startsWith("CODER REPORT"));

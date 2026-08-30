@@ -113,8 +113,12 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       setTests((t) => ({ ...t, [name]: data }));
     } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: e?.response?.data?.detail || "test failed" } })); }
   };
-  const usePreset = (pr) => setDraft({ name: pr.name, cmd: pr.cmd, args: pr.args.join(NEWLINE),
-    resume: pr.resume, timeout: pr.timeout, cwd: "", cwdMap: "" });
+  const usePreset = (pr) => {
+    let name = pr.name, n = 2;
+    while (agents[name]) name = `${pr.name}-${n++}`;
+    setDraft({ name, cmd: pr.cmd, args: pr.args.join(NEWLINE),
+      resume: pr.resume, timeout: pr.timeout, cwd: "", cwdMap: "" });
+  };
 
   if (!agents) return <CircularProgress size={22} sx={{ m: 4 }} />;
   return (
@@ -123,7 +127,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
         <Typography variant="body2" sx={{ color: DIM }}>
-          Any CLI that reads a prompt on stdin is a teammate — Claude Code's JSON output enables resumable sessions.
+          Add the same CLI more than once under different names for separate profiles; Claude Code profiles stay resumable.
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
@@ -273,4 +277,3 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     </Box>
   );
 };
-

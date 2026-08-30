@@ -16,11 +16,11 @@ from loguru import logger
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
 
-def sharepoint_connection(store) -> dict:
+def sharepoint_connection(store, connector_id=None) -> dict:
     """The card's own app, else the Outlook card's TENANT app. A user sign-in on Outlook is not
     borrowable (its secret is a refresh token for mail scopes), so it is skipped on purpose."""
     from .reports import _card
-    cfg = _card(store, 'sharepoint', 'client_secret')
+    cfg = _card(store, 'sharepoint', 'client_secret', connector_id)
     if not (cfg.get('client_id') and cfg.get('client_secret')):
         o = _card(store, 'outlook', 'client_secret')
         if o.get('auth') != 'user' and o.get('client_id') and o.get('client_secret'):

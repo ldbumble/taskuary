@@ -1172,7 +1172,7 @@ def brains():
     from .llm import AI_TYPES
     # no steering: auto is one option among equals, and which brain triages is the owner's call
     out = [{'value': '', 'label': 'auto — first active AI connector', 'kind': 'auto', 'ready': True}]
-    out += [{'value': f"connector:{c['Type']}", 'label': c['Name'], 'kind': 'api',
+    out += [{'value': f"connector:{c['ConnectorId']}", 'label': c['Name'], 'kind': 'api',
              'ready': bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))}   # local models carry no key
             for c in store.list_connectors() if c['Type'] in AI_TYPES]
     # named by WHAT RUNS, leading with the CLI ('claude · coder'): the profile name is the
@@ -1183,7 +1183,9 @@ def brains():
                    'openai': ['gpt-4o-mini'],
                    'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct']}
     for o in out:
-        if o['kind'] == 'api': o['models'] = CONN_MODELS.get(o['value'][10:], [])
+        if o['kind'] == 'api':
+            c = store.get_connector(int(o['value'][10:]))
+            o['models'] = CONN_MODELS.get((c or {}).get('Type'), [])
     def _cli_of(a):
         prof = cfg.get('agents', {}).get(a['Name']) or json.loads(a.get('Config') or '{}')
         return cli_base(prof.get('cmd') or a['Name'])
@@ -1191,11 +1193,20 @@ def brains():
              'label': (_cli_of(a) + (f" · {a['Name']}" if _cli_of(a) != a['Name'] else '')) + ' (your CLI)',
              'kind': 'cli', 'ready': True, 'models': CLI_MODELS.get(_cli_of(a), [])}
             for a in store.list_agents()]
-    return {'data': out, 'current': store.get_settings().get('triage_ai') or ''}
+    current = store.get_settings().get('triage_ai') or ''
+    # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but
+    # point the picker at the concrete instance it currently resolves to.
+    if current.startswith('connector:') and not current[10:].isdigit():
+        old = store.get_connector_by_type(current[10:])
+        if old: current = f"connector:{old['ConnectorId']}"
+    return {'data': out, 'current': current}
 
 @app.post('/api/connectors')
 def save_connector(body: ConnectorBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    if fields.get('Name') is not None:
+        fields['Name'] = fields['Name'].strip()
+        if not fields['Name']: raise HTTPException(422, 'connector name cannot be blank')
     if fields.get('Roles') is not None:
         bad = {r for r in fields['Roles'].split(',') if r} - set(store_mod.ROLES)
         if bad: raise HTTPException(422, f"unknown role(s): {', '.join(sorted(bad))}")
@@ -1205,6 +1216,17 @@ def save_connector(body: ConnectorBody):
             raise HTTPException(422, f"unknown authority: {fields['Scope']} - one of {', '.join(scopes.SCOPES)}")
     if not fields.get('ConnectorId') and not (fields.get('Type') and fields.get('Name')):
         raise HTTPException(422, 'new connectors need Type and Name')
+    if not fields.get('ConnectorId'):
+        # New instances start with the normal role for their type, but never inherit credentials,
+        # cursors, sources or test state from the card they were added beside.
+        fields.setdefault('Roles', store_mod.DEFAULT_ROLES.get(fields['Type'], ''))
+    current = store.get_connector(fields['ConnectorId']) if fields.get('ConnectorId') else None
+    typ = fields.get('Type') or (current or {}).get('Type')
+    name = fields.get('Name') or (current or {}).get('Name')
+    if typ and name and any(c['Name'].casefold() == name.casefold()
+                            and c['ConnectorId'] != fields.get('ConnectorId')
+                            for c in store.connectors_by_type(typ)):
+        raise HTTPException(409, f'a {typ} connector named {name!r} already exists')
     cid = store.save_connector(fields, ACTOR)
     safe = {k: v for k, v in fields.items() if k != 'Secret'} | ({'secret': 'updated'} if 'Secret' in fields else {})
     store.audit('connector', cid, 'edit' if body.ConnectorId else 'create', ACTOR, detail=safe)
@@ -1464,7 +1486,11 @@ def tool_run(body: dict):
     if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
     from .reports import card_of
     from . import scopes
-    conn = store.get_connector_by_type(card_of(t))    # s3_object runs on the aws card's roles
+    connector_id = (body or {}).get('connector_id')
+    try: conn = store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type(card_of(t))
+    except (TypeError, ValueError): raise HTTPException(422, 'connector_id must be a number')
+    if conn and conn.get('Type') != card_of(t):
+        raise HTTPException(422, f'connector {connector_id} is {conn.get("Type")}, not {card_of(t)}')
     if conn:
         if not conn.get('Active'):
             raise HTTPException(403, f'the {t} connection is off - turn it on under Connectors')

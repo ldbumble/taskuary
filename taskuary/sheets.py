@@ -16,9 +16,9 @@ SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets'
 _TOK = {}   # refresh token -> (access token, expiry)
 
 
-def google_sheets_connection(store) -> dict:
+def google_sheets_connection(store, connector_id=None) -> dict:
     from .reports import _card
-    cfg = _card(store, 'google_sheets', 'google_refresh_token')
+    cfg = _card(store, 'google_sheets', 'google_refresh_token', connector_id)
     if not (cfg.get('google_client_id') and cfg.get('google_client_secret')):
         g = _card(store, 'gmail', 'password')
         if g.get('google_client_id') and g.get('google_client_secret'):

@@ -153,8 +153,10 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     return n
 
 
-def tg_send(store, chat_id: str, body: str) -> dict:
-    c = store.get_connector_by_type('telegram', with_secret=True)
+def tg_send(store, chat_id: str, body: str, connector_id=None) -> dict:
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
+        store.get_connector_by_type('telegram', with_secret=True)
+    if c and c.get('Type') != 'telegram': c = None
     if not (c and c.get('Secret')): raise RuntimeError('the Telegram connection is not set up')
     tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000])
     return {'channel': 'telegram', 'chat': chat_id}
@@ -297,8 +299,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     return n
 
 
-def wa_send(store, jid: str, body: str) -> dict:
-    c = store.get_connector_by_type('whatsapp', with_secret=True)
+def wa_send(store, jid: str, body: str, connector_id=None) -> dict:
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
+        store.get_connector_by_type('whatsapp', with_secret=True)
+    if c and c.get('Type') != 'whatsapp': c = None
     if not c: raise RuntimeError('the WhatsApp connection is not set up')
     _wa(c, '/send', {'jid': jid, 'text': body[:4000]})
     return {'channel': 'whatsapp', 'chat': jid}

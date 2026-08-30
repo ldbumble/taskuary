@@ -889,7 +889,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
                     if mode not in ('feed', 'tasks'): continue
                     from .reports import aws_connection, azure_connection
                     mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
-                    conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store)
+                    conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store, c['ConnectorId'])
                     n += mod.poll_source(store, conn_cfg, s, since, llm, mode == 'feed')
                 elif c['Type'] == 'discord':
                     # per SOURCE, like slack: each watched channel id is its own source

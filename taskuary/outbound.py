@@ -14,9 +14,20 @@ from loguru import logger
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
 
-def _graph_token(store, kind='outlook'):
+def _source_connector_id(store, channel, address):
+    """The instance owning a source address/chat. Replies must leave through the same account
+    they arrived through when several connectors share a type."""
+    src = next((s for s in store.list_sources(active_only=False)
+                if s.get('Channel') == channel and str(s.get('Address') or '') == str(address or '')
+                and s.get('ConnectorId')), None)
+    return src.get('ConnectorId') if src else None
+
+
+def _graph_token(store, kind='outlook', connector_id=None):
     from .channels import graph_creds, graph_token
-    c = store.get_connector_by_type(kind, with_secret=True)
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
+        store.get_connector_by_type(kind, with_secret=True)
+    if c and c.get('Type') != kind: c = None
     if not c or not c.get('Active'): raise RuntimeError(f'the {kind} connection is not set up')
     cfg, sec, _ = graph_creds(store, c)
     return graph_token(cfg, sec)
@@ -30,11 +41,13 @@ def _mailbox(store, msg=None):
     return src['Address']
 
 
-def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str = None, mailbox: str = None) -> dict:
+def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str = None, mailbox: str = None,
+               connector_id=None) -> dict:
     """Reply in thread when we know the Graph message id, otherwise a new mail. Plain text:
     these are answers from a person, not marketing."""
-    tok = _graph_token(store)
     box = mailbox or _mailbox(store)
+    connector_id = connector_id or _source_connector_id(store, 'email', box)
+    tok = _graph_token(store, connector_id=connector_id)
     to = [t for t in (to or []) if t and '@' in t]
     if not to and not reply_to_graph_id: raise RuntimeError('no recipient')
     hdr = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
@@ -57,10 +70,10 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
     return {'channel': 'email', 'to': to, 'mailbox': box, 'threaded': bool(reply_to_graph_id)}
 
 
-def send_teams(store, chat_id: str, body: str) -> dict:
+def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
     """Post into a chat. App-only posting needs ChatMessage.Send on the app registration,
     which reading does NOT include - say so plainly rather than failing with a 403 blob."""
-    tok = _graph_token(store, 'teams')
+    tok = _graph_token(store, 'teams', connector_id)
     r = requests.post(f'{GRAPH}/chats/{chat_id}/messages', timeout=30,
                       headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'},
                       data=json.dumps({'body': {'contentType': 'text', 'content': body}}))
@@ -178,26 +191,31 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
                          body, in_reply_to=msg.get('ConversationId'))
     if ch == 'email':
         return send_email(store, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
-                          body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'))
+                          body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'),
+                          _source_connector_id(store, 'email', msg.get('SourceName')))
     if ch == 'teams':
         chat = (msg.get('ConversationId') or '')[6:]        # 'teams:19:...'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
-        return send_teams(store, chat, body)
+        return send_teams(store, chat, body, _source_connector_id(store, 'teams', msg.get('SourceName')))
     if ch in ('telegram', 'whatsapp'):
         from . import messengers
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'telegram:<id>' / 'whatsapp:<jid>'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
-        return (messengers.tg_send if ch == 'telegram' else messengers.wa_send)(store, chat, body)
+        send = messengers.tg_send if ch == 'telegram' else messengers.wa_send
+        connector_id = _source_connector_id(store, ch, chat)
+        return send(store, chat, body, connector_id) if connector_id else send(store, chat, body)
     if ch == 'imessage':
         from .imessage import send_text
         chat = str(msg.get('ConversationId') or '')[9:]                 # 'imessage:<chat guid>'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
-        return send_text(store, chat, body)
+        connector_id = _source_connector_id(store, 'imessage', chat)
+        return send_text(store, chat, body, connector_id) if connector_id else send_text(store, chat, body)
     if ch == 'discord':
         from .devtools import discord_send
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'discord:<channel_id>'
         if not chat: raise RuntimeError('this chat message has no channel id to answer in')
-        return discord_send(store, chat, body)
+        connector_id = _source_connector_id(store, 'discord', chat)
+        return discord_send(store, chat, body, connector_id) if connector_id else discord_send(store, chat, body)
     if ch == 'github':
         # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's
         # explicit say-so (the GitHub card's 'Reply to issue/PR authors' switch)
@@ -207,7 +225,9 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
         repo, _, num = ext[3:].rpartition('#')              # 'gh:owner/repo#N'
         if not (ext.startswith('gh:') and repo and num.isdigit()):
             raise RuntimeError('this github item carries no issue/PR reference to comment on')
-        c = store.get_connector_by_type('github', with_secret=True)
+        connector_id = _source_connector_id(store, 'github', repo)
+        c = store.get_connector(connector_id, with_secret=True) if connector_id else \
+            store.get_connector_by_type('github', with_secret=True)
         if not (c and c.get('Secret')): raise RuntimeError('no GitHub PAT saved')
         from .github import comment_issue
         url = comment_issue(c['Secret'], repo, int(num), body)
@@ -247,7 +267,8 @@ def notify_targets(store) -> list:
     for c in store.list_connectors():
         if not c['Active'] or 'notify' not in roles_of(c): continue
         chat = str(_cfg(c).get('notify_chat') or '').strip()
-        if chat and c['Type'] in ('telegram', 'whatsapp', 'teams'): out.append((c['Type'], chat))
+        if chat and c['Type'] in ('telegram', 'whatsapp', 'teams'):
+            out.append((c['Type'], chat, c['ConnectorId']))
     return out
 
 
@@ -257,13 +278,13 @@ def notify(store, text: str, about: dict = None) -> int:
     is one you are already looking at."""
     from . import messengers
     sent = 0
-    for ch, chat in notify_targets(store):
+    for ch, chat, connector_id in notify_targets(store):
         if about and about.get('Channel') == ch and str(about.get('ConversationId') or '').endswith(chat):
             continue
         try:
-            if ch == 'telegram': messengers.tg_send(store, chat, text)
-            elif ch == 'whatsapp': messengers.wa_send(store, chat, text)
-            else: send_teams(store, chat, text)
+            if ch == 'telegram': messengers.tg_send(store, chat, text, connector_id)
+            elif ch == 'whatsapp': messengers.wa_send(store, chat, text, connector_id)
+            else: send_teams(store, chat, text, connector_id)
             sent += 1
         except Exception as e:
             logger.warning(f'notify via {ch} failed: {e}')

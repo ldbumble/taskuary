@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind
   Action TEXT, Reason TEXT, SortOrder INTEGER DEFAULT 100, Active INTEGER DEFAULT 1, CreatedBy TEXT);
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
   Owner TEXT, ConnectorId INTEGER, Active INTEGER DEFAULT 1, ConfigJson TEXT, LastPolledAt TEXT);
-CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT UNIQUE, Name TEXT,
+CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT,
   ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, Roles TEXT,
   Scope TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
@@ -176,6 +176,7 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_dispatchq_task ON dispatchq(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_waitroom_task ON waitroom(TaskId, DeliveredAt)',
     'CREATE INDEX IF NOT EXISTS idx_idea_status ON idea(Status, MessageId)',
+    'CREATE INDEX IF NOT EXISTS idx_connector_type ON connector(Type, ConnectorId)',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -184,7 +185,7 @@ INDEXES = (
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
-                    'triage_ai': '',      # '' = first active AI connector | connector:<type> | cli:<agent>
+                    'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
                     # minutes between background polls while the app is OPEN. The Timeline said
                     # "auto-syncs every 10 min" for a long time while the only clock was a
@@ -311,8 +312,6 @@ class SQLiteStore:
         self._writes = 0
         with self.lock:
             self.cx.executescript(SCHEMA)
-            for ix in INDEXES:
-                self.cx.execute(ix)
             # columns added after a release: CREATE TABLE IF NOT EXISTS never reaches an
             # existing db, so widen it here (cheap, idempotent)
             # Work can now leave as well as arrive, so a row has to say which way it went. A
@@ -344,6 +343,35 @@ class SQLiteStore:
             # left NULL on purpose: scopes.scope_of falls back to the type's default, so an
             # existing db keeps exactly the authority it had before the column existed
             if 'Scope' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Scope TEXT')
+            # Connector Type used to be UNIQUE, which made the catalog row the only possible
+            # instance of a connector. SQLite cannot drop an inline unique constraint, so widen
+            # the table in place while keeping every ConnectorId. Source ownership is by that id,
+            # so mailboxes/repos/cloud objects remain attached to exactly the same connection.
+            unique_type = False
+            for ix in self.cx.execute('PRAGMA index_list(connector)').fetchall():
+                if not ix[2]: continue
+                cols = [r[2] for r in self.cx.execute(f'PRAGMA index_info("{ix[1]}")').fetchall()]
+                if cols == ['Type']: unique_type = True; break
+            if unique_type:
+                self.cx.execute('SAVEPOINT widen_connector_type')
+                try:
+                    self.cx.execute('ALTER TABLE connector RENAME TO connector_one_per_type')
+                    self.cx.execute('''CREATE TABLE connector (
+                        ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT, ConfigJson TEXT,
+                        Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT,
+                        Roles TEXT, Scope TEXT)''')
+                    self.cx.execute('''INSERT INTO connector
+                        (ConnectorId, Type, Name, ConfigJson, Secret, Active, LastSyncAt, LastError, Roles, Scope)
+                        SELECT ConnectorId, Type, Name, ConfigJson, Secret, Active, LastSyncAt, LastError, Roles, Scope
+                        FROM connector_one_per_type''')
+                    self.cx.execute('DROP TABLE connector_one_per_type')
+                    self.cx.execute('RELEASE widen_connector_type')
+                except Exception:
+                    self.cx.execute('ROLLBACK TO widen_connector_type')
+                    self.cx.execute('RELEASE widen_connector_type')
+                    raise
+            for ix in INDEXES:
+                self.cx.execute(ix)
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
@@ -369,8 +397,12 @@ class SQLiteStore:
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
                          ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper')):
-                self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
-                                (t, n, DEFAULT_ROLES.get(t, '')))
+                # Type is intentionally not unique anymore. Seed only when a type has no card;
+                # INSERT OR IGNORE would now insert another blank copy on every startup.
+                self.cx.execute('''INSERT INTO connector (Type, Name, Roles)
+                                   SELECT ?, ?, ? WHERE NOT EXISTS
+                                   (SELECT 1 FROM connector WHERE Type=?)''',
+                                (t, n, DEFAULT_ROLES.get(t, ''), t))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
                 self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
             # operator documents start from shipped templates (John Smith placeholder) -
@@ -983,8 +1015,14 @@ class SQLiteStore:
     def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
     def get_connector(self, cid, with_secret=False):
         return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
+    def connectors_by_type(self, ctype, with_secret=False):
+        return self._rows(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector "
+                          'WHERE Type=? ORDER BY Active DESC, ConnectorId', (ctype,))
     def get_connector_by_type(self, ctype, with_secret=False):
-        return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE Type=?", (ctype,))
+        """Compatibility/default lookup for code that needs one connection: prefer an active
+        instance, then the original catalog row. Instance-aware paths use ConnectorId."""
+        rows = self.connectors_by_type(ctype, with_secret)
+        return rows[0] if rows else None
     def save_connector(self, fields, actor):
         cid = fields.get('ConnectorId')
         cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope') if c in fields and fields[c] is not None]

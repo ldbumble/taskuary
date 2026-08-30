@@ -432,11 +432,12 @@ def _osa(argv: list) -> None:
         raise RuntimeError(why or f'Messages.app refused the send: {err or "no detail"}')
 
 
-def send_text(store, chat_guid: str, body: str) -> dict:
+def send_text(store, chat_guid: str, body: str, connector_id=None) -> dict:
     """Into an EXISTING chat by its guid - the id the message row carries. A brand-new
     conversation (a bare number or address) is a different job and not done here."""
     if sys.platform != 'darwin': raise SetupError('macos_required', 'sending through Messages.app needs a Mac')
-    c = store.get_connector_by_type('imessage') if store else None
+    c = (store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type('imessage')) if store else None
+    if c and c.get('Type') != 'imessage': c = None
     if not (c and c.get('Active')): raise RuntimeError('the Apple Messages connection is off')
     if not chat_guid: raise RuntimeError('no chat id to send into')
     parts = chunks(body)

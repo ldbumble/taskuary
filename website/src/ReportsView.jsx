@@ -194,7 +194,7 @@ const toShape = (src) => {
 };
 // Everything that belongs to ONE source card; the rest (title, prompt, schedule) is the
 // report itself. Splitting here is what lets old single-source configs load unchanged.
-const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick", "region",
+const SOURCE_KEYS = ["type", "label", "connector_id", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick", "region",
   "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver",
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
   "api_version", "path_expr", "account", "container", "blob", "workspace_id",
@@ -844,7 +844,9 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
     return only.includes(suffix);
   });
   const cardType = CARD_OF[src.type] || src.type;
-  const conn = connectors.find((c) => c.Type === cardType);
+  const matching = connectors.filter((c) => c.Type === cardType);
+  const conn = matching.find((c) => c.ConnectorId === Number(src.connector_id))
+    || matching.find((c) => c.Active) || matching[0];
   const needsConn = ["mssql", "winrm", "database", "aws", "azure", "prometheus", "datadog",
     "exa", "tavily", "firecrawl"].includes(cardType);   // reader works with no key at all
   const connOk = conn?.LastSyncAt && !conn?.LastError;
@@ -878,10 +880,21 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         })()}
       </Select>
       {needsConn && (
-        <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#47654a" : "#55697a" }}>
-          {connOk ? `✓ uses the ${CARD_LABELS[cardType] || cardType} connection from Connectors`
-            : `⚠ set up Connectors → ${CARD_LABELS[cardType] || cardType} first`}
-        </Typography>
+        <>
+          {matching.length > 1 && (
+            <Select size="small" value={conn?.ConnectorId || ""}
+              onChange={(e) => onChange({ connector_id: Number(e.target.value) })}
+              displayEmpty sx={{ fontSize: 12, bgcolor: "#fff" }}>
+              {matching.map((c) => (
+                <MenuItem key={c.ConnectorId} value={c.ConnectorId} sx={{ fontSize: 12 }}>{c.Name}</MenuItem>
+              ))}
+            </Select>
+          )}
+          <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#47654a" : "#55697a" }}>
+            {connOk ? `✓ uses ${conn.Name} from Connectors`
+              : `⚠ set up ${conn?.Name || CARD_LABELS[cardType] || cardType} in Connectors first`}
+          </Typography>
+        </>
       )}
       {count > 1 && (
         <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "#fff" }}

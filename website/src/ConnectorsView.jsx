@@ -772,7 +772,11 @@ export default function ConnectorsView() {
     catch { setSyncing(false); }
   };
 
-  const byType = Object.fromEntries((connectors || []).map((c) => [c.Type, c]));
+  const allOf = (type) => (connectors || []).filter((c) => c.Type === type);
+  // Explicit cards travel by ConnectorId. A type-only deep link or credential reuse picks an
+  // active instance first, then the original catalog row for backward compatibility.
+  const byType = Object.fromEntries([...new Set((connectors || []).map((c) => c.Type))]
+    .map((type) => [type, allOf(type).find((c) => c.Active) || allOf(type)[0]]));
   // #connector=<type> opens that card on arrival - the bell's Fix button lands here, and so can any
   // link. Consumed once, so Back does not reopen it.
   useEffect(() => {
@@ -780,9 +784,8 @@ export default function ConnectorsView() {
     if (!m || !connectors) return;
     const t = m[1];
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    if (t === "mssql" || t === "winrm") setOpen({ kind: t });
-    else if (DATA_META[t]) setOpen({ kind: "data", type: t });
-    else if (byType[t]) setOpen({ kind: "channel", id: byType[t].ConnectorId });
+    const direct = /^\d+$/.test(t) ? connectors.find((c) => c.ConnectorId === Number(t)) : byType[t];
+    if (direct) setOpen({ kind: "connector", id: direct.ConnectorId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectors]);
 
@@ -790,19 +793,15 @@ export default function ConnectorsView() {
 
   if (open?.kind === "agents") return <AgentsPage section="Connectors" title="AI CLI agents" onBack={() => setOpen(null)} />;
   if (open?.kind === "voice-vocabulary") return <VoiceVocabulary onBack={() => setOpen(null)} />;
-  if (open?.kind === "channel") {
+  if (open?.kind === "connector") {
     const conn = connectors.find((c) => c.ConnectorId === open.id);
-    return <ChannelDetail conn={conn} sources={sources} reload={load} onBack={() => setOpen(null)} />;
-  }
-  if (open?.kind === "mssql") {
-    return <MssqlDetail conn={byType.mssql} drivers={drivers} reload={load} onBack={() => setOpen(null)} />;
-  }
-  if (open?.kind === "winrm") {
-    return <WinrmDetail conn={byType.winrm} reload={load} onBack={() => setOpen(null)} />;
-  }
-  if (open?.kind === "data") {
-    return <DataDetail conn={byType[open.type]} meta={DATA_META[open.type]} sources={sources} byType={byType}
-      reload={load} onBack={() => setOpen(null)} />;
+    if (!conn) return null;
+    const shared = { conn, reload: load, onBack: () => setOpen(null),
+      onCreated: (id) => setOpen({ kind: "connector", id }) };
+    if (conn.Type === "mssql") return <MssqlDetail key={conn.ConnectorId} {...shared} drivers={drivers} />;
+    if (conn.Type === "winrm") return <WinrmDetail key={conn.ConnectorId} {...shared} />;
+    if (DATA_META[conn.Type]) return <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />;
+    return <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} />;
   }
 
   /* ── landing: searchable grouped catalog ── */
@@ -823,19 +822,25 @@ export default function ConnectorsView() {
     return { key: `c${c.ConnectorId}`, title: c.Name, desc: status,
       channel: hasLogo(c.Type) ? c.Type : (m.channel || c.Type),
       haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`,
-      go: () => setOpen({ kind: "channel", id: c.ConnectorId }) };
+      go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
   };
   // three shapes of card, said once instead of inline in five groups
   const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
     + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length} reports (built on the Reports tab)`;
-  const dataCards = (keys) => keys.filter((t) => DATA_META[t] && byType[t]).map((t) => {
+  const dataCards = (keys) => keys.flatMap((t) => allOf(t).filter(() => DATA_META[t]).map((c) => {
     const dm = DATA_META[t];
-    return { key: t, title: dm.title, channel: t,
-      desc: (byType[t].LastError ? "connection failing" : byType[t].LastSyncAt ? "connection ✓" : "not set up")
+    return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
+      desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : "not set up")
         + ` · ${reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length} reports (built on the Reports tab)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
-      go: () => setOpen({ kind: "data", type: t }) };
-  });
+      go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
+  }));
+  const channelCards = (keys) => keys.flatMap((t) => allOf(t).map(chanCard));
+  const specialCards = (type, title, rtype, haystack) => allOf(type).map((c) => ({
+    key: `s${c.ConnectorId}`, title: c.Name || title, channel: type,
+    desc: dataDesc(c, rtype), haystack,
+    go: () => setOpen({ kind: "connector", id: c.ConnectorId }),
+  }));
   const planned = types.filter((t) => t.status === "planned").map((t) => t.type);
   // `rest` catches whatever the server starts advertising that this file has not been taught
   // about yet, so a new planned type never silently vanishes from the catalog
@@ -847,7 +852,7 @@ export default function ConnectorsView() {
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "claude / codex / gemini — bring your own coding CLI, resumable sessions",
         channel: "cli", haystack: "ai cli agents claude codex gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...["anthropic", "openai", "azure_openai", "openrouter", "ollama"].filter((t) => byType[t]).map((t) => chanCard(byType[t])),
+      ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "ollama"]),
       ...PLANNED_AI.map((p) => ({ key: p.name, title: p.name, desc: p.desc, channel: "ai", haystack: `${p.name} ${p.desc}`, planned: true })),
     ]},
     // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic
@@ -859,36 +864,27 @@ export default function ConnectorsView() {
           desc: "one system-wide list used by every voice connector and mic",
           haystack: "custom shared voice vocabulary words phrases domain names acronyms",
           go: () => setOpen({ kind: "voice-vocabulary" }) },
-        ...["gemini_stt", "groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"]
-          .filter((t) => byType[t]).map((t) => chanCard(byType[t])),
+        ...channelCards(["gemini_stt", "groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"]),
       ] },
     // mail and chat are different jobs: one group held nine cards and read as a wall
-    { title: "Email", cards: ["outlook", "gmail", "imap"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Messaging", cards: ["teams", "slack", "telegram", "whatsapp", "imessage", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Developer", cards: ["github", "gitlab", "azdo", "sentry", "pagerduty"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Project management", cards: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    { title: "Email", cards: channelCards(["outlook", "gmail", "imap"]) },
+    { title: "Messaging", cards: channelCards(["teams", "slack", "telegram", "whatsapp", "imessage", "discord"]) },
+    { title: "Developer", cards: channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]) },
+    { title: "Project management", cards: channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]) },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each
        other - a SQL server, a log store and a web-search API are three different jobs, and a
        rail entry saying "11" tells you nothing about which one you came for. Split by what
        the thing IS, and the planned cards land in the group they will belong to rather than
        all together at the bottom. */
     { title: "Databases", cards: [
-      {
-        key: "mssql", title: "Microsoft SQL Server", channel: "mssql",
-        desc: dataDesc(byType.mssql, "mssql"),
-        haystack: "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" "),
-        go: () => setOpen({ kind: "mssql" }),
-      },
+      ...specialCards("mssql", "Microsoft SQL Server", "mssql",
+        "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" ")),
       ...dataCards(["database"]), ...plannedCards(["graphql", "sqlite"]),
     ]},
     { title: "Cloud & infrastructure", cards: [
       ...dataCards(["aws", "azure"]),
-      ...(byType.winrm ? [{
-        key: "winrm", title: "Remote Windows (WinRM)", channel: "winrm",
-        desc: dataDesc(byType.winrm, "winrm"),
-        haystack: "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" "),
-        go: () => setOpen({ kind: "winrm" }),
-      }] : []),
+      ...specialCards("winrm", "Remote Windows (WinRM)", "winrm",
+        "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" ")),
       ...plannedCards(["gcp", "kubernetes"]),
     ]},
     { title: "Corporate systems", cards: [
@@ -947,6 +943,56 @@ export default function ConnectorsView() {
         </>
       )}
     </SideRail>
+  );
+}
+
+/* Every catalog card is an instance. Its name is the human-facing identity used everywhere
+   Taskuary lists it; Add another creates a clean instance of the same connector type. */
+function ConnectorIdentity({ conn, reload, onCreated }) {
+  const [name, setName] = useState(conn.Name || "");
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => setName(conn.Name || ""), [conn.Name]);
+  const rename = async () => {
+    const value = name.trim();
+    if (!value || value === conn.Name) return;
+    setBusy("rename"); setErr("");
+    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Name: value }); await reload(); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not rename the connector"); }
+    setBusy("");
+  };
+  const add = async () => {
+    const value = newName.trim();
+    if (!value) return;
+    setBusy("add"); setErr("");
+    try {
+      const { data } = await api.post("/api/connectors", { Type: conn.Type, Name: value });
+      await reload(); onCreated?.(data.connectorId);
+    } catch (e) { setErr(e?.response?.data?.detail || "could not add the connector"); }
+    setBusy("");
+  };
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5, maxWidth: 720 }}>
+      <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "#fff", minWidth: 240 }} />
+      <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
+        onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
+      {!adding ? (
+        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another</Button>
+      ) : (
+        <>
+          <TextField size="small" autoFocus label={`New ${conn.Type} connection name`} value={newName}
+            onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+            sx={{ bgcolor: "#fff", minWidth: 240 }} />
+          <Button size="small" variant="contained" disableElevation disabled={busy === "add" || !newName.trim()}
+            onClick={add}>{busy === "add" ? "Adding…" : "Add"}</Button>
+          <Button size="small" onClick={() => { setAdding(false); setNewName(""); setErr(""); }}>Cancel</Button>
+        </>
+      )}
+      {err && <Alert severity="error" sx={{ width: "100%", py: 0 }}>{err}</Alert>}
+    </Box>
   );
 }
 
@@ -1085,7 +1131,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
 }
 
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
-function ChannelDetail({ conn, sources, reload, onBack }) {
+function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
   const m = META[conn.Type] || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
@@ -1273,6 +1319,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
           itself (install Node is the owner's; the bridge starts on its own; the QR is scanned from a phone).
           An agent handed this setup sat on the bridge process for five minutes on a tester's machine. */}
@@ -1301,12 +1348,13 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
 }
 
 /* ── SQL Server detail: connection wizard + guide (reports live on the Reports tab) ── */
-function MssqlDetail({ conn, drivers, reload, onBack }) {
+function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
   const [tab, setTab] = useState("Connection");
   if (!conn) return null;
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title="Microsoft SQL Server" />
+      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) on the Reports tab.
@@ -1393,7 +1441,7 @@ function MssqlConnection({ conn, drivers, reload }) {
 }
 
 /* ── Remote Windows (WinRM) detail: machine name + live probe; reports live on Reports ── */
-function WinrmDetail({ conn, reload, onBack }) {
+function WinrmDetail({ conn, reload, onBack, onCreated }) {
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [test, setTest] = useState(null);
@@ -1418,7 +1466,8 @@ function WinrmDetail({ conn, reload, onBack }) {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title="Remote Windows (WinRM)" />
+      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
@@ -1597,7 +1646,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
 
 /* ── shared detail for the DATA_META cards (database / aws / azure): fields + write-only
    secret + live Test; the connection only - reports are built on the Reports tab. ── */
-function DataDetail({ conn, meta, sources, reload, onBack, byType = {} }) {
+function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {} }) {
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [secret, setSecret] = useState("");
@@ -1605,7 +1654,7 @@ function DataDetail({ conn, meta, sources, reload, onBack, byType = {} }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   if (!conn) return null;
-  const objects = (sources || []).filter((s) => s.Channel === conn.Type);
+  const objects = (sources || []).filter((s) => s.Channel === conn.Type && s.ConnectorId === conn.ConnectorId);
   // the borrow offer: only when the OTHER card actually has something to lend (a tenant app, a
   // Google client) - an offer to reuse nothing is worse than no offer
   const canReuse = !!(meta.reuse && meta.reuse.ok(byType[meta.reuse.from]));
@@ -1640,7 +1689,8 @@ function DataDetail({ conn, meta, sources, reload, onBack, byType = {} }) {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title={meta.title} />
+      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} agentSteps={meta.agent || []} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc} The connection only — build the scheduled reports on the Reports tab.

@@ -2,6 +2,10 @@
 
 Connector roles determine what Taskuary may do with a system:
 
+Each connector card is one named connection. Rename it for the account or environment it
+represents, and use **Add another** on the card to connect the same kind again—for example,
+two IMAP mailboxes, two GitHub organizations, or separate production and staging databases.
+
 - **trigger** sends inbound items through triage
 - **feed** displays inbound items without triage
 - **report** makes the source available to scheduled reports

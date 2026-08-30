@@ -452,82 +452,90 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
 def card_of(t): return CARD_OF.get(t, t)
 
 
-def mssql_connection(store) -> dict:
+def _connector(store, typ, connector_id=None, with_secret=False):
+    """Resolve an explicitly selected instance, or the active/default instance for legacy
+    report configs. Refuse an id belonging to another connector type."""
+    c = store.get_connector(int(connector_id), with_secret=with_secret) if connector_id else \
+        store.get_connector_by_type(typ, with_secret=with_secret)
+    return c if c and c.get('Type') == typ else None
+
+
+def mssql_connection(store, connector_id=None) -> dict:
     """The SQL Server CONNECTION lives on the mssql connector card (set up once, tested
     there); report configs carry only query/ai_prompt/schedule and inherit it here.
     Per-report overrides still win if present."""
-    c = store.get_connector_by_type('mssql', with_secret=True)
+    c = _connector(store, 'mssql', connector_id, with_secret=True)
     if not c: return {}
     cfg = json.loads(c.get('ConfigJson') or '{}')
     if c.get('Secret'): cfg.setdefault('password', c['Secret'])
     return {k: v for k, v in cfg.items() if v}
 
 
-def winrm_connection(store) -> dict:
+def winrm_connection(store, connector_id=None) -> dict:
     """Same connection-card pattern as mssql: the host lives on the winrm connector."""
-    c = store.get_connector_by_type('winrm')
+    c = _connector(store, 'winrm', connector_id)
     cfg = json.loads((c or {}).get('ConfigJson') or '{}')
     return {k: v for k, v in cfg.items() if v}
 
 
-def _card(store, typ, secret_as):
-    c = store.get_connector_by_type(typ, with_secret=True)
+def _card(store, typ, secret_as, connector_id=None):
+    c = _connector(store, typ, connector_id, with_secret=True)
     if not c: return {}
     cfg = json.loads(c.get('ConfigJson') or '{}')
     if c.get('Secret'): cfg.setdefault(secret_as, c['Secret'])
     return {k: v for k, v in cfg.items() if v}
 
 
-def database_connection(store) -> dict:
+def database_connection(store, connector_id=None) -> dict:
     """The connection string lives on the 'Any database' card; its write-only secret fills
     the string's {password} placeholder."""
-    return _card(store, 'database', 'password')
+    return _card(store, 'database', 'password', connector_id)
 
 
-def aws_connection(store) -> dict:
-    return _card(store, 'aws', 'secret_access_key')
+def aws_connection(store, connector_id=None) -> dict:
+    return _card(store, 'aws', 'secret_access_key', connector_id)
 
 
-def azure_connection(store) -> dict:
+def azure_connection(store, connector_id=None) -> dict:
     """The Azure card's own app, else the Outlook connector's saved Graph app - one app
     registration can hold Graph permissions AND Azure RBAC roles, so the borrow is real."""
-    cfg = _card(store, 'azure', 'client_secret')
+    cfg = _card(store, 'azure', 'client_secret', connector_id)
     if not (cfg.get('client_id') and cfg.get('client_secret')):
         cfg = {**_card(store, 'outlook', 'client_secret'), **cfg}
     return cfg
 
 
-def intacct_connection(store) -> dict:
+def intacct_connection(store, connector_id=None) -> dict:
     """Five credentials, of which exactly one is a secret worth hiding: the API USER's
     password. The sender pair identifies the integration and the company id names the tenant -
     neither is a password to this company's books, and burying them write-only would only mean
     nobody can ever check the sender id for a typo."""
-    return _card(store, 'intacct', 'user_password')
+    return _card(store, 'intacct', 'user_password', connector_id)
 
 
-def prometheus_connection(store) -> dict:
+def prometheus_connection(store, connector_id=None) -> dict:
     """base_url (+ optional bearer token as the write-only secret) lives on the card."""
-    return _card(store, 'prometheus', 'token')
+    return _card(store, 'prometheus', 'token', connector_id)
 
 
-def datadog_connection(store) -> dict:
+def datadog_connection(store, connector_id=None) -> dict:
     """site + application key on the card; the API key is the write-only secret."""
-    return _card(store, 'datadog', 'api_key')
+    return _card(store, 'datadog', 'api_key', connector_id)
 
 
-def _sharepoint_connection(store) -> dict:
+def _sharepoint_connection(store, connector_id=None) -> dict:
     from .sharepoint import sharepoint_connection
-    return sharepoint_connection(store)
+    return sharepoint_connection(store, connector_id)
 
 
-def _sheets_connection(store) -> dict:
+def _sheets_connection(store, connector_id=None) -> dict:
     from .sheets import google_sheets_connection
-    return google_sheets_connection(store)
+    return google_sheets_connection(store, connector_id)
 
 
 def _apikey_card(typ):
     """A card whose whole configuration is one key: the secret arrives as `api_key`."""
-    return lambda store: _card(store, typ, 'api_key')
+    return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
@@ -547,7 +555,9 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 def resolve_cfg(store, cfg: dict) -> dict:
     if cfg.get('type') in ('digest', 'automate', 'agent', 'calendar'): return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards)
     conn = CONNECTION_OF.get(cfg.get('type'))
-    if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
+    if conn:
+        saved = conn(store, cfg.get('connector_id')) if cfg.get('connector_id') else conn(store)
+        return {**saved, **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg
 
 

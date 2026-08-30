@@ -17,10 +17,19 @@ NO_REPLY = re.compile(r'^\W*no( reply| response)?( needed| required)?\W*$', re.I
 HOW = "reply 'approve' to send it, 'reject', 'no reply' — or your own text to send that instead"
 
 
+def notify_chats_of(store, channel: str) -> set:
+    out = set()
+    for c in store.connectors_by_type(channel):
+        try:
+            chat = str(json.loads((c or {}).get('ConfigJson') or '{}').get('notify_chat') or '')
+            if chat: out.add(chat)
+        except ValueError: continue
+    return out
+
+
 def notify_chat_of(store, channel: str) -> str:
-    c = store.get_connector_by_type(channel)
-    try: return str(json.loads((c or {}).get('ConfigJson') or '{}').get('notify_chat') or '')
-    except ValueError: return ''
+    """Compatibility helper for callers displaying one destination."""
+    return next(iter(notify_chats_of(store, channel)), '')
 
 
 def ping_tail(store, rid: int, draft: str = None) -> str:
@@ -45,7 +54,7 @@ def intercept(store, channel: str, chat_id: str, text: str, quoted: str = None) 
     """True = this was a verdict in the notify chat and it was handled - never ingest it.
     False = not ours (feature off, another chat, or nothing to decide) - flow on to triage."""
     if store.get_settings().get('phone_approvals') != '1': return False
-    if not chat_id or str(chat_id) != notify_chat_of(store, channel): return False
+    if not chat_id or str(chat_id) not in notify_chats_of(store, channel): return False
     t = (text or '').strip()
     if not t: return False
     # our OWN pings and acks come back through the WhatsApp bridge as fromMe messages in

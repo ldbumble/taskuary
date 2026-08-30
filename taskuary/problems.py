@@ -9,8 +9,8 @@ def collect(store) -> list:
     for c in store.list_connectors():
         err = str(c.get('LastError') or '').strip()
         if c.get('Active') and err:
-            out.append({'key': f"connector:{c['Type']}", 'title': f"{c.get('Name') or c['Type']}: the last poll failed",
-                        'detail': err[:400], 'since': c.get('LastSyncAt') or '', 'where': 'Connectors', 'connector': c['Type'],
+            out.append({'key': f"connector:{c['ConnectorId']}", 'title': f"{c.get('Name') or c['Type']}: the last poll failed",
+                        'detail': err[:400], 'since': c.get('LastSyncAt') or '', 'where': 'Connectors', 'connector': str(c['ConnectorId']),
                         'fix': 'Open the card'})
     s = store.get_settings()
     if str(s.get('triage_last_error') or '').strip():

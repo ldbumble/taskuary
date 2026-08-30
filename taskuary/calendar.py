@@ -139,16 +139,16 @@ def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
     start = start or now
     end = start + timedelta(days=days)
     events, errors, sources = [], [], []
-    ol = store.get_connector_by_type('outlook', with_secret=True)
-    if ol and ol.get('Active'):
+    for ol in store.connectors_by_type('outlook', with_secret=True):
+        if not ol.get('Active'): continue
         boxes = [s['Address'] for s in store.list_sources() if s.get('Channel') == 'email' and s.get('Address')
                  and (not s.get('ConnectorId') or s['ConnectorId'] == ol['ConnectorId'])]
         if boxes:
             sources.append(f"outlook: {', '.join(boxes)}")
             try: events += outlook_events(json.loads(ol.get('ConfigJson') or '{}'), ol.get('Secret'), boxes, start, end, tz)
             except Exception as e: errors.append(str(e)[:240])
-    gm = store.get_connector_by_type('gmail', with_secret=True)
-    if gm and gm.get('Active'):
+    for gm in store.connectors_by_type('gmail', with_secret=True):
+        if not gm.get('Active'): continue
         cfg = json.loads(gm.get('ConfigJson') or '{}')
         if cfg.get('google_refresh_token'):
             sources.append(f"google: {cfg.get('address') or 'primary'}")

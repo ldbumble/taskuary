@@ -543,9 +543,25 @@ class ApiTests(unittest.TestCase):
             c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'tool'})
         b = c.get('/api/brains').json()
         self.assertEqual(b['data'][0]['value'], '')                  # auto first
-        self.assertIn('connector:anthropic', [x['value'] for x in b['data']])
+        anthropic_value = f"connector:{rows['anthropic']['ConnectorId']}"
+        self.assertIn(anthropic_value, [x['value'] for x in b['data']])
         self.assertIn('cli:coder', [x['value'] for x in b['data']])  # your coding CLI can be the brain
-        self.assertFalse(next(x for x in b['data'] if x['value'] == 'connector:anthropic')['ready'])   # no key saved
+        self.assertFalse(next(x for x in b['data'] if x['value'] == anthropic_value)['ready'])   # no key saved
+
+    def test_connector_api_accepts_named_instances_of_one_type(self):
+        made = []
+        try:
+            for name in ('Test IMAP east', 'Test IMAP west'):
+                r = c.post('/api/connectors', json={'Type': 'imap', 'Name': name})
+                self.assertEqual(r.status_code, 200, r.text)
+                made.append(r.json()['connectorId'])
+            rows = [x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] in made]
+            self.assertEqual([(x['Name'], x['Roles']) for x in rows],
+                             [('Test IMAP east', 'trigger,tool'), ('Test IMAP west', 'trigger,tool')])
+            self.assertEqual(c.post('/api/connectors', json={'Type': 'imap', 'Name': 'test imap east'}).status_code, 409)
+        finally:
+            for cid in made:
+                server.store._exec('DELETE FROM connector WHERE ConnectorId=?', (cid,))
 
     def test_connector_test_fails_cleanly_without_creds(self):
         cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'teams')

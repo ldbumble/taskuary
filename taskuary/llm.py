@@ -4,7 +4,8 @@ triage.classify_intent expects. Which brain is the owner's choice (setting `tria
     ''                  first ACTIVE AI connector with a key (anthropic/openai/azure_openai/
                         openrouter) - or keyless ollama, for a local model
 
-    connector:<type>    that specific AI connector
+    connector:<id>      that specific AI connector instance
+    connector:<type>    legacy/default form - first active instance of that type
     cli:<agent>         your CODING CLI does the triage too - one headless run per message,
                         same brain that works the tasks, no second API key to buy
 
@@ -86,16 +87,18 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None):
 
 
 def build_llm(store, pick=None, model=None):
-    """The brain named by `pick` ('' = first active AI connector, 'connector:<type>',
+    """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier."""
     pick = (pick if pick is not None else store.get_settings().get('triage_ai') or '').strip()
     if pick.startswith('cli:'): return make_cli_llm(store, pick[4:], model)
     want = pick[10:] if pick.startswith('connector:') else None
+    want_id = int(want) if want and want.isdigit() else None
     for c in store.list_connectors():
         # a local model server (ollama) is the one brain that needs no key to be real
         ready = c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')
-        if c['Type'] in AI_TYPES and ready and (not want or c['Type'] == want):
+        selected = not want or (c['ConnectorId'] == want_id if want_id is not None else c['Type'] == want)
+        if c['Type'] in AI_TYPES and ready and selected:
             full = store.get_connector(c['ConnectorId'], with_secret=True)
             cfg = json.loads(full.get('ConfigJson') or '{}')
             if model: cfg = {**cfg, 'model': model}

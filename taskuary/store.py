@@ -659,7 +659,7 @@ class SQLiteStore:
                           '(SELECT ConversationId FROM message WHERE lower(FromEmail)=? AND ConversationId IS NOT NULL) '
                           'ORDER BY SentAt DESC LIMIT ?', (since, email.lower(), limit))
     def recent_messages(self, since, limit=300):
-        return self._rows("SELECT MessageId, ConversationId, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
+        return self._rows("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
                           "FROM message WHERE Status NOT IN ('context','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
     def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
     # ── what the assistant's post reads (assistant.py) ────────────────────────────────────────

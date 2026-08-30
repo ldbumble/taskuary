@@ -312,3 +312,85 @@ class LastRunRecord(unittest.TestCase):
         self.assertEqual((rec['type'], rec['said'], rec['failed']), ('assistant', 0, False))
         self.assertIn('Tuesdays', rec['reviewed']['notes'])
         self.assertIn('ALREADY SAID', rec['inputs'])                     # the exact text the model saw
+
+
+class WhatItReadsTests(unittest.TestCase):
+    """The owner (2026-08-30): iterate on the data it brings in until it says something useful and surprising.
+    Handed subjects and counts, the model wrote 'no content given'; so the check reads the words, the
+    auto-replies, the calendar, and the machines' schedules and causes."""
+    def _chat(self, s, who, body, days=0, hours=0, status='filed', mine=False):
+        return s.add_message({'ExternalId': f'chat:{who}:{body[:20]}:{days}:{hours}', 'ConversationId': 'chat1', 'Channel': 'teams', 'SourceName': 'Teams',
+                              'Subject': f'Teams chat with {who}', 'FromName': 'You' if mine else who, 'FromEmail': ME if mine else f'{who.split()[0].lower()}@ours.com',
+                              'SentAt': _ago(days, hours), 'BodyText': body, 'Status': 'context' if mine else status})
+
+    def test_out_of_office_rides_on_the_followup_instead_of_a_chase(self):
+        s = _store()
+        _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        _mail(s, DANA, 'Automatic reply: Q3 ledger', 'I am out of the office until Monday September 7th with no access to email.', days=3, conv='c9')
+        self.assertEqual(assistant.ooo(s), {DANA: f'out until Monday September 7th (auto-reply {assistant._when(_ago(3))[:10]})'})
+        got = assistant.followups(s, hours=24)
+        self.assertEqual(len(got), 1)
+        self.assertIn('they are out until Monday September 7th', got[0]['text']); self.assertIn("I'd wait", got[0]['text'])
+        self.assertIn('BUT Dana is out until Monday September 7th', got[0]['facts'])
+        self.assertTrue(got[0]['sig'].endswith(':away'))                       # the facts changed: a dismissed chase may be said again as a wait
+        self.assertIn('OUT OF OFFICE (from their auto-replies):\n- ' + DANA, assistant.inputs(s, got))
+
+    def test_what_people_said_carries_the_words_and_marks_yours(self):
+        s = _store()
+        self._chat(s, 'Mindy Gorelick', 'Yittie said the server was updating? Did she understand wrong?', hours=5)
+        self._chat(s, 'Mindy Gorelick', 'Also, can you please fill out the performance review? It is almost my hire date.', hours=4)
+        self._chat(s, 'Mindy Gorelick', 'Looking now - the review goes out today.', hours=3, mine=True)
+        self._chat(s, 'Mindy Gorelick', 'She said that every day from 4 - 5:00 it does not work', hours=2)
+        _mail(s, 'noreply@robots.com', 'Vendor Create', 'This is an automated message. A vendor was created.', days=0, conv='r1')
+        s.add_message({'ExternalId': 'rep:1', 'ConversationId': 'rep', 'Channel': 'report', 'SourceName': 'Morning digest', 'Subject': 'Morning digest — today',
+                       'FromName': 'Morning digest', 'SentAt': _ago(0, 1), 'BodyText': 'By the tags...', 'Status': 'feed'})
+        txt = assistant._people(s)
+        self.assertIn('- Mindy Gorelick [teams] re "Teams chat with Mindy Gorelick" - 3 new, last word THEIRS', txt)
+        self.assertIn('"Also, can you please fill out the performance review?', txt)
+        self.assertIn('    you ', txt); self.assertIn('the review goes out today', txt)   # the owner's own line, marked
+        self.assertNotIn('Vendor Create', txt); self.assertNotIn('Morning digest', txt)  # robots and reports are not people
+        self.assertEqual(assistant._people(_store()), '(no person wrote in the last two days)')
+        inp = assistant.inputs(s, [])
+        for head in ('NOW: ', 'WHAT PEOPLE SAID', 'OUT OF OFFICE', 'CALENDAR (the next two days):\n(nothing on the calendar for two days - calendar off)', 'ARRIVED IN THE LAST TWO DAYS'):
+            self.assertIn(head, inp)
+        self.assertIn('CANDIDATES (new since the last post):', assistant.facts(s))     # the Reports tab's Preview is the same text
+
+    def test_arrivals_carry_the_reports_schedule_and_the_failures_cause(self):
+        s = _store()
+        s._exec("INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES ('report', 'Nightly', 't', 1, ?)",
+                (json.dumps({'type': 'digest', 'title': 'Nightly', 'daily_at': '08:00', 'on_startup': True}),))
+        for i in range(3):
+            s.add_message({'ExternalId': f'n:{i}', 'ConversationId': f'n{i}', 'Channel': 'report', 'SourceName': 'Nightly', 'Subject': 'Nightly — FAILED', 'FromName': 'Nightly',
+                           'SentAt': _ago(0, i + 1), 'BodyText': 'Report error: Login timeout expired (0)', 'Status': 'feed'})
+        _mail(s, 'notifications@github.com', '[o/r] Run failed: ci - master (abc1234)', 'ci: Some jobs were not successful\n\nci / build-web Succeeded in 27 seconds\n\n'
+              'ci / test (ubuntu-latest, 3.12) Failed in 49 seconds\n1\nci / test (windows-latest, 3.10) Failed in 3 minutes\n', days=0, conv='g1', status='ignored', name='Uri')
+        txt = assistant._recent(s)
+        self.assertIn('x3 [report] Nightly: "Nightly — FAILED"', txt)
+        self.assertIn('[schedule: daily 08:00 + on every app start] -> "Report error: Login timeout expired (0)"', txt)
+        self.assertIn('-> failed: test (ubuntu-latest, 3.12), test (windows-latest, 3.10)', txt)
+        self.assertEqual(assistant._schedules(s)['Nightly'], 'daily 08:00 + on every app start')
+
+    def test_two_checks_at_once_post_one_row(self):
+        """2026-08-29 23:59:02: two clocks fired in the same second and the same followup posted twice."""
+        import threading, time
+        s = _store()
+        _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        def llm(system, user, **k):
+            time.sleep(0.2); return json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the ledger - I'd nudge.", 'mid': None}]})
+        outs = []
+        ts = [threading.Thread(target=lambda: outs.append(assistant.run(s, llm=llm, force=True))) for _ in range(2)]
+        for t in ts: t.start()
+        for t in ts: t.join()
+        self.assertEqual(sorted(o['said'] for o in outs), [0, 1])
+        self.assertEqual(len([r for r in s.feed(limit=10) if r['Channel'] == 'assistant']), 1)
+
+    def test_the_rows_line_is_cut_at_a_word_and_the_post_counts_the_threads_it_read(self):
+        s = _store()
+        self._chat(s, 'Mindy Gorelick', 'can you please fill out the performance review?', hours=4)
+        long = "I would go into Monday's Target Meeting with Mindy's note that exporting freezes the app every afternoon at four"
+        out = assistant.run(s, llm=lambda *a, **k: json.dumps({'say': [{'key': 'idea:a', 'text': long, 'mid': None}, {'key': 'idea:b', 'text': 'Second.', 'mid': None}]}), force=True)
+        row = s.get_message(out['message_id'])
+        self.assertEqual(row['Subject'], long[:90].rsplit(' ', 1)[0] + '… (+1 more)')
+        self.assertEqual(out['reviewed']['people'], 1); self.assertIn('1 thread(s) of what people said', row['BodyText'])

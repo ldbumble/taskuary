@@ -19,6 +19,14 @@ own clock (the owner, 2026-08-30: the status strip with its counts and 'ask now'
 thresholds and the producers are settings (assistant_*); the clock and the instruction are the
 'Assistant' report on the Reports tab.
 
+What it READS decides what it can say (the owner, 2026-08-30: "keep iterating from prompt to the data
+it brings in until it says something useful and surprising"). Handed only subject lines and counts it
+wrote 'no content given' in its own notes; so the check now reads WHAT PEOPLE SAID (the words of every
+human thread of the last two days, the owner's lines marked), who is OUT OF OFFICE (from auto-replies -
+a chase to someone away is worse than silence), the CALENDAR, and the machines' mail with each report's
+schedule and each failure's cause beside the count. That is where "Yittie said exporting freezes the
+app - and she is in Monday's meeting" comes from.
+
 It also leaves itself a NOTE: each check ends with what it looked at and found nothing in, when
 something becomes worth raising, whatever it would otherwise work out again - and the next check
 starts by reading it (assistant_notes). Half-hourly checks are cheap only if each one does not
@@ -26,7 +34,7 @@ start from zero; a quiet check still rewrites the note, it just posts nothing. H
 COUNSEL.md (Docs tab) - the owner edits that to change its voice and what it takes a position on;
 the report's prompt is what it watches for.
 """
-import json, re
+import json, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -36,7 +44,9 @@ CHANNEL = 'assistant'
 PRODUCERS = ('followup', 'promise', 'prep', 'cold', 'idea')
 DAYS = 30                  # how far back followups and promises are read
 MAX_LINES = 5              # lines per post by default - a post nobody reads to the end is a post that failed
-POST_TOKENS = 700
+POST_TOKENS = 900
+PEOPLE_THREADS, PEOPLE_CHARS = 14, 5200   # what people said: threads shown, and the block's ceiling
+_LOCK = threading.Lock()   # one check at a time: two clocks firing in the same second posted the same line twice (2026-08-29 23:59:02)
 # the owner's last word on a thread ASKED for something - that is what a chase is for...
 _ASKS = re.compile(r'\?|\b(let me know|could you|can you|would you|please (send|confirm|share|advise|review|check)|get back to me|'
                    r'by (monday|tuesday|wednesday|thursday|friday|eod|end of (day|week)|tomorrow|next week))\b', re.I)
@@ -47,28 +57,34 @@ _PROMISE = re.compile(r"\b(i('ll| will)|i'?m going to|let me) (send|get|have|fol
 # on the Reports tab (store.__init__), so the owner edits it there like the Morning digest's;
 # this copy is the default and the fallback. CONTRACT (the JSON shape) stays in code.
 PROMPT = (
-    'You are my assistant. Every 30 minutes you check in; tell me only what a sharp human assistant would lean over and say - '
-    'nothing I can already see in my inbox. Watch for, in this order of worth:\n'
-    '1. What I am waiting on from others and have not chased (the CANDIDATES marked followup): name who and what, and '
-    'whether it is worth a nudge yet - a vendor who always takes a week is not news at day two.\n'
-    '2. What I promised and have not done (promise): the date I gave, and whether it has passed.\n'
-    '3. Meetings in the next day (prep): who is in the room, the last exchange I had with each, the one open item, and '
-    'the question worth asking. A recurring standup with nothing new needs no line.\n'
-    '4. Work that has gone quiet (cold): push it or drop it - say which I would do.\n'
-    '5. Dates and deadlines buried in what arrived today - a renewal, a due date, an RSVP - that nobody made a task.\n'
-    '6. Patterns: the same person asking twice, a thread past six messages with no decision, two people asking me '
-    'the same thing, a system failing twice this week.\n'
-    '7. Getting ahead: the thing to do now so the next ask never comes.\n'
-    '8. My own work: from DONE THIS WEEK and what keeps arriving - the fix that keeps coming back, the alert firing eighty '
-    'times, the report nobody acts on, the thread that is really a workflow, the automation or process change worth proposing. '
-    'Name the evidence: the TQ-ref, the count, the sender. Surprise me with the idea I have not had; never restate what I did.\n'
-    'Be useful, not busy: a check with nothing NEW gets no post, and most checks are that. But an idea about my own work that '
-    'I have not heard (8) is never "nothing" - one a day is right, none is timid, three is noise. A recurring notification is '
-    'not noise to skip: eighty of the same mail IS the finding. Never repeat anything under ALREADY SAID, reworded or not.\n'
+    'You are my assistant; every 30 minutes you check in. Tell me only what a sharp human assistant who had READ everything '
+    'would lean over and say - never a summary of my inbox, never a count I can see myself. A good line connects two things I '
+    'have not connected, or names the one thing I am about to miss. Read, in this order of worth:\n'
+    '1. WHAT PEOPLE SAID - the actual words, by thread. The ask buried in a chat ("can you fill out the form?") that got a '
+    'reply but not the thing itself; the colleague mentioning in passing that a system fails "every day 4-5"; the person '
+    'answering a question nobody asked me; the thread where the last word is theirs and it wants something from me. Say who, '
+    'what, and what I would do - "Mindy asked for X on Thursday; I would send it before her Monday 1pm".\n'
+    '2. What I am waiting on and have not chased (CANDIDATES followup) - but check OUT OF OFFICE first: a chase to someone '
+    'who is away is worse than silence; say when they are back instead.\n'
+    '3. What I promised and have not done (promise): the date I gave, and whether it has passed.\n'
+    '4. CALENDAR: for each meeting in the next two days, what in the mail and chats bears on it - the person in the room '
+    'who asked me something this week, the thread it will be about. A recurring standup with nothing behind it needs no line.\n'
+    '5. Work gone quiet (cold): push it or drop it - say which.\n'
+    '6. What the machines are telling me, read not counted: a report marked FAILED says WHY (the error is in the line) - name '
+    'the cause; a job that fails the same way N times is one finding, with the cause; a report whose every run says "0 rows" '
+    'is a report nobody needs. Reports carry their schedule: "on app start" firing 20 times means the app was started 20 '
+    'times, not that the scheduler is broken.\n'
+    '7. My own work (DONE THIS WEEK, OPEN WORK): the fix that keeps coming back, the task that closed without shipping, the '
+    'process change worth proposing. Name the evidence: TQ-ref, count, sender. Never restate what I did.\n'
+    'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
+    'specific over the general: a name, a date, a quoted phrase, a cause. One idea about my own work a day is right; three is '
+    'noise. Never repeat anything under ALREADY SAID, reworded or not - but a fact that CHANGES an earlier line (they are out '
+    'of office; the failure has a cause; they answered) is new and worth one line.\n'
     'End every check with a note to your next one: what you looked at and found nothing in, when something becomes worth '
     'raising (a date, a length of silence), anything you would otherwise have to work out again - facts, never rules.')
 # a stock prompt still starting like one of these is healed to PROMPT (store.__init__)
-OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;')
+OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;',
+                    'You are my assistant. Every 30 minutes you check in;')
 
 
 def cfg(store) -> dict:
@@ -99,16 +115,40 @@ def _short(s, n=90): return ' '.join(str(s or '').split())[:n]
 def _dt(s):
     try: return datetime.fromisoformat(_ts(s))
     except ValueError: return None
+def _when(s) -> str:
+    """'Thu 28 Aug 11:21' - a day name the model can hold against a calendar, no year."""
+    d = _dt(s); return d.strftime('%a %d %b %H:%M') if d else str(s or '')[:16]
+# the corporate wrapper around a body, not the sender's words: the external-mail banner and the "you don't often get email" hint
+_BANNER = re.compile(r"(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)", re.I)
+def _gist(body, n=180) -> str:
+    """The sender's own words, one line: banner, legal footer and signature gone (triage.strip_boilerplate)."""
+    from .triage import strip_boilerplate
+    return _short(strip_boilerplate(_BANNER.sub('', str(body or ''))), n)
+
+_OOO = re.compile(r'^(automatic reply|auto(matic)?[ -]?reply|out of (the )?office)', re.I)
+_UNTIL = re.compile(r'\b(until|through|returning( on)?|back (on|in the office on))\s+([A-Z][a-z]+day,?\s+)?([A-Z][a-z]+ \d{1,2}(st|nd|rd|th)?|\d{1,2}/\d{1,2}(/\d{2,4})?)', re.I)
+def ooo(store, days: int = 14) -> dict:
+    """{sender email: 'out until Monday August 31st (auto-reply Thu 28 Aug)'} from the auto-replies in the
+    window - a chase to someone who is away is worse than silence, and the hub already holds the answer."""
+    out = {}
+    for r in store.recent_messages(_since(days), limit=600):
+        if not _OOO.match(str(r.get('Subject') or '')): continue
+        em = (r.get('FromEmail') or '').lower()
+        if not em or em in out: continue                          # newest first: the latest auto-reply wins
+        m = _UNTIL.search(str(r.get('BodyText') or ''))
+        out[em] = (f"out {m.group(0)}" if m else 'out of office') + f" (auto-reply {_when(r['SentAt'])[:10]})"
+    return out
 
 
 # ── the candidates: facts the hub can find without a model ───────────────────────────────────
 def followups(store, hours: int, want=('followup', 'promise')) -> list:
     """Threads where the last word is the owner's, `hours` old or more, and that word ASKED for
     something (followup - theirs to answer, ours to chase) or PROMISED something (promise - the
-    owner's own open item). Silence after a plain "thanks" is neither."""
+    owner's own open item). Silence after a plain "thanks" is neither. A sender's auto-reply in
+    the window rides on the line: silence from someone who is away is not silence."""
     from .triage import strip_boilerplate
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
-    out = []
+    out, away = [], None
     for r in store.owner_last_words(_since(DAYS), cut):
         body = strip_boilerplate(str(r.get('BodyText') or ''))
         kind = 'promise' if _PROMISE.search(body) else 'followup' if _ASKS.search(body) else None
@@ -119,16 +159,18 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
         sent = _dt(r['SentAt']) or datetime.now()
         days = max(1, int((datetime.now() - sent).total_seconds() // 86400))
         subj = _short(inbound.get('Subject'), 60)
+        if away is None: away = ooo(store)
+        gone = away.get((inbound.get('FromEmail') or '').lower(), '')
         if kind == 'promise':
             out.append({'key': f"promise:{r['ConversationId']}", 'kind': 'promise', 'sig': _ts(r['SentAt']),
                         'facts': f"You told {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" - {days} day(s) ago, and the thread has not moved.",
                         'text': f"You told {who} you would - \"{_short(body, 70)}\" - {days} day{'s' if days != 1 else ''} ago on \"{subj}\". Done?",
                         'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
         else:
-            out.append({'key': f"followup:{r['ConversationId']}", 'kind': 'followup', 'sig': _ts(r['SentAt']),
+            out.append({'key': f"followup:{r['ConversationId']}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else ''),
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
-                                  f"- nothing has come back in {days} day(s)."),
-                        'text': f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - follow up?",
+                                  f"- nothing has come back in {days} day(s)." + (f" BUT {who} is {gone}." if gone else '')),
+                        'text': (f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
                         'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')}})
     return out
 
@@ -154,19 +196,26 @@ def cold(store, days: int) -> list:
     return out
 
 
+_AGENDA = {}               # one calendar read per check: prep's candidates and the CALENDAR block share it
+def _agenda(store) -> list:
+    if store.get_settings().get('calendar_enabled', '1') != '1': return []
+    if _AGENDA.get('at', 0) > datetime.now().timestamp() - 60: return _AGENDA['events']
+    from . import calendar as cal
+    try: ev = [e for e in (cal.agenda(store, days=2).get('events') or []) if not e.get('all_day')]
+    except Exception as e:
+        logger.debug(f'assistant: calendar skipped - {e}'); ev = []
+    _AGENDA.update(at=datetime.now().timestamp(), events=ev)
+    return ev
+
+
 def prep(store) -> list:
     """Meetings in the next two days, each with what the hub already knows about the people in it
     and the subject - the prep note counsel writes for an invite, written for the ones already
     on the calendar."""
-    if store.get_settings().get('calendar_enabled', '1') != '1': return []
     from . import calendar as cal
     from .counsel import dossier
-    try: ag = cal.agenda(store, days=2)
-    except Exception as e:
-        logger.debug(f'assistant: calendar skipped - {e}'); return []
     out = []
-    for e in (ag.get('events') or [])[:6]:
-        if e.get('all_day'): continue
+    for e in _agenda(store)[:6]:
         who = list(e.get('who') or [])
         dos = dossier(store, {'from_email': '', 'from_name': ' '.join(who[:4]), 'subject': e.get('subject') or ''}, calendar=False)
         out.append({'key': f"prep:{e['start'][:16]}:{_short(e.get('subject'), 40)}", 'kind': 'prep', 'sig': e['start'][:16],
@@ -202,9 +251,10 @@ def fresh(state: dict, cand: dict, now: datetime) -> bool:
 
 # ── the model's pass: its own read, given what it already said ───────────────────────────────
 CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short list of things worth saying right now. You get '
-            'CANDIDATES the hub found itself (each with a key), what arrived today, what is open, and WHAT YOU ALREADY SAID. '
-            'Answer JSON only: {"say": [{"key": "<a candidate key, or idea:<short-slug> for a thought of your own>", '
-            '"text": "<one line, under 30 words, first person: the fact and what I would do>", '
+            'CANDIDATES the hub found itself (each with a key), WHAT PEOPLE SAID (the words, by thread), who is OUT OF OFFICE, the '
+            'CALENDAR, what arrived (with each report\'s schedule and each failure\'s cause), what got done, what is open, and WHAT '
+            'YOU ALREADY SAID. Answer JSON only: {"say": [{"key": "<a candidate key, or idea:<short-slug> for a thought of your own>", '
+            '"text": "<one line, under 30 words, first person: the fact and what I would do - quote the phrase or name the cause when there is one>", '
             '"why": "<one line: what this rests on - the mail, the date, the silence, the pattern - named as it appears in what you '
             'were given (sender, subject, mid, TQ-ref), so the owner can check it>", "mid": <the message id it is '
             'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>"}], '
@@ -219,11 +269,36 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'Facts only from what you are given; never invent a name, a date or a number. Nothing new to say -> {"say": []}.')
 
 
+def _schedules(store) -> dict:
+    """{report title: 'daily 08:00 + on every app start'} - a report's arrivals mean nothing without its
+    clock: 25 digests in two days on an on_startup report is 25 launches, not a scheduler bug."""
+    out = {}
+    for src in store.list_sources(active_only=False):
+        if src.get('Channel') != 'report': continue
+        try: c = json.loads(src.get('ConfigJson') or '{}')
+        except ValueError: continue
+        parts = ([f"every {c['every_minutes']} min"] if c.get('every_minutes') else []) + ([f"daily {c['daily_at']}"] if c.get('daily_at') else []) \
+              + ([f"cron {c['cron']}"] if c.get('cron') else []) + (['on every app start'] if c.get('on_startup') else [])
+        out[c.get('title') or src.get('Address')] = ' + '.join(parts) or 'no schedule'
+    return out
+
+_FAILS = re.compile(r'fail|error|denied|timeout|could not|unable', re.I)
+_GH_FAILED = re.compile(r'^(.+?) Failed in ', re.M)          # the job lines of GitHub's "Run failed" mail
+def _cause(r: dict) -> str:
+    """For a machine's mail that says something broke: the cause, not the count. GitHub's run mail
+    names the failed jobs; a report's FAILED body starts with the error."""
+    subj, body = str(r.get('Subject') or ''), str(r.get('Preview') or r.get('BodyText') or '')
+    if not _FAILS.search(subj): return ''
+    jobs = _GH_FAILED.findall(body)
+    if jobs: return ' -> failed: ' + ', '.join(_short(j.split('/', 1)[-1], 40) for j in jobs[:4])
+    return f' -> "{_gist(body, 150)}"' if body.strip() else ''
+
 def _recent(store, days: int = 2) -> str:
     """The last two days' arrivals, ROLLED UP: one line per sender+subject with a count, newest
     first. A pattern (87 alerts from one system, the same ask twice) is a number the model can see
-    instead of a list it has to count - and calendar-today at 00:49 was a 49-minute window."""
-    by = {}
+    instead of a list it has to count - and calendar-today at 00:49 was a 49-minute window. A report
+    carries its schedule, and a failure its cause (the machines are to be read, not counted)."""
+    by, sched = {}, _schedules(store)
     for r in store.feed(limit=400, days=days):
         if r.get('Channel') == CHANNEL: continue
         k = (r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or '?',
@@ -232,9 +307,53 @@ def _recent(store, days: int = 2) -> str:
     lines = []
     for (who, _), g in sorted(by.items(), key=lambda kv: -kv[1]['n'])[:35]:
         r = g['r']
+        clock = f" [schedule: {sched[who]}]" if r.get('Channel') == 'report' and who in sched else ''
         lines.append(f"- {'x%d ' % g['n'] if g['n'] > 1 else ''}[{'/'.join(sorted(c for c in g['cats'] if c))}] {who}: \"{_short(r.get('Subject'), 70)}\" "
-                     f"(latest mid {r['MessageId']}" + (f", {task_ref(r['TaskId'])}" if r.get('TaskId') else '') + ')')
+                     f"(latest mid {r['MessageId']} {_when(r['SentAt'])}" + (f", {task_ref(r['TaskId'])}" if r.get('TaskId') else '') + ')' + clock + _cause(r))
     return '\n'.join(lines) or '(nothing arrived in the last two days)'
+
+
+def _people(store, days: int = 2) -> str:
+    """WHAT PEOPLE SAID: the human threads of the last two days with the words in them - newest
+    first, the last few lines of each, the owner's own lines marked. The subject line said
+    "Teams chat with Mindy"; the words said "can you fill out the performance review?" - the
+    ask, the pattern and the promise all live here, and a model handed only subjects wrote
+    'no content given' in its notes."""
+    from .categories import sender_class, team_domains_of
+    team = team_domains_of(store.get_settings())
+    rows = [r for r in store.recent_messages(_since(days), limit=500)
+            if r.get('Channel') not in ('report', CHANNEL) and not _OOO.match(str(r.get('Subject') or ''))]
+    # the owner's own lines are 'context' rows - recent_messages leaves them out, so fetch the threads' chains
+    by = {}
+    for r in rows:
+        if sender_class(r, team) != 'person': continue
+        k = r.get('ConversationId') or re.sub(r'^((re|fw|fwd|aw)\s*:\s*)+', '', _short(r.get('Subject'), 60), flags=re.I).lower()
+        by.setdefault(k, []).append(r)
+    me = (store.get_settings().get('owner_email') or '').lower()
+    out, used = [], 0
+    for k, rs in list(by.items())[:PEOPLE_THREADS]:
+        chain = store.thread_messages(conversation_id=rs[0].get('ConversationId'), subject=rs[0].get('Subject'), limit=12) if rs[0].get('ConversationId') else rs
+        chain = sorted((c for c in chain if c.get('Status') != 'skipped'), key=lambda c: _ts(c.get('SentAt')))[-8:]
+        last = chain[-1]
+        mine = lambda c: c.get('Status') == 'context' or c.get('Direction') == 'out' or (c.get('FromEmail') or '').lower() == me
+        who = next((c.get('FromName') or c.get('FromEmail') for c in reversed(chain) if not mine(c)), rs[0].get('FromName') or '?')
+        tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
+        t = store.get_task(tid) if tid else None
+        head = (f"- {who} [{rs[0].get('Channel')}] re \"{_short(rs[0].get('Subject'), 60)}\" - {len(rs)} new, last word {'YOURS' if mine(last) else 'THEIRS'} {_when(last['SentAt'])}"
+                + (f", {task_ref(tid)} {t.get('Kind')} {t.get('Status')}" if t else '') + f" (latest mid {rs[0]['MessageId']})")
+        first = lambda c: ((c.get('FromName') or c.get('FromEmail') or '?').split(',')[0].split() or ['?'])[0]
+        quotes = [f"    {'you' if mine(c) else first(c)} {_when(c['SentAt'])[:6]}: \"{_gist(c.get('BodyText'), 150)}\"" for c in chain]
+        block = '\n'.join([head] + [q for q in quotes if not q.endswith(': ""')])
+        if used + len(block) > PEOPLE_CHARS: break
+        out.append(block); used += len(block)
+    return '\n'.join(out) or '(no person wrote in the last two days)'
+
+
+def _calendar(store) -> str:
+    from . import calendar as cal
+    ev = _agenda(store)
+    return '\n'.join(f"- {_when(e['start'])} {cal.span(e['start'], e.get('end') or '')} \"{e.get('subject')}\"" + (f" with {', '.join(list(e.get('who') or [])[:6])}" if e.get('who') else '')
+                     for e in ev[:8]) or '(nothing on the calendar for two days' + (')' if store.get_settings().get('calendar_enabled', '1') == '1' else ' - calendar off)')
 
 
 def _week(store) -> str:
@@ -257,7 +376,12 @@ def _week(store) -> str:
 
 def _open(store) -> str:
     ts = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')]
-    return '\n'.join(f"- {task_ref(t['TaskId'])} [{t['Status']}] {_short(t.get('Title'), 80)}" for t in ts[:20]) or '(nothing open)'
+    def line(t):
+        last = _dt(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
+        age = f"{int((datetime.now() - last).total_seconds() // 3600)}h since anything happened" if last else ''
+        state = f"{t.get('RunAgent') or 'an agent'} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you in Review' if t.get('ReviewStatus') == 'pending' else age
+        return f"- {task_ref(t['TaskId'])} [{t['Status']}, {t.get('Kind')}] {_short(t.get('Title'), 80)}" + (f" - {state}" if state else '')
+    return '\n'.join(line(t) for t in ts[:20]) or '(nothing open)'
 
 
 def _said(store) -> str:
@@ -280,7 +404,8 @@ def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
         key, txt, why = str(s.get('key') or '').strip(), _short(s.get('text'), 240), _short(s.get('why'), 400)
         if not key or key in seen or not txt: continue
         if key in by:
-            out.append({**by[key], 'text': txt, 'why': by[key]['facts'] + (f"\nThe model's read: {why}" if why else '')})
+            # the first line of the facts: prep's line carries a 1200-char dossier under it that belongs in 'skipped', not under a button
+            out.append({**by[key], 'text': txt, 'why': by[key]['facts'].split('\n', 1)[0] + (f"\nThe model's read: {why}" if why else '')})
         elif key.startswith('idea:') and len(key) > 5:
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
@@ -293,6 +418,20 @@ def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     return out
 
 
+def inputs(store, cands: list, head: str = 'CANDIDATES') -> str:
+    """Everything one check reads, as the model sees it - the same text is the Reports tab's Preview
+    (facts) and the run record (reports.run_report_source), so what it was given is never a guess."""
+    now = datetime.now()
+    away = ooo(store)
+    return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
+            + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first):\n{_people(store)}"
+            + '\n\nOUT OF OFFICE (from their auto-replies):\n' + ('\n'.join(f'- {k}: {v}' for k, v in away.items()) or '(nobody)')
+            + f"\n\nCALENDAR (the next two days):\n{_calendar(store)}"
+            + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike; a report carries its schedule, a failure its cause):\n{_recent(store)}"
+            + f"\n\nDONE THIS WEEK (my own work, with the agent's summary):\n{_week(store)}"
+            + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}\n\n{_notes_block(store)}")
+
+
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES) -> list:
     """One call: COUNSEL.md's voice, the owner's instruction (the Reports tab), the candidates, the
     day, what was already said."""
@@ -300,9 +439,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     soul = store.doc('soul') or ''
     system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{(instruction or PROMPT).strip()}" + CONTRACT.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
-    user = ('CANDIDATES:\n' + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
-            + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike):\n{_recent(store)}\n\nDONE THIS WEEK (my own work, with the agent's summary):\n{_week(store)}"
-            + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}\n\n{_notes_block(store)}")
+    user = inputs(store, cands)
     text = llm(system, user, max_tokens=POST_TOKENS)
     return parse(text, cands, max_lines), _notes(text), user
 
@@ -311,10 +448,7 @@ def facts(store) -> str:
     """What a run would hand the model, as text - the Reports tab's Preview (reports.run_assistant)."""
     c = cfg(store); now = datetime.now()
     state = {i['Key']: i for i in store.list_ideas()}
-    cands = [x for x in candidates(store, c) if fresh(state, x, now)]
-    return ('CANDIDATES (new since the last post):\n' + ('\n'.join(f"[{c_['key']}] {c_['facts']}" for c_ in cands) or '(none)')
-            + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike):\n{_recent(store)}\n\nDONE THIS WEEK (my own work, with the agent's summary):\n{_week(store)}"
-            + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID:\n{_said(store)}\n\n{_notes_block(store)}")
+    return inputs(store, [x for x in candidates(store, c) if fresh(state, x, now)], 'CANDIDATES (new since the last post)')
 
 
 # ── the note to the next check ───────────────────────────────────────────────────────────────
@@ -341,7 +475,7 @@ def _public(i: dict) -> dict:
     return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'why': a.pop('why', ''), 'action': a, 'status': i.get('Status')}
 
 
-def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: bool, week: str = '(') -> dict:
+def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: bool, week: str = '(', people: str = '(') -> dict:
     """What this post was built from, so the owner can judge it: the candidates by kind, the ones it
     looked at and let go (with their facts), how much of the day and the open work it read, how many
     of its own lines it was told not to repeat. Stored on the post (Brief.reviewed) and written
@@ -351,14 +485,15 @@ def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: 
     by = {}
     for c in cands: by[c['kind']] = by.get(c['kind'], 0) + 1
     return {'candidates': by, 'skipped': [{'key': c['key'], 'kind': c['kind'], 'facts': c['facts']} for c in cands if c['key'] not in kept],
-            'recent': n(recent), 'week': n(week), 'open': n(open_), 'said': n(said), 'model': model}
+            'recent': n(recent), 'week': n(week), 'open': n(open_), 'said': n(said), 'model': model,
+            'people': 0 if people.startswith('(') else sum(1 for l in people.split('\n') if l.startswith('- '))}
 
 
 def _footer(r: dict) -> str:
     kinds = ', '.join(f"{v} {k}" for k, v in r['candidates'].items()) or 'no candidates'
     skip = f"; let go: {len(r['skipped'])}" if r['skipped'] else ''
-    return (f"Reviewed: {kinds}{skip} - {r['recent']} sender/subject line(s) from the last two days, {r['week']} task(s) closed this week, "
-            f"{r['open']} open task(s), {r['said']} line(s) already said"
+    return (f"Reviewed: {kinds}{skip} - {r.get('people', 0)} thread(s) of what people said, {r['recent']} sender/subject line(s) from the last two days, "
+            f"{r['week']} task(s) closed this week, {r['open']} open task(s), {r['said']} line(s) already said"
             + ('' if r['model'] else " - no model: the facts in the hub's own words"))
 
 
@@ -367,10 +502,14 @@ def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
     (reports.run_report_source) and its "Run now" calls it forced; the instruction is the report's
     editable prompt. Deleting or switching off that report is the off switch - a forced run still
     answers. Posts nothing when nothing is new."""
-    c = cfg(store); now = datetime.now()
     src = source(store)
     if not force and not (src and src.get('Active')): return {'ran': False, 'said': 0}
     if instruction is None and src: instruction = (src['cfg'].get('ai_prompt') or '').strip() or None
+    with _LOCK: return _run(store, llm, instruction)
+
+
+def _run(store, llm, instruction) -> dict:
+    c = cfg(store); now = datetime.now()
     store.set_setting('assistant_last_run', now.isoformat(timespec='seconds'), 'assistant')
     state = {i['Key']: i for i in store.list_ideas()}
     cands = [x for x in candidates(store, c) if fresh(state, x, now)]
@@ -379,24 +518,29 @@ def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
         try: llm = build_llm(store)
         except Exception as e:
             logger.debug(f'assistant: no model - {e}'); llm = None
-    used, note, inputs = bool(llm and 'idea' in c['producers']), '', ''
+    used, note, read = bool(llm and 'idea' in c['producers']), '', ''
     if used:
-        try: say, note, inputs = think(store, cands, llm, instruction, c['max'])
+        try: say, note, read = think(store, cands, llm, instruction, c['max'])
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
-    if not inputs: inputs = 'CANDIDATES (no model pass - these posted as facts):\n' + ('\n'.join(f"[{x['key']}] {x['facts']}" for x in cands) or '(none)')
+    if not read: read = inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)')
     # the note outlives the post: a quiet check leaves one too, so the next check starts where this one stopped
     if note:
         store.set_setting('assistant_notes', note, 'assistant'); store.set_setting('assistant_notes_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
-    say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say if fresh(state, s, now)]   # a model echoing a dismissed key changes nothing
-    rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store)) | {'notes': note}
-    if not say: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': inputs}
+    # the state is read AGAIN here: another process may have posted while the model was thinking, and a
+    # model echoing a dismissed key changes nothing
+    state = {i['Key']: i for i in store.list_ideas()}
+    say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say if fresh(state, s, now)]
+    rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {'notes': note}
+    if not say: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': read}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}}, stamp) for s in say]
     body = ('\n'.join(f"- {i['Text']}\n    why: {s_['why']}" for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
             + (f"\nNote to my next check: {note}" if note else ''))
-    subj = rows[0]['Text'][:90] + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
+    # the row's one line: the first idea, cut at a word, and how many more wait behind it
+    head = rows[0]['Text'] if len(rows[0]['Text']) <= 90 else rows[0]['Text'][:90].rsplit(' ', 1)[0] + '…'
+    subj = head + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
     mid = store.add_message({'TaskId': None, 'ExternalId': f'assistant:{stamp}', 'ConversationId': 'assistant', 'Channel': CHANNEL,
                              'SourceName': 'Assistant', 'Subject': subj, 'FromName': 'Assistant', 'SentAt': stamp,
                              'BodyText': body, 'Status': 'feed'})
@@ -406,7 +550,7 @@ def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
-    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': inputs}
+    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read}
 
 
 # ── the buttons ──────────────────────────────────────────────────────────────────────────────

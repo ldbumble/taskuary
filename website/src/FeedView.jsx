@@ -1671,6 +1671,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
           <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
             <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>
             {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
+            {rv.people != null ? ` · ${rv.people} thread${rv.people === 1 ? "" : "s"} of what people said` : ""}
             {rv.recent != null ? ` · ${rv.recent} sender/subject line${rv.recent === 1 ? "" : "s"} from the last two days · ${rv.week} task${rv.week === 1 ? "" : "s"} closed this week`
               : ` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today`}
             {` · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}

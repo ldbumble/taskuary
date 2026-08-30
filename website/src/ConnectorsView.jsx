@@ -665,22 +665,45 @@ const VoiceVocabulary = ({ onBack }) => {
   const [busy, setBusy] = useState(true);
   const [saved, setSaved] = useState("");
   const [err, setErr] = useState("");
+  const [onServer, setOnServer] = useState("");   // what the server holds, to know when the box has unsaved edits
+  const [genBusy, setGenBusy] = useState(false);
+  const [genWhat, setGenWhat] = useState("");
+  const [genEv, setGenEv] = useState(null);       // the receipts: what history was read, what the model kept
+  const show = (data) => { const t = (data.terms || []).join("\n"); setText(t); setOnServer(t); setLimit(data.limit || 100); };
   useEffect(() => {
     let alive = true;
-    api.get("/api/voice/vocabulary").then(({ data }) => {
-      if (!alive) return;
-      setText((data.terms || []).join("\n")); setLimit(data.limit || 100); setBusy(false);
-    }).catch((e) => { if (alive) { setErr(e?.response?.data?.detail || "Could not load voice vocabulary"); setBusy(false); } });
+    api.get("/api/voice/vocabulary").then(({ data }) => { if (alive) { show(data); setBusy(false); } })
+      .catch((e) => { if (alive) { setErr(e?.response?.data?.detail || "Could not load voice vocabulary"); setBusy(false); } });
     return () => { alive = false; };
   }, []);
+  // same narration as the Docs tab: poll while it runs so the button says what it is reading
+  useEffect(() => {
+    if (!genBusy) return undefined;
+    const t = setInterval(async () => {
+      try { setGenWhat((await api.get("/api/doc/generate/status")).data.what || ""); } catch { /* status is a nicety */ }
+    }, 1200);
+    return () => clearInterval(t);
+  }, [genBusy]);
   const terms = text.split("\n").map((x) => x.trim()).filter(Boolean);
   const save = async () => {
     setBusy(true); setErr(""); setSaved("");
     try {
       const { data } = await api.put("/api/voice/vocabulary", { terms });
-      setText((data.terms || []).join("\n")); setSaved(`${(data.terms || []).length} shared term${data.terms?.length === 1 ? "" : "s"} saved`);
+      show(data); setSaved(`${(data.terms || []).length} shared term${data.terms?.length === 1 ? "" : "s"} saved`);
     } catch (e) { setErr(e?.response?.data?.detail || "Could not save voice vocabulary"); }
     setBusy(false);
+  };
+  // history -> names, systems, acronyms (histgen.gen_vocabulary). Your edits in the box are saved
+  // first so nothing typed is lost; your terms stay, the model's fill the room left.
+  const generate = async () => {
+    setGenBusy(true); setErr(""); setSaved(""); setGenEv(null); setGenWhat("starting…");
+    try {
+      if (text !== onServer) await api.put("/api/voice/vocabulary", { terms });
+      const { data } = await api.post("/api/doc/vocabulary/generate");
+      show((await api.get("/api/voice/vocabulary")).data); setSaved(`✓ ${data.detail}`);
+      try { setGenEv((await api.get("/api/doc/generate/status")).data.evidence || null); } catch { /* receipts optional */ }
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not generate from history"); }
+    setGenBusy(false); setGenWhat("");
   };
   return (
     <Box sx={{ maxWidth: 760, mx: "auto" }}>
@@ -688,20 +711,35 @@ const VoiceVocabulary = ({ onBack }) => {
       <Typography variant="body2" sx={{ color: DIM, mb: 2, lineHeight: 1.7 }}>
         One list for every AI voice connector, browser mic and voice note. Add unusual names, acronyms, products and internal system terms;
         each active provider receives the same hints automatically. Hints improve recognition but never force words into a transcript.
+        Generate from history reads who writes to you and what about, and adds the names a recogniser would get wrong - your own lines stay.
       </Typography>
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, p: 2 }}>
-        <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy}
+        <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy || genBusy}
           label="Words and phrases" placeholder={"Taskuary\nPointClickCare\nIntacct\nTQ-0243"}
           helperText={`One term or phrase per line · up to ${limit} · 50 characters and 5 words per entry`} />
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Typography variant="caption" sx={{ color: terms.length > limit ? "error.main" : FAINT }}>{terms.length}/{limit}</Typography>
           <Box sx={{ flex: 1 }} />
-          <Button variant="contained" disableElevation onClick={save} disabled={busy || terms.length > limit}>
-            {busy ? "Saving…" : "Save shared vocabulary"}
+          <Button variant="outlined" onClick={generate} disabled={busy || genBusy || terms.length > limit}
+            startIcon={genBusy ? <CircularProgress size={12} /> : null}
+            title="Read the last three months of mail - who writes, about what - and add the names, systems and acronyms a recogniser would misspell. Your own lines stay.">
+            {genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}
+          </Button>
+          <Button variant="contained" disableElevation onClick={save} disabled={busy || genBusy || terms.length > limit || text === onServer}>
+            {busy ? "Saving…" : text === onServer ? "Saved" : "Save shared vocabulary"}
           </Button>
         </Box>
         {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
         {saved && <Alert severity="success" sx={{ mt: 1.5 }}>{saved}</Alert>}
+        {/* the receipts: what history was read and counted, so every added name traces back to your own mail */}
+        {genEv?.length > 0 && (
+          <Box sx={{ mt: 1.5, p: 1.25, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 2 }}>
+            <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>What it read</Typography>
+            {genEv.map((l, i) => (
+              <Typography key={i} variant="caption" component="div" sx={{ color: l.startsWith("  ") ? FAINT : DIM, whiteSpace: "pre-wrap", fontFamily: l.startsWith("  ") ? "monospace" : "inherit", fontSize: 11 }}>{l}</Typography>
+            ))}
+          </Box>
+        )}
       </Box>
     </Box>
   );

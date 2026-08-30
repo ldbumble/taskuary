@@ -12,7 +12,8 @@ from datetime import datetime
 from loguru import logger
 
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
-SESSIONS = {}               # sid -> Term
+SESSIONS = {}               # sid -> Term. Iterate a list(...) copy: readers run on FastAPI worker threads while
+                            # close()/reap() pop from it - "dictionary changed size during iteration" mid-wrap-up
 SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
 # settle() waits for QUIET - and a TUI with an animated boot spinner is never quiet, so every
 # settle in the seed path used to burn its full cap (codex took ~30s before the prompt showed).
@@ -975,7 +976,7 @@ def phase_of(lines) -> str:
 def for_task(task_id, tail=0):
     """The live session working a task, if any - what makes a task 'agent working' even
     though no headless run exists."""
-    t = next((x for x in SESSIONS.values() if x.task_id == task_id and x.alive), None)
+    t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     return t.info(tail) if t else None
 
 
@@ -985,7 +986,7 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
     not on a timeline it cannot read. Fed in seed()-sized bites (a one-shot paste drops
     bytes mid-stream), then Enter until it lands. False = no live session to tell.
     Accepts a message as a DB row (BodyText/FromName) or an ingest dict (body/from_name)."""
-    t = next((x for x in SESSIONS.values() if x.task_id == task_id and x.alive), None)
+    t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     if not t: return False
     who = msg.get('FromName') or msg.get('from_name') or msg.get('FromEmail') or msg.get('from_email') or 'the sender'
     body = str(msg.get('BodyText') or msg.get('body') or '').strip()
@@ -1019,7 +1020,7 @@ def session_for(task_id):
     """This task's session OBJECT - the live one if there is one, else the most recent that has
     not been reaped yet. Unlike for_task, an exited session counts: its scrollback is exactly
     what wrapping up needs to read."""
-    mine = [x for x in SESSIONS.values() if x.task_id == task_id]
+    mine = [x for x in list(SESSIONS.values()) if x.task_id == task_id]
     return next((x for x in mine if x.alive), None) or (max(mine, key=lambda x: x.started) if mine else None)
 
 
@@ -1039,7 +1040,7 @@ def transcript_for(store, task_id) -> tuple:
 
 
 def live_sessions(tail=3):
-    return [t.info(tail) for t in SESSIONS.values() if t.alive]
+    return [t.info(tail) for t in list(SESSIONS.values()) if t.alive]
 
 
 def close(sid):
@@ -1054,11 +1055,11 @@ KEEP_DEAD = 600     # an exited session stays listed this long so you can still 
 def reap():
     """Drop long-finished sessions nobody is watching (a fresh exit stays readable). The
     transcript was filed when the pty ended, so what is dropped here is only the bytes."""
-    for sid in [s for s, t in SESSIONS.items()
+    for sid in [s for s, t in list(SESSIONS.items())
                 if not t.alive and not t.subs and time.time() - (t.ended or 0) > KEEP_DEAD]:
         SESSIONS.pop(sid, None)
 
 
 def listing():
     reap()
-    return [t.info() for t in SESSIONS.values()]
+    return [t.info() for t in list(SESSIONS.values())]

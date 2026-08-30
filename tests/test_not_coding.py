@@ -67,52 +67,89 @@ class DispatchGateTests(unittest.TestCase):
         started = [c for c in spawn.call_args_list if getattr(c[0][0], '__name__', '') == '_auto_code']
         return s, out, started
 
-    def test_a_task_with_no_code_in_it_never_opens_a_coding_session(self):
+    def test_a_task_with_no_code_in_it_waits_on_your_list(self):
+        """The owner's rule as it now stands (2026-08-30): almost everything goes to the agent,
+        and the one exception is work that is clearly not a coding job. `kind` carries that
+        verdict - here from the keyword scan, because this path has triage switched off."""
         s, out, started = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        self.assertEqual(started, [])                                  # nobody was dispatched
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # but it IS still a task
+        self.assertEqual(started, [])                                    # no session bought
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # and labelled honestly
 
     def test_a_real_bug_report_still_reaches_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.')
         self.assertEqual(len(started), 1)
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
 
-    def test_the_route_line_stops_promising_an_agent_that_was_never_sent(self):
-        s, out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertIn('no agent dispatched', reason)
-        self.assertNotIn('sent to the coding agent', reason)
+    def test_the_route_line_says_which_way_it_went(self):
+        s, _out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
+        self.assertIn('not a coding job', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.')
+        self.assertIn('sent to the coding agent', s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
 
 class HarmlessExitTests(unittest.TestCase):
-    def test_filing_a_message_teaches_nothing_about_its_sender(self):
-        """The whole point. "Not our task" writes a verdict that suppresses the sender - and on
-        a channel with no address to key on it is written GLOBALLY. Getting one chat off the
-        timeline must not cost you a colleague."""
+    """The timeline's "Not a task" is the SAME verdict as the task list's, so it teaches the same
+    thing (owner, 2026-08-30). What made the old exit dangerous is still barred: it never mutes a
+    sender - that is "Skip this sender" - and it writes nothing at all when a channel gives it no
+    address and no topic to key a note to, which is where a verdict against everyone came from."""
+    def test_filing_never_mutes_the_sender(self):
         from fastapi.testclient import TestClient
         from taskuary import server
         s = server.store
-        mid = s.add_message({'Channel': 'teams', 'Subject': 'Teams chat', 'FromName': 'Priya',
+        c = TestClient(server.app)
+        mid = s.add_message({'Channel': 'email', 'Subject': 'Quarterly newsletter roundup', 'FromEmail': 'news@vendor.com',
                              'BodyText': JOB_SCOPE, 'ExternalId': 'file-me', 'Status': 'filed'})
-        before = len(s.list_memories())
-        r = TestClient(server.app).post(f'/api/messages/{mid}/file')
+        before = len(c.get('/api/policies').json()['data'])
+        r = c.post(f'/api/messages/{mid}/file')
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(s.list_memories()), before)        # nothing learned
+        self.assertEqual(len(c.get('/api/policies').json()['data']), before)     # no ignore rule
+        self.assertIn('NOT A TASK', next(m['Note'] for m in s.list_memories()
+                                         if m['MemoryId'] == r.json()['memoryId']))
         self.assertEqual(s.get_message(mid)['Status'], 'ignored')
         self.assertFalse(r.json()['taskDeleted'])
+
+    def test_a_message_with_nothing_to_key_on_teaches_nothing(self):
+        """A Teams chat carries no address, and "Teams chat" is not a topic. A note keyed to
+        neither is a verdict against everyone, so none is written - the thread is still ruled."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = server.store
+        before = len(s.list_memories())
+        mid = s.add_message({'Channel': 'teams', 'Subject': 'chat', 'FromName': 'Priya',
+                             'BodyText': JOB_SCOPE, 'ExternalId': 'file-me-teams', 'Status': 'filed'})
+        r = TestClient(server.app).post(f'/api/messages/{mid}/file')
+        self.assertIsNone(r.json()['memoryId'])
+        self.assertEqual(len(s.list_memories()), before)
 
     def test_filing_also_removes_a_task_the_message_had(self):
         from fastapi.testclient import TestClient
         from taskuary import server
         s = server.store
         tid = s.create_task({'Title': 'chat', 'Kind': 'general'}, 'o')
-        mid = s.add_message({'Channel': 'teams', 'Subject': 'Teams chat', 'TaskId': tid,
+        mid = s.add_message({'Channel': 'teams', 'Subject': 'chat', 'TaskId': tid,
                              'BodyText': 'yes', 'ExternalId': 'file-me-2'})
-        before = len(s.list_memories())          # server.store is shared - count, never assume 0
         r = TestClient(server.app).post(f'/api/messages/{mid}/file')
         self.assertTrue(r.json()['taskDeleted'])
         self.assertIsNone(s.get_task(tid))
-        self.assertEqual(len(s.list_memories()), before)
+
+    def test_both_doors_teach_the_same_verdict(self):
+        """The task list's button and the timeline's must not drift apart again."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = server.store
+        c = TestClient(server.app)
+        notes = []
+        for i, door in enumerate(('task', 'message')):
+            tid = s.create_task({'Title': 'Vendor renewal reminder', 'Kind': 'general'}, 'o')
+            mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Vendor renewal reminder',
+                                 'FromEmail': 'billing@vendor.com', 'BodyText': 'your plan renews',
+                                 'ExternalId': f'both-doors-{i}', 'Status': 'routed'})
+            r = c.post(f'/api/tasks/{tid}/not-a-task' if door == 'task' else f'/api/messages/{mid}/file').json()
+            memid = r['learned']['memory_id'] if door == 'task' else r['memoryId']
+            notes.append(next(m for m in s.list_memories() if m['MemoryId'] == memid))
+        self.assertEqual(notes[0]['Scope'], notes[1]['Scope'])
+        self.assertEqual(notes[0]['ScopeKey'], notes[1]['ScopeKey'])
+        self.assertEqual(notes[0]['Note'], notes[1]['Note'])
 
     def test_filing_an_unknown_message_is_a_404_not_a_500(self):
         from fastapi.testclient import TestClient

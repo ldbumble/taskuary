@@ -12,7 +12,8 @@ from datetime import datetime
 from loguru import logger
 
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
-SESSIONS = {}               # sid -> Term
+SESSIONS = {}               # sid -> Term. Iterate a list(...) copy: readers run on FastAPI worker threads while
+                            # close()/reap() pop from it - "dictionary changed size during iteration" mid-wrap-up
 SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
 # settle() waits for QUIET - and a TUI with an animated boot spinner is never quiet, so every
 # settle in the seed path used to burn its full cap (codex took ~30s before the prompt showed).
@@ -44,17 +45,26 @@ def seed_argv(profile: dict, seed: str):
 # inherit the parent's conversation - strip anything that would carry that in.
 _DIRTY = ('CLAUDE_CODE', 'CLAUDECODE', 'CLAUDE_SESSION', 'ANTHROPIC_SESSION', 'CODEX_SESSION', 'GEMINI_SESSION')
 
-def clean_env() -> dict:
-    return {k: v for k, v in os.environ.items() if not k.upper().startswith(_DIRTY)}
+def clean_env(extra: dict = None) -> dict:
+    env = {k: v for k, v in os.environ.items() if not k.upper().startswith(_DIRTY)}
+    # per-session additions: the browser session name that ties an agent's agent-browser to
+    # its pane (browserview) - set after the strip, so it wins over an inherited one
+    env.update(extra or {})
+    # the pane IS a real terminal (xterm.js): say so. A service started with no TERM, or TERM=dumb,
+    # made codex stop at "Codex's interactive TUI may not work in this terminal. Continue? [y/N]"
+    # before a single prompt - the owner typed y into a box that was built for exactly this.
+    if env.get('TERM', 'dumb').lower() in ('', 'dumb'): env['TERM'] = 'xterm-256color'
+    env.setdefault('COLORTERM', 'truecolor')
+    return env
 
 
 class _WinPty:
-    def __init__(self, argv, cwd, rows, cols):
+    def __init__(self, argv, cwd, rows, cols, env=None):
         try:
             from winpty import PtyProcess
         except ImportError:
             raise RuntimeError('the interactive terminal needs pywinpty on Windows - pip install pywinpty')
-        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env())
+        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env(env))
     def read(self):
         try: return self.p.read(65536)
         except EOFError: return ''
@@ -67,12 +77,12 @@ class _WinPty:
 
 
 class _UnixPty:
-    def __init__(self, argv, cwd, rows, cols):
+    def __init__(self, argv, cwd, rows, cols, env=None):
         import fcntl, pty, struct, termios
         self.fd, slave = pty.openpty()
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
         self.p = subprocess.Popen(argv, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
-                                  close_fds=True, start_new_session=True, env=clean_env())
+                                  close_fds=True, start_new_session=True, env=clean_env(env))
         os.close(slave)
         import codecs
         self.dec = codecs.getincrementaldecoder('utf-8')(errors='replace')
@@ -104,14 +114,18 @@ class Term:
         self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
         self.store = store                                # so the pty can file its own transcript when it ends
+        self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
         self.taps = []                                    # plain callables, for server-side readers
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
-        from . import blackboard as _bb
+        from . import blackboard as _bb, witness as _w
         self.dirty0 = _bb.dirty(cwd) if task_id else set()
         self._files = ([], 0.0)
-        self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols)
+        self.witness, self.ext_id = _w.Witness(), ''     # what the agent said and did (hooks / rollout), and the CLI's own session id once a hook names it
+        # the browser this session may open is named after it, so the pane can find it (browserview)
+        from . import browserview as _bv
+        self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(argv, cwd, rows, cols, _bv.env(self.sid))
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself
@@ -138,6 +152,8 @@ class Term:
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self.keep()                                       # the transcript must outlive the pty
         self._emit(None)
+        from . import browserview as _bv
+        _bv.close(self.sid)                               # its browser goes with it, not into an hour of idling
         if self.store and self.task_id:                   # whoever queued behind this session gets its turn
             from . import blackboard, waitroom
             blackboard.drain_later(self.store)
@@ -148,7 +164,7 @@ class Term:
         reaped, and once the last one was gone the task could no longer be wrapped up at all - the
         buttons had nothing to read and quietly disappeared. Written on exit AND on close, because
         either can come first."""
-        if not (self.store and self.task_id): return
+        if not (self.store and self.task_id and self.keep_transcript): return
         try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd)
         except Exception as e: logger.warning(f'could not file the transcript for {self.sid}: {e}')
 
@@ -308,11 +324,20 @@ class Term:
 
     def info(self, tail=0):
         # module functions, not methods: the tests' fakes (and any other stand-in) need only tail() and idle()
+        files, w = self.files(), getattr(self, 'witness', None)      # fakes in tests carry no witness
+        from . import browserview as _bv
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
-                'agent': self.agent, 'alive': self.alive, 'started': self.started,
+                'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase_of(self.tail(4)), 'waiting': waiting_of(self),
-                'cmd': ' '.join(self.argv), 'files': self.files(),
+                'cmd': ' '.join(self.argv), 'files': files, 'browser': _bv.state(self.sid),
+                'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None,
                 **({'tail': self.tail(tail)} if tail else {})}
+
+
+def cli_of(argv) -> str:
+    """'claude' for C:\\...\\claude.exe or claude.cmd - the CLI a session runs, whatever the profile is
+    called. A profile named codex that runs claude showed 'codex' on the card next to a 'claude' badge."""
+    return re.split(r'[\\/]', str((argv or [''])[0]))[-1].lower().rsplit('.', 1)[0] if argv else ''
 
 
 def default_shell():
@@ -374,8 +399,9 @@ def agent_argv(profile: dict, model: str = None) -> list:
     ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
     `interactive_args` in the profile replaces the lot, for CLIs that need a subcommand."""
     from .agents import _resolve_cmd
+    from .clis import preset_args
     argv = _resolve_cmd(profile.get('cmd') or 'claude')
-    argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args'))
+    argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args') or preset_args(profile.get('cmd') or 'claude'))
     model = model or profile.get('model')
     return _codex_windows_auto(argv + ([profile.get('model_arg') or '--model', str(model)] if model else []))
 
@@ -427,8 +453,18 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                      os.path.basename(str(a)).lower() in ('cmd', 'cmd.exe') for a in argv):
         extra = None
     if extra: argv = list(argv) + extra
+    # the agent tells the Board what it is doing: Claude through its own hooks in this checkout
+    # (hooks.py), Codex through the rollout it writes as it works (witness.RolloutTail)
+    if agent and task_id:
+        from . import hooks as _hooks
+        try:
+            if _hooks.wanted(store, profile): _hooks.install(cwd)
+        except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    if agent and task_id and 'codex' in os.path.basename(str(argv[0])).lower():
+        from .witness import RolloutTail
+        RolloutTail(t).start()
     if seed:
         if extra: t.seeded = seed        # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
@@ -713,23 +749,32 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from .agents import memory_block
     mem = memory_block(store, msgs)
     if mem: parts.append(no_emails(' '.join(mem.split())[:DOC_CHARS]))
+    # Everything else the hub knows goes in a FILE, not the command line: the sender's history,
+    # the topic elsewhere, the calendar, the learned profile, the whole thread - and PAST WORK, the
+    # reports of closed tasks on this sender/subject/repo, which no agent ever saw before. Under
+    # Taskuary's own home, never in the checkout (a stray file there gets staged - 8abb175).
+    from . import context as ctx
+    cpath = ctx.write(store, tid, msgs, repo)
+    # short on purpose: this line rides on the command line with a full path in it, and a canonical
+    # tty caps a line at 1024 bytes (CI's fake TUI; macOS temp paths are long) - a wordy sentence here
+    # pushed the seed over and the prompt arrived clipped
+    if cpath: parts.append(f'CONTEXT FILE: {cpath} - read it FIRST: this sender, this topic, past tasks and how they ended.')
+    # a browser the owner can WATCH exists only if the agent is told so - and told who types passwords
+    from . import browserview as _bv
+    if _bv.hint(): parts.append(_bv.hint())
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.
     issues_ok, push_ok = store.github_permissions()
-    parts.append('WHAT TO DO: work it from THIS message alone. Diagnose the problem, fix it if it '
-                 'is fixable, and if it is not, say plainly what the problem is and what it would '
-                 'take. Do NOT call the Taskuary API, read its database or go looking for this task '
-                 'anywhere - everything known about it is above. '
-                 + ('GitHub is the issue tracker here: open and update issues for the work as '
-                    'the team expects. '
+    parts.append('WHAT TO DO: work it from THIS message alone - diagnose, fix it if it is fixable, else say plainly '
+                 'what the problem is and what it would take. Do NOT call the Taskuary API, read its database or '
+                 'hunt for this task elsewhere - everything known about it is above' + (' and in the context file. ' if cpath else '. ')
+                 + ('GitHub is the issue tracker here: open and update issues for the work as the team expects. '
                     if issues_ok else
-                    'Do NOT create GitHub issues, PRs or any other tracker items for this work '
-                    'unless this message explicitly asks for one - Taskuary IS the tracker, and '
-                    'this task is the record. ')
+                    'Do NOT create GitHub issues, PRs or other tracker items unless this message asks for one - '
+                    'Taskuary IS the tracker and this task is the record. ')
                  + ('You may push and deploy as the work needs. ' if push_ok else
-                    'Do NOT push, deploy, publish or release anything - commit locally and stop; '
-                    'the owner reviews and pushes. Only when this message explicitly says to. ')
+                    'Do NOT push, deploy, publish or release - commit locally and stop; the owner reviews and pushes. ')
                  + 'Ask the owner here in the session if something is genuinely missing.')
     out = ' '.join(' '.join(parts).split())
     # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses
@@ -887,10 +932,12 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
     agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
     import json
-    live = for_task(tid)
-    if live: return {**live, 'existing': True}
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
+    live = for_task(tid)
+    if live:
+        if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
+        return {**live, 'existing': True}
     row = store.get_agent(agent or '')
     if not row: raise ValueError(f'unknown agent: {agent}')
     repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
@@ -901,7 +948,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
         store.add_comment(tid, actor, 'human', f'Session opened in {repo} - {why}.')
     store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',
                       f'{agent} started on this task in a live session ({term.cwd}).')
-    if t.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)
+    if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
     return {**term.info(), 'existing': False}
 
 
@@ -919,7 +966,9 @@ IDLE_WAITING = 45
 # LAST line wins where both appear - a status line redrawn in place leaves old frames in the
 # scrollback, so an "esc to interrupt" three lines up is history, not now.
 _WORKING = re.compile(r'esc to interrupt|esc to cancel|\(thinking\)|[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]|\b(thinking|working|running)…', re.I)
-_PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|^\s*[›>❯]\s*$', re.I)
+_PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|'
+                     r'\?\s*$|\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|press enter|'
+                     r'choose an option|select an option|enter to (confirm|select))\b|^\s*[›>❯](?:\s*\d+\.)?', re.I)
 
 def waiting_of(t) -> bool:
     """Is the agent parked and the next move the owner's? The CLI's own screen decides where it
@@ -940,7 +989,7 @@ def phase_of(lines) -> str:
 def for_task(task_id, tail=0):
     """The live session working a task, if any - what makes a task 'agent working' even
     though no headless run exists."""
-    t = next((x for x in SESSIONS.values() if x.task_id == task_id and x.alive), None)
+    t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     return t.info(tail) if t else None
 
 
@@ -950,7 +999,7 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
     not on a timeline it cannot read. Fed in seed()-sized bites (a one-shot paste drops
     bytes mid-stream), then Enter until it lands. False = no live session to tell.
     Accepts a message as a DB row (BodyText/FromName) or an ingest dict (body/from_name)."""
-    t = next((x for x in SESSIONS.values() if x.task_id == task_id and x.alive), None)
+    t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     if not t: return False
     who = msg.get('FromName') or msg.get('from_name') or msg.get('FromEmail') or msg.get('from_email') or 'the sender'
     body = str(msg.get('BodyText') or msg.get('body') or '').strip()
@@ -984,7 +1033,7 @@ def session_for(task_id):
     """This task's session OBJECT - the live one if there is one, else the most recent that has
     not been reaped yet. Unlike for_task, an exited session counts: its scrollback is exactly
     what wrapping up needs to read."""
-    mine = [x for x in SESSIONS.values() if x.task_id == task_id]
+    mine = [x for x in list(SESSIONS.values()) if x.task_id == task_id]
     return next((x for x in mine if x.alive), None) or (max(mine, key=lambda x: x.started) if mine else None)
 
 
@@ -1004,7 +1053,7 @@ def transcript_for(store, task_id) -> tuple:
 
 
 def live_sessions(tail=3):
-    return [t.info(tail) for t in SESSIONS.values() if t.alive]
+    return [t.info(tail) for t in list(SESSIONS.values()) if t.alive]
 
 
 def close(sid):
@@ -1019,11 +1068,11 @@ KEEP_DEAD = 600     # an exited session stays listed this long so you can still 
 def reap():
     """Drop long-finished sessions nobody is watching (a fresh exit stays readable). The
     transcript was filed when the pty ended, so what is dropped here is only the bytes."""
-    for sid in [s for s, t in SESSIONS.items()
+    for sid in [s for s, t in list(SESSIONS.items())
                 if not t.alive and not t.subs and time.time() - (t.ended or 0) > KEEP_DEAD]:
         SESSIONS.pop(sid, None)
 
 
 def listing():
     reap()
-    return [t.info() for t in SESSIONS.values()]
+    return [t.info() for t in list(SESSIONS.values())]

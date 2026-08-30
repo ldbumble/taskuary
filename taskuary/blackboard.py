@@ -51,7 +51,7 @@ def peers(store, cwd, exclude_tid=None) -> list:
     [{tid, ref, title, agent, files, started}]."""
     from . import terminal as term
     out, me = [], norm(cwd)
-    for t in term.SESSIONS.values():
+    for t in list(term.SESSIONS.values()):
         if t.alive and t.task_id and t.task_id != exclude_tid and norm(t.cwd) == me:
             task = store.get_task(t.task_id) or {}
             out.append({'tid': t.task_id, 'ref': task_ref(t.task_id), 'title': task.get('Title') or '',
@@ -123,7 +123,7 @@ def drain(store):
         # a ranked row's value ages a little per day waited (rank.aged) so the bottom never starves
         qs.sort(key=lambda q: -(rank.aged(q['Value'], q.get('CreatedAt')) if q.get('Value') is not None else 0.5))
         for q in qs:
-            if len([t for t in term.SESSIONS.values() if t.alive]) >= auto_sessions(store): return
+            if len([t for t in list(term.SESSIONS.values()) if t.alive]) >= auto_sessions(store): return
             b = q.get('BehindTaskId')
             if b and (term.for_task(b) or any(r['TaskId'] == b for r in store.running_runs())): continue
             t = store.get_task(q['TaskId']) or {}

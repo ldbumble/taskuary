@@ -81,18 +81,19 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(start.call_args.args[1], out['task_id'])
         self.assertTrue(any('auto-started a live coder session' in c['Body'] for c in s.list_comments(out['task_id'])))
 
-    def test_work_the_brain_calls_general_waits_for_you_instead_of_opening_a_session(self):
-        """"Add the new user to the system" is real work with no repository in it. When the
-        classifier SAYS so (kind: general) it is a task on your list, one click from an agent."""
+    def test_work_the_brain_calls_general_goes_on_your_list(self):
+        """`kind` routes the task and triage alone decides it (owner, 2026-08-30): general means
+        it looked and saw nothing a keyboard does, so the task lands on the Board and waits for
+        a click rather than buying a session that can only say "nothing to do here"."""
         from unittest import mock
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 't')
-        general = lambda *a, **k: '{"intent": "task", "kind": "general", "why": "no code in it"}'
-        with mock.patch('taskuary.terminal.start_on_task') as start:
+        general = lambda *a, **k: '{"intent": "task", "kind": "general", "why": "nobody can type this"}'
+        with mock.patch('taskuary.ingest._spawn') as spawn:
             out = ingest_message(s, self.msg(external_id='ac3'), llm=general)
-        start.assert_not_called()
+        spawn.assert_not_called()
         t = s.get_task(out['task_id'])
-        self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))     # real work, still yours
+        self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))     # a real task, just yours
 
     def test_a_task_the_brain_did_not_call_general_goes_to_the_coder(self):
         """The owner's call (2026-08-27): err toward the coding agent. A task the brain did not
@@ -106,6 +107,60 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(any(getattr(c[0][0], '__name__', '') == '_auto_code' for c in spawn.call_args_list))
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
         self.assertIn('sent to the coding agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+
+    def test_a_first_time_email_sender_never_starts_the_coder_by_itself(self):
+        """The one road from a stranger's text to an agent on this machine with nobody in between
+        was the auto-start. Email now gates it on the SENDER (senders.py): known = your own
+        domain, has written before, or your mailbox has written to them (Sent Items, asked of the
+        server - Taskuary's table starts the day it was connected, the correspondence did not).
+        The task still lands; only the automatic session waits for the owner."""
+        from unittest import mock
+        from taskuary import senders
+        s = MemoryStore()
+        s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('owner_email', 'uri@mfaheritage.net', 't')
+        # distinct subjects and bodies: a look-alike would ATTACH to the first task and never reach the create path
+        texts = {'e1': ('importer crash', 'the importer throws an exception in jobs/import.py'),
+                 'e2': ('invoice portal login', 'customers cannot log into the invoice portal since friday'),
+                 'e3': ('nightly scheduler', 'the report scheduler silently skipped tuesday night'),
+                 'e4': ('ios signing', 'the mobile build fails at the code signing step on ci')}
+        mail = lambda **kw: self.msg(channel='email', source_name='uri@mfaheritage.net', conversation_id=kw['external_id'],
+                                     subject=texts[kw['external_id']][0], body=texts[kw['external_id']][1], **kw)
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False) as wt:
+            out = ingest_message(s, mail(external_id='e1', from_email='stranger@evil.example'), llm=TASK_LLM)
+        spawn.assert_not_called(); wt.assert_called_once()
+        t = s.get_task(out['task_id'])
+        self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))                      # a task, on the Board, not worked
+        self.assertTrue(any('not auto-started' in c['Body'] for c in s.list_comments(out['task_id'])))
+        self.assertIn('this mailbox has never written to them', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        # the same stranger writes again: the table knows them now, no mailbox lookup, agent starts
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+            self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once(); wt.assert_not_called()
+        # your own domain: never a stranger
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+            self.assertEqual(ingest_message(s, mail(external_id='e3', from_email='leah@mfaheritage.net'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once(); wt.assert_not_called()
+        # someone you have written to for years, whom Taskuary has never seen: Sent Items says so
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True):
+            self.assertEqual(ingest_message(s, mail(external_id='e4', from_email='old.client@partner.example'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once()
+        # chat senders are already inside a workspace you control: no gate at all
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+            self.assertEqual(ingest_message(s, self.msg(external_id='e5', channel='teams', from_email='new.colleague@elsewhere.example',
+                                                        conversation_id='c5', subject='teams: the exporter', body='e5: exporter fails in jobs/export.py'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_called_once(); wt.assert_not_called()
+
+    def test_the_digest_window_starts_at_midnight_so_a_one_day_digest_is_all_of_yesterday(self):
+        from datetime import datetime, timedelta
+        from taskuary.digest import gather
+        from taskuary.reports import run_digest
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'fixed at dawn yesterday', 'Kind': 'coding', 'Status': 'done'}, 't')
+        dawn = (datetime.now() - timedelta(days=1)).replace(hour=6, minute=0, second=0).isoformat(sep=' ', timespec='seconds')
+        s._exec('UPDATE task SET UpdatedAt=? WHERE TaskId=?', (dawn, tid))
+        self.assertIn('fixed at dawn yesterday', gather(s, 1))                  # 24h back from 07:26 would have missed it
+        self.assertEqual(run_digest({'store': s, 'days': 1})[0], 'yesterday and today so far, distilled')
 
     def test_no_auto_dispatch_when_disabled(self):
         """Dispatching is ON by default now, so this asserts the SWITCH works - turned off,
@@ -215,6 +270,8 @@ class CoreTests(unittest.TestCase):
         s.save_source({'Channel': 'teams', 'Address': 'me@corp.com', 'Active': 1, 'Owner': 'o'}, 'o')
         # the delta feed hands them back NEWEST first, mixed across chats
         msgs = [
+            {'id': 'm4', 'chatId': '19:aa', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:03:00Z',
+             'from': {'user': {'id': 'me', 'displayName': 'You'}}, 'body': {'content': '<p>I sent it to her in this chat.</p>'}},
             {'id': 'm3', 'chatId': '19:aa', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:02:00Z',
              'from': {'application': {'id': 'bot'}, 'user': None}, 'body': {'content': '<attachment id="x"></attachment>'}},
             {'id': 'm2', 'chatId': '19:aa', 'messageType': 'systemEventMessage', 'createdDateTime': '2026-08-18T10:01:00Z',
@@ -228,12 +285,15 @@ class CoreTests(unittest.TestCase):
              mock.patch.object(channels, '_graph_user', return_value=('Priya', 'priya@corp.com')), \
              mock.patch.object(channels.requests, 'get', return_value=mock.Mock(status_code=200,
                                                                                json=lambda: {'id': 'me'})):
-            self.assertEqual(channels.poll_channels(s), 1)
+            self.assertEqual(channels.poll_channels(s), 2)
         feed = [m for m in s.feed() if m['Channel'] == 'teams']
         self.assertEqual(len(feed), 1)                                 # only the human line, bot + system dropped
         self.assertEqual((feed[0]['FromName'], feed[0]['FromEmail']), ('Priya', 'priya@corp.com'))
         row = s._one('SELECT ConversationId FROM message WHERE MessageId=?', (feed[0]['MessageId'],))
         self.assertEqual(row['ConversationId'], 'teams:19:aa')          # a chat is one thread, like a mail chain
+        chain = s.thread_messages(conversation_id='teams:19:aa')
+        self.assertEqual([(m['Status'], m['BodyText']) for m in chain],
+                         [('filed', 'can you look at the export?'), ('context', 'I sent it to her in this chat.')])
 
     def test_needs_you_is_anything_no_agent_is_moving(self):
         """The old rule was 'a review is pending', so a task whose agent finished without
@@ -411,6 +471,60 @@ class CoreTests(unittest.TestCase):
                     pass
             self.assertEqual(pop2.call_args[0][0][-2:], ['-m', 'gpt-5-codex'])   # flag name is per-CLI
 
+    def test_a_profile_with_only_a_cmd_gets_the_known_headless_flags(self):
+        from unittest import mock
+        from taskuary.agents import run_cli
+        from taskuary.clis import preset_args
+        from taskuary.terminal import agent_argv
+        # config.toml said [agents.coder] cmd = "claude" and nothing else -> bare `claude -p`, and a
+        # non-interactive claude with no permission flag denied every tool call of a scheduled report
+        for cmd in ('claude', r'C:\Users\me\AppData\Roaming\npm\claude.cmd', '/usr/local/bin/claude'):
+            with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), \
+                 mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+                with self.assertRaises(RuntimeError): run_cli({'cmd': cmd}, 'hi', lambda *a: None)
+            self.assertIn('--dangerously-skip-permissions', pop.call_args[0][0]); self.assertIn('-p', pop.call_args[0][0])
+        self.assertEqual(preset_args('codex.exe')[0], 'exec'); self.assertEqual(preset_args('mycli'), [])
+        with mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+            with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), self.assertRaises(RuntimeError):
+                run_cli({'cmd': 'mycli'}, 'hi', lambda *a: None)
+        self.assertEqual(pop.call_args[0][0], ['X', '-p'])                       # an unknown CLI keeps the old bare pipe
+        with mock.patch('taskuary.agents._resolve_cmd', side_effect=lambda n: ['X']):   # and the watched session gets the same trust, minus the pipe flags
+            self.assertEqual(agent_argv({'cmd': 'claude'}), ['X', '--dangerously-skip-permissions', '--verbose'])
+            self.assertEqual(agent_argv({'cmd': 'claude', 'args': ['-p', '--foo']}), ['X', '--foo'])   # args the owner wrote stay theirs
+
+    def test_run_cli_names_a_lapsed_login_and_says_how_to_fix_it(self):
+        from unittest import mock
+        import sys
+        from taskuary.agents import run_cli
+        # the exact stderr claude prints when its OAuth session has lapsed - the raw line told the user nothing they could act on
+        script = "import sys;sys.stdin.read();sys.stderr.write('Failed to authenticate: OAuth session expired and could not be refreshed');sys.exit(1)"
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
+            with self.assertRaises(RuntimeError) as e:
+                run_cli({'cmd': 'claude', 'args': ['-c', script]}, 'hi', lambda *a: None)
+        msg = str(e.exception)
+        self.assertIn('signed out', msg); self.assertIn('/login', msg); self.assertIn('come back here', msg)
+        self.assertIn('OAuth session expired', msg)                      # the original reason still travels with it
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):   # any other failure keeps the plain exit line
+            with self.assertRaises(RuntimeError) as e2:
+                run_cli({'cmd': 'claude', 'args': ['-c', "import sys;sys.stdin.read();sys.stderr.write('boom');sys.exit(2)"]}, 'hi', lambda *a: None)
+        self.assertEqual(str(e2.exception), 'claude exit 2: boom')
+
+    def test_the_pane_says_it_is_a_real_terminal(self):
+        """codex read TERM=dumb (or none) off a service environment and stopped at 'Continue anyway?
+        [y/N]' before its first prompt - the pane is xterm.js, so the env says so."""
+        from unittest import mock
+        from taskuary.terminal import clean_env
+        with mock.patch.dict('os.environ', {'TERM': 'dumb'}): self.assertEqual(clean_env()['TERM'], 'xterm-256color')
+        with mock.patch.dict('os.environ', {}, clear=True): self.assertEqual((clean_env()['TERM'], clean_env()['COLORTERM']), ('xterm-256color', 'truecolor'))
+        with mock.patch.dict('os.environ', {'TERM': 'screen-256color', 'COLORTERM': 'x'}):
+            self.assertEqual((clean_env()['TERM'], clean_env()['COLORTERM']), ('screen-256color', 'x'))   # a real value is left alone
+
+    def test_a_full_path_to_the_cli_still_finds_its_model_list(self):
+        from taskuary.server import cli_base, CLI_MODELS
+        for cmd in (r'C:\Users\rabbi\AppData\Local\OpenAI\Codex\bin\codex.exe', '/usr/local/bin/codex', 'codex', 'CODEX.CMD'):
+            self.assertEqual(cli_base(cmd), 'codex'); self.assertEqual(CLI_MODELS[cli_base(cmd)], CLI_MODELS['codex'])
+        self.assertEqual(cli_base(r'C:\npm\claude.cmd'), 'claude'); self.assertEqual(cli_base(''), '')
+
     def test_terminal_env_never_inherits_a_session(self):
         from taskuary.terminal import clean_env
         import os
@@ -482,8 +596,10 @@ class CoreTests(unittest.TestCase):
         with mock.patch('taskuary.agents._resolve_cmd', side_effect=lambda n: [n]):
             self.assertEqual(agent_argv({'cmd': 'claude', 'args': ['-p', '--output-format', 'json']}, 'opus'),
                              ['claude', '--model', 'opus'])
+            # no args at all -> the known preset stands in (minus its `exec` pipe subcommand), so a
+            # cmd-only profile is as unattended in a session as it is headless
             self.assertEqual(agent_argv({'cmd': 'codex', 'model_arg': '-m', 'model': 'gpt-5-codex'}),
-                             ['codex', '-m', 'gpt-5-codex'])
+                             ['codex', '--dangerously-bypass-approvals-and-sandbox', '-m', 'gpt-5-codex'])
             self.assertEqual(agent_argv({'cmd': 'gemini', 'interactive_args': ['chat']}), ['gemini', 'chat'])
 
     def test_wrap_up_reads_the_screen_and_asks_the_agent_nothing(self):

@@ -16,6 +16,12 @@ export const FAINT = "#6e685f";        // tertiary (timestamps, rails) - twice d
                                        // passes still read as fog against oat paper
 export const ACCENT = "#55697a";       // slate blue - the brand: chrome, links, buttons
 export const ACCENT2 = "#6f8a6e";      // sage - section labels, secondary emphasis
+export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7d9a7c)`;
+// The assistant shares the sync control's slate-to-sage family: the sage end identifies its
+// posts without the old light-blue wash, and primary actions use the exact same gradient.
+export const ASSISTANT = {
+  solid: "#7d9a7c", ink: "#526b53", tint: "#edf1ea", bd: "#cfd8c8", gradient: GRADIENT,
+};
 
 /* The one loud colour, and the whole point of this palette: ALERT means "this is on you" and
    is spent on nothing else. It is deliberately COOLER than the paper - a warm red on warm oat
@@ -28,7 +34,6 @@ export const ALERT = "#8a3646";        // oxblood - solid: dots, badges, the nee
 export const ALERT_INK = "#7a2f3c";    // text on a tint
 export const ALERT_TINT = "#f3e6e8";   // the tint, mixed toward the paper
 export const ALERT_BD = "#e0c6cb";
-export const GRADIENT = `linear-gradient(90deg, ${ACCENT}, #7d9a7c)`;
 
 /* ── ROLES: one colour per MEANING, and nothing else decides a colour ────────────────────
    The bug this fixes is not any single hex. It is that "in progress" was wearing the
@@ -75,6 +80,8 @@ export const TAGS = {
   feed:      { ...role("info", "feed"),        hint: "shown for information - this connection is a feed" },
   yours:     { ...role("handled", "your reply"), hint: "you sent this - kept so the thread shows both sides" },
   triaging:  { ...role("muted", "triaging…"),  hint: "on the timeline first - triage is deciding" },
+  assistant: { bg: ASSISTANT.tint, fg: ASSISTANT.ink, label: "assistant",
+    hint: "the assistant's own post - what it noticed and what it would do; open it to talk back or act" },
 };
 
 // Catppuccin Mocha — the palette the Claude Code / Codex theme plugins use, so a session
@@ -122,6 +129,19 @@ export const theme = createTheme({
   },
   shape: { borderRadius: 8 },
   components: {
+    MuiCssBaseline: { styleOverrides: {
+      // Windows paints a classic scrollbar - arrow buttons and all - on every box that can
+      // scroll, and a box that overflows by a pixel shows up as a pair of stray arrows at
+      // its edge. Thin, arrowless, the app's own colour, everywhere; nothing else changes.
+      // Chromium ignores the ::-webkit-scrollbar rules once scrollbar-width is set, so the
+      // standard property is for Firefox only; Edge and Chrome take the webkit rules below
+      "@supports not selector(::-webkit-scrollbar)": { "*": { scrollbarWidth: "thin", scrollbarColor: "#d3ccc1 transparent" } },
+      "*::-webkit-scrollbar": { width: 8, height: 8 },
+      "*::-webkit-scrollbar-thumb": { backgroundColor: "#d3ccc1", borderRadius: 8 },
+      "*::-webkit-scrollbar-track": { background: "transparent" },
+      "*::-webkit-scrollbar-button": { display: "none", width: 0, height: 0 },
+      "*::-webkit-scrollbar-corner": { background: "transparent" },
+    } },
     MuiPaper: { styleOverrides: { root: { backgroundImage: "none", border: `1px solid ${BORDER}`, boxShadow: "none" } } },
     MuiButton: {
       styleOverrides: {

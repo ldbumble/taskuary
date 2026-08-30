@@ -9,6 +9,7 @@ import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import RateReviewIcon from "@mui/icons-material/RateReview";
+import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import api from "./api";
 import LearnedView from "./LearnedView.jsx";
 import { FAINT, INK, mono } from "./theme.jsx";
@@ -20,6 +21,8 @@ const DOCS = {
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "How you write replies — greeting, tone, length, phrasing — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
+  counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+    blurb: "How the assistant speaks to YOU — its posts on the Timeline: the reply you never heard back on, the meeting ahead, the task gone quiet, its own ideas. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#55697a" }} />,
@@ -66,8 +69,8 @@ const OwnerCard = () => {
       <Box sx={{ minWidth: 260, flex: 1 }}>
         <Typography variant="body2" sx={{ color: INK, fontWeight: 700 }}>Who the documents speak for</Typography>
         <Typography variant="caption" sx={{ color: FAINT }}>
-          One field, every mention: the docs say {"{{owner}}"} and this fills it in — signatures, escalation
-          rules, the coder's instructions. Saving also converts any name still typed into them.
+          Set your identity once and Taskuary uses it everywhere it speaks for you — signatures,
+          escalation rules, and the coder's instructions. Saving also updates older documents that spell out your name.
         </Typography>
       </Box>
       <TextField size="small" label="Your name" value={name} onChange={(e) => setName(e.target.value)}

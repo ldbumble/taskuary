@@ -1,7 +1,7 @@
 // Bring-your-own-AI-CLI editor - shared by Settings (Agents page) and Connectors
 // (AI CLI agents card). Any CLI that reads a prompt on stdin is a teammate.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, ListSubheader, MenuItem, Select, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
@@ -40,17 +40,20 @@ const MODEL_PICKS = {
 };
 const pickLabel = (v) => v.startsWith("effort:")
   ? `same model, ${v.slice(7)} reasoning effort` : v;
+// "C:\...\OpenAI\Codex\bin\codex.exe" is codex: the picks key on the CLI, not on how the path was typed
+const cliBase = (cmd) => String(cmd || "").trim().replace(/^.*[\\/]/, "").replace(/\.(cmd|exe|bat|ps1)$/i, "").toLowerCase();
 
 const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "", lightModel: "" };
 const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(Boolean);
 
 export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) => {
   const [agents, setAgents] = useState(null);
+  const [catalog, setCatalog] = useState({});     // per agent: the CLI's own model list (codex reads it off disk)
   const [draft, setDraft] = useState(null);
   const [err, setErr] = useState("");
 
   const load = useCallback(async () => {
-    try { setAgents((await api.get("/api/agents")).data.config || {}); }
+    try { const { data } = await api.get("/api/agents"); setAgents(data.config || {}); setCatalog(data.models || {}); }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load agents"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -110,8 +113,12 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       setTests((t) => ({ ...t, [name]: data }));
     } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: e?.response?.data?.detail || "test failed" } })); }
   };
-  const usePreset = (pr) => setDraft({ name: pr.name, cmd: pr.cmd, args: pr.args.join(NEWLINE),
-    resume: pr.resume, timeout: pr.timeout, cwd: "", cwdMap: "" });
+  const usePreset = (pr) => {
+    let name = pr.name, n = 2;
+    while (agents[name]) name = `${pr.name}-${n++}`;
+    setDraft({ name, cmd: pr.cmd, args: pr.args.join(NEWLINE),
+      resume: pr.resume, timeout: pr.timeout, cwd: "", cwdMap: "" });
+  };
 
   if (!agents) return <CircularProgress size={22} sx={{ m: 4 }} />;
   return (
@@ -120,7 +127,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
         <Typography variant="body2" sx={{ color: DIM }}>
-          Any CLI that reads a prompt on stdin is a teammate — Claude Code's JSON output enables resumable sessions.
+          Add the same CLI more than once under different names for separate profiles; Claude Code profiles stay resumable.
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
@@ -219,16 +226,42 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
               light model — what triage, drafts and summaries run on when this CLI is the triage
               brain; coding sessions keep the main model
             </Typography>
-            <Select size="small" displayEmpty value={draft.lightModel} sx={{ minWidth: 260, bgcolor: "#fff" }}
-              onChange={(e) => setDraft({ ...draft, lightModel: e.target.value })}>
-              <MenuItem value="" sx={{ fontSize: 12.5 }}>same model as coding (no downshift)</MenuItem>
-              {(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).map((mo) => (
-                <MenuItem key={mo} value={mo} sx={{ fontSize: 12.5 }}>{pickLabel(mo)}</MenuItem>
-              ))}
-              {draft.lightModel && !(MODEL_PICKS[(draft.cmd || "").trim().toLowerCase()] || []).includes(draft.lightModel) && (
-                <MenuItem value={draft.lightModel} sx={{ fontSize: 12.5 }}>{draft.lightModel}</MenuItem>
-              )}
-            </Select>
+            {(() => {
+              // codex: the models its own /model picker lists, each with its reasoning levels, read off
+              // ~/.codex/models_cache.json - the hand-typed list said gpt-5 while codex said GPT-5.6-Sol
+              const cat = catalog[draft.name] || Object.values(catalog).find((c) => c.cli === cliBase(draft.cmd)) || {};
+              const rich = (cat.models || []).filter((m) => m.efforts?.length);
+              const flat = rich.length ? [] : (cat.choices?.length ? cat.choices : (MODEL_PICKS[cliBase(draft.cmd)] || []));
+              const known = new Set([...rich.flatMap((m) => [m.id, ...m.efforts.map((e) => `${m.id}@${e}`)]), ...flat]);
+              return (
+                <>
+                  <Select size="small" displayEmpty value={draft.lightModel} sx={{ minWidth: 320, bgcolor: "#fff" }}
+                    MenuProps={{ PaperProps: { sx: { maxHeight: 420 } } }}
+                    onChange={(e) => setDraft({ ...draft, lightModel: e.target.value })}>
+                    <MenuItem value="" sx={{ fontSize: 12.5 }}>same model as coding (no downshift)</MenuItem>
+                    {rich.map((m) => [
+                      <ListSubheader key={`${m.id}-h`} sx={{ fontSize: 11, lineHeight: "28px", color: "#55697a", bgcolor: "#f6f4f1" }}>
+                        {m.label}{m.desc ? ` — ${m.desc}` : ""}
+                      </ListSubheader>,
+                      ...m.efforts.map((eff) => (
+                        <MenuItem key={`${m.id}@${eff}`} value={`${m.id}@${eff}`} sx={{ fontSize: 12.5, pl: 3 }}>
+                          {m.id} · {eff}{eff === m.default_effort ? " (default)" : ""}
+                        </MenuItem>
+                      )),
+                    ])}
+                    {flat.map((mo) => <MenuItem key={mo} value={mo} sx={{ fontSize: 12.5 }}>{pickLabel(mo)}</MenuItem>)}
+                    {draft.lightModel && !known.has(draft.lightModel) && (
+                      <MenuItem value={draft.lightModel} sx={{ fontSize: 12.5 }}>{pickLabel(draft.lightModel)}</MenuItem>
+                    )}
+                  </Select>
+                  {cat.current?.model && (
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                      Codex itself is set to {cat.current.model}{cat.current.effort ? ` · ${cat.current.effort}` : ""} (its config.toml) — list read from {cat.source}.
+                    </Typography>
+                  )}
+                </>
+              );
+            })()}
           </Box>
           <TextField label="repo → dir map (one 'org/repo = C:/src/checkout' per line)" multiline minRows={2}
             value={draft.cwdMap} onChange={(e) => setDraft({ ...draft, cwdMap: e.target.value })} />
@@ -244,4 +277,3 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     </Box>
   );
 };
-

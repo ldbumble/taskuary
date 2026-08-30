@@ -26,10 +26,11 @@ const T = ({ p, bg, fg = "#fff", text, size = 11, weight = 800 }) => (
 );
 
 export const LOGOS = {
+  // dark slate, not the brand mid-tone: on oat paper the lighter envelope read as disabled
   email: (p) => (
     <S {...p}>
-      <rect x="2" y="5" width="20" height="14" rx="2.5" fill="#55697a" />
-      <path fill="none" stroke="#fffdfb" strokeWidth="1.8" strokeLinejoin="round" d="M4.2 7.6l7.8 5.9 7.8-5.9" />
+      <rect x="1.5" y="4.5" width="21" height="15" rx="2.5" fill="#3a4a58" />
+      <path fill="none" stroke="#fffdfb" strokeWidth="1.9" strokeLinejoin="round" d="M3.8 7.3l8.2 6.2 8.2-6.2" />
     </S>
   ),
   outlook: (p) => (
@@ -50,8 +51,10 @@ export const LOGOS = {
   ),
   whatsapp: (p) => (
     <S {...p}>
-      <circle cx="12" cy="12" r="10" fill="#25D366" />
-      <path fill="#fff" d="M6.6 17.6l.9-3.1a6.2 6.2 0 1 1 2.3 2.3l-3.2.8zm3.5-2.1c.6.3 1.2.5 1.9.5a4.5 4.5 0 1 0-4.5-4.5c0 .8.2 1.5.6 2.1l-.5 1.8 1.9-.5zm3.8-1.8c-.1-.1-.7-.4-.8-.4s-.2 0-.3.1l-.4.5c-.1.1-.2.1-.3 0a3.7 3.7 0 0 1-1.8-1.6c-.1-.2 0-.2.1-.3l.3-.4v-.3l-.4-.8c-.1-.2-.2-.2-.3-.2h-.3c-.1 0-.3 0-.4.2-.2.2-.6.6-.6 1.4s.6 1.6.7 1.7c.1.1 1.2 1.8 2.9 2.5.4.2.7.3 1 .3.4.1.7.1 1 0 .3 0 .9-.4 1-.8.1-.4.1-.7.1-.8 0-.1-.1-.1-.2-.2z" />
+      {/* the familiar mark: a speech bubble with a tail at lower-left and a handset inside - the
+          old path was a blob at 17px */}
+      <circle cx="12" cy="12" r="11" fill="#25D366" />
+      <path fill="#fff" d="M12 4.6a7.3 7.3 0 0 0-6.3 11l-1.1 4 4.1-1.1A7.3 7.3 0 1 0 12 4.6zm0 1.5a5.8 5.8 0 1 1-3 10.8l-.3-.2-2.4.6.6-2.3-.2-.3A5.8 5.8 0 0 1 12 6.1zm-2.4 2.8c-.2 0-.5.1-.8.4-.3.3-.8.8-.8 1.8s.8 2.1.9 2.3c.1.1 1.6 2.5 3.8 3.4 1.9.8 2.3.6 2.7.6.4-.1 1.3-.6 1.5-1.1.2-.6.2-1 .1-1.1l-.5-.3-1.5-.7c-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.7-.3-1.4-.8-2-1.3-.5-.5-1-1.2-1.2-1.7-.1-.2 0-.3.1-.4l.4-.4.3-.5c.1-.2 0-.3 0-.5l-.7-1.6c-.1-.3-.3-.3-.5-.3h-.4z" />
     </S>
   ),
   gmail: (p) => (
@@ -135,6 +138,47 @@ export const LOGOS = {
       <path fill="#262521" d="M8.2 5.4c.7 0 1.2 1.1 1.3 2.5a3.9 3.9 0 0 1 5 0c.1-1.4.6-2.5 1.3-2.5.8 0 1.3 1.6 1.1 3.4 1 .9 1.6 2.1 1.6 3.4 0 .8-.2 1.5-.6 2.1.4.6.6 1.4.6 2.2v2h-1.8v-2c0-.6-.2-1.1-.5-1.5-.9.8-2.2 1.3-3.7 1.3s-2.8-.5-3.7-1.3c-.3.4-.5.9-.5 1.5v2H6.5v-2c0-.8.2-1.6.6-2.2-.4-.6-.6-1.3-.6-2.1 0-1.3.6-2.5 1.6-3.4-.2-1.8.3-3.4 1.1-3.4zm3.8 4.2c-1.9 0-3.4 1.2-3.4 2.7s1.5 2.7 3.4 2.7 3.4-1.2 3.4-2.7-1.5-2.7-3.4-2.7zm-1.2 1.6a.7.7 0 1 1 0 1.4.7.7 0 0 1 0-1.4zm2.4 0a.7.7 0 1 1 0 1.4.7.7 0 0 1 0-1.4z" />
     </S>
   ),
+  // ── AI — voice: speech to text. Brand tiles where the brand has a mark; a waveform for the
+  //    two that are "a Whisper somewhere" - one with a plug (a server), one with a house (local).
+  groq_stt: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#F55036" />
+      <path fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" d="M15.6 10.2A4 4 0 1 0 12 15.9h2.4a1.6 1.6 0 0 1 1.6 1.6V19" />
+    </S>
+  ),
+  openai_stt: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#0f0f0f" />
+      <circle cx="12" cy="12" r="5.6" fill="none" stroke="#fff" strokeWidth="1.8" />
+      <path fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" d="M12 6.4v3.2M12 14.4v3.2M6.9 9.2l2.8 1.6M14.3 13.2l2.8 1.6M6.9 14.8l2.8-1.6M14.3 10.8l2.8-1.6" />
+    </S>
+  ),
+  deepgram: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#13EF93" />
+      <path fill="#0b1f19" d="M8 6.5h4.2c3.2 0 5.3 2.2 5.3 5.5s-2.1 5.5-5.3 5.5H8V6.5zm2.6 2.4v6.2h1.5c1.7 0 2.7-1.2 2.7-3.1s-1-3.1-2.7-3.1h-1.5z" />
+    </S>
+  ),
+  elevenlabs_stt: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#000" />
+      <rect x="8" y="6.5" width="2.6" height="11" rx=".6" fill="#fff" />
+      <rect x="13.4" y="6.5" width="2.6" height="11" rx=".6" fill="#fff" />
+    </S>
+  ),
+  stt_server: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#55697a" />
+      <path fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" d="M5.5 12h1.2M8.4 9v6M11.2 6.5v11M14 8.5v7M16.8 10.5v3M19 12h-.6" />
+    </S>
+  ),
+  local_whisper: (p) => (
+    <S {...p}>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#6f8a6e" />
+      <path fill="#fff" d="M12 5.2l6.2 5.2h-1.7v2.2h-9v-2.2H5.8z" opacity=".95" />
+      <path fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" d="M7.4 16.5v2M9.7 14.8v3.7M12 13.6v4.9M14.3 14.8v3.7M16.6 16.5v2" />
+    </S>
+  ),
   cli: (p) => (
     <S {...p}>
       <rect x="2" y="3" width="20" height="18" rx="3" fill="#1e1e2e" />
@@ -162,9 +206,12 @@ export const LOGOS = {
       <path fill="#fff" d="M17.4 7.3l-1.9 9.1c-.14.64-.53.8-1.07.5l-2.94-2.17-1.42 1.37c-.16.16-.29.29-.58.29l.21-2.97 5.4-4.88c.23-.2-.05-.32-.36-.12l-6.67 4.2-2.88-.9c-.62-.2-.63-.62.13-.92l11.2-4.32c.52-.19.97.12.8.92z" />
     </S>
   ),
+  // Messages: the bubble on its green rounded square, the same white-glyph-on-brand-shape
+  // as the Telegram and WhatsApp marks beside it, so the row reads at one fidelity at 15px
   imessage: (p) => (
     <S {...p}>
-      <path fill="#34C759" d="M12 3C6.5 3 2 6.7 2 11.3c0 2.5 1.3 4.7 3.4 6.2-.2 1.2-.8 2.4-1.6 3.3 1.9-.2 3.6-.9 4.9-1.9 1 .3 2.1.4 3.3.4 5.5 0 10-3.7 10-8.3S17.5 3 12 3z" />
+      <rect x="2" y="2" width="20" height="20" rx="4.6" fill="#34C759" />
+      <path fill="#fff" d="M12 6.6C8.2 6.6 5.6 8.9 5.6 11.7c0 1.6.85 3 2.2 3.9-.15.8-.55 1.6-1.1 2.2 1.3-.15 2.45-.6 3.35-1.3.6.2 1.25.3 1.95.3 3.8 0 6.4-2.3 6.4-5.1S15.8 6.6 12 6.6z" />
     </S>
   ),
   discord: (p) => (
@@ -378,5 +425,6 @@ export const LOGOS = {
   ),
 };
 
+LOGOS.sharepoint = LOGOS.sharepoint_list;      // the card is "SharePoint"; the list mark is the brand mark
 export const hasLogo = (k) => !!LOGOS[k];
 export const Logo = ({ name, sx }) => (LOGOS[name] ? LOGOS[name]({ sx }) : null);

@@ -12,9 +12,14 @@ TRANSCRIPT_SYSTEM = (
     'You are reading the terminal transcript of a coding agent that has just worked a task for '
     "the owner, who has now closed the session. Write the owner's record of what happened, from "
     'the transcript ALONE - never a step it did not take, never a claim it did not make.\n'
-    'Output ONLY this JSON: {"determination": "...", "actions": "...", "summary": "..."} - '
+    'Output ONLY this JSON: {"determination": "...", "actions": "...", "summary": "...", '
+    '"outcome": "did_work|nothing_to_do"} - '
     'determination is what was decided and why, actions is what was actually changed (files, '
-    'commands, records, ids), summary is the two-sentence version for someone who read none of it.')
+    'commands, records, ids), summary is the two-sentence version for someone who read none of it.\n'
+    'outcome is nothing_to_do ONLY when the session changed, produced and chased nothing because there '
+    'was nothing here to do at all - the message turned out to be a notice, a reminder, a newsletter or '
+    "somebody else's job. Anything the session did, found out or settled for the owner is did_work, and "
+    'that includes looking and reporting that the problem is not real.')
 
 
 def report_from_transcript(store, task_id: int, transcript: str, agent: str = 'coder') -> dict:
@@ -30,8 +35,12 @@ def report_from_transcript(store, task_id: int, transcript: str, agent: str = 'c
         out = llm(TRANSCRIPT_SYSTEM, f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\n"
                                      f'Transcript:\n{transcript}', max_tokens=900)
         j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
-        rep = blank | {k: str(j.get(k) or '') for k in ('determination', 'actions', 'summary')}
+        rep = blank | {k: str(j.get(k) or '') for k in FIELDS}
         if not any(rep.values()): raise ValueError('empty report')
+        # a flag, not prose: resolution_text never renders it, finish() reads it (see nobody_waiting).
+        # Absent or unrecognised means did_work - the ending that drafts, because swallowing a reply
+        # somebody is waiting for is the worse failure of the two.
+        if j.get('outcome') == 'nothing_to_do': rep['outcome'] = 'nothing_to_do'
         return rep
     except Exception as e:
         logger.warning(f'transcript report failed for task {task_id}: {e}')
@@ -79,6 +88,27 @@ def reply_target(store, task_id: int):
     return next((m['MessageId'] for m in reversed(store.list_messages(task_id)) if m.get('Status') != 'context'), None)
 
 
+# ── the cheap ending ────────────────────────────────────────────────────────────────────
+# Almost everything a keyboard can do goes to the coding agent (the owner's rule), and the
+# whole bargain is that an agent with nothing to do says "nothing to do here" and stops CHEAPLY.
+# It did not stop cheaply: finish() drafted a reply whatever the session found, so a CyberHoot
+# training reminder came back as mail to hoots@cyberhoot.com reading "Done. This was just a
+# CyberHoot training reminder, not an engineering or repo issue, so I closed it as FYI with no
+# further action" - our own internal wrap-up, in our own internal words, posted to the robot that
+# sent the notice (TQ-0252). Nothing about that was a reply to the sender.
+def nobody_waiting(store, mid: int, rep: dict) -> bool:
+    """Did this run end with nothing done, for a sender who is not waiting to hear anything back?
+    Then there is no reply to write and the notice is simply filed with its report.
+
+    BOTH halves are required, and the second is the one that keeps this honest. "Nothing to do"
+    said to a PERSON who asked is still the answer they are owed - "I looked, the import is fine"
+    is a reply, and swallowing it would be the worse bug. "Nothing to do" on an automated notice
+    is a mailer's inbox, and whatever we write there is only ever about ourselves."""
+    if rep.get('outcome') != 'nothing_to_do': return False
+    from .categories import sender_class, team_domains_of
+    return sender_class(store.get_message(mid) or {}, team_domains_of(store.get_settings())) != 'person'
+
+
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder') -> dict:
     """The end of finished work: the responder drafts the reply the sender gets and the task waits
     on you to send it. Nothing to reply to means nothing to wait for, so it just closes."""
@@ -93,6 +123,11 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     if mid:
         from .outbound import can_reply
         if not can_reply(store, (store.get_message(mid) or {}).get('Channel')): mid = None
+    # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
+    if mid and not held and nobody_waiting(store, mid, rep):
+        store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
+                                                   'answer - filed with the report, no reply drafted.')
+        mid = None
     if mid: raise_reply(store, task_id, mid, run_id, rep)
     store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
     return {'drafting': bool(mid), 'message_id': mid}

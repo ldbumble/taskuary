@@ -25,18 +25,24 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import StorageIcon from "@mui/icons-material/Storage";
+import MicIcon from "@mui/icons-material/Mic";
+import StopCircleIcon from "@mui/icons-material/StopCircle";
+import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/material";
 import { Logo, hasLogo } from "./logos.jsx";
-import { ACTION_COLORS, TAGS, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
+import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
-// Brand colors so a glance says where a message came from: Teams purple, Outlook blue,
-// teal for scheduled reports.
-export const CHANNEL_COLORS = { teams: "#6264A7", email: "#7c7367", github: "#2b2a26", report: "#6f8a6e",
+// Brand colors so a glance says where a message came from: Teams purple, Outlook blue - and
+// amber for scheduled reports, the one row that is ours and not a person, so it has to read
+// from across the room rather than blend into the paper the way sage did.
+export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b2a26", report: "#c47d1a", assistant: ASSISTANT.solid,
+  followup: "#6f8a6e", promise: "#55697a", prep: "#8a7a5c", cold: "#8a3646", idea: "#55697a",     // the assistant's producers (Settings)
   slack: "#611f69", telegram: "#229ED9", whatsapp: "#25D366", imessage: "#34C759", ai: "#55697a",
   jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF", clickup: "#7b68ee", todoist: "#e44332",
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
   aws: "#ff9900", azure: "#0078d4", database: "#6b6459", smb_file: "#6b6459" };
-const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon,
+const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon, assistant: SmartToyIcon,
+  followup: SendIcon, promise: ChecklistIcon, prep: GroupsIcon, cold: ErrorOutlineIcon, idea: AutoAwesomeIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon, imessage: SendIcon,
   ai: AutoAwesomeIcon, jira: BugReportIcon, asana: ChecklistIcon, monday: ViewKanbanIcon,
   clickup: ViewKanbanIcon, todoist: ChecklistIcon,
@@ -54,7 +60,7 @@ export const ChannelIcon = ({ channel, sx }) => {
 /* One dialog for everything that destroys something.
 
    Deleting a report, an agent or a connection, and "Not a task" - which deletes the task AND
-   writes a rule about its sender - were all a single unconfirmed click; "Not a task" was one
+   writes a verdict triage reads on every later message - were all a single unconfirmed click; "Not a task" was one
    click inside a MENU, where the pointer is already moving. None of it is undoable.
 
    `what` names the thing in the user's own words, `consequence` says what actually happens
@@ -62,6 +68,33 @@ export const ChannelIcon = ({ channel, sx }) => {
    that only says "are you sure?" tells you nothing you did not already know. The failure is
    shown here rather than swallowed: these calls can be refused, and a dialog that closes on a
    failed delete claims the thing is gone. */
+/* One in-app question in the app's own voice. A native confirm() paints the browser's
+   "127.0.0.1:7787 says" box over the page - the one dialog in the product that does not look
+   like the product. */
+export const Confirm = ({ open, title, text, confirmLabel = "OK", onConfirm, onClose }) => {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const go = async () => {
+    setBusy(true); setErr("");
+    try { await onConfirm(); setBusy(false); onClose(); }
+    catch (e) { setErr(e?.response?.data?.detail || e?.message || "that did not work"); setBusy(false); }
+  };
+  return (
+    <Dialog open={!!open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 700, pb: 0.5 }}>{title}</DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ fontSize: 13, color: DIM, whiteSpace: "pre-wrap" }}>{text}</DialogContentText>
+        {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disableElevation onClick={go} disabled={busy}>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : confirmLabel}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete", onConfirm, onClose }) => {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -95,7 +128,14 @@ export const RefChip = ({ taskId, onClick }) => taskId ? (
     sx={{ ...mono, bgcolor: "#eae4d8", color: "#55697a", height: 19, fontSize: 10.5 }} />
 ) : null;
 
-export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, category }) => {
+export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, category, working }) => {
+  // an agent in a live session on this task: the row says so, by name - not "needs you"
+  if (working && taskStatus !== "done" && reviewStatus !== "pending") {
+    // "agent", not the agent's name: the name is whichever CLI happens to be configured (claude,
+    // codex, a wrapper) and reads as a brand on a status chip; the tooltip still says who
+    return <Chip size="small" label="agent working" title={`${working} has this task open in a live session right now`}
+      sx={{ bgcolor: ROLES.working.tint, color: ROLES.working.ink, height: 19, fontSize: 10.5, fontWeight: 700 }} />;
+  }
   // a category that is NOT a review state (info, promo, ignored…) is the whole story - a
   // stray review row must not turn a colleague's FYI into "reviewed · edited"
   const cat = category && TAGS[category];
@@ -373,16 +413,95 @@ const REPORT_COLORS = { Triage: "#6f8a6e", Determination: "#6f8a6e", Actions: "#
 /* The four things you can do with a timeline item were four buttons of four different sizes
    and colours, two rows apart, half of them right-aligned - so the reader had to hunt for
    the set. One list, one shape per row: what it is, and what it does. */
+/* ── Voice into prompts. Is there a speech-to-text connector at all (Connectors → AI — voice)?
+   Asked once per mount; the mic explains itself when there is none. ── */
+export const useVoiceReady = () => {
+  const [v, setV] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    api.get("/api/voice/status").then(({ data }) => alive && setV(data)).catch(() => alive && setV({ ready: false }));
+    return () => { alive = false; };
+  }, []);
+  return v;
+};
+
+// One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
+// raw bytes and the text lands through onText - into a prompt box, or straight into a session.
+export const MicButton = ({ onText, size = 18, sx }) => {
+  const voice = useVoiceReady();
+  const [rec, setRec] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const flash = (s) => { setErr(s); setTimeout(() => setErr(""), 5000); };
+  // No voice connector? Edge and Chrome ship their own recogniser (the Web Speech API) - free,
+  // decent for dictation, nothing to set up. It cannot transcribe a voice-note FILE, so the
+  // connectors still matter for the funnel; here it means the mic always works.
+  const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  const viaBrowser = !!(voice && !voice.ready && SR);
+  const start = async () => {
+    if (viaBrowser) {
+      try {
+        const r = new SR(); r.lang = navigator.language || "en-US"; r.continuous = true; r.interimResults = false;
+        // Chrome's contextual-biasing surface is progressive: use it when present, while older
+        // browsers keep dictating normally. Server voice connectors always receive this same list.
+        if (voice?.vocabulary?.length && window.SpeechRecognitionPhrase) {
+          try { r.phrases = voice.vocabulary.map((term) => new window.SpeechRecognitionPhrase(term, 5)); } catch { /* unsupported preview surface */ }
+        }
+        let heard = "";
+        r.onresult = (e) => { heard = Array.from(e.results).filter((x) => x.isFinal).map((x) => x[0].transcript.trim()).join(" "); };
+        r.onerror = (e) => flash(e.error === "not-allowed" ? "microphone blocked in this browser" : `recognition ${e.error}`);
+        r.onend = () => { setRec(null); if (heard) onText?.(heard); else flash("nothing heard"); };
+        r.start(); setRec(r);
+      } catch { flash("this browser cannot dictate here"); }
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
+      const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+        setBusy(true);
+        try {
+          const { data } = await api.post("/api/voice/transcribe", blob, { headers: { "Content-Type": blob.type || "audio/webm" } });
+          if (data.text) onText?.(data.text); else flash("nothing audible");
+        } catch (e) { flash(e?.response?.data?.detail || "transcription failed"); }
+        setBusy(false);
+      };
+      mr.start(); setRec(mr);
+    } catch { flash("microphone not available in this browser"); }
+  };
+  const stop = () => { rec?.stop(); if (!viaBrowser) setRec(null); };   // the browser recogniser reports back through onend
+  const title = err || (!voice ? ""
+    : rec ? "Stop and transcribe"
+    : voice.ready ? `Dictate (${voice.label || voice.provider})`
+    : viaBrowser ? "Dictate — your browser's own recogniser (free). Add an AI voice connector for voice notes and better accuracy."
+    : "Dictate — add an AI voice connector first (Connectors → AI — voice; Groq is free)");
+  return (
+    <MuiTooltip title={title}><span>
+      <MuiIconButton size="small" onClick={rec ? stop : start} disabled={busy || (voice && !voice.ready && !viaBrowser)} sx={sx}
+        aria-label={rec ? "stop recording" : "dictate"}>
+        {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "#8a3646" }} /> : <MicIcon sx={{ fontSize: size }} />}
+      </MuiIconButton>
+    </span></MuiTooltip>
+  );
+};
+
 export const ChoiceRow = ({ icon, label, hint, tint = "#eae4d8", onClick, first, busy }) => (
   <Box onClick={busy ? undefined : onClick}
-    sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, py: 0.7, cursor: busy ? "default" : "pointer",
+    sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, py: 0.55, cursor: busy ? "default" : "pointer",
       borderTop: first ? "none" : `1px solid ${BORDER}`, transition: "background .12s",
       "&:hover": { bgcolor: busy ? "transparent" : "#f4f1ec" }, "&:hover .thubChoiceGo": { opacity: 1, transform: "none" } }}>
     <Box sx={{ width: 24, height: 24, borderRadius: 1.5, bgcolor: tint, flexShrink: 0,
       display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</Box>
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.3 }}>{label}</Typography>
-      {hint && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.25, fontSize: 10.5 }}>{hint}</Typography>}
+    {/* one line per choice: the label, then its hint trailing in the same line (ellipsis on
+        a narrow panel, the whole of it on hover) - eight two-line rows needed a scrollbar */}
+    <Box sx={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 0.9 }} title={hint || undefined}>
+      <Typography variant="body2" sx={{ color: INK, fontWeight: 600, lineHeight: 1.3, whiteSpace: "nowrap" }}>{label}</Typography>
+      {hint && <Typography variant="caption" noWrap sx={{ color: FAINT, fontSize: 10.5, minWidth: 0 }}>{hint}</Typography>}
     </Box>
     {busy ? <CircularProgress size={13} />
       : <ChevronRightIcon className="thubChoiceGo" sx={{ fontSize: 16, color: FAINT, opacity: 0,
@@ -741,7 +860,7 @@ const tzOffsetMin = (d) => {
   const m = part.replace("GMT", "").match(/([+-]?)(\d+)(?::(\d+))?/) || [0, "+", "0"];
   return (m[1] === "-" ? -1 : 1) * (parseInt(m[2] || 0) * 60 + parseInt(m[3] || 0));
 };
-const asUtc = (s) => {
+export const asUtc = (s) => {
   const iso = s.replace(" ", "T");
   if (!TZ) return new Date(iso);                       // blank = this browser IS the server's zone
   try { return new Date(Date.parse(iso + "Z") - tzOffsetMin(new Date(iso + "Z")) * 60000); }
@@ -756,6 +875,7 @@ export const tzLabel = () => {
 };
 const tzOpt = () => (TZ ? { timeZone: TZ } : {});   // format in the configured zone, so digits match the label
 export const fmtTime12 = (s) => s ? asUtc(s).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "";
+export const tsMs = (s) => s ? asUtc(s).getTime() : 0;      // one clock for everything the Timeline orders (messages, meetings)
 export const fmtDateTime = (s) => {
   if (!s) return "";
   const base = asUtc(s).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...tzOpt() });
@@ -872,19 +992,37 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   const [text, setText] = React.useState("");
   const [flash, setFlash] = React.useState("");
   const [many, setMany] = React.useState(false);      // paste a list: one prompt per line, queued in order
+  const [imgs, setImgs] = React.useState([]);         // screenshots pasted into the box, going with the note
+  const [showQ, setShowQ] = React.useState(false);    // Wall badge peeks at the queue, then folds itself away
+  const peekTimer = React.useRef(null);
   const load = React.useCallback(async () => {
     if (!taskId) return;
     try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
   }, [taskId]);
   React.useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  React.useEffect(() => () => clearTimeout(peekTimer.current), []);
   const lines = text.split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).length;
+  // A screenshot pasted in: held here as a thumbnail, uploaded when you queue. The pty carries
+  // text only, so the file goes to disk and the note names it - the agent opens it from there.
+  const onPaste = (e) => {
+    const files = [...(e.clipboardData?.items || [])].filter((i) => i.kind === "file" && /^image\//.test(i.type)).map((i) => i.getAsFile()).filter(Boolean);
+    if (!files.length) return;
+    e.preventDefault();
+    setImgs((s) => [...s, ...files.map((f) => ({ id: Math.random().toString(36).slice(2), file: f, url: URL.createObjectURL(f) }))]);
+  };
+  const dropImg = (id) => setImgs((s) => { const g = s.find((x) => x.id === id); if (g) URL.revokeObjectURL(g.url); return s.filter((x) => x.id !== id); });
+  const dropImgs = () => setImgs((s) => { s.forEach((x) => URL.revokeObjectURL(x.url)); return []; });
   const queue = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() && !imgs.length) return;
     try {
+      const paths = [];
+      for (const im of imgs) paths.push((await api.post(`/api/tasks/${taskId}/waitroom/image`, im.file, { headers: { "Content-Type": im.file.type } })).data.path);
+      const ref = !paths.length ? "" : `${paths.length === 1 ? "Pasted image - open it with your image/Read tool:" : "Pasted images - open them with your image/Read tool:"} ${paths.map((x) => `"${x}"`).join(" ")}`;
+      const body = [text.trim(), ref].filter(Boolean).join(many ? "\n" : " ");
       const { data } = many
-        ? await api.post(`/api/tasks/${taskId}/waitroom/bulk`, { text })
-        : await api.post(`/api/tasks/${taskId}/waitroom`, { text });
-      setText(""); setMany(false);
+        ? await api.post(`/api/tasks/${taskId}/waitroom/bulk`, { text: body })
+        : await api.post(`/api/tasks/${taskId}/waitroom`, { text: body });
+      imgs.forEach((im) => URL.revokeObjectURL(im.url)); setImgs([]); setText(""); setMany(false);
       if (many) { setFlash(`${data.queued} prompts queued — they drip in one per stop`); setTimeout(() => setFlash(""), 5000); load(); onQueued?.(data); return; }
       setFlash(data.delivered ? (data.state === "restarted" ? "session reopened with it" : "typed in — the agent was parked") : "queued — goes in when the agent stops");
       setTimeout(() => setFlash(""), 4000);
@@ -892,12 +1030,111 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     } catch (e) { setFlash(e?.response?.data?.detail || "could not queue it"); }
   };
   const pending = wait.data.filter((w) => !w.DeliveredAt);
+  const peekQueue = () => {
+    if (!pending.length) return;
+    clearTimeout(peekTimer.current); setShowQ(true);
+    peekTimer.current = setTimeout(() => setShowQ(false), 3000);
+  };
   const stateLine = wait.state === "working" ? "agent is working — this waits for its next stop"
     : wait.state === "asking" ? "agent is asking you something — answer it first; this goes in after"
     : wait.state === "parked" ? "agent is parked — this goes straight in"
     : wait.state === "no_session" ? "no live session — this reopens one with your note as the ask" : "";
+  // compact has no room for a header line, so the placeholder carries the state instead
+  const ph = many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
+    : !compact ? "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line. Paste a screenshot to send it along."
+    : wait.state === "asking" ? "It asked you something — answer that first; this goes in after"
+    : wait.state === "parked" ? "Tell the agent — goes straight in. Enter to send, paste a screenshot to attach it"
+    : wait.state === "no_session" ? "Tell the agent — reopens a session with this as the ask"
+    : "Tell the agent — queued, typed in when it stops. Enter to send, paste a screenshot to attach it";
+  const input = (
+    <TextField fullWidth multiline minRows={many ? 6 : 1} maxRows={many ? 14 : (compact ? 1 : 5)} size="small" value={text}
+      placeholder={compact && flash ? flash : ph}
+      onChange={(e) => setText(e.target.value)} onPaste={onPaste}
+      onKeyDown={(e) => { if (!many && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
+      sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: compact ? 11.5 : 12.5 },
+        ...(compact ? { "& .MuiInputBase-root": { py: "3px", px: 1 } } : {}) }} />
+  );
+  const thumbs = imgs.length > 0 && (
+    <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", mt: 0.5 }}>
+      {imgs.map((im) => (
+        <Box key={im.id} sx={{ position: "relative" }}>
+          <Box component="img" src={im.url} alt="" sx={{ height: compact ? 28 : 40, borderRadius: 0.75, border: "1px solid #ddd2b9", display: "block" }} />
+          <Box onClick={() => dropImg(im.id)} title="remove" sx={{ position: "absolute", top: -5, right: -5, width: 14, height: 14, borderRadius: 99,
+            bgcolor: "#6b5f45", color: "#fff", fontSize: 9, lineHeight: "14px", textAlign: "center", cursor: "pointer" }}>×</Box>
+        </Box>
+      ))}
+      <Typography variant="caption" sx={{ color: "#6b5f45", fontSize: 10 }}>
+        {imgs.length === 1 ? "goes with the note, as a file the agent opens" : `${imgs.length} images go with the note`}
+      </Typography>
+    </Box>
+  );
+  const queueRows = pending.map((w, i) => (
+        <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
+          <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
+          <Typography variant="body2" noWrap={compact} title={w.Note}
+            sx={{ fontSize: compact ? 11 : 11.5, flex: 1, minWidth: 0, whiteSpace: compact ? "nowrap" : "pre-wrap", color: INK }}>{w.Note}</Typography>
+          <Typography variant="caption" onClick={async () => { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); load(); }}
+            sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
+        </Box>
+  ));
+  // The full task page keeps the durable queue list open. The Wall gets the same list only as a
+  // three-second overlay, so checking it never changes the terminal's geometry.
+  const queued = !compact && pending.length > 0 && (
+    <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
+      {queueRows}
+    </Box>
+  );
+  // Compact (the Wall): exactly one fixed-height row. The corner badge is the only queue-size
+  // change; clicking it briefly overlays the list without moving or resizing the terminal.
+  if (compact) {
+    return (
+      <Box sx={{ position: "relative", height: 40 }}>
+        {showQ && pending.length > 0 && (
+          <Box sx={{ position: "absolute", zIndex: 5, left: 0, right: 0, bottom: "calc(100% + 4px)",
+            maxHeight: 104, overflowY: "auto", display: "flex", flexDirection: "column", gap: 0.3,
+            bgcolor: "#fffdfb", border: "1px solid #ddd2b9", borderRadius: 1.5, p: 0.75,
+            boxShadow: "0 5px 16px rgba(60,50,35,.14)" }}>
+            {queueRows}
+          </Box>
+        )}
+        <Box sx={{ height: 40, boxSizing: "border-box", overflow: "hidden", bgcolor: "#f1ead9",
+          border: "1px solid #ddd2b9", borderRadius: 1.5, px: 0.75, py: 0.45 }}>
+          <Box sx={{ height: "100%", display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Box title={pending.length ? `${pending.length} prompt${pending.length === 1 ? "" : "s"} waiting in the funnel — click to peek for 3 seconds; open the full task to withdraw them` : stateLine}
+            onClick={peekQueue}
+            sx={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+              width: 20, height: 24, color: "#6b5f45", flexShrink: 0, userSelect: "none",
+              cursor: pending.length ? "pointer" : "default" }}>
+            <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: "inherit" }}>✎</Typography>
+            {pending.length > 0 && (
+              <Box sx={{ position: "absolute", top: -4, right: -5, minWidth: 14, height: 14, px: 0.3,
+                display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99,
+                bgcolor: "#6b5f45", color: "#fffdfb", border: "1px solid #f1ead9",
+                ...mono, fontSize: 8, fontWeight: 800, lineHeight: 1 }}>
+                {pending.length > 99 ? "99+" : pending.length}
+              </Box>
+            )}
+          </Box>
+          {input}
+          {imgs.length > 0 && (
+            <Tooltip title={`${imgs.length} image${imgs.length === 1 ? "" : "s"} attached — click to remove`}>
+              <Box component="button" onClick={dropImgs}
+                sx={{ ...mono, height: 24, px: 0.6, borderRadius: 1, border: "1px solid #ddd2b9",
+                  bgcolor: "#fffdfb", color: "#6b5f45", cursor: "pointer", fontSize: 9.5, whiteSpace: "nowrap" }}>
+                ▧ {imgs.length} ×
+              </Box>
+            </Tooltip>
+          )}
+          <MicButton size={15} sx={{ color: "#6b5f45", p: 0.25 }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
+          <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim() && !imgs.length}
+            sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, minWidth: 0, px: 1, py: 0.2, fontSize: 11, lineHeight: 1.4, whiteSpace: "nowrap" }}>Queue</Button>
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
   return (
-    <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: compact ? 1 : 1.25 }}>
+    <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
         <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>
           ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} in the funnel` : ""}
@@ -910,30 +1147,16 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
         </Typography>
       </Box>
       <Box sx={{ display: "flex", gap: 1 }}>
-        <TextField fullWidth multiline minRows={many ? 6 : 1} maxRows={many ? 14 : (compact ? 3 : 5)} size="small" value={text}
-          placeholder={many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
-            : "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line."}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (!many && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); queue(); } }}
-          sx={{ bgcolor: "#fffdfb", "& .MuiInputBase-input": { fontSize: 12.5 } }} />
-        <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim()}
+        {input}
+        <MicButton sx={{ alignSelf: "flex-end", color: "#6b5f45" }} onText={(t) => setText((s) => (s.trim() ? `${s.trimEnd()} ${t}` : t))} />
+        <Button size="small" variant="contained" disableElevation onClick={queue} disabled={!text.trim() && !imgs.length}
           sx={{ alignSelf: "flex-end", bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, whiteSpace: "nowrap" }}>
           {many ? `Queue ${lines || ""} prompt${lines === 1 ? "" : "s"}` : "Queue"}</Button>
       </Box>
+      {thumbs}
       {flash && <Typography variant="caption" sx={{ color: "#47654a", display: "block", mt: 0.5 }}>{flash}</Typography>}
-      {pending.length > 0 && (
-        <Box sx={{ mt: 0.75, display: "flex", flexDirection: "column", gap: 0.35 }}>
-          {pending.map((w, i) => (
-            <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline", fontSize: 11.5 }}>
-              <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
-              <Typography variant="body2" sx={{ fontSize: 11.5, flex: 1, whiteSpace: "pre-wrap", color: INK }}>{w.Note}</Typography>
-              <Typography variant="caption" onClick={async () => { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); load(); }}
-                sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
-            </Box>
-          ))}
-        </Box>
-      )}
-      {!compact && wait.data.some((w) => w.DeliveredAt) && (
+      {queued}
+      {wait.data.some((w) => w.DeliveredAt) && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
           {wait.data.filter((w) => w.DeliveredAt).length} earlier note{wait.data.filter((w) => w.DeliveredAt).length === 1 ? "" : "s"} already typed in.
         </Typography>
@@ -969,6 +1192,206 @@ const _elapsed = (since) => {
   const sec = Math.max(0, (Date.now() - new Date(String(since).replace(" ", "T"))) / 1000);
   return sec < 90 ? `${Math.round(sec)}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${(sec / 3600).toFixed(1)}h`;
 };
+/* ── Said and did: what the agent HOLDS, in the terminal's own colours ─────────────────────
+   The Board pane used to show two raw trace lines - nobody read them. This is the same dark pane
+   with lines a person checks: the tool in hand (agent · tool · file · seconds), the agent's own
+   list with the current item lit, the files it has written hottest first. Fed by /api/runs/live
+   -> session.work (taskuary/witness.py: Claude hooks, Codex rollout, git). A pane always says
+   which rung it stands on: tool line -> last screen line -> files only. Red is spent on exactly
+   one thing: a file written after the agent said done. ── */
+const fileName = (p) => String(p || "").split(/[\\/]/).pop();
+const secsAgo = (at) => { if (!at) return ""; const s = Math.max(0, (Date.now() - new Date(String(at).replace(" ", "T"))) / 1000); return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`; };
+const isHot = (at) => at && Date.now() - new Date(String(at).replace(" ", "T")) < 20000;
+// up to `max` list lines: everything when it fits; otherwise the current item with what is around it
+const todoWindow = (todos, max = 4) => {
+  if (todos.length <= max) return { rows: todos, hidden: 0 };
+  const i = Math.max(0, todos.findIndex((t) => t.status === "now"));
+  const start = Math.max(0, Math.min(i - 1, todos.length - max));
+  return { rows: todos.slice(start, start + max), hidden: todos.length - max, before: start };
+};
+const TERM_MARK = { done: "✓", now: "▸", todo: "○" };
+const TERM_TONE = { done: CATPPUCCIN.faint, now: CATPPUCCIN.yellow, todo: CATPPUCCIN.faint };
+
+// the one header line, shared by the pane and the compact WorkLine
+const workHead = (work, who, waiting, asking, startedAt) => {
+  if (waiting) return { tone: CATPPUCCIN.yellow, mark: "⏸", text: `${who} ${asking ? "asked you something" : "stopped - waiting on you"}`, tool: "", t: "" };
+  if (work?.tool?.name) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `${work.tool.name} ${fileName(work.tool.target) || work.tool.target || ""}`.trim(), t: secsAgo(work.tool.at), blink: true };
+  if (work?.last_line) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `last line: ${work.last_line}`, t: startedAt ? secsAgo(startedAt) : "", blink: true, muted: true };
+  return { tone: CATPPUCCIN.cyan, mark: "▮", text: `${who} working`, tool: "", t: startedAt ? secsAgo(startedAt) : "", blink: true };
+};
+
+export const WorkPane = ({ run, onOpen }) => {
+  // the CLI it runs, not the profile's nickname: a profile called codex that runs claude is claude here
+  const work = run?.work || {}, who = run?.cli || run?.AgentName || run?.agent || "agent";
+  const waiting = run?.kind === "session" && (run.asking || isWaiting(run));
+  const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started);
+  const todos = work.todos || [];
+  const files = (work.files?.length ? work.files : (run?.files || []).map((p) => ({ path: p, n: 0 }))).slice(0, 4);
+  const more = Math.max(0, (work.files?.length || run?.files?.length || 0) - files.length);
+  const { rows, hidden, before } = todoWindow(todos);
+  const flag = (work.flags || []).find((f) => f.level === "check");
+  const fin = !!work.done_at && !work.tool;
+  return (
+    <Box onClick={onOpen} sx={{ mt: 0.6, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 0.85, py: 0.55,
+      ...mono, fontSize: 9.5, lineHeight: 1.6, color: CATPPUCCIN.dim, cursor: onOpen ? "pointer" : "default" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, whiteSpace: "nowrap", overflow: "hidden", color: h.tone, fontWeight: 600 }}>
+        <Box component="span" sx={h.blink && !waiting ? { "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" } : {}}>{h.mark}</Box>
+        <span>{h.text}</span>
+        {h.tool && <Box component="span" noWrap sx={{ color: h.muted ? CATPPUCCIN.faint : CATPPUCCIN.blue, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{h.tool}</Box>}
+        <Box sx={{ flex: 1 }} />
+        {h.t && <Box component="span" sx={{ color: CATPPUCCIN.faint, fontWeight: 400 }}>{h.t}</Box>}
+      </Box>
+      {!!todos.length && (
+        <Box sx={{ borderTop: `1px dashed ${CATPPUCCIN.surface}`, mt: 0.4, pt: 0.35 }}>
+          {fin ? (
+            <Box sx={{ color: CATPPUCCIN.green }}>✓ {work.n_done} of {work.n_todos} done{work.said ? <Box component="span" sx={{ color: CATPPUCCIN.faint }}> · {work.said.slice(0, 60)}</Box> : null}</Box>
+          ) : (
+            <>
+              {before > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>✓ {before} done</Box>}
+              {rows.map((t, i) => (
+                <Box key={i} sx={{ display: "grid", gridTemplateColumns: "12px 1fr auto", gap: "0 6px", whiteSpace: "nowrap", overflow: "hidden",
+                  color: t.status === "now" ? CATPPUCCIN.fg : CATPPUCCIN.faint, opacity: t.status === "todo" ? 0.8 : 1 }}>
+                  <Box component="span" sx={{ textAlign: "center", color: t.status === "done" ? CATPPUCCIN.green : TERM_TONE[t.status] }}>{TERM_MARK[t.status] || "○"}</Box>
+                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", color: t.status === "now" ? CATPPUCCIN.yellow : "inherit" }}>{t.text}</Box>
+                  <Box component="span" sx={{ color: CATPPUCCIN.faint, fontSize: 9 }}>{t.status === "now" ? `${work.n_done + 1}/${work.n_todos}` : ""}</Box>
+                </Box>
+              ))}
+              {hidden - (before || 0) > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>+{hidden - (before || 0)} more</Box>}
+            </>
+          )}
+        </Box>
+      )}
+      {!!files.length && (
+        <Box sx={{ borderTop: `1px dashed ${CATPPUCCIN.surface}`, mt: 0.4, pt: 0.4, display: "flex", flexWrap: "wrap", gap: "3px 4px", alignItems: "center" }}>
+          <Box component="span" sx={{ color: CATPPUCCIN.faint, mr: 0.25 }}>{fin ? "touched" : "holding"}</Box>
+          {files.map((f) => (
+            <Tooltip key={f.path} title={f.path} arrow>
+              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.6, borderRadius: 0.75, lineHeight: 1.5,
+                bgcolor: isHot(f.last) ? "#2a2f4a" : CATPPUCCIN.surface, color: f.late ? CATPPUCCIN.peach : isHot(f.last) ? CATPPUCCIN.blue : CATPPUCCIN.dim }}>
+                {isHot(f.last) && <Box component="span" sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: CATPPUCCIN.blue, "@keyframes tqPulse": { "50%": { opacity: 0.25 } }, animation: "tqPulse 1.4s ease-in-out infinite" }} />}
+                {fileName(f.path)}{f.n > 0 && <Box component="span" sx={{ color: CATPPUCCIN.faint }}>×{f.n}</Box>}
+              </Box>
+            </Tooltip>
+          ))}
+          {more > 0 && <Box component="span" sx={{ color: CATPPUCCIN.faint }}>+{more}</Box>}
+        </Box>
+      )}
+      {flag && <Box sx={{ color: CATPPUCCIN.red, whiteSpace: "normal", lineHeight: 1.45, mt: 0.35 }}>✗ {flag.text}</Box>}
+    </Box>
+  );
+};
+
+// one line, for a header: ● agent · Edit server.py · 4s  |  ● agent · last line: "…"
+export const WorkLine = ({ work, who = "agent", waiting = false, asking = false, startedAt }) => {
+  const h = workHead(work, who, waiting, asking, startedAt);
+  if (!h.tool && !waiting) return null;
+  return (
+    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, minWidth: 0, maxWidth: "100%", ...mono, fontSize: 10.5 }}>
+      <Box component="span" sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, bgcolor: waiting ? ROLES.you.solid : ROLES.working.solid,
+        ...(waiting ? {} : { "@keyframes tqPulse2": { "50%": { opacity: 0.25 } }, animation: "tqPulse2 1.4s ease-in-out infinite" }) }} />
+      <Box component="span" sx={{ fontWeight: 700, color: waiting ? ROLES.you.ink : INK, whiteSpace: "nowrap" }}>{waiting ? h.text : who}</Box>
+      {h.tool && <Box component="span" noWrap sx={{ px: 0.6, borderRadius: 0.75, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0,
+        bgcolor: h.muted ? ROLES.muted.tint : ROLES.working.tint, color: h.muted ? ROLES.muted.ink : ROLES.working.ink }}>{h.tool}</Box>}
+      {h.t && <Box component="span" sx={{ color: FAINT, flexShrink: 0 }}>{h.t}</Box>}
+    </Box>
+  );
+};
+
+/* The task page's strip: the agent's own list beside the files it wrote, with git's +/- per file,
+   reconciled in plain sentences (taskuary/witness.py decides "late" and "stray"; nothing is
+   inferred). Provenance pills say where the task came from and who worked it - facts the audit
+   chain already held and the card never showed. Polls only while the session is alive. */
+const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 700, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
+const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+export const WorkStrip = ({ taskId, live }) => {
+  const [d, setD] = useState(null);
+  // one line by default - the terminal is the page, and a strip that pushed its bottom off screen
+  // was worse than no strip; the detail opens on click and stays open for this browser
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem("tq.workstrip") === "1"; } catch { return false; } });
+  const toggle = () => { setOpen((o) => { try { localStorage.setItem("tq.workstrip", o ? "0" : "1"); } catch { /* private window */ } return !o; }); };
+  useEffect(() => {
+    if (!taskId) return undefined;
+    let alive = true;
+    const load = async (diff) => { try { const { data } = await api.get(`/api/tasks/${taskId}/work`, { params: { diff } }); if (alive) setD(data); } catch { /* no session yet */ } };
+    load(true);
+    // the witness is cheap and polled; git's per-file diff is not, so it refreshes only when the session ends
+    const id = live ? setInterval(() => load(false), 5000) : 0;
+    return () => { alive = false; clearInterval(id); };
+  }, [taskId, live]);
+  const w = d?.work;
+  if (!d || (!w && !(d.files || []).length)) return null;
+  const todos = w?.todos || [], files = (d.files || []).slice(0, 12);
+  const tone = { check: "you", note: "info", ok: "done" };
+  const who = d.session?.cli || d.session?.agent || d.prov?.by || "agent";
+  const checks = (w?.flags || []).filter((f) => f.level === "check").length;
+  const summary = `said ${todos.length ? `${w.n_done}/${w.n_todos}` : "—"} · touched ${(d.files || []).length}`;
+  return (
+    <Box sx={{ mb: 0.75, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden" }}>
+      <Box onClick={toggle} title={open ? "Fold the detail away" : "Open: the agent's list beside the files it wrote"}
+        sx={{ px: 1.5, py: 0.5, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", cursor: "pointer", borderBottom: open ? `1px solid ${BORDER}` : 0, "&:hover": { bgcolor: "#faf8f5" } }}>
+        <Typography component="span" sx={{ ...mono, fontSize: 10, color: FAINT, width: 12 }}>{open ? "▾" : "▸"}</Typography>
+        {d.prov?.from && <Chip size="small" label={`from: ${d.prov.from}`} sx={pillSx("muted")} />}
+        {d.prov?.kind && <Chip size="small" label={`kind: ${d.prov.kind}`} sx={pillSx("working")} />}
+        {d.prov?.by && <Chip size="small" label={`by: ${who}`} sx={pillSx("working")} />}
+        {d.prov?.approved && <Chip size="small" label={`approved by you · ${hhmm(d.prov.approved)}`} sx={pillSx("info")} />}
+        {w?.done_at && <Chip size="small" label={`agent said done · ${hhmm(w.done_at)}`} sx={pillSx("done")} />}
+        <Chip size="small" label={summary} sx={pillSx("muted")} />
+        {checks > 0 && <Chip size="small" label={`${checks} to check`} sx={pillSx("you")} />}
+        <Box sx={{ flex: 1 }} />
+        {w && <WorkLine work={w} who={who} waiting={false} startedAt={d.session?.started} />}
+      </Box>
+      {open && <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+        <Box sx={{ px: 1.5, py: 1, borderRight: { md: `1px solid ${BORDER}` } }}>
+          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
+            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>said it would</Typography>
+            <Typography variant="caption" sx={{ color: DIM }}>{todos.length ? `the agent's own list · ${w.n_done} of ${w.n_todos}` : w?.source ? "no list reported by this agent" : "no signal from this CLI - files only"}</Typography>
+          </Box>
+          {todos.map((t, i) => (
+            <Box key={i} sx={{ display: "flex", gap: 1, alignItems: "flex-start", py: 0.35, borderBottom: i < todos.length - 1 ? `1px dashed ${BORDER}` : 0, color: t.status === "todo" ? FAINT : INK, fontSize: 12.5 }}>
+              <Box sx={{ ...mono, fontSize: 10, width: 15, height: 15, borderRadius: "50%", display: "grid", placeItems: "center", flex: "none", mt: "2px",
+                bgcolor: t.status === "done" ? ROLES.done.solid : t.status === "now" ? ROLES.working.solid : "transparent", color: t.status === "todo" ? FAINT : "#fff",
+                border: t.status === "todo" ? `1.5px solid ${BORDER}` : 0 }}>{t.status === "done" ? "✓" : t.status === "now" ? "▸" : ""}</Box>
+              <span>{t.text}</span>
+            </Box>
+          ))}
+          {!todos.length && w?.said && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>last said: “{w.said.slice(0, 200)}”</Typography>}
+        </Box>
+        <Box sx={{ px: 1.5, py: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
+            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>touched</Typography>
+            <Typography variant="caption" sx={{ color: DIM }}>{files.length} file{files.length === 1 ? "" : "s"}{d.diffstat?.added != null ? ` · +${d.diffstat.added} −${d.diffstat.removed}` : ""}</Typography>
+          </Box>
+          {files.map((f) => {
+            const top = Math.max(1, ...files.map((x) => x.n || 1));
+            return (
+              <Box key={f.path} title={f.path} sx={{ display: "grid", gridTemplateColumns: "1fr auto auto 64px", gap: 1, alignItems: "center", py: 0.35, borderBottom: `1px dashed ${BORDER}`,
+                "&:last-of-type": { borderBottom: 0 }, color: f.stray ? ROLES.info.ink : INK, opacity: f.late || isHot(f.last) || f.n > 0 ? 1 : 0.7 }}>
+                <Typography noWrap sx={{ ...mono, fontSize: 11.5 }}>{f.path}</Typography>
+                <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, fontVariantNumeric: "tabular-nums" }}>{f.n ? `×${f.n}` : ""}</Typography>
+                <Typography sx={{ ...mono, fontSize: 10.5, color: f.late ? ROLES.you.ink : FAINT, fontVariantNumeric: "tabular-nums" }}>
+                  {f.added != null ? <><span style={{ color: ROLES.done.solid }}>+{f.added}</span> <span style={{ color: ROLES.you.solid }}>−{f.removed}</span></> : hhmm(f.last)}
+                </Typography>
+                <Box sx={{ height: 4, borderRadius: 2, bgcolor: PANEL2 }}><Box sx={{ height: "100%", borderRadius: 2, width: `${Math.round(100 * (f.n || 0.3) / top)}%`, bgcolor: f.late ? ROLES.you.solid : ROLES.working.solid, opacity: isHot(f.last) ? 1 : 0.7 }} /></Box>
+              </Box>
+            );
+          })}
+          {!files.length && <Typography variant="caption" sx={{ color: FAINT }}>nothing written yet</Typography>}
+        </Box>
+      </Box>}
+      {open && !!(w?.flags || []).length && (
+        <Box sx={{ px: 1.5, py: 0.75, borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 0.4 }}>
+          {w.flags.map((f, i) => (
+            <Box key={i} sx={{ display: "flex", gap: 1, alignItems: "flex-start", fontSize: 12 }}>
+              <Chip size="small" label={f.level} sx={{ ...pillSx(tone[f.level] || "info"), mt: "1px" }} />
+              <span>{f.text}</span>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
 export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
   const waiting = run ? (run.kind === "session" && (run.asking || isWaiting(run))) : false;
   const tail = (run?.tail || []).slice(-lines);

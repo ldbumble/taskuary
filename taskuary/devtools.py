@@ -254,8 +254,10 @@ def poll_discord(store, c, src, since, llm=None, file_only=False) -> int:
     return n
 
 
-def discord_send(store, channel_id: str, body: str) -> dict:
-    c = store.get_connector_by_type('discord', with_secret=True)
+def discord_send(store, channel_id: str, body: str, connector_id=None) -> dict:
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
+        store.get_connector_by_type('discord', with_secret=True)
+    if c and c.get('Type') != 'discord': c = None
     if not (c and c.get('Secret')): raise RuntimeError('no Discord bot token saved')
     _discord(c, 'post', f'/channels/{channel_id}/messages', json={'content': body[:2000]})
     return {'channel': 'discord', 'chat': channel_id}

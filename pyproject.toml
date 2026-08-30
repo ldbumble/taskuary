@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taskuary"
-version = "0.3.0"
+version = "0.3.1"
 description = "Automate your job - the local-first operating system for your work: AI triage in, coding agents out."
 readme = "README.md"
 license = { text = "MIT" }
@@ -27,6 +27,7 @@ dependencies = [
     "pydantic>=2",
     "requests>=2.28",
     "loguru>=0.7",
+    "segno>=1.6",               # WhatsApp pairing QR drawn ON the card - pure Python, no Pillow
     "anthropic>=0.69",
     "tomli>=2; python_version<'3.11'",
     "websockets>=12",                            # uvicorn's ws transport - the terminal streams over it
@@ -38,6 +39,7 @@ dependencies = [
 mssql = ["pyodbc>=4"]
 db = ["sqlalchemy>=2"]      # 'any database' URLs; add the engine driver too (psycopg2-binary, pymysql, ...)
 aws = ["boto3>=1.28"]       # azure needs no extra: tokens ride plain requests
+voice = ["faster-whisper>=1.0"]   # Local Whisper: speech to text on this machine, no key, audio never leaves the box
 desktop = ["pywebview>=4"]
 build = ["pyinstaller>=6"]
 dev = ["pytest>=7", "httpx>=0.24", "openpyxl>=3"]   # openpyxl READS xlsx in tests; the writer is ours

@@ -27,7 +27,7 @@ POLL_LIMIT = 500                   # rows per page; the poll loops until caught 
 SEND_MAX = 4000                    # per message; longer replies are split at paragraphs
 SEND_TIMEOUT = 15
 MIN_SUPPORTED = 13                 # the maintained test matrix starts at Ventura
-MAX_KNOWN = 26                     # anything newer is "experimental" until a smoke test passes
+MAX_KNOWN = 27                     # 27.0 beta (26A5421a) smoke-tested 2026-08-27; newer is "experimental"
 MAX_BLOB = 512 * 1024              # attributedBody larger than this is not a text message
 
 # Baseline schema: absent = a database this connector does not understand. Everything else
@@ -58,6 +58,30 @@ OSA_ERRORS = {'-1743': 'macOS has not allowed this process to control Messages (
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
+
+
+class SetupError(RuntimeError):
+    """A failure the owner fixes in System Settings, not in Taskuary. The message is the
+    plain sentence every card shows; `setup` is the structured half the Apple Messages card
+    turns into buttons (which pane, which host, retry hint). Stable `code`s, never parsed
+    text: the React side switches on them."""
+    def __init__(self, code: str, detail: str, pane: str | None = None):
+        super().__init__(detail)
+        self.code, self.setup = code, setup_info(code, pane)
+
+
+# The two panes this connector ever opens, as fixed URLs the server picks by enum - a URL
+# never travels from the browser. Apple documents the modern scheme loosely, so the manual
+# breadcrumb always rides alongside on the card.
+SETTINGS_URLS = {
+    ('full_disk_access', 'modern'): 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles',
+    ('full_disk_access', 'legacy'): 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+    ('automation', 'modern'): 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation',
+    ('automation', 'legacy'): 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
+}
+PANES = ('full_disk_access', 'automation')
+BREADCRUMBS = {'full_disk_access': 'System Settings → Privacy & Security → Full Disk Access',
+               'automation': 'System Settings → Privacy & Security → Automation'}
 
 
 # ── platform and permissions ─────────────────────────────────────────────────────────────
@@ -97,7 +121,54 @@ def host_process() -> dict:
     return {'name': name, 'bundle_id': bid or None, 'python': exe, 'recommendation': rec}
 
 
-FDA_HINT = 'System Settings → Privacy & Security → Full Disk Access'
+FDA_HINT = BREADCRUMBS['full_disk_access']
+
+
+def setup_info(code: str, pane: str | None) -> dict:
+    ps, h = platform_support(), host_process()
+    return {'code': code, 'pane': pane, 'platform': ps['platform'], 'product_version': ps.get('product_version'),
+            'support': ps['support'], 'host_name': h['name'], 'host_path': h['python'] if not h['name'] else None,
+            'host_bundle_id': h['bundle_id'], 'breadcrumb': BREADCRUMBS.get(pane),
+            'restart_may_be_required': pane == 'full_disk_access'}
+
+
+def settings_url(pane: str) -> str:
+    """macOS 13+ has System Settings; 12 and earlier the old System Preferences scheme."""
+    if pane not in PANES: raise ValueError(f'unknown settings pane: {pane}')
+    ps = platform_support()
+    return SETTINGS_URLS[(pane, 'modern' if (ps.get('major') or 0) >= 13 else 'legacy')]
+
+
+def open_settings(pane: str) -> dict:
+    """`open <fixed url>` - argv, no shell, and only the panes above."""
+    if sys.platform != 'darwin': raise SetupError('macos_required', 'System Settings only exists on a Mac')
+    url = settings_url(pane)
+    r = subprocess.run(['open', url], capture_output=True, text=True, timeout=10)
+    if r.returncode != 0:
+        raise SetupError('settings_unavailable', f'macOS did not open that Settings pane ({(r.stderr or "").strip() or r.returncode}) - '
+                         f'open it by hand: {BREADCRUMBS[pane]}', pane)
+    return {'ok': True, 'pane': pane, 'breadcrumb': BREADCRUMBS[pane]}
+
+
+# A non-sending Apple Event: asking Messages.app for its name is enough to make macOS decide
+# (and, the first time, ask) whether this process may control it. Nothing is sent.
+PROBE_SCRIPT = 'tell application "Messages" to get name'
+
+
+def automation_probe() -> dict:
+    """Explained on the card BEFORE it runs, because it is what makes macOS pop the prompt."""
+    if sys.platform != 'darwin': raise SetupError('macos_required', 'Messages.app automation only exists on a Mac')
+    try:
+        r = subprocess.run(['osascript', '-'], input=PROBE_SCRIPT, capture_output=True, text=True, timeout=SEND_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise SetupError('messages_app_unavailable', f'Messages.app did not answer within {SEND_TIMEOUT}s - is it able to launch?')
+    err = (r.stderr or '').strip()
+    if r.returncode != 0:
+        if '-1743' in err:
+            raise SetupError('automation_denied', 'macOS has not allowed this process to control Messages - allow '
+                             f'{host_process()["name"] or "it"} under {BREADCRUMBS["automation"]}, then test again', 'automation')
+        raise SetupError('messages_app_unavailable', f'Messages.app could not be reached: {err or "no detail"}')
+    return {'ok': True, 'detail': f'Messages.app answered ({(r.stdout or "").strip() or "Messages"}) - this process may send through it'}
 
 
 def db_path(cfg: dict) -> Path:
@@ -131,40 +202,42 @@ def open_db(cfg: dict):
     access is a real SELECT on message - file existence and Settings checkboxes both lie."""
     ps = platform_support()
     if ps['support'] == 'unavailable':
-        raise RuntimeError('Apple Messages needs a Mac - Messages.app keeps its history in a local '
-                           'database that only exists on macOS')
+        raise SetupError('macos_required', 'Apple Messages needs a Mac - Messages.app keeps its history in a local '
+                         'database that only exists on macOS')
     if ps['support'] == 'unsupported':
-        raise RuntimeError(f"macOS {ps['product_version']} is not supported - Apple Messages needs macOS 12 or later")
+        raise SetupError('unsupported_macos_version',
+                         f"macOS {ps['product_version']} is not supported - Apple Messages needs macOS 12 or later")
     path = db_path(cfg)
     if not path.exists() and not os.access(path.parent, os.R_OK):
         # the folder itself is TCC-protected: a missing file here almost always means no FDA
-        raise RuntimeError(_fda_message(path))
+        raise _fda_error(path)
     if not path.exists():
-        raise RuntimeError(f'no Messages database at {path} - sign in to Messages.app on this Mac first')
+        raise SetupError('messages_database_missing', f'no Messages database at {path} - sign in to Messages.app on this Mac first')
     try:
         cx = connect(path)
         cx.execute('SELECT ROWID FROM message LIMIT 1').fetchall()
     except (sqlite3.OperationalError, sqlite3.DatabaseError, PermissionError) as e:
         s = str(e).lower()
         if 'locked' in s or 'busy' in s:
-            raise RuntimeError('the Messages database is busy - Messages.app is writing; try again in a moment')
+            raise SetupError('messages_database_busy', 'the Messages database is busy - Messages.app is writing; try again in a moment')
         if 'unable to open' in s or 'authorization' in s or 'permission' in s or 'not a database' in s:
-            raise RuntimeError(_fda_message(path))
+            raise _fda_error(path)
         raise RuntimeError(f'could not read the Messages database: {e}')
     cols = columns(cx)
     miss = missing_columns(cols)
     if miss:
         cx.close()
-        raise RuntimeError(f"this Messages database is not one Taskuary understands (macOS {ps['product_version']}, "
-                           f"missing {', '.join(miss)}) - please report it with these details")
+        raise SetupError('unsupported_messages_schema',
+                         f"this Messages database is not one Taskuary understands (macOS {ps['product_version']}, "
+                         f"missing {', '.join(miss)}) - please report it with these details")
     return cx, cols
 
 
-def _fda_message(path) -> str:
+def _fda_error(path) -> SetupError:
     h = host_process()
-    return (f'macOS is not letting this process read the Messages database ({path}). It needs Full Disk '
-            f'Access - {FDA_HINT} - {h["recommendation"]}. This is a macOS permission: Taskuary cannot '
-            f'grant it, and Settings may only apply after the host is relaunched.')
+    return SetupError('full_disk_access_required',
+                      f'macOS is not letting this process read {path}: it needs Full Disk Access ({FDA_HINT}) - '
+                      f'{h["recommendation"]}', 'full_disk_access')
 
 
 def test(store, c) -> str:
@@ -241,11 +314,16 @@ def normalize_row(row) -> dict | None:
         else: return None
     handle = r.get('sender_handle') or ''
     title = (r.get('display_name') or '').strip()
+    group = bool(title) or (r.get('style') == 43)
+    # iMessage / SMS / RCS - the message's own transport first, the chat's as a fallback
+    service = (r.get('service') or r.get('service_name') or '').strip() or 'Messages'
+    # The Timeline heads a chat row "<sender> in <source>". A named group is its name; an
+    # unnamed group would otherwise be "chat482913..." - the transport says more; and a 1:1 chat
+    # is the transport too, so it does not read "<number> in <number>".
     return {'rowid': r['rowid'], 'message_guid': r['message_guid'], 'chat_guid': r['chat_guid'],
-            'text': text, 'is_from_me': bool(r.get('is_from_me')), 'handle': handle,
-            'group': bool(title) or (r.get('style') == 43),
-            'chat_title': title or r.get('chat_identifier') or handle or 'chat',
-            'sent_at': apple_date(r.get('date')), 'service': r.get('service')}
+            'text': text, 'is_from_me': bool(r.get('is_from_me')), 'handle': handle, 'group': group,
+            'chat_title': title or (f'Group {service}' if group else service),
+            'sent_at': apple_date(r.get('date')), 'service': service}
 
 
 def initial_cursor(cx, lookback_days) -> int:
@@ -321,7 +399,7 @@ def _ingest(store, m, want, llm, file_only, ingest_message, ingest_own_message) 
         'external_id': f"imessage:{m['message_guid']}", 'channel': 'imessage',
         'subject': None, 'body': m['text'], 'from_name': m['handle'] or 'someone',
         'from_email': m['handle'] or None, 'conversation_id': conv, 'sent_at': m['sent_at'],
-        'source_name': m['chat_title'] if m['group'] else (m['handle'] or 'Messages')})
+        'source_name': m['chat_title']})
     return int(r['status'] != 'duplicate')
 
 
@@ -349,15 +427,17 @@ def _osa(argv: list) -> None:
                        text=True, timeout=SEND_TIMEOUT)
     if r.returncode != 0:
         err = (r.stderr or '').strip()
+        if '-1743' in err: raise SetupError('automation_denied', OSA_ERRORS['-1743'], 'automation')
         why = next((v for k, v in OSA_ERRORS.items() if k in err), None)
         raise RuntimeError(why or f'Messages.app refused the send: {err or "no detail"}')
 
 
-def send_text(store, chat_guid: str, body: str) -> dict:
+def send_text(store, chat_guid: str, body: str, connector_id=None) -> dict:
     """Into an EXISTING chat by its guid - the id the message row carries. A brand-new
     conversation (a bare number or address) is a different job and not done here."""
-    if sys.platform != 'darwin': raise RuntimeError('sending through Messages.app needs a Mac')
-    c = store.get_connector_by_type('imessage') if store else None
+    if sys.platform != 'darwin': raise SetupError('macos_required', 'sending through Messages.app needs a Mac')
+    c = (store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type('imessage')) if store else None
+    if c and c.get('Type') != 'imessage': c = None
     if not (c and c.get('Active')): raise RuntimeError('the Apple Messages connection is off')
     if not chat_guid: raise RuntimeError('no chat id to send into')
     parts = chunks(body)

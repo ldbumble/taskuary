@@ -55,7 +55,10 @@ def catalog(store) -> list:
     the composer can answer "you would need to connect Datadog first" instead of inventing a
     config that will fail on its first scheduled run."""
     from .reports import REGISTRY, PLANNED, CONNECTION_OF, card_of
-    conns = {c['Type']: c for c in store.list_connectors()}
+    conns = {}
+    for c in store.list_connectors():
+        if c['Type'] not in conns or (c.get('Active') and not conns[c['Type']].get('Active')):
+            conns[c['Type']] = c
     out = []
     for t, fn in sorted(REGISTRY.items()):
         if t in PLANNED: continue

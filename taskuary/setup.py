@@ -56,6 +56,13 @@ def state(store) -> dict:
     """The wizard's whole model: ordered steps, each with what it is for and whether it is done."""
     who = (store.owner() or {}).get('owner') or ''
     ai, inbound = _ai(store), _inbound(store)
+    # Generate-from-history always stamps the block it owns. The templates already contain the
+    # marker pair, so marker presence alone would call an untouched fresh install personalized.
+    # A real manual edit counts too: onboarding must not insist on replacing guidance somebody
+    # already wrote themselves just because it did not come from the generator.
+    personalized = {name: ('_generated ' in (store.get_doc(name) or '')
+                           or store.doc_owner(name) not in (None, 'template', 'startup'))
+                    for name in ('style', 'triage')}
     # Both of these read as DONE on a brand-new install unless you are careful, which is worse
     # than useless: a checklist that ticks itself teaches you not to read it.
     #
@@ -84,6 +91,25 @@ def state(store) -> dict:
          'why': 'A mailbox, a chat, a tracker - anything that brings work in. Without one the '
                 'Timeline is empty because nothing is being read, not because nothing happened.',
          'done': bool(inbound), 'detail': ', '.join(inbound[:3]), 'where': 'Connectors'},
+        {'key': 'sync', 'title': 'Read your first messages', 'optional': True, 'recommended': True,
+         'why': 'With the three above in place, one sync pulls your mail in and the AI triages it. '
+                'It also gives the two personalization steps below real history to learn from.',
+         # no count: this samples the feed, so any number it printed would be the sample size
+         # rather than the truth ("2 read" on an install holding thousands)
+         'done': bool(inbox), 'detail': 'messages are arriving' if inbox else '',
+         'where': 'Timeline'},
+        {'key': 'style', 'title': 'Teach it how you write replies', 'optional': True, 'recommended': True,
+         'why': 'Taskuary reads the last three months of messages you sent and distills your greeting, '
+                'tone, length, phrasing, and sign-off into STYLE.md. Your first drafted reply then '
+                'sounds like you instead of a generic assistant.',
+         'done': personalized['style'], 'detail': 'reply style ready' if personalized['style'] else '',
+         'where': 'Docs'},
+        {'key': 'triage', 'title': 'Teach it what deserves your attention', 'optional': True, 'recommended': True,
+         'why': 'Taskuary compares what you answered with what you let sit, then adds those patterns to '
+                'TRIAGE.md. It starts with a useful idea of your real work instead of learning every '
+                'routine sender and topic one correction at a time.',
+         'done': personalized['triage'], 'detail': 'triage habits ready' if personalized['triage'] else '',
+         'where': 'Docs'},
         {'key': 'agent', 'title': 'Put a coding agent to work', 'optional': True,
          'why': 'Only for work that means changing code - everything else, triage, replies and '
                 'reports, works without one. Ticked once an agent has actually finished a run '
@@ -91,16 +117,12 @@ def state(store) -> dict:
                 'has never run is not proof that anything is installed.',
          'done': bool(ran), 'detail': f'{len(ran)} run{"s" if len(ran) != 1 else ""} finished' if ran else '',
          'where': 'Settings'},
-        {'key': 'sync', 'title': 'Read your first messages', 'optional': True,
-         'why': 'With the three above in place, one sync pulls your mail in and the AI triages it. '
-                'This is the first time you see the funnel actually work.',
-         # no count: this samples the feed, so any number it printed would be the sample size
-         # rather than the truth ("2 read" on an install holding thousands)
-         'done': bool(inbox), 'detail': 'messages are arriving' if inbox else '',
-         'where': 'Timeline'},
     ]
     required = [s for s in steps if not s.get('optional')]
+    guided = [s for s in steps if not s.get('optional') or s.get('recommended')]
     return {'steps': steps,
             'done': sum(1 for s in required if s['done']), 'total': len(required),
             'ready': all(s['done'] for s in required),
+            'guide_done': sum(1 for s in guided if s['done']), 'guide_total': len(guided),
+            'complete': all(s['done'] for s in guided),
             'dismissed': str(store.get_settings().get(DISMISSED) or '') == '1'}

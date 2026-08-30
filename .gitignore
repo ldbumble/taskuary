@@ -17,6 +17,8 @@ website/ui.png
 # the WhatsApp bridge's own install and pairing state - never committed
 taskuary/whatsapp/node_modules/
 taskuary/whatsapp/wa-auth/
+taskuary/whatsapp/wa-media/
+taskuary/whatsapp/wa-bridge.log
 taskuary/whatsapp/package-lock.json
 
 # editor droppings and scratch files - a vim swap once leaked a username into the repo

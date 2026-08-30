@@ -1,26 +1,38 @@
-"""Approve from your phone. When `phone_approvals` is on, the notify ping carries the
-draft and a [rvN] tag - and a reply IN THE NOTIFY CHAT decides the review: 'approve' sends
-the draft, 'reject' / 'no reply' land those verdicts, and any other text is sent INSTEAD
-of the draft (an edit, exactly like the Review tab). The pollers hand messages here BEFORE
-triage and BEFORE the approve-first source filter, so the notify chat never becomes work
-by accident and needs no source row flipped on. The review is found by the [rvN] tag (in
-the quoted ping or typed), falling back to the last review pinged.
+"""Answer agents and approve replies from your phone. With `phone_approvals` on, a waiting
+agent ping carries [tqN]; replying to that quoted ping types the owner's answer into that
+exact live terminal. A review ping carries [rvN], where approve/reject/no-reply retain their
+existing meanings and any other text replaces the draft.
+
+Pollers call this before triage, so an answer or verdict never becomes new work. Explicit
+tags win. Reviews retain the convenient last-ping fallback, but agent answers require their
+tag because several coding sessions can be waiting at once.
 """
 import json, re
 from loguru import logger
 
 TAG = re.compile(r'\[rv(\d+)\]')
+TASK_TAG = re.compile(r'\[tq0*(\d+)\]', re.I)
 APPROVE = re.compile(r'^\W*(approve[d]?|send( it)?|yes|ok(ay)?)\W*$', re.I)
 REJECT = re.compile(r'^\W*reject(ed)?\W*$', re.I)
 NO_REPLY = re.compile(r'^\W*no( reply| response)?( needed| required)?\W*$', re.I)
 
 HOW = "reply 'approve' to send it, 'reject', 'no reply' — or your own text to send that instead"
+TASK_HOW = "reply to this message with your answer — it goes straight to the live agent"
+
+
+def notify_chats_of(store, channel: str) -> set:
+    out = set()
+    for c in store.connectors_by_type(channel):
+        try:
+            chat = str(json.loads((c or {}).get('ConfigJson') or '{}').get('notify_chat') or '')
+            if chat: out.add(chat)
+        except ValueError: continue
+    return out
 
 
 def notify_chat_of(store, channel: str) -> str:
-    c = store.get_connector_by_type(channel)
-    try: return str(json.loads((c or {}).get('ConfigJson') or '{}').get('notify_chat') or '')
-    except ValueError: return ''
+    """Compatibility helper for callers displaying one destination."""
+    return next(iter(notify_chats_of(store, channel)), '')
 
 
 def ping_tail(store, rid: int, draft: str = None) -> str:
@@ -30,6 +42,13 @@ def ping_tail(store, rid: int, draft: str = None) -> str:
     if store.get_settings().get('phone_approvals') != '1': return ''
     store.set_setting('last_pinged_review', str(rid), 'notify')
     return (f'\n\nDRAFT:\n{draft.strip()[:800]}' if (draft or '').strip() else '') + f'\n\n[rv{rid}] {HOW}'
+
+
+def task_ping_tail(store, tid: int) -> str:
+    """Explicit routing for an agent answer. There is intentionally no "last task" fallback:
+    with concurrent sessions, a bare "yes" is not enough information to safely type anywhere."""
+    if store.get_settings().get('phone_approvals') != '1': return ''
+    return f'\n\n[tq{int(tid):04d}] {TASK_HOW}'
 
 
 def _find_review(store, text: str, quoted: str):
@@ -45,12 +64,31 @@ def intercept(store, channel: str, chat_id: str, text: str, quoted: str = None) 
     """True = this was a verdict in the notify chat and it was handled - never ingest it.
     False = not ours (feature off, another chat, or nothing to decide) - flow on to triage."""
     if store.get_settings().get('phone_approvals') != '1': return False
-    if not chat_id or str(chat_id) != notify_chat_of(store, channel): return False
+    if not chat_id or str(chat_id) not in notify_chats_of(store, channel): return False
     t = (text or '').strip()
     if not t: return False
     # our OWN pings and acks come back through the WhatsApp bridge as fromMe messages in
     # this very chat - swallow them, or a ping's text would read as an 'edit' verdict
-    if HOW in t or t.startswith('✓') or ' is not waiting on a verdict' in t: return True
+    if HOW in t or TASK_HOW in t or t.startswith('✓') or ' is not waiting on a verdict' in t \
+            or ' has no live agent to answer' in t: return True
+    # A reply quoting a waiting-agent ping is an answer for that exact task. It wins over the
+    # review fallback, so "approve" under [tq0251] reaches the agent and cannot send an email.
+    tm = TASK_TAG.search(quoted or '') or TASK_TAG.search(t)
+    if tm:
+        tid = int(tm.group(1))
+        answer = TASK_TAG.sub('', t).strip()
+        if not answer:
+            _ack(store, channel, chat_id, f'tq{tid:04d} needs an answer after the tag.')
+            return True
+        from . import terminal
+        ok = terminal.say_to_task(store, tid, {'FromName': 'the owner', 'Channel': channel,
+                                               'BodyText': answer}, actor='owner-phone')
+        if ok:
+            store.audit('task', tid, 'phone_answer', 'owner-phone', detail={'channel': channel})
+            _ack(store, channel, chat_id, f'✓ tq{tid:04d}: sent to the live agent.')
+        else:
+            _ack(store, channel, chat_id, f'tq{tid:04d} has no live agent to answer any more.')
+        return True
     rv, rid = _find_review(store, t, quoted)
     if not rid: return False                      # nothing was ever pinged: a plain chat message
     if not rv or rv['Status'] != 'pending':

@@ -97,6 +97,39 @@ class PhoneTests(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
         self.assertIn('no draft yet', acks[0])
 
+    def test_quoted_task_ping_routes_answer_to_that_live_agent(self):
+        s = MemoryStore(); arm_phone(s)
+        tid = s.create_task({'Title': 'choose a repo', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        fake = FakeSession(tid); acks = []
+        quoted = f'{tid} is waiting.' + phone.task_ping_tail(s, tid)
+        with mock.patch.dict(terminal.SESSIONS, {'sid1': fake}, clear=True), \
+             mock.patch('taskuary.messengers.tg_send', side_effect=lambda st, chat, text: acks.append(text)):
+            self.assertTrue(phone.intercept(s, 'telegram', '777', 'Yes, use taskhub.', quoted))
+            time.sleep(0.4)
+        self.assertIn('Yes, use taskhub.', ''.join(fake.writes))
+        self.assertIn('sent to the live agent', acks[0])
+
+    def test_task_tag_wins_over_a_bare_review_approve(self):
+        s = MemoryStore(); arm_phone(s)
+        _, _, rid = seed_review(s); phone.ping_tail(s, rid)
+        tid = s.create_task({'Title': 'permission', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        fake = FakeSession(tid)
+        with mock.patch.dict(terminal.SESSIONS, {'sid1': fake}, clear=True), \
+             mock.patch('taskuary.messengers.tg_send'):
+            self.assertTrue(phone.intercept(s, 'telegram', '777', 'approve', phone.task_ping_tail(s, tid)))
+            time.sleep(0.4)
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')
+        self.assertIn('approve', ''.join(fake.writes))
+
+    def test_stale_task_ping_is_acknowledged_without_becoming_work(self):
+        s = MemoryStore(); arm_phone(s)
+        tid = s.create_task({'Title': 'old question', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        acks = []
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch('taskuary.messengers.tg_send', side_effect=lambda st, chat, text: acks.append(text)):
+            self.assertTrue(phone.intercept(s, 'telegram', '777', f'[tq{tid:04d}] yes'))
+        self.assertIn('no live agent', acks[0])
+
 
 class FakeSession:
     def __init__(self, task_id): self.task_id, self.alive, self.n, self.writes = task_id, True, 0, []

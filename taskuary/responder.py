@@ -57,10 +57,24 @@ NOT_YET = ('If the request cannot be answered by a reply alone - it needs work d
            'line that you will pick it up, and stop. Not who will do it, not how, and never that '
            'you are unable to.')
 # the coder has already closed the thread: this reply reports an outcome, never promises one
+# the assistant's chase: you wrote last, heard nothing, and are nudging - never a reproach
+NUDGE = ('This reply is a FOLLOW-UP: you wrote last on this thread, asked for or promised something, and have '
+         'heard nothing since. Nudge in one or two sentences: restate in a line what you need or are waiting on, '
+         'make it easy to answer, and assume they are busy rather than ignoring you. No reproach, no "just '
+         'checking in", no recap of the whole thread.\n')
 DONE = ('The work this thread asked for is FINISHED - the report below says what was done. Say what '
         'happened in a sentence or two, claiming nothing the report does not support; if it could NOT '
         'be done, say that and why, just as briefly. Never mention agents, tasks, tickets, '
-        'repositories or tooling: YOU did this.')
+        'repositories or tooling: YOU did this.\n'
+        # the report is written for the owner's records and reads like it. Copied straight out, it
+        # went to a vendor's mailer as "not an engineering or repo issue, so I closed it as FYI" -
+        # a sentence about our own filing, addressed to somebody who filed nothing (TQ-0252).
+        'The report is an INTERNAL record in internal words: it may call the message an FYI, a '
+        'ticket, a repo issue, something closed, filed or triaged. NONE of that goes to the sender - '
+        'they did not file anything and none of those words mean anything to them. Write only the '
+        'part that is news to THEM, about THEIR message, in the words they used. If the honest answer '
+        'is that nothing was needed, that is a sentence about their thing, never about our handling '
+        'of it.')
 
 CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp', 'imessage')
 REPLY_TOKENS = 300          # a ceiling as well as an instruction: 800 invited an essay
@@ -80,6 +94,22 @@ def style_doc(store) -> str:
     meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
     return t.strip() if len(meat) > 40 else ''
 
+def history_block(store, m: dict) -> str:
+    """What this mailbox already knows about the sender and the topic BEYOND this thread - their
+    other recent mail, what you last wrote them, the same matter elsewhere, open tasks. The draft
+    used to see six thread messages and nothing else, and answered last week's question as if it
+    had never been asked (counsel.dossier; the thread itself is excluded - it is in the prompt)."""
+    from .counsel import dossier
+    try:
+        dos = dossier(store, {'from_email': m.get('FromEmail'), 'from_name': m.get('FromName'), 'subject': m.get('Subject'),
+                              'conversation_id': m.get('ConversationId')}, exclude_mid=m.get('MessageId'), skip_conv=True)
+    except Exception as e:
+        logger.debug(f'history block skipped: {e}'); return ''
+    return ('\n\nWHAT YOU ALREADY KNOW - your recent history with this sender and this topic, outside this '
+            'thread. Use it: never contradict what you already told them, never ask what they already answered, '
+            'and mention an open matter only when it bears on this reply.\n' + dos[:2500]) if dos else ''
+
+
 def strip_signoff(text: str) -> str:
     lines = [l for l in (text or '').rstrip().splitlines()]
     while lines:
@@ -92,7 +122,7 @@ def strip_signoff(text: str) -> str:
     return '\n'.join(lines).strip()
 
 
-def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
+def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
     whichever brain `triage_ai` names), the standing memory notes, and the thread itself."""
     from .llm import build_llm
@@ -114,7 +144,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     lrn = injectable(store.doc('learned') or '')
     sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n'
-              + (DONE if resolution else NOT_YET)
+              + (NUDGE if nudge else DONE if resolution else NOT_YET)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -137,9 +167,11 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
         for m in store.list_messages(task_id)[-6:])
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
+    if nudge: user += f'\n\n--- WHY YOU ARE WRITING AGAIN (the assistant\'s note to you, not for the reader)\n{nudge}'
     from . import calendar as cal
     calendar = cal.context_for(store, f"{last.get('Subject') or ''} {thread}")     # "Tuesday at 1 works" only if Tuesday at 1 is free
-    system += calendar
+    from . import knowledge
+    system += calendar + history_block(store, last) + knowledge.block(store, f"{last.get('Subject') or ''} {thread}")
     if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
         store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
@@ -148,9 +180,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
 
 
-def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None) -> str:
+def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
     """Write the draft and park it on its review, ready for approve / edit / no-reply."""
-    text = draft_reply(store, task_id, llm, resolution)
+    text = draft_reply(store, task_id, llm, resolution, nudge)
     store.update_review_draft(review_id, text, None)
     logger.info(f'drafted reply for task {task_id} ({len(text)} chars)')
     return text
@@ -163,7 +195,7 @@ def resolution_of(store, task_id: int):
                  if str(c.get('Body') or '').startswith('CODER REPORT')), None)
 
 
-def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None) -> str:
+def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None, nudge: str = None) -> str:
     """The one door every reply comes through - and there is only one road behind it now.
 
     An agent named `responder` used to take this over and run HEADLESS: a CLI opened, worked
@@ -171,7 +203,7 @@ def write_draft(store, task_id: int, review_id: int, resolution: str = None, act
     app exists to replace, so it is gone. Coding work goes to a real session you can see
     (terminal.start_on_task); a reply is two sentences and belongs to the main AI, which
     writes it here in under a second and parks it for approval."""
-    return draft_for_review(store, task_id, review_id, llm, resolution)
+    return draft_for_review(store, task_id, review_id, llm, resolution, nudge)
 
 
 def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
@@ -210,7 +242,8 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
             f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
     from . import calendar as cal
     calendar = cal.context_for(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
-    system += calendar
+    from . import knowledge
+    system += calendar + history_block(store, m) + knowledge.block(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else out

@@ -18,7 +18,9 @@ import TuneIcon from "@mui/icons-material/Tune";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { AgentsPage } from "./AgentsPanel.jsx";
+import AboutYou from "./AboutYou.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, Empty, FilterPills } from "./ui.jsx";
@@ -75,6 +77,20 @@ const KNOB_META = {
     desc: "Kept only for old databases — has no effect. Leave off.",
     help: "An earlier design had a separate send gate. Sending is now simply what Approve & send does, so this switch controls nothing." },
 
+  // ── Assistant: the voice on the Timeline (assistant.py) ──
+  assistant_max_lines: { group: "Assistant", label: "Lines per post, at most", type: "number",
+    desc: "The assistant checks in every 30 minutes and on startup (the 'Assistant' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
+    help: "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice into Review — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule." },
+  assistant_followup_hours: { group: "Assistant", label: "Silence before a follow-up", type: "number",
+    desc: "Hours after your last reply on a thread — one that asked for or promised something — before 'no answer yet, follow up?' appears. 24 by default.",
+    help: "Only your own last word counts, and only when it asked or promised something ('could you send', 'by Friday', a question mark). A plain thanks that goes unanswered is not a follow-up. The chase itself is drafted only when you click." },
+  assistant_cold_days: { group: "Assistant", label: "Quiet days before a task has 'gone cold'", type: "number",
+    desc: "Open work with no comment, message or run for this many days gets a line. 3 by default.",
+    help: "A task with a live agent on it is never cold. One with a draft waiting in Review is named as waiting on you." },
+  assistant_producers: { group: "Assistant", label: "What it looks for", type: "channels", options: ["followup", "promise", "prep", "cold", "idea"],
+    desc: "followup = your unanswered asks · promise = what you said you would do and have not · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · idea = the model's own thoughts from the day's mail, guided by the report's prompt.",
+    help: "Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words." },
+
   // ── Coder agent: who works the tasks, and how eagerly ──
   default_agent: { group: "Coder agent", label: "Default agent", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
@@ -96,9 +112,15 @@ const KNOB_META = {
   waitroom_drip: { group: "Coder agent", label: "Tell-the-agent notes land one per stop", type: "switch",
     desc: "On: a queue of prompts drips in - each time the agent stops, the next one is typed in, the rest wait their turn. Off: everything queued goes in as one batch.",
     help: "The waiting room is a funnel: paste twenty prompts and each becomes its own note, in order. With the drip on, the agent gets one at a time with its full attention - it is told how many wait behind it and that the next comes when it stops again, so it never goes looking. Turn it off to hand over the whole list in one message instead." },
-  coder_auto_enabled: { group: "Coder agent", label: "Auto-dispatch new coding tasks", type: "switch",
-    desc: "A new task with software in it immediately opens a live agent session in its repo.",
-    help: "On: the moment triage says 'this is work' AND the work is plainly about code - a failure with a trace, a named repository or pull request, a file path - your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nWork with no code in it (chase a vendor, add a user, produce a document) is still a real task - it just waits on your list rather than opening a session, because a CLI sitting in a repository has nothing to do with it. One click sends it to an agent anyway if you disagree.\n\nRequires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way." },
+  coder_auto_enabled: { group: "Coder agent", label: "Auto-dispatch new tasks", type: "switch",
+    desc: "Every new task immediately opens a live agent session - coding or not. The agent does what a keyboard can do, or says 'nothing to do here'.",
+    help: "On: the moment triage says 'this is work' your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. That includes work with no code in it - chase a vendor, add a user, produce a document - because an agent that looks and stops is cheap and a job sitting on a list is not. Only plain questions (a reply is drafted instead) and notices (filed) stay out of it. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nA first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way." },
+  coder_context_file: { group: "Coder agent", label: "Write the agent a context file", type: "switch",
+    desc: "Each session gets ~/.taskuary/context/TQ-xxxx.md: this sender's recent mail and what you last wrote them, the topic elsewhere, your calendar, the assistant's read, the learned profile, the whole thread - and the reports of closed tasks on the same sender, subject or repo. The seed says 'read it first'.",
+    help: "The seed prompt is one command line (Windows caps it at 32,767 characters, and when it overflows the ask is what gets cut), so the two-line read rides in the prompt and the rest lives in this file. It is written under Taskuary's own home, never inside a checkout - a stray file in a shared checkout gets staged. Off: the seed carries what it always did and no file is written." },
+  agent_hooks: { group: "Coder agent", label: "Let Claude Code tell the Board what it is doing", type: "switch",
+    desc: "A Claude Code hook in each checkout a session opens reports every tool call and stop to Taskuary - the Board card reads 'Edit server.py · 4s' and the agent's own list instead of a scrollback.",
+    help: "How: Taskuary adds PostToolUse, Stop and UserPromptSubmit entries to the checkout's .claude/settings.local.json (the project-local file Claude Code itself keeps out of git). Each entry pipes the event's JSON to this server on localhost with curl; nothing leaves the machine and nothing changes what the agent does. Existing hooks in that file are kept.\n\nCodex needs no hook: Taskuary follows the session log Codex writes as it works. Other CLIs show the last screen line and the files git says they touched.\n\nOff: no file is written; cards fall back to files only." },
   auto_sessions: { group: "Coder agent", label: "Agents at once", type: "number",
     desc: "How many unattended agent sessions may run together. The rest queue.",
     help: "The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.\n\nPast the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board's floor view is drawn to this number, so raising it widens the room instead of crowding it.\n\nRaise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this." },
@@ -112,9 +134,9 @@ const KNOB_META = {
     help: "The moment worth a sound: the thing you delegated is now waiting on you. It fires once, on the transition from working to waiting, never while you already have the task open in front of you. Sounds are synthesised in the browser - nothing to download.\n\nThe desktop notification below is separate: it is the browser's own, so it reaches you when Taskuary is behind other windows, and the first time it asks for permission." },
   hand_desktop: { group: "Notifications", label: "Desktop notification when an agent raises its hand", type: "switch",
     desc: "The browser's notification, so it reaches you when Taskuary is behind other windows. Click it to jump to the task." },
-  phone_approvals: { group: "Notifications", label: "Approve from your phone", type: "switch",
-    desc: "Reply to a ping in the notify chat to decide the review — approve, reject, or type the reply yourself.",
-    help: "On: every ping about a pending reply carries the DRAFT and an [rvN] tag. Reply in that same chat: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft — exactly like editing in Review. A confirmation comes back into the chat, including when a send fails (the review returns to the queue wearing the error).\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Verdicts typed in the notify chat are intercepted before triage: they never become work, and the chat needs no source row flipped on.\n\nOff (default): pings stay read-only." },
+  phone_approvals: { group: "Notifications", label: "Answer agents & approve from phone", type: "switch",
+    desc: "Reply to a tagged ping to answer that live agent, approve a draft, reject it, or write the reply yourself.",
+    help: "On: when a live coding agent stops or asks, its chat ping carries a [tqN] tag. Reply to that ping and your words go straight into that exact agent session. Pending-reply pings carry the DRAFT and an [rvN] tag: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft. Confirmations come back into the chat.\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Answers and verdicts are intercepted before triage, so they never become new work. Quoting the [tqN] ping is required for agent answers because several agents may be waiting at once.\n\nOff (default): pings stay read-only." },
 
   // ── Attachments & images ──
   vision_enabled: { group: "Attachments & images", label: "AI reads attached images", type: "switch",
@@ -144,28 +166,32 @@ const KNOB_META = {
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
     help: "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search." },
 };
-const GROUPS = ["Triage & routing", "Replies", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
-// internal state and settings that moved onto their connector - never shown as knobs
-const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_enabled",
-                        "owner_name", "owner_email",     // the owner lives on the Docs page
-                        "last_pinged_review"]);          // phone-approvals bookkeeping, not a knob
+const GROUPS = ["Triage & routing", "Replies", "Assistant", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
+// Internal state, and settings that live on another page - never shown as knobs. The "Other" tab
+// used to catch every bookkeeping value the server ever wrote (digest_report_seeded, task_id_mark,
+// learn_pending, owner_bio...), each with a switch that did something nobody could predict.
+const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_enabled",   // github card decisions
+                        "last_pinged_review", "triage_last_error",                          // bookkeeping
+                        "setup_dismissed", "task_id_mark", "learn_pending", "learn_last_reflect"]);
+const hidden = (name) => HIDDEN.has(name) || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
 const SECTION_HELP = {
   policies: { title: "Routing policies — the deterministic layer",
-    body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: ignore > escalate > auto_answer > draft > task_only — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent - this is the ONLY thing that marks one urgent, so name the senders whose mail jumps your queue), auto_answer (the draft is auto-approved — still never sent), draft (targeted default), task_only (file it, no reply).\n\nWhen you hit 'Not a task', a sender ignore rule is added here automatically — the learning loop writes into this table." },
-  memory: { title: "Agent memory — the specific layer",
-    body: "Standing notes tied to a sender, domain, or everyone: written when you say 'Not a task' or 'Not our task' (editable before saving), plus anything you add manually. Active notes are injected into triage and every draft, and they outrank the AI's own reading.\n\nThis is the SPECIFIC memory — verdicts about senders and kinds of mail. The GENERAL lessons (your style, your responsibilities, what deserves a task) are distilled from the same verdicts into LEARNED.md on the Docs tab, and the daily DIGEST.md is the working memory. Toggle off anything learned wrong — deactivated notes stay for the record but are never injected." },
-  audit: { title: "Audit integrity",
-    body: "Every action (routing, verdicts, agent runs, deletions, config changes) is appended to a hash-chained audit log: each row's hash covers the previous row's hash, so editing history breaks every hash after it. Verify recomputes the whole chain." },
+    body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: ignore > escalate > auto_answer > draft > task_only — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent - this is the ONLY thing that marks one urgent, so name the senders whose mail jumps your queue), auto_answer (the draft is auto-approved — still never sent), draft (targeted default), task_only (file it, no reply).\n\nNothing writes into this table by itself: 'Not a task' teaches a verdict in Memory, not a rule here, and muting a sender is 'Skip this sender'." },
+  memory: { title: "Verdicts & notes — the evidence behind LEARNED.md",
+    body: "Two layers, one loop. LEARNED.md (Docs tab) is the GENERAL profile — your style, your responsibilities, what deserves a task — and it is written by a nightly pass. This page is the EVIDENCE that pass reads: one dated line per verdict you gave ('Not our task' on this subject from this sender, 'Not a task' on that one) plus notes you type yourself, each tied to a sender, a domain, a subject, or everyone.\n\nWhen a new message arrives, the lines that bear on it (same sender, same topic) ride into triage and into the reply draft, and the model judges how alike the new message really is — the same sender asking the same thing is binding, a shared word is not. The general lessons in LEARNED.md are distilled from these same lines under a stricter rule (LEARNED.md → Verdicts lists which ones fed which lesson).\n\nSo nothing was removed: LEARNED.md is what it concluded, this is what it concluded it from. Toggle off a line learned wrong — it stays for the record and is never injected again; the next distillation drops it too." },
+  audit: { title: "Audit integrity — what the log is, and how to read it",
+    body: "Every consequential thing Taskuary does is one row in an append-only log: a message routed or filed and why, a verdict you gave, a reply sent, an agent session opened or wrapped, a connector saved or signed in, a setting changed, a task deleted. Each row stores a hash of its own contents PLUS the hash of the row before it, so the rows form a chain: change any row after the fact — even one character in the database — and its hash no longer matches, and every row after it points at a parent that no longer exists.\n\nVerify recomputes the whole chain from the first row. Intact means the record you see is the record that was written. 'Contents altered' names the exact rows that were changed after writing — the thing this log exists to catch. 'Out of order' means two writers raced at the same instant once; nothing was changed, and it cannot recur.\n\nThe history below is that log, newest first: when, who (you, the router, an agent, a scheduled report), what was done, to what. It is the answer to 'why did this happen' and 'who did this' for anything on the Timeline or the Board." },
 };
 
 const PAGES = {
+  about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
   config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
-  memory: { title: "Agent memory", icon: PsychologyIcon, desc: "Standing notes learned from your verdicts, injected into every draft." },
+  memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
   agents: { title: "Agents", icon: SmartToyIcon, desc: "Bring your own AI CLI — cmd, args, resumable sessions, repo → checkout map." },
-  audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Tamper-evident hash chain over every action the hub takes." },
+  audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
 };
 
 function SettingsPages({ page, setPage, q, setQ }) {
@@ -205,7 +231,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
   // Deep search: every hit knows which page (and tab) it lives on and jumps there.
   const hit = (...parts) => parts.join(" ").toLowerCase().includes(q.toLowerCase());
   const results = !q ? [] : [
-    ...settings.filter((s) => { if (HIDDEN.has(s.Name)) return false; const m = meta(s.Name); return hit(s.Name, s.Description, m.label, m.desc, m.help, m.group); })
+    ...settings.filter((s) => { if (hidden(s.Name)) return false; const m = meta(s.Name); return hit(s.Name, s.Description, m.label, m.desc, m.help, m.group); })
       .map((s) => ({ key: `k${s.Name}`, label: meta(s.Name).label, crumb: `Configuration → ${meta(s.Name).group}`,
         go: () => { setPage("config"); setCfgTab(meta(s.Name).group); setQ(""); } })),
     ...(policies || []).filter((p) => hit(p.Name, p.Kind, p.Pattern, p.Action, p.Reason))
@@ -309,7 +335,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
 
   /* ── detail pages ─────────────────────────────────────────────────────── */
   if (page === "config") {
-    const rows = settings.filter((s) => !HIDDEN.has(s.Name) && meta(s.Name).group === cfgTab);
+    const rows = settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === cfgTab);
     const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
     return (
       <Box>
@@ -353,7 +379,17 @@ function SettingsPages({ page, setPage, q, setQ }) {
           <Box sx={{ flex: 1 }} />
           <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setDraft({ ...NEW_POLICY })}>Add rule</Button>
         </Box>
-        {!(policies || []).length && <Empty>No rules yet.</Empty>}
+        {!(policies || []).length && !draft && (
+          <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>No routing rules yet</Typography>
+            <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5, maxWidth: 560 }}>
+              Rules are optional. Add one when a sender, domain, or message type should always be drafted,
+              filed, made into a task, or sent to you for a decision.
+            </Typography>
+            <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+              onClick={() => setDraft({ ...NEW_POLICY })}>Add your first rule</Button>
+          </Box>
+        )}
         {(policies || []).map((p) => (
           <Box key={p.PolicyId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: p.Active ? 1 : 0.55 }}>
             <Chip size="small" label={p.Action.replace("_", " ")}
@@ -403,10 +439,11 @@ function SettingsPages({ page, setPage, q, setQ }) {
       <Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <Typography variant="body2" sx={{ color: DIM }}>
-            Standing notes learned from your verdicts, injected into every draft.
+            One dated line per verdict you gave, plus notes you write — the evidence LEARNED.md (Docs) distils its general lessons from.
+            Lines that bear on a new message ride into its triage and draft.
             <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
               sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
-              How memory works →
+              How this relates to LEARNED.md →
             </Typography>
           </Typography>
           <Box sx={{ flex: 1 }} />
@@ -451,6 +488,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
     );
   }
 
+  if (page === "about") return <AboutYou />;
+
   if (page === "agents") {
     return <AgentsPage onBack={() => setPage(null)} />;
   }
@@ -458,10 +497,18 @@ function SettingsPages({ page, setPage, q, setQ }) {
   if (page === "audit") {
     return (
       <Box>
-        <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
-          Every action lands in a hash-chained, tamper-evident log — verification recomputes the whole chain.
+        <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
+          Every consequential action — a message routed, a verdict given, a reply sent, an agent started, a connector or setting changed —
+          is one row in an append-only log. Each row carries a hash of its own contents and of the row before it, so changing history
+          after the fact breaks every hash from that point on. <b>Verify</b> recomputes the chain and says whether the record you see is
+          the record that was written.
+          <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.audit)}
+            sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+            How to read it →
+          </Typography>
         </Typography>
         <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
+        <AuditHistory />
         {verify && (
           <Box sx={{ mt: 2 }}>
             {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#47654a" }}>
@@ -498,24 +545,33 @@ function SettingsPages({ page, setPage, q, setQ }) {
   return (
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-      {!results.length && <Empty>Nothing matches.</Empty>}
-      {results.map((r) => (
-        <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-          "&:hover": { bgcolor: "#f4f1ec" } }}>
-          <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
-          <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb}</Typography>
-        </Box>
-      ))}
+      {!results.length ? <Empty>Nothing matches “{q}”. Try a setting, rule, or memory keyword.</Empty> : (
+        <>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
+            {results.length} {results.length === 1 ? "result" : "results"}
+          </Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 1 }}>
+            {results.map((r) => (
+              <Box key={r.key} onClick={r.go}
+                sx={{ ...card, p: 1.5, cursor: "pointer", transition: "border-color .15s, box-shadow .15s",
+                  "&:hover": { borderColor: "#c8c0b3", boxShadow: "0 2px 8px rgba(47,56,64,.08)" } }}>
+                <Typography sx={{ color: "#55697a", fontWeight: 650, fontSize: 13.5 }}>{r.label}</Typography>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.35 }}>{r.crumb}</Typography>
+              </Box>
+            ))}
+          </Box>
+        </>
+      )}
     </Box>
   );
 }
 
 // One page, a rail, and a search box that is always reachable. The landing grid meant every
 // trip between two settings went section → back → section; these five are edited together.
-const NAV = ["config", "policies", "memory", "agents", "audit"];
+const NAV = ["about", "config", "policies", "memory", "agents", "audit"];
 
 export default function SettingsView() {
-  const [page, setPage] = useState("config");
+  const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
   const [q, setQ] = useState("");
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "236px minmax(0,1fr)" },
@@ -549,6 +605,42 @@ export default function SettingsView() {
   );
 }
 
+
+// The log itself, newest first - the page used to be one button and a sentence, and nobody could
+// tell what it was a log OF. Who is said in words: you, the router, an agent, a scheduled report.
+const ACTOR_LABEL = { owner: "you", router: "the router", triage: "triage", report: "a report", system: "the app", startup: "startup", "connector-test": "a Test", msauth: "sign-in" };
+const AuditHistory = () => {
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState("");
+  useEffect(() => { api.get("/api/audit/recent", { params: { limit: 300 } }).then(({ data }) => setRows(data.data || [])).catch(() => setRows([])); }, []);
+  if (rows === null) return <CircularProgress size={16} sx={{ display: "block", mt: 3 }} />;
+  const hit = (r) => !q || `${r.Actor} ${r.Action} ${r.EntityType} ${r.EntityId} ${r.Detail || ""}`.toLowerCase().includes(q.toLowerCase());
+  const shown = rows.filter(hit);
+  const who = (r) => ACTOR_LABEL[r.Actor] || r.Actor || r.ActorType || "?";
+  return (
+    <Box sx={{ mt: 3 }}>
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, mb: 1 }}>
+        <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>HISTORY · LAST {rows.length} ACTIONS</Typography>
+        <Box sx={{ flex: 1 }} />
+        <TextField size="small" placeholder="filter — a task id, an action, a word" value={q} onChange={(e) => setQ(e.target.value)}
+          sx={{ width: 280, bgcolor: "#fff" }} inputProps={{ style: { fontSize: 12, padding: "5px 9px" } }} />
+      </Box>
+      {!shown.length && <Empty>Nothing matches.</Empty>}
+      {shown.map((r) => (
+        <Box key={r.Id} sx={{ display: "grid", gridTemplateColumns: "150px 110px 150px minmax(0, 1fr) 70px", gap: 1.5, alignItems: "baseline", py: 0.75, borderBottom: `1px solid ${BORDER}` }}>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }}>{String(r.CreatedAt || "").slice(0, 16)}</Typography>
+          <Typography variant="caption" sx={{ color: r.ActorType === "human" ? "#47654a" : DIM, fontWeight: 600 }}>{who(r)}</Typography>
+          <Typography variant="caption" sx={{ color: INK, fontWeight: 700 }}>{String(r.Action || "").replace(/_/g, " ")}</Typography>
+          <Typography variant="caption" sx={{ color: DIM, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.Detail || ""}>
+            {r.EntityType}{r.EntityId ? ` ${r.EntityType === "task" ? `TQ-${String(r.EntityId).padStart(4, "0")}` : `#${r.EntityId}`}` : ""}
+            {r.Detail ? ` — ${typeof r.Detail === "string" ? r.Detail : JSON.stringify(r.Detail)}` : ""}
+          </Typography>
+          <Typography variant="caption" sx={{ ...mono, color: "#cfc9bf", fontSize: 9.5 }} title={`row hash ${r.RowHash || ""}`}>{String(r.RowHash || "").slice(0, 8)}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+};
 
 const HelpDialog = ({ help, onClose }) => (
   <Dialog open={!!help} onClose={onClose} fullWidth maxWidth="sm">

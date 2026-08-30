@@ -1,39 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 210" font-family="Segoe UI, Helvetica, Arial, sans-serif">
   <title>How Taskuary learns: your verdicts become hypotheses; hypotheses that keep holding become your profile; the profile steers every AI call.</title>
+  <!-- the app's own palette (website/src/theme.jsx): oat paper, slate brand, sage second, warm ink -->
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M0 0 L10 5 L0 10 z" fill="#8b93a7"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="#6e685f"/>
     </marker>
   </defs>
+  <rect width="960" height="210" rx="14" fill="#f6f4f1"/>
 
   <!-- your verdicts -->
-  <rect x="16" y="62" width="168" height="68" rx="34" fill="#4f46e5"/>
-  <text x="100" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#ffffff">your verdicts</text>
-  <text x="100" y="110" text-anchor="middle" font-size="10.5" fill="#dcd9ff">edits · rejections · not-a-task</text>
+  <rect x="16" y="62" width="168" height="68" rx="34" fill="#55697a"/>
+  <text x="100" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#fffdfb">your verdicts</text>
+  <text x="100" y="110" text-anchor="middle" font-size="10.5" fill="#dfe6ea">edits · rejections · not-a-task</text>
 
-  <line x1="184" y1="96" x2="256" y2="96" stroke="#8b93a7" stroke-width="1.6" marker-end="url(#a)"/>
-  <text x="219" y="82" text-anchor="middle" font-size="10.5" fill="#8b93a7">one AI call</text>
+  <line x1="184" y1="96" x2="256" y2="96" stroke="#6e685f" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="219" y="82" text-anchor="middle" font-size="10.5" fill="#6e685f">one AI call</text>
 
   <!-- hypothesis -->
-  <rect x="258" y="62" width="190" height="68" rx="8" fill="#eeedfc" stroke="#4f46e5" stroke-width="1.4" stroke-dasharray="5 4"/>
-  <text x="353" y="90" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1c2130">hypothesis</text>
-  <text x="353" y="110" text-anchor="middle" font-size="11.5" fill="#4f46e5">born with score s:2</text>
-  <text x="353" y="158" text-anchor="middle" font-size="10.5" fill="#8b93a7">+1 each verdict that agrees · −1 each you contradict</text>
-  <text x="353" y="174" text-anchor="middle" font-size="10.5" fill="#8b93a7">at s:0 the line is deleted · never shown to the AI while testing</text>
+  <rect x="258" y="62" width="190" height="68" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text x="353" y="90" text-anchor="middle" font-size="14.5" font-weight="700" fill="#262521">hypothesis</text>
+  <text x="353" y="110" text-anchor="middle" font-size="11.5" fill="#55697a">born with score s:2</text>
+  <text x="353" y="158" text-anchor="middle" font-size="10.5" fill="#6e685f">+1 each verdict that agrees · −1 each you contradict</text>
+  <text x="353" y="174" text-anchor="middle" font-size="10.5" fill="#6e685f">at s:0 the line is deleted · never shown to the AI while testing</text>
 
-  <line x1="448" y1="96" x2="556" y2="96" stroke="#8b93a7" stroke-width="1.6" marker-end="url(#a)"/>
-  <text x="502" y="70" text-anchor="middle" font-size="10.5" font-weight="700" fill="#4f46e5">promoted at s:4</text>
-  <text x="502" y="84" text-anchor="middle" font-size="10.5" fill="#8b93a7">proof from 2+ people</text>
+  <line x1="448" y1="96" x2="556" y2="96" stroke="#6e685f" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="502" y="70" text-anchor="middle" font-size="10.5" font-weight="700" fill="#47654a">promoted at s:4</text>
+  <text x="502" y="84" text-anchor="middle" font-size="10.5" fill="#6e685f">proof from 2+ people</text>
 
   <!-- the profile -->
-  <rect x="558" y="62" width="190" height="68" rx="8" fill="#eeedfc" stroke="#4f46e5" stroke-width="1.6"/>
-  <text x="653" y="90" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1c2130">LEARNED.md</text>
-  <text x="653" y="110" text-anchor="middle" font-size="11.5" fill="#5c6478">your profile — edit it freely</text>
+  <rect x="558" y="62" width="190" height="68" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.6"/>
+  <text x="653" y="90" text-anchor="middle" font-size="14.5" font-weight="700" fill="#262521">LEARNED.md</text>
+  <text x="653" y="110" text-anchor="middle" font-size="11.5" fill="#4d4a43">your profile — edit it freely</text>
 
-  <line x1="748" y1="96" x2="798" y2="96" stroke="#8b93a7" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="748" y1="96" x2="798" y2="96" stroke="#6e685f" stroke-width="1.6" marker-end="url(#a)"/>
 
   <!-- consumers -->
-  <rect x="800" y="62" width="146" height="68" rx="34" fill="#4f46e5"/>
-  <text x="873" y="86" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">every triage,</text>
-  <text x="873" y="102" text-anchor="middle" font-size="12.5" font-weight="700" fill="#ffffff">draft &amp; agent run</text>
+  <rect x="800" y="62" width="146" height="68" rx="34" fill="#6f8a6e"/>
+  <text x="873" y="86" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fffdfb">every triage,</text>
+  <text x="873" y="102" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fffdfb">draft &amp; agent run</text>
 </svg>

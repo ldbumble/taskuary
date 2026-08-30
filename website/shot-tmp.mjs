@@ -1,0 +1,16 @@
+import { launch } from "./browser.mjs";
+const out = process.argv[2];
+const b = await launch();
+const p = await b.newPage();
+await p.setViewport({ width: 1660, height: 900 });
+await p.goto("http://127.0.0.1:7787/", { waitUntil: "networkidle2", timeout: 30000 });
+await new Promise(r => setTimeout(r, 3500));
+await p.screenshot({ path: `${out}/tl-top.png` });
+await p.evaluate(() => window.scrollTo({ top: 900 }));
+await new Promise(r => setTimeout(r, 900));
+await p.screenshot({ path: `${out}/tl-scrolled.png` });
+await p.evaluate(() => window.scrollTo({ top: 3200 }));
+await new Promise(r => setTimeout(r, 900));
+await p.screenshot({ path: `${out}/tl-deep.png` });
+await b.close();
+console.log("ok");

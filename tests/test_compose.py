@@ -32,7 +32,8 @@ class CatalogTests(unittest.TestCase):
         types = {c['type'] for c in compose.catalog(self.s)}
         self.assertIn('local_file', types)
         self.assertIn('intacct', types)
-        self.assertNotIn('sharepoint_list', types)      # planned types are not offered as choices
+        self.assertIn('sharepoint_list', types)         # built 2026-08-28 - it borrows the Outlook tenant app
+        self.assertNotIn('graphql', types)              # planned types are not offered as choices
 
     def test_every_type_carries_its_config_keys(self):
         """Taken from the executors' own docstrings, so the composer cannot believe a type

@@ -18,7 +18,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
-import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
+import { ASSISTANT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -58,6 +58,10 @@ const FIELDS = {
     ["failed only (1 = just the failures)", "failed_only", "text", "1"], AI_FIELD],
   entra_licenses: [AI_FIELD],
   automate: [["days back", "days", "text", "30"], AI_FIELD],
+  // the assistant's post: the prompt IS the configuration (what it watches for); thresholds live in Settings -> Assistant
+  assistant: [AI_FIELD],
+  // the window starts at MIDNIGHT that many days back: 1 = all of yesterday plus today so far
+  digest: [["days back (1 = all of yesterday + today so far; counted from midnight)", "days", "text", "1"], AI_FIELD],
   prometheus: [["PromQL query", "query", "multiline", 'up == 0   ·   sum(rate(http_requests_total[5m])) by (service)'], AI_FIELD],
   datadog: [["monitor name filter (blank = all monitors, trouble first)", "name", "text", "prod"], AI_FIELD],
   winrm: [["PowerShell to run on the remote box", "script", "multiline",
@@ -65,6 +69,15 @@ const FIELDS = {
   mcp: [["command", "cmd", "text", "npx / uvx / path to the MCP server"], ["args (one per line)", "args", "multiline", ""],
     ["tool", "tool", "text", "query"], ["tool args (JSON)", "tool_args", "multiline", '{"sql": "SELECT ..."}'], AI_FIELD],
   sqlite: [["db path", "db", "text", "C:/data/app.db"], ["query", "query", "multiline", "SELECT ..."], AI_FIELD],
+  google_sheets: [["spreadsheet (URL or id)", "spreadsheet", "text", "https://docs.google.com/spreadsheets/d/…"],
+    ["range (blank = the first sheet)", "range", "text", "Sheet1!A:F"], AI_FIELD],
+  sharepoint_list: [["site", "site", "text", "contoso.sharepoint.com/sites/Ops"],
+    ["list (its title in SharePoint)", "list", "text", "Requests"],
+    ["max items", "top", "text", "200"], AI_FIELD],
+  sharepoint_file: [["site", "site", "text", "contoso.sharepoint.com/sites/Ops"],
+    ["path in the library (end with / to list a folder)", "path", "text", "Shared Documents/Reports/latest.xlsx"],
+    ["sheet name (xlsx only, blank = the first)", "sheet", "text", ""],
+    ["last N lines (text files only)", "tail", "text", "50"], AI_FIELD],
   local_file: [["file, folder, or a pattern", "path", "text", "C:/exports/sales-*.csv"],
     ["which one, when the pattern matches several", "pick", "pick_file", ""],
     ["last N lines (text and log files only)", "tail", "text", "50"],
@@ -108,9 +121,10 @@ const TYPE_LABELS = {
   entra_signins: "Entra ID — sign-ins", entra_licenses: "Entra ID — licence seats",
   prometheus: "Prometheus", datadog: "Datadog monitors",
   intacct: "Sage Intacct", intacct_fields: "Intacct \u2014 what fields exist",
-  digest: "Taskuary digest", automate: "Automation ideas (own data)",
+  digest: "Taskuary digest", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline (its voice: COUNSEL.md, Docs tab)",
   agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
+  google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",
   exa: "Exa — search the web", tavily: "Tavily — search + answer",
   firecrawl: "Firecrawl — read a page", reader: "Jina Reader — read a page (no key)",
 };
@@ -121,6 +135,7 @@ const TYPE_LABELS = {
    Microsoft, somewhere on the web. Anything new falls into "Other" rather than vanishing. */
 const TYPE_GROUPS = [
   ["This computer", ["local_file", "sqlite", "mcp"]],
+  ["Files & sheets", ["google_sheets", "sharepoint_list", "sharepoint_file"]],
   ["Databases", ["mssql", "database"]],
   ["AWS", ["aws", "s3_object", "cloudwatch_logs"]],
   ["Azure", ["azure", "azure_blob", "azure_logs"]],
@@ -131,13 +146,14 @@ const TYPE_GROUPS = [
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],
   ["Windows", ["winrm"]],
-  ["Taskuary's own data", ["digest", "automate"]],
+  ["Taskuary's own data", ["digest", "automate", "assistant"]],
 ];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
-  intacct_fields: "intacct" };
+  intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
+  sharepoint: "SharePoint", google_sheets: "Google Sheets",
   prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl",
   intacct: "Sage Intacct" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
@@ -178,7 +194,7 @@ const toShape = (src) => {
 };
 // Everything that belongs to ONE source card; the rest (title, prompt, schedule) is the
 // report itself. Splitting here is what lets old single-source configs load unchanged.
-const SOURCE_KEYS = ["type", "label", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick", "region",
+const SOURCE_KEYS = ["type", "label", "connector_id", "query", "script", "cmd", "args", "tool", "tool_args", "tail", "sheet", "pick", "region",
   "db", "url", "headers", "path", "max_rows", "server", "database", "auth", "username", "driver",
   "service", "operation", "params", "bucket", "key", "prefix", "log_group", "pattern", "hours",
   "api_version", "path_expr", "account", "container", "blob", "workspace_id",
@@ -204,11 +220,13 @@ export default function ReportsView() {
   const [bucket, setBucket] = useState("all");   // which rail section is open
   const [q, setQ] = useState("");
 
+  const [lastRuns, setLastRuns] = useState({});   // per source: what its last run read and did
   const load = useCallback(async () => {
     try {
-      const [s, t, c] = await Promise.all([api.get("/api/sources"), api.get("/api/report-types"), api.get("/api/connectors")]);
+      const [s, t, c, r] = await Promise.all([api.get("/api/sources"), api.get("/api/report-types"), api.get("/api/connectors"),
+        api.get("/api/reports/last-runs").catch(() => ({ data: { data: {} } }))]);
       setSources((s.data.data || []).filter((x) => x.Channel === "report"));
-      setTypes(t.data.data || []); setConnectors(c.data.data || []);
+      setTypes(t.data.data || []); setConnectors(c.data.data || []); setLastRuns(r.data.data || {});
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load reports"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -283,9 +301,10 @@ export default function ReportsView() {
         const sched = c.on_startup ? "on startup" : c.cron ? `cron ${c.cron}`
           : c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
         return (
-          <Box key={s.SourceId} onClick={() => { setQ(""); setBucket(s.SourceId); }}
+          <Box key={s.SourceId} sx={{ borderBottom: `1px solid ${BORDER}` }}>
+          <Box onClick={() => { setQ(""); setBucket(s.SourceId); }}
             sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
-              borderBottom: `1px solid ${BORDER}`, "&:hover": { bgcolor: "#faf8f4" } }}>
+              "&:hover": { bgcolor: "#faf8f4" } }}>
             <StatusDot ok={!!s.Active} />
             <ChannelIcon channel="report" />
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -305,6 +324,8 @@ export default function ReportsView() {
             <Button size="small" onClick={() => { setQ(""); setBucket(s.SourceId); }}>Edit</Button>
             <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
               onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
+          </Box>
+          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} />}
           </Box>
         );
       })}
@@ -597,6 +618,14 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     ...(e.target.checked ? { every_minutes: "", daily_at: "", cron: "" } : {}) })} />
                 <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
               </Box>
+              {/* a report is informational by default. On, each run goes through triage like an inbound
+                  message and TRIAGE.md decides whether it is work - an agent's research can then be handed
+                  to the coding agent. A failed run is never triaged. */}
+              <Box sx={{ display: "flex", alignItems: "center", ml: { sm: 1 } }}
+                title="Send each run through triage like an inbound message. TRIAGE.md decides whether it becomes a task - so a report one agent researched can be handed to the coding agent. Off: informational, never a task.">
+                <Switch checked={!!cfg.triage} onChange={(e) => setCfg({ ...cfg, triage: e.target.checked })} />
+                <Typography variant="caption" sx={{ color: DIM }}>can become work (triage decides)</Typography>
+              </Box>
               <Button variant="contained" disableElevation onClick={save} disabled={!cfg.title}
                 title={cfg.title ? "" : "the report needs a title - step 1"}>Save report</Button>
             </Box>
@@ -815,7 +844,9 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
     return only.includes(suffix);
   });
   const cardType = CARD_OF[src.type] || src.type;
-  const conn = connectors.find((c) => c.Type === cardType);
+  const matching = connectors.filter((c) => c.Type === cardType);
+  const conn = matching.find((c) => c.ConnectorId === Number(src.connector_id))
+    || matching.find((c) => c.Active) || matching[0];
   const needsConn = ["mssql", "winrm", "database", "aws", "azure", "prometheus", "datadog",
     "exa", "tavily", "firecrawl"].includes(cardType);   // reader works with no key at all
   const connOk = conn?.LastSyncAt && !conn?.LastError;
@@ -849,10 +880,21 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         })()}
       </Select>
       {needsConn && (
-        <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#47654a" : "#55697a" }}>
-          {connOk ? `✓ uses the ${CARD_LABELS[cardType] || cardType} connection from Connectors`
-            : `⚠ set up Connectors → ${CARD_LABELS[cardType] || cardType} first`}
-        </Typography>
+        <>
+          {matching.length > 1 && (
+            <Select size="small" value={conn?.ConnectorId || ""}
+              onChange={(e) => onChange({ connector_id: Number(e.target.value) })}
+              displayEmpty sx={{ fontSize: 12, bgcolor: "#fff" }}>
+              {matching.map((c) => (
+                <MenuItem key={c.ConnectorId} value={c.ConnectorId} sx={{ fontSize: 12 }}>{c.Name}</MenuItem>
+              ))}
+            </Select>
+          )}
+          <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#47654a" : "#55697a" }}>
+            {connOk ? `✓ uses ${conn.Name} from Connectors`
+              : `⚠ set up ${conn?.Name || CARD_LABELS[cardType] || cardType} in Connectors first`}
+          </Typography>
+        </>
       )}
       {count > 1 && (
         <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "#fff" }}
@@ -907,5 +949,154 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />
       <SourceTest src={src} />
     </Box>
+  );
+}
+
+/* What the report's last run DID, under its row. A quiet assistant check posts nothing, so this is
+   the only place its work shows: what it read (the exact text the model saw), what it reviewed and let
+   go, its note to the next check, and what came out - or the error, when it failed. */
+const IDEA_KINDS = { followup: "follow up", promise: "promise", prep: "prep", cold: "gone quiet", idea: "idea" };
+function LastRun({ r, sid, embedded }) {
+  // embedded: one run inside the History dialog - starts open, no "last run" header of its own
+  const [open, setOpen] = useState(!!embedded);
+  const [showInputs, setShowInputs] = useState(false);
+  const [hist, setHist] = useState(false);
+  const rv = r.reviewed || null;
+  const outcome = r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
+    : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "nothing to say — no post")
+    : r.subject ? `filed: ${r.subject}` : "ran";
+  const read = rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
+    `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KINDS[k] || k}`).join(", ") || "no candidates"] : [];
+  return (
+    <Box sx={{ pl: embedded ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded ? 0 : 1.25, mt: embedded ? 0 : -0.5 }}>
+      {!embedded && (
+      <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
+        <Box component="span" sx={{ fontWeight: 700, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
+        {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
+        {rv && ` · read ${read[0]}, ${read[1]}`}
+        <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+          sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
+          {open ? "hide ↑" : "details ↓"}
+        </Box>
+        {/* every run, not only the last: what each one read and why it said what it said (the owner, 2026-08-30) */}
+        {sid != null && (
+          <Box component="span" onClick={(e) => { e.stopPropagation(); setHist(true); }}
+            sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>history ↗</Box>
+        )}
+      </Typography>
+      )}
+      {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)} />}
+      {open && !!r.lines?.length && (
+        <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>what it said, and why</Typography>
+          {r.lines.map((l) => (
+            <Box key={l.id ?? l.key} sx={{ mt: 0.35, px: 1, py: 0.5, borderRadius: 1, border: `1px solid ${ASSISTANT.bd}`, bgcolor: ASSISTANT.tint }}>
+              <Typography variant="caption" sx={{ display: "block", color: INK, lineHeight: 1.45 }}>
+                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
+              </Typography>
+              {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
+                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>why · </Box>{l.why}</Typography>}
+            </Box>
+          ))}
+        </Box>
+      )}
+      {open && (
+        <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
+          {rv && (
+            <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>
+              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>{read.join(" · ")}
+              {rv.model === false ? " · no model — the facts in the hub's own words" : ""}
+            </Typography>
+          )}
+          {rv?.notes && (
+            <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mt: 0.4 }}>
+              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+            </Typography>
+          )}
+          {!!rv?.skipped?.length && (
+            <Box sx={{ mt: 0.4 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: "#6b5f45" }}>looked at and let go · {rv.skipped.length}</Typography>
+              {rv.skipped.map((c) => (
+                <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, pl: 1, borderLeft: `2px solid ${BORDER}`, mt: 0.3, whiteSpace: "pre-wrap" }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>{IDEA_KINDS[c.kind] || c.kind} · </Box>{c.facts}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          {r.summary && r.type !== "assistant" && (
+            <Typography variant="caption" sx={{ color: DIM, display: "block", whiteSpace: "pre-wrap", mt: 0.4, maxHeight: 220, overflowY: "auto" }}>
+              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it filed · </Box>{r.summary}
+            </Typography>
+          )}
+          {r.inputs && (
+            <Box sx={{ mt: 0.6 }}>
+              <Typography variant="caption" onClick={() => setShowInputs((v) => !v)}
+                sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                {showInputs ? "hide" : "show"} exactly what it read — {r.inputs.length.toLocaleString()} chars {showInputs ? "↑" : "↓"}
+              </Typography>
+              {showInputs && (
+                <Box component="pre" sx={{ ...mono, fontSize: 11, lineHeight: 1.45, color: INK, whiteSpace: "pre-wrap", m: 0, mt: 0.5, p: 1,
+                  bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, maxHeight: 360, overflowY: "auto" }}>{r.inputs}</Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/* The History dialog: every run of one report (store.report_run, newest first) down the left - when,
+   how long, what came out - and the chosen run whole on the right: what it read, what it reviewed and
+   let go, what it said and WHY. The assistant's quiet checks post nothing, so this is where "why did it
+   bring that up / why did it stay quiet at 14:30" gets answered (the owner, 2026-08-30). */
+function RunHistory({ sid, title, onClose }) {
+  const [runs, setRuns] = useState(null);
+  const [pick, setPick] = useState(null);      // the run id chosen
+  const [full, setFull] = useState({});        // run id -> the whole record, inputs and all
+  useEffect(() => {
+    api.get(`/api/reports/${sid}/runs`).then(({ data }) => { const rs = data.data || []; setRuns(rs); if (rs.length) setPick(rs[0].runId); })
+      .catch(() => setRuns([]));
+  }, [sid]);
+  useEffect(() => {
+    if (pick == null || full[pick]) return;
+    api.get(`/api/reports/runs/${pick}`).then(({ data }) => setFull((f) => ({ ...f, [pick]: data }))).catch(() => {});
+  }, [pick, full]);
+  const outcome = (r) => r.failed ? "failed" : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "quiet") : (r.subject ? "filed" : "ran");
+  const cur = pick != null ? (full[pick] || runs?.find((r) => r.runId === pick)) : null;
+  return (
+    <Dialog open onClose={onClose} maxWidth="lg" fullWidth onClick={(e) => e.stopPropagation()}>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 15 }}>
+        {title || "Report"} — run history
+        <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${runs.length} run${runs.length === 1 ? "" : "s"} kept` : "loading…"}</Typography>
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" onClick={onClose} startIcon={<CloseIcon sx={{ fontSize: 14 }} />}>Close</Button>
+      </DialogTitle>
+      <DialogContent sx={{ display: "flex", gap: 1.5, minHeight: 420 }}>
+        <Box sx={{ width: 260, flexShrink: 0, borderRight: `1px solid ${BORDER}`, pr: 1, overflowY: "auto", maxHeight: "70vh" }}>
+          {runs && !runs.length && <Empty>No runs kept yet — the history starts with the next run.</Empty>}
+          {(runs || []).map((r) => (
+            <Box key={r.runId} onClick={() => setPick(r.runId)}
+              sx={{ px: 1, py: 0.6, mb: 0.4, borderRadius: 1, cursor: "pointer", bgcolor: pick === r.runId ? "#eef3ea" : "transparent",
+                border: `1px solid ${pick === r.runId ? "#cfd8c8" : "transparent"}`, "&:hover": { bgcolor: "#f4f3ef" } }}>
+              <Typography variant="caption" sx={{ display: "block", color: INK, fontWeight: 600, lineHeight: 1.4 }}>{(r.at || "").slice(0, 16)}</Typography>
+              <Typography variant="caption" sx={{ display: "block", color: r.failed ? "#8a3646" : DIM, lineHeight: 1.4 }}>
+                {outcome(r)}{r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}{r.inputChars ? ` · read ${r.inputChars.toLocaleString()} chars` : ""}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0, overflowY: "auto", maxHeight: "70vh" }}>
+          {cur ? (
+            <>
+              <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 0.5 }}>
+                {cur.at} · {outcome(cur)}{cur.error ? ` — ${cur.error}` : ""}{cur.subject && cur.type !== "assistant" ? ` · ${cur.subject}` : ""}
+              </Typography>
+              {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded /> : <CircularProgress size={16} />}
+            </>
+          ) : <Typography variant="caption" sx={{ color: FAINT }}>Pick a run on the left.</Typography>}
+        </Box>
+      </DialogContent>
+    </Dialog>
   );
 }

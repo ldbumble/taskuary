@@ -12,13 +12,14 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
-import { pollWhileVisible } from "./visible.js";
+import { pollWhileActive, pollWhileVisible } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting } from "./ui.jsx";
+import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
@@ -37,11 +38,17 @@ const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
 // picked it up vanished out of the bucket you were watching - and a task sitting in "needs
 // you" WITH an agent thinking on it read as a contradiction, because it was one. One
 // in-progress bucket holds everything still open; the label inside it is what changes.
+// the pills wear the same colours as the chips on the rows they hold: "in progress" in the
+// slate-blue brand chrome next to a sage "agent working" chip read as two different states
+const ST_C = Object.fromEntries(TASK_STATES.map((s) => [s.key, s.c]));
 const STATE_FILTERS = [
   { key: "", label: "all" },
-  { key: "live", label: "in progress", c: PILL_COLORS.working },
-  { key: "done", label: "done", c: PILL_COLORS.done },
+  { key: "live", label: "in progress", c: ST_C.working },
+  { key: "done", label: "done", c: ST_C.done },
 ];
+// "today" as the person reading the list means it - the server's clock, in local terms
+const isToday = (s) => !!s && asUtc(String(s)).toDateString() === new Date().toDateString();
+const touchedToday = (t) => isToday(t.ClosedAt) || isToday(t.UpdatedAt) || isToday(t.CreatedAt);
 // everything still on somebody's plate - yours or an agent's. Dropped is neither, and only
 // ever shows under "all".
 const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key)
@@ -56,7 +63,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // "live" on arrival: what is still on somebody's plate is what you came here for. "all"
   // opens on a list whose top is whatever finished most recently. ("" = all; the rest derive.)
   const [filter, setFilter] = useState("live");
+  // "all" and "done" pile up for months; today's are the ones you came to look at, the rest
+  // wait behind one button. In progress is never cut: what is still on a plate must show.
+  const [older, setOlder] = useState(false);
   const [detail, setDetail] = useState(null);
+  // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
+  // keyed to a task, and a response that lands after you clicked another one must be dropped:
+  // a wrap-up finishing 8 seconds later used to paint ITS task's header and report over the
+  // one you had moved to, while the funnel below still belonged to the new one - two tasks
+  // in one pane, and "Done" a click away from the wrong session.
+  const selRef = useRef(selected); selRef.current = selected;
+  // A refresh already in flight when the tab is left can finish after the refresh
+  // fired on return. Only the newest request is allowed to repaint the list.
+  const taskLoadSeq = useRef(0);
+  const stale = (id) => selRef.current !== id;
   const { agents, models } = useAgents();
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
@@ -69,38 +89,46 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
+  const [feedOpen, setFeedOpen] = useState(false);   // Feed the agent, for THIS task
+  const waitingN = (tasks || []).find((x) => x.TaskId === selected)?.Waiting || 0;   // prompts in this task's funnel
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
 
   // fetch everything once and filter on the derived state - the server only knows raw
   // Status, and the state a person cares about is a combination of three columns
   const loadTasks = useCallback(async () => {
-    try { setTasks((await api.get("/api/tasks")).data.data || []); }
-    catch (e) { setErr(e?.response?.data?.detail || "Failed to load tasks"); }
+    const seq = ++taskLoadSeq.current;
+    try {
+      const next = (await api.get("/api/tasks")).data.data || [];
+      if (seq === taskLoadSeq.current) setTasks(next);
+    } catch (e) {
+      if (seq === taskLoadSeq.current) setErr(e?.response?.data?.detail || "Failed to load tasks");
+    }
   }, []);
 
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
     try {
       const { data } = await api.get(`/api/tasks/${id}`);
+      if (stale(id)) return;
       setDetail(data);
-      try { setWait((await api.get(`/api/tasks/${id}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
-      // opened a task the current filter hides (e.g. from the Board)? widen to "all" so
-      // the list and the detail never contradict each other
-      setFilter((f) => (f && !inBucket({ ...data.task, Session: data.session,
-                                         ReviewStatus: (data.reviews || [])[0]?.Status }, f) ? "" : f));
-    } catch (e) { setErr(e?.response?.data?.detail || "Failed to load task"); }
+      try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) setWait(w); }
+      catch { if (!stale(id)) setWait({ data: [], state: null }); }
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Failed to load task"); }
   }, []);
+  // the tab always lands on what is still in progress - whatever it was left on last time
+  useEffect(() => { if (active) { setFilter("live"); setOlder(false); } }, [active]);
+  useEffect(() => { setOlder(false); }, [filter]);
 
-  useEffect(() => { loadTasks(); }, [loadTasks]);
   // ...and keep it honest. The list was fetched ONCE, so a task whose agent picked it up
   // kept wearing "needs you" - and the pill counts kept agreeing with it - until something
   // else happened to reload. "Agent working" is a fact with a 45-second shelf life (a live
   // session that goes quiet is waiting on you); a row that states it has to be re-asked.
   // Only while this tab is the one on screen: it stays mounted behind the others.
   useEffect(() => {
-    if (!active) return;
-    return pollWhileVisible(loadTasks, 5000);
+    // Refresh now as well as polling: otherwise returning from Board shows the hidden
+    // tab's old list for five seconds.
+    return pollWhileActive(active, loadTasks, 5000);
   }, [active, loadTasks]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
@@ -120,7 +148,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const create = async () => {
     const { data } = await api.post("/api/tasks", nt);
     setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
-    setFilter(""); loadTasks(); onSelect(data.taskId);
+    setFilter("live"); loadTasks(); onSelect(data.taskId);
   };
   const queueNote = async () => {
     if (!waitText.trim() || !selected) return;
@@ -142,26 +170,32 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // result lands right here under where the terminal was.
   const wrapUp = async () => {
     if (!canWrap) return;
+    const id = selected;
     setWrapping("wrap"); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${selected}/wrap`, { close: true });
+      const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: true });
+      loadTasks(); onChanged?.();
+      if (stale(id)) return;                    // moved on meanwhile: the report is on the task's history
       setWrapped({ report: data.report, drafting: data.drafting });
-      setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
-    setWrapping(false);
+      setTerm(null); loadDetail(id);
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
+    if (!stale(id)) setWrapping(false);
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
   // resumable id - killing the session used to throw all of that away.
   const pause = async () => {
     if (!canWrap) return;
+    const id = selected;
     setWrapping("pause"); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${selected}/pause`, {});
+      const { data } = await api.post(`/api/tasks/${id}/pause`, {});
+      loadTasks(); onChanged?.();
+      if (stale(id)) return;
       setWrapped({ note: data.note });
-      setTerm(null); loadDetail(selected); loadTasks(); onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not pause the session"); }
-    setWrapping(false);
+      setTerm(null); loadDetail(id);
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not pause the session"); }
+    if (!stale(id)) setWrapping(false);
   };
   useEffect(() => { setWrapping(false); setWrapped(null); }, [selected]);
 
@@ -185,7 +219,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (r?.dropped === selected) onSelect(r.merged); else loadDetail(selected);
   };
   // one click, inside a MENU, where the pointer is already moving - and it deletes the task and
-  // writes a standing rule about its sender. The two sharpest things in the app were the two
+  // writes a standing verdict triage reads. The two sharpest things in the app were the two
   // easiest to hit by accident.
   const [confirmNAT, setConfirmNAT] = useState(false);
   const notATask = async () => {
@@ -204,15 +238,21 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (!tid) { setTerm(null); return; }
     try {
       const rows = (await api.get("/api/terminals")).data.data || [];
+      if (stale(tid)) return;
       // an exited session still holds its scrollback (they stay listed ~10 min), and that
       // transcript is exactly what Done and Pause need - dropping it left a task you could
       // not close out because the CLI had finished on its own
       setTerm(rows.find((x) => x.taskId === tid && x.alive) || rows.find((x) => x.taskId === tid) || null);
-    } catch { setTerm(null); }
+    } catch { if (!stale(tid)) setTerm(null); }
   }, []);
   useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
   const openTerm = useCallback(async (body) => {
-    try { const { data } = await api.post("/api/terminals", body); setTerm(data); }
+    try {
+      const { data } = await api.post("/api/terminals", body); setTerm(data);
+      // Starting a session reopens a completed task. Refresh both surfaces immediately so the
+      // chip and buckets say in progress on the same click that makes the terminal appear.
+      loadDetail(body.task_id); loadTasks(); onChanged?.();
+    }
     catch (e) {
       const msg = e?.response?.data?.detail || "Could not start a terminal";
       setErr(msg);
@@ -220,7 +260,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       // here instead of sending the user off to read the error's directions
       if (/no local path/i.test(msg)) setRepoPick(true);
     }
-  }, []);
+  }, [loadDetail, loadTasks, onChanged]);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one
   useEffect(() => {
@@ -231,8 +271,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   }, [autostart, selected, term, detail, openTerm, onAutostarted, run.agent]);
 
 
-  const t = detail?.task;
-  const shown = (tasks || []).filter((x) => !filter || inBucket(x, filter));
+  // the pane shows the selected task or nothing - never the previous one while this loads
+  const t = detail?.task?.TaskId === selected ? detail.task : null;
+  const bucket = (tasks || []).filter((x) => !filter || inBucket(x, filter));
+  const cut = filter !== "live" && !older;
+  const shown = cut ? bucket.filter(touchedToday) : bucket;
+  const nOlder = bucket.length - shown.length;
+  // The desktop page is a master/detail workspace. Opening it with a populated list but no
+  // detail selected leaves most of the screen as a dead blank panel and makes the first click
+  // compulsory. Follow the visible list to its first task on arrival (and after removing the
+  // selected task); an explicitly selected task is never replaced when filters change.
+  const firstShownId = shown[0]?.TaskId;
+  useEffect(() => {
+    if (active && !selected && firstShownId) onSelect(firstShownId);
+  }, [active, selected, firstShownId, onSelect]);
   const report = [...(detail?.comments || [])].reverse().find(
     (c) => c.ActorType === "agent" && String(c.Body || "").replace("CODER REPORT", "").trim()
       && String(c.Body || "").startsWith("CODER REPORT"));
@@ -267,13 +319,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           {/* rows as separated cards on a soft ground - air between tasks instead of a ruled
               ledger, selection said with the border alone. Scandinavian: fewer lines, calmer. */}
           <Box sx={{ overflowY: "auto", flex: 1, bgcolor: "#f1ede7", px: 1, py: 1 }}>
-            {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length ? <Empty>No tasks here.</Empty> : shown.map((task) => (
+            {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length && !nOlder ? <Empty>No tasks here.</Empty> : shown.map((task) => (
+              // the selected row is outlined in its STATE's colour - a working task in the same sage as
+              // its chip - not in the brand slate, which read as a fourth state nobody could name
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
                 sx={{ px: 1.25, py: 1, mb: 0.75, cursor: "pointer", bgcolor: "#fff", borderRadius: 1.75,
-                  border: `1px solid ${selected === task.TaskId ? "#55697a" : BORDER}`,
+                  border: `1px solid ${selected === task.TaskId ? stateOf(task).c.fg : BORDER}`,
                   boxShadow: selected === task.TaskId ? "0 1px 8px rgba(47,107,79,.14)" : "none",
                   transition: "border-color .12s, box-shadow .12s",
-                  "&:hover": { borderColor: selected === task.TaskId ? "#55697a" : "#d8cfbe" } }}>
+                  "&:hover": { borderColor: selected === task.TaskId ? stateOf(task).c.fg : "#d8cfbe" } }}>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700 }}>{task.ref}</Typography>
                   <StateChip task={task} />
@@ -285,6 +339,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.4 }}>{task.Title}</Typography>
               </Box>
             ))}
+            {tasks && nOlder > 0 && (
+              <Button size="small" fullWidth onClick={() => setOlder(true)} sx={{ color: DIM, fontSize: 11.5, mt: 0.25 }}>
+                {shown.length ? `show ${nOlder} more from before today` : `nothing from today — show ${nOlder} older`}
+              </Button>
+            )}
           </Box>
         </Box>
       </Box>
@@ -292,7 +351,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       {/* ── detail ────────────────────────────────────────────────────── */}
       <Box sx={{ ...frame, flex: 1, minWidth: 0, height: "calc(100vh - 118px)", minHeight: 420 }}>
         <Box sx={{ ...frameInner, height: "100%", display: "flex", flexDirection: "column" }}>
-          {!t ? <Empty>Select a task to see its full story.</Empty> : (
+          {!t ? (selected ? <CircularProgress size={20} sx={{ m: 2 }} /> : <Empty>Select a task to see its full story.</Empty>) : (
             <>
               {/* header strip: identity + controls. Calm on purpose - white ground, one quiet
                   outlined action, ghost icons: the loud green block + boxed dots read as three
@@ -307,6 +366,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                   <StateChip task={{ ...t, ReviewStatus: (detail.reviews || [])[0]?.Status,
                     RunStatus: (detail.runs || [])[0]?.Status, Session: detail.session }} />
+                  {t.Kind !== "reply" && t.Status !== "done" && (
+                    <Tooltip title="Queue prompts for this task's agent - one or a whole list; they land one per stop, never mid-turn">
+                      <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
+                        sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, px: 1.25 }}>
+                        ✎ Feed the agent{waitingN > 0 ? ` · ${waitingN} queued` : ""}
+                      </Button>
+                    </Tooltip>
+                  )}
                   {t.Status !== "done" && (
                     <Tooltip title="I took care of it — close the task and wrap anything running">
                       <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
@@ -340,7 +407,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Divider />
                     <MenuItem onClick={() => { setMenuEl(null); setConfirmNAT(true); }} sx={{ color: "#6b2733" }}>
                       <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#6b2733" }} /></ListItemIcon>
-                      <ListItemText primary="Not a task" secondary="delete it and teach triage why" />
+                      <ListItemText primary="Not a task" secondary="delete it and teach triage why — the sender keeps writing to you" />
                     </MenuItem>
                   </Menu>
                   <Tooltip title="Close — back to the list (the task stays)">
@@ -367,7 +434,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Typography>
                 </Box>
               </Box>
-              <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1 }}>
+              {/* a flex column so the terminal takes exactly what is left between the strip above and the
+                  waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
+              <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -432,7 +501,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Box>
                 ) : term ? (
                   <>
+                    {/* said and did, above the session: the agent's own list beside the files it wrote */}
+                    <WorkStrip taskId={selected} live={!!term.alive} />
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+                      {term.alive && term.work && (
+                        <WorkLine work={term.work} who={term.cli || term.agent || term.label} waiting={isWaiting(term)} startedAt={term.started} />
+                      )}
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
                       </Typography>
@@ -464,11 +538,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     {/* sized to what is actually left on screen below the header and the button strip, so the
     detail panel does not have to be scrolled to see the bottom of the session - the
     terminal has its own scrollbar for its own scrollback */}
-                    <TerminalPane sid={term.sid} height="clamp(300px, calc(100vh - 300px), 820px)"
-                      onExit={() => findTerm(selected)} />
+                    <Box sx={{ flex: 1, minHeight: 260, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+                      <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
+                    </Box>
                     {/* the waiting room, right under the session it feeds: type here instead of into the
                         terminal, and it goes in when the agent stops rather than on top of its work */}
-                    <Box sx={{ mt: 1 }}><TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} /></Box>
+                    <Box sx={{ mt: 0.75, flexShrink: 0 }}><TellAgent taskId={selected} taskRef={detail?.ref} compact onQueued={() => loadDetail(selected)} /></Box>
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
                         {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."
@@ -564,11 +639,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           )}
                         </Box>
                         <Typography variant="body2" sx={{ color: INK }}>{m.Subject}</Typography>
-                        <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block",
-                          maxHeight: 220, overflowY: "auto", "&::-webkit-scrollbar": { width: 8 },
+                        <Box sx={{ maxHeight: 220, overflowY: "auto", "&::-webkit-scrollbar": { width: 8 },
                           "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
-                          {cleanText(m.BodyText)}
-                        </Typography>
+                          {m.Channel === "report" && looksMd(m.BodyText)
+                            ? <Md text={cleanText(m.BodyText)} />
+                            : <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{cleanText(m.BodyText)}</Typography>}
+                        </Box>
                         <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} dense />
                       </Box>
                     );
@@ -688,6 +764,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       </Drawer>
 
       {/* ── new task dialog ───────────────────────────────────────────── */}
+      <Dialog open={feedOpen} onClose={() => setFeedOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ pb: 0.5 }}>Feed the agent · {detail?.ref}
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
+            Queue prompts for this task's agent - one, or a whole list. They land one per stop, in order, never mid-turn.
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          {selected && <TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} />}
+        </DialogContent>
+      </Dialog>
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>New task</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>
@@ -708,8 +794,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         </DialogActions>
       </Dialog>
       <ConfirmDelete open={confirmNAT} what={t ? `"${(t.Title || "this task").slice(0, 60)}"` : "this task"}
-        consequence={"It is deleted, and its sender is taught that mail like this is never a task — so their future messages file themselves. "
-          + "Its messages stay on the Timeline."}
+        consequence={"It is deleted, and triage is taught that this topic is never a task. Its messages stay on the Timeline, "
+          + "and the sender is not muted — that is \"Skip this sender\"."}
         onClose={() => setConfirmNAT(false)} onConfirm={notATask} />
     </Box>
   );

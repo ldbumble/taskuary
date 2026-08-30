@@ -1,12 +1,15 @@
 // Task Hub shell - clean light enterprise workspace, compact: slim top bar, pill tabs,
 // content underneath. Five spaces: Timeline, Tasks, Review, Connectors, Settings.
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Badge, Box, Button, IconButton, Snackbar, Tooltip, Typography } from "@mui/material";
+import { Badge, Box, Button, IconButton, Popover, Snackbar, Tooltip, Typography } from "@mui/material";
+import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
+import { pollWhileVisible } from "./visible.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
-import { theme, ALERT, BG, BORDER, DIM, INK, PANEL, GRADIENT } from "./theme.jsx";
+import { theme, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
 import FeedView from "./FeedView.jsx";
 import BoardView from "./BoardView.jsx";
 import TasksView from "./TasksView.jsx";
@@ -17,8 +20,52 @@ import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
+import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
+
+// The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
+// report that failed today - each with the way to where it is fixed. The setup chip beside it says
+// what is not yet set up; this says what was working and is not. Grey and quiet when nothing is.
+function Bell({ onGo }) {
+  const [items, setItems] = useState([]);
+  const [el, setEl] = useState(null);
+  const load = useCallback(async () => { try { setItems((await api.get("/api/problems")).data.data || []); } catch { /* the bell is optional */ } }, []);
+  useEffect(() => pollWhileVisible(load, 30000), [load]);
+  const n = items.length;
+  return (
+    <>
+      <Tooltip title={n ? `${n} thing${n === 1 ? "" : "s"} failing — click to see` : "Nothing is failing"}>
+        <IconButton size="small" onClick={(e) => { setEl(e.currentTarget); load(); }} sx={{ position: "relative" }}>
+          {n ? <NotificationsActiveIcon sx={{ fontSize: 18, color: ALERT }} /> : <NotificationsNoneIcon sx={{ fontSize: 18, color: DIM }} />}
+          {n > 0 && (
+            <Box component="span" sx={{ position: "absolute", top: 1, right: 1, minWidth: 14, height: 14, px: 0.3, borderRadius: 99,
+              bgcolor: ALERT, color: "#fffdfb", fontSize: 9, fontWeight: 700, display: "grid", placeItems: "center", lineHeight: 1 }}>
+              {n > 9 ? "9+" : n}
+            </Box>
+          )}
+        </IconButton>
+      </Tooltip>
+      <Popover open={!!el} anchorEl={el} onClose={() => setEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
+        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Every connection polled clean, the triage brain answered, no report failed today.</Typography>}
+        {items.map((p) => (
+          <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" sx={{ fontWeight: 650, color: INK, fontSize: 12.5 }}>{p.title}</Typography>
+              <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, wordBreak: "break-word" }}>{p.detail}</Typography>
+              {p.since && <Typography variant="caption" sx={{ color: FAINT }}>last tried {p.since}</Typography>}
+            </Box>
+            <Button size="small" variant="outlined" sx={{ flexShrink: 0, fontSize: 11, whiteSpace: "nowrap" }}
+              onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Fix"} →</Button>
+          </Box>
+        ))}
+      </Popover>
+    </>
+  );
+}
 
 function ServerVersion() {
   const [v, setV] = useState(null);
@@ -43,22 +90,30 @@ export default function TaskHubPage() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [greeted, setGreeted] = useState(false);
   // the agent raised its hand: sound + desktop notification + a toast with the way to it.
-  // Settings are re-read on each raise (cheap, and it means the switch works without a reload).
-  const [raised, setRaised] = useState(null);
+  // The toast queues immediately; settings are read only for sound/desktop delivery. Making the
+  // visible notification wait on that request made it appear at arbitrary times on a busy server.
+  const [raisedQueue, setRaisedQueue] = useState([]);
+  const raised = raisedQueue[0] || null;
   const tabRef = useRef("Timeline"), selRef = useRef(null);
-  const onRaise = useCallback(async (r) => {
-    let sound = "chime", desktop = true;
-    try {
-      const { data } = await api.get("/api/settings");
-      const v = (k, d) => { const row = (data.data || data || []).find?.((x) => x.Name === k); return row ? row.Value : d; };
-      sound = v("hand_sound", "chime"); desktop = v("hand_desktop", "1") === "1";
-    } catch { /* defaults */ }
+  const selectTask = useCallback((tid) => { setSelectedTask(tid); selRef.current = tid; }, []);
+  const onRaise = useCallback((r) => {
     // already looking at this very task's session: no ring, you are watching it stop
-    if (tabRef.current === "Tasks" && selRef.current === r.tid) return;
-    const what = r.asking ? `${r.agent} asked you something` : `${r.agent} stopped and is waiting on you`;
-    setRaised({ ...r, what });
-    playSound(sound);
-    if (desktop) desktopNotify(`${r.ref} · ${what}`, r.title || r.tail || "", () => openTask(r.tid));
+    if (isWatchingTask(tabRef.current, selRef.current, r.tid)) return;
+    const what = handRaiseWhat(r);
+    setRaisedQueue((q) => enqueueHandRaise(q, { ...r, what }));
+    (async () => {
+      let sound = "chime", desktop = true;
+      try {
+        const { data } = await api.get("/api/settings", { timeout: 2000 });
+        const v = (k, d) => { const row = (data.data || data || []).find?.((x) => x.Name === k); return row ? row.Value : d; };
+        sound = v("hand_sound", "chime"); desktop = v("hand_desktop", "1") === "1";
+      } catch { /* defaults */ }
+      // The toast was immediate. If the owner opened the task while settings loaded, a late
+      // sound or OS popup would be noise and would look unrelated to the thing now on screen.
+      if (isWatchingTask(tabRef.current, selRef.current, r.tid)) return;
+      playSound(sound);
+      if (desktop) desktopNotify(`${r.ref} · ${what}`, r.title || r.tail || "", () => openTask(r.tid));
+    })();
   }, []);
   useHandRaise(onRaise);
   // a first run opens it once, unprompted: somebody who has just installed this should not have
@@ -81,7 +136,13 @@ export default function TaskHubPage() {
   // second pass covers a tab that fetches its list on mount: on the switching frame it has
   // no height yet, so the first scrollTo has nothing to scroll to.)
   const scrollAt = useRef({});
-  const go = (t) => { scrollAt.current[tab] = window.scrollY; setTab(t); tabRef.current = t; };
+  // clicking the tab you are already on is "take me back to the top of it": the view remounts
+  // to its landing (Connectors out of a card, Settings to its first page) instead of doing nothing
+  const [reset, setReset] = useState(0);
+  const go = (t) => {
+    if (t === tab) { scrollAt.current[t] = 0; window.scrollTo(0, 0); setReset((r) => r + 1); return; }
+    scrollAt.current[tab] = window.scrollY; setTab(t); tabRef.current = t;
+  };
   useLayoutEffect(() => {
     const y = scrollAt.current[tab] || 0;
     if (!y) return;
@@ -114,7 +175,7 @@ export default function TaskHubPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const openTask = (taskId, opts) => {
-    setSelectedTask(taskId); go("Tasks"); selRef.current = taskId;
+    selectTask(taskId); go("Tasks");
     setAutostart(opts?.start ? { taskId, agent: opts.agent, model: opts.model } : null);
   };
 
@@ -123,17 +184,20 @@ export default function TaskHubPage() {
       <CssBaseline />
       {/* textAlign left kills the CRA-default .App { text-align: center } leaking in */}
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
-        <Snackbar open={!!raised} autoHideDuration={12000} onClose={() => setRaised(null)}
+        <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised} autoHideDuration={12000}
+          onClose={() => setRaisedQueue(dismissHandRaise)}
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
-          action={raised && <Button size="small" sx={{ color: "#a6e3a1" }} onClick={() => { openTask(raised.tid); setRaised(null); }}>Open</Button>} />
+          action={raised && <Button size="small" sx={{ color: "#a6e3a1" }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
         {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to
             drag to reach Settings - and pushed the whole page into horizontal scroll with it. A
             nav bar is chrome; it spans. */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2.5, py: 1,
-          bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 10 }}>
+        {/* id + top z: the Timeline's frozen dock pins itself right below this bar (it measures
+            the height by id) - z above the dock so nothing ever slides over the tabs */}
+        <Box id="tqTopNav" sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2.5, py: 1,
+          bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
           <Box sx={{ width: 26, height: 26, borderRadius: 1.5, background: GRADIENT, display: "flex",
             alignItems: "center", justifyContent: "center" }}>
             <HubIcon sx={{ color: "#fff", fontSize: 17 }} />
@@ -174,6 +238,8 @@ export default function TaskHubPage() {
           </Box>
           <Box sx={{ flex: 1 }} />
           <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />
+          {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
+          <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connectors"); }} />
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
@@ -190,16 +256,16 @@ export default function TaskHubPage() {
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
           {everTasks && (
             <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
-              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask} active={tab === "Tasks"}
+              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={selectTask} active={tab === "Tasks"}
                 onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
                 onGoReview={() => { refreshPending(); go("Review"); }} />
             </Box>
           )}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
-          {tab === "Reports" && <ReportsView key={`rp${tick}`} />}
-          {tab === "Connectors" && <ConnectorsView key={`c${tick}`} />}
-          {tab === "Docs" && <DocsView key={`d${tick}`} />}
-          {tab === "Settings" && <SettingsView key={`s${tick}`} />}
+          {tab === "Reports" && <ReportsView key={`rp${tick}-${reset}`} />}
+          {tab === "Connectors" && <ConnectorsView key={`c${tick}-${reset}`} />}
+          {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
+          {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} />}
         </Box>
       </Box>
     </ThemeProvider>

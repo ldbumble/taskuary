@@ -46,6 +46,25 @@ class AgentSourceTests(unittest.TestCase):
             _, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {'type': 'agent', 'skill': 'weekly-user-review'}))
             self.assertIn('ASKED[/weekly-user-review]', body)
 
+    def test_the_last_run_shape_rides_along_so_runs_stay_comparable(self):
+        """Two runs twenty minutes apart were two different documents. The previous run's headings
+        and table columns - never its content - go into the next ask; a failed run anchors nothing."""
+        cfg = {'type': 'agent', 'title': 'Daily GitHub Trending Projects', 'prompt': 'trending repos today'}
+        with mock.patch('taskuary.llm.make_cli_llm', self._fake_cli([])):
+            _, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, cfg))
+        self.assertNotIn('STRUCTURE', body)                                                    # first run: nothing to keep
+        self.s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Daily GitHub Trending Projects',
+                            'Subject': 'Daily GitHub Trending Projects — coder ran a prompt - 5 lines', 'SentAt': '2026-08-28 08:16:00',
+                            'BodyText': '# GitHub Trending Report\n## Headline\nAI agents everywhere\n## Fast risers\n| Repo | Lang | Stars |\n|---|---|---|\n| a/b | Go | 900 |\nsecret content line'})
+        self.s.add_message({'ExternalId': 'r2', 'Channel': 'report', 'SourceName': 'Daily GitHub Trending Projects',
+                            'Subject': 'Daily GitHub Trending Projects — FAILED', 'SentAt': '2026-08-28 08:40:00', 'BodyText': '# Report error'})
+        with mock.patch('taskuary.llm.make_cli_llm', self._fake_cli([])):
+            _, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, cfg))
+        self.assertIn('STRUCTURE: keep the sections', body)
+        self.assertIn('# GitHub Trending Report / ## Headline / ## Fast risers / | Repo | Lang | Stars |', body)
+        self.assertNotIn('AI agents everywhere', body); self.assertNotIn('secret content', body)      # shape, not content
+        self.assertNotIn('Report error', body)                                                       # the failed run is not the anchor
+
     def test_nothing_to_run_is_an_error_not_a_blank_report(self):
         with self.assertRaises(RuntimeError):
             reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {'type': 'agent'}))

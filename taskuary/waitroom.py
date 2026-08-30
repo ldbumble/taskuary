@@ -80,7 +80,7 @@ def state(store, tid: int) -> tuple:
     """('working'|'asking'|'parked'|'no_session', live Term or None) - where the agent on this
     task stands right now, read off the terminal's silence and its last lines."""
     from . import terminal as term
-    t = next((x for x in term.SESSIONS.values() if x.task_id == tid and x.alive), None)
+    t = next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     if t is None:
         return ('working', None) if any(r.get('TaskId') == tid for r in store.running_runs()) else ('no_session', None)
     parked = t.waiting() if hasattr(t, 'waiting') else term.waiting_of(t)
@@ -119,7 +119,7 @@ def deliver(store, tid: int) -> dict:
     if st == 'no_session':
         task = store.get_task(tid) or {}
         if task.get('Status') not in ('open', 'in_progress'): return {'delivered': 0, 'state': 'closed'}
-        if len([x for x in term.SESSIONS.values() if x.alive]) >= auto_sessions(store): return {'delivered': 0, 'state': 'full'}
+        if len([x for x in list(term.SESSIONS.values()) if x.alive]) >= auto_sessions(store): return {'delivered': 0, 'state': 'full'}
         agent = store.get_settings().get('default_agent') or 'coder'
         term.start_on_task(store, tid, agent, instruction=batch(notes, after_restart=True, remaining=left), actor='router')
         store.deliver_waiting([x['WId'] for x in notes], 'seeded')
@@ -132,6 +132,11 @@ def deliver(store, tid: int) -> dict:
 
 def tick(store) -> int:
     """Every task with notes waiting: deliver where its agent has stopped."""
+    # The same clock also backs chat hand-raises. It must look at every session, not only tasks
+    # with queued notes, and it is separate so note delivery remains deterministic.
+    from . import handraise
+    try: handraise.tick(store)
+    except Exception as e: logger.warning(f'hand raise tick failed: {e}')
     n = 0
     for tid in store.tasks_with_waiting():
         try: n += deliver(store, tid)['delivered']

@@ -1,7 +1,8 @@
-// Real terminals in the app: xterm.js over a websocket over a pty. There is exactly ONE
-// place they live - the task page. No terminal tab, no dock at the bottom of the screen: a
-// session belongs to the task it is working. The pty lives server-side, so leaving the task
-// (or reloading) never kills it - reopening the task re-attaches to the running session.
+// Real terminals in the app: xterm.js over a websocket over a pty. A session belongs to the
+// task it is working, and it is shown where that task is worked: the task page, and - for a
+// "Get AI to set it up" session - the connector card whose guide it is following (still a task
+// on the Board). No terminal tab, no dock at the bottom of the screen. The pty lives
+// server-side, so leaving the page (or reloading) never kills it - coming back re-attaches.
 import React, { useEffect, useRef, useState } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import { Terminal } from "@xterm/xterm";
@@ -10,6 +11,12 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
+import { MicButton } from "./ui.jsx";
+import { canRevealTerminal, changedTerminalSize, usableTerminalBox } from "./terminalSizing.js";
+import { pastedImageFiles, pastedImagePrompt } from "./terminalInput.js";
+import api from "./api.js";
+import BrowserPane from "./BrowserPane.jsx";
+import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -81,7 +88,7 @@ const wsUrl = (sid) => {
 // The effect keys on `sid` ALONE: the task page re-renders every few seconds while a run
 // polls, and taking a fresh callback identity as a dependency tore the terminal down and
 // rebuilt it on every one of those renders - which is what "it just flashes" was.
-export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
+const TermOnly = ({ sid, height = "70vh", onExit }) => {
   const host = useRef(null);
   const exit = useRef(onExit);
   exit.current = onExit;
@@ -90,11 +97,14 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
   // viewport following along - so you watched the session scroll from its first line down to
   // the bottom, every time. The pane stays curtained until the server says the live screen is
   // up (see the 'ready' frame); nobody needs to watch their own history rewind.
-  const [restoring, setRestoring] = useState(false);
+  // Start covered. Waiting for the first replay frame before raising the curtain lets the
+  // first chunk visibly paint from row one; the whole point is that reopening looks settled.
+  const [restoring, setRestoring] = useState(true);
   const [themeName, setThemeName] = useState(savedTheme);
   const [size, setSize] = useState(savedSize);
   const termRef = useRef(null);
   const refit = useRef(null);                        // set at mount: refit + tell the pty
+  const sendRef = useRef(null);                      // the socket's send, for the mic: dictated text is typed into the session
   useEffect(() => {                                  // live restyle, no reconnect
     try { localStorage.setItem("tq-term-theme", themeName); } catch { /* private mode */ }
     if (termRef.current) termRef.current.options.theme = THEMES[themeName];
@@ -129,23 +139,67 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     fit.fit();
     const ws = new WebSocket(wsUrl(sid));
     const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
-    ws.onopen = () => { setState("live"); send({ type: "resize", rows: term.rows, cols: term.cols }); };
-    // a server that never sends 'ready' (older build, a child that dies mid-redraw) must not
-    // leave the curtain down over a working session - the pane opens anyway
-    let bail = null;
-    const lift = () => { clearTimeout(bail); term.scrollToBottom(); setRestoring(false); };
+    // ResizeObserver may fire several times for one unchanged box (and every parent poll used
+    // to render this component again). Sending the same rows/cols still makes a full-screen TUI
+    // repaint; Codex visibly flashed even though no dimensions changed. Only real size changes
+    // belong on the wire. Do not remember a size before the socket opens, or the initial resize
+    // would be swallowed.
+    let sentSize = "";
+    const sendSize = () => {
+      if (ws.readyState !== 1) return;
+      const sizeNow = changedTerminalSize(sentSize, term.rows, term.cols);
+      if (!sizeNow) return;
+      sentSize = sizeNow;
+      send({ type: "resize", rows: term.rows, cols: term.cols });
+    };
+    sendRef.current = send;
+    ws.onopen = () => { setState("live"); sendSize(); };
+    // Every xterm write is asynchronous. The replay can finish while live redraw frames are still
+    // queued behind it, so one replayPending boolean was not enough: the curtain lifted between
+    // those writes and exposed Codex repainting from top to bottom. Count ALL queued writes and
+    // reveal only after the server's redraw barrier and xterm's final write callback both land.
+    let bail = null, revealFrame = null, pendingWrites = 0, readySeen = false;
+    const lift = () => {
+      clearTimeout(bail); cancelAnimationFrame(revealFrame);
+      revealFrame = null;
+      term.scrollToBottom(); setRestoring(false); term.focus();
+    };
+    const maybeLift = () => {
+      if (canRevealTerminal(readySeen, pendingWrites) && !revealFrame) revealFrame = requestAnimationFrame(lift);
+    };
+    const write = (data) => {
+      if (revealFrame) { cancelAnimationFrame(revealFrame); revealFrame = null; }
+      pendingWrites += 1;
+      term.write(data, () => { pendingWrites -= 1; term.scrollToBottom(); maybeLift(); });
+    };
+    // Compatibility with an older server: this marks the barrier seen, but still NEVER uncovers
+    // an unfinished replay. The old escape hatch called lift() directly at four seconds.
+    bail = setTimeout(() => { readySeen = true; maybeLift(); }, 4000);
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === "out") {
-        if (m.replay) { setRestoring(true); bail = setTimeout(lift, 4000); }
-        term.write(m.data, m.replay ? () => term.scrollToBottom() : undefined);
+        if (m.replay) setRestoring(true);
+        write(m.data);
       }
-      else if (m.type === "ready") lift();
-      else if (m.type === "exit") { setState("exited"); term.write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); lift(); }
+      else if (m.type === "ready") { readySeen = true; maybeLift(); }
+      else if (m.type === "exit") {
+        setState("exited"); readySeen = true;
+        write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); maybeLift();
+      }
     };
     ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
     term.onData((d) => send({ type: "in", data: d }));
-    const onResize = () => { fit.fit(); send({ type: "resize", rows: term.rows, cols: term.cols }); };
+    let resizeTimer = null;
+    const onResize = () => {
+      const box = host.current?.getBoundingClientRect();
+      if (!box || !usableTerminalBox(box.width, box.height)) return;
+      fit.fit();
+      // Flex layout, tab visibility and the browser split can report several intermediate
+      // boxes in one gesture. Codex redraws its whole TUI for every PTY resize; send only the
+      // settled geometry while still fitting xterm locally on each frame.
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(sendSize, 90);
+    };
     refit.current = onResize;                       // the size picker drives the same path
     window.addEventListener("resize", onResize);
     const ro = new ResizeObserver(onResize);
@@ -157,6 +211,21 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     const el = host.current;
     const trap = (e) => e.preventDefault();
     el.addEventListener("wheel", trap, { passive: false });
+    // xterm forwards text paste through onData, but clipboard images have no text for it to send.
+    // Save each image on this task and type the returned local paths into the CLI's own prompt.
+    const pasteImages = async (e) => {
+      const files = pastedImageFiles(e.clipboardData);
+      if (!files.length) return;
+      e.preventDefault();
+      try {
+        const paths = [];
+        for (const file of files) paths.push((await api.post(`/api/terminals/${sid}/image`, file,
+          { headers: { "Content-Type": file.type } })).data.path);
+        send({ type: "in", data: pastedImagePrompt(paths) });
+      } catch { /* leave the current prompt untouched when an upload is rejected */ }
+      term.focus();
+    };
+    el.addEventListener("paste", pasteImages, true);       // capture before xterm discards a file-only paste
     // ...and the scrollbar only shows when there is genuinely something behind it: a TUI in the
     // alternate buffer scrolls ITSELF (the wheel is forwarded to it), so xterm's own bar would be
     // a full-height slider that drags nothing.
@@ -167,12 +236,15 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     term.focus();
-    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail);
-      el.removeEventListener("wheel", trap); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
+    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame);
+      el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
+      d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid]);
   return (
+    // height="100%": the pane fills the flex slot its parent gives it (the task page sizes it to
+    // whatever is left on screen); any other value is a fixed height as before
     <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden",
-      bgcolor: THEMES[themeName].background }}>
+      bgcolor: THEMES[themeName].background, ...(height === "100%" ? { display: "flex", flexDirection: "column", minHeight: 0 } : {}) }}>
       {/* the pane's two knobs, discreet until hovered: how it is painted, and how much of the
           run fits in it. Both restyle ANY CLI in the pane - codex and claude included - and
           both stick per browser. */}
@@ -194,6 +266,10 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           sx={{ ...mono, fontSize: 13, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#867f74",
             border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
             "&:hover:not(:disabled)": { color: "#e1dcd5" } }}>A+</Box>
+        {/* dictate to the agent: the words are typed into the session as keystrokes, no Enter -
+            you read them and press it yourself */}
+        <MicButton size={15} sx={{ color: "#867f74", p: 0.25, "&:hover": { color: "#e1dcd5" } }}
+          onText={(t) => { sendRef.current?.({ type: "in", data: t }); termRef.current?.focus(); }} />
         <Box component="select" value={themeName} onChange={(e) => setThemeName(e.target.value)}
           title="terminal palette"
           sx={{ ...mono, fontSize: 10, bgcolor: "transparent", color: "#867f74", border: "none",
@@ -208,7 +284,12 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           positioned, and simply could not be seen or grabbed; the only scrollbar on screen was the
           page's, which is why reaching the scrollback meant scrolling the whole window instead.
           Colour comes from XTERM_THEME - this keeps the vertical bar on permanently. */}
-      <Box ref={host} sx={{ height, p: 1, "& .xterm": { height: "100%" },
+      {/* content-box, deliberately: FitAddon divides the host's computed `height` by the cell
+          height, and under the app's border-box default that height INCLUDED this padding - so
+          it sized one row too many and the bottom row (claude's "bypass permissions" status line)
+          was drawn under the edge and clipped. Content-box reports the inner height, rows fit. */}
+      <Box ref={host} onMouseDown={() => requestAnimationFrame(() => termRef.current?.focus())}
+        sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, boxSizing: "content-box", "& .xterm": { height: "100%" },
         "& .xterm-scrollable-element > .scrollbar.vertical": {
           // pinned visible ONLY while scrollback exists (--sbar, set from the buffer state):
           // an alternate-screen TUI scrolls itself, and a dead full-height slider is a lie
@@ -223,7 +304,7 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
           simply already there - and it lifts on the live screen, scrolled to the bottom */}
       {restoring && (
         <Box sx={{ position: "absolute", inset: 0, zIndex: 1, display: "flex", alignItems: "center",
-          justifyContent: "center", gap: 1, bgcolor: THEMES[themeName].background }}>
+          justifyContent: "center", gap: 1, bgcolor: THEMES[themeName].background, pointerEvents: "none" }}>
           <CircularProgress size={13} sx={{ color: CATPPUCCIN.yellow }} />
           <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.yellow }}>
             restoring the session…
@@ -239,6 +320,86 @@ export const TerminalPane = ({ sid, height = "70vh", onExit }) => {
     </Box>
   );
 };
+
+// The session and, when the agent opens a page, its browser beside it - the Split the owner chose
+// (2026-08-30): terminal narrower, browser the larger share, a drag handle between, the pane
+// appearing when a page opens and folding when it closes. Whether a browser is open comes from the
+// server (agent-browser's own state files), polled - nothing here asks the agent. A slot too
+// narrow for two panes (a Wall tile three across) gets a chip instead, which opens the browser
+// OVER the terminal until dismissed.
+const TerminalPaneInner = ({ sid, height = "70vh", onExit }) => {
+  const slot = useRef(null);
+  const [browser, setBrowser] = useState({ open: false, url: "" });
+  const [width, setWidth] = useState(0);
+  const [folded, setFolded] = useState(savedFold);
+  const [ratio, setRatio] = useState(savedRatio);
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try { const r = await api.get(`/api/terminals/${sid}/browser`); if (!stop) setBrowser(r.data || { open: false }); }
+      catch { /* server away for a moment: keep showing what we had */ }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => { stop = true; clearInterval(id); };
+  }, [sid]);
+  useEffect(() => {
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    ro.observe(slot.current);
+    return () => ro.disconnect();
+  }, []);
+  const layout = layoutFor(width, browser.open, folded);
+  const fold = (f) => { setFolded(f); rememberFold(f); };
+  // the handle: the pointer's place across the slot IS the split, remembered on release
+  const startDrag = (e) => {
+    e.preventDefault();
+    const rect = slot.current.getBoundingClientRect();
+    let r = ratio;
+    const move = (ev) => { r = ratioFromPointer(ev.clientX, rect.left, rect.width); setRatio(r); };
+    const up = () => { rememberRatio(r); window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+    window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+  };
+  const fixed = height !== "100%";
+  const chip = (layout === "chip" || layout === "folded") && !peek && (
+    <Box component="button" onClick={() => (layout === "chip" ? setPeek(true) : fold(false))}
+      title={layout === "chip" ? "the agent has a browser open - show it" : "unfold the browser"}
+      sx={{ ...mono, position: "absolute", top: 5, left: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 0.6,
+        fontSize: 10.5, px: 0.9, py: 0.35, borderRadius: 99, cursor: "pointer", border: `1px solid ${BORDER}`,
+        bgcolor: "#1a1a1acc", color: "#c9c3b9", "&:hover": { color: "#e1dcd5", borderColor: "#6b655c" } }}>
+      <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: CATPPUCCIN.green }} />
+      browser · {shortUrl(browser.url, 36) || "open"}
+    </Box>
+  );
+  return (
+    <Box ref={slot} sx={{ display: "flex", flexDirection: "row", position: "relative", minHeight: 0, minWidth: 0,
+      ...(fixed ? { height } : { flex: 1 }) }}>
+      <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - ratio) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
+        display: "flex", flexDirection: "column", position: "relative", "& > *": { flex: 1, minHeight: 0 } }}>
+        <TermOnly sid={sid} height="100%" onExit={onExit} />
+        {chip}
+      </Box>
+      {layout === "split" && (
+        <>
+          <Box onMouseDown={startDrag} title="drag to resize"
+            sx={{ flex: "0 0 8px", cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center",
+              "&:hover > *": { bgcolor: "#6b655c" } }}>
+            <Box sx={{ width: 2, height: 36, borderRadius: 99, bgcolor: BORDER, transition: "background .15s" }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+            <BrowserPane sid={sid} url={browser.url} onFold={() => fold(true)} />
+          </Box>
+        </>
+      )}
+      {peek && browser.open && <BrowserPane sid={sid} url={browser.url} overlay onFold={() => setPeek(false)} />}
+    </Box>
+  );
+};
+
+// Wall status polls should update the header, not ask React to reconcile xterm's DOM. xterm owns
+// everything inside its host after mount; sid/height are the only props that change its surface.
+export const TerminalPane = React.memo(TerminalPaneInner, (a, b) => a.sid === b.sid && a.height === b.height);
+TerminalPane.displayName = "TerminalPane";
 
 // Taskuary's terminals default to Catppuccin Mocha, switchable per pane (top-right picker)
 // - that palette is what styles codex and every other CLI, since a TUI paints with the

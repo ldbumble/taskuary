@@ -3,7 +3,7 @@
 // setup WIZARD (stepper) plus Sources/management. All connectors live here - channel
 // connectors (Outlook, Teams, Slack, GitHub), cloud AI APIs (Anthropic, OpenAI, Azure
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step, StepButton,
   StepContent, Stepper, Switch, TextField, Typography,
@@ -15,27 +15,91 @@ import SearchIcon from "@mui/icons-material/Search";
 import SyncIcon from "@mui/icons-material/Sync";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
 import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
+import { TerminalPane } from "./TerminalView.jsx";
+
+/* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
+   the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
+   the card through the API and runs Test until it passes - and it is a task on the Board meanwhile. ── */
+const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], reload }) => {
+  const [sess, setSess] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {           // the card reloads, the agent is still there: reattach
+    let alive = true;
+    api.get(`/api/connectors/${conn.ConnectorId}/ai-setup`).then(({ data }) => { if (alive && data.session) setSess(data.session); }).catch(() => {});
+    return () => { alive = false; };
+  }, [conn.ConnectorId]);
+  const start = async () => {
+    setBusy(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ai-setup`,
+        { guide: steps || [], fields: (fields || []).map(([l, k]) => [l, k]), secret_label: secretLabel || "", agent_steps: agentSteps || [] });
+      setSess(data);
+    } catch (e) { setErr(e?.response?.data?.detail || "could not start the agent"); }
+    setBusy(false);
+  };
+  const done = async () => {
+    try { await api.post(`/api/tasks/${sess.taskId}/wrap`, {}); } catch { /* the session may already be gone */ }
+    setSess(null); reload?.();
+  };
+  const ref = sess?.taskId ? `TQ-${String(sess.taskId).padStart(4, "0")}` : "";
+  return (
+    <Box sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+        <TerminalIcon sx={{ fontSize: 18, color: DIM }} />
+        <Box sx={{ flex: 1, minWidth: 240 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Get AI to set it up</Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
+            Your coding agent takes the Guide as its prompt, asks you here for anything only you can fetch, saves it onto this
+            card and runs Test until it passes. It sits on the Board as a task while it works.
+          </Typography>
+        </Box>
+        {sess ? (
+          <>
+            <Typography variant="caption" sx={{ color: FAINT }}>{ref} on the Board</Typography>
+            <Button size="small" variant="outlined" onClick={done}>Done — close the session</Button>
+          </>
+        ) : (
+          <Button variant="contained" disableElevation disabled={busy} onClick={start}
+            startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
+            {busy ? "starting…" : "Get AI to set it up"}
+          </Button>
+        )}
+      </Box>
+      {err && <Alert severity="error" sx={{ fontSize: 12.5 }}>{err}</Alert>}
+      {sess && <TerminalPane sid={sess.sid} height={360} />}
+    </Box>
+  );
+};
 
 /* ── connector metadata: channel + AI connectors (rows in the connector table) ── */
 const META = {
   outlook: { group: "Messaging", channel: "email", srcLabel: "Mailboxes", srcPh: "someone@yourdomain.com",
-    fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
-],
-    secretLabel: "client secret",
-    desc: "Ingest mailboxes through a Microsoft Graph app - mail lands on the Timeline through triage.",
-    howto: ["Register (or reuse) an Azure app: Azure Portal → App registrations → New registration.",
-      "API permissions → add the APPLICATION permission Mail.Read (Microsoft Graph) → Grant admin consent. Mail.ReadWrite instead if you want Outlook drafts on approve, or 'Mark items read at the source' (Settings → Sync & startup) — both write back to the mailbox.",
-      "Add Calendars.Read (application) too and replies about time check your calendar first — Test reports whether the calendar can be read.",
-      "Enter tenant_id + client_id and paste the app's client secret (write-only). Blank = the server's AZURE_* env vars.",
-      "Add each mailbox to read as a UPN under Sources and flip it on.",
-      "Test acquires a real Graph token and reports exactly what failed if anything. Enable, and mail flows through the same triage funnel as everything else."] },
+    fields: [["tenant_id (tenant app only)", "tenant_id"], ["client_id (your own app - sign-in or tenant app)", "client_id"]],
+    secretLabel: "client secret (tenant app only)",
+    desc: "Your Microsoft mailbox on the Timeline through triage. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
+    howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → open microsoft.com/devicelogin, enter the code, sign in with your own account and accept. That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). Nobody registers anything.",
+      "\"Need admin approval\": some organisations let only an admin say yes to a new app. The card then shows an approval link - forward it to your Microsoft 365 admin. They sign in, click Accept once, and everyone in the organisation can sign in from then on. It is a consent grant on Taskuary's app id, not an app registration on their side; the yellow \"unverified publisher\" note on their screen is expected.",
+      "Register your own Microsoft app (optional - if your organisation only approves apps it registered itself, or you want your own name on the consent screen). portal.azure.com → Microsoft Entra ID → App registrations → New registration: name it Taskuary; Supported account types: \"Accounts in any organizational directory and personal Microsoft accounts\" (or just your organisation); Redirect URI: platform \"Mobile and desktop applications\", tick https://login.microsoftonline.com/common/oauth2/nativeclient → Register.",
+      "Then: Authentication → Advanced settings → Allow public client flows = Yes → Save. API permissions → Add a permission → Microsoft Graph → Delegated permissions: offline_access, User.Read, Mail.ReadWrite, Mail.Send, Calendars.Read → Add. No client secret - a sign-in app is public by design. Copy the Application (client) ID into client_id here (under Admin?) and sign in above - or set TASKUARY_MS_CLIENT_ID on the server so every install uses it. No Partner Center and no publisher verification: those only remove the \"unverified\" label on the consent screen.",
+      "Tenant app (admins - required for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Mark items read at the source') and Calendars.Read → Grant admin consent; Certificates & secrets → New client secret. Enter tenant_id + client_id and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
+      "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
+      "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."],
+    // written FOR the agent: it drives the device-code sign-in through the API and relays the code
+    agent: ["Preferred road, no Azure portal: POST {base}/api/connectors/{cid}/ms/signin{hdr}. It returns user_code, verification_uri and a flow id. Tell the owner: open <verification_uri>, enter <user_code>, sign in with their own Microsoft account and Accept.",
+      "Poll POST {base}/api/connectors/{cid}/ms/poll{hdr} with JSON {\"flow\": \"<flow>\"} every 5 seconds. status pending = keep waiting; status ok = the card is connected as them and their mailbox was added as a source; status error = read detail. If the error carries admin_consent_url, give the owner that link to forward to their Microsoft 365 admin, and start again at step 1 once the admin has approved.",
+      "Only if the owner says they are an admin who wants a tenant app (needed for Teams chat reading or for mailboxes other than their own): ask for tenant_id, client_id and the client secret, save tenant_id and client_id in ConfigJson and the client secret as Secret.",
+      "Run Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}) and say SETUP DONE."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
       ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"]],
@@ -45,7 +109,10 @@ const META = {
       "App-only chat reading is a Microsoft PROTECTED API: the tenant needs Microsoft-approved Chat.Read.All - until that approval is granted, Test shows the 403 telling you so.",
       "Add the user whose chats to ingest as a UPN under Sources. Your UPN (User Principal Name) is your Microsoft 365 sign-in address - usually just your work email. Find it in Teams: click your profile picture, it's the address under your name. Or run `whoami /upn` in a terminal on a work Windows machine, or check Azure Portal → Users → your account → User principal name.",
       "A specific chat id works too (Teams web: open the chat, the 19:...@thread.v2 part of the URL).",
-      "Test probes an actual chat read for the first Teams source, not just the token."] },
+      "Test probes an actual chat read for the first Teams source, not just the token."],
+    agent: ["GET {base}/api/connectors{hdr} and look at the outlook card: Teams reuses its app. If that card has tenant_id and client_id and a secret (a tenant app), leave this card's credentials blank. If it only carries a personal sign-in (auth = user) or nothing, say plainly that Teams chat reading needs a tenant app with the Microsoft-approved Chat.Read.All application permission, ask whether the owner is a Microsoft 365 admin who has one, and stop if not - do not invent a registration.",
+      "Find the owner's UPN yourself when you can: on a domain-joined Windows machine run `whoami /upn`; otherwise ask - it is usually their work email. Add it with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"teams\", \"Address\": \"<upn>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
     fields: [], secretLabel: "bot token (xoxb-…)",
     desc: "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
@@ -53,7 +120,10 @@ const META = {
       "Install the app to your workspace and invite the bot to the channels to ingest (/invite @yourbot).",
       "Paste the xoxb- bot token under Credentials (write-only).",
       "Add each channel ID under Sources (channel → View details → ID at the bottom).",
-      "Test authenticates and probes a real channel read."] },
+      "Test authenticates and probes a real channel read."],
+    agent: ["The Slack app is the owner's to create (api.slack.com/apps: bot token scopes channels:history and channels:read, install to the workspace). Ask them for the xoxb- bot token and save it as Secret.",
+      "List the channels yourself instead of asking for IDs: GET https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200 with header Authorization: Bearer <token>. Show the owner names, ask which to watch, and add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"slack\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Remind the owner the bot must be invited into each of those channels (/invite @bot) or the read will fail; then Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
     fields: [["Notify chat id", "notify_chat", "", "Only for the Notifications role — same id the chat's Source card shows"]],
     secretLabel: "bot token (from @BotFather)",
@@ -62,20 +132,32 @@ const META = {
       "Paste the token under Credentials (write-only) and Test.",
       "Finding a chat id is automatic: message your bot (or add it to a group) and Sync — the chat appears under Sources with its chat id, switched OFF. Flip on the ones that are yours; messages flow from then on.",
       "Everything else stays out by design — anyone can find and message a public bot, and an unapproved stranger must never be able to put tasks on your board.",
-      "For a group: add the bot to it and disable its privacy mode (@BotFather → /setprivacy) so it sees messages."] },
-  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs (optional — blank takes every chat)", srcPh: "15551234567@s.whatsapp.net",
+      "For a group: add the bot to it and disable its privacy mode (@BotFather → /setprivacy) so it sees messages."],
+    agent: ["Ask the owner for the bot token from @BotFather (/newbot, or /token for an existing bot) and save it as Secret; Test (POST {base}/api/connectors/{cid}/test{hdr}).",
+      "Chat ids are discovered, never typed: ask the owner to send any message to the bot (or add it to the group and post there), then run a sync yourself with POST {base}/api/ingest/poll{hdr} and GET {base}/api/sources{hdr} - the chat appears as a telegram source, switched OFF.",
+      "Read the new sources back to the owner and ask which are theirs; flip those on with POST {base}/api/sources{hdr} and JSON {\"SourceId\": <id>, \"Active\": true}. Never flip on a chat the owner did not name - a bot is public and strangers must not be able to put tasks on the board.",
+      "For a group, remind them to disable the bot's privacy mode (@BotFather > /setprivacy) or it will not see messages. Turn the connector on and say SETUP DONE."] },
+  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID; add * to take every direct chat)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
        "Only for the Notifications role — the WhatsApp JID of the chat to ping"]],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
-    howto: ["The heavy dependency is deliberately NOT bundled: in the Taskuary folder run `cd taskuary/whatsapp && npm install && node bridge.mjs` (Node 18+).",
-      "Pair once: scan the QR the bridge prints (WhatsApp → Linked devices), or run it with --phone 1555… and enter the code it gives you.",
-      "Leave the bridge running; Test here confirms the pairing and adds a catch-all source.",
-      "Add specific chat JIDs under Sources only if you want to LIMIT which chats come in.",
-      "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."] },
+    howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
+      "2 - The bridge starts by itself once Node is there (first time it fetches its dependency, Baileys - a minute or two). 3 - The QR appears; on your phone: WhatsApp → Linked devices → Link a device → scan. The box turns green when the phone accepts.",
+      "Leave the bridge running (it survives closing the browser; a reboot stops it - the box starts it again when you open this card). Test here confirms the pairing and adds a catch-all source.",
+      "The catch-all covers DIRECT chats. Group chats are opt-in: add a group's JID under Sources and only that group comes in - groups you never picked stay out of the funnel.",
+      "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."],
+    // written FOR the agent: the machine-side work is its own; the phone is the owner's
+    agent: ["Do NOT run node bridge.mjs yourself: it is a server and never returns - an agent that ran it in the foreground sat on it for five minutes. Taskuary starts it: POST {base}/api/connectors/{cid}/wa/bridge/start{hdr}. It installs the bridge's dependency when missing (a few minutes on a slow line) and launches the bridge detached.",
+      "Poll GET {base}/api/connectors/{cid}/wa/status{hdr} every 5 seconds and read manager.phase: installing → starting → running; bridge becomes true when it answers. If phase is failed, read manager.detail - node missing means the owner installs Node 18+ from nodejs.org (the one install that is theirs); anything else, report it and stop.",
+      "If connected is false: do NOT print the QR here (a terminal QR is too big to scan) and do NOT ask for a phone number. The card above this terminal draws the bridge's QR itself and redraws it as it rotates - tell the owner to scan it from the phone: WhatsApp > Linked devices > Link a device. Poll GET http://127.0.0.1:8977/status every 5 seconds until connected is true. Only if the owner SAYS they would rather type a code: ask for the number, restart the bridge with --phone <digits only>, and relay pairingCode from /status.",
+      "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}) - it confirms the pairing and adds the catch-all source: every DIRECT chat comes in; group chats only when their JID is added as a source.",
+      "Ask the owner whether every chat should come in or only specific ones. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Once specific chats exist, only those come in.",
+      "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
-    fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"]],
+    fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
+      ["Check for new messages every N seconds (blank = the global sync interval)", "poll_seconds", "60", "A chat is slower on the ten-minute mailbox clock; 60 is a good number. Only this connector polls faster"]],
     secretLabel: null,
     desc: "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats flow through triage, approved replies go back into the same chat through Messages.app. macOS only.",
     howto: ["No token: Messages.app is the account. Taskuary reads the history macOS already keeps on this Mac (~/Library/Messages/chat.db) and asks Messages.app to send.",
@@ -83,7 +165,10 @@ const META = {
       "System Settings → Privacy & Security → Full Disk Access → switch on (or + and add) the host Test named, then Test again. A real read of the database is the proof — not the checkbox.",
       "Sending needs Automation: the first reply makes macOS ask whether that host may control Messages. Allow it. Test never sends anything.",
       "New messages from the moment of the first sync; the optional look-back here reads a few days of history instead. Chat ids under Sources LIMIT which chats come in — blank means every chat that reaches this Mac.",
-      "macOS 13 and later; macOS 12 best effort. On Linux and Windows the card stays here but Test says it needs a Mac."] },
+      "macOS 13 and later; macOS 12 best effort. On Linux and Windows the card stays here but Test says it needs a Mac."],
+    agent: ["Check the platform first (`uname -s`). Not a Mac: say so and stop - there is nothing to set up here.",
+      "Run Test (POST {base}/api/connectors/{cid}/test{hdr}) and read detail: it names the HOST that needs Full Disk Access (Terminal, iTerm, the IDE, or the python binary). That permission is the owner's to grant: System Settings > Privacy & Security > Full Disk Access, switch on (or + and add) exactly that host, then relaunch it. Ask them to do that and Test again until the read succeeds.",
+      "Ask whether every chat should come in or only some; for some, add chat ids as sources (POST {base}/api/sources{hdr}, Channel imessage). Ask if they want history: lookback_days in ConfigJson reads that many days on the first sync; blank is from now on. Turn the connector on, SETUP DONE - and tell them the first reply will make macOS ask for Automation permission, which they should allow."] },
   gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
     fields: [["mailbox address", "address"],
       ["Google OAuth client id (optional — calendar)", "google_client_id", "", "Only for calendar access: an OAuth client from Google Cloud with the Calendar API enabled"],
@@ -95,7 +180,10 @@ const META = {
       "Create an App Password: myaccount.google.com -> Security -> App passwords -> app: Mail.",
       "Enter the mailbox address under Credentials and paste the 16-character App Password (write-only).",
       "Test logs in and adds the mailbox as a source; new mail flows in on the next sync.",
-      "Replies you approve are sent from this same address over SMTP, threaded into the conversation."] },
+      "Replies you approve are sent from this same address over SMTP, threaded into the conversation."],
+    agent: ["Ask for the Gmail address and save it as address in ConfigJson.",
+      "The App Password is the owner's to create (myaccount.google.com > Security > 2-Step Verification on, then App passwords > Mail). Ask them to paste the 16 characters here, save it as Secret, and never echo it back.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}) logs in and adds the mailbox as a source. Turn the connector on, SETUP DONE. The Google calendar fields are optional and rarely wanted - skip them unless asked."] },
   imap: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@yourdomain.com",
     fields: [["mailbox address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
              ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"]],
@@ -104,7 +192,10 @@ const META = {
     howto: ["Find your provider's IMAP and SMTP hostnames (usually imap./smtp. + your domain; ports 993/587).",
       "Enter the address and IMAP host under Credentials; SMTP host only if it does not follow the imap->smtp pattern.",
       "Paste the mailbox password (write-only). Providers with app passwords (Yahoo, iCloud) want those.",
-      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync."] },
+      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync."],
+    agent: ["Ask for the mailbox address. Find the hosts yourself: GET https://autoconfig.thunderbird.net/v1.1/<domain> (it returns the IMAP and SMTP hostnames for most providers), and otherwise try imap.<domain> / mail.<domain> on port 993 and smtp.<domain> on 587 with a socket probe. Only ask the owner if none answers.",
+      "Microsoft-hosted mailbox (outlook.com, hotmail, Microsoft 365)? IMAP passwords no longer work there - point the owner at the Outlook card and stop.",
+      "Ask for the mailbox password (Yahoo and iCloud want an app password instead) and save it as Secret; save address, imap_host and, only if it breaks the imap->smtp pattern, smtp_host in ConfigJson. Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
     fields: [], secretLabel: "fine-grained PAT",
     desc: "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
@@ -114,7 +205,10 @@ const META = {
       "Everything inbound lives on ONE step — Inbound, what becomes work: the trigger/feed switch, a per-repo picker for what issues and PRs do (tasks = through triage, feed = timeline only, off = ignored), and the agent prompts. Triage sees each item's author and GitHub association, so a stranger's PR on a public repo files as FYI instead of becoming work — and github items never auto-start a coding agent; you promote the ones that deserve one.",
       "When you DO send a PR or issue to the agent, its prompt carries the standing rules you set on that same Inbound step — the PR default says judge it (useful? safe? minimal?), run the tests, report a verdict, and never merge.",
       "Test re-runs discovery and reports who it's authenticated as.",
-      "Coding tasks then open an issue first, the agent works it, and closing the task closes the issue."] },
+      "Coding tasks then open an issue first, the agent works it, and closing the task closes the issue."],
+    agent: ["The fine-grained PAT is the owner's to mint (GitHub > Settings > Developer settings > Fine-grained tokens: the repos the agent may touch; Issues Read+Write, Pull requests Read+Write, Metadata Read). Ask for it and save it as Secret - saving runs discovery: every reachable repo is added under Sources and the repo map is written into SOUL.md.",
+      "Read the discovery result back (who it authenticated as, how many repos). If `gh` is installed here, `gh auth status` tells you which account the machine already uses - mention a mismatch.",
+      "Ask which repos should make work: per repo, issues and PRs can be tasks, feed or off - the owner sets that on the Inbound step of the card; you only report what exists. Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   jira: { group: "Project management", channel: "jira", srcLabel: "Site", srcPh: "yourteam.atlassian.net",
     fields: [["site URL (https://yourteam.atlassian.net)", "base_url"], ["account email (the one the token belongs to)", "email"]],
     secretLabel: "API token",
@@ -229,7 +323,10 @@ const META = {
       "Invite the bot to your server with permission to read (and send, for replies in) the channels you'll watch.",
       "Paste the bot token under Credentials (write-only).",
       "Add each channel ID under Sources (Discord → Settings → Advanced → Developer Mode, then right-click a channel → Copy Channel ID).",
-      "Approving a drafted reply posts it into the same channel as the bot."] },
+      "Approving a drafted reply posts it into the same channel as the bot."],
+    agent: ["The Discord app and bot are the owner's to create (discord.com/developers > Bot > Reset Token, Message Content intent ON, invited to the server). Ask for the bot token and save it as Secret.",
+      "List the channels yourself: GET https://discord.com/api/v10/users/@me/guilds with header Authorization: Bot <token>, then GET https://discord.com/api/v10/guilds/<id>/channels for each server; text channels have type 0. Show names, ask which to watch, add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"discord\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   anthropic: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default claude-opus-5)", "model"]], secretLabel: "API key",
     desc: "Claude via the Anthropic API - powers intent triage (task / reply-only / FYI) once enabled.",
@@ -262,7 +359,73 @@ const META = {
     howto: ["Install Ollama (ollama.com) and pull a model: ollama pull llama3.2 — or point base_url at LM Studio (http://127.0.0.1:1234), llama.cpp or vLLM.",
       "Enter the model name (ollama list shows what's installed). No key needed for a local server.",
       "Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under Settings → Triage & routing.",
-      "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."] },
+      "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."],
+    agent: ["Check for a local server yourself: GET http://127.0.0.1:11434/api/tags (Ollama) - and http://127.0.0.1:1234/v1/models for LM Studio. If Ollama is not installed, ask the owner once whether to install it, then do it (winget install Ollama.Ollama on Windows, brew install ollama on a Mac, the ollama.com script on Linux) and start it.",
+      "If /api/tags lists no models, ask which to pull (suggest llama3.2 for a laptop, qwen2.5 for more headroom) and run `ollama pull <model>` yourself - it downloads gigabytes, so say so and wait for it.",
+      "Save model (and base_url only if not the default) in ConfigJson; no Secret. Test (POST {base}/api/connectors/{cid}/test{hdr}) runs a real round trip. Turn the connector on and say SETUP DONE - and that the owner can pick it as the triage brain under Settings."] },
+  /* ── AI — voice: speech to text. A voice note on WhatsApp or Telegram is transcribed by the first
+     active one of these and goes through triage as text; without one it still lands, marked "not
+     transcribed", with the audio attached for a later click. The same connector powers the mic in
+     the prompt boxes. Cheapest hosted: Groq (free tier, ~$0.04/hour after). Best accuracy: ElevenLabs
+     Scribe / Deepgram Nova-3 / OpenAI gpt-4o-transcribe. Private: Local Whisper, or any Whisper server. ── */
+  gemini_stt: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["model (default gemini-3.5-transcribe)", "model"], ["language code (optional, e.g. en-US — blank = auto)", "language"]],
+    secretLabel: "Google Gemini API key",
+    desc: "Google Gemini transcription — accurate speech-to-text with native custom-vocabulary biasing for names, acronyms and system terms.",
+    howto: ["Create a paid Gemini API key in Google AI Studio. Do not put the key in the browser — Taskuary stores it on this server.",
+      "Paste the key under Credentials. The default gemini-3.5-transcribe model understands the shared vocabulary configured on this page.",
+      "Test uploads one second of silence, transcribes it, and immediately deletes the temporary Google file. Enable to transcribe voice notes and every Taskuary mic."],
+    agent: ["Ask the owner for a paid Gemini API key from Google AI Studio and save it as Secret; never expose it in browser code or output.",
+      "Leave model blank for gemini-3.5-transcribe unless the owner explicitly names another transcription model. Test the card, turn it on, and say SETUP DONE."] },
+  groq_stt: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["model (default whisper-large-v3-turbo; whisper-large-v3 is more accurate)", "model"], ["language code (optional, e.g. en — blank = auto)", "language"]],
+    secretLabel: "Groq API key (gsk_…)",
+    desc: "Whisper on Groq — the cheapest hosted transcription (free tier; ~$0.04 per audio hour after) and the fastest: an hour of audio in seconds.",
+    howto: ["Create a key at console.groq.com → API Keys (a free account is enough to start).",
+      "Paste it under Credentials (write-only). Optionally set a model: whisper-large-v3-turbo (default, cheapest) or whisper-large-v3 (more accurate).",
+      "Test sends a second of silence through the real endpoint. Enable, and voice notes on WhatsApp and Telegram arrive as text; the mic in the prompt boxes works too.",
+      "Audio is billed with a 10-second minimum per request; a voice note is one request."] },
+  openai_stt: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["model (default gpt-4o-mini-transcribe; gpt-4o-transcribe or whisper-1)", "model"], ["language code (optional)", "language"]],
+    secretLabel: "OpenAI API key",
+    desc: "OpenAI transcription — gpt-4o-mini-transcribe is cheap ($0.003/min) and accurate; gpt-4o-transcribe is the accuracy leader on independent benchmarks.",
+    howto: ["Create an API key at platform.openai.com (the same key as the OpenAI triage connector works).",
+      "Paste it under Credentials; optionally set a model.",
+      "Test sends a second of silence through the real endpoint. Enable to transcribe voice notes and power the mic."] },
+  deepgram: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["model (default nova-3)", "model"], ["language code (optional; nova-3 detects it otherwise)", "language"]],
+    secretLabel: "Deepgram API key",
+    desc: "Deepgram Nova-3 — the fastest hosted API, ~$0.26 per audio hour, very strong accuracy, generous free credit to start.",
+    howto: ["Create a key at console.deepgram.com → API Keys (new accounts get free credit).",
+      "Paste it under Credentials. Test sends a second of silence through the real endpoint.",
+      "Enable to transcribe voice notes and power the mic."] },
+  elevenlabs_stt: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["model (default scribe_v2)", "model"], ["language code (optional)", "language"]],
+    secretLabel: "ElevenLabs API key",
+    desc: "ElevenLabs Scribe — top-tier accuracy across 99 languages, ~$0.22 per audio hour; the pick when notes arrive in several languages.",
+    howto: ["Create a key at elevenlabs.io → Profile → API Keys.",
+      "Paste it under Credentials. Test sends a second of silence through the real endpoint.",
+      "Enable to transcribe voice notes and power the mic."] },
+  stt_server: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["base URL (default http://127.0.0.1:8000/v1 — speaches / faster-whisper-server; whisper.cpp server uses its own port)", "base_url"],
+      ["model (as the server names it, e.g. Systran/faster-whisper-small)", "model"], ["language code (optional)", "language"]],
+    secretLabel: "API key (optional — a local server rarely needs one)",
+    desc: "Any speech-to-text server speaking the OpenAI audio endpoint: speaches (faster-whisper), whisper.cpp server, LocalAI — audio stays on your network.",
+    howto: ["Run a server: `pip install speaches` (or docker) for faster-whisper with an OpenAI-compatible API, or whisper.cpp's server with the OpenAI endpoint on, or LocalAI.",
+      "Enter its base URL and the model name it serves. No key unless you put one in front of it.",
+      "Test sends a second of silence. Enable to transcribe voice notes and power the mic."],
+    agent: ["Check whether a server already answers: GET http://127.0.0.1:8000/v1/models (speaches) and the whisper.cpp / LocalAI ports the owner names. If none, ask which they want and install it yourself (pip install speaches, then start it as a background process); confirm /v1/models lists a model.",
+      "Save base_url and model in ConfigJson (no Secret unless the server wants one), Test (POST {base}/api/connectors/{cid}/test{hdr}), turn it on, SETUP DONE."] },
+  local_whisper: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["model size (default small; base is faster, medium is more accurate)", "model"], ["language code (optional)", "language"],
+      ["device (default cpu; cuda with an NVIDIA GPU)", "device"]],
+    secretLabel: null,
+    desc: "Whisper on this machine, no key and no server — faster-whisper inside Taskuary. Audio never leaves the box; the first run downloads the model.",
+    howto: ["On the machine running Taskuary: pip install taskuary[voice] (installs faster-whisper).",
+      "Pick a model size: small is a good default on a laptop CPU; medium if you have the patience or a GPU.",
+      "Test downloads the model on first use (a few hundred MB) and transcribes a second of silence. Enable, and voice notes are transcribed locally."],
+    agent: ["Run `pip show faster-whisper` in the environment Taskuary runs in; if missing, install it yourself: pip install taskuary[voice]. Check for an NVIDIA GPU (nvidia-smi) and set device cuda only if there is one.",
+      "Save model (small unless the owner wants otherwise) in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}) - warn the owner the first Test downloads the model - turn it on, SETUP DONE."] },
 };
 
 const PLANNED_AI = [
@@ -275,6 +438,12 @@ const MSSQL_HOWTO = [
   "Local SQL Server: keep auth on Windows (trusted) - server + database is all the config. Named instance? Use HOST\INSTANCE, e.g. localhost\SQLEXPRESS.",
   "Driver auto-picks the newest installed 'ODBC Driver NN for SQL Server'; SQL logins go under auth.",
   "Build the actual reports (query + AI summary + schedule) on the REPORTS tab.",
+];
+const MSSQL_AGENT = [
+  "Check the machine yourself first: `Get-OdbcDriver -Name '*SQL Server*'` (Windows) or `odbcinst -q -d` lists the ODBC drivers; none installed means the owner needs 'ODBC Driver 18 for SQL Server' from Microsoft - offer to install it (winget install Microsoft.msodbcsql.18) and do it if they agree.",
+  "Ask for the server (HOST or HOST\\INSTANCE) and database. Probe reachability yourself (Test-NetConnection <host> -Port 1433, or the instance's port) before saving.",
+  "Try Windows authentication first - auth 'windows' in ConfigJson, no Secret - because on a domain-joined machine it usually just works. Only if Test says the login failed, ask for a SQL login: auth 'sql', username in ConfigJson, the password as Secret.",
+  "Save server, database, auth (and driver only to override the auto-pick) in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}) - it connects for real and reports the server version - then SETUP DONE; reports are built on the Reports tab.",
 ];
 
 /* ── data-connection cards that share one field-driven detail page (mssql keeps its
@@ -289,7 +458,10 @@ const DATA_META = {
       "Keep the password OUT of the string: write {password} where it goes and paste the real one below (stored write-only, never shown again).",
       "URL engines need their Python driver on the server: pip install taskuary[db] plus e.g. psycopg2-binary (postgres) or pymysql (mysql).",
       "Test connects for real and runs a probe (SELECT 1 — engines that need FROM DUAL can set test_query in the config).",
-      "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."] },
+      "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."],
+    agent: ["Ask what database it is and where (engine, host, port, database name, user). Build the connection string yourself with {password} where the password goes - never the real one - and save it as conn_str in ConfigJson; ask for the password and save it as Secret.",
+      "Install the Python driver yourself in the environment Taskuary runs in: `pip install taskuary[db]` plus psycopg2-binary (Postgres), pymysql (MySQL), snowflake-sqlalchemy (Snowflake) as needed; check with `pip show`. Then Test (POST {base}/api/connectors/{cid}/test{hdr}) - it runs SELECT 1; an engine that wants FROM DUAL gets test_query in ConfigJson.",
+      "Say SETUP DONE and that reports are built on the Reports tab."] },
   aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"], discovers: true,
     fields: [["access key id", "access_key_id"], ["region(s), comma-separated (e.g. us-east-2, us-east-1)", "region"]],
     secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
@@ -300,7 +472,10 @@ const DATA_META = {
       "The server needs boto3: pip install taskuary[aws].",
       "Test & discover calls STS (reporting which account/ARN you are) and then asks the keys what they can SEE: every S3 bucket and CloudWatch log group is listed under 'What you have access to'.",
       "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines appear on the Timeline), tasks (they go through triage), or off.",
-      "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."] },
+      "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."],
+    agent: ["Look for credentials this machine already has before asking: `aws sts get-caller-identity` (if the CLI is installed), ~/.aws/credentials, AWS_* environment variables. If they exist and the owner agrees to use them, leave the key fields blank - the server uses its own credentials.",
+      "Otherwise the IAM user and keys are the owner's to create (read-only policies such as AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess); ask for the access key id and region(s), save them in ConfigJson, and the secret access key as Secret.",
+      "Install boto3 yourself: `pip install taskuary[aws]`. Test & discover (POST {base}/api/connectors/{cid}/test{hdr}) reports the account and lists buckets and log groups; read that back, then SETUP DONE - what each object does (report, feed, tasks) is picked on the card."] },
   intacct: { title: "Sage Intacct", types: ["intacct", "intacct_fields"],
     fields: [["sender id (the integration's, issued by Sage)", "sender_id"],
       ["sender password", "sender_password"],
@@ -364,6 +539,42 @@ const DATA_META = {
       "Test reads a page for real, key or no key.",
       "Paste a key from jina.ai only if you hit the anonymous rate limit.",
       "On the REPORTS tab, give it a URL — same shape as Firecrawl, no account required."] },
+  /* Files & sheets people already keep. Both cards borrow: SharePoint the Outlook card's tenant
+     app (one registration, Graph mail AND Sites), Sheets the Gmail card's Google OAuth client. The
+     offer appears only when there is something to borrow - `reuse.ok` reads the other card. */
+  sharepoint: { title: "SharePoint", types: ["sharepoint_list", "sharepoint_file"],
+    fields: [["tenant_id (blank = reuse the Outlook card's app)", "tenant_id"], ["client_id (blank = reuse the Outlook card's app)", "client_id"],
+      ["default site (optional) — e.g. contoso.sharepoint.com/sites/Ops", "site"]],
+    secretLabel: "client secret (write-only; blank = reuse the Outlook card's tenant app)",
+    desc: "SharePoint lists and files in document libraries as scheduled reports and agent tools, over Graph — a list's items as rows, a csv/xlsx in a library parsed to rows.",
+    howto: ["One app registration with the Sites.Read.All APPLICATION permission (admin-consented) is all it needs. If the Outlook card already runs on a tenant app, leave the fields blank and it is borrowed - just add Sites.Read.All to that app in Azure Portal → App registrations → API permissions → Grant admin consent.",
+      "Otherwise register one: Azure Portal → App registrations → New registration; API permissions → Microsoft Graph → Application → Sites.Read.All → Grant admin consent; Certificates & secrets → New client secret. Enter tenant_id + client_id here and paste the secret (write-only).",
+      "Optionally name a default site (contoso.sharepoint.com/sites/Ops). Test authenticates, reaches the root site and, with a default site, counts its lists.",
+      "Build the reports on the REPORTS tab: 'SharePoint list' (a list's items) or 'SharePoint file' (a csv/xlsx in Shared Documents; a path ending in / lists the folder)."],
+    agent: ["GET {base}/api/connectors{hdr} and read the outlook card's config. If it has tenant_id, client_id and a saved secret and its auth is not 'user', this card can borrow it: leave tenant_id/client_id blank, tell the owner the app needs the Sites.Read.All application permission with admin consent (their admin adds it in Azure Portal → the app → API permissions), and Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 means that permission is missing - say so, do not retry.",
+      "If Outlook is a personal sign-in or absent, the owner (or their admin) registers an app with Sites.Read.All; ask for tenant_id, client_id (ConfigJson) and the client secret (Secret).",
+      "Ask for a default site URL, save it as site, Test, turn the connector on, SETUP DONE - reports are built on the Reports tab."],
+    reuse: { from: "outlook", title: "Reuse the Outlook card's Microsoft app",
+      text: "Outlook runs on a tenant app registration already. One registration can hold mail permissions and Sites.Read.All at once — leave the app fields blank and this card uses it. Make sure Sites.Read.All (application) is granted and admin-consented on that app.",
+      clear: ["tenant_id", "client_id"],
+      ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && c.HasSecret && k.client_id && k.auth !== "user"); } } },
+  google_sheets: { title: "Google Sheets", types: ["google_sheets"],
+    fields: [["Google OAuth client id (blank = reuse the Gmail card's)", "google_client_id"],
+      ["Google OAuth client secret (blank = reuse the Gmail card's)", "google_client_secret"],
+      ["default spreadsheet (optional) — URL or id", "spreadsheet"]],
+    secretLabel: "refresh token (write-only) — minted with spreadsheets.readonly",
+    desc: "A Google Sheet's cells as rows, on a schedule or as an agent tool — the first row as the column names.",
+    howto: ["Google Cloud console → APIs & Services → enable the Google Sheets API (and the Google Drive API, so Test can list your sheets) → Credentials → OAuth client ID, type Desktop app. If the Gmail card already carries a Google client (its calendar fields), leave id and secret blank here and it is reused.",
+      "Mint a refresh token WITH the Sheets scope: OAuth 2.0 Playground (developers.google.com/oauthplayground) → gear icon → use your own OAuth credentials → scopes https://www.googleapis.com/auth/spreadsheets.readonly and https://www.googleapis.com/auth/drive.metadata.readonly → Authorize APIs → Exchange authorization code → copy the refresh token. A token minted for the calendar does not cover spreadsheets, which is why this card holds its own.",
+      "Paste the refresh token (write-only). Share the sheets you want with the Google account you authorized as. Optionally set a default spreadsheet. Test checks the token's scopes and lists a few visible spreadsheets.",
+      "Build the reports on the REPORTS tab: 'Google Sheet' with a URL or id and a range (Sheet1!A:F); blank range = the first tab."],
+    agent: ["GET {base}/api/connectors{hdr} and read the gmail card's config: with google_client_id and google_client_secret present, leave those blank here - they are reused. Otherwise the owner creates an OAuth client (Desktop app) in Google Cloud console; ask for id and secret and save them in ConfigJson.",
+      "The refresh token is the owner's to mint in the OAuth Playground with the spreadsheets.readonly and drive.metadata.readonly scopes (walk them through: gear → own credentials → the two scopes → Authorize → Exchange → copy refresh token). Save it as Secret; never echo it.",
+      "Ask which spreadsheet is the usual one, save its URL as spreadsheet, Test (POST {base}/api/connectors/{cid}/test{hdr}) - a 403 or a scope complaint means the token was minted without the Sheets scope; mint again. Turn it on, SETUP DONE."],
+    reuse: { from: "gmail", title: "Reuse the Gmail card's Google client",
+      text: "The Gmail card already carries a Google OAuth client id and secret (its calendar fields). Leave those blank here and they are reused — you still mint a refresh token with the Sheets scope, because the calendar one does not cover spreadsheets.",
+      clear: ["google_client_id", "google_client_secret"],
+      ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && k.google_client_id && k.google_client_secret); } } },
   azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"], discovers: true,
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
     secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
@@ -373,14 +584,72 @@ const DATA_META = {
       "No extra installs — tokens ride the same client-credentials road the Outlook connector uses.",
       "Test & discover authenticates (naming the subscriptions the app can see — a token with no roles is called out) and then enumerates what those roles reach: every blob container and Log Analytics workspace is listed under 'What you have access to'.",
       "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new blobs / new query rows appear on the Timeline), tasks (they go through triage), or off.",
-      "Reports tab then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."] },
+      "Reports tab then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."],
+    agent: ["GET {base}/api/connectors{hdr} and check the outlook card: if it carries a tenant app (tenant_id, client_id, a secret) this card can reuse it with everything blank. If `az` is installed, `az account show` tells you which tenant and subscription this machine is already signed into - useful to confirm ids.",
+      "Otherwise the registration and its RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader) are the owner's admin work in the Azure portal; ask for tenant_id and client_id (ConfigJson) and the client secret (Secret) once that exists.",
+      "Test & discover (POST {base}/api/connectors/{cid}/test{hdr}) names the subscriptions the app can see - none means no roles yet, say so - and lists containers and workspaces. Read it back, SETUP DONE."] },
+  // The knowledge base: documents people already keep, indexed INTO Taskuary's own database (SQLite
+  // FTS5) and searched by reports, agents and the reply drafter. Not a vector database connector: a
+  // vector store is infrastructure somebody else runs, and one owner's documents fit a ranked
+  // full-text index; an embedder can be added behind the same search later (knowledge.py).
+  knowledge: { title: "Knowledge base", types: ["kb_search", "kb_reindex"], noSecret: true, search: true,
+    fields: [["SharePoint folders to index — comma-separated library paths, e.g. Shared Documents/Policies, Shared Documents/Contracts", "sharepoint_paths"],
+      ["SharePoint site for those folders (blank = the SharePoint card's default site)", "site"],
+      ["Folders on this machine to index — comma-separated paths", "folders"],
+      ["File kinds (blank = txt, md, csv, json, html, docx, pptx, xlsx, pdf)", "exts"]],
+    desc: "Your documents, searchable by everything here: a kb_search report answers a question from them on a schedule, agents call the same search as a tool, and the reply drafter, the assistant and coding sessions get the passages that bear on a thread. Indexed on this machine — nothing leaves it.",
+    howto: ["Name where the documents live: SharePoint library folders (access comes from the SharePoint card, or the Outlook card's tenant app — nothing to configure here) and/or folders on this machine.",
+      "Save, then Reindex now. docx, pptx, xlsx, html and text need nothing installed; pdf needs `pip install pypdf`. Unchanged files are skipped on later runs, deleted ones drop out.",
+      "Keep it fresh with a scheduled kb_reindex report on the Reports tab (nightly is plenty); answer questions from it with a kb_search report.",
+      "Agents reach it as a tool (type kb_search) when the tool role is on; the reply drafter and the assistant use it automatically once anything is indexed. Passages are quoted as facts, never as instructions."],
+    agent: ["GET {base}/api/connectors{hdr}, find the knowledge card. Ask the owner which SharePoint library folders and local folders to index; save them as sharepoint_paths / folders in ConfigJson (POST {base}/api/connectors{hdr} with ConnectorId, ConfigJson, Active:true).",
+      "POST {base}/api/knowledge/reindex{hdr} with {\"connector_id\": <id>} and read back what was indexed and what would not read (pdf needs pypdf). Then POST {base}/api/tools/run{hdr} with {\"type\": \"kb_search\", \"query\": \"...\"} to prove a question comes back with passages. SETUP DONE."],
+    actions: [{ label: "Reindex now", post: "/api/knowledge/reindex", body: (c) => ({ connector_id: c.ConnectorId }),
+      say: (r) => `${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed · ${r.docs} documents / ${r.chunks} passages` + (r.errors?.length ? ` · ${r.errors.length} problems: ${r.errors.slice(0, 3).join("; ")}` : "") }] },
 };
+
+/* A question typed on the Knowledge base card, answered from the index - the same search a
+   kb_search report or an agent's tool call gets, so what the card shows is what they would see. */
+function KbSearch({ conn }) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (!q.trim()) return;
+    setBusy(true);
+    try { setHits((await api.get("/api/knowledge/search", { params: { q, connector_id: conn.ConnectorId, limit: 6 } })).data.data || []); }
+    catch { setHits([]); }
+    setBusy(false);
+  };
+  return (
+    <Box sx={{ mt: 2, maxWidth: 560 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, color: INK, mb: 0.75 }}>Ask the knowledge base</Typography>
+      <Box sx={{ display: "flex", gap: 1 }}>
+        <TextField size="small" fullWidth placeholder="e.g. what is our resident refund policy" value={q} sx={{ bgcolor: "#fff" }}
+          onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
+        <Button variant="outlined" disabled={busy || !q.trim()} onClick={go}>{busy ? <CircularProgress size={14} /> : "Search"}</Button>
+      </Box>
+      {hits && hits.length === 0 && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>nothing matched — is anything indexed yet?</Typography>}
+      {(hits || []).map((h) => (
+        <Box key={`${h.doc_id}-${h.seq}`} sx={{ mt: 1, p: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: PANEL2 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>{h.name} <Typography component="span" variant="caption" sx={{ color: DIM }}>· {h.source}/{h.path} · {(h.modified || "").slice(0, 10)}</Typography></Typography>
+          <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>{h.snippet}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 const WINRM_HOWTO = [
   "This card is the CONNECTION only - the machine name. Build the actual reports (script + AI summary + schedule) on the REPORTS tab.",
   "A box you can RDP into (like AZWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
   "If Test fails with 'WinRM unreachable', enable PS remoting on the remote box once: open an elevated PowerShell THERE and run Enable-PSRemoting -Force.",
   "Reports then run any PowerShell you write ON that machine (read a log, query a service, export a CSV) and the output - optionally AI-summarized - lands on the Timeline.",
+];
+const WINRM_AGENT = [
+  "Ask for the machine name. Probe it yourself from here: `Test-WSMan <host>` (and Test-NetConnection <host> -Port 5985). Reachable: save host in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}), SETUP DONE.",
+  "Unreachable: remoting has to be enabled ON the remote box, by someone with an admin session there - `Enable-PSRemoting -Force` in an elevated PowerShell on that machine. You cannot do that from here without remoting; ask the owner (or their admin) to run it, then probe and Test again.",
+  "Runs use the Windows login Taskuary itself runs under - if Test fails with access denied, that account needs rights on the remote box; say so rather than asking for a password, the card has none.",
 ];
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -441,6 +710,92 @@ const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "el
   "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file",
   "netsuite", "quickbooks", "sap", "workday", "adp", "epic", "cerner", "pointclickcare"]);
 
+const VoiceVocabulary = ({ onBack }) => {
+  const [text, setText] = useState("");
+  const [limit, setLimit] = useState(100);
+  const [busy, setBusy] = useState(true);
+  const [saved, setSaved] = useState("");
+  const [err, setErr] = useState("");
+  const [onServer, setOnServer] = useState("");   // what the server holds, to know when the box has unsaved edits
+  const [genBusy, setGenBusy] = useState(false);
+  const [genWhat, setGenWhat] = useState("");
+  const [genEv, setGenEv] = useState(null);       // the receipts: what history was read, what the model kept
+  const show = (data) => { const t = (data.terms || []).join("\n"); setText(t); setOnServer(t); setLimit(data.limit || 100); };
+  useEffect(() => {
+    let alive = true;
+    api.get("/api/voice/vocabulary").then(({ data }) => { if (alive) { show(data); setBusy(false); } })
+      .catch((e) => { if (alive) { setErr(e?.response?.data?.detail || "Could not load voice vocabulary"); setBusy(false); } });
+    return () => { alive = false; };
+  }, []);
+  // same narration as the Docs tab: poll while it runs so the button says what it is reading
+  useEffect(() => {
+    if (!genBusy) return undefined;
+    const t = setInterval(async () => {
+      try { setGenWhat((await api.get("/api/doc/generate/status")).data.what || ""); } catch { /* status is a nicety */ }
+    }, 1200);
+    return () => clearInterval(t);
+  }, [genBusy]);
+  const terms = text.split("\n").map((x) => x.trim()).filter(Boolean);
+  const save = async () => {
+    setBusy(true); setErr(""); setSaved("");
+    try {
+      const { data } = await api.put("/api/voice/vocabulary", { terms });
+      show(data); setSaved(`${(data.terms || []).length} shared term${data.terms?.length === 1 ? "" : "s"} saved`);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not save voice vocabulary"); }
+    setBusy(false);
+  };
+  // history -> names, systems, acronyms (histgen.gen_vocabulary). Your edits in the box are saved
+  // first so nothing typed is lost; your terms stay, the model's fill the room left.
+  const generate = async () => {
+    setGenBusy(true); setErr(""); setSaved(""); setGenEv(null); setGenWhat("starting…");
+    try {
+      if (text !== onServer) await api.put("/api/voice/vocabulary", { terms });
+      const { data } = await api.post("/api/doc/vocabulary/generate");
+      show((await api.get("/api/voice/vocabulary")).data); setSaved(`✓ ${data.detail}`);
+      try { setGenEv((await api.get("/api/doc/generate/status")).data.evidence || null); } catch { /* receipts optional */ }
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not generate from history"); }
+    setGenBusy(false); setGenWhat("");
+  };
+  return (
+    <Box sx={{ maxWidth: 760, mx: "auto" }}>
+      <Crumb section="Connectors" onBack={onBack} title="Shared voice vocabulary" />
+      <Typography variant="body2" sx={{ color: DIM, mb: 2, lineHeight: 1.7 }}>
+        One list for every AI voice connector, browser mic and voice note. Add unusual names, acronyms, products and internal system terms;
+        each active provider receives the same hints automatically. Hints improve recognition but never force words into a transcript.
+        Generate from history reads who writes to you and what about, and adds the names a recogniser would get wrong - your own lines stay.
+      </Typography>
+      <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, p: 2 }}>
+        <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy || genBusy}
+          label="Words and phrases" placeholder={"Taskuary\nPointClickCare\nIntacct\nTQ-0243"}
+          helperText={`One term or phrase per line · up to ${limit} · 50 characters and 5 words per entry`} />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
+          <Typography variant="caption" sx={{ color: terms.length > limit ? "error.main" : FAINT }}>{terms.length}/{limit}</Typography>
+          <Box sx={{ flex: 1 }} />
+          <Button variant="outlined" onClick={generate} disabled={busy || genBusy || terms.length > limit}
+            startIcon={genBusy ? <CircularProgress size={12} /> : null}
+            title="Read the last three months of mail - who writes, about what - and add the names, systems and acronyms a recogniser would misspell. Your own lines stay.">
+            {genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}
+          </Button>
+          <Button variant="contained" disableElevation onClick={save} disabled={busy || genBusy || terms.length > limit || text === onServer}>
+            {busy ? "Saving…" : text === onServer ? "Saved" : "Save shared vocabulary"}
+          </Button>
+        </Box>
+        {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
+        {saved && <Alert severity="success" sx={{ mt: 1.5 }}>{saved}</Alert>}
+        {/* the receipts: what history was read and counted, so every added name traces back to your own mail */}
+        {genEv?.length > 0 && (
+          <Box sx={{ mt: 1.5, p: 1.25, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 2 }}>
+            <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>What it read</Typography>
+            {genEv.map((l, i) => (
+              <Typography key={i} variant="caption" component="div" sx={{ color: l.startsWith("  ") ? FAINT : DIM, whiteSpace: "pre-wrap", fontFamily: l.startsWith("  ") ? "monospace" : "inherit", fontSize: 11 }}>{l}</Typography>
+            ))}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 export default function ConnectorsView() {
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
@@ -467,24 +822,36 @@ export default function ConnectorsView() {
     catch { setSyncing(false); }
   };
 
-  const byType = Object.fromEntries((connectors || []).map((c) => [c.Type, c]));
+  const allOf = (type) => (connectors || []).filter((c) => c.Type === type);
+  // Explicit cards travel by ConnectorId. A type-only deep link or credential reuse picks an
+  // active instance first, then the original catalog row for backward compatibility.
+  const byType = Object.fromEntries([...new Set((connectors || []).map((c) => c.Type))]
+    .map((type) => [type, allOf(type).find((c) => c.Active) || allOf(type)[0]]));
+  // #connector=<type> opens that card on arrival - the bell's Fix button lands here, and so can any
+  // link. Consumed once, so Back does not reopen it.
+  useEffect(() => {
+    const m = /connector=([\w-]+)/.exec(window.location.hash || "");
+    if (!m || !connectors) return;
+    const t = m[1];
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    const direct = /^\d+$/.test(t) ? connectors.find((c) => c.ConnectorId === Number(t)) : byType[t];
+    if (direct) setOpen({ kind: "connector", id: direct.ConnectorId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectors]);
 
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
   if (open?.kind === "agents") return <AgentsPage section="Connectors" title="AI CLI agents" onBack={() => setOpen(null)} />;
-  if (open?.kind === "channel") {
+  if (open?.kind === "voice-vocabulary") return <VoiceVocabulary onBack={() => setOpen(null)} />;
+  if (open?.kind === "connector") {
     const conn = connectors.find((c) => c.ConnectorId === open.id);
-    return <ChannelDetail conn={conn} sources={sources} reload={load} onBack={() => setOpen(null)} />;
-  }
-  if (open?.kind === "mssql") {
-    return <MssqlDetail conn={byType.mssql} drivers={drivers} reload={load} onBack={() => setOpen(null)} />;
-  }
-  if (open?.kind === "winrm") {
-    return <WinrmDetail conn={byType.winrm} reload={load} onBack={() => setOpen(null)} />;
-  }
-  if (open?.kind === "data") {
-    return <DataDetail conn={byType[open.type]} meta={DATA_META[open.type]} sources={sources}
-      reload={load} onBack={() => setOpen(null)} />;
+    if (!conn) return null;
+    const shared = { conn, reload: load, onBack: () => setOpen(null),
+      onCreated: (id) => setOpen({ kind: "connector", id }) };
+    if (conn.Type === "mssql") return <MssqlDetail key={conn.ConnectorId} {...shared} drivers={drivers} />;
+    if (conn.Type === "winrm") return <WinrmDetail key={conn.ConnectorId} {...shared} />;
+    if (DATA_META[conn.Type]) return <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />;
+    return <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} />;
   }
 
   /* ── landing: searchable grouped catalog ── */
@@ -496,26 +863,34 @@ export default function ConnectorsView() {
     const status = `${c.Active ? "on" : "off"}`
       + (roles.length ? ` · ${roles.map((r) => r === "notify" ? "notifications" : r).join(" + ")}` : "")
       + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
-        : c.HasSecret ? " · key saved" : c.Type === "ollama" ? " · local — no key needed" : " · no key yet")
+        : c.HasSecret ? " · key saved"
+          : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
+          : c.Type === "stt_server" ? " · your server — key optional" : " · no key yet")
       + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
     // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
     // or Jira and Linear both wearing 'boards', tells you nothing about which is which
     return { key: `c${c.ConnectorId}`, title: c.Name, desc: status,
       channel: hasLogo(c.Type) ? c.Type : (m.channel || c.Type),
       haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`,
-      go: () => setOpen({ kind: "channel", id: c.ConnectorId }) };
+      go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
   };
   // three shapes of card, said once instead of inline in five groups
   const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
     + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length} reports (built on the Reports tab)`;
-  const dataCards = (keys) => keys.filter((t) => DATA_META[t] && byType[t]).map((t) => {
+  const dataCards = (keys) => keys.flatMap((t) => allOf(t).filter(() => DATA_META[t]).map((c) => {
     const dm = DATA_META[t];
-    return { key: t, title: dm.title, channel: t,
-      desc: (byType[t].LastError ? "connection failing" : byType[t].LastSyncAt ? "connection ✓" : "not set up")
+    return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
+      desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : "not set up")
         + ` · ${reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length} reports (built on the Reports tab)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
-      go: () => setOpen({ kind: "data", type: t }) };
-  });
+      go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
+  }));
+  const channelCards = (keys) => keys.flatMap((t) => allOf(t).map(chanCard));
+  const specialCards = (type, title, rtype, haystack) => allOf(type).map((c) => ({
+    key: `s${c.ConnectorId}`, title: c.Name || title, channel: type,
+    desc: dataDesc(c, rtype), haystack,
+    go: () => setOpen({ kind: "connector", id: c.ConnectorId }),
+  }));
   const planned = types.filter((t) => t.status === "planned").map((t) => t.type);
   // `rest` catches whatever the server starts advertising that this file has not been taught
   // about yet, so a new planned type never silently vanishes from the catalog
@@ -527,34 +902,39 @@ export default function ConnectorsView() {
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "claude / codex / gemini — bring your own coding CLI, resumable sessions",
         channel: "cli", haystack: "ai cli agents claude codex gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...["anthropic", "openai", "azure_openai", "openrouter", "ollama"].filter((t) => byType[t]).map((t) => chanCard(byType[t])),
+      ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "ollama"]),
       ...PLANNED_AI.map((p) => ({ key: p.name, title: p.name, desc: p.desc, channel: "ai", haystack: `${p.name} ${p.desc}`, planned: true })),
     ]},
-    { title: "Messaging", cards: ["outlook", "gmail", "imap", "teams", "slack", "telegram", "whatsapp", "imessage", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Developer", cards: ["github", "gitlab", "azdo", "sentry", "pagerduty"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
-    { title: "Project management", cards: ["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+    // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic
+    { title: "AI — voice",
+      // what happens with NO card here is not visible anywhere else, and it looked like something was missing
+      note: "Without a card here: the mic buttons still work through your browser's own recognition (Edge and Chrome ship one — free, live microphone only), and voice notes on WhatsApp/Telegram land marked not transcribed, with a Transcribe button for later. A card is what transcribes a voice-note file on the server. Free choices: Groq (free tier) or Local Whisper (no key, on this machine). Edge's voices are text-to-speech — the other direction.",
+      cards: [
+        { key: "voice-vocabulary", title: "Shared voice vocabulary", channel: "ai",
+          desc: "one system-wide list used by every voice connector and mic",
+          haystack: "custom shared voice vocabulary words phrases domain names acronyms",
+          go: () => setOpen({ kind: "voice-vocabulary" }) },
+        ...channelCards(["gemini_stt", "groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"]),
+      ] },
+    // mail and chat are different jobs: one group held nine cards and read as a wall
+    { title: "Email", cards: channelCards(["outlook", "gmail", "imap"]) },
+    { title: "Messaging", cards: channelCards(["teams", "slack", "telegram", "whatsapp", "imessage", "discord"]) },
+    { title: "Developer", cards: channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]) },
+    { title: "Project management", cards: channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]) },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each
        other - a SQL server, a log store and a web-search API are three different jobs, and a
        rail entry saying "11" tells you nothing about which one you came for. Split by what
        the thing IS, and the planned cards land in the group they will belong to rather than
        all together at the bottom. */
     { title: "Databases", cards: [
-      {
-        key: "mssql", title: "Microsoft SQL Server", channel: "mssql",
-        desc: dataDesc(byType.mssql, "mssql"),
-        haystack: "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" "),
-        go: () => setOpen({ kind: "mssql" }),
-      },
+      ...specialCards("mssql", "Microsoft SQL Server", "mssql",
+        "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" ")),
       ...dataCards(["database"]), ...plannedCards(["graphql", "sqlite"]),
     ]},
     { title: "Cloud & infrastructure", cards: [
       ...dataCards(["aws", "azure"]),
-      ...(byType.winrm ? [{
-        key: "winrm", title: "Remote Windows (WinRM)", channel: "winrm",
-        desc: dataDesc(byType.winrm, "winrm"),
-        haystack: "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" "),
-        go: () => setOpen({ kind: "winrm" }),
-      }] : []),
+      ...specialCards("winrm", "Remote Windows (WinRM)", "winrm",
+        "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" ")),
       ...plannedCards(["gcp", "kubernetes"]),
     ]},
     { title: "Corporate systems", cards: [
@@ -566,7 +946,7 @@ export default function ConnectorsView() {
     // the web as a source: one REST call and a key each. What is deliberately NOT here is
     // anything that drives a browser - logging in, clicking - which needs CDP, not an API.
     { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "firecrawl", "reader"]), ...plannedCards(["perplexity", "serpapi", "browserbase"])] },
-    { title: "Files & sheets", cards: plannedCards(["google_sheets", "sharepoint_list", "smb_file", "local_file"]) },
+    { title: "Files & sheets", cards: [...dataCards(["knowledge", "sharepoint", "google_sheets"]), ...plannedCards(["smb_file", "local_file"])] },
     { title: "Everything else", cards: plannedCards(KNOWN_PLANNED, true) },
   ];
   const hits = q ? groups.flatMap((g) => g.cards.filter((c) => !c.planned && c.haystack.toLowerCase().includes(q.toLowerCase()))
@@ -593,21 +973,78 @@ export default function ConnectorsView() {
 
       {q ? (
         <Box>
-          {!hits.length && <Empty>Nothing matches.</Empty>}
-          {hits.map((r) => (
-            <Box key={r.key} onClick={r.go} sx={{ py: 1.25, borderBottom: `1px solid ${BORDER}`, cursor: "pointer",
-              "&:hover": { bgcolor: "#faf8f4" } }}>
-              <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.title}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT }}>{r.crumb} · {r.desc}</Typography>
-            </Box>
-          ))}
+          {!hits.length ? <Empty>Nothing matches “{q}”. Try a product, channel, or connection name.</Empty> : (
+            <>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
+                {hits.length} {hits.length === 1 ? "result" : "results"}
+              </Typography>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" }, gap: 1.5 }}>
+                {hits.map((r) => <ConnCard key={r.key} c={r} />)}
+              </Box>
+            </>
+          )}
         </Box>
       ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", xl: "repeat(3, 1fr)" }, gap: 1.5 }}>
-          {shown.cards.map((c) => <ConnCard key={c.key} c={c} />)}
-        </Box>
+        <>
+          {shown.note && (
+            <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 860, lineHeight: 1.55 }}>{shown.note}</Typography>
+          )}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", xl: "repeat(3, 1fr)" }, gap: 1.5 }}>
+            {shown.cards.map((c) => <ConnCard key={c.key} c={c} />)}
+          </Box>
+        </>
       )}
     </SideRail>
+  );
+}
+
+/* Every catalog card is an instance. Its name is the human-facing identity used everywhere
+   Taskuary lists it; Add another creates a clean instance of the same connector type. */
+function ConnectorIdentity({ conn, reload, onCreated }) {
+  const [name, setName] = useState(conn.Name || "");
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => setName(conn.Name || ""), [conn.Name]);
+  const rename = async () => {
+    const value = name.trim();
+    if (!value || value === conn.Name) return;
+    setBusy("rename"); setErr("");
+    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Name: value }); await reload(); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not rename the connector"); }
+    setBusy("");
+  };
+  const add = async () => {
+    const value = newName.trim();
+    if (!value) return;
+    setBusy("add"); setErr("");
+    try {
+      const { data } = await api.post("/api/connectors", { Type: conn.Type, Name: value });
+      await reload(); onCreated?.(data.connectorId);
+    } catch (e) { setErr(e?.response?.data?.detail || "could not add the connector"); }
+    setBusy("");
+  };
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5, maxWidth: 720 }}>
+      <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "#fff", minWidth: 240 }} />
+      <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
+        onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
+      {!adding ? (
+        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another</Button>
+      ) : (
+        <>
+          <TextField size="small" autoFocus label={`New ${conn.Type} connection name`} value={newName}
+            onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+            sx={{ bgcolor: "#fff", minWidth: 240 }} />
+          <Button size="small" variant="contained" disableElevation disabled={busy === "add" || !newName.trim()}
+            onClick={add}>{busy === "add" ? "Adding…" : "Add"}</Button>
+          <Button size="small" onClick={() => { setAdding(false); setNewName(""); setErr(""); }}>Cancel</Button>
+        </>
+      )}
+      {err && <Alert severity="error" sx={{ width: "100%", py: 0 }}>{err}</Alert>}
+    </Box>
   );
 }
 
@@ -631,8 +1068,122 @@ function RemoveConnection({ conn, reload, onBack }) {
   );
 }
 
+/* ── Apple Messages: the two macOS permissions, as a walkthrough instead of a paragraph ──
+   Both belong to macOS. Taskuary cannot grant either; what it can do is say which one is
+   missing, which process macOS will list (the app Taskuary was launched from, or the python
+   binary), open the right pane, and test the real operation afterwards - a checkbox in
+   Settings is not proof, a SELECT on the database is. Sending is probed separately and only
+   on request, because the probe is what makes macOS pop the consent prompt. */
+function MacPermissions({ conn, test, busy, runTest }) {
+  const [probe, setProbe] = useState(null);
+  const [probing, setProbing] = useState(false);
+  const [opened, setOpened] = useState("");
+  const [openErr, setOpenErr] = useState({});      // per pane - a refused link under its own card
+  // the host macOS lists comes back on a failed read test, a successful one, or a denied
+  // probe - whichever answered last knows it
+  const setup = test?.setup || probe?.setup || {};
+  const code = test ? (test.ok ? "ready" : setup.code || "error") : null;
+  const openPane = async (pane) => {
+    setOpened(""); setOpenErr((o) => ({ ...o, [pane]: "" }));
+    try {
+      const { data } = await api.post("/api/platform/macos/open-settings", { pane });
+      if (data?.ok) setOpened(pane); else setOpenErr((o) => ({ ...o, [pane]: data?.detail || "Settings did not open" }));
+    } catch (e) { setOpenErr((o) => ({ ...o, [pane]: e?.response?.data?.detail || "Settings did not open" })); }
+  };
+  const runProbe = async () => {
+    setProbing(true); setProbe(null); setOpenErr((o) => ({ ...o, automation: "" }));
+    try { const { data } = await api.post("/api/platform/macos/probe", { what: "messages_automation" }); setProbe(data); }
+    catch (e) { setProbe({ ok: false, detail: e?.response?.data?.detail || "probe call failed" }); }
+    setProbing(false);
+  };
+  const copy = (s) => { try { navigator.clipboard.writeText(s); } catch { /* not in this context */ } };
+  const host = setup.host_name || (setup.host_path ? "the Python executable" : "the process running Taskuary");
+  const notMac = code === "macos_required";
+  const readOk = code === "ready";
+  const readNeeds = code === "full_disk_access_required";
+  // only a consent failure is fixed in the Full Disk Access pane; a missing database, a locked
+  // one, an unknown schema or an old macOS are not, and the button would send people to the
+  // wrong place
+  const fdaPane = !test || readOk || readNeeds;
+  const sendOk = !!probe?.ok;
+  const sendDenied = probe && !probe.ok && probe.setup?.code === "automation_denied";
+  const Card = ({ title, sub: subtitle, ok, children }) => (
+    <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.5, bgcolor: PANEL2, flex: 1, minWidth: 280 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+        <StatusDot ok={!!ok} />
+        <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: INK }}>{title}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{subtitle}</Typography>
+      </Box>
+      {children}
+    </Box>
+  );
+  return (
+    <Box sx={{ mt: 1, maxWidth: 760 }}>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
+        Apple Messages stays on this Mac. Reading the history macOS already keeps needs <b>Full Disk Access</b>;
+        asking Messages.app to send a reply needs <b>Automation</b>. macOS controls both — Taskuary cannot grant or
+        bypass them, and both are granted to <b>{host}</b>, not to "Taskuary".
+      </Typography>
+      {notMac ? (
+        <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>✗ {test.detail}</Typography>
+      ) : (
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+          <Card title="Read Messages" sub="Full Disk Access" ok={readOk}>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
+              Opens the local Messages database read-only so new messages and context can enter Taskuary.
+            </Typography>
+            {(setup.host_name || setup.host_path) && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
+                <Typography variant="caption" sx={{ color: FAINT }}>grant to:</Typography>
+                <Typography sx={{ ...mono, fontSize: 12, color: INK }} noWrap>{setup.host_name || setup.host_path}</Typography>
+                {setup.host_path && <IconButton size="small" onClick={() => copy(setup.host_path)} title="copy path"><ContentCopyIcon sx={{ fontSize: 13 }} /></IconButton>}
+              </Box>
+            )}
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+              {fdaPane && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("full_disk_access")}>
+                Open Full Disk Access</Button>}
+              <Button size="small" variant="contained" disableElevation disabled={busy === "test"} onClick={() => { setOpenErr((o) => ({ ...o, full_disk_access: "" })); runTest(); }}
+                startIcon={busy === "test" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
+                {!test ? "Test" : readNeeds ? "I enabled it — test again" : "Test again"}</Button>
+            </Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+              {fdaPane ? (setup.breadcrumb || "System Settings → Privacy & Security → Full Disk Access") : "not a permission problem - see the message below"}
+              {readNeeds && setup.restart_may_be_required && " · macOS may only apply it after the host is quit and relaunched"}
+              {opened === "full_disk_access" && " · Settings opened"}
+              {openErr.full_disk_access && ` · ${openErr.full_disk_access}`}
+            </Typography>
+            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
+              {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+            {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
+          </Card>
+          <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
+              Lets Taskuary ask Messages.app to send a reply. Testing this makes macOS ask whether {host} may control
+              Messages — allow it. <b>The test sends nothing.</b> Skip it and macOS asks on the first real reply instead.
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+              <Button size="small" variant="contained" disableElevation disabled={probing} onClick={runProbe}
+                startIcon={probing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
+                {probe ? "Test again" : "Test Automation"}</Button>
+              {sendDenied && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("automation")}>
+                Open Automation settings</Button>}
+            </Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+              System Settings → Privacy & Security → Automation → {host} → Messages
+              {opened === "automation" && " · Settings opened"}
+              {openErr.automation && ` · ${openErr.automation}`}
+            </Typography>
+            {probe && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: probe.ok ? "#47654a" : "#6b2733" }}>
+              {probe.ok ? "✓" : "✗"} {probe.detail}</Typography>}
+          </Card>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
-function ChannelDetail({ conn, sources, reload, onBack }) {
+function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
   const m = META[conn.Type] || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
@@ -667,7 +1218,9 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     try {
       const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/test`);
       setTest(data);
-      if (data.ok) setStep(m.srcLabel ? 2 : 3);
+      // Apple Messages has a second card (Automation) on this step - a passing read test must
+      // not whisk the step away before the person can try the send probe
+      if (data.ok && conn.Type !== "imessage") setStep(m.srcLabel ? 2 : 3);
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };
@@ -678,35 +1231,56 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   };
   // the telegram flow says "hit Sync now" - so the button has to BE here, not on another tab
   const [srcSync, setSrcSync] = useState(false);
+  // the Outlook card leads with the sign-in; the tenant-app fields (an admin's road) fold
+  // away unless they are already what this card runs on
+  const [adminFields, setAdminFields] = useState(conn.Type !== "outlook" || (!!cfg.client_id && cfg.auth !== "user"));
   const syncHere = async () => {
     setSrcSync(true);
     try { await api.post("/api/ingest/poll"); setTimeout(() => { setSrcSync(false); reload(); }, 3000); }
     catch { setSrcSync(false); }
   };
   const toggleSource = async (s) => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); reload(); };
+  const [delSrc, setDelSrc] = useState(null);      // a source being removed for good - off was the only option before
   const setActive = async (on) => { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Active: on }); reload(); };
 
   const steps = [
     { label: "Credentials", done: !!conn.HasSecret || !m.secretLabel, body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-        {m.fields.map(([label, key, ph, helper]) => (
-          <TextField key={key} label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
-            helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
-        ))}
-        {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
-        {m.secretLabel && (
-          <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
-            value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-            helperText="Write-only: stored server-side, never returned to the browser." />
+        {conn.Type === "outlook" && !adminFields && (
+          <Button size="small" variant="text" onClick={() => setAdminFields(true)}
+            sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
+            Admin? Use a tenant app registration instead →
+          </Button>
         )}
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-          <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
-            {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-          {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
-        </Box>
+        {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
+          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
+            Microsoft mailboxes no longer accept IMAP passwords — use the Outlook connector and “Sign in with Microsoft”.
+          </Typography>
+        )}
+        {adminFields && (
+          <>
+            {m.fields.map(([label, key, ph, helper]) => (
+              <TextField key={key} label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
+                helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
+            ))}
+            {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
+            {m.secretLabel && (
+              <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
+                value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
+                helperText="Write-only: stored server-side, never returned to the browser." />
+            )}
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
+                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
+              {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
+            </Box>
+          </>
+        )}
       </Box>
     )},
-    { label: "Test", done: !!conn.LastSyncAt && !conn.LastError, body: (
+    { label: "Test", done: !!conn.LastSyncAt && !conn.LastError, body: conn.Type === "imessage" ? (
+      <MacPermissions conn={conn} test={test} busy={busy} runTest={runTest} />
+    ) : (
       <Box sx={{ mt: 1 }}>
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Live probe — token / model / channel read, for real.</Typography>
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
@@ -725,6 +1299,7 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
             one place: the <b>Inbound — what becomes work</b> step below.
           </Typography>
         )}
+        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} />}
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
@@ -740,9 +1315,10 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
           </>
         )}
         {mine.filter((s) => !(conn.Type === "telegram" && s.Address === "*")).map((s) => (
-          <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
+          <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
             <StatusDot ok={!!s.Active} />
             <Typography sx={{ ...mono, color: INK, fontSize: 13 }} noWrap>{s.Address}</Typography>
+            {conn.Type === "outlook" && <MailFolders conn={conn} s={s} reload={reload} />}
             {String(s.Owner || "").startsWith("discovered:") && (
               <Typography variant="caption" sx={{ color: FAINT }} noWrap>
                 {s.Owner.replace("discovered:", "").trim()}
@@ -751,8 +1327,14 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
             <Box sx={{ flex: 1 }} />
             {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>polled {timeAgo(s.LastPolledAt)}</Typography>}
             <Switch checked={!!s.Active} onChange={() => toggleSource(s)} />
+            <IconButton size="small" title="Remove it for good (off keeps it listed)" onClick={() => setDelSrc(s)}>
+              <DeleteOutlineIcon sx={{ fontSize: 16, color: "#867f74" }} />
+            </IconButton>
           </Box>
         ))}
+        <ConfirmDelete open={!!delSrc} what={delSrc ? `"${delSrc.Address}"` : ""} confirmLabel="Remove"
+          consequence="It is removed from this connection - nothing from it comes in until you add it again. What already arrived stays on the Timeline."
+          onClose={() => setDelSrc(null)} onConfirm={async () => { await api.delete(`/api/sources/${delSrc.SourceId}`); reload(); }} />
         <Box sx={{ display: "flex", gap: 1, mt: 1.5, maxWidth: 460 }}>
           <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setNewSrc(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSource()} />
@@ -769,13 +1351,19 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
     ]),
     ...(conn.Type === "github" ? [{ label: "Agent permissions", done: true, body: <GithubPerms conn={conn} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
         <Switch checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
         <Typography variant="body2" sx={{ color: DIM }}>
           {conn.Active
             ? (isAI ? "On — wired into intent triage (the first active AI connector wins)." : "On — polling on schedule and via Sync now.")
             : "Off — flip on once Test passes."}
         </Typography>
+        {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock */}
+        {conn.Active && !isAI && (
+          <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
+            startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
+            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : "Sync now — see it on the Timeline"}</Button>
+        )}
       </Box>
     )},
   ];
@@ -783,8 +1371,18 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
+          itself (install Node is the owner's; the bridge starts on its own; the QR is scanned from a phone).
+          An agent handed this setup sat on the bridge process for five minutes on a tester's machine. */}
+      {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
+      {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
+          runs on a tenant app opens on Sources, and the one button most people need was folded away */}
+      {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
+      {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
-      <UnderTabs tabs={["Setup", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      {tab === "Agent" && <AgentTab steps={m.agent} />}
       {tab === "Setup" && (
         <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
           {steps.map((s, i) => (
@@ -802,16 +1400,19 @@ function ChannelDetail({ conn, sources, reload, onBack }) {
 }
 
 /* ── SQL Server detail: connection wizard + guide (reports live on the Reports tab) ── */
-function MssqlDetail({ conn, drivers, reload, onBack }) {
+function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
   const [tab, setTab] = useState("Connection");
   if (!conn) return null;
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title="Microsoft SQL Server" />
+      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) on the Reports tab.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
+      {tab === "Agent" && <AgentTab steps={MSSQL_AGENT} />}
       {tab === "Connection" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
@@ -892,7 +1493,7 @@ function MssqlConnection({ conn, drivers, reload }) {
 }
 
 /* ── Remote Windows (WinRM) detail: machine name + live probe; reports live on Reports ── */
-function WinrmDetail({ conn, reload, onBack }) {
+function WinrmDetail({ conn, reload, onBack, onCreated }) {
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [test, setTest] = useState(null);
@@ -917,13 +1518,16 @@ function WinrmDetail({ conn, reload, onBack }) {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title="Remote Windows (WinRM)" />
+      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
         build the scheduled reports on the Reports tab.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={WINRM_HOWTO} />}
+      {tab === "Agent" && <AgentTab steps={WINRM_AGENT} />}
       {tab === "Connection" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
           <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
@@ -1094,7 +1698,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
 
 /* ── shared detail for the DATA_META cards (database / aws / azure): fields + write-only
    secret + live Test; the connection only - reports are built on the Reports tab. ── */
-function DataDetail({ conn, meta, sources, reload, onBack }) {
+function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {} }) {
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [secret, setSecret] = useState("");
@@ -1102,7 +1706,21 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   if (!conn) return null;
-  const objects = (sources || []).filter((s) => s.Channel === conn.Type);
+  const objects = (sources || []).filter((s) => s.Channel === conn.Type && s.ConnectorId === conn.ConnectorId);
+  // the borrow offer: only when the OTHER card actually has something to lend (a tenant app, a
+  // Google client) - an offer to reuse nothing is worse than no offer
+  const canReuse = !!(meta.reuse && meta.reuse.ok(byType[meta.reuse.from]));
+  const useShared = async () => {
+    const next = { ...cfg }; (meta.reuse.clear || []).forEach((k) => { delete next[k]; });
+    setCfg(next); setBusy("save"); setMsg("");
+    try {
+      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next), Active: true });
+      setMsg(`saved — using the ${meta.reuse.from} card's app ✓`);
+      setBusy("test");
+      setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data);
+    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "could not switch to the shared app" }); }
+    setBusy(""); reload();
+  };
 
   const save = async () => {
     setBusy("save"); setMsg("");
@@ -1123,30 +1741,50 @@ function DataDetail({ conn, meta, sources, reload, onBack }) {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title={meta.title} />
+      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} agentSteps={meta.agent || []} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc} The connection only — build the scheduled reports on the Reports tab.
       </Typography>
-      <UnderTabs tabs={["Connection", "Guide"]} value={tab} onChange={setTab} />
+      <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={meta.howto} />}
+      {tab === "Agent" && <AgentTab steps={meta.agent} />}
       {tab === "Connection" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 560, mt: 1 }}>
+          {canReuse && (
+            <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: INK }}>{meta.reuse.title}</Typography>
+              <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mb: 0.75 }}>{meta.reuse.text}</Typography>
+              <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>Use it — save and test</Button>
+            </Box>
+          )}
           {meta.fields.map(([label, key, ph]) => (
             <TextField key={key} label={label} placeholder={ph} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
               multiline={key === "conn_str"} minRows={key === "conn_str" ? 2 : undefined}
               onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
           ))}
-          <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
+          {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-            helperText="Write-only: stored server-side, never returned to the browser." />
-          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            helperText="Write-only: stored server-side, never returned to the browser." />}
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
             <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
               {meta.discovers ? "Test & discover" : "Test"}</Button>
+            {/* a card's own verbs (the knowledge base's Reindex): one POST, the answer said in a line */}
+            {(meta.actions || []).map((a) => (
+              <Button key={a.label} variant="outlined" disabled={!!busy} onClick={async () => {
+                setBusy(a.label); setMsg("");
+                try { const r = (await api.post(a.post, a.body ? a.body(conn) : {})).data; setMsg(a.say ? a.say(r) : "done ✓"); }
+                catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || `${a.label} failed` }); }
+                setBusy(""); reload();
+              }}>{busy === a.label ? <CircularProgress size={12} /> : a.label}</Button>
+            ))}
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
+          {meta.search && <KbSearch conn={conn} />}
           {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
@@ -1344,9 +1982,9 @@ const BULK_HELP = (
       dropped — a low value waits.
     </Typography>
     <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55 }}>
-      Value is <b>words first</b>: addressed to you or merely cc'd, how many people, whether a colleague has
+      Value is <b>words first</b>: addressed to you or merely cc’d, how many people, whether a colleague has
       already replied, urgency, who the author is on a code host. With two or more waiting, one call to the
-      triage brain orders the head of the queue and adds its own reason. You see it on the Timeline's funnel
+      triage brain orders the head of the queue and adds its own reason. You see it on the Timeline’s funnel
       bar and can pin any card to the top or push it back.
     </Typography>
   </Box>
@@ -1354,8 +1992,297 @@ const BULK_HELP = (
 
 const MODES = [
   ["clear", "One by one", "Every task from here goes to an agent as it arrives, in arrival order. When all agent slots are busy, the next ones queue - first in, first out - until the inbox is clear. Right when the inbox IS the job."],
-  ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc'd, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
+  ["rank", "Ranked together", "Tasks from here join one queue ordered by value - addressed to you or merely cc’d, how many people, whether a colleague replied, urgency, who the author is - and only the top K are worked at once (K = Agents at once in Settings). A new arrival re-ranks the queue rather than joining its tail; nothing is dropped, lower value waits. Right when you are cc'd on most of it and a few things matter."],
 ];
+
+/* ── Which folders a mailbox reads. Only the Inbox was ever read, and a rule that files vendor mail
+   into "Vendors" made that mail invisible here. The chooser lists the mailbox's folders (Graph) and
+   keeps the picks on the source; the Inbox alone is the default. ── */
+const MailFolders = ({ conn, s, reload }) => {
+  const cfg = parse(s.ConfigJson);
+  const chosen = new Set((cfg.folders || []).length ? cfg.folders : ["inbox"]);
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    setOpen(true);
+    if (list) return;
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/mail/folders`, { params: { mailbox: s.Address } }); setList(data.data); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not list folders"); setList([]); }
+  };
+  const toggle = async (id) => {
+    const next = new Set(chosen); next.has(id) ? next.delete(id) : next.add(id);
+    if (!next.size) return;                                       // a mailbox that reads nothing is a switched-off mailbox
+    await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...cfg, folders: [...next] }) }); reload();
+  };
+  const label = chosen.size === 1 && chosen.has("inbox") ? "Inbox only" : `${chosen.size} folder${chosen.size === 1 ? "" : "s"}`;
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
+      <Button size="small" onClick={() => (open ? setOpen(false) : load())} sx={{ fontSize: 11, textTransform: "none", color: DIM, py: 0, minWidth: 0 }}>
+        {label} {open ? "▴" : "▾"}
+      </Button>
+      {open && (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
+          {list === null && <CircularProgress size={11} />}
+          {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
+          {(list || []).map((f) => (
+            <Box key={f.id} onClick={() => toggle(f.id)}
+              sx={{ px: 0.9, py: 0.2, borderRadius: 99, cursor: "pointer", fontSize: 11, userSelect: "none",
+                fontWeight: chosen.has(f.id) ? 700 : 500, bgcolor: chosen.has(f.id) ? "#eae4d8" : "#fff",
+                color: chosen.has(f.id) ? "#55697a" : DIM, border: `1px solid ${chosen.has(f.id) ? "#d8cfbe" : BORDER}` }}>
+              {f.name}{f.count ? <Box component="span" sx={{ color: FAINT, ml: 0.5 }}>{f.count}</Box> : null}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+/* ── WhatsApp pairing, on the card. The bridge serves its QR at /status and WhatsApp rotates it
+   every ~20 seconds, so this polls and redraws; a terminal QR is too big to scan and a phone
+   number is nothing to type into a chat. Paired = the box says who, and stops polling. ── */
+/* ── WhatsApp pairing: three steps that drive themselves. 1 Node on the machine (the only thing the
+   owner installs - the box says how and re-checks on its own); 2 the bridge, which the box starts the
+   moment Node is there (no button to find, no agent to wait on); 3 the QR, scanned from the phone.
+   A tester's agent-driven setup spun for five minutes on step 2; a person should never see that. ── */
+const WaPair = ({ conn, reload }) => {
+  const [st, setSt] = useState(null);
+  const kicked = useRef(false);
+  const startBridge = useCallback(async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/start`); } catch { /* status polling shows the failure */ } }, [conn.ConnectorId]);
+  useEffect(() => {
+    let alive = true, wasConnected = null;
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/status`);
+        if (!alive) return;
+        setSt(data);
+        if (data.connected && wasConnected === false) reload?.();     // just paired: the card's status line changes
+        wasConnected = !!data.connected;
+        // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair
+        if (data.bridge === false && data.node && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
+        setTimeout(tick, data.connected ? 30000 : data.bridge === false ? (data.node ? 3000 : 6000) : 4000);
+      } catch { if (alive) { setSt({ connected: false, bridge: false }); setTimeout(tick, 8000); } }
+    };
+    tick();
+    return () => { alive = false; };
+  }, [conn.ConnectorId, reload, startBridge]);
+  if (!st) return null;
+  const phase = st.manager?.phase, busy = ["installing", "starting"].includes(phase);
+  const stepNo = st.connected ? 4 : st.bridge === false ? (st.node ? 2 : 1) : 3;
+  const StepLine = ({ n, label, state }) => (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
+      <Box sx={{ width: 18, height: 18, borderRadius: "50%", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center",
+        bgcolor: state === "done" ? "#47654a" : state === "now" ? "#55697a" : "#e6e2dc", color: state === "todo" ? DIM : "#fff" }}>{state === "done" ? "✓" : n}</Box>
+      <Typography variant="body2" sx={{ fontSize: 13, fontWeight: state === "now" ? 700 : 500, color: state === "todo" ? DIM : INK }}>{label}</Typography>
+      {state === "now" && busy && <CircularProgress size={11} sx={{ color: DIM }} />}
+    </Box>
+  );
+  const stateOf = (n) => (n < stepNo ? "done" : n === stepNo ? "now" : "todo");
+  return (
+    <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", gap: 2, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <Box sx={{ flex: 1, minWidth: 240 }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+        {!st.connected && (
+          <Box sx={{ mb: 1 }}>
+            <StepLine n={1} label="Node 18+ on this machine" state={stateOf(1)} />
+            <StepLine n={2} label={phase === "installing" ? "Fetching the bridge (a minute or two, first time only)" : "The bridge is running"} state={stateOf(2)} />
+            <StepLine n={3} label="Scan the QR from your phone" state={stateOf(3)} />
+          </Box>
+        )}
+        {/* the bridge's own controls, whatever state it is in. A bridge that wedged, or one started before
+            the code on disk changed, is fixed HERE - the log's "start it: cd taskuary/whatsapp && node bridge.mjs"
+            sent people to a shell for a button's worth of work. The pairing survives a restart: it lives in
+            the auth folder, not the process. */}
+        <Box sx={{ display: "flex", gap: 1, mt: 0.75, mb: 0.75, flexWrap: "wrap", alignItems: "center" }}>
+          <Button size="small" variant="outlined" startIcon={<RestartAltIcon sx={{ fontSize: 15 }} />} disabled={busy}
+            title="Stop the running bridge (ours, or one started by hand - found by its port) and start it again from the code on disk. You stay paired."
+            onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}>
+            Restart bridge
+          </Button>
+          {st.bridge === false && st.node && !busy && phase !== "failed" && (
+            <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Start bridge</Button>
+          )}
+          <Typography variant="caption" sx={{ color: FAINT }}>
+            {st.connected ? "connected" : st.bridge === false ? "bridge not running" : "bridge up, not paired"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
+          </Typography>
+        </Box>
+        {st.connected ? (
+          <Box sx={{ mt: 0.5 }}>
+            <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
+          </Box>
+        ) : st.bridge === false && !st.node ? (
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.6, display: "block" }}>
+            Node is not installed here, and it is the one thing Taskuary cannot install for you. In a terminal:
+            <Box component="code" sx={{ ...mono, display: "block", my: 0.5, p: 0.75, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, fontSize: 12 }}>winget install OpenJS.NodeJS.LTS</Box>
+            (or download the LTS from nodejs.org and run the installer). This box re-checks every few seconds and moves on by itself once Node is there.
+          </Typography>
+        ) : st.bridge === false ? (
+          <Box>
+            <Typography variant="caption" sx={{ color: phase === "failed" ? "#a33" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
+              {phase === "installing" ? "Fetching the bridge's dependency (Baileys, not bundled on purpose). The QR appears here the moment the bridge is up."
+                : phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
+                : "Starting the bridge…"}
+            </Typography>
+            {phase === "failed" && (
+              <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Try again</Button>
+            )}
+          </Box>
+        ) : st.pairing_code ? (
+          <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}>
+            Enter this code on your phone — WhatsApp → Linked devices → Link a device → Link with phone number:
+            <Box component="span" sx={{ ...mono, fontSize: 22, fontWeight: 800, letterSpacing: 3, display: "block", mt: 0.5 }}>{st.pairing_code}</Box>
+          </Typography>
+        ) : (
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mt: 0.5 }}>
+            On your phone: <b>WhatsApp → Linked devices → Link a device</b>, and scan this. It refreshes by itself as WhatsApp rotates it;
+            this box turns green the moment the phone accepts. Nothing to type, no phone number to share.
+          </Typography>
+        )}
+      </Box>
+      {!st.connected && st.qr_svg && (
+        <Box component="img" src={st.qr_svg} alt="WhatsApp pairing QR" sx={{ width: 220, height: 220, borderRadius: 1, bgcolor: "#fff", border: `1px solid ${BORDER}` }} />
+      )}
+    </Box>
+  );
+};
+
+/* ── WhatsApp: the chats the bridge has seen, offered as sources. "Only this group" needs the
+   group's JID and there is no directory to browse - the JID appears the moment someone writes in
+   the chat. The catch-all covers direct chats; a group only comes in once its JID is added. ── */
+const WaChats = ({ conn, mine, reload }) => {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr(""); }
+    catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
+  }, [conn.ConnectorId]);
+  useEffect(() => { load(); }, [load]);
+  const have = new Set(mine.map((s) => s.Address));
+  const add = async (jid) => {
+    await api.post("/api/sources", { Channel: "whatsapp", Address: jid, ConnectorId: conn.ConnectorId, Active: true }); reload();
+  };
+  return (
+    <Box sx={{ mb: 1.5, maxWidth: 620 }}>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
+        Chats the bridge has seen since it started — <b>write something in the chat you want</b> (or have someone else), refresh,
+        and add it. Direct chats come in on their own; a <b>group</b> joins the funnel only when you add it here.
+        <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
+      </Typography>
+      {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
+      {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>nothing seen yet — send a message in a chat and refresh</Typography>}
+      {(rows || []).map((r) => (
+        <Box key={r.jid} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5, borderBottom: `1px solid ${BORDER}` }}>
+          <Chip size="small" label={r.group ? "group" : "chat"} sx={{ height: 18, fontSize: 10 }} />
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
+            <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
+          </Box>
+          {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ source</Typography>
+            : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
+/* ── Sign in with Microsoft: Graph for a regular user, no Azure portal (taskuary/msauth.py).
+   A code, microsoft.com/devicelogin, their own account; this box polls until they are done. ── */
+const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
+  const [flow, setFlow] = useState(null);      // {flow, user_code, verification_uri, interval}
+  const [state, setState] = useState("");      // "" | ok | error
+  const [detail, setDetail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [adminUrl, setAdminUrl] = useState("");   // the link IT clicks once; shown when Microsoft says "Need admin approval" or on request
+  const signedIn = cfg.auth === "user" && conn.HasSecret;
+  useEffect(() => {
+    if (!flow) return undefined;
+    let alive = true;
+    const wait = Math.max(2, flow.interval || 5) * 1000;
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/poll`, { flow: flow.flow });
+        if (!alive) return;
+        if (data.status === "pending") { setTimeout(tick, wait); return; }
+        setFlow(null);
+        if (data.status === "ok") {
+          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under Mailboxes below and the first sync is running; mail lands on the Timeline in a minute.`);
+          reload(); onSignedIn?.();
+        }
+        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); if (data.admin_consent_url) setAdminUrl(data.admin_consent_url); }
+      } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
+    };
+    const id = setTimeout(tick, wait);
+    return () => { alive = false; clearTimeout(id); };
+  }, [flow, conn.ConnectorId, reload]);
+  const start = async () => {
+    setBusy(true); setState(""); setDetail("");
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ms/signin`); setFlow(data); }
+    catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
+    setBusy(false);
+  };
+  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`); setState(""); setDetail(""); setAdminUrl(""); reload(); };
+  const copy = (s) => { try { navigator.clipboard?.writeText(s); } catch { /* it is on screen anyway */ } };
+  const adminLink = async () => {
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/ms/adminlink`); setAdminUrl(data.url); }
+    catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not build the approval link"); }
+  };
+  return (
+    <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
+      <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
+      <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
+        Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
+        work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.
+      </Typography>
+      {signedIn ? (
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
+          <Button size="small" variant="outlined" onClick={signout}>Sign out</Button>
+        </Box>
+      ) : flow ? (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+          <Typography variant="body2" sx={{ color: INK }}>
+            1. Open <a href={flow.verification_uri} target="_blank" rel="noreferrer">{String(flow.verification_uri).replace("https://", "")}</a> and enter this code:
+          </Typography>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <Typography sx={{ ...mono, fontSize: 26, fontWeight: 800, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
+              bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>{flow.user_code}</Typography>
+            <IconButton size="small" onClick={() => copy(flow.user_code)} title="copy the code"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
+            <Button size="small" variant="contained" disableElevation component="a" href={flow.verification_uri} target="_blank" rel="noreferrer"
+              endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}>Open the sign-in page</Button>
+          </Box>
+          <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75 }}>
+            <CircularProgress size={11} /> 2. Sign in with your Microsoft account and accept — this page finishes by itself.
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          <Button variant="contained" disableElevation disabled={busy} onClick={start}>
+            {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with Microsoft"}</Button>
+          {!adminUrl && <Button size="small" onClick={adminLink} sx={{ fontSize: 11.5, textTransform: "none", color: DIM }}>Does IT have to approve apps? Get the admin link</Button>}
+        </Box>
+      )}
+      {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
+        {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
+      {adminUrl && !signedIn && (
+        <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", display: "flex", flexDirection: "column", gap: 0.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: INK }}>Approval link for your Microsoft 365 admin</Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
+            Forward this to whoever runs your Microsoft 365. They sign in, click Accept once, and everyone in your organisation can
+            sign in above. It is a consent grant, not an app registration - nothing to build on their side. Then click Sign in with Microsoft again.
+          </Typography>
+          <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+            <Typography sx={{ ...mono, fontSize: 11, color: INK, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adminUrl}</Typography>
+            <IconButton size="small" onClick={() => copy(adminUrl)} title="copy the link"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
+            <IconButton size="small" component="a" href={adminUrl} target="_blank" rel="noreferrer" title="open it (if you are the admin)"><OpenInNewIcon sx={{ fontSize: 15 }} /></IconButton>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+};
 
 const ProcessingStep = ({ conn, reload, n }) => {
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
@@ -1381,7 +2308,7 @@ const ProcessingStep = ({ conn, reload, n }) => {
         </Popover>
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.75 }}>
-        How tasks from this connection reach the agents. Applies to every task it creates; the Timeline's funnel bar and the Board's Queued lane follow it.
+        How tasks from this connection reach the agents. Applies to every task it creates; the Timeline’s funnel bar and the Board’s Queued lane follow it.
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
         {MODES.map(([v, title, desc]) => (
@@ -1406,6 +2333,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
   const [roles, toggle] = useRoles(conn, reload);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [saved, setSaved] = useState("");
+  const [ask, setAsk] = useState(null);           // the public-repo question, asked in-app
   useEffect(() => { setCfg(parse(conn.ConfigJson)); }, [conn.ConfigJson]);
   const gh = conn.Type === "github";
   const on = roles.has("trigger") || roles.has("feed") || (gh && ghInboundExplicit(mine));
@@ -1435,7 +2363,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             <b>tasks</b> = through triage, <b>feed</b> = shown on the Timeline only, <b>off</b> = ignored.
             The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
             owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
-            <b>anyone</b> = every author. Everyone else's items still become tasks for you to promote.
+            <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.
             A picker set here pulls that repo whatever the switches above say; picking saves instantly.
           </Typography>
           {mine.filter((s) => s.Active).map((s) => {
@@ -1447,18 +2375,22 @@ const InboundStep = ({ conn, m, mine, reload }) => {
                 {["issues", "prs", "auto"].map((kind) => (
                   <Select key={kind} size="small" value={gc[kind] || (kind === "issues" ? "tasks" : "off")}
                     sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const v = e.target.value;
+                      const apply = async () => {
+                        await api.post("/api/sources", { SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...gc, [kind]: v }) });
+                        reload();
+                      };
                       // a public repo: anyone on the internet can open a PR, and with this on each one
-                      // may start an agent (the session cap still holds - 4 at once by default)
-                      if (kind === "auto" && v !== "off" && gc.private !== true
-                          && !window.confirm(`${s.Address} is ${gc.private === false ? "a PUBLIC repo" : "not known to be private"}.\n\n`
-                            + `With "${v}" on, ${v === "anyone" ? "any author's" : v === "contributors" ? "any past contributor's" : "any team member's"} `
-                            + `PR or issue can start a coding agent by itself - uncontrolled PRs mean uncontrolled agents, `
-                            + `limited only by the session cap. Turn it on anyway?`)) return;
-                      await api.post("/api/sources", { SourceId: s.SourceId,
-                        ConfigJson: JSON.stringify({ ...gc, [kind]: v }) });
-                      reload();
+                      // may start an agent (the session cap still holds - Settings → Agents at once, 4 by default)
+                      if (kind === "auto" && v !== "off" && gc.private !== true) {
+                        const who = v === "anyone" ? "any author's" : v === "contributors" ? "any past contributor's" : "any team member's";
+                        setAsk({ title: `${s.Address} is ${gc.private === false ? "a public repo" : "not known to be private"}`,
+                          text: `With "${v}" on, ${who} PR or issue can start a coding agent by itself. Uncontrolled PRs mean uncontrolled agents, limited only by the session cap (Settings → Agents at once).`,
+                          label: `Turn on "${v}" anyway`, onConfirm: apply });
+                        return;
+                      }
+                      apply();
                     }}>
                     {(kind === "auto" ? ["off", "team", "contributors", "anyone"] : ["tasks", "feed", "off"]).map((v) => (
                       <MenuItem key={v} value={v} sx={{ fontSize: 12 }}>
@@ -1472,6 +2404,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
         </Box>
       )}
       {/* processing: one by one, or ranked together - every inbound card, whether on or not */}
+      {ask && <Confirm open title={ask.title} text={ask.text} confirmLabel={ask.label} onConfirm={ask.onConfirm} onClose={() => setAsk(null)} />}
       <ProcessingStep conn={conn} reload={reload} n={gh ? "3" : "2"} />
       {/* the standing prompt, right where inbound is decided */}
       {prompts.length > 0 && (
@@ -1494,6 +2427,21 @@ const InboundStep = ({ conn, m, mine, reload }) => {
     </Box>
   );
 };
+
+/* What "Get AI to set it up" hands the coding agent. The Guide is written for a person; these
+   steps are written for the agent - and where a card has none, the agent works from the Guide
+   under the one standing rule the caption states. */
+const AgentTab = ({ steps }) => (
+  <Box>
+    <Typography variant="body2" sx={{ color: DIM, mb: 1, maxWidth: 720, mx: "auto" }}>
+      What <b>Get AI to set it up</b> hands your coding agent, on top of one standing rule: anything on this machine —
+      installs, starting processes, commands, config, the API — is the agent's own job; only your accounts, phone,
+      browser or admin console are yours to do. {steps?.length ? "These steps are written for the agent:" :
+        "This connector has no agent-specific steps yet, so the agent works from the Guide under that rule."}
+    </Typography>
+    {!!steps?.length && <Steps steps={steps} />}
+  </Box>
+);
 
 const Steps = ({ steps }) => (
   <Box sx={{ maxWidth: 720, mx: "auto" }}>

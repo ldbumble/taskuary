@@ -12,6 +12,7 @@ from loguru import logger
 
 from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message
+from .counsel import is_invite
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 MAIL_SELECT = 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments,isRead'
@@ -35,11 +36,18 @@ def graph_creds(store, c):
         o = store.get_connector_by_type('outlook', with_secret=True)
         ocfg = _cfg(o) if o else {}
         if o and (ocfg.get('client_id') or o.get('Secret')):
-            return {**ocfg, **{k: v for k, v in cfg.items() if v}}, sec or o.get('Secret'), True
-    return cfg, sec, False
+            # _cid = whose secret this is, so a rotated refresh token is saved on the right card
+            return {**ocfg, **{k: v for k, v in cfg.items() if v}, '_cid': o['ConnectorId']}, sec or o.get('Secret'), True
+    return {**cfg, '_cid': c.get('ConnectorId')}, sec, False
 
 
 def graph_token(cfg: dict, secret: str = None) -> str:
+    """An access token for Graph. Two roads: the card's owner signed in with their own account
+    (auth=user: the secret is a refresh token, msauth turns it into access tokens) or a tenant
+    app registration (client credentials, app-only). The callers cannot tell them apart."""
+    if (cfg or {}).get('auth') == 'user':
+        from . import msauth
+        return msauth.access_token(cfg, secret)
     tid = cfg.get('tenant_id') or os.getenv('AZURE_TENANT_ID')
     cid = cfg.get('client_id') or os.getenv('AZURE_CLIENT_ID')
     sec = secret or os.getenv('AZURE_CLIENT_SECRET')
@@ -59,6 +67,12 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     if not tok: raise RuntimeError('no PAT saved yet - paste one under Credentials')
     u = requests.get('https://api.github.com/user', headers=gh_headers(tok), timeout=20)
     u.raise_for_status()
+    # who the PAT is: kept on the card so About you can say it without another API call
+    login = u.json().get('login')
+    if login:
+        try: cfg0 = json.loads(c.get('ConfigJson') or '{}')
+        except ValueError: cfg0 = {}
+        if cfg0.get('login') != login: store.set_connector_config(c['ConnectorId'], {**cfg0, 'login': login})
     repos = list_accessible_repos(tok)
     have = {s['Address']: s for s in store.list_sources(active_only=False) if s['Channel'] == 'github'}
     added = 0
@@ -115,11 +129,17 @@ def test_connector(store, cid: int) -> dict:
     try:
         if c['Type'] in ('outlook', 'teams'):
             gcfg, gsec, borrowed = graph_creds(store, c)
+            if c['Type'] == 'teams' and gcfg.get('auth') == 'user':
+                # Graph's chat delta (getAllMessages) is app-only; a person's sign-in cannot read it
+                raise RuntimeError('Teams chat reading needs a tenant app registration (application permission '
+                                   'Chat.Read.All) - the Outlook sign-in covers mail, sending and calendar only. '
+                                   'Enter tenant_id + client_id + client secret on this card.')
             own = bool(cfg.get('client_id') and c.get('Secret'))
             tok = graph_token(gcfg, gsec)
-            detail = 'Graph token OK' + ('' if own else
-                                         " (using the Outlook connector's credentials)" if borrowed
-                                         else ' (using server env credentials)')
+            detail = (f"signed in as {gcfg.get('name') or gcfg.get('account')} ({gcfg.get('account')})" if gcfg.get('auth') == 'user'
+                      else 'Graph token OK' + ('' if own else
+                                               " (using the Outlook connector's credentials)" if borrowed
+                                               else ' (using server env credentials)'))
             if c['Type'] == 'outlook':
                 # the calendar rides the same app: one more permission, and the card says whether it is there
                 try:
@@ -258,13 +278,34 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama'):
             from .llm import test_ai
             detail = test_ai(store, cid)
+        elif c['Type'] == 'sharepoint':
+            from . import sharepoint
+            detail = sharepoint.test(store, c)
+        elif c['Type'] == 'google_sheets':
+            from . import sheets
+            detail = sheets.test(store, c)
+        elif c['Type'] == 'knowledge':
+            from . import knowledge
+            detail = knowledge.test(store, c)
+        elif c['Type'] in ('gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper'):
+            from . import voice
+            detail = voice.test(store, store.get_connector(cid, with_secret=True))   # a second of silence through the real endpoint
         else:
             raise RuntimeError(f"no test for connector type '{c['Type']}'")
         store.touch_connector(cid)
-        return {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail}
+        out = {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail}
+        if c['Type'] == 'imessage':
+            # the read succeeded, but the send card still needs to name the host macOS will list
+            from .imessage import setup_info
+            out['setup'] = setup_info('ready', None)
+        return out
     except Exception as e:
         store.touch_connector(cid, str(e))
-        return {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': str(e)[:500]}
+        out = {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': str(e)[:500]}
+        # a failure the owner fixes in the OS (macOS privacy consent) carries the structured
+        # half too - which pane, which host - so the card can offer the button, not a paragraph
+        if getattr(e, 'setup', None): out['setup'] = e.setup
+        return out
 
 
 _DROP = re.compile(r'(?is)<(script|style|head)[^>]*>.*?</\1>')
@@ -352,6 +393,29 @@ def _local(iso):
     except ValueError: return iso
 
 
+def mail_folders(tok, upn) -> list:
+    """The mailbox's folders, for the card's chooser: id + name, the well-known ones first. Only the
+    Inbox was ever read; a rule that files vendor mail into 'Vendors' made that mail invisible here."""
+    r = requests.get(f'{GRAPH}/users/{upn}/mailFolders', headers={'Authorization': f'Bearer {tok}'}, timeout=30,
+                     params={'$top': 100, '$select': 'id,displayName,totalItemCount,wellKnownName'})
+    r.raise_for_status()
+    skip = {'sentitems', 'deleteditems', 'drafts', 'junkemail', 'outbox', 'conversationhistory', 'syncissues', 'recoverableitemsdeletions'}
+    out = []
+    for f in r.json().get('value', []):
+        wk = (f.get('wellKnownName') or '').lower()
+        if wk in skip: continue
+        out.append({'id': 'inbox' if wk == 'inbox' else f['id'], 'name': f.get('displayName') or '', 'count': f.get('totalItemCount') or 0, 'well_known': wk})
+    out.sort(key=lambda f: (f['id'] != 'inbox', f['name'].lower()))
+    return out
+
+
+def source_folders(s: dict) -> list:
+    """Which folders a mailbox source reads - its ConfigJson `folders`, default the Inbox alone."""
+    try: fs = json.loads(s.get('ConfigJson') or '{}').get('folders') or []
+    except ValueError: fs = []
+    return [f for f in fs if f] or ['inbox']
+
+
 def _mail_msgs(tok, upn, since, folder='inbox'):
     # folder-scoped - a bare /messages spans every folder including Sent Items, which made
     # the owner's own replies come back through the funnel as inbound work
@@ -363,22 +427,24 @@ def _mail_msgs(tok, upn, since, folder='inbox'):
     return r.json().get('value', [])
 
 
-def ingest_own_message(store, msg: dict, why: str) -> int:
+def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = False) -> int:
     """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row
     and never becomes work: when the conversation already has a task it rides along INSIDE
     the chain (a 'context' message + a history entry, so the panel shows it was answered).
-    No matching chain -> nothing stored at all."""
+    Chats may opt to keep unmatched lines too: the assistant needs the owner's half of a
+    conversation even when no task was made from it."""
     if store.message_exists(msg['external_id']): return 0
     conv = msg.get('conversation_id')
     tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
-    if not tid: return 0
+    if not tid and not keep_unmatched: return 0
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
                              'SourceLink': msg.get('source_link'), 'Status': 'context'})
-    store.add_route(mid, tid, 'attach', None, why, [], 'router')
-    store.add_comment(tid, 'you', 'human', f"You replied: {(msg.get('body') or '')[:300]}")
+    if tid:
+        store.add_route(mid, tid, 'attach', None, why, [], 'router')
+        store.add_comment(tid, 'you', 'human', f"You replied: {(msg.get('body') or '')[:300]}")
     return 1
 
 
@@ -533,7 +599,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
                   'source_name': upn, 'images': images_for_triage(store, atts)}
         if user['id'] == me:                       # your own chat lines are context, never work
             n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
-                                    'your message in this chat - kept for context')
+                                    'your message in this chat - kept for context', keep_unmatched=True)
             continue
         out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'
@@ -704,7 +770,7 @@ def _since(s, backfill_days: int = 0):
     return min(last, datetime.now() - timedelta(days=backfill_days)) if backfill_days else last
 
 
-def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
+def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> int:
     """Ingest new items for every connection the owner marked as a TRIGGER, through the
     same triage funnel (incl. the configured AI, if any). A connection without the trigger
     role is still usable by agents and reports - it just never creates work on its own.
@@ -718,6 +784,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
     n = 0
     for c in store.list_connectors():
         if not c['Active'] or c['Type'] not in CH2SRC: continue
+        if only is not None and c['Type'] not in only: continue     # a quick poll of the chatty ones
         roles = roles_of(c)
         # trigger = becomes work; feed = shows on the timeline and stops there; neither = never
         # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two
@@ -777,7 +844,10 @@ def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
                     # visible on the timeline, never triaged into work
                     for m in reversed(_mail_msgs(tok, s['Address'], since_iso, folder='sentitems')):
                         n += ingest_outbound_mail(store, s['Address'], m)
-                    for m in reversed(_mail_msgs(tok, s['Address'], since_iso)):
+                    # every folder the source asks for (the Inbox alone unless the card says otherwise), oldest first
+                    inbound = [m for f in source_folders(s) for m in _mail_msgs(tok, s['Address'], since_iso, folder=f)]
+                    inbound.sort(key=lambda m: m.get('receivedDateTime') or '')
+                    for m in inbound:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
                         if (frm.get('address') or '').lower() == s['Address'].lower():
                             continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
@@ -794,7 +864,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
                             'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address'],
-                            'images': images_for_triage(store, atts)}, llm=llm)
+                            'images': images_for_triage(store, atts), 'invite': is_invite(m)}, llm=llm)
                         n += out['status'] != 'duplicate'
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
@@ -824,7 +894,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None) -> int:
                     if mode not in ('feed', 'tasks'): continue
                     from .reports import aws_connection, azure_connection
                     mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
-                    conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store)
+                    conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store, c['ConnectorId'])
                     n += mod.poll_source(store, conn_cfg, s, since, llm, mode == 'feed')
                 elif c['Type'] == 'discord':
                     # per SOURCE, like slack: each watched channel id is its own source

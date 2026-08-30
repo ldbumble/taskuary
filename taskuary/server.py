@@ -1,7 +1,8 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, re, threading, time
+import asyncio, json, re, secrets, threading, time
+import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +22,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
-from . import learn, learnedgraph, outbound, rank, responder, waitroom
+from . import aisetup, assistant, learn, learnedgraph, outbound, rank, responder, waitroom
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -39,6 +40,8 @@ async def _lifespan(_app):
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     threading.Thread(target=poll_forever, daemon=True).start()
     waitroom.watch(store)          # notes queued for a working agent land when it stops
+    from . import msauth
+    msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     yield
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
@@ -106,6 +109,10 @@ class ConnectorBody(BaseModel):
     ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
     Roles: str | None = None                       # csv of trigger,report,tool - see store.ROLES
     Scope: str | None = None                       # read | write | admin - see scopes.SCOPES
+class AiSetupBody(BaseModel):
+    guide: list[str] = []; fields: list = []; secret_label: str | None = None   # the card's Guide + form, as the UI has them
+    agent_steps: list[str] = []                                                  # the card's Agent tab: steps written FOR the agent
+    agent: str | None = None; model: str | None = None
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -173,8 +180,10 @@ def tasks(status: str = None, active: bool = False):
     live CLI on it reads as 'queued' while the agent sits there asking a question."""
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
+    agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
     return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId']),
-                      'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0)}
+                      'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
+                      'HadAgent': t['TaskId'] in agented}
                      for t in store.list_tasks(status, active_only=active)]}
 
 @app.post('/api/tasks')
@@ -312,6 +321,36 @@ def set_task_repo(task_id: int, body: RepoBody):
 
 class NotATaskBody(BaseModel): learn: bool = True
 
+def _teach_not_a_task(m: dict, background=None):
+    """The NOT A TASK verdict, written the SAME way whichever door it came through - the task
+    list's "Not a task" and the timeline's "Not a task - just conversation" are one judgement
+    and used to teach two different things (owner, 2026-08-30).
+
+    It writes a memory note and NOTHING else. It used to also save a sender `ignore` POLICY,
+    which quietly muted that address for good - a second, wider verdict the owner never asked
+    for, hidden inside a button whose label says "not a task". Silencing a sender has its own
+    button and always did ("Skip this sender"), where it is undoable and says what it does.
+
+    Keyed on the topic where there is one and on the sender otherwise. With neither - a Teams
+    chat has no address, and a two-word subject has no topic - there is nothing to key a note
+    to, and a note keyed to nothing is a verdict against everyone, so none is written. The
+    thread is still ruled either way: that is the ignore route the callers add."""
+    em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
+    if not (em or topic): return None
+    mid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
+                            'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                            'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or '')[:90]}\""
+                                    + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
+                                    + ' - NOT A TASK: the owner filed it, no task, no reply'})
+    learn.note_verdicts(store)
+    # the sender note is durable already; the GENERAL lesson (what kinds of mail are not tasks
+    # for this owner) is LEARNED.md's to distill
+    if background is not None:
+        background.add_task(learn.learn_from, store,
+                            f"mem{mid}: owner said NOT A TASK: \"{(m.get('Subject') or '')[:80]}\""
+                            + (f' from {em}' if em else '') + ' should never have opened a task')
+    return mid
+
 @app.post('/api/tasks/{task_id}/not-coding')
 def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
     """Owner verdict: real work, but not for the coding agent. The default is the other way
@@ -346,35 +385,17 @@ def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTa
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
-    """Owner verdict: never needed to be a task. Teaches (sender ignore policy + memory
-    note), then deletes the task - its messages stay in the feed as 'filed'.
+    """Owner verdict: never needed to be a task. Writes the verdict to memory (_teach_not_a_task
+    - a note, never a policy: muting a sender is "Skip this sender", not a side effect of this),
+    then deletes the task - its messages stay in the feed as 'filed'.
 
-    learn=false is the lighter verdict: THIS one is just chatter (someone answered "yes"),
-    with nothing to conclude about the sender - delete the task, teach nothing, keep their
-    future messages flowing exactly as before."""
+    learn=false is the lighter verdict: THIS one is just chatter (someone answered "yes"), with
+    nothing to conclude - delete the task and teach nothing."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     msgs, learned = store.list_messages(task_id), None
-    em = (msgs[0].get('FromEmail') or '').lower() if msgs else ''
-    if em and (body is None or body.learn):
-        store.save_policy({'Name': f'not-a-task: {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'ignore',
-                           'Reason': 'owner said not a task', 'SortOrder': 50, 'Active': 1}, ACTOR)
-        # the same generalisation as "Not our task": this verdict is about a kind of work, and
-        # keyed to one sender it stops applying the moment a colleague forwards the same thing.
-        # (The sender ignore POLICY above stays per-sender - that one really is about them.)
-        topic = _topic_key(msgs[0])
-        mid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
-                                'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                                'Note': f"{str(msgs[0].get('SentAt') or '')[:10]}: \"{(msgs[0].get('Subject') or '')[:90]}\" from {em}"
-                                        + (f' - the topic "{topic}"' if topic else '')
-                                        + ' - NOT A TASK: the owner filed it, no task, no reply'})
-        learned = {'policy': em, 'memory_id': mid}
-        learn.note_verdicts(store)
-        # the sender note is durable already; the GENERAL lesson (what kinds of mail are not
-        # tasks for this owner) is LEARNED.md's to distill. learn=false teaches nothing, as asked.
-        if background is not None:
-            background.add_task(learn.learn_from, store,
-                                f"mem{mid}: owner said NOT A TASK: \"{(msgs[0].get('Subject') or '')[:80]}\" from {em} "
-                                'should never have opened a task')
+    if msgs and (body is None or body.learn):
+        mid = _teach_not_a_task(msgs[0], background)
+        if mid: learned = {'memory_id': mid}
     # whatever was (or was not) learned about the sender, THIS conversation has been ruled on:
     # the owner's ignore route is what ingest.veto reads before the next message on it can open
     # a task (store.owner_verdict_on_thread) - the six-tasks-from-one-chat failure
@@ -653,25 +674,28 @@ def _also_covered(scope: str, key: str, dropped_tid) -> list:
     return out[:20]
 
 @app.post('/api/messages/{mid}/file')
-def file_message(mid: int):
-    """"Nothing to do here" - the harmless exit, and the one that was MISSING. A message
-    triage filed with no task offered only "Not our task", which writes a durable verdict
-    against the sender (and against EVERY sender when the channel has no address to key on,
-    like Teams) - so getting one chat off the timeline could quietly teach the funnel to stop
-    listening to a colleague. This teaches nothing about the SENDER or the topic: the item
-    stops being work, its task goes if it had one, and their next message on another thread
-    arrives exactly as before. The rest of THIS conversation is filed with it, though - the
-    owner ignore route below is what ingest.veto reads (store.owner_verdict_on_thread), because
-    "not a task" said on a thread and then a task from its next reply is the funnel arguing."""
+def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTasks = None):
+    """"Not a task - just conversation" / "Nothing to do here" - the timeline's door onto the
+    SAME verdict the task list's "Not a task" gives, and now teaching the same thing through it
+    (owner, 2026-08-30). It used to teach nothing at all, which was the right answer to the wrong
+    problem: what made the old exit dangerous was "Not our task" writing a verdict against the
+    SENDER - and against every sender at once on a channel with no address, like Teams. A
+    NOT A TASK note keyed to the topic is not that, and _teach_not_a_task writes nothing when
+    there is nothing to key it to. No sender is ever muted here; that is "Skip this sender".
+
+    Either way the rest of THIS conversation is filed with it - the owner ignore route below is
+    what ingest.veto reads (store.owner_verdict_on_thread), because "not a task" said on a thread
+    and then a task from its next reply is the funnel arguing with itself."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     tid = m.get('TaskId')
     if tid and store.get_task(tid):
         store.audit('task', tid, 'filed_not_work', ACTOR, detail={'message_id': mid})
         _drop_task(tid)                              # its messages revert to 'filed'
+    learned = _teach_not_a_task(m, background) if (body is None or body.learn) else None
     store.set_message_status(mid, 'ignored')
-    store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], ACTOR)
-    return {'ok': True, 'taskDeleted': bool(tid)}
+    store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner', [], ACTOR)
+    return {'ok': True, 'taskDeleted': bool(tid), 'memoryId': learned}
 
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
@@ -714,7 +738,32 @@ def _learn_promotion(m: dict, background):
                             f"{m.get('FromEmail') or m.get('SourceName') or '?'} as fyi, but the owner made it a task - "
                             'triage under-reached')
 
-class MineBody(BaseModel): kind: str = 'general'
+# ── the assistant on the Timeline (assistant.py): its post and its buttons ───────────────────
+@app.get('/api/assistant/ideas')
+def assistant_ideas(status: str = None, mid: int = None):
+    """What the assistant has said, with what became of each line - by state, or the lines of one post."""
+    return {'data': [assistant._public(i) | {'firstSeen': i.get('FirstSeen'), 'lastSaid': i.get('LastSaid'), 'messageId': i.get('MessageId')}
+                     for i in store.list_ideas(status or None, mid)]}
+
+class IdeaBody(BaseModel): days: int = 1
+
+@app.post('/api/assistant/ideas/{iid}/{verb}')
+def assistant_act(iid: int, verb: str, body: IdeaBody = None, background: BackgroundTasks = None):
+    """One button on one line: followup (the chase, drafted into Review), task (the agent starts),
+    dismiss (teaches LEARNED.md), snooze (a day, or `days`), done (you handled it)."""
+    try: return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1),
+                              learn_async=background.add_task if background is not None else None)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.post('/api/assistant/talk/{iid}')
+def assistant_talk(iid: int, body: TextBody):
+    """Talk back to one suggestion: corrections and questions get an answer, not a verdict button."""
+    try: return assistant.talk(store, iid, body.body, ACTOR, _llm())
+    except ValueError as e: raise HTTPException(422, str(e))
+
+class MineBody(BaseModel):
+    kind: str = 'general'
+    title: str | None = None        # the assistant's suggested title, accepted as-is from the panel
 
 @app.post('/api/messages/{mid}/mine')
 def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = None):
@@ -728,6 +777,7 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     _learn_promotion(m, background)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'general', ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
+    if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
     return {'taskId': tid, 'ref': task_ref(tid)}
 
@@ -800,7 +850,8 @@ def live_runs(lines: int = 3):
                         'waiting': (w := t['waiting'] if t.get('waiting') is not None else t['idle'] >= hub_term.IDLE_WAITING), 'phase': t.get('phase'),
                         'asking': bool(w) and waitroom.looks_like_question(t.get('tail') or []),
                         'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
-                        'files': t.get('files') or [], 'tail': t.get('tail') or []})
+                        'files': t.get('files') or [], 'tail': t.get('tail') or [],
+                        'cli': t.get('cli'), 'work': t.get('work')})     # the CLI it runs; said and did (witness.py) - the card's pane
     return {'data': out}
 
 @app.get('/api/runs/{run_id}')
@@ -835,6 +886,43 @@ def task_proof(tid: int):
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     from . import proof
     return proof.gather(store, tid)
+
+@app.get('/api/tasks/{tid}/work')
+def task_work(tid: int, diff: bool = True):
+    """Said and did, for the task page: the agent's own list and tool in hand (witness), the files
+    it wrote with git's +/- per file (proof.review), and where the task came from - the two
+    halves side by side so a disagreement is seen BEFORE the review, not after."""
+    t = store.get_task(tid)
+    if not t: raise HTTPException(404, 'task not found')
+    from . import proof
+    sess = hub_term.session_for(tid)
+    work = sess.witness.snapshot(sess.files(), sess.cwd, (sess.tail(1) or [''])[-1]) if sess else None
+    rev = {}
+    if diff:
+        try: rev = proof.review(store, tid) or {}
+        except Exception as e: logger.debug(f'work review for {tid}: {e}')
+    by_path = {f.get('path'): f for f in (rev.get('files') or [])}
+    files = [{**f, 'added': by_path.get(f['path'], {}).get('added'), 'removed': by_path.get(f['path'], {}).get('removed')} for f in (work or {}).get('files', [])]
+    for p, f in by_path.items():                        # git saw it, the witness did not: still DID
+        if p not in {x['path'] for x in files}: files.append({'path': p, 'n': 0, 'last': None, 'stray': False, 'late': False, 'added': f.get('added'), 'removed': f.get('removed')})
+    d = store.task_detail(tid); m0 = (d.get('messages') or [None])[0] or {}
+    approved = next((r for r in d.get('reviews') or [] if r.get('Status') in ('approved', 'sent')), None)
+    prov = {'from': ' · '.join(x for x in (m0.get('Channel'), m0.get('FromName') or m0.get('FromEmail')) if x) or t.get('Source') or '',
+            'kind': t.get('Kind') or '', 'by': (sess.agent if sess else '') or t.get('RunAgent') or '',
+            'approved': (approved or {}).get('UpdatedAt') or (approved or {}).get('CreatedAt'), 'status': t.get('Status')}
+    return {'work': work, 'files': files, 'prov': prov, 'diffstat': {'added': rev.get('added'), 'removed': rev.get('removed')},
+            'session': {'sid': sess.sid, 'alive': sess.alive, 'agent': sess.agent, 'cli': hub_term.cli_of(sess.argv), 'started': sess.started, 'cwd': sess.cwd} if sess else None}
+
+@app.post('/api/hooks/claude')
+async def claude_hook(request: Request):
+    """Claude Code's hook fired in a checkout a session of ours works in (hooks.py wires it): the
+    event's JSON comes in on the body. Always 200 and quiet - a hook must never trouble the agent."""
+    from . import hooks
+    try: payload = json.loads((await request.body()) or b'{}')
+    except ValueError: return {'bound': False}
+    try: return hooks.receive(payload if isinstance(payload, dict) else {})
+    except Exception as e:
+        logger.debug(f'claude hook ignored: {e}'); return {'bound': False}
 
 @app.get('/api/tasks/{tid}/diff')
 def task_diff(tid: int, scope: str = 'task'):
@@ -877,6 +965,13 @@ def answer_to_agent(tid: int, body: dict):
     if not terminal.say_to_task(store, tid, m, ACTOR):
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
     return {'ok': True}
+
+@app.get('/api/calendar/today')
+def calendar_today():
+    """Today's meetings with who is in them and what they are about - the digest panel's strip."""
+    from . import calendar as cal
+    try: return cal.today(store)
+    except Exception as e: return {'date': None, 'now': None, 'events': [], 'tz': None, 'errors': [str(e)[:200]]}
 
 @app.get('/api/calendar/upcoming')
 def calendar_upcoming(hours: int = 72, force: bool = False):
@@ -927,6 +1022,43 @@ def waitroom_bulk(tid: int, body: dict):
     (Settings -> Coder agent) each lands as its own turn when the agent stops."""
     try: return waitroom.add_many(store, tid, str((body or {}).get('text') or ''), ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
+
+_IMG_EXT = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp'}
+IMG_MAX = 12 * 1024 * 1024
+
+@app.post('/api/tasks/{tid}/waitroom/image')
+async def waitroom_image(tid: int, request: Request):
+    """A screenshot pasted into the Tell-the-agent box, posted as the raw body (no multipart
+    dependency, like /api/voice/transcribe). The pty carries text only, so the image goes to
+    disk under ~/.taskuary/attachments/waitroom/<task>/ and the NOTE names the file - a coding
+    CLI reads images from a path (Claude Code's Read does), which is how it gets to see it."""
+    return await _save_prompt_image(tid, request)
+
+
+async def _save_prompt_image(tid: int, request: Request):
+    """Store an image that will be named in a CLI prompt, from either prompt surface."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    mime = (request.headers.get('content-type') or '').split(';')[0].strip().lower()
+    ext = _IMG_EXT.get(mime)
+    if not ext: raise HTTPException(415, 'paste a PNG, JPEG, GIF or WebP image')
+    data = await request.body()
+    if not data: raise HTTPException(422, 'no image in the request')
+    if len(data) > IMG_MAX: raise HTTPException(413, 'image over 12 MB - crop it')
+    d = config.home() / 'attachments' / 'waitroom' / str(tid)
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}.{ext}'
+    p.write_bytes(data)
+    store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
+    return {'path': str(p), 'size': len(data)}
+
+
+@app.post('/api/terminals/{sid}/image')
+async def terminal_image(sid: str, request: Request):
+    """Paste a screenshot into xterm's prompt: save it and return the local path to type."""
+    t = hub_term.get(sid)
+    if not t: raise HTTPException(404, 'terminal not found')
+    if not t.task_id: raise HTTPException(422, 'this terminal is not attached to a task')
+    return await _save_prompt_image(t.task_id, request)
 
 @app.delete('/api/tasks/{tid}/waitroom/{wid}')
 def waitroom_drop(tid: int, wid: int):
@@ -1034,9 +1166,34 @@ def run_source_now(sid: int):
     store.touch_source(sid)
     return out
 
+@app.get('/api/reports/last-runs')
+def report_last_runs():
+    """What each report's last run did - when, how long, what it read, what came out (reports.last_runs)."""
+    from .reports import last_runs
+    return {'data': last_runs(store)}
+
+@app.get('/api/reports/{sid}/runs')
+def report_runs(sid: int, limit: int = 60):
+    """A report's run history, newest first, without the inputs (store.report_runs) - the Reports tab's
+    History; one run whole, inputs and all, is /api/reports/runs/{rid}."""
+    if not store.get_source(sid): raise HTTPException(404, 'source not found')
+    return {'data': store.report_runs(sid, min(max(1, limit), 200))}
+
+@app.get('/api/reports/runs/{rid}')
+def report_run(rid: int):
+    r = store.get_report_run(rid)
+    if not r: raise HTTPException(404, 'run not found')
+    return r
+
 @app.get('/api/report-types')
 def report_types():
     return {'data': [{'type': t, 'status': 'planned' if t in PLANNED else 'builtin'} for t in REGISTRY]}
+
+@app.get('/api/problems')
+def problems_now():
+    """What is failing right now, for the bell in the top bar (problems.py): each with where to fix it."""
+    from . import problems
+    return {'data': problems.collect(store)}
 
 @app.get('/api/connectors')
 def connectors():
@@ -1063,7 +1220,7 @@ def brains():
     from .llm import AI_TYPES
     # no steering: auto is one option among equals, and which brain triages is the owner's call
     out = [{'value': '', 'label': 'auto — first active AI connector', 'kind': 'auto', 'ready': True}]
-    out += [{'value': f"connector:{c['Type']}", 'label': c['Name'], 'kind': 'api',
+    out += [{'value': f"connector:{c['ConnectorId']}", 'label': c['Name'], 'kind': 'api',
              'ready': bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))}   # local models carry no key
             for c in store.list_connectors() if c['Type'] in AI_TYPES]
     # named by WHAT RUNS, leading with the CLI ('claude · coder'): the profile name is the
@@ -1074,19 +1231,30 @@ def brains():
                    'openai': ['gpt-4o-mini'],
                    'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct']}
     for o in out:
-        if o['kind'] == 'api': o['models'] = CONN_MODELS.get(o['value'][10:], [])
+        if o['kind'] == 'api':
+            c = store.get_connector(int(o['value'][10:]))
+            o['models'] = CONN_MODELS.get((c or {}).get('Type'), [])
     def _cli_of(a):
         prof = cfg.get('agents', {}).get(a['Name']) or json.loads(a.get('Config') or '{}')
-        return re.sub(r'\.(cmd|exe|bat|ps1)$', '', Path(str(prof.get('cmd') or a['Name'])).name.lower())
+        return cli_base(prof.get('cmd') or a['Name'])
     out += [{'value': f"cli:{a['Name']}",
              'label': (_cli_of(a) + (f" · {a['Name']}" if _cli_of(a) != a['Name'] else '')) + ' (your CLI)',
              'kind': 'cli', 'ready': True, 'models': CLI_MODELS.get(_cli_of(a), [])}
             for a in store.list_agents()]
-    return {'data': out, 'current': store.get_settings().get('triage_ai') or ''}
+    current = store.get_settings().get('triage_ai') or ''
+    # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but
+    # point the picker at the concrete instance it currently resolves to.
+    if current.startswith('connector:') and not current[10:].isdigit():
+        old = store.get_connector_by_type(current[10:])
+        if old: current = f"connector:{old['ConnectorId']}"
+    return {'data': out, 'current': current}
 
 @app.post('/api/connectors')
 def save_connector(body: ConnectorBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
+    if fields.get('Name') is not None:
+        fields['Name'] = fields['Name'].strip()
+        if not fields['Name']: raise HTTPException(422, 'connector name cannot be blank')
     if fields.get('Roles') is not None:
         bad = {r for r in fields['Roles'].split(',') if r} - set(store_mod.ROLES)
         if bad: raise HTTPException(422, f"unknown role(s): {', '.join(sorted(bad))}")
@@ -1096,6 +1264,17 @@ def save_connector(body: ConnectorBody):
             raise HTTPException(422, f"unknown authority: {fields['Scope']} - one of {', '.join(scopes.SCOPES)}")
     if not fields.get('ConnectorId') and not (fields.get('Type') and fields.get('Name')):
         raise HTTPException(422, 'new connectors need Type and Name')
+    if not fields.get('ConnectorId'):
+        # New instances start with the normal role for their type, but never inherit credentials,
+        # cursors, sources or test state from the card they were added beside.
+        fields.setdefault('Roles', store_mod.DEFAULT_ROLES.get(fields['Type'], ''))
+    current = store.get_connector(fields['ConnectorId']) if fields.get('ConnectorId') else None
+    typ = fields.get('Type') or (current or {}).get('Type')
+    name = fields.get('Name') or (current or {}).get('Name')
+    if typ and name and any(c['Name'].casefold() == name.casefold()
+                            and c['ConnectorId'] != fields.get('ConnectorId')
+                            for c in store.connectors_by_type(typ)):
+        raise HTTPException(409, f'a {typ} connector named {name!r} already exists')
     cid = store.save_connector(fields, ACTOR)
     safe = {k: v for k, v in fields.items() if k != 'Secret'} | ({'secret': 'updated'} if 'Secret' in fields else {})
     store.audit('connector', cid, 'edit' if body.ConnectorId else 'create', ACTOR, detail=safe)
@@ -1132,6 +1311,215 @@ def connector_test(cid: int):
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     return out
 
+# ── Voice (taskuary/voice.py): speech to text for the funnel and for the prompt box ──
+@app.get('/api/voice/status')
+def voice_status():
+    from . import voice
+    return voice.ready(store)
+
+@app.get('/api/voice/vocabulary')
+def voice_vocabulary():
+    from . import voice
+    return {'terms': voice.vocabulary(store), 'limit': voice.VOCAB_MAX}
+
+@app.put('/api/voice/vocabulary')
+def voice_vocabulary_save(body: dict):
+    from . import voice
+    try: terms = voice.save_vocabulary(store, body.get('terms'), ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'voice_vocabulary', ACTOR, detail={'count': len(terms)})
+    return {'terms': terms, 'limit': voice.VOCAB_MAX}
+
+@app.post('/api/voice/transcribe')
+async def voice_transcribe(request: Request):
+    """A clip from the browser's microphone, posted as the raw body (no multipart dependency):
+    the text comes back and goes wherever the prompt box goes."""
+    from . import voice
+    data = await request.body()
+    if not data: raise HTTPException(422, 'no audio in the request')
+    mime = (request.headers.get('content-type') or 'audio/webm').split(';')[0].strip()
+    try: return voice.transcribe(store, data, mime, f'clip.{voice.ext_for(mime)}')
+    except RuntimeError as e: raise HTTPException(409, str(e))
+    except requests.RequestException as e: raise HTTPException(502, f'could not reach the transcription service: {str(e)[:160]}')
+
+@app.post('/api/messages/{mid}/transcribe')
+def message_transcribe(mid: int):
+    """A voice note that landed untranscribed (no connector at the time): the audio is attached,
+    so it is transcribed now and the body replaced."""
+    from . import voice
+    try: out = voice.transcribe_message(store, mid)
+    except RuntimeError as e: raise HTTPException(409, str(e))
+    store.audit('message', mid, 'transcribed', ACTOR, detail={'provider': out['provider']})
+    return out
+
+@app.get('/api/connectors/{cid}/mail/folders')
+def mail_folder_list(cid: int, mailbox: str):
+    """A mailbox's folders, for the Mailboxes step: which ones this source reads (Inbox by default)."""
+    from .channels import graph_token, mail_folders
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'folders are an Outlook card thing')
+    try:
+        tok = graph_token({**json.loads(c.get('ConfigJson') or '{}'), '_cid': cid}, c.get('Secret'))
+        return {'data': mail_folders(tok, mailbox)}
+    except requests.HTTPError as e: raise HTTPException(502, f'Graph refused the folder list: {str(e)[:160]}')
+    except RuntimeError as e: raise HTTPException(409, str(e))
+
+@app.get('/api/connectors/{cid}/wa/status')
+def wa_status(cid: int):
+    """Paired or not - the pairing QR as an SVG for the card to draw (messengers.wa_status), and
+    what Taskuary's own bridge manager is doing (installing, starting, running, failed)."""
+    from .messengers import wa_status as _status
+    from . import wabridge
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    # node: the one thing the card cannot install for the owner - step 1 of the pairing box turns on it
+    try: return {**_status(c), 'bridge': True, 'node': True, 'manager': wabridge.state()}
+    except RuntimeError as e: return {'connected': False, 'bridge': False, 'node': bool(wabridge.node()), 'detail': str(e), 'manager': wabridge.state()}   # bridge down is a state, not a 500
+
+@app.post('/api/connectors/{cid}/wa/bridge/start')
+def wa_bridge_start(cid: int, force_install: bool = False):
+    """Install the bridge's dependency if needed and start it detached - the card's button and the
+    setup agent's verb, instead of a shell command that never returns (wabridge.py)."""
+    from . import wabridge
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    store.audit('connector', cid, 'wa_bridge_start', ACTOR)
+    return wabridge.start(force_install)
+
+@app.post('/api/connectors/{cid}/wa/bridge/stop')
+def wa_bridge_stop(cid: int):
+    from . import wabridge
+    return wabridge.stop()
+
+@app.post('/api/connectors/{cid}/wa/bridge/restart')
+def wa_bridge_restart(cid: int):
+    """Stop the running bridge (ours or one started by hand - found by its port) and start the one on
+    disk: how a paired bridge picks up newer bridge code without the owner touching a shell."""
+    from . import wabridge
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    store.audit('connector', cid, 'wa_bridge_restart', ACTOR)
+    return wabridge.restart()
+
+@app.get('/api/connectors/{cid}/wa/chats')
+def wa_chats(cid: int):
+    """The chats the WhatsApp bridge has seen - to pick 'only these' as sources (messengers.wa_chats)."""
+    from .messengers import wa_chats as _chats
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    try: return {'data': _chats(c)}
+    except RuntimeError as e: raise HTTPException(409, str(e))
+
+# ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
+@app.post('/api/connectors/{cid}/ai-setup')
+def connector_ai_setup(cid: int, body: AiSetupBody):
+    c = store.get_connector(cid)
+    # WhatsApp pairs itself (Node check, bridge auto-start, QR on the card); an agent here only sat on the bridge process
+    if c and c['Type'] == 'whatsapp': raise HTTPException(422, 'WhatsApp needs no agent: the Pair with your phone box does the setup itself')
+    try: return aisetup.start(store, cfg['server'], cid, body.guide, body.fields, body.secret_label, body.agent, body.model, ACTOR, body.agent_steps)
+    except (ValueError, RuntimeError, FileNotFoundError) as e: raise HTTPException(422, str(e))
+
+@app.get('/api/connectors/{cid}/ai-setup')
+def connector_ai_setup_live(cid: int):
+    """Reattach: the card reloads, the agent is still there."""
+    return {'session': aisetup.live_for(store, cid)}
+
+# ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
+_MSFLOWS = {}   # flow id -> the device code being polled; one browser tab, minutes, then gone
+
+@app.post('/api/connectors/{cid}/ms/signin')
+def ms_signin(cid: int):
+    """Start the device-code sign-in: the code and URL to show, and a flow id to poll with."""
+    import secrets as _secrets
+    from . import msauth
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook card')
+    cfg = json.loads(c.get('ConfigJson') or '{}')
+    try: d = msauth.device_start(cfg)
+    except RuntimeError as e: raise HTTPException(409, str(e))
+    except requests.RequestException as e: raise HTTPException(502, f'could not reach login.microsoftonline.com: {str(e)[:160]}')
+    flow = _secrets.token_urlsafe(12)
+    for k, v in list(_MSFLOWS.items()):
+        if time.time() - v['at'] > 1800: _MSFLOWS.pop(k, None)
+    _MSFLOWS[flow] = {'cid': cid, 'device_code': d.pop('device_code'), 'cfg': cfg, 'at': time.time()}
+    return {'flow': flow, **d}
+
+@app.post('/api/connectors/{cid}/ms/poll')
+def ms_poll(cid: int, body: dict):
+    """One poll of a sign-in. pending until the user finishes in the browser; then the card is
+    connected as them: refresh token saved as the secret, their mailbox added as the source."""
+    from . import msauth
+    flow = (body or {}).get('flow')
+    f = _MSFLOWS.get(flow)
+    if not f or f['cid'] != cid: raise HTTPException(404, 'no such sign-in in progress - start it again')
+    try: t = msauth.device_poll(f['cfg'], f['device_code'])
+    except msauth.AdminConsent as e:
+        _MSFLOWS.pop(flow, None)
+        return {'status': 'error', 'detail': str(e), 'admin_consent_url': msauth.admin_consent_url(f['cfg'])}
+    except RuntimeError as e:
+        _MSFLOWS.pop(flow, None)
+        return {'status': 'error', 'detail': str(e)}
+    if t.get('pending'): return {'status': 'pending'}
+    _MSFLOWS.pop(flow, None)
+    if not t.get('refresh_token'):
+        return {'status': 'error', 'detail': 'Microsoft returned no refresh token - the offline_access scope was not granted'}
+    who = msauth.me(t['access_token'])
+    cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name']}
+    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    if who['account'] and not any(s['Channel'] == 'email' and (s['Address'] or '').lower() == who['account'].lower()
+                                  for s in store.list_sources(active_only=False)):
+        store.save_source({'Channel': 'email', 'Address': who['account'], 'ConnectorId': cid, 'Active': 1}, ACTOR)
+    store.audit('connector', cid, 'ms_signin', ACTOR, detail={'account': who['account']})
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
+    # signed in = connected: the first sync starts now, so mail is on the Timeline by the time
+    # the card has finished saying "signed in" - not ten minutes later, or never until Sync now
+    threading.Thread(target=_poll_reports, kwargs={'what': 'syncing'}, daemon=True).start()
+    return {'status': 'ok', **who, 'syncing': True}
+
+@app.get('/api/connectors/{cid}/ms/adminlink')
+def ms_adminlink(cid: int):
+    """The admin-approval link on demand - for the person who knows in advance that IT has to say yes."""
+    from . import msauth
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook card')
+    try: return {'url': msauth.admin_consent_url(json.loads(c.get('ConfigJson') or '{}'))}
+    except RuntimeError as e: raise HTTPException(409, str(e))
+
+@app.post('/api/connectors/{cid}/ms/signout')
+def ms_signout(cid: int):
+    """Forget the sign-in: the refresh token goes, the card turns off, admin fields stay."""
+    c = store.get_connector(cid)
+    if not c: raise HTTPException(404, 'connector not found')
+    cfg = json.loads(c.get('ConfigJson') or '{}')
+    for k in ('auth', 'account', 'name'): cfg.pop(k, None)
+    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': '', 'Active': 0}, ACTOR)
+    store.audit('connector', cid, 'ms_signout', ACTOR, detail={'type': c['Type']})
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
+    return {'ok': True}
+
+@app.post('/api/platform/macos/open-settings')
+def macos_open_settings(body: dict):
+    """Open one of two System Settings panes the Apple Messages card walks the owner through.
+    The pane is an enum mapped to a fixed URL on this side - the browser never sends a URL."""
+    from . import imessage
+    pane = (body or {}).get('pane')
+    if pane not in imessage.PANES: raise HTTPException(422, f'unknown pane: {pane}')
+    try: return imessage.open_settings(pane)
+    except imessage.SetupError as e: return {'ok': False, 'detail': str(e), 'setup': e.setup}
+
+@app.post('/api/platform/macos/probe')
+def macos_probe(body: dict):
+    """The Automation consent check: a non-sending Apple Event to Messages.app. Run only after
+    the card has explained that macOS is about to ask - nothing is sent either way."""
+    from . import imessage
+    what = (body or {}).get('what')
+    if what != 'messages_automation': raise HTTPException(422, f'unknown probe: {what}')
+    try: return imessage.automation_probe()
+    except imessage.SetupError as e: return {'ok': False, 'detail': str(e), 'setup': e.setup}
+    except Exception as e: return {'ok': False, 'detail': str(e)[:500]}
+
 @app.post('/api/tools/run')
 def tool_run(body: dict):
     """The agents' hands on your other systems: run ONE query/script through a connection
@@ -1146,7 +1534,11 @@ def tool_run(body: dict):
     if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
     from .reports import card_of
     from . import scopes
-    conn = store.get_connector_by_type(card_of(t))    # s3_object runs on the aws card's roles
+    connector_id = (body or {}).get('connector_id')
+    try: conn = store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type(card_of(t))
+    except (TypeError, ValueError): raise HTTPException(422, 'connector_id must be a number')
+    if conn and conn.get('Type') != card_of(t):
+        raise HTTPException(422, f'connector {connector_id} is {conn.get("Type")}, not {card_of(t)}')
     if conn:
         if not conn.get('Active'):
             raise HTTPException(403, f'the {t} connection is off - turn it on under Connectors')
@@ -1203,7 +1595,7 @@ def cli_detect():
     """The AI CLIs on this machine. Most people already pay for one and have no separate API key,
     so the wizard offers what they have before it asks for a key."""
     from . import clis
-    return {'data': clis.detect(store)}
+    return {'data': clis.detect(store), 'tools': clis.tools()}    # tools: optional helpers (agent-browser), never offered as agents
 
 @app.get('/api/setup')
 def setup_state():
@@ -1267,14 +1659,23 @@ CLI_MODELS = {
     'gemini': ['gemini-2.5-pro', 'gemini-2.5-flash'],
 }
 
+def cli_base(cmd) -> str:
+    """'C:\\Users\\me\\...\\codex.exe' and 'codex' are the same CLI. A profile saved with the full
+    path (the setup wizard writes what `where` found) offered no model list at all."""
+    # both separators: a Windows path in a profile is still codex when the tests run on Linux CI
+    return re.sub(r'\.(cmd|exe|bat|ps1)$', '', re.split(r'[\\/]', str(cmd or ''))[-1].lower())
+
 @app.get('/api/agents')
 def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles;
     models = the quick-pick model list per agent, keyed by agent name."""
     def _models(a):
+        from . import climodels
         prof = json.loads(a.get('Config') or '{}')
-        picks = CLI_MODELS.get((prof.get('cmd') or '').lower(), [])
-        return {'cmd': prof.get('cmd'), 'default': prof.get('model'), 'choices': picks}
+        cli = cli_base(prof.get('cmd'))
+        cat = climodels.catalog(cli)                       # codex: its own /model list off disk; others: the built-in aliases
+        return {'cmd': prof.get('cmd'), 'cli': cli, 'default': prof.get('model'), 'choices': cat['choices'] or CLI_MODELS.get(cli, []),
+                'models': cat['models'], 'current': cat['current'], 'source': cat['source']}
     # the default agent (a setting) comes FIRST: every picker's initial value is the head of
     # this list, so "which CLI opens when I hit Start session" is decided in one place
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != (store.get_settings().get('default_agent') or 'coder'))
@@ -1376,6 +1777,30 @@ class OwnerBody(BaseModel): name: str; email: str | None = None
 @app.get('/api/owner')
 def get_owner(): return {**store.owner(), 'tokens': list(store_mod.DOC_TOKENS)}
 
+# ── About you (taskuary/whoami.py): what the system knows about its owner, in one place ──
+@app.get('/api/whoami')
+def whoami():
+    from . import whoami as _w
+    return _w.profile(store)
+
+@app.patch('/api/whoami')
+def whoami_save(body: dict):
+    """The manual facts (phone, handles, title, bio, avatar choice) - plain whitelisted settings.
+    Name and email keep going through PUT /api/owner, which retokens the docs."""
+    from . import whoami as _w
+    try: out = _w.save(store, body or {}, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'profile', ACTOR, detail={'fields': sorted((body or {}).keys())})
+    return out
+
+@app.get('/api/whoami/avatar')
+def whoami_avatar(style: str = 'monogram', seed: str = '', name: str = ''):
+    """A preview: the same deterministic SVG the profile shows, for a style and seed not saved yet."""
+    from . import whoami as _w
+    if style not in _w.STYLES: raise HTTPException(422, f'style must be one of {", ".join(_w.STYLES)}')
+    nm = name or (store.owner().get('owner') if store.owner().get('owner') != 'the owner' else '')
+    return {'svg': _w.avatar_svg(nm, seed or nm or 'taskuary', style), 'style': style, 'seed': seed or nm or 'taskuary'}
+
 @app.put('/api/owner')
 def put_owner(body: OwnerBody):
     """Your name, in ONE place. SOUL.md and CODER.md refer to the owner nine times between them,
@@ -1389,7 +1814,7 @@ def put_owner(body: OwnerBody):
     # 'the owner' is the fallback when no name is known, and real prose says those words -
     # retokenizing them would punch {{owner}} holes all over a doc that never had a name in it
     if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
+    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
@@ -1480,19 +1905,45 @@ def poll_forever():
             except (TypeError, ValueError): mins = 10
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
                 _poll_reports(0, what='syncing')
+            elif mins > 0:
+                # poll_minutes 0 is "background sync off", and that includes the fast clock
+                quick = _quick_due()
+                if quick: _poll_reports(0, what='syncing', only=quick)
         except Exception as e:
             logger.warning(f'scheduled poll failed: {e}')      # a bad cycle must not end the loop
         time.sleep(POLL_TICK)
 
-def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False):
+
+# A chat channel on the ten-minute mailbox clock is a slow conversation. A connector whose
+# config carries poll_seconds asks to be read more often than poll_minutes, on its own - the
+# quick pass polls ONLY those connectors and runs no reports or CI, so the expensive ones stay
+# on the global clock. Granularity is POLL_TICK.
+_QUICK_LAST = {}
+
+def _quick_due() -> list:
+    due = []
+    for c in store.list_connectors():
+        if not c['Active']: continue
+        try:
+            cfg = json.loads(c.get('ConfigJson') or '{}')
+            secs = int(cfg.get('poll_seconds') or 0) if isinstance(cfg, dict) else 0
+        except (TypeError, ValueError): secs = 0
+        if secs > 0 and time.time() - _QUICK_LAST.get(c['Type'], 0) >= secs:
+            due.append(c['Type'])
+    return due
+
+def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None):
     # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
     # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
     # rewriting 'running', and the "catching up" banner never ended.
     if not _POLL_BUSY.acquire(blocking=False):
         logger.info('poll already running - skipped'); return
-    _LAST_POLL[0] = time.time()      # a manual Sync now resets the clock too, so the timer
+    if only is None:
+        _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
                                      # does not fire again moments later over the same watermarks
+    else:
+        for t in only: _QUICK_LAST[t] = time.time()
     store.set_setting('ingest_status', json.dumps(
         {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
     try:
@@ -1510,13 +1961,14 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
         from . import ingest as ingest_mod
         with ingest_mod.deferred():
-            poll_channels(store, backfill_days, progress=_say)
+            poll_channels(store, backfill_days, progress=_say, **({'only': only} if only is not None else {}))
         def _left(n):
             store.set_setting('ingest_status', json.dumps(
                 {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
                  'what': f'{what} · triaging' + (f' · {n} left' if n else '')}), 'system')
         try: ingest_mod.drain(store, _llm(), progress=_left)
         except Exception as e: logger.warning(f'deferred triage drain failed: {e}')
+        if only is not None: return            # a quick pass reads its channels and stops
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         try:
@@ -1524,7 +1976,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             ci.poll(store)
         except Exception as e:
             logger.warning(f'CI poll failed: {e}')
-        run_due_reports(store, startup)
+        run_due_reports(store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
     finally:
         try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
         finally: _POLL_BUSY.release()
@@ -1579,7 +2031,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
+        for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')
@@ -1621,7 +2073,12 @@ def ingest_status():
     # hardcoded "every 10 min" that stayed on screen after somebody set the interval to 0
     try: every = int(store.get_settings().get('poll_minutes') or 0)
     except (TypeError, ValueError): every = 10
-    return {'status': st, 'everyMinutes': every}
+    # and the clock itself: when the last full poll ran and when the next is due, so the caption
+    # can count down instead of asserting a cadence nobody could check
+    return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
+            'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
+            # the brain's last failure, until it answers again - shown in the caption, not buried in rows
+            'triageError': store.get_settings().get('triage_last_error') or ''}
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
 class TermBody(BaseModel):
@@ -1654,6 +2111,11 @@ def open_terminal(body: TermBody):
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         # a CLI you configured but never installed is the common one - say which, don't 500
         raise HTTPException(422, str(e))
+    # This is the task page's Start session door (dispatch uses terminal.start_on_task). Opening
+    # a real session is an explicit restart: the live agent belongs in progress even when this
+    # task had already been marked done, waiting or dropped.
+    if tk and tk.get('Status') != 'in_progress':
+        store.update_task(body.task_id, {'Status': 'in_progress'}, ACTOR)
     if seed_fn:
         store.add_comment(body.task_id, ACTOR, 'human',
                           f'Opened an interactive {t.label} session in {t.cwd}' + (f' - {why}.' if why else '.'))
@@ -1667,6 +2129,8 @@ class WrapBody(BaseModel): task_id: int | None = None; close: bool = True
 # ends, so these work whether the terminal is live, exited, or long gone.
 def _wrap_task(tid: int, close: bool, sid: str = None):
     if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
+    # a setup session kept no transcript on purpose (secrets were typed into it) and has no report to write
+    if store.get_task(tid).get('Kind') == aisetup.KIND: return aisetup.finish(store, tid, ACTOR)
     text, agent, found = hub_term.transcript_for(store, tid)
     if not text.strip(): raise HTTPException(422, 'nothing to wrap up - this task has no session transcript')
     if found: hub_term.close(found)          # done means done - the pty and its shells go too
@@ -1751,12 +2215,62 @@ async def terminal_ws(ws: WebSocket, sid: str):
     await ws.accept()
     q = asyncio.Queue()
     t.subscribe(asyncio.get_running_loop(), q)
+    input_q = asyncio.Queue()
+    send_lock = asyncio.Lock()
+    delivered, inflight = 0, 0
+    redraw_boundary = None
+    redraw_quiet = None
+    redraw_cap = None
+
+    async def send_frame(frame):
+        # Output and the ready barrier come from separate tasks. One lock makes their order on
+        # the wire exactly the order expressed below.
+        async with send_lock: await ws.send_json(frame)
+
+    async def finish_redraw(delay: float):
+        """Send ready after the resize-driven repaint goes quiet, not after resize() returns."""
+        nonlocal redraw_boundary, redraw_quiet, redraw_cap
+        try: await asyncio.sleep(delay)
+        except asyncio.CancelledError: return
+        if redraw_boundary is None: return
+        redraw_boundary = None
+        if redraw_quiet and redraw_quiet is not asyncio.current_task(): redraw_quiet.cancel()
+        if redraw_cap and redraw_cap is not asyncio.current_task(): redraw_cap.cancel()
+        redraw_quiet = redraw_cap = None
+        await send_frame({'type': 'ready'})
+
     async def to_browser():
+        nonlocal delivered, inflight, redraw_quiet
         while True:
             data = await q.get()
-            if data is None: return await ws.send_json({'type': 'exit'})
-            await ws.send_json({'type': 'out', 'data': data})
+            if data is None: return await send_frame({'type': 'exit'})
+            inflight += 1
+            try: await send_frame({'type': 'out', 'data': data})
+            finally: inflight -= 1
+            delivered += 1
+            # Ignore output that was already queued when the resize began. The first new chunk
+            # and every repaint chunk after it move the quiet barrier; ready follows the burst.
+            if redraw_boundary is not None and delivered >= redraw_boundary:
+                if redraw_quiet: redraw_quiet.cancel()
+                redraw_quiet = asyncio.create_task(finish_redraw(.09))
     pump = asyncio.create_task(to_browser())
+
+    async def to_pty():
+        """Drain the socket independently of ConPTY and fold its queued keystrokes into one write.
+
+        pywinpty writes are synchronous and can take a visible beat while Codex is repainting.
+        Calling one directly from the receive loop made a fast sentence arrive one character per
+        beat. The first character may still be in flight, but the rest collect here and cross the
+        PTY in one ordered byte stream instead of paying that cost for every key.
+        """
+        while True:
+            data = await input_q.get()
+            chunks = [data]
+            while True:
+                try: chunks.append(input_q.get_nowait())
+                except asyncio.QueueEmpty: break
+            await asyncio.to_thread(t.write, ''.join(chunks))
+    input_pump = asyncio.create_task(to_pty())
     try:
         # scrubbed: a replayed scrollback that still contains the TUI's terminal queries makes
         # xterm answer them AGAIN, and the answers land in the CLI as typed junk - see terminal.py
@@ -1764,11 +2278,11 @@ async def terminal_ws(ws: WebSocket, sid: str):
         # scrollback runs the viewport from the top of the session down to the bottom, and
         # watching a week of coding scroll past every time you reopen a task is not a feature
         if t.scrollback():
-            await ws.send_json({'type': 'out', 'replay': True, 'data': hub_term.scrub_queries(t.scrollback())})
+            await send_frame({'type': 'out', 'replay': True, 'data': hub_term.scrub_queries(t.scrollback())})
         first_resize = True
         while True:
             m = await ws.receive_json()
-            if m.get('type') == 'in': t.write(m.get('data') or '')
+            if m.get('type') == 'in': input_q.put_nowait(m.get('data') or '')
             elif m.get('type') == 'resize':
                 rows, cols = m.get('rows') or 32, m.get('cols') or 110
                 # a full-screen TUI (codex) paints with absolute cursor moves, so the raw
@@ -1776,19 +2290,65 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 # nothing repaints until the CHILD is told to. A one-column wiggle on the
                 # first resize makes ConPTY signal a window change: a full redraw, the live
                 # screen instead of the replay's debris.
-                wiggled = first_resize
                 if first_resize:
                     first_resize = False
+                    # The child repaints asynchronously. Mark the queue boundary before the
+                    # wiggle; output beyond it is evidence of the live Codex screen arriving.
+                    redraw_boundary = delivered + inflight + q.qsize() + 1
+                    redraw_cap = asyncio.create_task(finish_redraw(1.5))
                     t.resize(rows, max(2, cols - 1))
                     await asyncio.sleep(0.05)
                 t.resize(rows, cols)
-                # the replay is debris until that redraw lands - THIS is the moment the pane
-                # is showing the live screen, and the only honest time to lift the curtain
-                if wiggled: await ws.send_json({'type': 'ready'})
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:
-        t.unsubscribe(q); pump.cancel()
+        t.unsubscribe(q); pump.cancel(); input_pump.cancel()
+        if redraw_quiet: redraw_quiet.cancel()
+        if redraw_cap: redraw_cap.cancel()
+
+# ── the knowledge base (knowledge.py): the card's Reindex button; searching goes through /api/tools/run (kb_search) ──
+class ReindexBody(BaseModel): connector_id: int | None = None
+
+@app.post('/api/knowledge/reindex')
+def knowledge_reindex(body: ReindexBody):
+    """Walk the Knowledge base card's sources now and refresh the index. Long for a big library -
+    the response carries what was indexed, skipped, removed and any file that would not read."""
+    from . import knowledge
+    r = knowledge.reindex(store, body.connector_id)
+    store.audit('connector', body.connector_id or 0, 'reindex', ACTOR, detail={k: v for k, v in r.items() if k != 'errors'})
+    return {'ok': not r['errors'] or r['indexed'] > 0, **r}
+
+@app.get('/api/knowledge/search')
+def knowledge_search(q: str, limit: int = 8, connector_id: int | None = None):
+    """Ranked passages for a question - what the card's search box shows."""
+    from . import knowledge
+    return {'data': knowledge.search(store, q, max(1, min(50, limit)), connector_id)}
+
+# ── the agent's browser, beside its terminal (browserview.py) ──
+@app.get('/api/terminals/{sid}/browser')
+def terminal_browser(sid: str):
+    """Is a browser open for this session, and on what page - read from agent-browser's state
+    files, so the pane can appear when the agent opens a page and fold when it closes."""
+    from . import browserview
+    return browserview.state(sid)
+
+class SnapBody(BaseModel): task_id: int | None = None
+
+@app.post('/api/terminals/{sid}/browser/snapshot')
+def terminal_browser_snapshot(sid: str, body: SnapBody):
+    """Keep the frame on the task record: a JPEG attachment plus a comment naming the page."""
+    from . import browserview
+    try: return browserview.snapshot(store, sid, ACTOR, body.task_id)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.websocket('/api/terminals/{sid}/browser/ws')
+async def terminal_browser_ws(ws: WebSocket, sid: str):
+    """agent-browser's screencast, relayed: frames out, the owner's input back when they take over.
+    Same token rule as the terminal socket - it rides on the query string."""
+    from . import browserview
+    tok = cfg['server'].get('token')
+    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    await browserview.relay(ws, sid)
 
 @app.get('/api/health')
 def health():
@@ -1797,7 +2357,8 @@ def health():
 
 @app.get('/api/settings')
 def settings():
-    return {'data': [s for s in store.list_settings() if s['Name'] != 'ingest_status']}
+    return {'data': [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at')
+                     and not s['Name'].startswith('report_last_run:')]}
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):

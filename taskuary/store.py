@@ -4,6 +4,7 @@ the audit log is a Buzz-style tamper-evident hash chain (each row hashes the pre
 """
 import contextlib, hashlib, json, re, sqlite3, threading
 from datetime import datetime, timedelta
+from loguru import logger
 
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
@@ -136,7 +137,7 @@ CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind
   Action TEXT, Reason TEXT, SortOrder INTEGER DEFAULT 100, Active INTEGER DEFAULT 1, CreatedBy TEXT);
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
   Owner TEXT, ConnectorId INTEGER, Active INTEGER DEFAULT 1, ConfigJson TEXT, LastPolledAt TEXT);
-CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT UNIQUE, Name TEXT,
+CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT,
   ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, Roles TEXT,
   Scope TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
@@ -149,7 +150,18 @@ CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, No
   CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
 CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
+CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Kind TEXT, Text TEXT, ActionJson TEXT, Sig TEXT,
+  Status TEXT DEFAULT 'open', SnoozeUntil TEXT, MessageId INTEGER, FirstSeen TEXT, LastSaid TEXT, SaidCount INTEGER DEFAULT 0,
+  DecidedBy TEXT, DecidedAt TEXT);
+CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
+  MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
+CREATE TABLE IF NOT EXISTS kb_doc (DocId INTEGER PRIMARY KEY, ConnectorId INTEGER, Source TEXT, Path TEXT, Name TEXT, Modified TEXT,
+  Size INTEGER, Chars INTEGER, IndexedAt TEXT);
+CREATE TABLE IF NOT EXISTS kb_chunk (ChunkId INTEGER PRIMARY KEY, DocId INTEGER, Seq INTEGER, Text TEXT);
 """
+# the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
+# built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
+KB_FTS = 'CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(Text, ChunkId UNINDEXED, tokenize="porter unicode61")'
 
 # CREATE TABLE IF NOT EXISTS is a no-op on an existing db; these are not. IF NOT EXISTS
 # so a second open (desktop + web, or a restart) does not raise. Named so EXPLAIN QUERY
@@ -172,6 +184,8 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit(EntityType, EntityId)',
     'CREATE INDEX IF NOT EXISTS idx_dispatchq_task ON dispatchq(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_waitroom_task ON waitroom(TaskId, DeliveredAt)',
+    'CREATE INDEX IF NOT EXISTS idx_idea_status ON idea(Status, MessageId)',
+    'CREATE INDEX IF NOT EXISTS idx_connector_type ON connector(Type, ConnectorId)',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -180,7 +194,7 @@ INDEXES = (
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
-                    'triage_ai': '',      # '' = first active AI connector | connector:<type> | cli:<agent>
+                    'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
                     # minutes between background polls while the app is OPEN. The Timeline said
                     # "auto-syncs every 10 min" for a long time while the only clock was a
@@ -197,6 +211,16 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
+                    # the assistant's POST on the Timeline (assistant.py): what it looks for, the silence and
+                    # quiet that count as news, how much it says. Its clock and its instruction live on the
+                    # Reports tab (the seeded 'Assistant' report).
+                    'assistant_followup_hours': '24',
+                    'assistant_cold_days': '3', 'assistant_producers': 'followup,promise,prep,cold,idea',
+                    'assistant_max_lines': '5',
+                    # the coder's context file (context.py): history, past work and the brief, written to
+                    # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
+                    'coder_context_file': '1',
+                    'agent_hooks': '1',           # Claude Code tells the Board what it is doing, through its own hooks (hooks.py)
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
                     'default_agent': 'coder',
@@ -261,12 +285,16 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # aws/azure: the per-OBJECT picker carries the intent (report by default,
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
+                 'sharepoint': 'report,tool', 'google_sheets': 'report,tool',
+                 'knowledge': 'report,tool',       # indexed documents: a kb_search report, and a tool for agents and the drafter
                  'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger',
                  'clickup': 'trigger', 'todoist': 'trigger',
                  'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
                  # notion edits are information, not assignments; discord is a chat channel
                  'notion': 'feed', 'discord': 'trigger,tool',
-                 'sentry': 'trigger', 'pagerduty': 'trigger'}
+                 'sentry': 'trigger', 'pagerduty': 'trigger',
+                 # speech to text: no role - the funnel and the prompt box ask the first active one
+                 'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': ''}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
@@ -294,8 +322,6 @@ class SQLiteStore:
         self._writes = 0
         with self.lock:
             self.cx.executescript(SCHEMA)
-            for ix in INDEXES:
-                self.cx.execute(ix)
             # columns added after a release: CREATE TABLE IF NOT EXISTS never reaches an
             # existing db, so widen it here (cheap, idempotent)
             # Work can now leave as well as arrive, so a row has to say which way it went. A
@@ -310,6 +336,9 @@ class SQLiteStore:
             # against them - "was this cc'd mail really mine?" had no evidence left (evalset.py)
             if 'RecipientsJson' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN RecipientsJson TEXT')
+            # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
+            if 'Brief' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
             # WHERE an approved outbound draft goes. A reply knows its recipient from the
             # message it answers; an outbound report has no such message, so the review has to
             # carry the address itself or approving it would have nowhere to send.
@@ -324,6 +353,38 @@ class SQLiteStore:
             # left NULL on purpose: scopes.scope_of falls back to the type's default, so an
             # existing db keeps exactly the authority it had before the column existed
             if 'Scope' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Scope TEXT')
+            # Connector Type used to be UNIQUE, which made the catalog row the only possible
+            # instance of a connector. SQLite cannot drop an inline unique constraint, so widen
+            # the table in place while keeping every ConnectorId. Source ownership is by that id,
+            # so mailboxes/repos/cloud objects remain attached to exactly the same connection.
+            unique_type = False
+            for ix in self.cx.execute('PRAGMA index_list(connector)').fetchall():
+                if not ix[2]: continue
+                cols = [r[2] for r in self.cx.execute(f'PRAGMA index_info("{ix[1]}")').fetchall()]
+                if cols == ['Type']: unique_type = True; break
+            if unique_type:
+                self.cx.execute('SAVEPOINT widen_connector_type')
+                try:
+                    self.cx.execute('ALTER TABLE connector RENAME TO connector_one_per_type')
+                    self.cx.execute('''CREATE TABLE connector (
+                        ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT, ConfigJson TEXT,
+                        Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT,
+                        Roles TEXT, Scope TEXT)''')
+                    self.cx.execute('''INSERT INTO connector
+                        (ConnectorId, Type, Name, ConfigJson, Secret, Active, LastSyncAt, LastError, Roles, Scope)
+                        SELECT ConnectorId, Type, Name, ConfigJson, Secret, Active, LastSyncAt, LastError, Roles, Scope
+                        FROM connector_one_per_type''')
+                    self.cx.execute('DROP TABLE connector_one_per_type')
+                    self.cx.execute('RELEASE widen_connector_type')
+                except Exception:
+                    self.cx.execute('ROLLBACK TO widen_connector_type')
+                    self.cx.execute('RELEASE widen_connector_type')
+                    raise
+            for ix in INDEXES:
+                self.cx.execute(ix)
+            try: self.cx.execute(KB_FTS); self.kb_fts = True
+            except sqlite3.OperationalError as e:
+                self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
@@ -337,6 +398,8 @@ class SQLiteStore:
                          ('winrm', 'Remote Windows (WinRM)'),
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
+                         ('sharepoint', 'SharePoint'), ('google_sheets', 'Google Sheets'),
+                         ('knowledge', 'Knowledge base'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
                          ('clickup', 'ClickUp'), ('todoist', 'Todoist'),
                          ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),
@@ -345,9 +408,15 @@ class SQLiteStore:
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
-                         ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader')):
-                self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
-                                (t, n, DEFAULT_ROLES.get(t, '')))
+                         ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
+                         ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
+                         ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper')):
+                # Type is intentionally not unique anymore. Seed only when a type has no card;
+                # INSERT OR IGNORE would now insert another blank copy on every startup.
+                self.cx.execute('''INSERT INTO connector (Type, Name, Roles)
+                                   SELECT ?, ?, ? WHERE NOT EXISTS
+                                   (SELECT 1 FROM connector WHERE Type=?)''',
+                                (t, n, DEFAULT_ROLES.get(t, ''), t))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
                 self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
             # operator documents start from shipped templates (John Smith placeholder) -
@@ -379,7 +448,7 @@ class SQLiteStore:
                          else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
                 line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
                 self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
-            for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style'):
+            for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     txt = f.read_text(encoding='utf-8')
@@ -398,7 +467,7 @@ class SQLiteStore:
                 from .digest import PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Morning digest', 'template', 1,
-                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 3, 'every_minutes': 180,
+                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'daily_at': '08:00', 'on_startup': True,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
             # ...and its sibling: the weekly 'what should you automate next' brief (toil.py) -
@@ -410,17 +479,37 @@ class SQLiteStore:
                                  json.dumps({'type': 'automate', 'title': 'Automation ideas', 'days': 30,
                                              'cron': '0 8 * * 1', 'ai_prompt': AUTOMATE_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('automate_report_seeded', '1', 'template')")
+            # ...and the Assistant (assistant.py): its post on the Timeline is scheduled and worded HERE
+            # too - every 30 minutes and on startup by default (a quiet check posts nothing), the
+            # instruction editable, deleting the row is the off switch. These two are the working demo of
+            # both kinds of report: the digest is an AI pass over the hub's own data, the assistant a voice.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='assistant_report_seeded'").fetchone():
+                from .assistant import PROMPT as ASSISTANT_PROMPT
+                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
+                                ('report', 'Assistant', 'template', 1,
+                                 json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 30, 'on_startup': True,
+                                             'ai_prompt': ASSISTANT_PROMPT})))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
+            from .assistant import OLD_PROMPT_HEADS, PROMPT as ASSISTANT_PROMPT
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue
-                if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
+                # the stock Assistant was seeded hourly (then 20-minutely) with a stock prompt; unedited, it
+                # becomes the 30-minute check with the current prompt (an owner-edited prompt or cadence is kept)
+                if c.get('type') == 'assistant' and str(c.get('ai_prompt') or '').startswith(OLD_PROMPT_HEADS):
+                    c['ai_prompt'] = ASSISTANT_PROMPT
+                    if c.get('every_minutes') in (60, 20): c['every_minutes'] = 30
+                    c.setdefault('on_startup', True)
+                    self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
+                if c.get('type') == 'digest' and (c.get('ai_prompt') in OLD_PROMPTS or c.get('ai_prompt') == DIGEST_PROMPT):
                     c['ai_prompt'] = DIGEST_PROMPT
-                    # a stock digest that never had a cadence set was daily by default; out of the
-                    # box it is now every three hours with a link per task (owner-set cadences kept)
-                    if not any(c.get(k) for k in ('cron', 'every_minutes', 'daily_at', 'on_startup')): c['every_minutes'] = 180
+                    # a stock digest on the old default clock (none, or the three-hourly one) becomes the
+                    # 8 am brief that also runs on startup; an owner-set cadence is kept
+                    stock_clock = not any(c.get(k) for k in ('cron', 'every_minutes', 'daily_at')) or (c.get('every_minutes') == 180 and not c.get('cron') and not c.get('daily_at'))
+                    if stock_clock: c.pop('every_minutes', None); c['daily_at'] = '08:00'; c['on_startup'] = True
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
             # data heal: 'triage' was a fourth Kind the pickers never offered, so those tasks
             # showed a kind the dropdown could not represent - and every one of them had a
@@ -606,6 +695,102 @@ class SQLiteStore:
             self._bump_snapshots()
         return mid
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
+    # ── what the hub knows about a sender / a topic (counsel.dossier, responder) ─────────────
+    def messages_from(self, email, since, limit=8):
+        return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','skipped') AND SentAt>=? "
+                          'ORDER BY SentAt DESC LIMIT ?', (email.lower(), since, limit))
+    def own_replies_to(self, email, since, limit=5):
+        """The owner's own words on this sender's threads - 'context' rows ride inside the chains."""
+        return self._rows("SELECT * FROM message WHERE Status='context' AND SentAt>=? AND ConversationId IN "
+                          '(SELECT ConversationId FROM message WHERE lower(FromEmail)=? AND ConversationId IS NOT NULL) '
+                          'ORDER BY SentAt DESC LIMIT ?', (since, email.lower(), limit))
+    def recent_messages(self, since, limit=300):
+        return self._rows("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
+                          "FROM message WHERE Status NOT IN ('context','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
+    def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
+    # ── what the assistant's post reads (assistant.py) ────────────────────────────────────────
+    def owner_last_words(self, since, before, limit=40):
+        """Threads whose LAST message is the owner's own ('context' rides inside a chain, 'out' was
+        sent from here), written between `since` and `before` - the silence a chase is about."""
+        return self._rows("SELECT * FROM message m WHERE (m.Status='context' OR m.Direction='out') AND m.ConversationId IS NOT NULL "
+                          'AND m.SentAt>=? AND m.SentAt<=? AND NOT EXISTS (SELECT 1 FROM message x WHERE x.ConversationId=m.ConversationId '
+                          "AND x.MessageId<>m.MessageId AND x.Status<>'skipped' AND x.SentAt>m.SentAt) ORDER BY m.SentAt DESC LIMIT ?",
+                          (since, before, limit))
+    def last_inbound_in(self, conversation_id):
+        return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','skipped') AND IFNULL(Direction,'in')<>'out' "
+                         'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
+    def task_last_activity(self, task_id):
+        r = self._one('SELECT MAX(x) last FROM (SELECT MAX(CreatedAt) x FROM comment WHERE TaskId=? UNION ALL '
+                      'SELECT MAX(SentAt) FROM message WHERE TaskId=? UNION ALL SELECT MAX(IFNULL(UpdatedAt, StartedAt)) FROM run WHERE TaskId=?)',
+                      (task_id, task_id, task_id))
+        return (r or {}).get('last')
+    def done_tasks_from(self, senders, limit=50):
+        """Closed tasks that carried mail from any of these addresses (context.past_work)."""
+        s = [x for x in senders if x]
+        if not s: return []
+        return self._rows(f"SELECT DISTINCT t.TaskId FROM task t JOIN message m ON m.TaskId=t.TaskId WHERE t.Status='done' "
+                          f"AND lower(m.FromEmail) IN ({','.join('?' * len(s))}) ORDER BY t.TaskId DESC LIMIT ?", [*s, limit])
+    # ── ideas: what the assistant said, and what the owner did about it ──────────────────────
+    def list_ideas(self, status=None, mid=None):
+        q, p = 'SELECT * FROM idea', []
+        w = ([('Status=?', status)] if status else []) + ([('MessageId=?', mid)] if mid else [])
+        if w: q += ' WHERE ' + ' AND '.join(k for k, _ in w); p = [v for _, v in w]
+        return self._rows(q + ' ORDER BY IdeaId DESC', p)
+    def get_idea(self, idea_id): return self._one('SELECT * FROM idea WHERE IdeaId=?', (idea_id,))
+    def upsert_idea(self, s: dict, stamp: str) -> dict:
+        """Said (again): a known key reopens with the new facts and text; a new one is born."""
+        old = self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
+        action = dict(s.get('action') or {})
+        if old:
+            try: prior = json.loads(old.get('ActionJson') or '{}')
+            except ValueError: prior = {}
+            # Talking back is part of this suggestion's history. New facts may reopen and
+            # rewrite the action, but must not erase the owner's correction or our answer.
+            if prior.get('chat'): action['chat'] = prior['chat']
+        act = json.dumps(action)
+        if old:
+            self._exec("UPDATE idea SET Kind=?, Text=?, ActionJson=?, Sig=?, Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?",
+                       (s.get('kind'), s['text'], act, s.get('sig'), stamp, s['key']))
+        else:
+            self._exec('INSERT INTO idea (Key, Kind, Text, ActionJson, Sig, Status, FirstSeen, LastSaid, SaidCount) VALUES (?,?,?,?,?,?,?,?,1)',
+                       (s['key'], s.get('kind'), s['text'], act, s.get('sig'), 'open', stamp, stamp))
+        return self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
+    def set_idea_status(self, idea_id, status, by, until=None):
+        self._exec('UPDATE idea SET Status=?, SnoozeUntil=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (status, until, by, _now(), idea_id))
+    def set_idea_action(self, idea_id, action):
+        self._exec('UPDATE idea SET ActionJson=? WHERE IdeaId=?', (json.dumps(action), idea_id))
+    def set_ideas_message(self, ids, mid):
+        if ids: self._exec(f"UPDATE idea SET MessageId=? WHERE IdeaId IN ({','.join('?' * len(ids))})", [mid, *ids])
+    # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────
+    REPORT_RUNS_KEPT = 60          # per report - a month of half-hourly assistant checks is 1400, and nobody reads past the last few dozen
+    def add_report_run(self, sid: int, rec: dict) -> int:
+        """One run of one report, whole: what it read (Inputs), what it reviewed, what it said and why
+        (Lines), what came out. The last-run setting keeps the newest for the row; this keeps the rest."""
+        rid = self._exec('INSERT INTO report_run (SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, Inputs, Summary) '
+                         'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                         (sid, rec.get('at'), rec.get('type'), rec.get('title'), rec.get('ms'), rec.get('subject'), rec.get('message_id'), int(bool(rec.get('failed'))),
+                          rec.get('error'), rec.get('said'), json.dumps(rec.get('lines') or [], default=str), json.dumps(rec.get('reviewed'), default=str) if rec.get('reviewed') else None,
+                          rec.get('inputs'), rec.get('summary')))
+        self._exec('DELETE FROM report_run WHERE SourceId=? AND RunId NOT IN (SELECT RunId FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?)',
+                   (sid, sid, self.REPORT_RUNS_KEPT))
+        return rid
+    def report_runs(self, sid: int, limit: int = 60) -> list:
+        """The history, newest first, WITHOUT the inputs (14KB each) - get_report_run fetches one whole."""
+        return [self._run_row(r) for r in self._rows('SELECT RunId, SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, '
+                                                      'length(Inputs) InputChars FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?', (sid, limit))]
+    def get_report_run(self, rid: int):
+        r = self._one('SELECT *, length(Inputs) InputChars FROM report_run WHERE RunId=?', (rid,))
+        return self._run_row(r) if r else None
+    @staticmethod
+    def _run_row(r: dict) -> dict:
+        def j(s):
+            try: return json.loads(s) if s else None
+            except ValueError: return None
+        return {'runId': r['RunId'], 'sourceId': r['SourceId'], 'at': r['At'], 'type': r['Type'], 'title': r['Title'], 'ms': r['Ms'], 'subject': r['Subject'],
+                'messageId': r['MessageId'], 'failed': bool(r['Failed']), 'error': r['Error'], 'said': r['Said'], 'lines': j(r.get('LinesJson')) or [],
+                'reviewed': j(r.get('ReviewedJson')), 'inputChars': r.get('InputChars') or 0, **({'inputs': r['Inputs']} if 'Inputs' in r else {}),
+                **({'summary': r['Summary']} if 'Summary' in r else {})}
+
     def thread_messages(self, conversation_id=None, subject=None, limit=40):
         """Every message already on this thread, oldest last - by ConversationId where the channel
         gives us one, else by normalised subject for the channels that do not.
@@ -668,6 +853,8 @@ class SQLiteStore:
         return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, SentAt, substr(BodyText, 1, 2000) BodyText '
                           'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
     def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
+    def update_message_body(self, mid, body): self._exec('UPDATE message SET BodyText=? WHERE MessageId=?', (body, mid))   # a voice note, transcribed later
+    def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def place_message(self, mid, task_id, status):
         """A row that was shown first and judged later lands where the judgement puts it (ingest.drain)."""
         self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
@@ -692,6 +879,10 @@ class SQLiteStore:
         self._exec('DELETE FROM transcript WHERE Sid=?', (sid,))      # one row per session, always the latest
         return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,CreatedAt) VALUES (?,?,?,?,?,?)',
                           (task_id, sid, agent, cwd, text, _now()))
+    def agented_task_ids(self) -> set:
+        """Every task an agent has ever touched - a live-session transcript or a headless run. The
+        Board is the agents' board: a reply the owner answered by hand is finished work, not board work."""
+        return {r['TaskId'] for r in self._rows('SELECT DISTINCT TaskId FROM transcript UNION SELECT DISTINCT TaskId FROM run') if r['TaskId']}
     def last_transcript(self, task_id):
         return self._one('SELECT * FROM transcript WHERE TaskId=? ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
 
@@ -877,8 +1068,14 @@ class SQLiteStore:
     def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
     def get_connector(self, cid, with_secret=False):
         return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
+    def connectors_by_type(self, ctype, with_secret=False):
+        return self._rows(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector "
+                          'WHERE Type=? ORDER BY Active DESC, ConnectorId', (ctype,))
     def get_connector_by_type(self, ctype, with_secret=False):
-        return self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE Type=?", (ctype,))
+        """Compatibility/default lookup for code that needs one connection: prefer an active
+        instance, then the original catalog row. Instance-aware paths use ConnectorId."""
+        rows = self.connectors_by_type(ctype, with_secret)
+        return rows[0] if rows else None
     def save_connector(self, fields, actor):
         cid = fields.get('ConnectorId')
         cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope') if c in fields and fields[c] is not None]
@@ -902,8 +1099,18 @@ class SQLiteStore:
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
-    def known_sender(self, email):
-        return bool(email) and self._one('SELECT 1 x FROM message WHERE FromEmail=? LIMIT 1', (email,)) is not None
+    def last_report(self, title):
+        """The previous filed run of a report, by title - its shape anchors the next run (reports.run_agent).
+        Failed runs and outbound copies do not count: a table of refusals is not a structure to keep."""
+        return self._one("SELECT * FROM message WHERE Channel='report' AND (SourceName=? OR Subject LIKE ?) "
+                         "AND Subject NOT LIKE '%FAILED' AND COALESCE(Direction, '') <> 'out' ORDER BY SentAt DESC LIMIT 1",
+                         (title, f'{title} —%'))
+    def known_sender(self, email, exclude_mid=None):
+        """Has this address written before? exclude_mid: the message being judged, once it is
+        already landed - otherwise every sender is 'known' by their own first mail."""
+        if not email: return False
+        return self._one('SELECT 1 x FROM message WHERE LOWER(FromEmail)=LOWER(?) AND MessageId<>? LIMIT 1',
+                         (email, exclude_mid or 0)) is not None
     def add_memory(self, fields): return self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')
@@ -973,7 +1180,7 @@ class SQLiteStore:
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
-                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction,
+                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,
@@ -1015,6 +1222,19 @@ class SQLiteStore:
         from .categories import category_of, team_domains_of
         team = team_domains_of(self.get_settings())
         for r in rows: r['Category'] = category_of(r, team)
+        # NEEDS_YOU (SQL) only sees `run` rows; a coder in a LIVE pty session is working the task
+        # just as much, and the row said "needs you - no agent is working it" over a running
+        # console. Working carries the agent's name so the chip can say who.
+        live = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}
+        try:
+            from . import terminal as hub_term
+            live.update({t['taskId']: t.get('agent') or t.get('label') or 'coder' for t in hub_term.live_sessions(tail=0) if t.get('taskId')})
+        except Exception:
+            pass                                   # no pty support here: runs alone decide
+        for r in rows:
+            if r.get('TaskId') in live and r.get('TaskStatus') not in ('done', 'dropped'):
+                r['Working'] = live[r['TaskId']]
+                if r.get('ReviewStatus') != 'pending': r['NeedsYou'] = 0
         return rows
 
     def feed_tag(self, days=14, pending_only=False, channel=None, source=None):
@@ -1047,6 +1267,75 @@ class SQLiteStore:
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
                 'reviews': self._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC', (task_id,))}
+
+    # ── knowledge base (knowledge.py): documents as passages behind an FTS5 index ──
+    def kb_doc(self, cid, source, path):
+        return self._one('SELECT * FROM kb_doc WHERE ConnectorId=? AND Source=? AND Path=?', (cid, source, path))
+    def kb_put(self, doc: dict, chunks: list) -> int:
+        """Replace one document's passages in a single transaction - _exec commits per statement,
+        and a library of a thousand files is not a thousand fsyncs per file."""
+        with self.lock:
+            cur = self.cx.cursor()
+            old = cur.execute('SELECT DocId FROM kb_doc WHERE ConnectorId=? AND Source=? AND Path=?',
+                              (doc['ConnectorId'], doc['Source'], doc['Path'])).fetchone()
+            if old: self._kb_drop(cur, old[0])
+            cur.execute('INSERT INTO kb_doc (ConnectorId,Source,Path,Name,Modified,Size,Chars,IndexedAt) VALUES (?,?,?,?,?,?,?,?)',
+                        (doc['ConnectorId'], doc['Source'], doc['Path'], doc.get('Name'), doc.get('Modified'), doc.get('Size'),
+                         doc.get('Chars'), _now()))
+            did = cur.lastrowid
+            for i, t in enumerate(chunks):
+                cur.execute('INSERT INTO kb_chunk (DocId, Seq, Text) VALUES (?,?,?)', (did, i, t))
+                if self.kb_fts: cur.execute('INSERT INTO kb_fts (Text, ChunkId) VALUES (?,?)', (t, cur.lastrowid))
+            self.cx.commit(); self._writes += 1
+            return did
+    def _kb_drop(self, cur, did):
+        if self.kb_fts: cur.execute('DELETE FROM kb_fts WHERE ChunkId IN (SELECT ChunkId FROM kb_chunk WHERE DocId=?)', (did,))
+        cur.execute('DELETE FROM kb_chunk WHERE DocId=?', (did,)); cur.execute('DELETE FROM kb_doc WHERE DocId=?', (did,))
+    def kb_prune(self, cid, source, keep: set) -> int:
+        """Drop the documents of one source that a fresh walk did not see - deleted files leave the index."""
+        gone = [r for r in self._rows('SELECT DocId, Path FROM kb_doc WHERE ConnectorId=? AND Source=?', (cid, source)) if r['Path'] not in keep]
+        with self.lock:
+            cur = self.cx.cursor()
+            for r in gone: self._kb_drop(cur, r['DocId'])
+            if gone: self.cx.commit(); self._writes += 1
+        return len(gone)
+    def kb_clear(self, cid=None):
+        with self.lock:
+            cur = self.cx.cursor()
+            for r in cur.execute('SELECT DocId FROM kb_doc' + (' WHERE ConnectorId=?' if cid else ''), (cid,) if cid else ()).fetchall():
+                self._kb_drop(cur, r[0])
+            self.cx.commit(); self._writes += 1
+    def kb_count(self, cid=None) -> dict:
+        w, p = (' WHERE ConnectorId=?', (cid,)) if cid else ('', ())
+        return {'docs': self._one(f'SELECT COUNT(*) n FROM kb_doc{w}', p)['n'],
+                'chunks': self._one(f'SELECT COUNT(*) n FROM kb_chunk c' + (' JOIN kb_doc d ON d.DocId=c.DocId' + w if cid else ''), p)['n']}
+    def kb_docs(self, cid=None) -> list:
+        w, p = (' WHERE ConnectorId=?', (cid,)) if cid else ('', ())
+        return self._rows(f'SELECT * FROM kb_doc{w} ORDER BY Source, Path', p)
+    def kb_search(self, fts_query: str, limit: int = 8, cid=None) -> list:
+        """Passages ranked by bm25 (FTS5) with a snippet around the matches; one hit per document,
+        the best passage of each. `fts_query` is FTS5 syntax - knowledge._query builds it safely."""
+        if not fts_query: return []
+        w, p = (' AND d.ConnectorId=?', (cid,)) if cid else ('', ())
+        if self.kb_fts:
+            q = ('SELECT d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, bm25(kb_fts) score, '
+                 "snippet(kb_fts, 0, '[', ']', ' … ', 48) snip FROM kb_fts JOIN kb_chunk c ON c.ChunkId=kb_fts.ChunkId "
+                 f'JOIN kb_doc d ON d.DocId=c.DocId WHERE kb_fts MATCH ?{w} ORDER BY score LIMIT ?')
+            rows = self._rows(q, (fts_query, *p, limit * 4))
+        else:
+            words = [t.strip('"') for t in fts_query.split(' OR ') if t.strip('"')]
+            like = ' OR '.join('c.Text LIKE ?' for _ in words)
+            rows = self._rows('SELECT d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, 0 score, substr(c.Text, 1, 400) snip '
+                              f'FROM kb_chunk c JOIN kb_doc d ON d.DocId=c.DocId WHERE ({like}){w} LIMIT ?',
+                              (*[f'%{x}%' for x in words], *p, limit * 4))
+        out, seen = [], set()
+        for r in rows:
+            if r['DocId'] in seen: continue
+            seen.add(r['DocId'])
+            out.append({'doc_id': r['DocId'], 'name': r['Name'], 'path': r['Path'], 'source': r['Source'], 'modified': r['Modified'] or '',
+                        'seq': r['Seq'], 'score': round(-float(r['score']), 3), 'snippet': ' '.join(str(r['snip'] or '').split())})
+            if len(out) >= limit: break
+        return out
 
 
 class MemoryStore(SQLiteStore):

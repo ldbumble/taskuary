@@ -44,7 +44,7 @@ class AgendaTests(unittest.TestCase):
             ag = cal.agenda(s, days=3)
         self.assertEqual([e['subject'] for e in ag['events']], ['Budget review'])          # 'free' slots are not busy
         text = cal.render(ag)
-        self.assertIn('13:00-14:00 · Budget review · Room 2', text)
+        self.assertIn('1:00-2:00 PM · Budget review · Room 2', text)
         self.assertIn('free all day', text)
         self.assertIn('outlook: me@corp.example', text)
 
@@ -73,7 +73,7 @@ class AgendaTests(unittest.TestCase):
         with mock.patch('taskuary.calendar.agenda', return_value={'events': [{'start': '2026-08-28 13:00', 'end': '2026-08-28 14:00', 'subject': 'x', 'all_day': False, 'status': 'busy', 'where': '', 'mailbox': 'm'}],
                                                                    'errors': [], 'sources': ['outlook: m'], 'start': '2026-08-28T09:00:00', 'end': '2026-08-29T09:00:00', 'tz': 'UTC'}):
             head, body = cal.run_calendar({'store': s, 'days': 1})
-        self.assertEqual(head, '1 event(s) in the next 1 days'); self.assertIn('13:00-14:00 · x', body)
+        self.assertEqual(head, '1 event(s) in the next 1 days'); self.assertIn('1:00-2:00 PM · x', body)
 
 
 class ResponderTests(unittest.TestCase):

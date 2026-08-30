@@ -48,7 +48,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
 def _blocks_reply(store, tid: int) -> list:
     from .ingest import notes_for
     from .learn import injectable
-    from .responder import BREVITY, CHAT, CHAT_CHANNELS, EMAIL, NOT_YET, SYSTEM, style_doc
+    from .responder import BREVITY, CHAT, CHAT_CHANNELS, EMAIL, NOT_YET, SYSTEM, history_block, style_doc
     msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     last = msgs[-1] if msgs else {}
     soul = store.doc('soul') or ''
@@ -65,6 +65,8 @@ def _blocks_reply(store, tid: int) -> list:
     if lrn: out.append(('the learned profile', 'LEARNED.md (active sections only)', lrn[:2000]))
     if notes: out.append(('standing notes for this sender/topic', 'memory table (ingest.notes_for)',
                           '\n'.join(f'- {n}' for n in notes)))
+    hist = history_block(store, last) if last else ''
+    if hist: out.append(('your history with this sender and topic, outside this thread', 'message + task tables (counsel.dossier)', hist))
     out.append(('the thread being answered (USER turn)', 'message table, boilerplate trimmed',
                 '\n\n'.join(f"--- {m.get('FromName') or m.get('FromEmail')} · {m.get('SentAt')}\n"
                             f"{str(m.get('BodyText') or '')[:600]}" for m in msgs)))

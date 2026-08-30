@@ -15,6 +15,7 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
   const all = (connectors || []).filter(hasNotifyRole);
   const able = all.filter((c) => CAN_NOTIFY.has(c.Type));
   const named = able.filter((c) => c.Active && notifyChat(c));
+  const phoneNamed = named.filter((c) => c.Type === "telegram" || c.Type === "whatsapp");
   const asleep = able.filter((c) => !c.Active && notifyChat(c));
   const unnamed = able.filter((c) => !notifyChat(c));
   const stale = all.filter((c) => !CAN_NOTIFY.has(c.Type));
@@ -25,7 +26,8 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
     text: "Pushes are off — nothing is sent, even if a chat is named." + note };
   if (named.length) return { kind: "pinging", targets: named, stale,
     text: `Pinging ${named.map((c) => `${c.Name} · ${notifyChat(c)}`).join(" · ")}`
-      + (phoneApprovals ? " — reply in that chat to approve" : "") + note };
+      + (phoneApprovals && phoneNamed.length ? " — reply there to answer agents or approve drafts" : "")
+      + (phoneApprovals && !phoneNamed.length ? " — phone replies need a Telegram or WhatsApp notify chat" : "") + note };
   if (asleep.length) return { kind: "inactive", targets: asleep, stale,
     text: `${names(asleep)} ${one(asleep) ? "names a chat but is" : "name chats but are"} switched off`
       + ` — enable ${one(asleep) ? "it" : "them"} on the connector card.` + note };

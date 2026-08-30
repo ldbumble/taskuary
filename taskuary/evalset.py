@@ -249,6 +249,8 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     from .routing import draft_task_fields
     from .triage import classify_intent
     mine = owner_addresses(store)
+    from .ingest import own_addresses
+    me = own_addresses(store)          # the To/Cc signal is measured against the owner, not the shared boxes
     soul, system = store.doc('soul'), (system if system is not None else store.doc('triage'))
     lrn = injectable(store.doc('learned') or '') if learned else ''
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
@@ -265,7 +267,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
             # a throttled or garbled call is not a verdict: try again before scoring it as one
             if attempt: time.sleep(2 * attempt)
             v = classify_intent(msg, llm=llm, soul=soul, thread=thread, learned=lrn, notes=ns,
-                                notes_left=left, system=system, mine=mine)
+                                notes_left=left, system=system, mine=me)
         # the funnel FILES an answer it cannot read (ingest: 'degraded' -> filed, never assumed
         # work); scored as the keyword fallback, a transient model error looked like a wrong verdict
         got = 'fyi' if v.get('degraded') else v['intent']

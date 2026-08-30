@@ -9,6 +9,7 @@ from datetime import datetime
 from loguru import logger
 
 from .store import task_ref
+from .clis import preset_args
 
 
 def _git(cwd, *args):
@@ -136,16 +137,30 @@ def _live_line(j):
     return None
 
 
+# the CLI's own login has lapsed - nothing in Taskuary can renew it, only the user at a terminal can
+_SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logged in|Not logged in|please (?:run )?[`\']?(?:claude )?/?login|codex login|401 Unauthorized', re.I)
+_LOGIN_HOW = {'claude': "run `claude`, type `/login` and finish the sign-in", 'codex': "run `codex login` and finish the sign-in"}
+
+def signed_out_msg(name: str, why: str) -> str:
+    how = _LOGIN_HOW.get(name, f"run `{name}` and sign in again")
+    return f"{name} is signed out on this machine ({why.strip()[:160]}). Open a terminal, {how}, then come back here and try again."
+
+
 def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     """One headless invocation of the configured CLI, output STREAMED line by line into
     the run trace so the Board shows the agent working live. claude's stream-json events
     render as readable tool/text lines; any other CLI's plain stdout streams as-is.
     Returns (result, session_id, diff)."""
     name = profile.get('cmd', 'claude')
-    cmd = _resolve_cmd(name) + list(profile.get('args') or ['-p'])
+    cmd = _resolve_cmd(name) + list(profile.get('args') or preset_args(name) or ['-p'])
     # which model works it: profile default, or a per-run override from the UI. The flag
     # name is configurable because every CLI spells it differently (claude/codex: --model).
-    if profile.get('model'): cmd += [profile.get('model_arg') or '--model', str(profile['model'])]
+    if profile.get('model'):
+        # 'gpt-5.4@high' spells a codex model and its reasoning level in one pick (climodels)
+        from .climodels import split_pick
+        m, eff = split_pick(profile['model'])
+        cmd += [profile.get('model_arg') or '--model', m]
+        if eff: cmd += ['-c', f'model_reasoning_effort={eff}']
     if resume and profile.get('resume_args'): cmd += list(profile['resume_args']) + [resume]
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')
@@ -161,7 +176,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
     killer = threading.Timer(profile.get('timeout', 1200), lambda: (timed.set(), p.kill()))
     killer.start()
     err_buf = []
-    threading.Thread(target=lambda: err_buf.append(p.stderr.read()), daemon=True).start()
+    err_t = threading.Thread(target=lambda: err_buf.append(p.stderr.read()), daemon=True)
+    err_t.start()
     # stdin feed on its own thread: writing a big prompt while the child is already
     # emitting output can deadlock both pipes otherwise
     def _feed():
@@ -183,9 +199,11 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None):
         p.wait()
     finally:
         killer.cancel()
+    err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
     if p.returncode != 0:
         why = f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else \
             ((err_buf[0] if err_buf else '') or '\n'.join(raw[-5:]) or 'no output')[:500]
+        if _SIGNED_OUT.search(why): raise RuntimeError(signed_out_msg(name, why))
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     if final is not None: out, sid = str(final.get('result') or '').strip(), final.get('session_id')
     else: out, sid = parse_cli_json('\n'.join(raw))
@@ -211,6 +229,9 @@ def task_context(store, task_id: int) -> str:
     lines += ['', 'Thread:'] + [f"- {c.get('Actor')}: {str(c.get('Body'))[:300]}" for c in d['comments']]
     mem = memory_block(store, d['messages'])
     if mem: lines += ['', mem]
+    from . import knowledge
+    kb = knowledge.block(store, ' '.join(f"{m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in d['messages'])[:4000])
+    if kb: lines += [kb.strip()]
     return '\n'.join(lines)
 
 

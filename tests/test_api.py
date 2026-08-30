@@ -139,6 +139,7 @@ class GithubIngestTests(unittest.TestCase):
         from taskuary.ingest import ingest_message
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('owner_email', 'me@work.example', 't')      # the mail below is from a colleague: a KNOWN sender (senders.py gates strangers)
         spawned = []
         task_llm = lambda *a, **k: '{"intent": "task", "why": "work"}'
         with mock.patch('taskuary.ingest._spawn', side_effect=lambda fn, *a: spawned.append(fn.__name__)):
@@ -538,9 +539,25 @@ class ApiTests(unittest.TestCase):
             c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'tool'})
         b = c.get('/api/brains').json()
         self.assertEqual(b['data'][0]['value'], '')                  # auto first
-        self.assertIn('connector:anthropic', [x['value'] for x in b['data']])
+        anthropic_value = f"connector:{rows['anthropic']['ConnectorId']}"
+        self.assertIn(anthropic_value, [x['value'] for x in b['data']])
         self.assertIn('cli:coder', [x['value'] for x in b['data']])  # your coding CLI can be the brain
-        self.assertFalse(next(x for x in b['data'] if x['value'] == 'connector:anthropic')['ready'])   # no key saved
+        self.assertFalse(next(x for x in b['data'] if x['value'] == anthropic_value)['ready'])   # no key saved
+
+    def test_connector_api_accepts_named_instances_of_one_type(self):
+        made = []
+        try:
+            for name in ('Test IMAP east', 'Test IMAP west'):
+                r = c.post('/api/connectors', json={'Type': 'imap', 'Name': name})
+                self.assertEqual(r.status_code, 200, r.text)
+                made.append(r.json()['connectorId'])
+            rows = [x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] in made]
+            self.assertEqual([(x['Name'], x['Roles']) for x in rows],
+                             [('Test IMAP east', 'trigger,tool'), ('Test IMAP west', 'trigger,tool')])
+            self.assertEqual(c.post('/api/connectors', json={'Type': 'imap', 'Name': 'test imap east'}).status_code, 409)
+        finally:
+            for cid in made:
+                server.store._exec('DELETE FROM connector WHERE ConnectorId=?', (cid,))
 
     def test_connector_test_fails_cleanly_without_creds(self):
         cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'teams')
@@ -597,15 +614,22 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post('/api/memory', json={'note': 'x', 'scope': 'weird'}).status_code, 422)
 
     def test_not_a_task_learns_and_deletes(self):
+        """It writes the verdict to MEMORY and nothing else. It used to also save a sender
+        ignore POLICY, muting that address for good - a second, wider verdict hidden inside a
+        button that says "not a task" (owner, 2026-08-30). Silencing a sender is its own
+        button, "Skip this sender", where it is undoable and says what it does."""
         with mock.patch('taskuary.server._llm', return_value=lambda s_, u_: '{"intent": "task", "why": "x"}'):
             out = c.post('/api/ingest/push', json={'subject': 'please fix the export', 'body': 'please fix the export job',
                                                    'from_email': 'noise@vendor.com', 'channel': 'api'}).json()
         tid = out['task_id']
+        before = len(c.get('/api/policies').json()['data'])
         r = c.post(f'/api/tasks/{tid}/not-a-task').json()
-        self.assertEqual(r['learned']['policy'], 'noise@vendor.com')
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)
-        self.assertTrue(any(p['Pattern'] == 'noise@vendor.com' and p['Action'] == 'ignore'
-                            for p in c.get('/api/policies').json()['data']))
+        note = next(m for m in c.get('/api/memory').json()['data'] if m['MemoryId'] == r['learned']['memory_id'])
+        self.assertIn('NOT A TASK', note['Note'])
+        self.assertNotIn('policy', r['learned'])
+        self.assertEqual(len(c.get('/api/policies').json()['data']), before)      # nobody was muted
+        self.assertFalse(any(p['Pattern'] == 'noise@vendor.com' for p in c.get('/api/policies').json()['data']))
 
     def test_push_without_ai_files(self):
         out = c.post('/api/ingest/push', json={'subject': 'automated provisioning notice 77', 'body': 'please add the new user',

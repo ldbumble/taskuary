@@ -38,9 +38,26 @@ def _login(c):
     if not user: raise RuntimeError('no mailbox address set')
     if not c.get('Secret'): raise RuntimeError('no password saved - for Gmail use an App Password '
                                                '(myaccount.google.com > Security > App passwords)')
-    M = imaplib.IMAP4_SSL(imap_h, int(cfg.get('imap_port') or 993))
+    if _microsoft(user, imap_h):
+        # basic auth is gone from Outlook.com (Sept 2024) and Exchange Online (2023): the
+        # password would be refused after the socket opened, so say the useful thing first
+        raise RuntimeError('Microsoft mailboxes (Outlook.com, Hotmail, Microsoft 365) no longer accept IMAP passwords - '
+                           'use the Outlook connector and Sign in with Microsoft')
+    port = int(cfg.get('imap_port') or 993)
+    try: M = imaplib.IMAP4_SSL(imap_h, port)
+    except OSError as e:
+        if getattr(e, 'winerror', None) == 10013 or 'forbidden by its access permissions' in str(e):
+            raise RuntimeError(f'this PC blocked the connection to {imap_h}:{port} - a firewall or security agent stops '
+                               'Taskuary from reaching the mail server; ask IT to allow it (or allow port 993)') from e
+        raise
     M.login(user, c['Secret'])
     return M, user
+
+
+_MS_DOMAINS = {'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'outlook.co.uk', 'hotmail.co.uk', 'live.co.uk'}
+_MS_HOSTS = {'outlook.office365.com', 'outlook.office.com', 'imap-mail.outlook.com', 'smtp-mail.outlook.com', 'smtp.office365.com'}
+def _microsoft(user: str, host: str) -> bool:
+    return (user or '').rsplit('@', 1)[-1].lower() in _MS_DOMAINS or (host or '').lower() in _MS_HOSTS
 
 
 def test_imap(store, c) -> str:

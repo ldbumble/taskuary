@@ -7,11 +7,11 @@ REGISTRY: type -> executor(config) -> (headline, summary). Implemented: sqlite, 
 timeline instead of silently absent. Adding a type = one ~15-line function + a REGISTRY
 entry - PRs welcome.
 """
-import io, json, re, sqlite3
+import io, json, re, sqlite3, time
 from datetime import datetime, timedelta
 from loguru import logger
 
-PLANNED = ['sharepoint_list', 'google_sheets', 'graphql', 'smb_file',
+PLANNED = ['graphql', 'smb_file',
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
            # the category is the question people arrive with - "does this reach our ERP / our
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
@@ -91,6 +91,16 @@ AGENT_SYSTEM = ('You are running a SCHEDULED REPORT for a busy operator. Do exac
                 'questions back. If something the instruction asks about cannot be found, say so in the report.')
 
 
+def _outline(body: str) -> str:
+    """Section headings and table header rows of a report body - the shape without the content."""
+    out, lines = [], (body or '').splitlines()
+    for i, l in enumerate(lines):
+        s = l.strip()
+        if s.startswith('#'): out.append(s)
+        elif s.startswith('|') and i + 1 < len(lines) and set(lines[i + 1].strip()) <= set('|-: ') and '-' in lines[i + 1]: out.append(s)
+    return ' / '.join(out[:24])
+
+
 def run_agent(cfg):
     """{"agent": "coder", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
     the AI itself as the source: a coding CLI agent (Connectors -> AI CLI agents) runs your saved
@@ -109,6 +119,13 @@ def run_agent(cfg):
     llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None)
     if llm is None: raise RuntimeError(f'no CLI agent named {name!r} - add one under Connectors -> AI CLI agents')
     ask = (f'/{skill}' + (' ' if prompt else '') if skill else '') + prompt
+    # Two runs twenty minutes apart came back as two different documents - 106 lines with a
+    # fast-risers table, then 83 lines in another shape. A fresh agent has no memory of the last
+    # run, so the last run's SHAPE (headings, table columns - never the content) rides along.
+    prev = store.last_report(cfg.get('title') or '') if cfg.get('title') else None
+    shape = _outline((prev or {}).get('BodyText'))
+    if shape: ask += ('\n\nSTRUCTURE: keep the sections, their order and the table columns of the previous run of this '
+                      f'report so runs stay comparable - change only the content. Previous outline: {shape}')
     out = str(llm(AGENT_SYSTEM, ask) or '').strip()
     if not out: raise RuntimeError(f'{name} answered nothing')
     what = f'/{skill}' if skill else 'a prompt'
@@ -263,14 +280,24 @@ def run_datadog(cfg):
 
 
 def run_digest(cfg):
-    """{"days": 3} - Taskuary's own activity as the data: open work, finished work, pending
+    """{"days": 1} - Taskuary's own activity as the data: open work, finished work, pending
     reviews, fresh verdicts, who wrote how often. The Morning digest ships as a report ON
     PURPOSE: the brief lands on the Timeline like any report, its prompt is edited on the
     Reports tab, deleting the source turns it off - and it demonstrates how reports work
     using data every install already has. `store` arrives via resolve_cfg, never persisted."""
     from .digest import gather
-    days = int(cfg.get('days') or 3)
-    return f'the last {days} days, distilled', gather(cfg['store'], days)
+    days = int(cfg.get('days') or 1)
+    head = 'yesterday and today so far, distilled' if days == 1 else f'the last {days} days, distilled'
+    return head, gather(cfg['store'], days)
+
+
+def run_assistant(cfg):
+    """The 'Assistant' report - the post on the Timeline (assistant.py). Scheduled and worded on the
+    Reports tab like the Morning digest, but it does not file prose: run_report_source hands the
+    due run to assistant.run, which posts ideas with buttons and state. This executor is what
+    PREVIEW shows - the facts a run would hand the model. `store` arrives via resolve_cfg."""
+    from .assistant import facts
+    return 'what the assistant would read right now', facts(cfg['store'])
 
 
 def run_automate(cfg):
@@ -386,6 +413,16 @@ def _calendar(cfg):
     from .calendar import run_calendar
     return run_calendar(cfg)
 
+
+def _lazy(module, fn):
+    """An executor that lives in its own module, imported on first use - and the composer's
+    catalog still sees the real docstring (compose._keys_doc reads it off the wrapper)."""
+    import importlib
+    def run(cfg): return getattr(importlib.import_module(f'.{module}', __package__), fn)(cfg)
+    try: run.__doc__ = getattr(importlib.import_module(f'.{module}', __package__), fn).__doc__
+    except Exception: run.__doc__ = f'{module}.{fn}'
+    return run
+
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the web as a source: plain REST, a key on a card, nothing new in the exe
             'exa': _research('exa'), 'tavily': _research('tavily'),
@@ -398,86 +435,110 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
-            'rss': run_rss, 'digest': run_digest, 'automate': run_automate,
+            'rss': run_rss, 'digest': run_digest, 'automate': run_automate, 'assistant': run_assistant,
             'calendar': _calendar,       # the owner's busy times, off the Outlook (and Google) cards - read-only
             'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
+            # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
+            'google_sheets': _lazy('sheets', 'run_google_sheets'),
+            'sharepoint_list': _lazy('sharepoint', 'run_sharepoint_list'), 'sharepoint_file': _lazy('sharepoint', 'run_sharepoint_file'),
+            # the knowledge base: documents indexed in this store (knowledge.py) - searched, and refreshed on a schedule
+            'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),
             **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
-           'intacct_fields': 'intacct'}
+           'intacct_fields': 'intacct', 'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
+           'kb_search': 'knowledge', 'kb_reindex': 'knowledge'}
 
 def card_of(t): return CARD_OF.get(t, t)
 
 
-def mssql_connection(store) -> dict:
+def _connector(store, typ, connector_id=None, with_secret=False):
+    """Resolve an explicitly selected instance, or the active/default instance for legacy
+    report configs. Refuse an id belonging to another connector type."""
+    c = store.get_connector(int(connector_id), with_secret=with_secret) if connector_id else \
+        store.get_connector_by_type(typ, with_secret=with_secret)
+    return c if c and c.get('Type') == typ else None
+
+
+def mssql_connection(store, connector_id=None) -> dict:
     """The SQL Server CONNECTION lives on the mssql connector card (set up once, tested
     there); report configs carry only query/ai_prompt/schedule and inherit it here.
     Per-report overrides still win if present."""
-    c = store.get_connector_by_type('mssql', with_secret=True)
+    c = _connector(store, 'mssql', connector_id, with_secret=True)
     if not c: return {}
     cfg = json.loads(c.get('ConfigJson') or '{}')
     if c.get('Secret'): cfg.setdefault('password', c['Secret'])
     return {k: v for k, v in cfg.items() if v}
 
 
-def winrm_connection(store) -> dict:
+def winrm_connection(store, connector_id=None) -> dict:
     """Same connection-card pattern as mssql: the host lives on the winrm connector."""
-    c = store.get_connector_by_type('winrm')
+    c = _connector(store, 'winrm', connector_id)
     cfg = json.loads((c or {}).get('ConfigJson') or '{}')
     return {k: v for k, v in cfg.items() if v}
 
 
-def _card(store, typ, secret_as):
-    c = store.get_connector_by_type(typ, with_secret=True)
+def _card(store, typ, secret_as, connector_id=None):
+    c = _connector(store, typ, connector_id, with_secret=True)
     if not c: return {}
     cfg = json.loads(c.get('ConfigJson') or '{}')
     if c.get('Secret'): cfg.setdefault(secret_as, c['Secret'])
     return {k: v for k, v in cfg.items() if v}
 
 
-def database_connection(store) -> dict:
+def database_connection(store, connector_id=None) -> dict:
     """The connection string lives on the 'Any database' card; its write-only secret fills
     the string's {password} placeholder."""
-    return _card(store, 'database', 'password')
+    return _card(store, 'database', 'password', connector_id)
 
 
-def aws_connection(store) -> dict:
-    return _card(store, 'aws', 'secret_access_key')
+def aws_connection(store, connector_id=None) -> dict:
+    return _card(store, 'aws', 'secret_access_key', connector_id)
 
 
-def azure_connection(store) -> dict:
+def azure_connection(store, connector_id=None) -> dict:
     """The Azure card's own app, else the Outlook connector's saved Graph app - one app
     registration can hold Graph permissions AND Azure RBAC roles, so the borrow is real."""
-    cfg = _card(store, 'azure', 'client_secret')
+    cfg = _card(store, 'azure', 'client_secret', connector_id)
     if not (cfg.get('client_id') and cfg.get('client_secret')):
         cfg = {**_card(store, 'outlook', 'client_secret'), **cfg}
     return cfg
 
 
-def intacct_connection(store) -> dict:
+def intacct_connection(store, connector_id=None) -> dict:
     """Five credentials, of which exactly one is a secret worth hiding: the API USER's
     password. The sender pair identifies the integration and the company id names the tenant -
     neither is a password to this company's books, and burying them write-only would only mean
     nobody can ever check the sender id for a typo."""
-    return _card(store, 'intacct', 'user_password')
+    return _card(store, 'intacct', 'user_password', connector_id)
 
 
-def prometheus_connection(store) -> dict:
+def prometheus_connection(store, connector_id=None) -> dict:
     """base_url (+ optional bearer token as the write-only secret) lives on the card."""
-    return _card(store, 'prometheus', 'token')
+    return _card(store, 'prometheus', 'token', connector_id)
 
 
-def datadog_connection(store) -> dict:
+def datadog_connection(store, connector_id=None) -> dict:
     """site + application key on the card; the API key is the write-only secret."""
-    return _card(store, 'datadog', 'api_key')
+    return _card(store, 'datadog', 'api_key', connector_id)
+
+
+def _sharepoint_connection(store, connector_id=None) -> dict:
+    from .sharepoint import sharepoint_connection
+    return sharepoint_connection(store, connector_id)
+
+
+def _sheets_connection(store, connector_id=None) -> dict:
+    from .sheets import google_sheets_connection
+    return google_sheets_connection(store, connector_id)
 
 
 def _apikey_card(typ):
     """A card whose whole configuration is one key: the secret arrives as `api_key`."""
-    return lambda store: _card(store, typ, 'api_key')
+    return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
@@ -488,13 +549,19 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'entra_users': azure_connection, 'entra_groups': azure_connection,
                  'entra_signins': azure_connection, 'entra_licenses': azure_connection,
                  'prometheus': prometheus_connection, 'datadog': datadog_connection,
-                 'intacct': intacct_connection, 'intacct_fields': intacct_connection}
+                 'intacct': intacct_connection, 'intacct_fields': intacct_connection,
+                 # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
+                 'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
+                 'google_sheets': _sheets_connection}
 
 
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') in ('digest', 'automate', 'agent', 'calendar'): return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards)
+    if cfg.get('type') in ('digest', 'automate', 'agent', 'calendar', 'kb_search', 'kb_reindex'):
+        return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards; the knowledge base: its index)
     conn = CONNECTION_OF.get(cfg.get('type'))
-    if conn: return {**conn(store), **{k: v for k, v in cfg.items() if v not in (None, '')}}
+    if conn:
+        saved = conn(store, cfg.get('connector_id')) if cfg.get('connector_id') else conn(store)
+        return {**saved, **{k: v for k, v in cfg.items() if v not in (None, '')}}
     return cfg
 
 
@@ -619,7 +686,11 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     # on_startup is local-first scheduling: the app is a window you open, so "when I open
     # it" is a real schedule. Due exactly once per launch - never on the 10-minute auto-sync,
     # and a cron time it would have missed while closed is not its problem.
-    if cfg.get('on_startup'): return startup
+    # on_startup ALONE is "once per launch, never on the clock"; on_startup beside a schedule is
+    # BOTH - the Morning digest runs when the app opens and again on its interval
+    if cfg.get('on_startup'):
+        if startup: return True
+        if not any(cfg.get(k) for k in ('cron', 'every_minutes', 'daily_at')): return False
     now = datetime.now()
     if not last_polled: return True
     try: last = datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))
@@ -645,12 +716,56 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     return (now - last).total_seconds() >= 24 * 3600
 
 
+LAST_RUN = 'report_last_run:'      # setting per source: what its last run did (the Reports tab shows it)
+
+
+def last_runs(store) -> dict:
+    """{source id: record} for every report that has run - when, how long, what it read, what came out."""
+    out = {}
+    for k, v in store.get_settings().items():
+        if not k.startswith(LAST_RUN): continue
+        try: out[int(k[len(LAST_RUN):])] = json.loads(v)
+        except (ValueError, TypeError): continue
+    return out
+
+
 def run_report_source(store, src: dict, llm=None) -> dict:
+    """Execute one due report and file it on the timeline - and leave a record of the run on the
+    source (LAST_RUN): when, how long, what it read, what it reviewed, what it posted or why it
+    stayed quiet. A quiet assistant check posts NOTHING, so without this there was no way to see
+    what it had looked at (the owner, 2026-08-30: 'want to see the last run... what data is processed')."""
+    t0, cfg = time.time(), json.loads(src.get('ConfigJson') or '{}')
+    rec = {'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': cfg.get('type') or 'rest', 'title': cfg.get('title') or src['Address']}
+    def keep():
+        # the newest run rides on the row (LAST_RUN); every run joins the history (report_run) - the
+        # owner (2026-08-30): "a history of runs... to see what it processed and why it created certain things"
+        store.set_setting(f"{LAST_RUN}{src['SourceId']}", json.dumps(rec, default=str), 'report')
+        try: store.add_report_run(src['SourceId'], rec)
+        except Exception as e: logger.warning(f'report run history not kept for {src["Address"]}: {e}')
+    try:
+        out = _run_report_source(store, src, cfg, llm)
+    except Exception as e:
+        rec.update({'ms': int((time.time() - t0) * 1000), 'failed': True, 'error': str(e)[:600]})
+        keep(); raise
+    rec.update({'ms': int((time.time() - t0) * 1000), 'subject': out.get('subject'), 'message_id': out.get('message_id'),
+                'failed': str(out.get('subject') or '').endswith('FAILED'), 'files': out.get('files'),
+                'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:30000],
+                'lines': out.get('lines') or [], 'summary': str(out.get('summary') or '')[:2000]})
+    keep()
+    return out
+
+
+def _run_report_source(store, src: dict, cfg: dict, llm=None) -> dict:
     """Execute one due report (executor + optional AI pass) and file it on the timeline.
     Errors file visibly too."""
-    cfg = json.loads(src.get('ConfigJson') or '{}')
     title = cfg.get('title') or src['Address']
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
+    if cfg.get('type') == 'assistant':
+        # not a report row: the assistant posts its own kind of row (ideas with buttons and state),
+        # on this report's schedule and with this report's prompt as its instruction
+        from . import assistant
+        out = assistant.run(cfg['store'] if cfg.get('store') else store, report_llm(store, cfg, llm), force=True, instruction=cfg.get('ai_prompt'))
+        return {'message_id': out.get('message_id'), 'subject': f"{title} - {out.get('said', 0)} line(s)", 'files': 0, **out}
     try:
         head, summary = render_report(store, cfg, llm)
         subject, body = f'{title} — {head}', summary
@@ -661,12 +776,29 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     # the CHART: line is an instruction to Taskuary about what to draw, not prose for the reader:
     # artifacts reads it off `body`, and what gets filed is the summary without it
     from .artifacts import strip_directive
-    mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}',
-                             'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
-                             'SourceName': title, 'Subject': subject, 'FromName': title,
-                             'SentAt': stamp, 'BodyText': strip_directive(body),
-                             'SourceLink': cfg.get('link'), 'Status': 'feed'})
-    store.add_route(mid, None, 'feed', None, 'scheduled report - informational, never a task', [], 'report')
+    failed = subject.endswith('— FAILED')
+    if cfg.get('triage') and not failed:
+        # the report is a MESSAGE like any other: triage reads it under TRIAGE.md, and a task is what
+        # TRIAGE.md says - so an agent's research report can hand its findings to the coding agent.
+        # A failed run is never work; it files with its error like before.
+        from .ingest import ingest_message
+        out = ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
+                                         'subject': subject, 'body': strip_directive(body), 'from_name': title,
+                                         'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
+                                         'source_link': cfg.get('link'), 'source_name': title}, llm=llm)
+        mid = out.get('message_id')
+        if not mid:
+            mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed', 'ConversationId': f'report:{src["SourceId"]}',
+                                     'Channel': 'report', 'SourceName': title, 'Subject': subject, 'FromName': title, 'SentAt': stamp,
+                                     'BodyText': strip_directive(body), 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+    else:
+        mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}',
+                                 'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
+                                 'SourceName': title, 'Subject': subject, 'FromName': title,
+                                 'SentAt': stamp, 'BodyText': strip_directive(body),
+                                 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+        store.add_route(mid, None, 'feed', None,
+                        'scheduled report - informational, never a task' + ('' if not cfg.get('triage') else ' (this run failed, so it was not triaged)'), [], 'report')
     # the rows are the report: hand back the spreadsheet to open and the chart to look at, not
     # just prose about them. Prose-only reports (an AI summary, a failure) produce neither.
     try:
@@ -689,7 +821,7 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
         from .digest import HEADER
         store.save_doc('digest', f'{HEADER}_refreshed {stamp[:16]}_\n\n{strip_directive(body)}\n', 'digest')
-    return {'message_id': mid, 'subject': subject, 'files': len(made)}
+    return {'message_id': mid, 'subject': subject, 'files': len(made), 'summary': strip_directive(body)}
 
 
 def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:

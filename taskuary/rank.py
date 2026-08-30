@@ -44,7 +44,7 @@ def mode_for(store, msg_row: dict) -> str:
     # a channel is not a connector type: 'email' is outlook OR gmail OR imap, so without a source
     # row to name it, any active mail connector in rank mode ranks the mail
     cands = ([store.get_connector(src['ConnectorId'])] if src and src.get('ConnectorId')
-             else [store.get_connector_by_type(t) for t in _TYPES.get(ch, (ch,))])
+             else [c for t in _TYPES.get(ch, (ch,)) for c in store.connectors_by_type(t)])
     for c in cands:
         try:
             if c and c.get('Active') and json.loads(c.get('ConfigJson') or '{}').get('bulk') == 'rank': return 'rank'

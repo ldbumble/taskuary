@@ -45,6 +45,11 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(terminal.phase_of(['Running tests… (esc to interrupt)', '? for shortcuts']), 'parked')
         self.assertEqual(terminal.phase_of(['? for shortcuts', 'Editing foo.py (esc to interrupt)']), 'working')
 
+    def test_permission_and_choice_prompts_are_parked_without_waiting_for_idle(self):
+        for tail in (['Do you want to allow this command?'], ['❯ 1. Yes', '  2. No'],
+                     ['Overwrite config.toml (y/n)'], ['Press enter to confirm']):
+            self.assertEqual(terminal.phase_of(tail), 'parked', tail)
+
     def test_an_unknown_screen_falls_back_to_the_clock(self):
         self.assertEqual(terminal.phase_of(['$ make test', 'ok 12 tests']), 'unknown')
         self.assertEqual(terminal.phase_of([]), 'unknown')

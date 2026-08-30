@@ -9,12 +9,14 @@ import {
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import StudioView from "./StudioView.jsx";
+import WallView from "./WallView.jsx";
+import GridViewIcon from "@mui/icons-material/GridView";
 import AddIcon from "@mui/icons-material/Add";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
 import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent, WorkPane } from "./ui.jsx";
 
 // "coder · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
@@ -68,6 +70,9 @@ export const FileChips = ({ files }) => (files || []).length === 0 ? null : (
 
 const LiveTail = ({ run }) => {
   const waiting = run.kind === "session" && isWaiting(run);
+  // a session reports what the agent HOLDS (ui.WorkPane); the raw-tail pane below stays only for
+  // a run with no witness at all
+  if (run.work) return <WorkPane run={run} />;
   return (
   <Box sx={{ mt: 0.6, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 0.85, py: 0.5 }}>
     <FileChips files={run.files} />
@@ -227,7 +232,8 @@ const COLS = [
 export default function BoardView({ onOpenTask }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
-  const [view, setView] = useState("columns");   // columns | studio - two looks at one board
+  const [view, setView] = useState("columns");   // columns | studio | wall - three looks at one board
+  const [boardTick, setBoardTick] = useState(0); // bumped when a session starts here: the active board view reloads at once
   const [dragId, setDragId] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [noteFor, setNoteFor] = useState(null);   // the task whose handover note is open
@@ -281,8 +287,18 @@ export default function BoardView({ onOpenTask }) {
     const { data } = await api.post("/api/tasks", { Title: nt.Title, Summary: nt.Summary || null, Kind: "coding",
       Tags: nt.repo ? `repo:${nt.repo}` : null });
     setNewOpen(false); setNt((cur) => ({ ...cur, Title: "", Summary: "" }));
-    // the details field IS the prompt - it gets typed into the session
-    if (nt.how === "live") return onOpenTask(data.taskId, { start: true, agent: nt.agent, model: nt.model });
+    // The details field IS the prompt - it gets typed into the session. A task born on the
+    // Board stays on the Board: start its terminal here, whichever board view is showing.
+    if (nt.how === "live") {
+      try {
+        await api.post("/api/terminals", { agent: nt.agent, model: nt.model || null, task_id: data.taskId, repo: nt.repo || null, seed: true });
+        setBoardTick((n) => n + 1);
+      } catch (e) {
+        // The task was created successfully, so keep it visible on the Board and explain only
+        // the part that failed instead of navigating away and silently retrying elsewhere.
+        setErr(e?.response?.data?.detail || "Task created, but the agent could not be started");
+      }
+    }
     load();
   };
 
@@ -299,7 +315,8 @@ export default function BoardView({ onOpenTask }) {
             much of your capacity is actually busy */}
         <Box sx={{ display: "flex", gap: 0.25, bgcolor: "#e7eae2", borderRadius: 2, p: "3px" }}>
           {[{ k: "columns", label: "Columns", icon: <ViewKanbanIcon sx={{ fontSize: 14 }} /> },
-            { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> }].map((o) => (
+            { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> },
+            { k: "wall", label: "Wall", icon: <GridViewIcon sx={{ fontSize: 14 }} /> }].map((o) => (
               <Box key={o.k} onClick={() => setView(o.k)}
                 sx={{ display: "flex", alignItems: "center", gap: 0.6, height: 24, px: 1.1, borderRadius: 1.5,
                   fontSize: 12, fontWeight: view === o.k ? 700 : 500, cursor: "pointer",
@@ -341,13 +358,17 @@ export default function BoardView({ onOpenTask }) {
         </DialogContent>
       </Dialog>
 
-      {view === "studio" && <StudioView onOpenTask={onOpenTask} />}
+      {view === "studio" && <StudioView onOpenTask={onOpenTask} refresh={boardTick} />}
+      {view === "wall" && <WallView onOpenTask={onOpenTask} refresh={boardTick} />}
 
-      <Box sx={{ display: view === "studio" ? "none" : "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
+      <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
         {COLS.map((col) => {
           const today = localToday();
+          // Done is agent work finished today. A reply the owner answered by hand, or a to-do
+          // ticked off in Tasks, never came through here - it lives in Tasks, not on this board.
+          const agentWork = (t) => t.HadAgent || t.Kind === "coding" || t.Kind === "setup" || !!t.Session;
           const cards = tasks.filter((t) => laneOf(t, live) === col.key
-            && (col.key !== "done" || String(t.ClosedAt || t.UpdatedAt || "").startsWith(today)));
+            && (col.key !== "done" || (String(t.ClosedAt || t.UpdatedAt || "").startsWith(today) && t.Kind !== "reply" && agentWork(t))));
           // rank mode: the Queued lane reads top-down in the order the funnel will take them
           if (col.key === "queued") cards.sort((a, b) => (b.Queued?.value ?? 0.5) - (a.Queued?.value ?? 0.5));
           return (
@@ -426,6 +447,15 @@ export default function BoardView({ onOpenTask }) {
                       border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.7 } }} />
                     {t.ReviewStatus && <ActionChip reviewStatus={t.ReviewStatus} taskStatus={t.Status}
                       action={t.ReviewKind === "auto" ? "auto" : "draft"} />}
+                    {/* the funnel is invisible until it isn't: a queued prompt is a promise the owner made
+                        to this agent, and the card is where they look for it */}
+                    {t.Waiting > 0 && (
+                      <Chip size="small" onClick={(e) => { e.stopPropagation(); setFeedTask(t.TaskId); setFeedOpen(true); }}
+                        label={`✎ ${t.Waiting} queued prompt${t.Waiting === 1 ? "" : "s"}`}
+                        title="waiting in the funnel - lands at the agent's next stop; click to add more"
+                        sx={{ height: 15, fontSize: 8.5, bgcolor: "#f1ead9", border: "1px solid #d8cfbe", color: "#6b5f45", fontWeight: 700,
+                          cursor: "pointer", "& .MuiChip-label": { px: 0.7 } }} />
+                    )}
                     <Box sx={{ flex: 1 }} />
                     <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
                   </Box>
@@ -475,7 +505,7 @@ export default function BoardView({ onOpenTask }) {
               How it gets worked — one agent, one way
             </Typography>
             <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}>
-              <MenuItem value="live" sx={{ fontSize: 12.5 }}>Start {nt.agent} on it — opens the task, prompt typed in, you can talk to it</MenuItem>
+              <MenuItem value="live" sx={{ fontSize: 12.5 }}>Start {nt.agent} on it — stays on the board with the prompt typed in</MenuItem>
               <MenuItem value="file" sx={{ fontSize: 12.5 }}>Just file it — nobody starts working yet</MenuItem>
             </Select>
           </Box>

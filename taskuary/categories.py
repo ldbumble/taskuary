@@ -54,6 +54,7 @@ def category_of(r: dict, team_domains=()) -> str:
     """One category for a feed row (store.feed columns: MsgStatus, RouteReason, TaskKind…)."""
     st, reason = r.get('MsgStatus') or r.get('Status') or '', (r.get('RouteReason') or '').lower()
     if r.get('Channel') == 'report': return 'report'
+    if r.get('Channel') == 'assistant': return 'assistant'         # the assistant's own post (assistant.py)
     if r.get('Direction') == 'out' or 'your reply' in reason or 'your sent reply' in reason: return 'yours'
     if st == 'feed': return 'feed'
     if st == 'triaging': return 'triaging'

@@ -137,13 +137,16 @@
   .logos span{font-family:var(--mono);font-size:12.5px;color:var(--dim);background:var(--panel);border:1px solid var(--bd);border-radius:999px;padding:6px 11px}
 
   /* download */
-  .dl{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:16px;margin-top:34px}
+  .dl{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:34px}  /* three equal cards - the wider first one read as a mistake */
   .dl .card{display:flex;flex-direction:column}
   .dl .card .os{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
   .dl .card h3{font-size:20px;margin:8px 0 4px}
   .dl .card p{flex:1}
   .dl .card .btn{align-self:flex-start;margin-top:16px}
-  .code{font-family:var(--mono);font-size:13px;background:var(--panel2);border-radius:8px;padding:10px 12px;color:var(--ink);margin-top:16px;overflow-x:auto;white-space:pre}
+  .code{font-family:var(--mono);font-size:13px;background:var(--panel2);border-radius:8px;padding:10px 64px 10px 12px;color:var(--ink);margin-top:16px;overflow-x:auto;white-space:pre;position:relative}
+  .code .cp{position:absolute;top:6px;right:6px;font:600 11px/1 var(--sans, system-ui);letter-spacing:.02em;padding:5px 9px;border-radius:6px;border:1px solid var(--bd);background:var(--panel);color:var(--accent);cursor:pointer}
+  .code .cp:hover{background:#fff}
+  .dl .ver{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:8px}
   .code .c{color:var(--faint)}
   .note{color:var(--faint);font-size:13px;margin-top:14px}
 
@@ -198,7 +201,7 @@
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="/"><img src="/icon.png" alt=""> Taskuary <span class="tag">v0.3</span></a>
+    <a class="brand" href="/"><img src="/icon.png" alt=""> Taskuary <span class="tag" id="vertag">v0.3</span></a>
     <div class="links">
       <a class="hide" href="#how">How it works</a>
       <a class="hide" href="#features">Features</a>
@@ -286,13 +289,14 @@
         <a class="btn primary" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
           Download Taskuary.exe</a>
+        <div class="ver" id="exever">latest release: checking GitHub…</div>
         <div class="note">Straight from the latest GitHub release — <a href="https://github.com/ldbumble/taskuary/releases/latest">release notes and checksums</a>.</div>
       </div>
       <div class="card">
         <div class="os">macOS · Linux · Windows</div>
         <h3>pip</h3>
         <p>Python 3.10 or newer. The desktop extra wraps it in a native window; without it, it opens in your browser.</p>
-        <div class="code">pip install taskuary
+        <div class="code"><button type="button" class="cp" onclick="copyCode(this)">copy</button>pip install taskuary
 taskuary
 <span class="c"># or a desktop window:</span>
 pip install "taskuary[desktop]"</div>
@@ -301,7 +305,7 @@ pip install "taskuary[desktop]"</div>
         <div class="os">Any box</div>
         <h3>Docker</h3>
         <p>For a home server or a machine that should not have Python on it. Persists across restarts; set a token to expose it beyond localhost.</p>
-        <div class="code">git clone https://github.com/ldbumble/taskuary
+        <div class="code"><button type="button" class="cp" onclick="copyCode(this)">copy</button>git clone https://github.com/ldbumble/taskuary
 cd taskuary
 docker compose up -d</div>
       </div>
@@ -319,7 +323,7 @@ docker compose up -d</div>
     <div class="oss">
       <div class="card">
         <h3>Where it is</h3>
-        <p>Early — <span class="mono">v0.3</span> and moving fast. The funnel, the review queue, the agent sessions and the reports pipeline are real; the edges are still being knocked off, and breaking changes are possible before 1.0.</p>
+        <p>Early — <span class="mono" id="verwhere">v0.3</span> and moving fast. The funnel, the review queue, the agent sessions and the reports pipeline are real; the edges are still being knocked off, and breaking changes are possible before 1.0.</p>
         <ul>
           <li>Python 3.10+ · FastAPI · SQLite — one process, one file</li>
           <li>730+ tests, run on Windows, macOS and Linux on every push</li>
@@ -407,6 +411,34 @@ docker compose up -d</div>
       btn.textContent = 'copied'; setTimeout(function(){ btn.textContent = 'copy'; }, 1400);
     });
   }
+  // a code block copies its COMMANDS: the button's own label and the # comment lines stay out
+  function copyCode(btn){
+    var lines = [];
+    btn.parentNode.childNodes.forEach(function(n){
+      if (n === btn) return;
+      if (n.nodeType === 1 && n.classList.contains('c')) return;
+      lines.push(n.textContent);
+    });
+    var text = lines.join('').split('\n').filter(function(l){ return l.trim(); }).join('\n');
+    navigator.clipboard.writeText(text).then(function(){
+      btn.textContent = 'copied'; setTimeout(function(){ btn.textContent = 'copy'; }, 1400);
+    });
+  }
+  // the version, read from GitHub at page load - a number typed into this file was stale the
+  // day after every release; the fallbacks stay in the markup for when the API is unreachable
+  (function(){
+    fetch('https://api.github.com/repos/ldbumble/taskuary/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rel){
+        if (!rel || !rel.tag_name) throw new Error('no release');
+        var v = rel.tag_name.replace(/^v/, ''), when = rel.published_at ? new Date(rel.published_at) : null;
+        var tag = document.getElementById('vertag'), where = document.getElementById('verwhere'), ex = document.getElementById('exever');
+        if (tag) tag.textContent = 'v' + v;
+        if (where) where.textContent = 'v' + v;
+        if (ex) ex.textContent = 'latest release: v' + v + (when ? ' · ' + when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+      })
+      .catch(function(){ var ex = document.getElementById('exever'); if (ex) ex.textContent = 'latest release on GitHub'; });
+  })();
 </script>
 </body>
 </html>

@@ -36,15 +36,18 @@ def sync_connections(store, actor='system'):
     if CONN_START not in doc or CONN_END not in doc: return
     srcs = store.list_sources()
     lines = []
-    for c in store.list_connectors():
+    connectors = store.list_connectors()
+    type_counts = {c['Type']: sum(x['Type'] == c['Type'] for x in connectors) for c in connectors}
+    for c in connectors:
         if not c['Active']: continue
         mine = [s['Address'] for s in srcs
                 if s['Channel'] == CH2SRC.get(c['Type']) and s['Active']
                 and (s.get('ConnectorId') in (None, c['ConnectorId']))]
         # what each connection IS to the agents, not just that it exists
         what = '; '.join(role_text(store, r) for r in ('trigger', 'tool', 'report') if r in roles_of(c))
-        if mine: lines.append(f"- {c['Name']}: {', '.join(sorted(mine)[:12])}" + (f" — {what}" if what else ''))
-        elif what: lines.append(f"- {c['Name']} — {what}")
+        name = c['Name'] + (f" [connector id {c['ConnectorId']}]" if type_counts[c['Type']] > 1 else '')
+        if mine: lines.append(f"- {name}: {', '.join(sorted(mine)[:12])}" + (f" — {what}" if what else ''))
+        elif what: lines.append(f"- {name} — {what}")
     for s in srcs:
         if s['Channel'] != 'report' or not s['Active']: continue
         cfg = json.loads(s.get('ConfigJson') or '{}')
@@ -60,8 +63,9 @@ def sync_connections(store, actor='system'):
         auth = ' (header X-Taskuary-Token)' if srv.get('token') else ''
         lines.append(f"- To USE one of the systems above, POST http://{srv.get('host', '127.0.0.1')}:{srv.get('port', 7787)}"
                      '/api/tools/run{auth} with {"type": "mssql|database|aws|s3_object|cloudwatch_logs|'
-                     'azure|azure_blob|azure_logs|winrm|mcp|rest|sqlite|rss", ...} — '
-                     'saved credentials are filled in for you; the raw output comes back.'.replace('{auth}', auth))
+                     'azure|azure_blob|azure_logs|winrm|mcp|rest|sqlite|rss|kb_search", ...} — '
+                     'saved credentials are filled in for you; if several cards have that type, pass '
+                     '"connector_id": <the id named above>; the raw output comes back.'.replace('{auth}', auth))
     block = '\n'.join(lines) or '_(no connections yet — add them in the Connectors tab)_'
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)

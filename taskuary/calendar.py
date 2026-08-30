@@ -58,20 +58,48 @@ def outlook_events(cfg: dict, secret: str, mailboxes: list, start: datetime, end
     out = []
     for mb in mailboxes:
         r = requests.get(f'{GRAPH}/users/{mb}/calendarView', timeout=20,
-                         headers={'Authorization': f'Bearer {tok}', 'Prefer': f'outlook.timezone="{tz_name(tz)}"'},
+                         headers={'Authorization': f'Bearer {tok}', 'Prefer': f'outlook.timezone="{tz_name(tz)}", outlook.body-content-type="text"'},
                          params={'startDateTime': _iso(start), 'endDateTime': _iso(end), '$top': MAX_EVENTS,
-                                 '$orderby': 'start/dateTime', '$select': 'subject,start,end,isAllDay,showAs,location,organizer'})
+                                 '$orderby': 'start/dateTime',
+                                 '$select': 'subject,start,end,isAllDay,showAs,location,organizer,attendees,bodyPreview,isOnlineMeeting,onlineMeeting,webLink'})
         if r.status_code == 403:
             raise RuntimeError(f'Graph refused the calendar for {mb} (403) - grant the APPLICATION permission Calendars.Read on the app and consent')
         if r.status_code != 200: raise RuntimeError(f'calendar read failed for {mb} ({r.status_code}): {r.text[:200]}')
         for e in r.json().get('value') or []:
             if (e.get('showAs') or '').lower() == 'free': continue
+            org = ((e.get('organizer') or {}).get('emailAddress') or {})
+            # the other people: by address, never by name - the owner is excluded whatever they are called
+            who = [((a.get('emailAddress') or {}).get('name') or (a.get('emailAddress') or {}).get('address') or '').strip()
+                   for a in (e.get('attendees') or [])
+                   if (a.get('type') or 'required') != 'resource' and ((a.get('emailAddress') or {}).get('address') or '').lower() != mb.lower()]
             out.append({'start': (e.get('start') or {}).get('dateTime', '')[:16].replace('T', ' '),
                         'end': (e.get('end') or {}).get('dateTime', '')[:16].replace('T', ' '),
                         'subject': e.get('subject') or '(no title)', 'all_day': bool(e.get('isAllDay')),
                         'status': (e.get('showAs') or 'busy').lower(), 'where': ((e.get('location') or {}).get('displayName') or '')[:60],
-                        'mailbox': mb})
+                        'mailbox': mb, 'organizer': org.get('name') or org.get('address') or '',
+                        'who': [w for w in who if w][:12],
+                        'about': about_text(e.get('bodyPreview')),
+                        'join': ((e.get('onlineMeeting') or {}).get('joinUrl') or '') if e.get('isOnlineMeeting') else '',
+                        'link': e.get('webLink') or ''})
     return out
+
+
+# invite bodies are mostly plumbing - the Teams block, dial-ins, "join on your computer" - and the
+# one useful sentence, when there is one, sits above it
+_BOILER = re.compile(r'(microsoft teams|join on your computer|join on the web|download teams|meeting id:|passcode:|dial in|dial-in|'
+                     r'conference id|find a local number|click here to join|join the meeting|join with a video|meeting options|'
+                     r'video conferencing device|tenant id|video id|or call in|phone conference|more info|learn more|reset pin|'
+                     r'help |need help|organizer|this is a recurring|zoom\.us|teams\.microsoft\.com|google meet|meet\.google\.com|'
+                     r'https?://|^\+?[\d\s(),.#*-]{7,}$|^[_\-=|\s]+$)', re.I)
+
+
+def about_text(preview: str, limit: int = 240) -> str:
+    """The invite's own words about what the meeting is - or '' when the body is only plumbing."""
+    # Teams lays its plumbing out with pipes on one line ("Download Teams | Join on the web") - split there too
+    lines = [p.strip() for l in str(preview or '').replace('\r', '\n').split('\n') for p in l.split(' | ')]
+    keep = [l for l in lines if l and not _BOILER.search(l) and len(l) > 3]
+    text = ' '.join(' '.join(keep).split())
+    return text[:limit].rstrip() + ('…' if len(text) > limit else '')
 
 
 def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
@@ -91,29 +119,36 @@ def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
     for e in r.json().get('items') or []:
         if e.get('transparency') == 'transparent' or e.get('status') == 'cancelled': continue
         s, en = e.get('start') or {}, e.get('end') or {}
+        me = (cfg.get('address') or '').lower()
         out.append({'start': (s.get('dateTime') or s.get('date') or '')[:16].replace('T', ' '),
                     'end': (en.get('dateTime') or en.get('date') or '')[:16].replace('T', ' '),
                     'subject': e.get('summary') or '(no title)', 'all_day': 'date' in s, 'status': 'busy',
-                    'where': (e.get('location') or '')[:60], 'mailbox': cfg.get('address') or 'google'})
+                    'where': (e.get('location') or '')[:60], 'mailbox': cfg.get('address') or 'google',
+                    'organizer': ((e.get('organizer') or {}).get('displayName') or (e.get('organizer') or {}).get('email') or ''),
+                    'who': [(a.get('displayName') or a.get('email') or '') for a in (e.get('attendees') or [])
+                            if not a.get('resource') and (a.get('email') or '').lower() != me][:12],
+                    'about': about_text(e.get('description')), 'join': e.get('hangoutLink') or '', 'link': e.get('htmlLink') or ''})
     return out
 
 
-def agenda(store, days: int = DAYS) -> dict:
-    """{events, errors, sources, start, end, tz} - every calendar the cards can reach."""
+def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
+    """{events, errors, sources, start, end, tz} - every calendar the cards can reach, from `start`
+    (now, unless a caller wants the whole day) for `days` days."""
     tz = tz_of(store)
     now = datetime.now(tz).replace(second=0, microsecond=0)
-    start, end = now, now + timedelta(days=days)
+    start = start or now
+    end = start + timedelta(days=days)
     events, errors, sources = [], [], []
-    ol = store.get_connector_by_type('outlook', with_secret=True)
-    if ol and ol.get('Active'):
+    for ol in store.connectors_by_type('outlook', with_secret=True):
+        if not ol.get('Active'): continue
         boxes = [s['Address'] for s in store.list_sources() if s.get('Channel') == 'email' and s.get('Address')
                  and (not s.get('ConnectorId') or s['ConnectorId'] == ol['ConnectorId'])]
         if boxes:
             sources.append(f"outlook: {', '.join(boxes)}")
             try: events += outlook_events(json.loads(ol.get('ConfigJson') or '{}'), ol.get('Secret'), boxes, start, end, tz)
             except Exception as e: errors.append(str(e)[:240])
-    gm = store.get_connector_by_type('gmail', with_secret=True)
-    if gm and gm.get('Active'):
+    for gm in store.connectors_by_type('gmail', with_secret=True):
+        if not gm.get('Active'): continue
         cfg = json.loads(gm.get('ConfigJson') or '{}')
         if cfg.get('google_refresh_token'):
             sources.append(f"google: {cfg.get('address') or 'primary'}")
@@ -122,6 +157,22 @@ def agenda(store, days: int = DAYS) -> dict:
     events.sort(key=lambda e: e['start'])
     return {'events': events[:MAX_EVENTS], 'errors': errors, 'sources': sources, 'start': _iso(start), 'end': _iso(end),
             'tz': tz_name(tz)}
+
+
+def _h12(hhmm: str, meridiem: bool = True) -> str:
+    """'13:30' -> '1:30 PM' (or '1:30' when the span's other end carries the PM). The digest copied
+    the prompt's 24-hour times into what the owner reads; nobody here tells time that way."""
+    try: h, m = int(hhmm[:2]), int(hhmm[3:5])
+    except ValueError: return hhmm
+    return f"{h % 12 or 12}:{m:02d}" + (f" {'AM' if h < 12 else 'PM'}" if meridiem else '')
+
+
+def span(start: str, end: str) -> str:
+    """'2026-08-28 13:30', '2026-08-28 14:00' -> '1:30-2:00 PM'; the AM/PM is written once when both ends share it."""
+    a, b = (start or '')[11:16], (end or '')[11:16]
+    if not b: return _h12(a)
+    same = (int(a[:2]) < 12) == (int(b[:2]) < 12) if a and b else False
+    return f"{_h12(a, not same)}-{_h12(b)}"
 
 
 def render(ag: dict) -> str:
@@ -137,7 +188,7 @@ def render(ag: dict) -> str:
         if not evs: lines.append(f'  {dow} {d}: free all day'); continue
         lines.append(f'  {dow} {d}:')
         for e in evs:
-            when = 'all day' if e['all_day'] else f"{e['start'][11:16]}-{e['end'][11:16]}"
+            when = 'all day' if e['all_day'] else span(e['start'], e['end'])
             lines.append(f"    {when} · {e['subject']}" + (f" ({e['status']})" if e['status'] not in ('busy', '') else '') + (f" · {e['where']}" if e['where'] else ''))
     for err in ag['errors']: lines.append(f'  COULD NOT READ: {err}')
     return '\n'.join(lines)
@@ -178,6 +229,36 @@ def upcoming(store, hours: int = 36, force: bool = False) -> dict:
     data = {'events': keep[:10], 'tz': ag['tz'], 'errors': ag['errors'], 'fetched': datetime.now().isoformat(timespec='seconds')}
     _UPCOMING.update(at=time.time(), data=data)
     return data
+
+
+_TODAY = {'at': 0.0, 'day': '', 'data': None}
+
+def today(store) -> dict:
+    """Today's meetings, ALL of them - the ones already over included - in order, with who is in
+    them and what they are about: the digest's calendar section, the Timeline's band, the panel's
+    strip. Read from midnight, not from now: a band that emptied as the day went on read as "the
+    calendar broke". Cached five minutes, per day."""
+    tz = tz_of(store); now = datetime.now(tz)
+    d = now.strftime('%Y-%m-%d')
+    if _TODAY['data'] and _TODAY['day'] == d and time.time() - _TODAY['at'] < UPCOMING_TTL: return _TODAY['data']
+    if store.get_settings().get('calendar_enabled', '1') != '1':
+        return {'date': d, 'now': now.strftime('%H:%M'), 'events': [], 'tz': tz_name(tz), 'errors': []}
+    ag = agenda(store, days=1, start=now.replace(hour=0, minute=0, second=0, microsecond=0))
+    evs = [e for e in ag['events'] if e['start'][:10] == d]
+    data = {'date': d, 'now': now.strftime('%H:%M'), 'events': evs, 'tz': ag['tz'], 'errors': ag['errors']}
+    _TODAY.update(at=time.time(), day=d, data=data)
+    return data
+
+
+def render_today(t: dict) -> list:
+    """One line per meeting, the way the digest prompt reads it: time, title, who, what it is about."""
+    out = []
+    for e in t.get('events') or []:
+        when = 'all day' if e.get('all_day') else span(e['start'], e.get('end') or '')
+        who = ', '.join(e.get('who') or [])
+        out.append(f"  {when} · {e['subject']}" + (f" · with {who}" if who else '') + (f" · where: {e['where']}" if e.get('where') else '')
+                   + (f" · about: {e['about']}" if e.get('about') else '') + (' · online' if e.get('join') else ''))
+    return out
 
 
 def run_calendar(cfg: dict):

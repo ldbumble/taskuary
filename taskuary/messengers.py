@@ -10,7 +10,7 @@ Taskuary's side is ~40 lines either way.
 Both are CHAT: messages land with a conversation id per chat, replies go back into the same
 chat, and the responder already knows not to sign chat messages.
 """
-import base64, json
+import base64, json, os
 import requests
 from loguru import logger
 
@@ -37,6 +37,8 @@ def tg_test(store, c) -> str:
     OFF under Sources with their chat id; only the ones the owner flips on become work."""
     if not c.get('Secret'): raise RuntimeError('no bot token saved - paste the token @BotFather gave you under Credentials')
     me = tg(c['Secret'], 'getMe')
+    # the bot's handle is part of who the owner is on Telegram (About you reads it back)
+    if me.get('username'): store.set_connector_config(c['ConnectorId'], {**_cfg(c), 'bot_username': me['username']})
     if not any(s['Channel'] == 'telegram' for s in store.list_sources(active_only=False)):
         store.save_source({'Channel': 'telegram', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
     return (f"authenticated as @{me.get('username')} - message the bot (or add it to a group), Sync, "
@@ -61,6 +63,17 @@ def _tg_photo(token: str, m: dict) -> list:
             except Exception as e:
                 logger.warning(f'telegram file fetch failed: {e}')
     return out
+
+
+def _tg_file(token: str, f: dict, fallback_name: str):
+    """One Telegram file by file_id -> (bytes, name, mime), or None with a warning."""
+    try:
+        path = tg(token, 'getFile', file_id=f['file_id']).get('file_path') or ''
+        data = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60).content
+        name = f.get('file_name') or (path.rsplit('/', 1)[-1] or fallback_name)
+        return data, name, (f.get('mime_type') or 'audio/ogg').split(';')[0]
+    except Exception as e:
+        logger.warning(f'telegram file fetch failed: {e}'); return None
 
 
 def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
@@ -108,16 +121,29 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
             continue
         text = m.get('text') or m.get('caption') or ''
         atts = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else []
+        # a voice message (or an audio file with no caption): fetched, transcribed if a voice
+        # connector exists, filed with the reason if not - and attached either way (voice.py)
+        transcribed, why = True, ''
+        v = m.get('voice') or (m.get('audio') if not text else None)
+        if v and not text:
+            from . import voice
+            got = _tg_file(tok, v, 'voice.ogg')
+            if got:
+                data, name, mime = got
+                text, transcribed, why = voice.note_body(store, data, mime, name, v.get('duration') or 0, 'Telegram')
+                atts.append({'id': v['file_id'][:60], 'name': name, 'contentType': mime, 'size': len(data),
+                             'contentBytes': base64.b64encode(data).decode()})
         if not text and not atts: continue
         who = ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) or frm.get('username') or 'someone'
-        out = ingest_message(store, file_only=file_only, msg={
+        out = ingest_message(store, file_only=file_only or not transcribed, msg={
             'external_id': f"telegram:{cid}:{m.get('message_id')}", 'channel': 'telegram',
             'subject': None, 'body': text or '(no text - see the attachment)',
             'from_name': who, 'from_email': f"@{frm['username']}" if frm.get('username') else None,
             'conversation_id': f'telegram:{cid}',
             'sent_at': datetime.fromtimestamp(m.get('date') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': chat.get('title') or who,
-            'images': images_for_triage(store, atts)}, llm=llm)
+            'images': images_for_triage(store, atts),
+            **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += out['status'] != 'duplicate'
         if atts and out.get('message_id') and out['status'] != 'duplicate':
             try: save_attachments(store, out['message_id'], atts, f"telegram:{cid}:{m.get('message_id')}")
@@ -127,8 +153,10 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     return n
 
 
-def tg_send(store, chat_id: str, body: str) -> dict:
-    c = store.get_connector_by_type('telegram', with_secret=True)
+def tg_send(store, chat_id: str, body: str, connector_id=None) -> dict:
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
+        store.get_connector_by_type('telegram', with_secret=True)
+    if c and c.get('Type') != 'telegram': c = None
     if not (c and c.get('Secret')): raise RuntimeError('the Telegram connection is not set up')
     tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000])
     return {'channel': 'telegram', 'chat': chat_id}
@@ -153,19 +181,73 @@ def wa_test(store, c) -> str:
         raise RuntimeError('bridge is running but WhatsApp is not paired yet - '
                            + (f"enter code {st['pairingCode']} on your phone (Linked devices)" if st.get('pairingCode')
                               else 'scan the QR the bridge printed in its own terminal'))
-    if not any(s['Channel'] == 'whatsapp' for s in store.list_sources(active_only=False)):
-        store.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
-    return f"paired as {st.get('me') or 'your account'} - chats flow in on the next sync"
+    # no catch-all is created here: only the chats the owner (or the setup agent) adds come in.
+    # '*' - every direct chat - is a row they add themselves. A '*' that appeared by itself was a
+    # timeline full of chats nobody asked for (the owner, 2026-08-30).
+    return f"paired as {st.get('me') or 'your account'} - add the chats you want under Chat JIDs; they flow in on the next sync"
+
+
+def wa_status(c) -> dict:
+    """The bridge's state, with the pairing QR drawn as an SVG the card can show. Pairing used to
+    mean reading a QR off the bridge's own terminal or typing a phone number into a chat; WhatsApp
+    rotates the QR every ~20s, so the card polls this and redraws - nobody relays anything."""
+    st = _wa(c, '/status')
+    jid = str(st.get('jid') or '')
+    out = {'connected': bool(st.get('connected')), 'me': st.get('me') or '', 'jid': jid,
+           'phone': ('+' + jid.split('@')[0].split(':')[0]) if jid and jid.split(':')[0].split('@')[0].isdigit() else '',   # the paired number, from the account jid
+           'pairing_code': st.get('pairingCode') or '', 'qr_svg': ''}
+    if st.get('qr') and not out['connected']:
+        import segno
+        out['qr_svg'] = segno.make(st['qr'], error='m').svg_data_uri(scale=5, border=2, dark='#1e1e2e', light='#ffffff')
+    return out
+
+
+def wa_chats(c) -> list:
+    """The chats the bridge has seen since it started - one row per JID, newest first. This is
+    how the owner finds the JID of "only this group": there is no directory to browse, the JID
+    shows up the moment someone writes in the chat, and the card offers it as a source."""
+    from datetime import datetime
+    out = _wa(c, '/messages?after=0')
+    by = {}
+    for m in out.get('messages', []):
+        jid = m.get('jid') or ''
+        if not jid or jid.endswith('@broadcast'): continue
+        r = by.setdefault(jid, {'jid': jid, 'group': bool(m.get('group')), 'name': '', 'n': 0, 'last': 0, 'snippet': ''})
+        r['n'] += 1
+        if not m.get('fromMe') and m.get('name'): r['name'] = m['name']     # the other side's push name, never ours
+        if (m.get('ts') or 0) >= r['last']: r['last'], r['snippet'] = m.get('ts') or 0, (m.get('text') or '')[:80]
+    rows = sorted(by.values(), key=lambda r: -r['last'])
+    for r in rows: r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
+    return rows
+
+
+def _read_media(path: str):
+    """The bridge wrote a voice note to disk beside itself; same machine, so it is read straight
+    off. Missing or oversized (over 25 MB - every transcription API's ceiling) is a warning, not
+    a failed poll."""
+    try:
+        if os.path.getsize(path) > 25 * 1024 * 1024: logger.warning(f'voice note too large to transcribe: {path}'); return None
+        with open(path, 'rb') as f: return f.read()
+    except OSError as e:
+        logger.warning(f'could not read the voice note the bridge saved ({path}): {e}'); return None
 
 
 def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     """The bridge keeps a sequence number per message; ours is on the connector, so nothing is
     read twice and a bridge restart just resets both to live traffic."""
+    import os
     from datetime import datetime
     from .ingest import ingest_message
+    from .channels import save_attachments
+    from . import voice
     cfg = _cfg(c)
-    want = {s['Address'] for s in sources
-            if s.get('Channel', 'whatsapp') == 'whatsapp' and s['Address'] and s['Address'] != '*'}
+    # '*' means every DIRECT chat and is itself opt-in (never created by default); a GROUP comes in
+    # only when its JID is added as a source. Both earlier readings were wrong ways: '*' silently
+    # dropped meant a listed group muted every DM, and '*' as admit-everything flooded the timeline
+    # with every group the owner is in.
+    srcs = [s for s in sources if s.get('Channel', 'whatsapp') == 'whatsapp' and s.get('Address')]
+    star = any(s['Address'] == '*' for s in srcs)
+    want = {s['Address'] for s in srcs if s['Address'] != '*'}
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n, took = 0, []
     from . import phone
@@ -175,17 +257,36 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # the WhatsApp bridge is the owner's OWN account, so a verdict they type in the
         # notify chat arrives as fromMe - intercept runs before that filter (phone.py also
         # recognizes and swallows our own pings echoing back through the bridge)
-        if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text']):
+        if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text'], m.get('quoted')):
             continue
-        if m.get('fromMe') or (want and jid not in want): continue
-        if not (m.get('text') or '').strip(): continue
-        r = ingest_message(store, file_only=file_only, msg={
-            'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp',
-            'subject': None, 'body': m['text'], 'from_name': m.get('name') or jid.split('@')[0],
+        if m.get('fromMe'): continue
+        if m.get('group') or jid.endswith('@g.us'):
+            if jid not in want: continue                      # groups are opt-in, always
+        elif not (star or jid in want): continue              # direct chats ride on '*'
+        body, audio = (m.get('text') or '').strip(), m.get('audio')
+        if not body and not audio: continue
+        # a voice note lands like any message: transcribed when a voice connector exists, and
+        # otherwise filed with the reason and the audio attached (voice.py) - it never vanishes
+        atts, transcribed, why = [], True, ''
+        if audio and not body:
+            data = _read_media(audio)
+            if data is None: continue
+            mime, name = (m.get('mime') or 'audio/ogg').split(';')[0], os.path.basename(audio)
+            body, transcribed, why = voice.note_body(store, data, mime, name, m.get('seconds') or 0, 'WhatsApp')
+            atts = [{'id': f"voice:{m.get('id')}", 'name': name, 'contentType': mime, 'size': len(data),
+                     'contentBytes': base64.b64encode(data).decode()}]
+        ext_id = f"whatsapp:{jid}:{m.get('id')}"
+        r = ingest_message(store, file_only=file_only or not transcribed, msg={
+            'external_id': ext_id, 'channel': 'whatsapp',
+            'subject': None, 'body': body, 'from_name': m.get('name') or jid.split('@')[0],
             'conversation_id': f'whatsapp:{jid}',
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
-            'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp'}, llm=llm)
+            'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp',
+            **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += r['status'] != 'duplicate'
+        if atts and r.get('message_id') and r['status'] != 'duplicate':
+            try: save_attachments(store, r['message_id'], atts, ext_id)
+            except Exception as e: logger.warning(f'whatsapp voice attachment failed: {e}')
         took.append(m.get('id'))
     # blue ticks on what the funnel took, when the owner asked for it - best effort, and
     # never at the cost of the poll: an unpaired or restarted bridge just does not mark
@@ -198,8 +299,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     return n
 
 
-def wa_send(store, jid: str, body: str) -> dict:
-    c = store.get_connector_by_type('whatsapp', with_secret=True)
+def wa_send(store, jid: str, body: str, connector_id=None) -> dict:
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
+        store.get_connector_by_type('whatsapp', with_secret=True)
+    if c and c.get('Type') != 'whatsapp': c = None
     if not c: raise RuntimeError('the WhatsApp connection is not set up')
     _wa(c, '/send', {'jid': jid, 'text': body[:4000]})
     return {'channel': 'whatsapp', 'chat': jid}

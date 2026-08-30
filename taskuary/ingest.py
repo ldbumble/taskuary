@@ -11,6 +11,7 @@ from .routing import route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref
+from . import senders
 
 
 # What the agent is TOLD about work from each kind of source. An email needs nothing -
@@ -96,6 +97,26 @@ def _from_row(r: dict, store=None) -> dict:
             'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r)}
 
 
+def auto_code_ok(store, msg: dict, mid: int, kind: str) -> tuple:
+    """May this task start a coding session by ITSELF? (ok, why-not) - two gates, cheapest first.
+
+    The first is the WORK, and it is not decided here (owner, 2026-08-30): a job that is clearly
+    not a coding job - a course to sit, a form to sign, a call somebody has to make - goes on the
+    Board and waits for a click. Sending it to an agent buys a session, a wrap-up and a drafted
+    reply for an agent that can only read it and say "nothing to do here" (TQ-0252 is what that
+    costs from outside). `kind` IS that judgement, made in triage against TRIAGE.md where the
+    owner can argue with it - there is no keyword, sender or category rule about it in this file,
+    because a rule here could not be argued with and would disagree with the document by lunch.
+
+    Then the stranger gate: a first-time sender's mail can be a task, it cannot start an agent on
+    this machine (senders.known). Second because it is the expensive one - a Sent Items search -
+    which no task already staying on the Board should pay for."""
+    if kind != 'coding': return False, 'not a coding job - on your list for you'
+    ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
+    return ok, why if ok else (f'{why} - not one of your domains, and this mailbox has never '
+                               'written to them; send it yourself if real')
+
+
 def drain(store, llm=None, progress=None, limit: int = 500) -> int:
     """Judge what deferred() stored - oldest first, one at a time, because a thread's second
     message must find the task its first one opened. A message whose triage raises is filed
@@ -111,6 +132,7 @@ def drain(store, llm=None, progress=None, limit: int = 500) -> int:
                 logger.warning(f'deferred triage failed for message {mid}: {e}')
                 store.place_message(mid, None, 'filed')
                 store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
+                store.set_setting('triage_last_error', str(e)[:200], 'system')
             if progress: progress(len(rows) - i - 1)
     return len(rows)
 
@@ -129,8 +151,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         return {'status': 'duplicate', 'task_id': None, 'message_id': None}
     if fresh and file_only:
         mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
+        # a voice note nothing could transcribe is filed too - and the reason says so, not "a feed"
         store.add_route(mid, None, 'feed', None,
-                        'shown for information - this connection is a feed, not a task trigger', [], 'feed')
+                        msg.get('file_reason') or 'shown for information - this connection is a feed, not a task trigger', [], 'feed')
         return {'status': 'feed', 'task_id': None, 'message_id': mid}
     # the policy answer is needed on both passes (escalate marks the task urgent below); it is
     # an in-memory match, cheap enough to make twice
@@ -150,8 +173,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     new_rid = None                       # set when a fresh reply task opens a review below
+    held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
-    mine = owner_addresses(store)        # who "you" is on the To/Cc lines - every mailbox, not just this one
+    mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
+    me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
     def _notes_note():
         # a cap that goes unmentioned reads as "everything you told me was applied". It was
         # not, and only the owner can judge whether the notes that missed out mattered - so
@@ -205,6 +230,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # short-circuit the obvious fyi noise before spending an AI call.
         if cfg.get('intent_classify_enabled', '1') == '1':
             pre = decided_intent(msg, mine)              # tracker items and obvious noise: no AI call needed
+            # a calendar invite is never work to triage - it is a meeting to be READY for: the
+            # assistant's post preps it before it starts (assistant.prep); the owner promotes it
+            # by hand if the meeting itself needs something prepared.
+            if msg.get('invite'): pre = {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}
             if pre:
                 intent = pre
             elif llm is None:
@@ -230,14 +259,19 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
                                          learned=injectable(store.doc('learned') or ''),
                                          notes=notes, notes_left=notes_left, images=msg.get('images'),
-                                         system=store.doc('triage'), mine=mine)
+                                         system=store.doc('triage'), mine=me)
                 if fail:
-                    # the AI errored - filing beats the old default-to-task heuristic
+                    # the AI errored - filing beats the old default-to-task heuristic. The error is
+                    # also kept as a setting so the Timeline's caption can say the brain is failing:
+                    # a codex profile carrying a flag its codex does not know failed every call,
+                    # and the only sign was rows that stayed on "triaging…"
                     mid = _land(store, msg, None, 'filed')
                     store.add_route(mid, None, 'file', None,
                                     f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail", [], 'triage')
+                    store.set_setting('triage_last_error', fail['err'][:200], 'system')
                     logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
                     return {'status': 'filed', 'task_id': None, 'message_id': mid}
+                if cfg.get('triage_last_error'): store.set_setting('triage_last_error', '', 'system')   # it answered: the brain is back
                 if intent.get('degraded'):
                     # the call SUCCEEDED and came back unusable, so `fail` is empty and the old
                     # code sailed on with a keyword guess that reads none of the standing notes
@@ -270,9 +304,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # 'escalate' was declared in the policy precedence and then read by nobody. It IS
         # the urgency rule: the owner names the senders whose mail jumps the queue, and that
         # is the only thing that marks a task urgent.
-        # a task the model did not label 'general' goes to the coding agent - the owner's call
-        # (2026-08-27): an agent on a non-coding task says "nothing to do here" and stops, a job left
-        # on a list does not. The keyword scan in draft_task_fields only decides with triage off.
+        # `kind` ROUTES the work: coding = an agent on a checkout, general = the owner's own list,
+        # reply = the responder and Review. It is triage's judgement, made against TRIAGE.md, and
+        # the keyword scan in draft_task_fields is only the fallback for a brain that did not say
+        # (or triage switched off). Nothing downstream second-guesses it - see auto_code_ok.
         judged = cfg.get('intent_classify_enabled', '1') == '1'       # a brain (or a by-construction rule) said 'task'
         f = draft_task_fields(msg, urgent=pol['action'] == 'escalate',
                               kind=intent.get('kind') or ('coding' if judged and intent['intent'] == 'task' else None))
@@ -292,14 +327,22 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                               'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
             if cfg.get('auto_draft_enabled') == '1':
                 _spawn(_auto_draft, store, tid, rid)
-        # KIND is the gate, not "anything that is not a reply". This used to dispatch a coding
-        # agent at every non-reply task, so a Teams message about someone's job scope - real
-        # work, no repository anywhere in it - opened a CLI session on a checkout and started
-        # editing code. A coding agent belongs on a coding task; the rest is yours to place.
-        elif f['kind'] == 'coding' and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
+        # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
+        # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
+        # stops, and a job left on a list does not. The one exception is work that is CLEARLY not
+        # a coding job (2026-08-30), and triage says which - `kind`, judged against TRIAGE.md.
+        # A general task still lands on the Board; it just waits for the owner's click.
+        elif f['kind'] in ('coding', 'general') and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
-            # open repo would start an agent per drive-by PR) - the task queues as needs-you
-            _spawn(_auto_code, store, tid)
+            # open repo would start an agent per drive-by PR) - the task queues as needs-you.
+            # The rest of the gate is auto_code_ok: what may start a session on this machine.
+            ok, who = auto_code_ok(store, msg, mid, f['kind'])
+            if ok: _spawn(_auto_code, store, tid)
+            else:
+                held = who
+                store.add_comment(tid, 'router', 'agent', f'Coding agent not auto-started: {who}. '
+                                                          'Send it to the coding agent yourself if an agent can do it.')
+                store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
     # and the tail says what happened NEXT - "it's a task" without "and who is working it"
@@ -308,8 +351,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     if r['decision'] != 'attach':
         act = ('a reply draft goes to Review for you' if f['kind'] == 'reply'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
-               # said per KIND, because the line is read as a promise about what just happened
-               else 'no code in it - it waits on your list, no agent dispatched' if f['kind'] != 'coding'
+               else f'not auto-worked: {held}' if held
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
                else 'auto-dispatch is off (Settings) - start the session from the task')
         reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
@@ -323,7 +365,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     lvl = cfg.get('notify_level') or 'needs_me'
     # on an attach there was no fresh triage (`f` only exists on create) - the task itself knows
     kind = f['kind'] if r['decision'] != 'attach' else (store.get_task(tid) or {}).get('Kind')
-    dispatched = kind != 'reply' and cfg.get('coder_auto_enabled') == '1'
+    dispatched = kind != 'reply' and cfg.get('coder_auto_enabled') == '1' and not held
     if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
         _notify_new(store, msg, tid, mid,
                     'a question for you' if kind == 'reply' else 'new task on your list', rid=new_rid)
@@ -451,6 +493,15 @@ def decided_intent(msg: dict, mine=()) -> dict | None:
         return {'intent': 'task', 'why': f'{what} on your own repository is work by construction - no classifier needed'}
     h = heuristic_intent(msg, mine)
     return h if h['intent'] == 'fyi' else None
+
+
+def own_addresses(store) -> set:
+    """The owner's OWN address(es) - what "addressed to you" is measured against. Settings ->
+    owner_email when it is set; otherwise every polled mailbox, which is all we know. Distinct
+    from owner_addresses: a shared log mailbox the funnel polls is a place the owner READS, not a
+    name the owner IS, and mail sent there is not mail sent to them."""
+    own = (store.get_settings().get('owner_email') or '').strip().lower()
+    return {own} if own else owner_addresses(store)
 
 
 def owner_addresses(store) -> set:
@@ -610,7 +661,7 @@ def _auto_code(store, tid):
     # the note belongs INSIDE the worker: written before the thread started, a task could
     # claim "auto-dispatched" with no session behind it whenever the process died first
     cap = auto_sessions(store)
-    if len([t for t in term.SESSIONS.values() if t.alive]) >= cap:
+    if len([t for t in list(term.SESSIONS.values()) if t.alive]) >= cap:
         store.enqueue_dispatch(tid, None, agent, f'{cap} agent sessions are already live')
         store.add_comment(tid, 'router', 'agent',
                           f'Queued: {cap} agent sessions are already live - '

@@ -17,9 +17,15 @@ test("a fully wired connector reads as pinging, with the chat named", () => {
   assert.match(st.text, /Pinging Telegram · -100123/);
 });
 
-test("phone approvals are mentioned only when they are on", () => {
+test("phone answers and approvals are mentioned only when they are on", () => {
   assert.doesNotMatch(notifyState([withChat({})], "needs_me", false).text, /approve/);
-  assert.match(notifyState([withChat({})], "needs_me", true).text, /reply in that chat to approve/);
+  assert.match(notifyState([withChat({})], "needs_me", true).text, /answer agents or approve drafts/);
+});
+
+test("Teams can carry alerts but says phone replies need Telegram or WhatsApp", () => {
+  const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me", true);
+  assert.equal(st.kind, "pinging");
+  assert.match(st.text, /phone replies need a Telegram or WhatsApp/);
 });
 
 test("the role without a chat is amber, not green", () => {

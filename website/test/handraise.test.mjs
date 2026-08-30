@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { advanceHandRaises, claimHandRaise, dismissHandRaise, enqueueHandRaise,
-  handRaiseWhat, isWatchingTask, nonOverlapping } from "../src/handraiseState.js";
+  handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping,
+  saveHandRaiseState } from "../src/handraiseState.js";
 
 const session = (overrides = {}) => ({ TaskId: 247, AgentName: "codex", kind: "session",
   StartedAt: "2026-08-30 00:00:00", phase: "working", waiting: false, idle: 2,
@@ -15,6 +16,13 @@ test("a parked session raises once only after it was seen working", () => {
   assert.equal(t.raises[0].ref, "TQ-0247");
   t = advanceHandRaises(t.state, [session({ phase: "parked", waiting: true })]);
   assert.deepEqual(t.raises, []);
+});
+
+test("a fast question already parked on the first poll raises immediately", () => {
+  const t = advanceHandRaises({}, [session({ phase: "parked", waiting: true, asking: true })]);
+  assert.equal(t.raises.length, 1);
+  assert.equal(t.raises[0].asking, true);
+  assert.equal(t.raises[0].eventId.endsWith(":1"), true);
 });
 
 test("an unknown idle screen must repeat, so one flaky poll cannot ring", () => {
@@ -37,7 +45,7 @@ test("a missed live-runs row preserves the working history", () => {
   assert.equal(t.raises.length, 1);
 });
 
-test("a process disappearing twice raises a finished event, but an old parked session does not", () => {
+test("a process disappearing twice raises a finished event, but a parked session does not also finish", () => {
   let working = advanceHandRaises({}, [session()]);
   working = advanceHandRaises(working.state, []);
   assert.deepEqual(working.raises, []);
@@ -46,15 +54,16 @@ test("a process disappearing twice raises a finished event, but an old parked se
   assert.equal(handRaiseWhat(working.raises[0]), "codex finished");
 
   let parked = advanceHandRaises({}, [session({ phase: "parked", waiting: true })]);
+  assert.equal(parked.raises.length, 1);
   parked = advanceHandRaises(parked.state, []);
   parked = advanceHandRaises(parked.state, []);
   assert.deepEqual(parked.raises, []);
 });
 
-test("a replacement session is primed independently instead of inheriting the old state", () => {
+test("a replacement session already asking raises independently", () => {
   let t = advanceHandRaises({}, [session()]);
   t = advanceHandRaises(t.state, [session({ StartedAt: "2026-08-30 00:01:00", phase: "parked", waiting: true })]);
-  assert.deepEqual(t.raises, []);
+  assert.equal(t.raises.length, 1);
 });
 
 test("an interactive session wins over a duplicate headless run row", () => {
@@ -64,12 +73,21 @@ test("an interactive session wins over a duplicate headless run row", () => {
   assert.equal(t.raises.length, 1);
 });
 
-test("browser windows share a short claim cooldown", () => {
+test("browser windows claim an event once but allow the next waiting cycle", () => {
   const values = new Map(), storage = { getItem: (k) => values.get(k), setItem: (k, v) => values.set(k, v) };
-  const raise = { tid: 247, identity: "session:now:codex" };
-  assert.equal(claimHandRaise(storage, raise, 100000), true);
-  assert.equal(claimHandRaise(storage, raise, 100010), false);
-  assert.equal(claimHandRaise(storage, raise, 112001), true);
+  const raise = { tid: 247, identity: "session:now:codex", eventId: "session:now:codex:1" };
+  assert.equal(claimHandRaise(storage, raise), true);
+  assert.equal(claimHandRaise(storage, raise), false);
+  assert.equal(claimHandRaise(storage, { ...raise, eventId: "session:now:codex:2" }), true);
+});
+
+test("tracker state survives a reload so an existing wait is not replayed", () => {
+  const values = new Map(), storage = { getItem: (k) => values.get(k), setItem: (k, v) => values.set(k, v) };
+  const first = advanceHandRaises({}, [session({ phase: "parked", waiting: true })]);
+  assert.equal(first.raises.length, 1);
+  saveHandRaiseState(storage, first.state);
+  const afterReload = advanceHandRaises(loadHandRaiseState(storage), [session({ phase: "parked", waiting: true })]);
+  assert.deepEqual(afterReload.raises, []);
 });
 
 test("watching suppression follows the selected task exactly", () => {

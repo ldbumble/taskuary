@@ -4,7 +4,7 @@ replies that go back into the SAME chat, and the owner-name flow the docs hang o
 import base64, json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import messengers, outbound, server
+from taskuary import messengers, outbound, phone, server
 from taskuary.store import MemoryStore, retoken_doc
 
 c_api = TestClient(server.app)
@@ -111,6 +111,17 @@ class WhatsAppTests(unittest.TestCase):
         self.assertEqual(m['ConversationId'], 'whatsapp:155@s.whatsapp.net')
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
+
+    def test_poll_passes_the_quoted_ping_to_phone_routing(self):
+        s, c = self._store()
+        feed = {'seq': 8, 'messages': [
+            {'seq': 8, 'id': 'answer', 'jid': '155@s.whatsapp.net', 'text': 'yes',
+             'quoted': '[tq0251] reply to this message', 'fromMe': True}]}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed), \
+             mock.patch.object(phone, 'intercept', return_value=True) as intercept:
+            self.assertEqual(messengers.poll_whatsapp(s, c, s.list_sources(), llm=None), 0)
+        intercept.assert_called_once_with(s, 'whatsapp', '155@s.whatsapp.net', 'yes',
+                                          '[tq0251] reply to this message')
 
     def test_star_covers_direct_chats_and_groups_are_opt_in(self):
         """Both earlier readings went wrong: '*' silently dropped meant one listed group muted every

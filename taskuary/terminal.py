@@ -953,7 +953,9 @@ IDLE_WAITING = 45
 # LAST line wins where both appear - a status line redrawn in place leaves old frames in the
 # scrollback, so an "esc to interrupt" three lines up is history, not now.
 _WORKING = re.compile(r'esc to interrupt|esc to cancel|\(thinking\)|[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]|\b(thinking|working|running)…', re.I)
-_PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|^\s*[›>❯]\s*$', re.I)
+_PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|'
+                     r'\?\s*$|\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|press enter|'
+                     r'choose an option|select an option|enter to (confirm|select))\b|^\s*[›>❯](?:\s*\d+\.)?', re.I)
 
 def waiting_of(t) -> bool:
     """Is the agent parked and the next move the owner's? The CLI's own screen decides where it

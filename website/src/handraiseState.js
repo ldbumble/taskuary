@@ -10,7 +10,7 @@ const payload = (row, identity, cycle, finished = false) => ({
   finished,
   tail: (row.tail || []).slice(-2).join(" "),
   identity,
-  eventId: `${identity}:${finished ? "ended" : cycle}`,
+  eventId: `${row.TaskId}:${identity}:${finished ? "ended" : cycle}`,
 });
 
 const observations = (rows, idleWaiting) => {
@@ -42,9 +42,16 @@ export function advanceHandRaises(previous = {}, rows = [], idleWaiting = 45) {
   for (const [tid, obs] of seen) {
     const key = String(tid), old = previous[key];
     if (!old || old.identity !== obs.identity || old.ended) {
-      state[key] = { identity: obs.identity, stable: obs.state, candidate: null, count: 0,
-        cycle: old?.identity === obs.identity ? old.cycle : 0, missing: 0, ended: false, row: obs.row };
-      continue; // a session already parked when first observed is old news
+      // A fast CLI can ask before the first 8-second poll. Treat an authoritative prompt as
+      // the event it is instead of requiring an earlier "working" snapshot. Unknown idle
+      // screens still need a confirming poll so one stalled response cannot ring the bell.
+      const firstWaiting = obs.state === "waiting" && obs.certain;
+      state[key] = { identity: obs.identity, stable: firstWaiting ? "waiting" : "working",
+        candidate: obs.state === "waiting" && !obs.certain ? "waiting" : null,
+        count: obs.state === "waiting" && !obs.certain ? 1 : 0,
+        cycle: firstWaiting ? 1 : 0, missing: 0, ended: false, row: obs.row };
+      if (firstWaiting) raises.push(payload(obs.row, obs.identity, 1));
+      continue;
     }
     if (old.stable === obs.state) {
       state[key] = { ...old, candidate: null, count: 0, missing: 0, row: obs.row };
@@ -76,16 +83,31 @@ export function advanceHandRaises(previous = {}, rows = [], idleWaiting = 45) {
 }
 
 // One browser window should claim a transition for all windows on the same Taskuary origin.
-// The cooldown also catches a flapping terminal without suppressing a later, genuine stop.
-export function claimHandRaise(storage, raise, now = Date.now(), cooldown = 12000) {
+// The event id includes the waiting cycle, so it is safe to remember for the session's life:
+// reloads do not ring again, while a later genuine stop has a new id and still does.
+export function claimHandRaise(storage, raise) {
   if (!storage) return true;
   try {
-    const key = `tq.handraise.${encodeURIComponent(`${raise.tid}:${raise.identity}`)}`;
-    const last = Number(storage.getItem(key) || 0);
-    if (last && now - last < cooldown) return false;
-    storage.setItem(key, String(now));
+    const key = `tq.handraise.${encodeURIComponent(raise.eventId || `${raise.tid}:${raise.identity}`)}`;
+    if (storage.getItem(key)) return false;
+    storage.setItem(key, "1");
     return true;
   } catch { return true; }
+}
+
+const TRACKER_KEY = "tq.handraise.tracker.v1";
+
+export function loadHandRaiseState(storage) {
+  if (!storage) return {};
+  try {
+    const got = JSON.parse(storage.getItem(TRACKER_KEY) || "{}");
+    return got && typeof got === "object" && !Array.isArray(got) ? got : {};
+  } catch { return {}; }
+}
+
+export function saveHandRaiseState(storage, state) {
+  if (!storage) return;
+  try { storage.setItem(TRACKER_KEY, JSON.stringify(state || {})); } catch { /* private mode/full storage */ }
 }
 
 export const isWatchingTask = (tab, selected, tid) => tab === "Tasks" && Number(selected) === Number(tid);

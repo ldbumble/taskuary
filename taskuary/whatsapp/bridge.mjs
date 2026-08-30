@@ -28,6 +28,7 @@ const messages = [];                       // { seq, id, jid, chat, name, text, 
 
 const text = (m) => m.conversation || m.extendedTextMessage?.text
   || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
+const context = (m) => Object.values(m || {}).find((v) => v?.contextInfo)?.contextInfo;
 
 async function connect() {
   const { state, saveCreds } = await useMultiFileAuthState("wa-auth");
@@ -61,7 +62,7 @@ async function connect() {
   sock.ev.on("messages.upsert", async ({ messages: ms, type }) => {
     if (type !== "notify") return;                       // history syncs are not new work
     for (const m of ms) {
-      const body = text(m.message || {});
+      const body = text(m.message || {}), quoted = text(context(m.message || {})?.quotedMessage || {});
       if (!body && !m.message) continue;
       const am = m.message?.audioMessage;
       let audio = "", mime = "", seconds = 0;
@@ -77,7 +78,7 @@ async function connect() {
       }
       messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid, group: m.key.remoteJid?.endsWith("@g.us"),
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
-        fromMe: !!m.key.fromMe, key: m.key,      // the whole key: read receipts need participant too
+        fromMe: !!m.key.fromMe, quoted, key: m.key, // quote routes phone answers; key is for read receipts
         audio, mime, seconds, voice: !!am?.ptt });
       while (messages.length > MAX_KEPT) messages.shift();
     }

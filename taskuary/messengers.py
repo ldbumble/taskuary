@@ -257,7 +257,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # the WhatsApp bridge is the owner's OWN account, so a verdict they type in the
         # notify chat arrives as fromMe - intercept runs before that filter (phone.py also
         # recognizes and swallows our own pings echoing back through the bridge)
-        if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text']):
+        if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text'], m.get('quoted')):
             continue
         if m.get('fromMe'): continue
         if m.get('group') or jid.endswith('@g.us'):

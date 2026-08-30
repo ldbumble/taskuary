@@ -132,6 +132,11 @@ def deliver(store, tid: int) -> dict:
 
 def tick(store) -> int:
     """Every task with notes waiting: deliver where its agent has stopped."""
+    # The same clock also backs chat hand-raises. It must look at every session, not only tasks
+    # with queued notes, and it is separate so note delivery remains deterministic.
+    from . import handraise
+    try: handraise.tick(store)
+    except Exception as e: logger.warning(f'hand raise tick failed: {e}')
     n = 0
     for tid in store.tasks_with_waiting():
         try: n += deliver(store, tid)['delivered']

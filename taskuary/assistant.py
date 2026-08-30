@@ -6,12 +6,13 @@ history behind it, the task that went quiet. This is the voice that does: on its
 (followups: the owner wrote last and asked for something; prep: meetings ahead, with what came
 before them; cold: work nothing has touched; and its own ideas
 from the day's mail), asks the model for its read GIVEN WHAT IT ALREADY SAID, and posts only what
-is new as ONE row on the Timeline - each line with its buttons on the panel: Follow up (the chase
-is drafted in the owner's voice, into Review), Make it a task (the agent starts), Not this, Snooze.
+is new as ONE row on the Timeline. The owner can talk back to every line; a correction or question
+gets an answer and becomes context for later checks. A concrete suggestion may also offer Follow up
+(the chase is drafted in Review) or Make it a task.
 
 It never repeats itself: every idea has a key and a state (idea table). Said once with the same
-facts is said; dismissed stays dismissed until the facts change; snoozed sleeps. Not this / Snooze
-are verdicts, so LEARNED.md hears which kinds of nudges this owner never wants.
+facts is said; dismissed stays dismissed until the facts change; snoozed sleeps. Those legacy states
+remain understood, but the panel asks the owner to explain what is wrong instead of exposing opaque verdict buttons.
 
 Nothing sits pinned above the Timeline: the assistant IS its rows, each posted for something
 specific, and what is open, in flight and waiting on the owner is the Morning digest's job on its
@@ -313,7 +314,7 @@ def _recent(store, days: int = 2) -> str:
     return '\n'.join(lines) or '(nothing arrived in the last two days)'
 
 
-def _people(store, days: int = 2) -> str:
+def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
     """WHAT PEOPLE SAID: the human threads of the last two days with the words in them - newest
     first, the last few lines of each, the owner's own lines marked. The subject line said
     "Teams chat with Mindy"; the words said "can you fill out the performance review?" - the
@@ -330,7 +331,7 @@ def _people(store, days: int = 2) -> str:
         k = r.get('ConversationId') or re.sub(r'^((re|fw|fwd|aw)\s*:\s*)+', '', _short(r.get('Subject'), 60), flags=re.I).lower()
         by.setdefault(k, []).append(r)
     me = (store.get_settings().get('owner_email') or '').lower()
-    out, used = [], 0
+    out, used, mids = [], 0, []
     for k, rs in list(by.items())[:PEOPLE_THREADS]:
         chain = store.thread_messages(conversation_id=rs[0].get('ConversationId'), subject=rs[0].get('Subject'), limit=12) if rs[0].get('ConversationId') else rs
         chain = sorted((c for c in chain if c.get('Status') != 'skipped'), key=lambda c: _ts(c.get('SentAt')))[-8:]
@@ -342,11 +343,21 @@ def _people(store, days: int = 2) -> str:
         head = (f"- {who} [{rs[0].get('Channel')}] re \"{_short(rs[0].get('Subject'), 60)}\" - {len(rs)} new, last word {'YOURS' if mine(last) else 'THEIRS'} {_when(last['SentAt'])}"
                 + (f", {task_ref(tid)} {t.get('Kind')} {t.get('Status')}" if t else '') + f" (latest mid {rs[0]['MessageId']})")
         first = lambda c: ((c.get('FromName') or c.get('FromEmail') or '?').split(',')[0].split() or ['?'])[0]
-        quotes = [f"    {'you' if mine(c) else first(c)} {_when(c['SentAt'])[:6]}: \"{_gist(c.get('BodyText'), 150)}\"" for c in chain]
+        def quote(c):
+            attachments = store.list_attachments(c['MessageId'])
+            files = ', '.join(f"{a.get('Name') or 'attachment'}" + (f" ({a['Path']})" if a.get('Path') else '')
+                              for a in attachments[:4])
+            return (f"    {'you' if mine(c) else first(c)} {_when(c['SentAt'])[:6]}: \"{_gist(c.get('BodyText'), 150)}\""
+                    + (f" [attachments: {files}]" if files else ''))
+        quotes = [quote(c) for c in chain]
         block = '\n'.join([head] + [q for q in quotes if not q.endswith(': ""')])
         if used + len(block) > PEOPLE_CHARS: break
-        out.append(block); used += len(block)
-    return '\n'.join(out) or '(no person wrote in the last two days)'
+        out.append(block); used += len(block); mids += [c['MessageId'] for c in chain]
+    return '\n'.join(out) or '(no person wrote in the last two days)', mids
+
+
+def _people(store, days: int = 2) -> str:
+    return _people_context(store, days)[0]
 
 
 def _calendar(store) -> str:
@@ -386,7 +397,14 @@ def _open(store) -> str:
 
 def _said(store) -> str:
     rows = [i for i in store.list_ideas() if i.get('Status') in ('open', 'dismissed', 'snoozed')][:40]
-    return '\n'.join(f"- ({i['Status']}) {i['Text']}" for i in rows) or '(nothing yet)'
+    out = []
+    for i in rows:
+        out.append(f"- ({i['Status']}) {i['Text']}")
+        try: chat = json.loads(i.get('ActionJson') or '{}').get('chat') or []
+        except ValueError: chat = []
+        for turn in chat[-4:]:
+            out.append(f"    {turn.get('role')}: {_short(turn.get('text'), 300)}")
+    return '\n'.join(out) or '(nothing yet)'
 
 
 def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
@@ -440,7 +458,9 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{(instruction or PROMPT).strip()}" + CONTRACT.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
     user = inputs(store, cands)
-    text = llm(system, user, max_tokens=POST_TOKENS)
+    from .llm import readable_images
+    images = readable_images(store, _people_context(store)[1])
+    text = llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {}))
     return parse(text, cands, max_lines), _notes(text), user
 
 
@@ -473,6 +493,47 @@ def _public(i: dict) -> dict:
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'why': a.pop('why', ''), 'action': a, 'status': i.get('Status')}
+
+
+def talk(store, idea_id: int, text: str, actor: str = 'owner', llm=None) -> dict:
+    """Let the owner challenge or question one suggestion and keep the exchange with it.
+
+    This is deliberately not a verdict. A correction becomes context under ALREADY SAID on
+    later checks, while the assistant answers now from the same people/calendar/work inputs
+    (and the same attached images) that should have informed the suggestion initially.
+    """
+    i = store.get_idea(idea_id)
+    if not i: raise ValueError(f'no idea {idea_id}')
+    text = _short(text, 1200)
+    if not text: raise ValueError('say what the assistant missed or ask a question')
+    try: action = json.loads(i.get('ActionJson') or '{}')
+    except ValueError: action = {}
+    chat = [t for t in (action.get('chat') or []) if isinstance(t, dict)][-10:]
+    if llm is None:
+        from .llm import build_llm
+        llm = build_llm(store)
+    if not llm: raise ValueError('the assistant needs an active AI connector to answer')
+    counsel = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
+    system = ((counsel + '\n\n') if counsel else '') + (
+        'The owner is talking back to one of your assistant suggestions. Answer as their assistant, '
+        'not as customer support. If they correct you, acknowledge the mistake plainly and update your '
+        'understanding from the evidence below. If they ask a question, answer it directly. Do not claim '
+        'you performed an action, sent anything, or saw a file that was not provided. Be brief: 2-4 sentences.')
+    history = '\n'.join(f"{t.get('role')}: {t.get('text')}" for t in chat)
+    user = (f"YOUR SUGGESTION:\n{i['Text']}\nWHY YOU GAVE:\n{action.get('why') or '(none)'}"
+            + (f"\nCONVERSATION SO FAR:\n{history}" if history else '')
+            + f"\nOWNER NOW SAYS:\n{text}\n\nCURRENT HUB CONTEXT:\n{inputs(store, [], 'NEW CANDIDATES (not relevant to this reply)')}")
+    from .llm import readable_images
+    images = readable_images(store, _people_context(store)[1])
+    answer = _short(llm(system, user, max_tokens=400, **({'images': images} if images else {})), 1200)
+    if not answer: raise ValueError('the assistant returned no answer')
+    stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    chat = (chat + [{'role': 'owner', 'text': text, 'at': stamp},
+                    {'role': 'assistant', 'text': answer, 'at': stamp}])[-12:]
+    action['chat'] = chat
+    store.set_idea_action(idea_id, action)
+    store.audit('idea', idea_id, 'talk', actor, detail={'owner': text[:300], 'assistant': answer[:300]})
+    return {'ideaId': idea_id, 'reply': answer, 'chat': chat}
 
 
 def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: bool, week: str = '(', people: str = '(') -> dict:
@@ -544,7 +605,7 @@ def _run(store, llm, instruction) -> dict:
     mid = store.add_message({'TaskId': None, 'ExternalId': f'assistant:{stamp}', 'ConversationId': 'assistant', 'Channel': CHANNEL,
                              'SourceName': 'Assistant', 'Subject': subj, 'FromName': 'Assistant', 'SentAt': stamp,
                              'BodyText': body, 'Status': 'feed'})
-    store.add_route(mid, None, 'feed', None, "the assistant's post: what it noticed and what it would do - each line has its buttons on the panel",
+    store.add_route(mid, None, 'feed', None, "the assistant's post: what it noticed and what it would do - open it to talk back or act",
                     [], 'assistant')
     store.set_brief(mid, json.dumps({'ideas': [_public(i) for i in rows], 'reviewed': rv}))
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
@@ -603,4 +664,3 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
         else: learn.learn_from(store, ev)
     store.audit('idea', idea_id, verb, actor, detail={'kind': i.get('Kind')})
     return out
-

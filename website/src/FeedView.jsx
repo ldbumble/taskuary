@@ -84,7 +84,7 @@ const needsYou = (r) => !!r.NeedsYou && r.TaskStatus !== "done";
 const blurb = (r) => {
   if ((r.RouteReason || "").includes("your reply") || (r.RouteReason || "").includes("your sent reply"))
     return r.TaskId ? `Your reply — kept on ${ref(r.TaskId)} so the thread shows both sides` : "Your reply — kept for context, never a task";
-  if (r.Channel === "assistant") return "The assistant's post — open it: every line has its buttons";
+  if (r.Channel === "assistant") return "The assistant's post — open it to talk back or act on a suggestion";
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
   if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
   if (r.MsgStatus === "triaging") return "On the timeline first — triage is deciding what it is";
@@ -1599,6 +1599,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
   const rv = briefOf(sel.Brief)?.reviewed;
   const [showSkipped, setShowSkipped] = useState(false);
   const [busy, setBusy] = useState(null);
+  const [talk, setTalk] = useState({});
   const [notes, setNotes] = useState({});
   const [err, setErr] = useState("");
   const load = useCallback(async () => {
@@ -1613,6 +1614,17 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
       if (verb === "task" && data.taskId) onOpenTask?.(data.taskId);
     } catch (e) { setErr(e?.response?.data?.detail || "That did not work"); }
     setBusy(null); load(); onChanged?.();
+  };
+  const answer = async (i) => {
+    const body = (talk[i.id] || "").trim();
+    if (!body) return;
+    setBusy(`${i.id}:talk`); setErr("");
+    try {
+      await api.post(`/api/assistant/talk/${i.id}`, { body });
+      setTalk((old) => ({ ...old, [i.id]: "" }));
+      await load();
+    } catch (e) { setErr(e?.response?.data?.detail || "The assistant could not answer"); }
+    setBusy(null);
   };
   const btn = { textTransform: "none", fontSize: 11.5, minWidth: 0, minHeight: 27, px: 1.1, lineHeight: 1.2 };
   const primary = { color: "#fff", background: ASSISTANT.gradient,
@@ -1645,22 +1657,42 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
               </Typography>
             )}
             {open ? (
-              <Box sx={{ mt: 0.75, display: "flex", gap: 0.6, flexWrap: "wrap", alignItems: "center" }}>
-                {a.type === "followup" && (
-                  <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "followup")} sx={{ ...btn, ...primary }}>
-                    {busy === `${i.id}:followup` ? "drafting…" : "Draft follow-up"}</Button>
-                )}
-                {a.mid && (
-                  <Button size="small" variant={a.type === "task" ? "contained" : "outlined"} disableElevation disabled={!!busy} onClick={() => act(i, "task")}
-                    title={a.title ? `Make it a task: ${a.title}` : "Make it a task"}
-                    sx={{ ...btn, ...(a.type === "task" ? primary : quiet) }}>
-                    {busy === `${i.id}:task` ? "starting…" : "Make it a task"}</Button>
-                )}
-                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
-                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "done")} sx={{ ...btn, ...quiet }}>Done</Button>
-                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "snooze")} sx={{ ...btn, ...quiet }}>Snooze a day</Button>
-                <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "dismiss")} title="teaches the assistant this kind of nudge is not for you" sx={{ ...btn, ...quiet }}>Not this</Button>
-              </Box>
+              <>
+                {(a.chat || []).map((turn, n) => (
+                  <Box key={`${i.id}:chat:${n}`} sx={{ mt: 0.55, ml: turn.role === "owner" ? 3 : 0,
+                    px: 1, py: 0.55, borderRadius: 1.25,
+                    bgcolor: turn.role === "owner" ? "#e9e3d8" : PANEL,
+                    border: `1px solid ${turn.role === "owner" ? "#d8d0c4" : BORDER}` }}>
+                    <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4 }}>
+                      <Box component="span" sx={{ fontWeight: 700, color: turn.role === "owner" ? INK : ASSISTANT.ink }}>
+                        {turn.role === "owner" ? "you" : "assistant"} · </Box>{turn.text}
+                    </Typography>
+                  </Box>
+                ))}
+                <Box sx={{ mt: 0.75, display: "flex", gap: 0.6, flexWrap: "wrap", alignItems: "center" }}>
+                  {a.type === "followup" && (
+                    <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "followup")} sx={{ ...btn, ...primary }}>
+                      {busy === `${i.id}:followup` ? "drafting…" : "Draft follow-up"}</Button>
+                  )}
+                  {a.mid && (
+                    <Button size="small" variant={a.type === "task" ? "contained" : "outlined"} disableElevation disabled={!!busy} onClick={() => act(i, "task")}
+                      title={a.title ? `Make it a task: ${a.title}` : "Make it a task"}
+                      sx={{ ...btn, ...(a.type === "task" ? primary : quiet) }}>
+                      {busy === `${i.id}:task` ? "starting…" : "Make it a task"}</Button>
+                  )}
+                  {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
+                </Box>
+                <Box sx={{ mt: 0.7, display: "flex", gap: 0.6, alignItems: "flex-end" }}>
+                  <TextField size="small" fullWidth multiline maxRows={4} value={talk[i.id] || ""}
+                    onChange={(e) => setTalk((old) => ({ ...old, [i.id]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); answer(i); } }}
+                    placeholder="Tell the assistant what it missed, or ask a follow-up…"
+                    sx={{ bgcolor: PANEL, "& .MuiInputBase-input": { fontSize: 11.5, lineHeight: 1.35 } }} />
+                  <Button size="small" variant="contained" disableElevation disabled={!!busy || !(talk[i.id] || "").trim()}
+                    onClick={() => answer(i)} sx={{ ...btn, ...primary, flexShrink: 0 }}>
+                    {busy === `${i.id}:talk` ? "answering…" : "Send"}</Button>
+                </Box>
+              </>
             ) : (
               <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.4 }}>
                 {notes[i.id] || (i.status === "done" ? "done" : i.status === "dismissed" ? "not this — noted" : i.status === "snoozed" ? "snoozed" : i.status)}

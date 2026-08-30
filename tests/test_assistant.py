@@ -1,9 +1,10 @@
 """The assistant on the Timeline (assistant.py): the half-hourly check that says what it noticed - the
 reply you sent and never heard back on, the task gone quiet, its
-own ideas - once each, with buttons. All offline: the model is a lambda, the calendar is off.
+own ideas - once each, with actions and conversation. All offline: the model is a lambda, the calendar is off.
 """
-import json, unittest
+import json, tempfile, unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest import mock
 
 from taskuary import assistant, ingest
@@ -252,6 +253,32 @@ class ButtonTests(unittest.TestCase):
         with self.assertRaises(ValueError): assistant.act(s, row['IdeaId'], 'task')
         with self.assertRaises(ValueError): assistant.act(s, row['IdeaId'], 'nonsense')
 
+    def test_talking_back_answers_with_the_thread_and_attachments_and_is_remembered(self):
+        s = _store()
+        mid = _mail(s, 'mindy@ours.com', 'Teams chat with Mindy', 'Please fill out the review.',
+                    days=0, conv='mindy', name='Mindy')
+        _mine(s, 'Teams chat with Mindy', 'I sent it to you here in the chat.', days=0, conv='mindy')
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'sent-review.png'; path.write_bytes(b'\x89PNG\r\n\x1a\nproof')
+            s.add_attachment({'MessageId': mid, 'ExternalId': 'mindy-proof', 'Name': 'sent-review.png',
+                              'ContentType': 'image/png', 'Path': str(path)})
+            idea = s.upsert_idea({'key': 'idea:mindy', 'kind': 'idea', 'text': 'You still owe Mindy the review.',
+                                  'action': {'type': 'task', 'mid': mid, 'why': 'Mindy asked Friday.'}}, _ago())
+            seen = {}
+            def llm(system, user, **kwargs):
+                seen.update(system=system, user=user, **kwargs)
+                return 'You are right — your chat says you sent it. I missed that line and the attached proof.'
+            out = assistant.talk(s, idea['IdeaId'], 'That is wrong; I sent it in the chat.', llm=llm)
+        self.assertEqual([t['role'] for t in out['chat']], ['owner', 'assistant'])
+        self.assertIn('I sent it to you here in the chat.', seen['user'])
+        self.assertIn('sent-review.png', seen['user'])
+        self.assertEqual(len(seen['images']), 1)
+        self.assertIn('That is wrong', assistant._said(s))
+        # A later check may rewrite the suggestion, but it cannot erase the correction.
+        s.upsert_idea({'key': 'idea:mindy', 'kind': 'idea', 'text': 'Updated thought.',
+                       'action': {'type': 'note', 'why': 'new facts'}}, _ago())
+        self.assertEqual(len(assistant._public(s.get_idea(idea['IdeaId']))['action']['chat']), 2)
+
 
 class ApiTests(unittest.TestCase):
     def test_the_endpoints_round_trip(self):
@@ -274,6 +301,9 @@ class ApiTests(unittest.TestCase):
         r = c.post(f"/api/assistant/ideas/{ideas[0]['id']}/snooze", json={'days': 2})
         self.assertEqual(r.status_code, 200); self.assertEqual(r.json()['verb'], 'snooze')
         self.assertEqual(c.post(f"/api/assistant/ideas/{ideas[0]['id']}/nonsense").status_code, 422)
+        with mock.patch('taskuary.server._llm', return_value=lambda *a, **k: 'You are right; I missed your reply.'):
+            talked = c.post(f"/api/assistant/talk/{ideas[0]['id']}", json={'body': 'I already sent it.'})
+        self.assertEqual(talked.status_code, 200); self.assertIn('missed your reply', talked.json()['reply'])
 
 
 class NotesToSelf(unittest.TestCase):

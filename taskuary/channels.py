@@ -424,22 +424,24 @@ def _mail_msgs(tok, upn, since, folder='inbox'):
     return r.json().get('value', [])
 
 
-def ingest_own_message(store, msg: dict, why: str) -> int:
+def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = False) -> int:
     """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row
     and never becomes work: when the conversation already has a task it rides along INSIDE
     the chain (a 'context' message + a history entry, so the panel shows it was answered).
-    No matching chain -> nothing stored at all."""
+    Chats may opt to keep unmatched lines too: the assistant needs the owner's half of a
+    conversation even when no task was made from it."""
     if store.message_exists(msg['external_id']): return 0
     conv = msg.get('conversation_id')
     tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
-    if not tid: return 0
+    if not tid and not keep_unmatched: return 0
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
                              'SourceLink': msg.get('source_link'), 'Status': 'context'})
-    store.add_route(mid, tid, 'attach', None, why, [], 'router')
-    store.add_comment(tid, 'you', 'human', f"You replied: {(msg.get('body') or '')[:300]}")
+    if tid:
+        store.add_route(mid, tid, 'attach', None, why, [], 'router')
+        store.add_comment(tid, 'you', 'human', f"You replied: {(msg.get('body') or '')[:300]}")
     return 1
 
 
@@ -594,7 +596,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
                   'source_name': upn, 'images': images_for_triage(store, atts)}
         if user['id'] == me:                       # your own chat lines are context, never work
             n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
-                                    'your message in this chat - kept for context')
+                                    'your message in this chat - kept for context', keep_unmatched=True)
             continue
         out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'

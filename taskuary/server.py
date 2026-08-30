@@ -755,6 +755,12 @@ def assistant_act(iid: int, verb: str, body: IdeaBody = None, background: Backgr
                               learn_async=background.add_task if background is not None else None)
     except ValueError as e: raise HTTPException(422, str(e))
 
+@app.post('/api/assistant/talk/{iid}')
+def assistant_talk(iid: int, body: TextBody):
+    """Talk back to one suggestion: corrections and questions get an answer, not a verdict button."""
+    try: return assistant.talk(store, iid, body.body, ACTOR, _llm())
+    except ValueError as e: raise HTTPException(422, str(e))
+
 class MineBody(BaseModel):
     kind: str = 'general'
     title: str | None = None        # the assistant's suggested title, accepted as-is from the panel

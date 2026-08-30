@@ -271,6 +271,8 @@ class CoreTests(unittest.TestCase):
         s.save_source({'Channel': 'teams', 'Address': 'me@corp.com', 'Active': 1, 'Owner': 'o'}, 'o')
         # the delta feed hands them back NEWEST first, mixed across chats
         msgs = [
+            {'id': 'm4', 'chatId': '19:aa', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:03:00Z',
+             'from': {'user': {'id': 'me', 'displayName': 'You'}}, 'body': {'content': '<p>I sent it to her in this chat.</p>'}},
             {'id': 'm3', 'chatId': '19:aa', 'messageType': 'message', 'createdDateTime': '2026-08-18T10:02:00Z',
              'from': {'application': {'id': 'bot'}, 'user': None}, 'body': {'content': '<attachment id="x"></attachment>'}},
             {'id': 'm2', 'chatId': '19:aa', 'messageType': 'systemEventMessage', 'createdDateTime': '2026-08-18T10:01:00Z',
@@ -284,12 +286,15 @@ class CoreTests(unittest.TestCase):
              mock.patch.object(channels, '_graph_user', return_value=('Priya', 'priya@corp.com')), \
              mock.patch.object(channels.requests, 'get', return_value=mock.Mock(status_code=200,
                                                                                json=lambda: {'id': 'me'})):
-            self.assertEqual(channels.poll_channels(s), 1)
+            self.assertEqual(channels.poll_channels(s), 2)
         feed = [m for m in s.feed() if m['Channel'] == 'teams']
         self.assertEqual(len(feed), 1)                                 # only the human line, bot + system dropped
         self.assertEqual((feed[0]['FromName'], feed[0]['FromEmail']), ('Priya', 'priya@corp.com'))
         row = s._one('SELECT ConversationId FROM message WHERE MessageId=?', (feed[0]['MessageId'],))
         self.assertEqual(row['ConversationId'], 'teams:19:aa')          # a chat is one thread, like a mail chain
+        chain = s.thread_messages(conversation_id='teams:19:aa')
+        self.assertEqual([(m['Status'], m['BodyText']) for m in chain],
+                         [('filed', 'can you look at the export?'), ('context', 'I sent it to her in this chat.')])
 
     def test_needs_you_is_anything_no_agent_is_moving(self):
         """The old rule was 'a review is pending', so a task whose agent finished without

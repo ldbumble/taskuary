@@ -727,8 +727,16 @@ class SQLiteStore:
     def get_idea(self, idea_id): return self._one('SELECT * FROM idea WHERE IdeaId=?', (idea_id,))
     def upsert_idea(self, s: dict, stamp: str) -> dict:
         """Said (again): a known key reopens with the new facts and text; a new one is born."""
-        act = json.dumps(s.get('action') or {})
-        if self._one('SELECT 1 FROM idea WHERE Key=?', (s['key'],)):
+        old = self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
+        action = dict(s.get('action') or {})
+        if old:
+            try: prior = json.loads(old.get('ActionJson') or '{}')
+            except ValueError: prior = {}
+            # Talking back is part of this suggestion's history. New facts may reopen and
+            # rewrite the action, but must not erase the owner's correction or our answer.
+            if prior.get('chat'): action['chat'] = prior['chat']
+        act = json.dumps(action)
+        if old:
             self._exec("UPDATE idea SET Kind=?, Text=?, ActionJson=?, Sig=?, Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?",
                        (s.get('kind'), s['text'], act, s.get('sig'), stamp, s['key']))
         else:
@@ -737,6 +745,8 @@ class SQLiteStore:
         return self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
     def set_idea_status(self, idea_id, status, by, until=None):
         self._exec('UPDATE idea SET Status=?, SnoozeUntil=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (status, until, by, _now(), idea_id))
+    def set_idea_action(self, idea_id, action):
+        self._exec('UPDATE idea SET ActionJson=? WHERE IdeaId=?', (json.dumps(action), idea_id))
     def set_ideas_message(self, ids, mid):
         if ids: self._exec(f"UPDATE idea SET MessageId=? WHERE IdeaId IN ({','.join('?' * len(ids))})", [mid, *ids])
     # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────

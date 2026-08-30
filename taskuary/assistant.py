@@ -550,7 +550,7 @@ def _run(store, llm, instruction) -> dict:
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
-    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read}
+    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows]}
 
 
 # ── the buttons ──────────────────────────────────────────────────────────────────────────────

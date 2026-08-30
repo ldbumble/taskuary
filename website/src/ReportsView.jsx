@@ -325,7 +325,7 @@ export default function ReportsView() {
             <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
               onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
           </Box>
-          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} />}
+          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} />}
           </Box>
         );
       })}
@@ -956,9 +956,11 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
    the only place its work shows: what it read (the exact text the model saw), what it reviewed and let
    go, its note to the next check, and what came out - or the error, when it failed. */
 const IDEA_KINDS = { followup: "follow up", promise: "promise", prep: "prep", cold: "gone quiet", idea: "idea" };
-function LastRun({ r }) {
-  const [open, setOpen] = useState(false);
+function LastRun({ r, sid, embedded }) {
+  // embedded: one run inside the History dialog - starts open, no "last run" header of its own
+  const [open, setOpen] = useState(!!embedded);
   const [showInputs, setShowInputs] = useState(false);
+  const [hist, setHist] = useState(false);
   const rv = r.reviewed || null;
   const outcome = r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
     : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "nothing to say — no post")
@@ -966,7 +968,8 @@ function LastRun({ r }) {
   const read = rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
     `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KINDS[k] || k}`).join(", ") || "no candidates"] : [];
   return (
-    <Box sx={{ pl: 5.5, pr: 1, pb: 1.25, mt: -0.5 }}>
+    <Box sx={{ pl: embedded ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded ? 0 : 1.25, mt: embedded ? 0 : -0.5 }}>
+      {!embedded && (
       <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
         <Box component="span" sx={{ fontWeight: 700, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
         {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
@@ -975,7 +978,28 @@ function LastRun({ r }) {
           sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
           {open ? "hide ↑" : "details ↓"}
         </Box>
+        {/* every run, not only the last: what each one read and why it said what it said (the owner, 2026-08-30) */}
+        {sid != null && (
+          <Box component="span" onClick={(e) => { e.stopPropagation(); setHist(true); }}
+            sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>history ↗</Box>
+        )}
       </Typography>
+      )}
+      {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)} />}
+      {open && !!r.lines?.length && (
+        <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: "#4f6b4e" }}>what it said, and why</Typography>
+          {r.lines.map((l) => (
+            <Box key={l.id ?? l.key} sx={{ mt: 0.35, px: 1, py: 0.5, borderRadius: 1, border: "1px solid #cfd8c8", bgcolor: "#eef3ea" }}>
+              <Typography variant="caption" sx={{ display: "block", color: INK, lineHeight: 1.45 }}>
+                <Box component="span" sx={{ fontWeight: 700, color: "#4f6b4e" }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
+              </Typography>
+              {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
+                <Box component="span" sx={{ fontWeight: 700, color: "#6f8a6e" }}>why · </Box>{l.why}</Typography>}
+            </Box>
+          ))}
+        </Box>
+      )}
       {open && (
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           {rv && (
@@ -1019,5 +1043,60 @@ function LastRun({ r }) {
         </Box>
       )}
     </Box>
+  );
+}
+
+/* The History dialog: every run of one report (store.report_run, newest first) down the left - when,
+   how long, what came out - and the chosen run whole on the right: what it read, what it reviewed and
+   let go, what it said and WHY. The assistant's quiet checks post nothing, so this is where "why did it
+   bring that up / why did it stay quiet at 14:30" gets answered (the owner, 2026-08-30). */
+function RunHistory({ sid, title, onClose }) {
+  const [runs, setRuns] = useState(null);
+  const [pick, setPick] = useState(null);      // the run id chosen
+  const [full, setFull] = useState({});        // run id -> the whole record, inputs and all
+  useEffect(() => {
+    api.get(`/api/reports/${sid}/runs`).then(({ data }) => { const rs = data.data || []; setRuns(rs); if (rs.length) setPick(rs[0].runId); })
+      .catch(() => setRuns([]));
+  }, [sid]);
+  useEffect(() => {
+    if (pick == null || full[pick]) return;
+    api.get(`/api/reports/runs/${pick}`).then(({ data }) => setFull((f) => ({ ...f, [pick]: data }))).catch(() => {});
+  }, [pick, full]);
+  const outcome = (r) => r.failed ? "failed" : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "quiet") : (r.subject ? "filed" : "ran");
+  const cur = pick != null ? (full[pick] || runs?.find((r) => r.runId === pick)) : null;
+  return (
+    <Dialog open onClose={onClose} maxWidth="lg" fullWidth onClick={(e) => e.stopPropagation()}>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 15 }}>
+        {title || "Report"} — run history
+        <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${runs.length} run${runs.length === 1 ? "" : "s"} kept` : "loading…"}</Typography>
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" onClick={onClose} startIcon={<CloseIcon sx={{ fontSize: 14 }} />}>Close</Button>
+      </DialogTitle>
+      <DialogContent sx={{ display: "flex", gap: 1.5, minHeight: 420 }}>
+        <Box sx={{ width: 260, flexShrink: 0, borderRight: `1px solid ${BORDER}`, pr: 1, overflowY: "auto", maxHeight: "70vh" }}>
+          {runs && !runs.length && <Empty>No runs kept yet — the history starts with the next run.</Empty>}
+          {(runs || []).map((r) => (
+            <Box key={r.runId} onClick={() => setPick(r.runId)}
+              sx={{ px: 1, py: 0.6, mb: 0.4, borderRadius: 1, cursor: "pointer", bgcolor: pick === r.runId ? "#eef3ea" : "transparent",
+                border: `1px solid ${pick === r.runId ? "#cfd8c8" : "transparent"}`, "&:hover": { bgcolor: "#f4f3ef" } }}>
+              <Typography variant="caption" sx={{ display: "block", color: INK, fontWeight: 600, lineHeight: 1.4 }}>{(r.at || "").slice(0, 16)}</Typography>
+              <Typography variant="caption" sx={{ display: "block", color: r.failed ? "#8a3646" : DIM, lineHeight: 1.4 }}>
+                {outcome(r)}{r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}{r.inputChars ? ` · read ${r.inputChars.toLocaleString()} chars` : ""}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0, overflowY: "auto", maxHeight: "70vh" }}>
+          {cur ? (
+            <>
+              <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 0.5 }}>
+                {cur.at} · {outcome(cur)}{cur.error ? ` — ${cur.error}` : ""}{cur.subject && cur.type !== "assistant" ? ` · ${cur.subject}` : ""}
+              </Typography>
+              {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded /> : <CircularProgress size={16} />}
+            </>
+          ) : <Typography variant="caption" sx={{ color: FAINT }}>Pick a run on the left.</Typography>}
+        </Box>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -732,17 +732,22 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     what it had looked at (the owner, 2026-08-30: 'want to see the last run... what data is processed')."""
     t0, cfg = time.time(), json.loads(src.get('ConfigJson') or '{}')
     rec = {'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': cfg.get('type') or 'rest', 'title': cfg.get('title') or src['Address']}
+    def keep():
+        # the newest run rides on the row (LAST_RUN); every run joins the history (report_run) - the
+        # owner (2026-08-30): "a history of runs... to see what it processed and why it created certain things"
+        store.set_setting(f"{LAST_RUN}{src['SourceId']}", json.dumps(rec, default=str), 'report')
+        try: store.add_report_run(src['SourceId'], rec)
+        except Exception as e: logger.warning(f'report run history not kept for {src["Address"]}: {e}')
     try:
         out = _run_report_source(store, src, cfg, llm)
     except Exception as e:
         rec.update({'ms': int((time.time() - t0) * 1000), 'failed': True, 'error': str(e)[:600]})
-        store.set_setting(f"{LAST_RUN}{src['SourceId']}", json.dumps(rec, default=str), 'report')
-        raise
+        keep(); raise
     rec.update({'ms': int((time.time() - t0) * 1000), 'subject': out.get('subject'), 'message_id': out.get('message_id'),
                 'failed': str(out.get('subject') or '').endswith('FAILED'), 'files': out.get('files'),
-                'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:20000],
-                'summary': str(out.get('summary') or '')[:2000]})
-    store.set_setting(f"{LAST_RUN}{src['SourceId']}", json.dumps(rec, default=str), 'report')
+                'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:30000],
+                'lines': out.get('lines') or [], 'summary': str(out.get('summary') or '')[:2000]})
+    keep()
     return out
 
 

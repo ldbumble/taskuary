@@ -1137,6 +1137,19 @@ def report_last_runs():
     from .reports import last_runs
     return {'data': last_runs(store)}
 
+@app.get('/api/reports/{sid}/runs')
+def report_runs(sid: int, limit: int = 60):
+    """A report's run history, newest first, without the inputs (store.report_runs) - the Reports tab's
+    History; one run whole, inputs and all, is /api/reports/runs/{rid}."""
+    if not store.get_source(sid): raise HTTPException(404, 'source not found')
+    return {'data': store.report_runs(sid, min(max(1, limit), 200))}
+
+@app.get('/api/reports/runs/{rid}')
+def report_run(rid: int):
+    r = store.get_report_run(rid)
+    if not r: raise HTTPException(404, 'run not found')
+    return r
+
 @app.get('/api/report-types')
 def report_types():
     return {'data': [{'type': t, 'status': 'planned' if t in PLANNED else 'builtin'} for t in REGISTRY]}

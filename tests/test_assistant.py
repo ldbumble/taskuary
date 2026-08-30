@@ -313,6 +313,49 @@ class LastRunRecord(unittest.TestCase):
         self.assertIn('Tuesdays', rec['reviewed']['notes'])
         self.assertIn('ALREADY SAID', rec['inputs'])                     # the exact text the model saw
 
+    def test_every_run_joins_the_history_with_what_it_read_and_why_it_said_it(self):
+        """The owner (2026-08-30): "a history of runs on the Reports tab... to see what it processed and why
+        it created certain things". Quiet runs and posting runs alike; the list is light, one run is whole."""
+        from taskuary import reports
+        s = _store()
+        _mail(s, DANA, 'Q3 ledger', 'Here is the ledger.', days=6, conv='c1')
+        _mine(s, 'Re: Q3 ledger', 'Could you send the reconciled version by Friday?', days=4, conv='c1')
+        src = next(x for x in s.list_sources(active_only=False) if json.loads(x['ConfigJson'] or '{}').get('type') == 'assistant')
+        reports.run_report_source(s, src, lambda *a, **k: '{"say": [], "notes": "quiet"}')
+        reports.run_report_source(s, src, lambda *a, **k: json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the ledger - I'd nudge.", 'why': 'four days is long for her'}]}))
+        runs = s.report_runs(src['SourceId'])
+        self.assertEqual([(r['said'], r['failed'], r['type']) for r in runs], [(1, False, 'assistant'), (0, False, 'assistant')])   # newest first
+        self.assertNotIn('inputs', runs[0]); self.assertGreater(runs[0]['inputChars'], 100)                                # the list is light
+        self.assertEqual(runs[0]['lines'][0]['kind'], 'followup'); self.assertIn("The model's read: four days", runs[0]['lines'][0]['why'])
+        whole = s.get_report_run(runs[0]['runId'])
+        self.assertIn('ALREADY SAID', whole['inputs']); self.assertEqual(whole['reviewed']['candidates'], {'followup': 1})
+        self.assertEqual(whole['messageId'], s.get_message(whole['messageId'])['MessageId'])
+        self.assertIsNone(s.get_report_run(99999))
+        # a failed run is kept too, with its error
+        bad = s.save_source({'Channel': 'report', 'Address': 'Broken', 'Active': 1, 'ConfigJson': json.dumps({'type': 'digest', 'title': 'Broken'})}, 't')
+        with mock.patch('taskuary.reports.render_report', side_effect=RuntimeError('no brain')):
+            reports.run_report_source(s, s.get_source(bad), None)
+        self.assertEqual(s.report_runs(bad)[0]['failed'], True)
+        # the history is capped per report
+        with mock.patch.object(type(s), 'REPORT_RUNS_KEPT', 3):
+            for _ in range(4): reports.run_report_source(s, src, lambda *a, **k: '{"say": []}')
+        self.assertEqual(len(s.report_runs(src['SourceId'])), 3)
+
+    def test_the_history_endpoints(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server, reports
+        s = server.store
+        s.set_setting('calendar_enabled', '0', 't')
+        src = assistant.source(s)
+        reports.run_report_source(s, src, lambda *a, **k: '{"say": [], "notes": "nothing"}')
+        c = TestClient(server.app)
+        runs = c.get(f"/api/reports/{src['SourceId']}/runs").json()['data']
+        self.assertTrue(runs); self.assertNotIn('inputs', runs[0])
+        one = c.get(f"/api/reports/runs/{runs[0]['runId']}").json()
+        self.assertIn('ALREADY SAID', one['inputs']); self.assertEqual(one['runId'], runs[0]['runId'])
+        self.assertEqual(c.get('/api/reports/runs/99999').status_code, 404)
+        self.assertEqual(c.get('/api/reports/99999/runs').status_code, 404)
+
 
 class WhatItReadsTests(unittest.TestCase):
     """The owner (2026-08-30): iterate on the data it brings in until it says something useful and surprising.

@@ -2269,6 +2269,24 @@ async def terminal_ws(ws: WebSocket, sid: str):
         if redraw_quiet: redraw_quiet.cancel()
         if redraw_cap: redraw_cap.cancel()
 
+# ── the knowledge base (knowledge.py): the card's Reindex button; searching goes through /api/tools/run (kb_search) ──
+class ReindexBody(BaseModel): connector_id: int | None = None
+
+@app.post('/api/knowledge/reindex')
+def knowledge_reindex(body: ReindexBody):
+    """Walk the Knowledge base card's sources now and refresh the index. Long for a big library -
+    the response carries what was indexed, skipped, removed and any file that would not read."""
+    from . import knowledge
+    r = knowledge.reindex(store, body.connector_id)
+    store.audit('connector', body.connector_id or 0, 'reindex', ACTOR, detail={k: v for k, v in r.items() if k != 'errors'})
+    return {'ok': not r['errors'] or r['indexed'] > 0, **r}
+
+@app.get('/api/knowledge/search')
+def knowledge_search(q: str, limit: int = 8, connector_id: int | None = None):
+    """Ranked passages for a question - what the card's search box shows."""
+    from . import knowledge
+    return {'data': knowledge.search(store, q, max(1, min(50, limit)), connector_id)}
+
 # ── the agent's browser, beside its terminal (browserview.py) ──
 @app.get('/api/terminals/{sid}/browser')
 def terminal_browser(sid: str):

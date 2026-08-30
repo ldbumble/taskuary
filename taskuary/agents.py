@@ -229,6 +229,9 @@ def task_context(store, task_id: int) -> str:
     lines += ['', 'Thread:'] + [f"- {c.get('Actor')}: {str(c.get('Body'))[:300]}" for c in d['comments']]
     mem = memory_block(store, d['messages'])
     if mem: lines += ['', mem]
+    from . import knowledge
+    kb = knowledge.block(store, ' '.join(f"{m.get('Subject') or ''} {m.get('BodyText') or ''}" for m in d['messages'])[:4000])
+    if kb: lines += [kb.strip()]
     return '\n'.join(lines)
 
 

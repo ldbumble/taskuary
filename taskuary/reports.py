@@ -441,13 +441,16 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
             'google_sheets': _lazy('sheets', 'run_google_sheets'),
             'sharepoint_list': _lazy('sharepoint', 'run_sharepoint_list'), 'sharepoint_file': _lazy('sharepoint', 'run_sharepoint_file'),
+            # the knowledge base: documents indexed in this store (knowledge.py) - searched, and refreshed on a schedule
+            'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),
             **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
-           'intacct_fields': 'intacct', 'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint'}
+           'intacct_fields': 'intacct', 'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
+           'kb_search': 'knowledge', 'kb_reindex': 'knowledge'}
 
 def card_of(t): return CARD_OF.get(t, t)
 
@@ -553,7 +556,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 
 
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') in ('digest', 'automate', 'agent', 'calendar'): return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards)
+    if cfg.get('type') in ('digest', 'automate', 'agent', 'calendar', 'kb_search', 'kb_reindex'):
+        return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards; the knowledge base: its index)
     conn = CONNECTION_OF.get(cfg.get('type'))
     if conn:
         saved = conn(store, cfg.get('connector_id')) if cfg.get('connector_id') else conn(store)

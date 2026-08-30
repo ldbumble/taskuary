@@ -31,6 +31,7 @@ ACTIONS = {
     'sqlite': 'read', 'mssql': 'read', 'database': 'read',
     'intacct': 'read', 'intacct_fields': 'read',      # readByQuery and lookup; nothing posts
     'local_file': 'read',    # a path on this machine, opened read-only - like the sqlite above it
+    'kb_search': 'read',     # the knowledge base is Taskuary's own index; searching it moves nothing (kb_reindex writes it: default)
     'aws': 'read', 's3_object': 'read', 'cloudwatch_logs': 'read',
     'azure': 'read', 'azure_blob': 'read', 'azure_logs': 'read',
     'entra_users': 'read', 'entra_groups': 'read', 'entra_signins': 'read', 'entra_licenses': 'read',

@@ -43,6 +43,12 @@ The rest of the workspace answers a specific question:
 - **Reports** turns connected data into scheduled Timeline items, spreadsheets, charts, and
   summaries. Every report can be previewed before it is scheduled.
 - **Connectors** controls sources and their roles: trigger, feed, report, tool, and notify.
+  The **Knowledge base** card there indexes the documents you already keep — SharePoint
+  library folders and folders on this machine — into Taskuary's own database, on this
+  machine. Once anything is indexed, a `kb_search` report answers questions from it on a
+  schedule, agents call the same search as a tool, and the reply drafter, the Assistant and
+  coding sessions receive the passages that bear on a thread; a nightly `kb_reindex` report
+  keeps it fresh. Passages are treated as facts to cite, never as instructions.
 - **Docs** contains the Markdown documents that govern Taskuary's behavior.
 - **Settings** contains routing policies, assistant thresholds, notification preferences,
   agent capacity, learned memory, and audit verification.

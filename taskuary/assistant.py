@@ -441,7 +441,10 @@ def inputs(store, cands: list, head: str = 'CANDIDATES') -> str:
     (facts) and the run record (reports.run_report_source), so what it was given is never a guess."""
     now = datetime.now()
     away = ooo(store)
+    from . import knowledge
+    facts_text = ' '.join(str(c.get('facts') or '') for c in cands)[:4000]
     return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
+            + knowledge.block(store, facts_text)
             + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first):\n{_people(store)}"
             + '\n\nOUT OF OFFICE (from their auto-replies):\n' + ('\n'.join(f'- {k}: {v}' for k, v in away.items()) or '(nobody)')
             + f"\n\nCALENDAR (the next two days):\n{_calendar(store)}"

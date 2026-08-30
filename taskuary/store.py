@@ -4,6 +4,7 @@ the audit log is a Buzz-style tamper-evident hash chain (each row hashes the pre
 """
 import contextlib, hashlib, json, re, sqlite3, threading
 from datetime import datetime, timedelta
+from loguru import logger
 
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
@@ -154,7 +155,13 @@ CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Ki
   DecidedBy TEXT, DecidedAt TEXT);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
+CREATE TABLE IF NOT EXISTS kb_doc (DocId INTEGER PRIMARY KEY, ConnectorId INTEGER, Source TEXT, Path TEXT, Name TEXT, Modified TEXT,
+  Size INTEGER, Chars INTEGER, IndexedAt TEXT);
+CREATE TABLE IF NOT EXISTS kb_chunk (ChunkId INTEGER PRIMARY KEY, DocId INTEGER, Seq INTEGER, Text TEXT);
 """
+# the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
+# built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
+KB_FTS = 'CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(Text, ChunkId UNINDEXED, tokenize="porter unicode61")'
 
 # CREATE TABLE IF NOT EXISTS is a no-op on an existing db; these are not. IF NOT EXISTS
 # so a second open (desktop + web, or a restart) does not raise. Named so EXPLAIN QUERY
@@ -279,6 +286,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
                  'sharepoint': 'report,tool', 'google_sheets': 'report,tool',
+                 'knowledge': 'report,tool',       # indexed documents: a kb_search report, and a tool for agents and the drafter
                  'jira': 'trigger', 'asana': 'trigger', 'monday': 'trigger',
                  'clickup': 'trigger', 'todoist': 'trigger',
                  'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
@@ -374,6 +382,9 @@ class SQLiteStore:
                     raise
             for ix in INDEXES:
                 self.cx.execute(ix)
+            try: self.cx.execute(KB_FTS); self.kb_fts = True
+            except sqlite3.OperationalError as e:
+                self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
@@ -388,6 +399,7 @@ class SQLiteStore:
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
                          ('sharepoint', 'SharePoint'), ('google_sheets', 'Google Sheets'),
+                         ('knowledge', 'Knowledge base'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
                          ('clickup', 'ClickUp'), ('todoist', 'Todoist'),
                          ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),
@@ -1255,6 +1267,75 @@ class SQLiteStore:
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
                 'reviews': self._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC', (task_id,))}
+
+    # ── knowledge base (knowledge.py): documents as passages behind an FTS5 index ──
+    def kb_doc(self, cid, source, path):
+        return self._one('SELECT * FROM kb_doc WHERE ConnectorId=? AND Source=? AND Path=?', (cid, source, path))
+    def kb_put(self, doc: dict, chunks: list) -> int:
+        """Replace one document's passages in a single transaction - _exec commits per statement,
+        and a library of a thousand files is not a thousand fsyncs per file."""
+        with self.lock:
+            cur = self.cx.cursor()
+            old = cur.execute('SELECT DocId FROM kb_doc WHERE ConnectorId=? AND Source=? AND Path=?',
+                              (doc['ConnectorId'], doc['Source'], doc['Path'])).fetchone()
+            if old: self._kb_drop(cur, old[0])
+            cur.execute('INSERT INTO kb_doc (ConnectorId,Source,Path,Name,Modified,Size,Chars,IndexedAt) VALUES (?,?,?,?,?,?,?,?)',
+                        (doc['ConnectorId'], doc['Source'], doc['Path'], doc.get('Name'), doc.get('Modified'), doc.get('Size'),
+                         doc.get('Chars'), _now()))
+            did = cur.lastrowid
+            for i, t in enumerate(chunks):
+                cur.execute('INSERT INTO kb_chunk (DocId, Seq, Text) VALUES (?,?,?)', (did, i, t))
+                if self.kb_fts: cur.execute('INSERT INTO kb_fts (Text, ChunkId) VALUES (?,?)', (t, cur.lastrowid))
+            self.cx.commit(); self._writes += 1
+            return did
+    def _kb_drop(self, cur, did):
+        if self.kb_fts: cur.execute('DELETE FROM kb_fts WHERE ChunkId IN (SELECT ChunkId FROM kb_chunk WHERE DocId=?)', (did,))
+        cur.execute('DELETE FROM kb_chunk WHERE DocId=?', (did,)); cur.execute('DELETE FROM kb_doc WHERE DocId=?', (did,))
+    def kb_prune(self, cid, source, keep: set) -> int:
+        """Drop the documents of one source that a fresh walk did not see - deleted files leave the index."""
+        gone = [r for r in self._rows('SELECT DocId, Path FROM kb_doc WHERE ConnectorId=? AND Source=?', (cid, source)) if r['Path'] not in keep]
+        with self.lock:
+            cur = self.cx.cursor()
+            for r in gone: self._kb_drop(cur, r['DocId'])
+            if gone: self.cx.commit(); self._writes += 1
+        return len(gone)
+    def kb_clear(self, cid=None):
+        with self.lock:
+            cur = self.cx.cursor()
+            for r in cur.execute('SELECT DocId FROM kb_doc' + (' WHERE ConnectorId=?' if cid else ''), (cid,) if cid else ()).fetchall():
+                self._kb_drop(cur, r[0])
+            self.cx.commit(); self._writes += 1
+    def kb_count(self, cid=None) -> dict:
+        w, p = (' WHERE ConnectorId=?', (cid,)) if cid else ('', ())
+        return {'docs': self._one(f'SELECT COUNT(*) n FROM kb_doc{w}', p)['n'],
+                'chunks': self._one(f'SELECT COUNT(*) n FROM kb_chunk c' + (' JOIN kb_doc d ON d.DocId=c.DocId' + w if cid else ''), p)['n']}
+    def kb_docs(self, cid=None) -> list:
+        w, p = (' WHERE ConnectorId=?', (cid,)) if cid else ('', ())
+        return self._rows(f'SELECT * FROM kb_doc{w} ORDER BY Source, Path', p)
+    def kb_search(self, fts_query: str, limit: int = 8, cid=None) -> list:
+        """Passages ranked by bm25 (FTS5) with a snippet around the matches; one hit per document,
+        the best passage of each. `fts_query` is FTS5 syntax - knowledge._query builds it safely."""
+        if not fts_query: return []
+        w, p = (' AND d.ConnectorId=?', (cid,)) if cid else ('', ())
+        if self.kb_fts:
+            q = ('SELECT d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, bm25(kb_fts) score, '
+                 "snippet(kb_fts, 0, '[', ']', ' … ', 48) snip FROM kb_fts JOIN kb_chunk c ON c.ChunkId=kb_fts.ChunkId "
+                 f'JOIN kb_doc d ON d.DocId=c.DocId WHERE kb_fts MATCH ?{w} ORDER BY score LIMIT ?')
+            rows = self._rows(q, (fts_query, *p, limit * 4))
+        else:
+            words = [t.strip('"') for t in fts_query.split(' OR ') if t.strip('"')]
+            like = ' OR '.join('c.Text LIKE ?' for _ in words)
+            rows = self._rows('SELECT d.DocId, d.Name, d.Path, d.Source, d.Modified, c.Seq, 0 score, substr(c.Text, 1, 400) snip '
+                              f'FROM kb_chunk c JOIN kb_doc d ON d.DocId=c.DocId WHERE ({like}){w} LIMIT ?',
+                              (*[f'%{x}%' for x in words], *p, limit * 4))
+        out, seen = [], set()
+        for r in rows:
+            if r['DocId'] in seen: continue
+            seen.add(r['DocId'])
+            out.append({'doc_id': r['DocId'], 'name': r['Name'], 'path': r['Path'], 'source': r['Source'], 'modified': r['Modified'] or '',
+                        'seq': r['Seq'], 'score': round(-float(r['score']), 3), 'snippet': ' '.join(str(r['snip'] or '').split())})
+            if len(out) >= limit: break
+        return out
 
 
 class MemoryStore(SQLiteStore):

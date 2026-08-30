@@ -170,7 +170,8 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if nudge: user += f'\n\n--- WHY YOU ARE WRITING AGAIN (the assistant\'s note to you, not for the reader)\n{nudge}'
     from . import calendar as cal
     calendar = cal.context_for(store, f"{last.get('Subject') or ''} {thread}")     # "Tuesday at 1 works" only if Tuesday at 1 is free
-    system += calendar + history_block(store, last)
+    from . import knowledge
+    system += calendar + history_block(store, last) + knowledge.block(store, f"{last.get('Subject') or ''} {thread}")
     if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
         store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
@@ -241,7 +242,8 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
             f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
     from . import calendar as cal
     calendar = cal.context_for(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
-    system += calendar + history_block(store, m)
+    from . import knowledge
+    system += calendar + history_block(store, m) + knowledge.block(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else out

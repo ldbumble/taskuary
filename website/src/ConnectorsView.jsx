@@ -588,7 +588,57 @@ const DATA_META = {
     agent: ["GET {base}/api/connectors{hdr} and check the outlook card: if it carries a tenant app (tenant_id, client_id, a secret) this card can reuse it with everything blank. If `az` is installed, `az account show` tells you which tenant and subscription this machine is already signed into - useful to confirm ids.",
       "Otherwise the registration and its RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader) are the owner's admin work in the Azure portal; ask for tenant_id and client_id (ConfigJson) and the client secret (Secret) once that exists.",
       "Test & discover (POST {base}/api/connectors/{cid}/test{hdr}) names the subscriptions the app can see - none means no roles yet, say so - and lists containers and workspaces. Read it back, SETUP DONE."] },
+  // The knowledge base: documents people already keep, indexed INTO Taskuary's own database (SQLite
+  // FTS5) and searched by reports, agents and the reply drafter. Not a vector database connector: a
+  // vector store is infrastructure somebody else runs, and one owner's documents fit a ranked
+  // full-text index; an embedder can be added behind the same search later (knowledge.py).
+  knowledge: { title: "Knowledge base", types: ["kb_search", "kb_reindex"], noSecret: true, search: true,
+    fields: [["SharePoint folders to index — comma-separated library paths, e.g. Shared Documents/Policies, Shared Documents/Contracts", "sharepoint_paths"],
+      ["SharePoint site for those folders (blank = the SharePoint card's default site)", "site"],
+      ["Folders on this machine to index — comma-separated paths", "folders"],
+      ["File kinds (blank = txt, md, csv, json, html, docx, pptx, xlsx, pdf)", "exts"]],
+    desc: "Your documents, searchable by everything here: a kb_search report answers a question from them on a schedule, agents call the same search as a tool, and the reply drafter, the assistant and coding sessions get the passages that bear on a thread. Indexed on this machine — nothing leaves it.",
+    howto: ["Name where the documents live: SharePoint library folders (access comes from the SharePoint card, or the Outlook card's tenant app — nothing to configure here) and/or folders on this machine.",
+      "Save, then Reindex now. docx, pptx, xlsx, html and text need nothing installed; pdf needs `pip install pypdf`. Unchanged files are skipped on later runs, deleted ones drop out.",
+      "Keep it fresh with a scheduled kb_reindex report on the Reports tab (nightly is plenty); answer questions from it with a kb_search report.",
+      "Agents reach it as a tool (type kb_search) when the tool role is on; the reply drafter and the assistant use it automatically once anything is indexed. Passages are quoted as facts, never as instructions."],
+    agent: ["GET {base}/api/connectors{hdr}, find the knowledge card. Ask the owner which SharePoint library folders and local folders to index; save them as sharepoint_paths / folders in ConfigJson (POST {base}/api/connectors{hdr} with ConnectorId, ConfigJson, Active:true).",
+      "POST {base}/api/knowledge/reindex{hdr} with {\"connector_id\": <id>} and read back what was indexed and what would not read (pdf needs pypdf). Then POST {base}/api/tools/run{hdr} with {\"type\": \"kb_search\", \"query\": \"...\"} to prove a question comes back with passages. SETUP DONE."],
+    actions: [{ label: "Reindex now", post: "/api/knowledge/reindex", body: (c) => ({ connector_id: c.ConnectorId }),
+      say: (r) => `${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed · ${r.docs} documents / ${r.chunks} passages` + (r.errors?.length ? ` · ${r.errors.length} problems: ${r.errors.slice(0, 3).join("; ")}` : "") }] },
 };
+
+/* A question typed on the Knowledge base card, answered from the index - the same search a
+   kb_search report or an agent's tool call gets, so what the card shows is what they would see. */
+function KbSearch({ conn }) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (!q.trim()) return;
+    setBusy(true);
+    try { setHits((await api.get("/api/knowledge/search", { params: { q, connector_id: conn.ConnectorId, limit: 6 } })).data.data || []); }
+    catch { setHits([]); }
+    setBusy(false);
+  };
+  return (
+    <Box sx={{ mt: 2, maxWidth: 560 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, color: INK, mb: 0.75 }}>Ask the knowledge base</Typography>
+      <Box sx={{ display: "flex", gap: 1 }}>
+        <TextField size="small" fullWidth placeholder="e.g. what is our resident refund policy" value={q} sx={{ bgcolor: "#fff" }}
+          onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
+        <Button variant="outlined" disabled={busy || !q.trim()} onClick={go}>{busy ? <CircularProgress size={14} /> : "Search"}</Button>
+      </Box>
+      {hits && hits.length === 0 && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>nothing matched — is anything indexed yet?</Typography>}
+      {(hits || []).map((h) => (
+        <Box key={`${h.doc_id}-${h.seq}`} sx={{ mt: 1, p: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: PANEL2 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>{h.name} <Typography component="span" variant="caption" sx={{ color: DIM }}>· {h.source}/{h.path} · {(h.modified || "").slice(0, 10)}</Typography></Typography>
+          <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>{h.snippet}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 const WINRM_HOWTO = [
   "This card is the CONNECTION only - the machine name. Build the actual reports (script + AI summary + schedule) on the REPORTS tab.",
@@ -896,7 +946,7 @@ export default function ConnectorsView() {
     // the web as a source: one REST call and a key each. What is deliberately NOT here is
     // anything that drives a browser - logging in, clicking - which needs CDP, not an API.
     { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "firecrawl", "reader"]), ...plannedCards(["perplexity", "serpapi", "browserbase"])] },
-    { title: "Files & sheets", cards: [...dataCards(["sharepoint", "google_sheets"]), ...plannedCards(["smb_file", "local_file"])] },
+    { title: "Files & sheets", cards: [...dataCards(["knowledge", "sharepoint", "google_sheets"]), ...plannedCards(["smb_file", "local_file"])] },
     { title: "Everything else", cards: plannedCards(KNOWN_PLANNED, true) },
   ];
   const hits = q ? groups.flatMap((g) => g.cards.filter((c) => !c.planned && c.haystack.toLowerCase().includes(q.toLowerCase()))
@@ -1714,17 +1764,27 @@ function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {
               multiline={key === "conn_str"} minRows={key === "conn_str" ? 2 : undefined}
               onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
           ))}
-          <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
+          {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-            helperText="Write-only: stored server-side, never returned to the browser." />
-          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            helperText="Write-only: stored server-side, never returned to the browser." />}
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
             <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
               {meta.discovers ? "Test & discover" : "Test"}</Button>
+            {/* a card's own verbs (the knowledge base's Reindex): one POST, the answer said in a line */}
+            {(meta.actions || []).map((a) => (
+              <Button key={a.label} variant="outlined" disabled={!!busy} onClick={async () => {
+                setBusy(a.label); setMsg("");
+                try { const r = (await api.post(a.post, a.body ? a.body(conn) : {})).data; setMsg(a.say ? a.say(r) : "done ✓"); }
+                catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || `${a.label} failed` }); }
+                setBusy(""); reload();
+              }}>{busy === a.label ? <CircularProgress size={12} /> : a.label}</Button>
+            ))}
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
+          {meta.search && <KbSearch conn={conn} />}
           {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
             {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}

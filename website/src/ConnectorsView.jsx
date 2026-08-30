@@ -367,6 +367,15 @@ const META = {
      transcribed", with the audio attached for a later click. The same connector powers the mic in
      the prompt boxes. Cheapest hosted: Groq (free tier, ~$0.04/hour after). Best accuracy: ElevenLabs
      Scribe / Deepgram Nova-3 / OpenAI gpt-4o-transcribe. Private: Local Whisper, or any Whisper server. ── */
+  gemini_stt: { group: "AI — voice", channel: "ai", srcLabel: null,
+    fields: [["model (default gemini-3.5-transcribe)", "model"], ["language code (optional, e.g. en-US — blank = auto)", "language"]],
+    secretLabel: "Google Gemini API key",
+    desc: "Google Gemini transcription — accurate speech-to-text with native custom-vocabulary biasing for names, acronyms and system terms.",
+    howto: ["Create a paid Gemini API key in Google AI Studio. Do not put the key in the browser — Taskuary stores it on this server.",
+      "Paste the key under Credentials. The default gemini-3.5-transcribe model understands the shared vocabulary configured on this page.",
+      "Test uploads one second of silence, transcribes it, and immediately deletes the temporary Google file. Enable to transcribe voice notes and every Taskuary mic."],
+    agent: ["Ask the owner for a paid Gemini API key from Google AI Studio and save it as Secret; never expose it in browser code or output.",
+      "Leave model blank for gemini-3.5-transcribe unless the owner explicitly names another transcription model. Test the card, turn it on, and say SETUP DONE."] },
   groq_stt: { group: "AI — voice", channel: "ai", srcLabel: null,
     fields: [["model (default whisper-large-v3-turbo; whisper-large-v3 is more accurate)", "model"], ["language code (optional, e.g. en — blank = auto)", "language"]],
     secretLabel: "Groq API key (gsk_…)",
@@ -390,7 +399,7 @@ const META = {
       "Paste it under Credentials. Test sends a second of silence through the real endpoint.",
       "Enable to transcribe voice notes and power the mic."] },
   elevenlabs_stt: { group: "AI — voice", channel: "ai", srcLabel: null,
-    fields: [["model (default scribe_v1)", "model"], ["language code (optional)", "language"]],
+    fields: [["model (default scribe_v2)", "model"], ["language code (optional)", "language"]],
     secretLabel: "ElevenLabs API key",
     desc: "ElevenLabs Scribe — top-tier accuracy across 99 languages, ~$0.22 per audio hour; the pick when notes arrive in several languages.",
     howto: ["Create a key at elevenlabs.io → Profile → API Keys.",
@@ -650,6 +659,54 @@ const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "el
   "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file",
   "netsuite", "quickbooks", "sap", "workday", "adp", "epic", "cerner", "pointclickcare"]);
 
+const VoiceVocabulary = ({ onBack }) => {
+  const [text, setText] = useState("");
+  const [limit, setLimit] = useState(100);
+  const [busy, setBusy] = useState(true);
+  const [saved, setSaved] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    api.get("/api/voice/vocabulary").then(({ data }) => {
+      if (!alive) return;
+      setText((data.terms || []).join("\n")); setLimit(data.limit || 100); setBusy(false);
+    }).catch((e) => { if (alive) { setErr(e?.response?.data?.detail || "Could not load voice vocabulary"); setBusy(false); } });
+    return () => { alive = false; };
+  }, []);
+  const terms = text.split("\n").map((x) => x.trim()).filter(Boolean);
+  const save = async () => {
+    setBusy(true); setErr(""); setSaved("");
+    try {
+      const { data } = await api.put("/api/voice/vocabulary", { terms });
+      setText((data.terms || []).join("\n")); setSaved(`${(data.terms || []).length} shared term${data.terms?.length === 1 ? "" : "s"} saved`);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not save voice vocabulary"); }
+    setBusy(false);
+  };
+  return (
+    <Box sx={{ maxWidth: 760, mx: "auto" }}>
+      <Crumb section="Connectors" onBack={onBack} title="Shared voice vocabulary" />
+      <Typography variant="body2" sx={{ color: DIM, mb: 2, lineHeight: 1.7 }}>
+        One list for every AI voice connector, browser mic and voice note. Add unusual names, acronyms, products and internal system terms;
+        each active provider receives the same hints automatically. Hints improve recognition but never force words into a transcript.
+      </Typography>
+      <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, p: 2 }}>
+        <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy}
+          label="Words and phrases" placeholder={"Taskuary\nPointClickCare\nIntacct\nTQ-0243"}
+          helperText={`One term or phrase per line · up to ${limit} · 50 characters and 5 words per entry`} />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
+          <Typography variant="caption" sx={{ color: terms.length > limit ? "error.main" : FAINT }}>{terms.length}/{limit}</Typography>
+          <Box sx={{ flex: 1 }} />
+          <Button variant="contained" disableElevation onClick={save} disabled={busy || terms.length > limit}>
+            {busy ? "Saving…" : "Save shared vocabulary"}
+          </Button>
+        </Box>
+        {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
+        {saved && <Alert severity="success" sx={{ mt: 1.5 }}>{saved}</Alert>}
+      </Box>
+    </Box>
+  );
+};
+
 export default function ConnectorsView() {
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
@@ -681,6 +738,7 @@ export default function ConnectorsView() {
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
   if (open?.kind === "agents") return <AgentsPage section="Connectors" title="AI CLI agents" onBack={() => setOpen(null)} />;
+  if (open?.kind === "voice-vocabulary") return <VoiceVocabulary onBack={() => setOpen(null)} />;
   if (open?.kind === "channel") {
     const conn = connectors.find((c) => c.ConnectorId === open.id);
     return <ChannelDetail conn={conn} sources={sources} reload={load} onBack={() => setOpen(null)} />;
@@ -745,7 +803,14 @@ export default function ConnectorsView() {
     { title: "AI — voice",
       // what happens with NO card here is not visible anywhere else, and it looked like something was missing
       note: "Without a card here: the mic buttons still work through your browser's own recognition (Edge and Chrome ship one — free, live microphone only), and voice notes on WhatsApp/Telegram land marked not transcribed, with a Transcribe button for later. A card is what transcribes a voice-note file on the server. Free choices: Groq (free tier) or Local Whisper (no key, on this machine). Edge's voices are text-to-speech — the other direction.",
-      cards: ["groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
+      cards: [
+        { key: "voice-vocabulary", title: "Shared voice vocabulary", channel: "ai",
+          desc: "one system-wide list used by every voice connector and mic",
+          haystack: "custom shared voice vocabulary words phrases domain names acronyms",
+          go: () => setOpen({ kind: "voice-vocabulary" }) },
+        ...["gemini_stt", "groq_stt", "openai_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"]
+          .filter((t) => byType[t]).map((t) => chanCard(byType[t])),
+      ] },
     // mail and chat are different jobs: one group held nine cards and read as a wall
     { title: "Email", cards: ["outlook", "gmail", "imap"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },
     { title: "Messaging", cards: ["teams", "slack", "telegram", "whatsapp", "imessage", "discord"].filter((t) => byType[t]).map((t) => chanCard(byType[t])) },

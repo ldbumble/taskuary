@@ -440,6 +440,11 @@ export const MicButton = ({ onText, size = 18, sx }) => {
     if (viaBrowser) {
       try {
         const r = new SR(); r.lang = navigator.language || "en-US"; r.continuous = true; r.interimResults = false;
+        // Chrome's contextual-biasing surface is progressive: use it when present, while older
+        // browsers keep dictating normally. Server voice connectors always receive this same list.
+        if (voice?.vocabulary?.length && window.SpeechRecognitionPhrase) {
+          try { r.phrases = voice.vocabulary.map((term) => new window.SpeechRecognitionPhrase(term, 5)); } catch { /* unsupported preview surface */ }
+        }
         let heard = "";
         r.onresult = (e) => { heard = Array.from(e.results).filter((x) => x.isFinal).map((x) => x[0].transcript.trim()).join(" "); };
         r.onerror = (e) => flash(e.error === "not-allowed" ? "microphone blocked in this browser" : `recognition ${e.error}`);

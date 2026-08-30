@@ -271,7 +271,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'notion': 'feed', 'discord': 'trigger,tool',
                  'sentry': 'trigger', 'pagerduty': 'trigger',
                  # speech to text: no role - the funnel and the prompt box ask the first active one
-                 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': ''}
+                 'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': ''}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
@@ -355,7 +355,7 @@ class SQLiteStore:
                          ('intacct', 'Sage Intacct'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
-                         ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
+                         ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
                          ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper')):
                 self.cx.execute('INSERT OR IGNORE INTO connector (Type, Name, Roles) VALUES (?,?,?)',
                                 (t, n, DEFAULT_ROLES.get(t, '')))

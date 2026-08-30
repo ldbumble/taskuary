@@ -1234,6 +1234,19 @@ def voice_status():
     from . import voice
     return voice.ready(store)
 
+@app.get('/api/voice/vocabulary')
+def voice_vocabulary():
+    from . import voice
+    return {'terms': voice.vocabulary(store), 'limit': voice.VOCAB_MAX}
+
+@app.put('/api/voice/vocabulary')
+def voice_vocabulary_save(body: dict):
+    from . import voice
+    try: terms = voice.save_vocabulary(store, body.get('terms'), ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'voice_vocabulary', ACTOR, detail={'count': len(terms)})
+    return {'terms': terms, 'limit': voice.VOCAB_MAX}
+
 @app.post('/api/voice/transcribe')
 async def voice_transcribe(request: Request):
     """A clip from the browser's microphone, posted as the raw body (no multipart dependency):

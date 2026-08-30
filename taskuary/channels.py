@@ -284,7 +284,7 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'google_sheets':
             from . import sheets
             detail = sheets.test(store, c)
-        elif c['Type'] in ('groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper'):
+        elif c['Type'] in ('gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper'):
             from . import voice
             detail = voice.test(store, store.get_connector(cid, with_secret=True))   # a second of silence through the real endpoint
         else:

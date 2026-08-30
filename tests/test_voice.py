@@ -1,6 +1,6 @@
 """Voice (voice.py): a voice note always lands - transcribed when an AI voice connector exists,
 filed with the reason and the audio attached when not - and the same road serves the mic."""
-import base64, json, os, tempfile, unittest
+import base64, json, os, sys, tempfile, types, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import messengers, server, voice
@@ -10,7 +10,7 @@ c_api = TestClient(server.app)
 
 
 class R:
-    def __init__(self, code, body): self.status_code, self._b, self.text = code, body, json.dumps(body)
+    def __init__(self, code, body, headers=None): self.status_code, self._b, self.text, self.headers = code, body, json.dumps(body), headers or {}
     def json(self): return self._b
 
 
@@ -24,7 +24,7 @@ def _voice_store(t='groq_stt', secret='k1'):
 class ProviderTests(unittest.TestCase):
     def test_no_connector_is_said_the_way_the_owner_can_fix_it(self):
         s = MemoryStore()
-        self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None})
+        self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None, 'vocabulary': []})
         with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'x', 'audio/ogg')
         self.assertIn('AI - voice', str(e.exception)); self.assertIn('Groq', str(e.exception))
 
@@ -61,7 +61,63 @@ class ProviderTests(unittest.TestCase):
         s = _voice_store('elevenlabs_stt')
         with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'el text'})) as p:
             self.assertEqual(voice.transcribe(s, b'x', 'audio/ogg')['text'], 'el text')
-        self.assertEqual(p.call_args[1]['headers'], {'xi-api-key': 'k1'}); self.assertEqual(p.call_args[1]['data']['model_id'], 'scribe_v1')
+        self.assertEqual(p.call_args[1]['headers'], {'xi-api-key': 'k1'}); self.assertEqual(p.call_args[1]['data']['model_id'], 'scribe_v2')
+
+    def test_one_shared_vocabulary_reaches_every_existing_provider_shape(self):
+        terms = ['Taskuary', 'PointClickCare']
+        for t in ('groq_stt', 'openai_stt', 'stt_server'):
+            s = _voice_store(t, secret=None if t == 'stt_server' else 'k1'); voice.save_vocabulary(s, terms)
+            with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'ok'})) as p:
+                voice.transcribe(s, b'x', 'audio/wav')
+            self.assertEqual(p.call_args[1]['data']['prompt'], 'Taskuary, PointClickCare')
+        s = _voice_store('deepgram'); voice.save_vocabulary(s, terms)
+        with mock.patch.object(voice.requests, 'post', return_value=R(200, {'results': {'channels': [{'alternatives': [{'transcript': 'ok'}]}]}})) as p:
+            voice.transcribe(s, b'x', 'audio/wav')
+        self.assertEqual(p.call_args[1]['params']['keyterm'], terms)
+        s = _voice_store('elevenlabs_stt'); voice.save_vocabulary(s, terms)
+        with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'ok'})) as p:
+            voice.transcribe(s, b'x', 'audio/wav')
+        self.assertEqual(p.call_args[1]['data']['keyterms'], terms)
+
+    def test_gpt_transcribe_receives_native_keywords_and_language(self):
+        s = _voice_store('openai_stt'); cid = s.get_connector_by_type('openai_stt')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'model': 'gpt-transcribe', 'language': 'en'})}, 'o')
+        voice.save_vocabulary(s, ['Taskuary', 'PointClickCare'])
+        with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'ok'})) as p:
+            voice.transcribe(s, b'x', 'audio/wav')
+        self.assertEqual(p.call_args[1]['data']['keywords[]'], ['Taskuary', 'PointClickCare'])
+        self.assertEqual(p.call_args[1]['data']['languages[]'], ['en'])
+
+    def test_local_whisper_receives_the_shared_vocabulary_as_its_initial_prompt(self):
+        calls = []
+        class FakeModel:
+            def __init__(self, *a, **kw): pass
+            def transcribe(self, path, **kw): calls.append(kw); return [types.SimpleNamespace(text=' local text ')], None
+        s = _voice_store('local_whisper', secret=None); voice.save_vocabulary(s, ['Taskuary', 'Pex Card']); voice._LOCAL.clear()
+        with mock.patch.dict(sys.modules, {'faster_whisper': types.SimpleNamespace(WhisperModel=FakeModel)}):
+            self.assertEqual(voice.transcribe(s, b'wav', 'audio/wav')['text'], 'local text')
+        self.assertEqual(calls[0]['initial_prompt'], 'Taskuary, Pex Card')
+
+    def test_gemini_uploads_transcribes_with_vocabulary_and_deletes_the_clip(self):
+        s = _voice_store('gemini_stt'); voice.save_vocabulary(s, ['Taskuary', 'PointClickCare'])
+        replies = [R(200, {}, {'X-Goog-Upload-URL': 'https://upload.example/one'}),
+                   R(200, {'file': {'name': 'files/one', 'uri': 'https://files.example/one', 'state': 'ACTIVE'}}),
+                   R(200, {'steps': [{'type': 'model_output', 'content': [{'type': 'text', 'text': 'queue TQ-0243'}]}]})]
+        with mock.patch.object(voice.requests, 'post', side_effect=replies) as p, mock.patch.object(voice.requests, 'delete') as d:
+            out = voice.transcribe(s, b'webm', 'audio/webm', 'clip.webm')
+        self.assertEqual(out, {'text': 'queue TQ-0243', 'provider': 'gemini_stt', 'model': 'gemini-3.5-transcribe'})
+        payload = p.call_args_list[2].kwargs['json']
+        self.assertEqual(payload['generation_config']['transcription_config']['custom_vocabulary'], ['Taskuary', 'PointClickCare'])
+        self.assertEqual(payload['input'][0]['mime_type'], 'audio/webm')
+        d.assert_called_once_with('https://generativelanguage.googleapis.com/v1beta/files/one', headers={'x-goog-api-key': 'k1'}, timeout=30)
+
+    def test_vocabulary_is_normalized_validated_and_persisted_once_for_the_system(self):
+        s = MemoryStore()
+        self.assertEqual(voice.save_vocabulary(s, [' Taskuary ', 'taskuary', 'PointClickCare']), ['Taskuary', 'PointClickCare'])
+        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'PointClickCare'])
+        with self.assertRaises(ValueError): voice.save_vocabulary(s, ['six word phrases are not accepted here'])
+        with self.assertRaises(ValueError): voice.save_vocabulary(s, ['x' * 51])
+        with self.assertRaises(ValueError): voice.save_vocabulary(s, [f'term {i}' for i in range(101)])
 
     def test_the_test_clip_is_a_second_of_silence_through_the_real_endpoint(self):
         s = _voice_store('groq_stt')
@@ -133,3 +189,13 @@ class FunnelTests(unittest.TestCase):
             r = c_api.post('/api/voice/transcribe', content=b'x', headers={'content-type': 'audio/webm'})
         self.assertEqual(r.status_code, 409); self.assertIn('AI - voice', r.json()['detail'])
         self.assertIn('ready', c_api.get('/api/voice/status').json())
+
+    def test_voice_vocabulary_api_is_shared_validated_and_audited(self):
+        s = MemoryStore()
+        with mock.patch.object(server, 'store', s):
+            r = c_api.put('/api/voice/vocabulary', json={'terms': [' Taskuary ', 'PointClickCare', 'taskuary']})
+            self.assertEqual(r.json(), {'terms': ['Taskuary', 'PointClickCare'], 'limit': 100})
+            self.assertEqual(c_api.get('/api/voice/vocabulary').json()['terms'], ['Taskuary', 'PointClickCare'])
+            self.assertEqual(c_api.get('/api/voice/status').json()['vocabulary'], ['Taskuary', 'PointClickCare'])
+            self.assertEqual(s._rows("SELECT Action FROM audit WHERE Action='voice_vocabulary'")[0]['Action'], 'voice_vocabulary')
+            self.assertEqual(c_api.put('/api/voice/vocabulary', json={'terms': ['x' * 51]}).status_code, 422)

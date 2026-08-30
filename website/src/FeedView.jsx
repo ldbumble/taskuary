@@ -933,7 +933,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
                           minWidth: 0, overflow: "hidden",
                           transition: "box-shadow .18s, border-color .18s",
                           ...(sel?.MessageId === r.MessageId
-                            ? { borderColor: "#d8cfbe", boxShadow: "inset 2px 0 0 #55697a, 0 1px 3px rgba(30,50,38,.07)" } : {}),
+                            ? { borderColor: "#d8cfbe", boxShadow: "inset 2px 0 0 #55697a, 0 1px 3px rgba(30,50,38,.07)",
+                                "& .thubDetail": { gridTemplateRows: "1fr" }, "& .thubDetailText": { opacity: 1 } } : {}),
                           "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)", cursor: "pointer" },
                           "&:hover .thubGo": { opacity: 1, transform: "translateX(0)" } }}>
                         <Box sx={{ display: "flex", gap: 0.85, alignItems: "baseline", minWidth: 0 }}>
@@ -968,10 +969,23 @@ export default function FeedView({ onOpenTask, onChanged }) {
                               transition: "opacity .18s, transform .18s" }} />
                           </Box>
                         </Box>
-                        {/* ONE line per message, always. A timeline is for scanning, and the second
-                            line was costing about a third of the items on a screen. It used to unfold
-                            on hover too, which heaved the list under a moving cursor; the panel spells
-                            the verdict out in full, so the row never grows. */}
+                        {/* ONE line per message while you scan; the SELECTED row unfolds its blurb and
+                            gist. It used to unfold on hover too, and a cursor sweeping down the list
+                            heaved every row below it - so the fold follows the selection, not the mouse
+                            (a hover still selects, after its short rest). */}
+                        <Box className="thubDetail" sx={{ display: "grid", gridTemplateRows: "0fr", transition: "grid-template-rows .22s ease" }}>
+                          <Box sx={{ overflow: "hidden" }}>
+                            <Typography className="thubDetailText" noWrap
+                              sx={{ fontSize: 11, lineHeight: 1.35, pt: "3px", opacity: 0, transition: "opacity .22s ease .05s",
+                                color: needsYou(r) ? ALERT_INK : "#867f74" }}>{blurb(r)}</Typography>
+                            {r.Preview && (
+                              <Typography className="thubDetailText" variant="caption" noWrap
+                                sx={{ display: "block", color: INK, pt: "3px", opacity: 0, transition: "opacity .22s ease .05s" }}>
+                                “{r.Preview}”
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
                       </Box>
                     </Box>
                   </React.Fragment>

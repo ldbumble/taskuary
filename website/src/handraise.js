@@ -8,6 +8,7 @@
 import { useEffect, useRef } from "react";
 import api from "./api";
 import { IDLE_WAITING } from "./ui.jsx";
+import { advanceHandRaises, claimHandRaise, nonOverlapping } from "./handraiseState.js";
 
 export const SOUNDS = ["off", "chime", "bell", "knock", "pop"];
 
@@ -55,25 +56,22 @@ export async function desktopNotify(title, body, onClick) {
 // a task's agent flips from working to waiting. Only transitions fire: a session already
 // parked when the page loads is old news, and a poll that misses a beat must not re-ring.
 export function useHandRaise(onRaise, every = 8000) {
-  const seen = useRef({});          // tid -> "working" | "waiting"
-  const primed = useRef(false);
+  const tracker = useRef({});
   useEffect(() => {
     let alive = true;
-    const poll = async () => {
+    const poll = nonOverlapping(async () => {
       try {
         const { data } = await api.get("/api/runs/live", { params: { lines: 4 } });
-        const now = {};
-        for (const r of data.data || []) {
-          const waiting = r.kind === "session" && (r.asking || (r.waiting ?? (r.idle >= IDLE_WAITING)));
-          now[r.TaskId] = waiting ? "waiting" : "working";
-          if (primed.current && waiting && seen.current[r.TaskId] === "working") {
-            onRaise({ tid: r.TaskId, ref: `TQ-${String(r.TaskId).padStart(4, "0")}`, agent: r.AgentName, title: r.Title || "",
-              asking: !!r.asking, tail: (r.tail || []).slice(-2).join(" ") });
-          }
+        if (!alive) return;
+        const next = advanceHandRaises(tracker.current, data.data || [], IDLE_WAITING);
+        tracker.current = next.state;
+        let storage = null;
+        try { storage = window.localStorage; } catch { /* private mode */ }
+        for (const raise of next.raises) {
+          if (claimHandRaise(storage, raise)) onRaise(raise);
         }
-        seen.current = now; primed.current = true;
       } catch { /* the server is asleep; try again next tick */ }
-    };
+    });
     poll();
     const id = setInterval(() => alive && poll(), every);
     return () => { alive = false; clearInterval(id); };

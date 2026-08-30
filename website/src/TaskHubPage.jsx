@@ -17,6 +17,7 @@ import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
+import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
 
@@ -43,22 +44,30 @@ export default function TaskHubPage() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [greeted, setGreeted] = useState(false);
   // the agent raised its hand: sound + desktop notification + a toast with the way to it.
-  // Settings are re-read on each raise (cheap, and it means the switch works without a reload).
-  const [raised, setRaised] = useState(null);
+  // The toast queues immediately; settings are read only for sound/desktop delivery. Making the
+  // visible notification wait on that request made it appear at arbitrary times on a busy server.
+  const [raisedQueue, setRaisedQueue] = useState([]);
+  const raised = raisedQueue[0] || null;
   const tabRef = useRef("Timeline"), selRef = useRef(null);
-  const onRaise = useCallback(async (r) => {
-    let sound = "chime", desktop = true;
-    try {
-      const { data } = await api.get("/api/settings");
-      const v = (k, d) => { const row = (data.data || data || []).find?.((x) => x.Name === k); return row ? row.Value : d; };
-      sound = v("hand_sound", "chime"); desktop = v("hand_desktop", "1") === "1";
-    } catch { /* defaults */ }
+  const selectTask = useCallback((tid) => { setSelectedTask(tid); selRef.current = tid; }, []);
+  const onRaise = useCallback((r) => {
     // already looking at this very task's session: no ring, you are watching it stop
-    if (tabRef.current === "Tasks" && selRef.current === r.tid) return;
-    const what = r.asking ? `${r.agent} asked you something` : `${r.agent} stopped and is waiting on you`;
-    setRaised({ ...r, what });
-    playSound(sound);
-    if (desktop) desktopNotify(`${r.ref} · ${what}`, r.title || r.tail || "", () => openTask(r.tid));
+    if (isWatchingTask(tabRef.current, selRef.current, r.tid)) return;
+    const what = handRaiseWhat(r);
+    setRaisedQueue((q) => enqueueHandRaise(q, { ...r, what }));
+    (async () => {
+      let sound = "chime", desktop = true;
+      try {
+        const { data } = await api.get("/api/settings", { timeout: 2000 });
+        const v = (k, d) => { const row = (data.data || data || []).find?.((x) => x.Name === k); return row ? row.Value : d; };
+        sound = v("hand_sound", "chime"); desktop = v("hand_desktop", "1") === "1";
+      } catch { /* defaults */ }
+      // The toast was immediate. If the owner opened the task while settings loaded, a late
+      // sound or OS popup would be noise and would look unrelated to the thing now on screen.
+      if (isWatchingTask(tabRef.current, selRef.current, r.tid)) return;
+      playSound(sound);
+      if (desktop) desktopNotify(`${r.ref} · ${what}`, r.title || r.tail || "", () => openTask(r.tid));
+    })();
   }, []);
   useHandRaise(onRaise);
   // a first run opens it once, unprompted: somebody who has just installed this should not have
@@ -120,7 +129,7 @@ export default function TaskHubPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const openTask = (taskId, opts) => {
-    setSelectedTask(taskId); go("Tasks"); selRef.current = taskId;
+    selectTask(taskId); go("Tasks");
     setAutostart(opts?.start ? { taskId, agent: opts.agent, model: opts.model } : null);
   };
 
@@ -129,10 +138,11 @@ export default function TaskHubPage() {
       <CssBaseline />
       {/* textAlign left kills the CRA-default .App { text-align: center } leaking in */}
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
-        <Snackbar open={!!raised} autoHideDuration={12000} onClose={() => setRaised(null)}
+        <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised} autoHideDuration={12000}
+          onClose={() => setRaisedQueue(dismissHandRaise)}
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
-          action={raised && <Button size="small" sx={{ color: "#a6e3a1" }} onClick={() => { openTask(raised.tid); setRaised(null); }}>Open</Button>} />
+          action={raised && <Button size="small" sx={{ color: "#a6e3a1" }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
         {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to
@@ -198,7 +208,7 @@ export default function TaskHubPage() {
           {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask} />}
           {everTasks && (
             <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
-              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={setSelectedTask} active={tab === "Tasks"}
+              <TasksView key={`t${tick}`} selected={selectedTask} onSelect={selectTask} active={tab === "Tasks"}
                 onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
                 onGoReview={() => { refreshPending(); go("Review"); }} />
             </Box>

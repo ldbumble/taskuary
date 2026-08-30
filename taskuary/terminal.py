@@ -706,6 +706,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                        f"subject \"{m.get('Subject') or ''}\": "
                        f"{_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS)}")
     elif t.get('Summary'): parts.append(f"ASK: {_cut(strip_boilerplate(str(t['Summary'])), ASK_CHARS)}")
+    # the assistant already read this message against the sender's history and formed a view
+    # (counsel.py) - the two lines of it worth the command line ride here; the rest is in the file
+    from . import context as ctx
+    bl = ctx.brief_line(m) if m else ''
+    if bl: parts.append(no_emails(bl))
     # the source's standing instruction: a PR is judged before it is worked, a Jira item may
     # have its own house rules - configured per connector card, defaulted for GitHub
     from .ingest import source_rules
@@ -740,6 +745,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from .agents import memory_block
     mem = memory_block(store, msgs)
     if mem: parts.append(no_emails(' '.join(mem.split())[:DOC_CHARS]))
+    # Everything else the hub knows goes in a FILE, not the command line: the sender's history,
+    # the topic elsewhere, the calendar, the learned profile, the whole thread - and PAST WORK, the
+    # reports of closed tasks on this sender/subject/repo, which no agent ever saw before. Under
+    # Taskuary's own home, never in the checkout (a stray file there gets staged - 8abb175).
+    cpath = ctx.write(store, tid, msgs, repo)
+    if cpath: parts.append(f'CONTEXT FILE: {cpath} - what Taskuary knows about this sender, this topic and past work on it '
+                           '(history, closed tasks and how they ended, the assistant\'s read). Read it first, before anything else.')
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.
@@ -747,7 +759,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     parts.append('WHAT TO DO: work it from THIS message alone. Diagnose the problem, fix it if it '
                  'is fixable, and if it is not, say plainly what the problem is and what it would '
                  'take. Do NOT call the Taskuary API, read its database or go looking for this task '
-                 'anywhere - everything known about it is above. '
+                 'anywhere - everything known about it is above' + (' and in the context file. ' if cpath else '. ')
                  + ('GitHub is the issue tracker here: open and update issues for the work as '
                     'the team expects. '
                     if issues_ok else

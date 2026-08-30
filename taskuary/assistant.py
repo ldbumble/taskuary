@@ -1,4 +1,4 @@
-"""The assistant on the Timeline: an hourly post of what it noticed and what it would do.
+"""The assistant on the Timeline: a check every 20 minutes, a post only when it has something to say.
 
 Triage judges each message as it arrives and then nothing ever spoke up later - the reply the
 owner sent on Monday and never heard back on, the meeting in two hours with five mails of
@@ -18,6 +18,11 @@ specific, and what is open, in flight and waiting on the owner is the Morning di
 own clock (the owner, 2026-08-30: the status strip with its counts and 'ask now' was noise). The
 thresholds and the producers are settings (assistant_*); the clock and the instruction are the
 'Assistant' report on the Reports tab.
+
+It also leaves itself a NOTE: each check ends with what it looked at and found nothing in, when
+something becomes worth raising, whatever it would otherwise work out again - and the next check
+starts by reading it (assistant_notes). Twenty-minute checks are cheap only if each one does not
+start from zero; a quiet check still rewrites the note, it just posts nothing.
 """
 import json, re
 from datetime import datetime, timedelta
@@ -40,7 +45,7 @@ _PROMISE = re.compile(r"\b(i('ll| will)|i'?m going to|let me) (send|get|have|fol
 # on the Reports tab (store.__init__), so the owner edits it there like the Morning digest's;
 # this copy is the default and the fallback. CONTRACT (the JSON shape) stays in code.
 PROMPT = (
-    'You are my assistant. Once an hour, tell me only what a sharp human assistant would lean over and say - '
+    'You are my assistant. Every 20 minutes you check in; tell me only what a sharp human assistant would lean over and say - '
     'nothing I can already see in my inbox. Watch for, in this order of worth:\n'
     '1. What I am waiting on from others and have not chased (the CANDIDATES marked followup): name who and what, and '
     'whether it is worth a nudge yet - a vendor who always takes a week is not news at day two.\n'
@@ -52,7 +57,10 @@ PROMPT = (
     '6. Patterns: the same person asking twice, a thread past six messages with no decision, two people asking me '
     'the same thing, a system failing twice this week.\n'
     '7. Getting ahead: the thing to do now so the next ask never comes.\n'
-    'Be useful, not busy: a quiet day gets no post. Never repeat anything under ALREADY SAID, reworded or not.')
+    'Be useful, not busy: a quiet check gets no post - most checks should. Never repeat anything under ALREADY SAID, reworded or not.\n'
+    'End every check with a note to your next one: what you looked at and found nothing in, when something becomes worth '
+    'raising (a date, a length of silence), anything you would otherwise have to work out again.')
+OLD_PROMPT_HEAD = 'You are my assistant. Once an hour,'      # a stock prompt still starting like this is healed to PROMPT (store.__init__)
 
 
 def cfg(store) -> dict:
@@ -191,7 +199,9 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             '"text": "<one line, under 30 words, first person: the fact and what I would do>", '
             '"why": "<one line: what this rests on - the mail, the date, the silence, the pattern - named as it appears in what you '
             'were given (sender, subject, mid, TQ-ref), so the owner can check it>", "mid": <the message id it is '
-            'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>"}]}.\n'
+            'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>"}], '
+            '"notes": "<your note to the next check, under 120 words: what you looked at and found nothing in, when something becomes '
+            'worth raising, what you settled so it need not be worked out again. Rewrite it whole each time; empty if nothing>"}.\n'
             'At most {max_lines} entries. Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
             'one-day silence from someone who always takes a week is not news) - skipping is free, repeating is not: never say '
             'again, reworded or not, anything under ALREADY SAID. Your own ideas are the point: a thread going in circles, a '
@@ -252,8 +262,10 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{(instruction or PROMPT).strip()}" + CONTRACT.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
     user = ('CANDIDATES:\n' + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
-            + f"\n\nARRIVED TODAY:\n{_today(store)}\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}")
-    return parse(llm(system, user, max_tokens=POST_TOKENS), cands, max_lines)
+            + f"\n\nARRIVED TODAY:\n{_today(store)}\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}"
+            + f"\n\n{_notes_block(store)}")
+    text = llm(system, user, max_tokens=POST_TOKENS)
+    return parse(text, cands, max_lines), _notes(text)
 
 
 def facts(store) -> str:
@@ -262,7 +274,24 @@ def facts(store) -> str:
     state = {i['Key']: i for i in store.list_ideas()}
     cands = [x for x in candidates(store, c) if fresh(state, x, now)]
     return ('CANDIDATES (new since the last post):\n' + ('\n'.join(f"[{c_['key']}] {c_['facts']}" for c_ in cands) or '(none)')
-            + f"\n\nARRIVED TODAY:\n{_today(store)}\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID:\n{_said(store)}")
+            + f"\n\nARRIVED TODAY:\n{_today(store)}\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID:\n{_said(store)}\n\n{_notes_block(store)}")
+
+
+# ── the note to the next check ───────────────────────────────────────────────────────────────
+def notes(store) -> tuple:
+    """(text, when) of the note the last check left - '' if none yet."""
+    s = store.get_settings()
+    return (s.get('assistant_notes') or '').strip(), s.get('assistant_notes_at') or ''
+
+def _notes_block(store) -> str:
+    n, at = notes(store)
+    return (f"YOUR NOTES FROM YOUR LAST CHECK ({_ts(at)}; yours - trust them, then rewrite them for the next check):\n{n}" if n
+            else 'YOUR NOTES FROM YOUR LAST CHECK: (none yet - this is your first check, or the last one left none)')
+
+def _notes(text: str) -> str:
+    try: j = json.loads(re.sub(r'^```(json)?|```$', '', (text or '').strip(), flags=re.M))
+    except ValueError: return ''
+    return ' '.join(str(j.get('notes') or '').split())[:900] if isinstance(j, dict) else ''
 
 
 # ── the post ─────────────────────────────────────────────────────────────────────────────────
@@ -309,18 +338,22 @@ def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
         try: llm = build_llm(store)
         except Exception as e:
             logger.debug(f'assistant: no model - {e}'); llm = None
-    used = bool(llm and 'idea' in c['producers'])
+    used, note = bool(llm and 'idea' in c['producers']), ''
     if used:
-        try: say = think(store, cands, llm, instruction, c['max'])
+        try: say, note = think(store, cands, llm, instruction, c['max'])
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
+    # the note outlives the post: a quiet check leaves one too, so the next check starts where this one stopped
+    if note:
+        store.set_setting('assistant_notes', note, 'assistant'); store.set_setting('assistant_notes_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
     say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say if fresh(state, s, now)]   # a model echoing a dismissed key changes nothing
-    rv = reviewed(cands, say, _today(store), _open(store), _said(store), used)
+    rv = reviewed(cands, say, _today(store), _open(store), _said(store), used) | {'notes': note}
     if not say: return {'ran': True, 'said': 0, 'reviewed': rv}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}}, stamp) for s in say]
-    body = '\n'.join(f"- {i['Text']}\n    why: {s_['why']}" for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
+    body = ('\n'.join(f"- {i['Text']}\n    why: {s_['why']}" for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
+            + (f"\nNote to my next check: {note}" if note else ''))
     subj = rows[0]['Text'][:90] + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
     mid = store.add_message({'TaskId': None, 'ExternalId': f'assistant:{stamp}', 'ConversationId': 'assistant', 'Channel': CHANNEL,
                              'SourceName': 'Assistant', 'Subject': subj, 'FromName': 'Assistant', 'SentAt': stamp,

@@ -434,20 +434,28 @@ class SQLiteStore:
                                              'cron': '0 8 * * 1', 'ai_prompt': AUTOMATE_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('automate_report_seeded', '1', 'template')")
             # ...and the Assistant (assistant.py): its post on the Timeline is scheduled and worded HERE
-            # too - hourly by default, the instruction editable, deleting the row is the off switch
+            # too - every 20 minutes by default (a quiet check posts nothing), the instruction editable,
+            # deleting the row is the off switch
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='assistant_report_seeded'").fetchone():
                 from .assistant import PROMPT as ASSISTANT_PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Assistant', 'template', 1,
-                                 json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 60, 'on_startup': True,
+                                 json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 20, 'on_startup': True,
                                              'ai_prompt': ASSISTANT_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
+            from .assistant import OLD_PROMPT_HEAD, PROMPT as ASSISTANT_PROMPT
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue
+                # the stock Assistant was seeded hourly with an hourly prompt; unedited, it becomes the
+                # 20-minute check with the current prompt (an owner-edited prompt or cadence is kept)
+                if c.get('type') == 'assistant' and str(c.get('ai_prompt') or '').startswith(OLD_PROMPT_HEAD):
+                    c['ai_prompt'] = ASSISTANT_PROMPT
+                    if c.get('every_minutes') == 60: c['every_minutes'] = 20
+                    self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
                 if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
                     c['ai_prompt'] = DIGEST_PROMPT
                     # a stock digest that never had a cadence set was daily by default; out of the

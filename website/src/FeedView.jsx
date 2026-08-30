@@ -609,8 +609,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
   }, [loadMore]);
   useEffect(() => { (rows || []).forEach((r) => seen.current.add(r.MessageId)); }, [rows]);
 
-  // Hovering a line auto-opens it in the review panel (260ms intent delay so scrolling
-  // doesn't thrash); click selects instantly. A draft mid-edit locks the panel in place.
+  // Hovering a line opens it in the review panel at once (the owner, 2026-08-30: no intent
+  // delay - the 260ms read as lag); click pins it. A draft mid-edit locks the panel in place.
   const [sel, setSel] = useState(null);
   const [sendErr, setSendErr] = useState("");     // approved, but the channel refused it
   const hoverTimer = useRef(null);
@@ -640,7 +640,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
     // a meeting you CLICKED stays until you click something else; one that opened on hover gives
     // way to the next hover like any row - otherwise the panel stuck on the first meeting
     if (calSel?.pinned) return;
-    hoverTimer.current = setTimeout(() => drill(row), 260);
+    drill(row);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
   // Clicking the page ground closes the panel AND collapses the selected row. Whatever was
@@ -1636,6 +1636,12 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
             {` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}
             {rv.model ? " · the model chose the lines" : " · no model — the hub's facts in its own words"}
           </Typography>
+          {/* what it left for its next check - so you can see what it will NOT research again */}
+          {rv.notes && (
+            <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45, mt: 0.3 }}>
+              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+            </Typography>
+          )}
           {!!rv.skipped?.length && (
             <>
               <Typography variant="caption" onClick={() => setShowSkipped((v) => !v)}

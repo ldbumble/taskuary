@@ -1,4 +1,4 @@
-"""The assistant on the Timeline (assistant.py): the hourly post that says what it noticed - the
+"""The assistant on the Timeline (assistant.py): the 20-minute check that says what it noticed - the
 reply you sent and never heard back on, the task gone quiet, its
 own ideas - once each, with buttons. All offline: the model is a lambda, the calendar is off.
 """
@@ -140,7 +140,7 @@ class PostTests(unittest.TestCase):
         editable instruction. Deleting it (or switching it off) turns the post off - except for 'ask now'."""
         s = self._seed()
         src = assistant.source(s)
-        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Assistant', 'assistant', 60, 1))
+        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Assistant', 'assistant', 20, 1))
         self.assertIn('What I promised', src['cfg']['ai_prompt'])
         seen = []
         def llm(system, user, **k): seen.append(system); return '{"say": []}'
@@ -274,3 +274,28 @@ class ApiTests(unittest.TestCase):
         r = c.post(f"/api/assistant/ideas/{ideas[0]['id']}/snooze", json={'days': 2})
         self.assertEqual(r.status_code, 200); self.assertEqual(r.json()['verb'], 'snooze')
         self.assertEqual(c.post(f"/api/assistant/ideas/{ideas[0]['id']}/nonsense").status_code, 422)
+
+
+class NotesToSelf(unittest.TestCase):
+    """A check ends with a note to the next one, and the next one reads it - even when the check
+    itself posted nothing. Twenty-minute checks that each start from zero would research the same
+    silence three times an hour."""
+    def test_note_survives_a_quiet_check_and_reaches_the_next(self):
+        s = _store(); seen = []
+        def llm(system, user, **k):
+            seen.append(user)
+            return json.dumps({'say': [], 'notes': 'Dana answers on Tuesdays - the SOW thread is not a chase before then'})
+        out = assistant.run(s, llm=llm, force=True)
+        self.assertEqual(out['said'], 0)                                            # nothing on the Timeline...
+        self.assertIn('Tuesdays', s.get_settings().get('assistant_notes', ''))         # ...but the note is kept
+        self.assertIn('Tuesdays', out['reviewed']['notes'])
+        self.assertIn('(none yet', seen[0])                                         # the first check had none to read
+        assistant.run(s, llm=llm, force=True)
+        self.assertIn('Tuesdays', seen[1])                                          # the second one does
+        self.assertIn('rewrite them', seen[1])
+
+    def test_an_empty_note_keeps_the_last_one(self):
+        s = _store()
+        assistant.run(s, llm=lambda *a, **k: '{"say": [], "notes": "renewal is on the 15th"}', force=True)
+        assistant.run(s, llm=lambda *a, **k: '{"say": []}', force=True)
+        self.assertIn('15th', s.get_settings().get('assistant_notes', ''))

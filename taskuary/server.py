@@ -2170,7 +2170,7 @@ def health():
 
 @app.get('/api/settings')
 def settings():
-    return {'data': [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run')]}
+    return {'data': [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at')]}
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):

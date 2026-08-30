@@ -65,7 +65,16 @@ NUDGE = ('This reply is a FOLLOW-UP: you wrote last on this thread, asked for or
 DONE = ('The work this thread asked for is FINISHED - the report below says what was done. Say what '
         'happened in a sentence or two, claiming nothing the report does not support; if it could NOT '
         'be done, say that and why, just as briefly. Never mention agents, tasks, tickets, '
-        'repositories or tooling: YOU did this.')
+        'repositories or tooling: YOU did this.\n'
+        # the report is written for the owner's records and reads like it. Copied straight out, it
+        # went to a vendor's mailer as "not an engineering or repo issue, so I closed it as FYI" -
+        # a sentence about our own filing, addressed to somebody who filed nothing (TQ-0252).
+        'The report is an INTERNAL record in internal words: it may call the message an FYI, a '
+        'ticket, a repo issue, something closed, filed or triaged. NONE of that goes to the sender - '
+        'they did not file anything and none of those words mean anything to them. Write only the '
+        'part that is news to THEM, about THEIR message, in the words they used. If the honest answer '
+        'is that nothing was needed, that is a sentence about their thing, never about our handling '
+        'of it.')
 
 CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp', 'imessage')
 REPLY_TOKENS = 300          # a ceiling as well as an instruction: 800 invited an essay

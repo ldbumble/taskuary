@@ -31,13 +31,17 @@ export const useSetup = (tick) => {
   return [state, load];
 };
 
-/* The counter: a ring that fills as steps complete. Gone once the required ones are done - a
-   permanent "3/3 ✓" is decoration, and the top bar is not for decoration. */
+/* The counter covers the three essentials plus the recommended first sync and personalization.
+   "Ready" means the funnel works; "complete" means its first drafts and triage have also learned
+   from the owner's history. A dismissed checklist stays as a quiet way back until it is complete. */
 export const SetupChip = ({ state, onOpen }) => {
-  if (!state || state.ready) return null;
-  const pct = state.total ? (state.done / state.total) * 100 : 0;
+  if (!state || state.complete) return null;
+  const done = state.guide_done ?? state.done;
+  const total = state.guide_total ?? state.total;
+  const pct = total ? (done / total) * 100 : 0;
   return (
-    <Tooltip title={state.dismissed ? "Setup — put away, click to reopen" : "Finish setting Taskuary up"}>
+    <Tooltip title={state.dismissed ? "Setup — put away, click to reopen"
+      : state.ready ? "Finish personalizing Taskuary" : "Finish setting Taskuary up"}>
       <Box onClick={onOpen}
         sx={{ display: "flex", alignItems: "center", gap: 0.75, cursor: "pointer", ml: 1,
           px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#d8cfbe"}`,
@@ -49,7 +53,7 @@ export const SetupChip = ({ state, onOpen }) => {
           <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: "#55697a" }} />
         </Box>
         <Typography variant="caption" sx={{ fontWeight: 700, color: state.dismissed ? DIM : "#55697a" }}>
-          {state.done}/{state.total}
+          {done}/{total}
         </Typography>
       </Box>
     </Tooltip>
@@ -310,7 +314,66 @@ const SyncForm = ({ onDone }) => {
   );
 };
 
-const FORMS = { owner: OwnerForm, ai: BrainForm, inbound: MailboxForm, agent: AgentForm, sync: SyncForm };
+const HISTORY = {
+  style: {
+    button: "Generate my reply style",
+    working: "Reading messages you sent…",
+    note: "This writes only inside STYLE.md's generated section. Anything you add yourself stays untouched when you regenerate.",
+  },
+  triage: {
+    button: "Learn my triage habits",
+    working: "Comparing what you answered and skipped…",
+    note: "This writes only inside TRIAGE.md's generated section. You can inspect and edit every conclusion afterward.",
+  },
+};
+
+/* The Docs page already owns the safe history generators. Onboarding gives them the missing
+   sequence and context: sync first, then one click for writing voice and one for attention. */
+const HistoryForm = ({ name, onDone, onGo }) => {
+  const [busy, setBusy] = useState(false);
+  const [what, setWhat] = useState("");
+  const [msg, setMsg] = useState(null);
+  const copy = HISTORY[name];
+  useEffect(() => {
+    if (!busy) return undefined;
+    const t = setInterval(async () => {
+      try { setWhat((await api.get("/api/doc/generate/status")).data.what || ""); }
+      catch { /* progress is a nicety; the generate call remains authoritative */ }
+    }, 1200);
+    return () => clearInterval(t);
+  }, [busy]);
+  const generate = async () => {
+    setBusy(true); setWhat(copy.working); setMsg(null);
+    try {
+      const { data } = await api.post(`/api/doc/${name}/generate`);
+      setMsg({ text: data.detail || "Generated from your history." });
+      await onDone();
+    } catch (e) {
+      setMsg({ bad: true, text: e?.response?.data?.detail || "Could not generate from history." });
+    }
+    setBusy(false); setWhat("");
+  };
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Button variant="contained" disableElevation size="small" disabled={busy} onClick={generate}
+        startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}>
+        {busy ? (what || copy.working) : copy.button}
+      </Button>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.5 }}>
+        {copy.note}{" "}
+        <Box component="span" onClick={() => onGo("Docs")} sx={{ color: "#55697a", cursor: "pointer" }}>
+          Open Docs
+        </Box>
+      </Typography>
+      {msg && <Alert severity={msg.bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{msg.text}</Alert>}
+    </Box>
+  );
+};
+
+const StyleForm = (props) => <HistoryForm name="style" {...props} />;
+const TriageForm = (props) => <HistoryForm name="triage" {...props} />;
+const FORMS = { owner: OwnerForm, ai: BrainForm, inbound: MailboxForm, sync: SyncForm,
+  style: StyleForm, triage: TriageForm, agent: AgentForm };
 
 /* A done step collapses to ONE line. Its reason mattered while you were deciding whether to do
    it; afterwards it is six lines of history pushing the thing you are actually working on below
@@ -336,7 +399,9 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
             <Typography sx={{ fontWeight: s.done ? 600 : 700, fontSize: s.done ? 12.5 : 13.5,
               color: s.done ? DIM : INK }}>{s.title}</Typography>
-            {s.optional && !s.done && <Typography variant="caption" sx={{ color: FAINT }}>optional</Typography>}
+            {s.optional && !s.done && (
+              <Typography variant="caption" sx={{ color: FAINT }}>{s.recommended ? "recommended" : "optional"}</Typography>
+            )}
             {s.done && s.detail && (
               <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>{s.detail}</Typography>
             )}
@@ -352,7 +417,7 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
         {!s.done && !open && Form && (
           <Button size="small" variant="outlined" onClick={onOpen}
             sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>
-            {s.key === "sync" ? "Sync" : "Set up"}
+            {s.key === "sync" ? "Sync" : ["style", "triage"].includes(s.key) ? "Generate" : "Set up"}
           </Button>
         )}
         {!s.done && !Form && (
@@ -402,11 +467,16 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
   // a list of buttons
   useEffect(() => {
     if (!open || !steps.length) return;
+    if (state.complete) { setOpenKey(null); return; }
     // whatever is left, in order - so a completed step advances to the next one by itself
-    setOpenKey((k) => k || (steps.find((s) => !s.done && FORMS[s.key]) || {}).key || null);
-  }, [open, steps]);
+    // A genuinely optional extra such as the coding agent never springs open after the guided
+    // path is complete; it remains one explicit Set up click for people who want it.
+    setOpenKey((k) => k || (steps.find((s) => !s.done && FORMS[s.key]
+      && (!s.optional || s.recommended)) || {}).key || null);
+  }, [open, steps, state?.complete]);
   if (!state) return null;
   const left = state.total - state.done;
+  const guideLeft = (state.guide_total ?? state.total) - (state.guide_done ?? state.done);
   // finishing hands you the next thing to do: closing to nothing makes you hunt for the button
   // you were always going to press
   const done = async () => { setOpenKey(null); await onRefresh(); };
@@ -416,11 +486,15 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
           <Box sx={{ flex: 1 }}>
             <Typography sx={{ fontWeight: 800, fontSize: 17, color: INK }}>
-              {state.ready ? "Taskuary is set up" : "Three things and Taskuary works"}
+              {state.complete ? "Taskuary is ready for you"
+                : state.ready ? "The essentials work — make it yours"
+                  : "Three things and Taskuary works"}
             </Typography>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5 }}>
-              {state.ready
-                ? "Everything needed is connected. The rest below is optional."
+              {state.complete
+                ? "Connections and personalization are complete. It will keep learning from your verdicts."
+                : state.ready
+                  ? `${guideLeft} recommended ${guideLeft === 1 ? "step" : "steps"} left to personalize Taskuary. Each is generated from your own history and remains editable.`
                 : `${state.done} of ${state.total} done${left ? ` — ${left} to go` : ""}. `
                   + "Without these the Timeline stays empty and looks like a quiet day."}
             </Typography>
@@ -435,21 +509,25 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
           ))}
         </Box>
 
-        {state.ready && <NextSteps onGo={onGo} />}
+        {state.complete && <NextSteps onGo={onGo} />}
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 2 }}>
           <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
             {state.dismissed
-              ? "Put away — the counter stays in the top bar until setup is done."
-              : "Not now? Put it away; the counter in the top bar brings it back."}
+              ? "Put away — the quiet counter in the top bar brings it back."
+              : state.complete
+                ? "Revisit any of these choices later from Connectors, Docs, or Settings."
+              : state.ready && !state.complete
+                ? "These are recommendations, not gates. Finish later and the counter keeps your place."
+                : "Not now? Put it away; the counter in the top bar brings it back."}
           </Typography>
-          {!state.ready && (
+          {!state.complete && (
             <Button size="small" sx={{ color: DIM, fontSize: 12 }} onClick={() => onDismiss(!state.dismissed)}>
-              {state.dismissed ? "Show it again" : "Put it away"}
+              {state.dismissed ? "Show it again" : state.ready ? "Finish later" : "Put it away"}
             </Button>
           )}
           <Button size="small" variant="contained" disableElevation onClick={onClose} sx={{ fontSize: 12 }}>
-            {state.ready ? "Done" : "Close"}
+            {state.complete ? "Done" : "Close"}
           </Button>
         </Box>
       </DialogContent>

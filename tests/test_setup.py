@@ -48,6 +48,34 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         for x in st['steps']:
             self.assertGreater(len(x['why']), 40, f"{x['key']} has no reason to exist")
 
+    def test_personalization_is_recommended_after_the_three_working_gates(self):
+        s = _fresh()
+        st = setup.state(s)
+        self.assertEqual([x['key'] for x in st['steps'] if x.get('recommended')],
+                         ['sync', 'style', 'triage'])
+        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (0, 6, False))
+        # The templates already have history marker blocks. They are placeholders, not evidence
+        # that either generator ran.
+        self.assertFalse(_step(st, 'style')['done'])
+        self.assertFalse(_step(st, 'triage')['done'])
+
+    def test_generated_personalization_is_derived_from_the_documents(self):
+        s = _fresh()
+        s.save_doc('style', (s.get_doc('style') or '') + '\n_generated 2026-08-30 — history_', 'histgen')
+        s.save_doc('triage', (s.get_doc('triage') or '') + '\n_generated 2026-08-30 — history_', 'histgen')
+        st = setup.state(s)
+        self.assertTrue(_step(st, 'style')['done'])
+        self.assertTrue(_step(st, 'triage')['done'])
+        self.assertIn('ready', _step(st, 'style')['detail'])
+
+    def test_manual_personalization_also_counts(self):
+        s = _fresh()
+        s.save_doc('style', '## Reply style\n- short, direct, no greeting', 'owner')
+        s.save_doc('triage', '## My triage rule\n- vendor newsletters are FYI', 'owner')
+        st = setup.state(s)
+        self.assertTrue(_step(st, 'style')['done'])
+        self.assertTrue(_step(st, 'triage')['done'])
+
     def test_the_owner_step_is_not_fooled_by_the_fallback_name(self):
         """store.owner() answers the literal string "the owner" when nothing is set, so a naive
         truthiness check reads a fresh install as done and never sends anybody to the one field
@@ -132,8 +160,21 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         _with_ai(s); _with_mailbox(s)
         st = setup.state(s)
         self.assertEqual((st['done'], st['total'], st['ready']), (3, 3, True))
+        self.assertFalse(st['complete'])                  # working is not personalized yet
         self.assertFalse(_step(st, 'agent')['done'])          # optional, and still not done
         self.assertTrue(_step(st, 'agent')['optional'])
+
+    def test_recommended_steps_complete_without_a_coding_agent(self):
+        s = _fresh()
+        s.set_setting('owner_name', 'Dana Example', 't')
+        _with_ai(s); _with_mailbox(s)
+        s.add_message({'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'hello',
+                       'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
+        s.save_doc('style', '_generated 2026-08-30 — history_', 'histgen')
+        s.save_doc('triage', '_generated 2026-08-30 — history_', 'histgen')
+        st = setup.state(s)
+        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (6, 6, True))
+        self.assertFalse(_step(st, 'agent')['done'])      # genuinely optional, never blocks completion
 
     def test_it_un_does_itself_when_a_connection_is_removed(self):
         """The whole reason it is derived rather than stored."""
@@ -207,7 +248,7 @@ class PuttingItAwayTests(unittest.TestCase):
 
     def test_the_endpoint_answers_the_same_shape_the_panel_reads(self):
         d = c.get('/api/setup').json()
-        for k in ('steps', 'done', 'total', 'ready', 'dismissed'):
+        for k in ('steps', 'done', 'total', 'ready', 'guide_done', 'guide_total', 'complete', 'dismissed'):
             self.assertIn(k, d)
         for x in d['steps']:
             for k in ('key', 'title', 'why', 'done', 'where'):

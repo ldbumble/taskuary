@@ -627,20 +627,43 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // detail has ARRIVED, then header and body swap in one render. Clearing the detail first
   // meant every hover flashed a spinner in the panel before filling it - sweeping down a list
   // of tasks read as the page labouring (the owner, 2026-08-30). A click still switches at once.
+  // Details are fetched the moment the cursor ENTERS a row and kept for a minute, so by the time
+  // the short rest is over the body is usually already here - hover felt slow when the fetch only
+  // started after the rest. (no task = report / filed / ignored: the message itself, whole - the
+  // feed row only carries a truncated preview.)
+  const cache = useRef(new Map());
+  const fetchDetail = (row) => {
+    const hit = cache.current.get(row.MessageId);
+    if (hit && Date.now() - hit.at < 60000) return hit.p;
+    const p = (row.TaskId ? api.get(`/api/tasks/${row.TaskId}`).then((r) => r.data)
+      : api.get(`/api/messages/${row.MessageId}`).then((r) => ({ messages: [r.data] })))
+      .catch(() => ({ messages: [] }));                                  // panel falls back to the preview
+    cache.current.set(row.MessageId, { at: Date.now(), p });
+    return p;
+  };
+  // pinned = you CLICKED it: it stays until you click something else or the page ground. A hover
+  // selection is transient - it closes when the cursor leaves the list and the panel.
+  const pinned = useRef(false);
   const drill = async (row, quiet = false) => {
     setCalSel(null);   // a message row takes the panel back from an opened meeting
-    want.current = row.MessageId;
+    want.current = row.MessageId; pinned.current = !quiet;
+    const p = fetchDetail(row);
     if (!quiet) { setSel(row); setDetail(null); setEditText(null); setSendErr(""); setPanelLock(false); }
-    // no task = report / filed / ignored: fetch the message itself so the panel shows the
-    // WHOLE body (the feed row only carries a truncated preview)
-    let d;
-    try {
-      d = row.TaskId ? (await api.get(`/api/tasks/${row.TaskId}`)).data
-        : { messages: [(await api.get(`/api/messages/${row.MessageId}`)).data] };
-    } catch { d = { messages: [] }; }                                    // panel falls back to the preview
+    const d = await p;
     if (want.current !== row.MessageId) return;                          // a newer hover won
     if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
     setDetail(d);
+  };
+  // leaving: a hover-opened row and its panel close 400ms after the cursor has left both the list
+  // and the panel (the gap between them is crossed in well under that); a clicked one stays
+  const leaveTimer = useRef(null);
+  const disarmClose = () => clearTimeout(leaveTimer.current);
+  const armClose = () => {
+    clearTimeout(leaveTimer.current);
+    if (pinned.current) return;
+    leaveTimer.current = setTimeout(() => {
+      if (!pinned.current && !panelLock && !(editText ?? "").trim()) { clearTimeout(hoverTimer.current); setSel(null); }
+    }, 400);
   };
   // A verdict being TYPED locks the panel the same way a draft does. It did not, and a sync
   // is when it hurts: rows arrive at the top every two seconds, the list slides under a
@@ -655,7 +678,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
     // way to the next hover like any row - otherwise the panel stuck on the first meeting
     if (calSel?.pinned) return;
     if (Date.now() - lastScroll.current < 250) return;
-    hoverTimer.current = setTimeout(() => drill(row, true), 120);
+    disarmClose(); fetchDetail(row);                                      // start the fetch now, commit after the rest
+    hoverTimer.current = setTimeout(() => drill(row, true), 70);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
   // Clicking the page ground closes the panel AND collapses the selected row. Whatever was
@@ -667,7 +691,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
     const h = (e) => {
       if (e.target.closest?.("[data-tq-keep], .MuiPopover-root, .MuiModal-root, #tqTopNav")) return;
       if (panelLock || (editText ?? "").trim()) return;
-      clearTimeout(hoverTimer.current); setSel(null); setCalSel(null);
+      clearTimeout(hoverTimer.current); pinned.current = false; setSel(null); setCalSel(null);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -882,7 +906,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
       <FunnelBar onOpenTask={onOpenTask} />
       {/* timeline column: grid's minmax(0,...) hard-caps both tracks, so the panel can
           never spill past the viewport and the list keeps its layout */}
-      <Box sx={{ minWidth: 0, position: "relative" }}>
+      <Box sx={{ minWidth: 0, position: "relative" }} onMouseEnter={disarmClose} onMouseLeave={armClose}>
         {/* syncing = the TIMELINE is loading, so the timeline says so: rows dim and a
             spinner sits on the list itself - the old 3px bar over just the left column
             read as a broken artifact, not a state */}
@@ -1021,7 +1045,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
         // its top edge IS the first card's top edge: both columns start on the same grid row,
         // and the date line lives in the dock above, so there is nothing left to push past.
         // (The 34px that used to be here compensated a day header the column no longer has.)
-        <Box data-tq-keep sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch" }}>
+        <Box data-tq-keep sx={{ minWidth: 0, display: { xs: "none", md: "block" }, alignSelf: "stretch" }}
+          onMouseEnter={disarmClose} onMouseLeave={armClose}>
           <Box sx={{ position: "sticky", top: `${navH + dockH + 6}px` }}>
             {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} /> : (
               <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}

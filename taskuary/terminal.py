@@ -747,25 +747,23 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # Taskuary's own home, never in the checkout (a stray file there gets staged - 8abb175).
     from . import context as ctx
     cpath = ctx.write(store, tid, msgs, repo)
-    if cpath: parts.append(f'CONTEXT FILE: {cpath} - what Taskuary knows about this sender, this topic and past work on it '
-                           '(history, closed tasks and how they ended). Read it first, before anything else.')
+    # short on purpose: this line rides on the command line with a full path in it, and a canonical
+    # tty caps a line at 1024 bytes (CI's fake TUI; macOS temp paths are long) - a wordy sentence here
+    # pushed the seed over and the prompt arrived clipped
+    if cpath: parts.append(f'CONTEXT FILE: {cpath} - read it FIRST: this sender, this topic, past tasks and how they ended.')
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.
     issues_ok, push_ok = store.github_permissions()
-    parts.append('WHAT TO DO: work it from THIS message alone. Diagnose the problem, fix it if it '
-                 'is fixable, and if it is not, say plainly what the problem is and what it would '
-                 'take. Do NOT call the Taskuary API, read its database or go looking for this task '
-                 'anywhere - everything known about it is above' + (' and in the context file. ' if cpath else '. ')
-                 + ('GitHub is the issue tracker here: open and update issues for the work as '
-                    'the team expects. '
+    parts.append('WHAT TO DO: work it from THIS message alone - diagnose, fix it if fixable, else say plainly '
+                 'what the problem is and what it would take. Do NOT call the Taskuary API, read its database or '
+                 'hunt for this task elsewhere - everything known about it is above' + (' and in the context file. ' if cpath else '. ')
+                 + ('GitHub is the issue tracker here: open and update issues for the work as the team expects. '
                     if issues_ok else
-                    'Do NOT create GitHub issues, PRs or any other tracker items for this work '
-                    'unless this message explicitly asks for one - Taskuary IS the tracker, and '
-                    'this task is the record. ')
+                    'Do NOT open GitHub issues, PRs or other tracker items unless this message asks for one - '
+                    'Taskuary IS the tracker and this task is the record. ')
                  + ('You may push and deploy as the work needs. ' if push_ok else
-                    'Do NOT push, deploy, publish or release anything - commit locally and stop; '
-                    'the owner reviews and pushes. Only when this message explicitly says to. ')
+                    'Do NOT push, deploy, publish or release - commit locally and stop; the owner reviews and pushes. ')
                  + 'Ask the owner here in the session if something is genuinely missing.')
     out = ' '.join(' '.join(parts).split())
     # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses

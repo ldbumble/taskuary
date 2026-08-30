@@ -623,18 +623,24 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [sendErr, setSendErr] = useState("");     // approved, but the channel refused it
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
-  const drill = async (row) => {
+  // `quiet` is the hover path: the panel keeps showing the row you were on until the next one's
+  // detail has ARRIVED, then header and body swap in one render. Clearing the detail first
+  // meant every hover flashed a spinner in the panel before filling it - sweeping down a list
+  // of tasks read as the page labouring (the owner, 2026-08-30). A click still switches at once.
+  const drill = async (row, quiet = false) => {
     setCalSel(null);   // a message row takes the panel back from an opened meeting
-    setSel(row); setDetail(null); setEditText(null); setSendErr(""); setPanelLock(false); want.current = row.MessageId;
+    want.current = row.MessageId;
+    if (!quiet) { setSel(row); setDetail(null); setEditText(null); setSendErr(""); setPanelLock(false); }
     // no task = report / filed / ignored: fetch the message itself so the panel shows the
     // WHOLE body (the feed row only carries a truncated preview)
+    let d;
     try {
-      const d = row.TaskId ? (await api.get(`/api/tasks/${row.TaskId}`)).data
+      d = row.TaskId ? (await api.get(`/api/tasks/${row.TaskId}`)).data
         : { messages: [(await api.get(`/api/messages/${row.MessageId}`)).data] };
-      if (want.current === row.MessageId) setDetail(d);
-    } catch {
-      if (want.current === row.MessageId) setDetail({ messages: [] });   // panel falls back to the preview
-    }
+    } catch { d = { messages: [] }; }                                    // panel falls back to the preview
+    if (want.current !== row.MessageId) return;                          // a newer hover won
+    if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
+    setDetail(d);
   };
   // A verdict being TYPED locks the panel the same way a draft does. It did not, and a sync
   // is when it hurts: rows arrive at the top every two seconds, the list slides under a
@@ -649,7 +655,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
     // way to the next hover like any row - otherwise the panel stuck on the first meeting
     if (calSel?.pinned) return;
     if (Date.now() - lastScroll.current < 250) return;
-    hoverTimer.current = setTimeout(() => drill(row), 120);
+    hoverTimer.current = setTimeout(() => drill(row, true), 120);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
   // Clicking the page ground closes the panel AND collapses the selected row. Whatever was
@@ -927,11 +933,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
                           minWidth: 0, overflow: "hidden",
                           transition: "box-shadow .18s, border-color .18s",
                           ...(sel?.MessageId === r.MessageId
-                            ? { borderColor: "#d8cfbe", boxShadow: "inset 2px 0 0 #55697a, 0 1px 3px rgba(30,50,38,.07)",
-                                "& .thubDetail": { gridTemplateRows: "1fr" }, "& .thubDetailText": { opacity: 1 } } : {}),
+                            ? { borderColor: "#d8cfbe", boxShadow: "inset 2px 0 0 #55697a, 0 1px 3px rgba(30,50,38,.07)" } : {}),
                           "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)", cursor: "pointer" },
-                          "&:hover .thubDetail": { gridTemplateRows: "1fr" },
-                          "&:hover .thubDetailText": { opacity: 1 },
                           "&:hover .thubGo": { opacity: 1, transform: "translateX(0)" } }}>
                         <Box sx={{ display: "flex", gap: 0.85, alignItems: "baseline", minWidth: 0 }}>
                           <Box sx={{ alignSelf: "center", display: "flex", flexShrink: 0 }}>
@@ -965,23 +968,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
                               transition: "opacity .18s, transform .18s" }} />
                           </Box>
                         </Box>
-                        {/* ONE line per message. A timeline is for scanning, and the second line
-                            was costing about a third of the items on a screen - which is the whole
-                            job of this tab. The blurb and the gist ride in on hover and stay open
-                            on the selected row; the panel spells the verdict out in full either way. */}
-                        <Box className="thubDetail" sx={{ display: "grid", gridTemplateRows: "0fr", transition: "grid-template-rows .22s ease" }}>
-                          <Box sx={{ overflow: "hidden" }}>
-                            <Typography className="thubDetailText" noWrap
-                              sx={{ fontSize: 11, lineHeight: 1.35, pt: "3px", opacity: 0, transition: "opacity .22s ease .05s",
-                                color: needsYou(r) ? ALERT_INK : "#867f74" }}>{blurb(r)}</Typography>
-                            {r.Preview && (
-                              <Typography className="thubDetailText" variant="caption" noWrap
-                                sx={{ display: "block", color: INK, pt: "3px", opacity: 0, transition: "opacity .22s ease .05s" }}>
-                                “{r.Preview}”
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
+                        {/* ONE line per message, always. A timeline is for scanning, and the second
+                            line was costing about a third of the items on a screen. It used to unfold
+                            on hover too, which heaved the list under a moving cursor; the panel spells
+                            the verdict out in full, so the row never grows. */}
                       </Box>
                     </Box>
                   </React.Fragment>
@@ -1137,7 +1127,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const codeless = /triage:\s*(reply_only|fyi)/.test(String(sel.RouteReason || "")) && !sel.TaskId;
   const history = historyOf(sel, detail);
   return (
-    <Box key={sel.MessageId} sx={{ ...frame, textAlign: "left",
+    <Box key={sel.MessageId} sx={{ ...frame, textAlign: "left", ...fadeIn, animationDuration: ".16s",
       // grows out of the clicked blurb: slides rightward from the row and scales up
       "@keyframes thubGrow": { from: { opacity: 0, transform: "translateX(-32px) scale(.965)" },
         to: { opacity: 1, transform: "none" } },

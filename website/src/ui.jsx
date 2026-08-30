@@ -1052,8 +1052,10 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
       </Typography>
     </Box>
   );
+  // compact: the open list is capped at about three lines and scrolls - the terminal above is
+  // the view, and a long funnel must not eat it a line at a time
   const queued = showQ && pending.length > 0 && (
-    <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
+    <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.25, ...(compact ? { maxHeight: 58, overflowY: "auto" } : {}) }}>
       {pending.map((w, i) => (
         <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
           <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>

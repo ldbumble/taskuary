@@ -79,7 +79,7 @@ const KNOB_META = {
 
   // ── Assistant: the voice on the Timeline (assistant.py) ──
   assistant_max_lines: { group: "Assistant", label: "Lines per post, at most", type: "number",
-    desc: "The assistant posts on the Timeline on the schedule and with the instruction of the 'Assistant' report (Reports tab — edit the prompt there, change the cadence, delete it to turn it off). This caps how much one post says. 5 by default.",
+    desc: "The assistant checks in every 30 minutes and on startup (the 'Assistant' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
     help: "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice: dismissed stays dismissed until the facts change, snoozed sleeps. 'Follow up' drafts the chase in your voice into Review — nothing is sent by itself; 'Make it a task' starts the agent; 'Not this' teaches LEARNED.md which nudges you never want. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule." },
   assistant_followup_hours: { group: "Assistant", label: "Silence before a follow-up", type: "number",
     desc: "Hours after your last reply on a thread — one that asked for or promised something — before 'no answer yet, follow up?' appears. 24 by default.",

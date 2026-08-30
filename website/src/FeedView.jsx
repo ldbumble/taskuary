@@ -609,8 +609,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
   }, [loadMore]);
   useEffect(() => { (rows || []).forEach((r) => seen.current.add(r.MessageId)); }, [rows]);
 
-  // Hovering a line opens it in the review panel at once (the owner, 2026-08-30: no intent
-  // delay - the 260ms read as lag); click pins it. A draft mid-edit locks the panel in place.
+  // Hovering a line opens it in the review panel after a SHORT rest (120ms: 260 read as lag, 0
+  // made the panel flicker through every row you scrolled past); click pins it. A draft mid-edit
+  // locks the panel in place. Rows sliding under a STILL cursor fire mouseenter too - that is
+  // scrolling, not hovering, so nothing opens until the mouse itself moves again.
+  const lastScroll = useRef(0);
+  useEffect(() => {
+    const h = () => { lastScroll.current = Date.now(); clearTimeout(hoverTimer.current); };
+    window.addEventListener("scroll", h, { passive: true });
+    return () => window.removeEventListener("scroll", h);
+  }, []);
   const [sel, setSel] = useState(null);
   const [sendErr, setSendErr] = useState("");     // approved, but the channel refused it
   const hoverTimer = useRef(null);
@@ -640,7 +648,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
     // a meeting you CLICKED stays until you click something else; one that opened on hover gives
     // way to the next hover like any row - otherwise the panel stuck on the first meeting
     if (calSel?.pinned) return;
-    drill(row);
+    if (Date.now() - lastScroll.current < 250) return;
+    hoverTimer.current = setTimeout(() => drill(row), 120);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);
   // Clicking the page ground closes the panel AND collapses the selected row. Whatever was
@@ -912,7 +921,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                       </Box>
                       {/* one DEFINED object per message: who and what on top, what the hub did
                           underneath. Hover adds the message gist; click opens the panel. */}
-                      <Box data-tq-keep onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
+                      <Box data-tq-keep onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseMove={() => hoverSelect(r)} onMouseLeave={hoverCancel}
                         sx={{ bgcolor: r.Channel === "assistant" ? "#eef3ea" : ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
                           border: `1px solid ${r.Channel === "assistant" ? "#cfd8c8" : BORDER}`, borderRadius: "8px", px: "11px", pt: "5px", pb: "6px",
                           minWidth: 0, overflow: "hidden",
@@ -1633,7 +1642,9 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
           <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
             <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>
             {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
-            {` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}
+            {rv.recent != null ? ` · ${rv.recent} sender/subject line${rv.recent === 1 ? "" : "s"} from the last two days · ${rv.week} task${rv.week === 1 ? "" : "s"} closed this week`
+              : ` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today`}
+            {` · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}
             {rv.model ? " · the model chose the lines" : " · no model — the hub's facts in its own words"}
           </Typography>
           {/* what it left for its next check - so you can see what it will NOT research again */}

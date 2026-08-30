@@ -1,4 +1,4 @@
-"""The assistant on the Timeline (assistant.py): the 20-minute check that says what it noticed - the
+"""The assistant on the Timeline (assistant.py): the half-hourly check that says what it noticed - the
 reply you sent and never heard back on, the task gone quiet, its
 own ideas - once each, with buttons. All offline: the model is a lambda, the calendar is off.
 """
@@ -122,7 +122,7 @@ class PostTests(unittest.TestCase):
         rv = brief['reviewed']
         self.assertEqual(rv['candidates'], {'followup': 2}); self.assertTrue(rv['model'])
         self.assertEqual([c['key'] for c in rv['skipped']], ['followup:c2']); self.assertIn('Can you confirm the PO', rv['skipped'][0]['facts'])
-        self.assertEqual(rv['said'], 0); self.assertTrue(all(isinstance(rv[k], int) for k in ('today', 'open')))
+        self.assertEqual(rv['said'], 0); self.assertTrue(all(isinstance(rv[k], int) for k in ('recent', 'week', 'open')))
         self.assertIn('    why: You wrote Dana', row['BodyText']); self.assertIn('Reviewed: 2 followup; let go: 1', row['BodyText'])
         self.assertEqual(out['reviewed'], rv)
         # nothing to say still reports what it read - the Reports tab's run result carries it
@@ -140,7 +140,7 @@ class PostTests(unittest.TestCase):
         editable instruction. Deleting it (or switching it off) turns the post off - except for 'ask now'."""
         s = self._seed()
         src = assistant.source(s)
-        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Assistant', 'assistant', 20, 1))
+        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Assistant', 'assistant', 30, 1))
         self.assertIn('What I promised', src['cfg']['ai_prompt'])
         seen = []
         def llm(system, user, **k): seen.append(system); return '{"say": []}'

@@ -121,7 +121,7 @@ const TYPE_LABELS = {
   entra_signins: "Entra ID — sign-ins", entra_licenses: "Entra ID — licence seats",
   prometheus: "Prometheus", datadog: "Datadog monitors",
   intacct: "Sage Intacct", intacct_fields: "Intacct \u2014 what fields exist",
-  digest: "Taskuary digest", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline",
+  digest: "Taskuary digest", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline (its voice: COUNSEL.md, Docs tab)",
   agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
   google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",

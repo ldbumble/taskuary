@@ -421,7 +421,7 @@ class SQLiteStore:
                 from .digest import PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Morning digest', 'template', 1,
-                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'every_minutes': 180, 'on_startup': True,
+                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'daily_at': '08:00', 'on_startup': True,
                                              'ai_prompt': PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
             # ...and its sibling: the weekly 'what should you automate next' brief (toil.py) -
@@ -434,33 +434,36 @@ class SQLiteStore:
                                              'cron': '0 8 * * 1', 'ai_prompt': AUTOMATE_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('automate_report_seeded', '1', 'template')")
             # ...and the Assistant (assistant.py): its post on the Timeline is scheduled and worded HERE
-            # too - every 20 minutes by default (a quiet check posts nothing), the instruction editable,
-            # deleting the row is the off switch
+            # too - every 30 minutes and on startup by default (a quiet check posts nothing), the
+            # instruction editable, deleting the row is the off switch. These two are the working demo of
+            # both kinds of report: the digest is an AI pass over the hub's own data, the assistant a voice.
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='assistant_report_seeded'").fetchone():
                 from .assistant import PROMPT as ASSISTANT_PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Assistant', 'template', 1,
-                                 json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 20, 'on_startup': True,
+                                 json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 30, 'on_startup': True,
                                              'ai_prompt': ASSISTANT_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
-            from .assistant import OLD_PROMPT_HEAD, PROMPT as ASSISTANT_PROMPT
+            from .assistant import OLD_PROMPT_HEADS, PROMPT as ASSISTANT_PROMPT
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue
-                # the stock Assistant was seeded hourly with an hourly prompt; unedited, it becomes the
-                # 20-minute check with the current prompt (an owner-edited prompt or cadence is kept)
-                if c.get('type') == 'assistant' and str(c.get('ai_prompt') or '').startswith(OLD_PROMPT_HEAD):
+                # the stock Assistant was seeded hourly (then 20-minutely) with a stock prompt; unedited, it
+                # becomes the 30-minute check with the current prompt (an owner-edited prompt or cadence is kept)
+                if c.get('type') == 'assistant' and str(c.get('ai_prompt') or '').startswith(OLD_PROMPT_HEADS):
                     c['ai_prompt'] = ASSISTANT_PROMPT
-                    if c.get('every_minutes') == 60: c['every_minutes'] = 20
+                    if c.get('every_minutes') in (60, 20): c['every_minutes'] = 30
+                    c.setdefault('on_startup', True)
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
-                if c.get('type') == 'digest' and c.get('ai_prompt') in OLD_PROMPTS:
+                if c.get('type') == 'digest' and (c.get('ai_prompt') in OLD_PROMPTS or c.get('ai_prompt') == DIGEST_PROMPT):
                     c['ai_prompt'] = DIGEST_PROMPT
-                    # a stock digest that never had a cadence set was daily by default; out of the
-                    # box it is now every three hours with a link per task (owner-set cadences kept)
-                    if not any(c.get(k) for k in ('cron', 'every_minutes', 'daily_at', 'on_startup')): c['every_minutes'] = 180
+                    # a stock digest on the old default clock (none, or the three-hourly one) becomes the
+                    # 8 am brief that also runs on startup; an owner-set cadence is kept
+                    stock_clock = not any(c.get(k) for k in ('cron', 'every_minutes', 'daily_at')) or (c.get('every_minutes') == 180 and not c.get('cron') and not c.get('daily_at'))
+                    if stock_clock: c.pop('every_minutes', None); c['daily_at'] = '08:00'; c['on_startup'] = True
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
             # data heal: 'triage' was a fourth Kind the pickers never offered, so those tasks
             # showed a kind the dropdown could not represent - and every one of them had a

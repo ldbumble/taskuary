@@ -712,7 +712,7 @@ def run_report_source(store, src: dict, llm=None) -> dict:
         # not a report row: the assistant posts its own kind of row (ideas with buttons and state),
         # on this report's schedule and with this report's prompt as its instruction
         from . import assistant
-        out = assistant.run(cfg['store'] if cfg.get('store') else store, llm, force=True, instruction=cfg.get('ai_prompt'))
+        out = assistant.run(cfg['store'] if cfg.get('store') else store, report_llm(store, cfg, llm), force=True, instruction=cfg.get('ai_prompt'))
         return {'message_id': out.get('message_id'), 'subject': f"{title} - {out.get('said', 0)} line(s)", 'files': 0, **out}
     try:
         head, summary = render_report(store, cfg, llm)

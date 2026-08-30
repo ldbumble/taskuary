@@ -23,6 +23,28 @@ still being knocked off, and breaking changes are possible before 1.0. Issues ge
 > ⭐ **Useful to you? Star the repo.** Stars are how other people find Taskuary — and the
 > clearest signal of what to keep building.
 
+## The assistant has your back
+
+Triage judges each message as it arrives. **The assistant is the voice that speaks up later** —
+every 30 minutes, and when you open the app, it reads what the hub can see and posts one row on
+the Timeline *only when it has something to say*: the reply you sent on Monday and never heard
+back on (one click drafts the chase in your voice), the meeting ahead with the last five mails
+about it, the task gone quiet, and its own ideas from your week's work and what keeps arriving —
+*nine CI failures in two days*, *a resident's deposit forwarded twice and nobody made a task*,
+*the report nobody acts on*. Every line carries its **why** (the mail, the date, the silence, the
+pattern — named so you can check it), the post says **what it reviewed and what it let go**, and
+it leaves itself a **note for the next check** so it never researches the same silence twice. It
+never repeats a line, reworded or not; *Not this* teaches it which nudges you never want.
+
+![The assistant's post open on the Timeline panel: two lines under WHAT I NOTICED, each with its why and its buttons — Make it a task, Done, Snooze a day, Not this — then what it reviewed (15 sender/subject lines from the last two days, 9 open tasks) and its note to its next check](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-assistant.png)
+
+Three knobs, all yours: **how it speaks** is `COUNSEL.md` on the Docs tab (bolder, quieter, what it
+takes a position on); **what it watches for** is the prompt of the *Assistant* report on the Reports
+tab, where its cadence lives too (delete the report to turn it off); **how sharp it is** is that
+report's brain — the cheap triage tier finds the CI failures, a coding CLI you already pay for
+finds the deposit. Thresholds (silence before a follow-up, days before a task is cold) are
+Settings → Assistant.
+
 ## Why
 
 Work arrives as messages, but work *is* tasks — and you are the translation layer. You
@@ -144,9 +166,9 @@ issues, the reports you scheduled — each row wearing one chip that says what i
 whether it needs you. Click a row and the whole story opens beside it: the message, why triage
 ruled the way it did, the drafted reply waiting for your approval, and every way out.
 
-![The Timeline: a day of mail, chats, Telegram and WhatsApp messages and scheduled reports on one rail, each with a chip — needs you, task created, completed, filed, report. A row is open on the right: the message, why it is here, its history, the AI-drafted reply with Approve & send, and the choices below it — send to a coding agent, open the task, hand it to a person, split it, not a task.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline.png)
+![The Timeline: a day of mail, Teams, Telegram and WhatsApp messages, the Morning digest and the assistant's post on one rail under a frozen date line, each row with a chip — needs you, agent working, completed, filed, report, assistant — the last rows dissolving at the bottom of the screen. The assistant's post is open on the right: what it noticed, why, its buttons, what it reviewed, its note to its next check, and the choices below — send to a coding agent, mine to do, nothing to do here, not our task.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline.png)
 
-<sub>Demo data. The seven "needs you" chips are the whole point: nothing else on the page is waiting on you.</sub>
+<sub>Demo data. Six "needs you" chips and a green assistant row: everything else on the page is handled or informational. The filters and the date freeze at the top; rows dissolve into them as you scroll.</sub>
 
 One tab per question, two lines each; the details live in the app's own help text.
 
@@ -165,7 +187,9 @@ One tab per question, two lines each; the details live in the app's own help tex
   *waiting on you* with the question showing. Cards working now show a live peephole and
   the files their agent has modified so far; a queued card says whom it waits behind (see
   [Many agents, one repo](#many-agents-one-repo--no-stepping-on-each-other)). Flip it to
-  **Studio** for the same board as a floor you can walk around — below.
+  **Studio** for the same board as a floor you can walk around, or to the **Wall** — every live
+  session as a terminal side by side, its task on top and a *tell the agent* box under each
+  (below).
 - **Tasks** — **the page is a terminal**: your CLI in the task's repo, prompt typed in and
   sent, and you keep talking. Taskuary picks the checkout from the SOUL.md repo map (one
   click to override); the prompt carries the ask, the mail, the files and the rules, so the
@@ -186,14 +210,16 @@ One tab per question, two lines each; the details live in the app's own help tex
 - **Reports** — sources at the top (SQL, REST, MCP…), one AI prompt at the bottom, a
   schedule. The rows come back as an **.xlsx** and a **bar chart** the summarizing model
   itself chose the columns for; capped slices are named as capped so the AI never calls a
-  truncated slice "all of them". Preview runs the whole pipeline first. The **Morning
-  digest** ships as one of these — your own funnel as the data source, the daily brief on
-  the Timeline — so every install starts with a working example.
+  truncated slice "all of them". Preview runs the whole pipeline first. Two ship with every
+  install, so it starts with a working example of each kind: the **Morning digest** — your
+  own funnel as the data source, an AI pass over it, on the Timeline at 8 am and whenever
+  you open the app — and the **Assistant** — the voice above, every 30 minutes and on
+  startup, its prompt the thing it watches for.
 - **Connectors** — a catalog with a wizard per card. Every connection has **roles** you
   choose: *trigger* (inbound work), *feed* (shown, never triaged), *report*, *tool* (agents
   may use it), *notify* (Taskuary pushes pings TO it). Nothing is polled without a role.
 - **Docs** — the six plain-markdown documents that steer everything (see
-  [The six documents](#the-six-documents)); they maintain themselves as connectors and
+  [The six documents](#the-seven-documents)); they maintain themselves as connectors and
   repos appear, and two can generate themselves from your mail history. Your name lives
   in ONE field here and fills every `{{owner}}` mention.
 - **Settings** — triage knobs with plain-English help, deterministic routing policies that
@@ -251,6 +277,15 @@ two modes, and it decides how the tasks that connection creates reach the agents
 
 ![Two agents share one checkout: each working card shows the files ITS agent has modified (claude in the theme files, codex in the report code and its tests), and a third task waits in Queued with the reason written on the card — waiting on TQ-0009, both would modify ReportsView.jsx, starts by itself when it can](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-board.png)
 
+And the same sessions as **the Wall** — every live terminal side by side, the task ref and the
+agent's last line on top of each, a *tell the agent* box under each that queues what you type
+until the agent next stops, and a raised hand when one is waiting on you. Drag a pane to
+rearrange, drag the bar under it to resize; 1× to 4× across.
+
+![The Wall on the Board tab: three live coding sessions side by side — TQ-0010 with claude committing the census fix, TQ-0011 with codex running the tests for the CSV export, TQ-0009 stopped with a question about the dark-mode legend, marked waiting on you — each with its task ref, its last line, and a tell-the-agent box](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-wall.png)
+
+<sub>Demo data — the sessions are stand-ins printing what an agent prints; no repository was touched.</sub>
+
 Auto-dispatch can put several CLIs to work at once — and the board keeps them out of each
 other's way with three light moves. No locks, no worktrees, no manager agent:
 
@@ -305,9 +340,9 @@ runs when there is real work in a real repository, and the cheap one handles the
 intent triage, reply drafts, report summaries, the morning digest, the lessons distilled
 into LEARNED.md.
 
-## The six documents
+## The seven documents
 
-Plain markdown, all on the Docs tab, all yours to edit. Three you write, two write
+Plain markdown, all on the Docs tab, all yours to edit. Four you write, two write
 themselves, and two can **bootstrap themselves from your mail history** (`TRIAGE.md` and
 `STYLE.md` — the Generate from history button). Each feeds exactly the calls it belongs in.
 
@@ -322,6 +357,12 @@ themselves, and two can **bootstrap themselves from your mail history** (`TRIAGE
 | `CODER.md` | how the coding agent works and closes out. Every session also gets a **context file** (`~/.taskuary/context/TQ-xxxx.md`): this sender's recent mail and what you last wrote them, the topic elsewhere, your calendar, the assistant's read, the learned profile, the whole thread, and the reports of closed tasks on the same sender, subject or repo - the seed says "read it first" (Settings → Coder agent) | coding agents (your CLI) |
 | `LEARNED.md` | your profile, learned from your verdicts — `SOUL.md` outranks it | triage, replies, coding agents |
 | `DIGEST.md` | your morning brief: what's in flight, who waits on whom — written by the **Morning digest** report (Reports tab), whose prompt decides what goes in | you — it lands on your Timeline daily; delete the report to turn it off |
+
+`COUNSEL.md` is the one that changes what the assistant *is*: SOUL.md keeps what goes out over
+your name careful; this document tells the assistant to have an opinion, connect the dots and
+get ahead of things — and it is where you dial that up or down.
+
+![COUNSEL.md open on the Docs tab: how the assistant speaks to you — "I have your back… on my own clock I say what I noticed, privately, never sent to anyone"; The post; Voice — plain, direct, first person; take a position; facts only; say nothing when there is nothing](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-counsel.png)
 
 Your verdicts ride alongside as evidence: dated, sender-and-subject-specific lines pulled
 into triage and replies when the sender or topic matches — the specific layer under
@@ -399,6 +440,9 @@ npm i --no-save puppeteer-core
 python seed_demo.py                            # with TASKUARY_HOME pointed at a scratch dir
 node hero_frames.mjs http://127.0.0.1:PORT     # frames + per-frame delays
 python hero_gif.py                             # -> docs/hero.gif (Pillow; no ffmpeg needed)
+# the README screenshots: the same seeded demo, plus the assistant's post and three stand-in sessions
+python seed_demo_assistant.py                  # after seed_demo.py, same TASKUARY_HOME
+node shot_readme.mjs http://127.0.0.1:PORT .. all   # timeline (fade + assistant), wall, counsel; `hover` runs the hover test
 
 pip install -e .[build]
 pyinstaller taskuary.spec   # dist/Taskuary.exe - single-file desktop build

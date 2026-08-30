@@ -299,3 +299,16 @@ class NotesToSelf(unittest.TestCase):
         assistant.run(s, llm=lambda *a, **k: '{"say": [], "notes": "renewal is on the 15th"}', force=True)
         assistant.run(s, llm=lambda *a, **k: '{"say": []}', force=True)
         self.assertIn('15th', s.get_settings().get('assistant_notes', ''))
+
+
+class LastRunRecord(unittest.TestCase):
+    """A quiet check posts nothing - the Reports tab still shows what it read and why it stayed quiet."""
+    def test_a_quiet_assistant_run_leaves_its_record_on_the_source(self):
+        from taskuary import reports
+        s = _store()
+        src = next(x for x in s.list_sources(active_only=False) if json.loads(x['ConfigJson'] or '{}').get('type') == 'assistant')
+        reports.run_report_source(s, src, lambda *a, **k: '{"say": [], "notes": "nothing new; Dana answers Tuesdays"}')
+        rec = reports.last_runs(s)[src['SourceId']]
+        self.assertEqual((rec['type'], rec['said'], rec['failed']), ('assistant', 0, False))
+        self.assertIn('Tuesdays', rec['reviewed']['notes'])
+        self.assertIn('ALREADY SAID', rec['inputs'])                     # the exact text the model saw

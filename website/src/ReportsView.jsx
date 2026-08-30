@@ -220,11 +220,13 @@ export default function ReportsView() {
   const [bucket, setBucket] = useState("all");   // which rail section is open
   const [q, setQ] = useState("");
 
+  const [lastRuns, setLastRuns] = useState({});   // per source: what its last run read and did
   const load = useCallback(async () => {
     try {
-      const [s, t, c] = await Promise.all([api.get("/api/sources"), api.get("/api/report-types"), api.get("/api/connectors")]);
+      const [s, t, c, r] = await Promise.all([api.get("/api/sources"), api.get("/api/report-types"), api.get("/api/connectors"),
+        api.get("/api/reports/last-runs").catch(() => ({ data: { data: {} } }))]);
       setSources((s.data.data || []).filter((x) => x.Channel === "report"));
-      setTypes(t.data.data || []); setConnectors(c.data.data || []);
+      setTypes(t.data.data || []); setConnectors(c.data.data || []); setLastRuns(r.data.data || {});
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load reports"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -299,9 +301,10 @@ export default function ReportsView() {
         const sched = c.on_startup ? "on startup" : c.cron ? `cron ${c.cron}`
           : c.every_minutes ? `every ${c.every_minutes}m` : c.daily_at ? `daily ${c.daily_at}` : "daily";
         return (
-          <Box key={s.SourceId} onClick={() => { setQ(""); setBucket(s.SourceId); }}
+          <Box key={s.SourceId} sx={{ borderBottom: `1px solid ${BORDER}` }}>
+          <Box onClick={() => { setQ(""); setBucket(s.SourceId); }}
             sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
-              borderBottom: `1px solid ${BORDER}`, "&:hover": { bgcolor: "#faf8f4" } }}>
+              "&:hover": { bgcolor: "#faf8f4" } }}>
             <StatusDot ok={!!s.Active} />
             <ChannelIcon channel="report" />
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -321,6 +324,8 @@ export default function ReportsView() {
             <Button size="small" onClick={() => { setQ(""); setBucket(s.SourceId); }}>Edit</Button>
             <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
               onChange={async () => { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); load(); }} />
+          </Box>
+          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} />}
           </Box>
         );
       })}
@@ -930,6 +935,76 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         FormHelperTextProps={{ sx: { fontSize: 10.5, mx: 0 } }}
         sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />
       <SourceTest src={src} />
+    </Box>
+  );
+}
+
+/* What the report's last run DID, under its row. A quiet assistant check posts nothing, so this is
+   the only place its work shows: what it read (the exact text the model saw), what it reviewed and let
+   go, its note to the next check, and what came out - or the error, when it failed. */
+const IDEA_KINDS = { followup: "follow up", promise: "promise", prep: "prep", cold: "gone quiet", idea: "idea" };
+function LastRun({ r }) {
+  const [open, setOpen] = useState(false);
+  const [showInputs, setShowInputs] = useState(false);
+  const rv = r.reviewed || null;
+  const outcome = r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
+    : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "nothing to say — no post")
+    : r.subject ? `filed: ${r.subject}` : "ran";
+  const read = rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
+    `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KINDS[k] || k}`).join(", ") || "no candidates"] : [];
+  return (
+    <Box sx={{ pl: 5.5, pr: 1, pb: 1.25, mt: -0.5 }}>
+      <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
+        <Box component="span" sx={{ fontWeight: 700, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
+        {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
+        {rv && ` · read ${read[0]}, ${read[1]}`}
+        <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+          sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
+          {open ? "hide ↑" : "details ↓"}
+        </Box>
+      </Typography>
+      {open && (
+        <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
+          {rv && (
+            <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>
+              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>{read.join(" · ")}
+              {rv.model === false ? " · no model — the facts in the hub's own words" : ""}
+            </Typography>
+          )}
+          {rv?.notes && (
+            <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mt: 0.4 }}>
+              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+            </Typography>
+          )}
+          {!!rv?.skipped?.length && (
+            <Box sx={{ mt: 0.4 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: "#6b5f45" }}>looked at and let go · {rv.skipped.length}</Typography>
+              {rv.skipped.map((c) => (
+                <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, pl: 1, borderLeft: `2px solid ${BORDER}`, mt: 0.3, whiteSpace: "pre-wrap" }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>{IDEA_KINDS[c.kind] || c.kind} · </Box>{c.facts}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          {r.summary && r.type !== "assistant" && (
+            <Typography variant="caption" sx={{ color: DIM, display: "block", whiteSpace: "pre-wrap", mt: 0.4, maxHeight: 220, overflowY: "auto" }}>
+              <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it filed · </Box>{r.summary}
+            </Typography>
+          )}
+          {r.inputs && (
+            <Box sx={{ mt: 0.6 }}>
+              <Typography variant="caption" onClick={() => setShowInputs((v) => !v)}
+                sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                {showInputs ? "hide" : "show"} exactly what it read — {r.inputs.length.toLocaleString()} chars {showInputs ? "↑" : "↓"}
+              </Typography>
+              {showInputs && (
+                <Box component="pre" sx={{ ...mono, fontSize: 11, lineHeight: 1.45, color: INK, whiteSpace: "pre-wrap", m: 0, mt: 0.5, p: 1,
+                  bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, maxHeight: 360, overflowY: "auto" }}>{r.inputs}</Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
     </Box>
   );
 }

@@ -1131,6 +1131,12 @@ def run_source_now(sid: int):
     store.touch_source(sid)
     return out
 
+@app.get('/api/reports/last-runs')
+def report_last_runs():
+    """What each report's last run did - when, how long, what it read, what came out (reports.last_runs)."""
+    from .reports import last_runs
+    return {'data': last_runs(store)}
+
 @app.get('/api/report-types')
 def report_types():
     return {'data': [{'type': t, 'status': 'planned' if t in PLANNED else 'builtin'} for t in REGISTRY]}
@@ -2176,7 +2182,8 @@ def health():
 
 @app.get('/api/settings')
 def settings():
-    return {'data': [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at')]}
+    return {'data': [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at')
+                     and not s['Name'].startswith('report_last_run:')]}
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):

@@ -7,7 +7,7 @@ REGISTRY: type -> executor(config) -> (headline, summary). Implemented: sqlite, 
 timeline instead of silently absent. Adding a type = one ~15-line function + a REGISTRY
 entry - PRs welcome.
 """
-import io, json, re, sqlite3
+import io, json, re, sqlite3, time
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -702,10 +702,43 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     return (now - last).total_seconds() >= 24 * 3600
 
 
+LAST_RUN = 'report_last_run:'      # setting per source: what its last run did (the Reports tab shows it)
+
+
+def last_runs(store) -> dict:
+    """{source id: record} for every report that has run - when, how long, what it read, what came out."""
+    out = {}
+    for k, v in store.get_settings().items():
+        if not k.startswith(LAST_RUN): continue
+        try: out[int(k[len(LAST_RUN):])] = json.loads(v)
+        except (ValueError, TypeError): continue
+    return out
+
+
 def run_report_source(store, src: dict, llm=None) -> dict:
+    """Execute one due report and file it on the timeline - and leave a record of the run on the
+    source (LAST_RUN): when, how long, what it read, what it reviewed, what it posted or why it
+    stayed quiet. A quiet assistant check posts NOTHING, so without this there was no way to see
+    what it had looked at (the owner, 2026-08-30: 'want to see the last run... what data is processed')."""
+    t0, cfg = time.time(), json.loads(src.get('ConfigJson') or '{}')
+    rec = {'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': cfg.get('type') or 'rest', 'title': cfg.get('title') or src['Address']}
+    try:
+        out = _run_report_source(store, src, cfg, llm)
+    except Exception as e:
+        rec.update({'ms': int((time.time() - t0) * 1000), 'failed': True, 'error': str(e)[:600]})
+        store.set_setting(f"{LAST_RUN}{src['SourceId']}", json.dumps(rec, default=str), 'report')
+        raise
+    rec.update({'ms': int((time.time() - t0) * 1000), 'subject': out.get('subject'), 'message_id': out.get('message_id'),
+                'failed': str(out.get('subject') or '').endswith('FAILED'), 'files': out.get('files'),
+                'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:20000],
+                'summary': str(out.get('summary') or '')[:2000]})
+    store.set_setting(f"{LAST_RUN}{src['SourceId']}", json.dumps(rec, default=str), 'report')
+    return out
+
+
+def _run_report_source(store, src: dict, cfg: dict, llm=None) -> dict:
     """Execute one due report (executor + optional AI pass) and file it on the timeline.
     Errors file visibly too."""
-    cfg = json.loads(src.get('ConfigJson') or '{}')
     title = cfg.get('title') or src['Address']
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
     if cfg.get('type') == 'assistant':
@@ -769,7 +802,7 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
         from .digest import HEADER
         store.save_doc('digest', f'{HEADER}_refreshed {stamp[:16]}_\n\n{strip_directive(body)}\n', 'digest')
-    return {'message_id': mid, 'subject': subject, 'files': len(made)}
+    return {'message_id': mid, 'subject': subject, 'files': len(made), 'summary': strip_directive(body)}
 
 
 def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:

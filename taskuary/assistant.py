@@ -304,7 +304,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
             + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike):\n{_recent(store)}\n\nDONE THIS WEEK (my own work, with the agent's summary):\n{_week(store)}"
             + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}\n\n{_notes_block(store)}")
     text = llm(system, user, max_tokens=POST_TOKENS)
-    return parse(text, cands, max_lines), _notes(text)
+    return parse(text, cands, max_lines), _notes(text), user
 
 
 def facts(store) -> str:
@@ -379,18 +379,19 @@ def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
         try: llm = build_llm(store)
         except Exception as e:
             logger.debug(f'assistant: no model - {e}'); llm = None
-    used, note = bool(llm and 'idea' in c['producers']), ''
+    used, note, inputs = bool(llm and 'idea' in c['producers']), '', ''
     if used:
-        try: say, note = think(store, cands, llm, instruction, c['max'])
+        try: say, note, inputs = think(store, cands, llm, instruction, c['max'])
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
+    if not inputs: inputs = 'CANDIDATES (no model pass - these posted as facts):\n' + ('\n'.join(f"[{x['key']}] {x['facts']}" for x in cands) or '(none)')
     # the note outlives the post: a quiet check leaves one too, so the next check starts where this one stopped
     if note:
         store.set_setting('assistant_notes', note, 'assistant'); store.set_setting('assistant_notes_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
     say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say if fresh(state, s, now)]   # a model echoing a dismissed key changes nothing
     rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store)) | {'notes': note}
-    if not say: return {'ran': True, 'said': 0, 'reviewed': rv}
+    if not say: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': inputs}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}}, stamp) for s in say]
     body = ('\n'.join(f"- {i['Text']}\n    why: {s_['why']}" for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
@@ -405,7 +406,7 @@ def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
-    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv}
+    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': inputs}
 
 
 # ── the buttons ──────────────────────────────────────────────────────────────────────────────

@@ -41,10 +41,22 @@ if (what === "all" || what === "timeline") {
   console.log("assistant row:", await clickRow("Summit is missing"));
   await wait(1800);
   await applyReadmeTone();
-  await shot("screenshot-timeline.png");
   // Tight panel crop in CSS pixels. It is captured from the same live DOM as the Timeline,
   // so its text and colors cannot drift into a separately reconstructed mockup.
   await shot("screenshot-assistant.png", { x: 1028.5, y: 181, width: 786, height: 466.5 });
+  // A full 1846px desktop shrinks every label below reading size in GitHub's README column.
+  // Reflow the real app to 1280px, then crop away global navigation and empty lower space:
+  // enough Timeline rows to show the funnel, with the selected row and its panel still whole.
+  await p.setViewport({ width: 1280, height: 820, deviceScaleFactor: 2 });
+  await wait(900);
+  await p.evaluate(() => {
+    document.getElementById("tqTopNav").style.display = "none";
+    window.scrollTo(0, 0);
+  });
+  await wait(500); // ResizeObserver moves the sticky Timeline dock to the vacated top edge.
+  await shot("screenshot-timeline.png", { x: 0, y: 0, width: 1280, height: 620 });
+  await p.evaluate(() => { document.getElementById("tqTopNav").style.display = ""; });
+  await p.setViewport({ width: 1846, height: 1080, deviceScaleFactor: 2 });
   console.log("timeline shot ok");
 }
 if (what === "all" || what === "hover") {

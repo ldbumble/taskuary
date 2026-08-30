@@ -11,6 +11,7 @@ from .routing import route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref
+from .categories import sender_class, team_domains_of
 from . import senders
 
 
@@ -97,6 +98,26 @@ def _from_row(r: dict, store=None) -> dict:
             'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r)}
 
 
+def auto_code_ok(store, msg: dict, mid: int) -> tuple:
+    """May this task start a coding session by ITSELF? (ok, why-not) - two gates, cheapest first.
+
+    A ROBOT sender is the new one (owner, 2026-08-30): a notice, a reminder or a newsletter is
+    not coding work whoever it nominally asks. The task is still real - a training assignment IS
+    due - so it lands on the Board and waits for the owner's click; what it does not do is open a
+    session that can only look at a vendor's mailshot and say "nothing to do here", which costs a
+    run, a wrap-up and a drafted reply for nothing (TQ-0252 is what that looks like from outside).
+    Deciding it on the SENDER, not the model's `kind`, keeps it deterministic: categories.py's
+    classifier is the same one the Timeline already tags these rows with.
+
+    Then the stranger gate: a first-time sender's mail can be a task, it cannot start an agent on
+    this machine (senders.known). Second because it is the expensive one - a Sent Items search -
+    and every newsletter used to pay for it before being sent to an agent anyway."""
+    cls = sender_class(store.get_message(mid) or {}, team_domains_of(store.get_settings()))
+    if cls != 'person': return False, f'the sender is {cls}, not a person - a notice is not coding work'
+    ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
+    return ok, why if ok else f'{why} - not one of your domains, and this mailbox has never written to them'
+
+
 def drain(store, llm=None, progress=None, limit: int = 500) -> int:
     """Judge what deferred() stored - oldest first, one at a time, because a thread's second
     message must find the task its first one opened. A message whose triage raises is filed
@@ -153,7 +174,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     new_rid = None                       # set when a fresh reply task opens a review below
-    held = ''                            # why the coding agent was NOT auto-started (a first-time email sender)
+    held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
     mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
     me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
@@ -284,9 +305,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # 'escalate' was declared in the policy precedence and then read by nobody. It IS
         # the urgency rule: the owner names the senders whose mail jumps the queue, and that
         # is the only thing that marks a task urgent.
-        # every task goes to the coding agent, `general` included - the owner's call (2026-08-27,
-        # restated 2026-08-29): an agent on a non-coding task says "nothing to do here" and stops, a
-        # job left on a list does not. The keyword scan in draft_task_fields only decides with triage off.
+        # `kind` labels the task, it does not route it: a person's task goes to the coding agent
+        # whether it says coding or general - the owner's call (2026-08-27, restated 2026-08-29) -
+        # because an agent on a non-coding task says "nothing to do here" and stops, and a job left
+        # on a list does not. Who may self-dispatch is decided below, on the sender (auto_code_ok).
+        # The keyword scan in draft_task_fields only decides with triage off.
         judged = cfg.get('intent_classify_enabled', '1') == '1'       # a brain (or a by-construction rule) said 'task'
         f = draft_task_fields(msg, urgent=pol['action'] == 'escalate',
                               kind=intent.get('kind') or ('coding' if judged and intent['intent'] == 'task' else None))
@@ -306,22 +329,21 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                               'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
             if cfg.get('auto_draft_enabled') == '1':
                 _spawn(_auto_draft, store, tid, rid)
-        # EVERY task goes to the agent - the owner's rule (2026-08-29): "almost everything should
-        # be the coding agent automatically; it does what it is supposed to, or says nothing to do
-        # here". `general` is a label the agent confirms, not a reason to leave a job on a list;
-        # what the agent must not touch is said in SOUL.md and the standing notes it is handed.
+        # A task from a PERSON goes to the agent, `general` included - the owner's rule (2026-08-29):
+        # "almost everything should be the coding agent automatically; it does what it is supposed
+        # to, or says nothing to do here". `general` is a label the agent confirms, not a reason to
+        # leave a job on a list; what the agent must not touch is said in SOUL.md and the standing
+        # notes it is handed. Robots and strangers still make tasks, they just do not self-dispatch.
         elif f['kind'] in ('coding', 'general') and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you.
-            # And the same gate for email, on the SENDER: a stranger's mail can be a task, it
-            # cannot start an agent on this machine by itself (senders.py). The task is here;
-            # the owner presses the button.
-            ok, who = senders.known(store, msg, exclude_mid=mid, deep=True)
+            # The rest of the gate is auto_code_ok: who may start a session on this machine.
+            ok, who = auto_code_ok(store, msg, mid)
             if ok: _spawn(_auto_code, store, tid)
             else:
                 held = who
-                store.add_comment(tid, 'router', 'agent', f'Coding agent not auto-started: {who} - not one of your domains, and this mailbox '
-                                                          'has never written to them. Send it to the coding agent yourself if this is real work.')
+                store.add_comment(tid, 'router', 'agent', f'Coding agent not auto-started: {who}. '
+                                                          'Send it to the coding agent yourself if this is real work.')
                 store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
@@ -331,7 +353,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     if r['decision'] != 'attach':
         act = ('a reply draft goes to Review for you' if f['kind'] == 'reply'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
-               else f'not auto-worked: {held} - a first-time sender never starts an agent by itself; send it yourself if real' if held
+               else f'not auto-worked: {held}; send it yourself if real' if held
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
                else 'auto-dispatch is off (Settings) - start the session from the task')
         reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')

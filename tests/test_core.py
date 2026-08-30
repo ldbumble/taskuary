@@ -132,7 +132,7 @@ class CoreTests(unittest.TestCase):
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))                      # a task, on the Board, not worked
         self.assertTrue(any('not auto-started' in c['Body'] for c in s.list_comments(out['task_id'])))
-        self.assertIn('first-time sender never starts an agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertIn('this mailbox has never written to them', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
         # the same stranger writes again: the table knows them now, no mailbox lookup, agent starts
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
             self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=TASK_LLM)['status'], 'created')

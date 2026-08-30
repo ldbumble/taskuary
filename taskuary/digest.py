@@ -171,7 +171,7 @@ def gather(store, days: int = DAYS) -> str:
     LABEL = {'coding': 'coding (sent to the agent)', 'todo': 'to do (yours, not code)', 'review': 'review (a reply drafted for you)',
              'info': 'info (a person told you something)', 'automated': 'automated (a system told you something)',
              'promo': 'promo (newsletters, marketing)', 'filed': 'filed', 'ignored': 'ignored', 'report': 'report',
-             'feed': 'feed', 'yours': 'your replies', 'triaging': 'still triaging'}
+             'feed': 'feed', 'yours': 'your replies', 'triaging': 'still triaging', 'assistant': 'assistant (its own posts)'}
     counts = {}
     for m in feed: counts[m.get('Category') or 'filed'] = counts.get(m.get('Category') or 'filed', 0) + 1
     _block(out, 'THE WINDOW BY TAG (every inbound item, tagged the way the Timeline shows it):',

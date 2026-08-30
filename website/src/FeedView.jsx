@@ -53,10 +53,11 @@ const CATEGORIES = [
   { key: "alerts", label: "alerts", channels: ["sentry", "pagerduty"], c: PILL_COLORS.pick },
   { key: "cloud", label: "cloud", channels: ["aws", "azure"], c: PILL_COLORS.pick },
   { key: "reports", label: "reports", channels: ["report"], c: PILL_COLORS.pick },
+  { key: "assistant", label: "assistant", channels: ["assistant"], c: PILL_COLORS.pick },
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
   telegram: "Telegram chats", whatsapp: "WhatsApp chats", imessage: "Apple Messages chats", discord: "Discord channels",
-  github: "Repositories", gitlab: "GitLab instances", report: "Reports",
+  github: "Repositories", gitlab: "GitLab instances", report: "Reports", assistant: "Assistant",
   jira: "Jira issues", asana: "Asana tasks", monday: "Monday items", linear: "Linear issues",
   clickup: "ClickUp tasks", todoist: "Todoist tasks",
   trello: "Trello cards", notion: "Notion pages", azdo: "Azure DevOps items",
@@ -83,6 +84,7 @@ const needsYou = (r) => !!r.NeedsYou && r.TaskStatus !== "done";
 const blurb = (r) => {
   if ((r.RouteReason || "").includes("your reply") || (r.RouteReason || "").includes("your sent reply"))
     return r.TaskId ? `Your reply — kept on ${ref(r.TaskId)} so the thread shows both sides` : "Your reply — kept for context, never a task";
+  if (r.Channel === "assistant") return "The assistant's post — open it: every line has its buttons";
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
   if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
   if (r.MsgStatus === "triaging") return "On the timeline first — triage is deciding what it is";
@@ -107,6 +109,7 @@ const GUTTER = 70;
 // The rail dot says WHAT STATE it is in. Channel identity is already on the icon beside the
 // sender, and the old row said it three times over (stripe, dot, tinted tile).
 const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
+  : r.Channel === "assistant" ? "#6f8a6e"                  // the assistant speaking up
   : r.Category === "info" ? "#6f8a6e"                      // a person told you something: worth the eye
   : ["ignored", "filed", "triaging"].includes(r.MsgStatus) ? "#cfc9bf"
     : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
@@ -860,6 +863,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
           ) : Object.entries(days).map(([day, items], di) => (
             // the group's top edge is what the date spy watches - no header row of its own
             <Box key={day} sx={{ mt: di ? 1.5 : 0 }} ref={(el) => { if (el) dayRefs.current[day] = el; else delete dayRefs.current[day]; }}>
+              {di === 0 && !cat && !pick && <AssistantCard onOpenTask={onOpenTask} />}
               {di === 0 && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
               <Box>
                 {items.map((r, i) => (
@@ -886,8 +890,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
                       {/* one DEFINED object per message: who and what on top, what the hub did
                           underneath. Hover adds the message gist; click opens the panel. */}
                       <Box onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseLeave={hoverCancel}
-                        sx={{ bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
-                          border: `1px solid ${BORDER}`, borderRadius: "8px", px: "11px", pt: "5px", pb: "6px",
+                        sx={{ bgcolor: r.Channel === "assistant" ? "#eef3ea" : ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
+                          border: `1px solid ${r.Channel === "assistant" ? "#cfd8c8" : BORDER}`, borderRadius: "8px", px: "11px", pt: "5px", pb: "6px",
                           minWidth: 0, overflow: "hidden",
                           transition: "box-shadow .18s, border-color .18s",
                           ...(sel?.MessageId === r.MessageId
@@ -1138,10 +1142,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {/* the assistant's own read - private, opinionated, written against what the hub already
                   knows about this sender and topic (counsel.py, COUNSEL.md). Above the mail on purpose:
                   it is what a good assistant says as they hand you the letter */}
-              {sel.Brief && <AssistantBrief brief={sel.Brief} messageId={sel.MessageId} taskId={sel.TaskId} onMade={() => onRefresh?.()} />}
+              {sel.Channel !== "assistant" && sel.Brief && <AssistantBrief brief={sel.Brief} messageId={sel.MessageId} taskId={sel.TaskId} onMade={() => onRefresh?.()} />}
+              {/* the assistant's own post: what it noticed, each line with its buttons (assistant.py) */}
+              {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
               {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayStrip />}
-              <PanelLabel>{(detail?.messages || []).length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}</PanelLabel>
-              <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
+              {sel.Channel !== "assistant" && (
+                <>
+                  <PanelLabel>{(detail?.messages || []).length > 1 ? `Emails in this chain (${detail.messages.length})` : "Message"}</PanelLabel>
+                  <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
+                </>
+              )}
 
               {rep && (
                 <>
@@ -1204,7 +1214,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
                 </>
               )}
-              {!pending && !opened && sel.Channel !== "report" && (
+              {!pending && !opened && !["report", "assistant"].includes(sel.Channel) && (
                 <ChoiceRow tint="#eae4d8" busy={opening} onClick={openReply}
                   icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                   label="Reply to this"
@@ -1268,7 +1278,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   icon={<CloseIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
                   label="Not a coding task" hint={`keep ${ref(sel.TaskId)} on your list, take the agent off it — and remember that for mail like this`} />
               )}
-              {sel.Channel !== "report" && <AskAssistant sel={sel} onDone={() => onRefresh?.()} />}
+              {!["report", "assistant"].includes(sel.Channel) && <AskAssistant sel={sel} onDone={() => onRefresh?.()} />}
               <VoiceNoteRow sel={sel} onRefresh={onRefresh} />
               <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               {sel.TaskId && (
@@ -1514,6 +1524,120 @@ const pendingDraft = (detail, open) => {
 // take its queue from exactly here.)
 // ── the assistant's private read (counsel.py) ──────────────────────────────────────────
 const briefOf = (b) => { if (!b) return null; if (typeof b === "object") return b; try { return JSON.parse(b); } catch { return null; } };
+
+// ── the assistant on the Timeline (assistant.py) ────────────────────────────────────────────
+// The pinned card is STATUS, not advice - one quiet line: what is being worked, what waits on
+// you, what is next on the calendar. The recommendations live in the rows below, where they can
+// scroll away (the owner, 2026-08-29: "a pinned card of ideas might be too much"). Settings →
+// Assistant hides it. Refreshes every minute while the tab is visible.
+const AssistantCard = ({ onOpenTask }) => {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { try { setSt((await api.get("/api/assistant/status")).data); } catch { setSt(null); } }, []);
+  useEffect(() => { load(); return pollWhileVisible(load, 60000); }, [load]);
+  if (!st || !st.card) return null;
+  const now = async () => { setBusy(true); try { await api.post("/api/assistant/run"); } catch { /* nothing to say, or no AI */ } setBusy(false); load(); };
+  const next = st.meetings?.[0];
+  const parts = [
+    st.working.length ? `${st.working.length} agent${st.working.length === 1 ? "" : "s"} working` : null,
+    st.waiting.length ? `${st.waiting.length} waiting on you` : null,
+    st.reviews ? `${st.reviews} to review` : null,
+    st.open ? `${st.open} open` : null,
+    next ? `next: ${next.all_day ? "all day" : fmtTime12(next.start)} ${next.subject}` : null,
+  ].filter(Boolean);
+  const detail = [...st.working.map((w) => `${w.ref} ${w.title} — ${w.agent}`), ...st.waiting.map((w) => `${w.ref} ${w.title} — waiting on you`)].join("\n");
+  return (
+    <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "6px" }}>
+      <Box /><Box />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: "11px", py: "4px", borderRadius: "8px",
+        bgcolor: PANEL, border: `1px solid ${BORDER}`, borderLeft: "3px solid #6f8a6e", minWidth: 0 }}>
+        <SmartToyIcon sx={{ fontSize: 15, color: "#6f8a6e", flexShrink: 0 }} />
+        <Typography variant="body2" noWrap title={detail} sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0 }}>
+          {parts.length ? parts.join(" · ") : "Nothing in flight, nothing waiting on you."}
+        </Typography>
+        {!!st.waiting.length && (
+          <Button size="small" onClick={() => onOpenTask?.(st.waiting[0].tid)}
+            sx={{ textTransform: "none", fontSize: 11.5, color: "#55697a", minWidth: 0, px: 0.75 }}>open {st.waiting[0].ref}</Button>
+        )}
+        <Button size="small" disabled={busy || !st.enabled} onClick={now}
+          title={st.last_run ? `last post ${fmtDateTime(st.last_run)} · every ${st.every} min` : "the assistant has not posted yet"}
+          sx={{ textTransform: "none", fontSize: 11.5, color: "#4f6b4e", minWidth: 0, px: 0.75 }}>{busy ? "thinking…" : "ask now"}</Button>
+      </Box>
+    </Box>
+  );
+};
+
+// One post, opened: each line with its buttons. State comes from the server (a line acted on from
+// another tab shows as done here too); the buttons are the ones the line's action allows.
+const IDEA_KIND = { followup: "follow up", prep: "prep", cold: "gone quiet", ahead: "coming up", idea: "idea" };
+const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
+  const [ideas, setIdeas] = useState(() => briefOf(sel.Brief)?.ideas || []);
+  const [busy, setBusy] = useState(null);
+  const [notes, setNotes] = useState({});
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    try { const { data } = await api.get(`/api/assistant/ideas?mid=${sel.MessageId}`); if (data.data?.length) setIdeas(data.data); } catch { /* keep the post's own copy */ }
+  }, [sel.MessageId]);
+  useEffect(() => { load(); }, [load]);
+  const act = async (i, verb) => {
+    setBusy(`${i.id}:${verb}`); setErr("");
+    try {
+      const { data } = await api.post(`/api/assistant/ideas/${i.id}/${verb}`, { days: 1 });
+      if (verb === "followup") setNotes((n) => ({ ...n, [i.id]: `drafted — the chase waits in Review on ${data.ref}` }));
+      if (verb === "task" && data.taskId) onOpenTask?.(data.taskId);
+    } catch (e) { setErr(e?.response?.data?.detail || "That did not work"); }
+    setBusy(null); load(); onChanged?.();
+  };
+  const btn = { textTransform: "none", fontSize: 11.5, minWidth: 0 };
+  const green = { bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b745a" } };
+  return (
+    <Box sx={{ mb: 1.25 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6 }}>
+        <SmartToyIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />
+        <Typography variant="caption" sx={{ color: "#4f6b4e", fontWeight: 700, letterSpacing: 0.3 }}>WHAT I NOTICED</Typography>
+        {err && <Typography variant="caption" sx={{ color: ALERT_INK }}>· {err}</Typography>}
+      </Box>
+      {ideas.map((i) => {
+        const a = i.action || {}, open = i.status === "open", ev = a.event;
+        return (
+          <Box key={i.id} sx={{ px: 1.25, py: 0.85, mb: 0.6, borderRadius: 1.5, border: "1px solid #cfd8c8", bgcolor: open ? "#eef3ea" : "#f4f3ef", opacity: open ? 1 : 0.72 }}>
+            <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
+              <Typography variant="caption" sx={{ color: "#4f6b4e", fontWeight: 700, flexShrink: 0 }}>{IDEA_KIND[i.kind] || i.kind}</Typography>
+              <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>{i.text}</Typography>
+            </Box>
+            {ev && (
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.3 }}>
+                {ev.who?.length ? `with ${ev.who.join(", ")}` : ""}{ev.where ? ` · ${ev.where}` : ""}{ev.about ? ` · ${ev.about}` : ""}
+              </Typography>
+            )}
+            {open ? (
+              <Box sx={{ mt: 0.6, display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
+                {a.type === "followup" && (
+                  <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "followup")} sx={{ ...btn, ...green }}>
+                    {busy === `${i.id}:followup` ? "drafting…" : "Follow up — draft the chase"}</Button>
+                )}
+                {a.mid && (
+                  <Button size="small" variant={a.type === "task" ? "contained" : "outlined"} disableElevation disabled={!!busy} onClick={() => act(i, "task")}
+                    sx={{ ...btn, ...(a.type === "task" ? green : { color: "#4f6b4e", borderColor: "#cfd8c8" }) }}>
+                    {busy === `${i.id}:task` ? "starting…" : a.title ? `Make it a task: ${a.title}` : "Make it a task"}</Button>
+                )}
+                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, color: "#55697a", borderColor: BORDER }}>Open {ref(a.tid)}</Button>}
+                <Box sx={{ flex: 1 }} />
+                <Button size="small" disabled={!!busy} onClick={() => act(i, "done")} sx={{ ...btn, color: DIM }}>Done</Button>
+                <Button size="small" disabled={!!busy} onClick={() => act(i, "snooze")} sx={{ ...btn, color: DIM }}>Snooze a day</Button>
+                <Button size="small" disabled={!!busy} onClick={() => act(i, "dismiss")} title="teaches the assistant this kind of nudge is not for you" sx={{ ...btn, color: DIM }}>Not this</Button>
+              </Box>
+            ) : (
+              <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.4 }}>
+                {notes[i.id] || (i.status === "done" ? "done" : i.status === "dismissed" ? "not this — noted" : i.status === "snoozed" ? "snoozed" : i.status)}
+              </Typography>
+            )}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+};
 
 const AssistantBrief = ({ brief, messageId, taskId, onMade }) => {
   const b = briefOf(brief);

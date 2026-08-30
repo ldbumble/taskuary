@@ -22,7 +22,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import (PAUSE_MARKER, finish as coder_finish, pause_note, reply_target as coder_reply_target,
                     report_from_transcript, resolution_text)
-from . import aisetup, learn, learnedgraph, outbound, rank, responder, waitroom
+from . import aisetup, assistant, learn, learnedgraph, outbound, rank, responder, waitroom
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -722,6 +722,33 @@ def _learn_promotion(m: dict, background):
                             f"msg{m['MessageId']}: triage filed \"{(m.get('Subject') or '')[:80]}\" from "
                             f"{m.get('FromEmail') or m.get('SourceName') or '?'} as fyi, but the owner made it a task - "
                             'triage under-reached')
+
+# ── the assistant on the Timeline (assistant.py): its post, its buttons, the status card ──────
+@app.get('/api/assistant/status')
+def assistant_status():
+    """The pinned card's line: what is being worked, what waits on you, what is next. Status, not advice."""
+    return assistant.status(store)
+
+@app.get('/api/assistant/ideas')
+def assistant_ideas(status: str = None, mid: int = None):
+    """What the assistant has said, with what became of each line - by state, or the lines of one post."""
+    return {'data': [assistant._public(i) | {'firstSeen': i.get('FirstSeen'), 'lastSaid': i.get('LastSaid'), 'messageId': i.get('MessageId')}
+                     for i in store.list_ideas(status or None, mid)]}
+
+@app.post('/api/assistant/run')
+def assistant_run():
+    """Post now, cadence or not - the card's 'Ask now'. Nothing new to say posts nothing."""
+    return assistant.run(store, force=True)
+
+class IdeaBody(BaseModel): days: int = 1
+
+@app.post('/api/assistant/ideas/{iid}/{verb}')
+def assistant_act(iid: int, verb: str, body: IdeaBody = None, background: BackgroundTasks = None):
+    """One button on one line: followup (the chase, drafted into Review), task (the agent starts),
+    dismiss (teaches LEARNED.md), snooze (a day, or `days`), done (you handled it)."""
+    try: return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1),
+                              learn_async=background.add_task if background is not None else None)
+    except ValueError as e: raise HTTPException(422, str(e))
 
 @app.post('/api/messages/{mid}/brief')
 def brief_message(mid: int):
@@ -1890,6 +1917,9 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         except Exception as e:
             logger.warning(f'CI poll failed: {e}')
         run_due_reports(store, startup)
+        # the assistant's own clock rides the poll: hourly by default, on top of whatever arrived
+        try: assistant.run(store)
+        except Exception as e: logger.warning(f'assistant post failed: {e}')
     finally:
         try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
         finally: _POLL_BUSY.release()
@@ -2169,7 +2199,7 @@ def health():
 
 @app.get('/api/settings')
 def settings():
-    return {'data': [s for s in store.list_settings() if s['Name'] != 'ingest_status']}
+    return {'data': [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run')]}
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):

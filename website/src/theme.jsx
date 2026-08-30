@@ -75,6 +75,7 @@ export const TAGS = {
   feed:      { ...role("info", "feed"),        hint: "shown for information - this connection is a feed" },
   yours:     { ...role("handled", "your reply"), hint: "you sent this - kept so the thread shows both sides" },
   triaging:  { ...role("muted", "triaging…"),  hint: "on the timeline first - triage is deciding" },
+  assistant: { ...role("handled", "assistant"), hint: "the assistant's own post - what it noticed and what it would do; open it for the buttons" },
 };
 
 // Catppuccin Mocha — the palette the Claude Code / Codex theme plugins use, so a session

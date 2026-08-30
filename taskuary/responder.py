@@ -57,6 +57,11 @@ NOT_YET = ('If the request cannot be answered by a reply alone - it needs work d
            'line that you will pick it up, and stop. Not who will do it, not how, and never that '
            'you are unable to.')
 # the coder has already closed the thread: this reply reports an outcome, never promises one
+# the assistant's chase: you wrote last, heard nothing, and are nudging - never a reproach
+NUDGE = ('This reply is a FOLLOW-UP: you wrote last on this thread, asked for or promised something, and have '
+         'heard nothing since. Nudge in one or two sentences: restate in a line what you need or are waiting on, '
+         'make it easy to answer, and assume they are busy rather than ignoring you. No reproach, no "just '
+         'checking in", no recap of the whole thread.\n')
 DONE = ('The work this thread asked for is FINISHED - the report below says what was done. Say what '
         'happened in a sentence or two, claiming nothing the report does not support; if it could NOT '
         'be done, say that and why, just as briefly. Never mention agents, tasks, tickets, '
@@ -108,7 +113,7 @@ def strip_signoff(text: str) -> str:
     return '\n'.join(lines).strip()
 
 
-def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
+def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
     whichever brain `triage_ai` names), the standing memory notes, and the thread itself."""
     from .llm import build_llm
@@ -130,7 +135,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     lrn = injectable(store.doc('learned') or '')
     sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n'
-              + (DONE if resolution else NOT_YET)
+              + (NUDGE if nudge else DONE if resolution else NOT_YET)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -153,6 +158,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
         for m in store.list_messages(task_id)[-6:])
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
+    if nudge: user += f'\n\n--- WHY YOU ARE WRITING AGAIN (the assistant\'s note to you, not for the reader)\n{nudge}'
     from . import calendar as cal
     calendar = cal.context_for(store, f"{last.get('Subject') or ''} {thread}")     # "Tuesday at 1 works" only if Tuesday at 1 is free
     system += calendar + history_block(store, last)
@@ -164,9 +170,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None) -> str:
     return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
 
 
-def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None) -> str:
+def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
     """Write the draft and park it on its review, ready for approve / edit / no-reply."""
-    text = draft_reply(store, task_id, llm, resolution)
+    text = draft_reply(store, task_id, llm, resolution, nudge)
     store.update_review_draft(review_id, text, None)
     logger.info(f'drafted reply for task {task_id} ({len(text)} chars)')
     return text
@@ -179,7 +185,7 @@ def resolution_of(store, task_id: int):
                  if str(c.get('Body') or '').startswith('CODER REPORT')), None)
 
 
-def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None) -> str:
+def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None, nudge: str = None) -> str:
     """The one door every reply comes through - and there is only one road behind it now.
 
     An agent named `responder` used to take this over and run HEADLESS: a CLI opened, worked
@@ -187,7 +193,7 @@ def write_draft(store, task_id: int, review_id: int, resolution: str = None, act
     app exists to replace, so it is gone. Coding work goes to a real session you can see
     (terminal.start_on_task); a reply is two sentences and belongs to the main AI, which
     writes it here in under a second and parks it for approval."""
-    return draft_for_review(store, task_id, review_id, llm, resolution)
+    return draft_for_review(store, task_id, review_id, llm, resolution, nudge)
 
 
 def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:

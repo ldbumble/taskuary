@@ -62,10 +62,11 @@ def _line(r) -> str:
     return f"- {when} {who}: \"{_first(r.get('Subject'), 80)}\"{tag} - {_first(strip_boilerplate(str(r.get('BodyText') or '')), 160)}"
 
 
-def dossier(store, msg: dict, days: int = DAYS, exclude_mid: int = None, skip_conv: bool = False) -> str:
+def dossier(store, msg: dict, days: int = DAYS, exclude_mid: int = None, skip_conv: bool = False, calendar: bool = True) -> str:
     """Everything the hub already knows that bears on this message, as prompt text - or '' when
     it knows nothing. Cheap: five local reads, one calendar fetch when a calendar is connected.
-    skip_conv leaves out this message's own thread - the responder already has it in full."""
+    skip_conv leaves out this message's own thread - the responder already has it in full;
+    calendar=False skips the fetch for a caller that already holds the agenda (assistant.prep)."""
     from .routing import tokens
     frm = (msg.get('from_email') or '').lower()
     subj_toks = set(tokens(msg.get('subject') or ''))
@@ -87,7 +88,7 @@ def dossier(store, msg: dict, days: int = DAYS, exclude_mid: int = None, skip_co
              if (subj_toks and len(subj_toks & set(tokens(t.get('Title') or ''))) >= 2)
              or (name_toks and name_toks & set(tokens(f"{t.get('Title') or ''} {t.get('Summary') or ''}")))][:5]
     if open_: parts.append('OPEN TASKS THAT TOUCH IT:\n' + '\n'.join(f"- TQ-{t['TaskId']:04d} {t.get('Status')}: {_first(t.get('Title'), 90)}" for t in open_))
-    cal = _calendar(store, frm, name_toks, subj_toks)
+    cal = _calendar(store, frm, name_toks, subj_toks) if calendar else ''
     if cal: parts.append(cal)
     return '\n\n'.join(parts)
 

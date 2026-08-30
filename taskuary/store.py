@@ -149,6 +149,9 @@ CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, No
   CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
 CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
+CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Kind TEXT, Text TEXT, ActionJson TEXT, Sig TEXT,
+  Status TEXT DEFAULT 'open', SnoozeUntil TEXT, MessageId INTEGER, FirstSeen TEXT, LastSaid TEXT, SaidCount INTEGER DEFAULT 0,
+  DecidedBy TEXT, DecidedAt TEXT);
 """
 
 # CREATE TABLE IF NOT EXISTS is a no-op on an existing db; these are not. IF NOT EXISTS
@@ -172,6 +175,7 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit(EntityType, EntityId)',
     'CREATE INDEX IF NOT EXISTS idx_dispatchq_task ON dispatchq(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_waitroom_task ON waitroom(TaskId, DeliveredAt)',
+    'CREATE INDEX IF NOT EXISTS idx_idea_status ON idea(Status, MessageId)',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -198,6 +202,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
                     'counsel_enabled': '1',       # the assistant's private brief on every judged message (counsel.py)
+                    # the assistant's POST on the Timeline (assistant.py): its clock, what it looks for, the
+                    # silence and quiet that count as news, and whether the status card shows at the top
+                    'assistant_enabled': '1', 'assistant_every_minutes': '60', 'assistant_followup_hours': '24',
+                    'assistant_cold_days': '3', 'assistant_card': '1', 'assistant_producers': 'followup,prep,cold,ahead,idea',
                     'agent_hooks': '1',           # Claude Code tells the Board what it is doing, through its own hooks (hooks.py)
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
@@ -630,6 +638,46 @@ class SQLiteStore:
         return self._rows("SELECT MessageId, ConversationId, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
                           "FROM message WHERE Status NOT IN ('context','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
     def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
+    # ── what the assistant's post reads (assistant.py) ────────────────────────────────────────
+    def owner_last_words(self, since, before, limit=40):
+        """Threads whose LAST message is the owner's own ('context' rides inside a chain, 'out' was
+        sent from here), written between `since` and `before` - the silence a chase is about."""
+        return self._rows("SELECT * FROM message m WHERE (m.Status='context' OR m.Direction='out') AND m.ConversationId IS NOT NULL "
+                          'AND m.SentAt>=? AND m.SentAt<=? AND NOT EXISTS (SELECT 1 FROM message x WHERE x.ConversationId=m.ConversationId '
+                          "AND x.MessageId<>m.MessageId AND x.Status<>'skipped' AND x.SentAt>m.SentAt) ORDER BY m.SentAt DESC LIMIT ?",
+                          (since, before, limit))
+    def last_inbound_in(self, conversation_id):
+        return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','skipped') AND IFNULL(Direction,'in')<>'out' "
+                         'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
+    def task_last_activity(self, task_id):
+        r = self._one('SELECT MAX(x) last FROM (SELECT MAX(CreatedAt) x FROM comment WHERE TaskId=? UNION ALL '
+                      'SELECT MAX(SentAt) FROM message WHERE TaskId=? UNION ALL SELECT MAX(IFNULL(UpdatedAt, StartedAt)) FROM run WHERE TaskId=?)',
+                      (task_id, task_id, task_id))
+        return (r or {}).get('last')
+    def briefed_messages(self, since, limit=200):
+        return self._rows('SELECT MessageId, TaskId, Subject, FromName, SentAt, Brief FROM message WHERE Brief IS NOT NULL AND SentAt>=? '
+                          "AND Status NOT IN ('context','skipped') ORDER BY SentAt DESC LIMIT ?", (since, limit))
+    # ── ideas: what the assistant said, and what the owner did about it ──────────────────────
+    def list_ideas(self, status=None, mid=None):
+        q, p = 'SELECT * FROM idea', []
+        w = ([('Status=?', status)] if status else []) + ([('MessageId=?', mid)] if mid else [])
+        if w: q += ' WHERE ' + ' AND '.join(k for k, _ in w); p = [v for _, v in w]
+        return self._rows(q + ' ORDER BY IdeaId DESC', p)
+    def get_idea(self, idea_id): return self._one('SELECT * FROM idea WHERE IdeaId=?', (idea_id,))
+    def upsert_idea(self, s: dict, stamp: str) -> dict:
+        """Said (again): a known key reopens with the new facts and text; a new one is born."""
+        act = json.dumps(s.get('action') or {})
+        if self._one('SELECT 1 FROM idea WHERE Key=?', (s['key'],)):
+            self._exec("UPDATE idea SET Kind=?, Text=?, ActionJson=?, Sig=?, Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?",
+                       (s.get('kind'), s['text'], act, s.get('sig'), stamp, s['key']))
+        else:
+            self._exec('INSERT INTO idea (Key, Kind, Text, ActionJson, Sig, Status, FirstSeen, LastSaid, SaidCount) VALUES (?,?,?,?,?,?,?,?,1)',
+                       (s['key'], s.get('kind'), s['text'], act, s.get('sig'), 'open', stamp, stamp))
+        return self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
+    def set_idea_status(self, idea_id, status, by, until=None):
+        self._exec('UPDATE idea SET Status=?, SnoozeUntil=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (status, until, by, _now(), idea_id))
+    def set_ideas_message(self, ids, mid):
+        if ids: self._exec(f"UPDATE idea SET MessageId=? WHERE IdeaId IN ({','.join('?' * len(ids))})", [mid, *ids])
 
     def thread_messages(self, conversation_id=None, subject=None, limit=40):
         """Every message already on this thread, oldest last - by ConversationId where the channel

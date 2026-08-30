@@ -1,5 +1,5 @@
 """The assistant on the Timeline (assistant.py): the hourly post that says what it noticed - the
-reply you sent and never heard back on, the task gone quiet, the brief's warning coming due, its
+reply you sent and never heard back on, the task gone quiet, its
 own ideas - once each, with buttons. All offline: the model is a lambda, the calendar is off.
 """
 import json, unittest
@@ -67,14 +67,6 @@ class ColdAndAheadTests(unittest.TestCase):
         self.assertIn('sat quiet', got[0]['text'])
         s.add_comment(tid, 'coder', 'agent', 'working on it')            # activity today: no longer cold
         self.assertEqual(assistant.cold(s, days=3), [])
-
-    def test_a_briefs_ahead_lines_come_back_as_candidates(self):
-        s = _store()
-        mid = _mail(s, DANA, 'Contract renewal', 'Renewal is due.', days=2)
-        s.set_brief(mid, json.dumps({'read': 'x', 'ahead': ['Renewal auto-extends on Sep 12 unless cancelled in writing']}))
-        got = assistant.ahead(s)
-        self.assertEqual(got[0]['key'], f'ahead:{mid}:0')
-        self.assertIn('Sep 12', got[0]['text']); self.assertEqual(got[0]['action'], {'type': 'message', 'mid': mid, 'tid': None})
 
 
 class PostTests(unittest.TestCase):

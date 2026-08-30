@@ -67,9 +67,6 @@ const KNOB_META = {
   calendar_enabled: { group: "Replies", label: "Check your calendar when a reply is about time", type: "switch",
     desc: "\"Tuesday at 1 works for me\" is only drafted if Tuesday at 1 is free. Reads the Outlook card's calendars (needs the Calendars.Read application permission) and a Google calendar if its OAuth fields are on the Gmail card.",
     help: "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.\n\nAgents can read the same thing: POST /api/tools/run with type \"calendar\"." },
-  counsel_enabled: { group: "Replies", label: "Assistant brief on every judged message", type: "switch",
-    desc: "After triage, the assistant reads the message against what it already knows — this sender's recent mail, what you last wrote them, the topic elsewhere, open tasks, your calendar — and leaves a short opinionated brief on the panel. Invites get a prep note. Voice and rules: COUNSEL.md on the Docs tab.",
-    help: "One extra AI call per message a model judged (never for automated noise the keyword pass filed). The brief is private and never sent anywhere; when it names something to get ahead of, or a task you may not see, it is also pushed to your notify channel. A suggested task is one click away on the panel and never opens itself. Replies read the same history, so a draft no longer forgets what the same person asked last week. Off: no briefs, drafts still read the history." },
   auto_draft_enabled: { group: "Replies", label: "Draft replies automatically", type: "switch",
     desc: "Questions get their AI draft the moment they arrive, waiting in Review.",
     help: "On: a message triaged as a question lands in Review with the reply already written — you edit or just Approve & send. Off: questions still queue in Review, but empty; you click 'Draft with AI' per item.\n\nNothing sends itself either way — approving is always yours. Turning this off is also the cheapest way to pause AI spending." },
@@ -96,8 +93,8 @@ const KNOB_META = {
   assistant_card: { group: "Assistant", label: "Status card at the top of the Timeline", type: "switch",
     desc: "One quiet line: agents working, tasks waiting on you, drafts to review, the next meeting — and 'ask now'. Status, not advice: the recommendations are the rows.",
     help: "Off hides the card; the posts keep coming. The card refreshes every minute while the tab is visible." },
-  assistant_producers: { group: "Assistant", label: "What it looks for", type: "channels", options: ["followup", "prep", "cold", "ahead", "idea"],
-    desc: "followup = your unanswered asks · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · ahead = what a brief said would bite later · idea = the model's own thoughts from the day's mail.",
+  assistant_producers: { group: "Assistant", label: "What it looks for", type: "channels", options: ["followup", "prep", "cold", "idea"],
+    desc: "followup = your unanswered asks · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · idea = the model's own thoughts from the day's mail.",
     help: "Switch a kind off and it never appears in a post again; lines already posted keep their buttons. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words." },
 
   // ── Coder agent: who works the tasks, and how eagerly ──

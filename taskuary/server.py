@@ -750,22 +750,6 @@ def assistant_act(iid: int, verb: str, body: IdeaBody = None, background: Backgr
                               learn_async=background.add_task if background is not None else None)
     except ValueError as e: raise HTTPException(422, str(e))
 
-@app.post('/api/messages/{mid}/brief')
-def brief_message(mid: int):
-    """The assistant's private read on this message, written now - for mail that arrived before
-    the brief existed, or when the owner wants a second look. Same road as ingest (counsel.brief):
-    the sender's recent mail, your replies to them, the topic elsewhere, open tasks, the calendar."""
-    m = store.get_message(mid)
-    if not m: raise HTTPException(404, 'message not found')
-    from . import counsel
-    t = store.get_task(m['TaskId']) if m.get('TaskId') else None
-    intent = 'reply_only' if (t or {}).get('Kind') == 'reply' else 'task' if t else 'fyi'
-    try: b = counsel.brief(store, counsel.msg_of(m), mid, intent, invite=counsel.is_invite(m))
-    except RuntimeError as e: raise HTTPException(422, str(e))
-    if not b: raise HTTPException(502, 'no brief - either no AI connector is set up, or the AI answered in a shape that could not be read')
-    if t: store.add_comment(t['TaskId'], 'counsel', 'agent', 'ASSISTANT BRIEF\n' + counsel.render(b))
-    return {'brief': b}
-
 class MineBody(BaseModel):
     kind: str = 'general'
     title: str | None = None        # the assistant's suggested title, accepted as-is from the panel

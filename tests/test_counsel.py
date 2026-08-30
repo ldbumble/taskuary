@@ -1,7 +1,6 @@
-"""The assistant's private brief (counsel.py): an info mail or an invite used to be filed and
-forgotten, and a reply was drafted with no memory of what the same person asked last week.
-These cover the dossier (what the hub already knows), the brief itself, the invite road through
-ingest, the notify ping, the feed column and the responder's history block - all offline.
+"""The dossier (counsel.py): what the hub already knows about a sender and a topic, read by the reply
+drafter, the assistant's post and the coder's context file. These cover the dossier, the invite road
+through ingest (an invite files as fyi, no model asked) and the responder's history block - all offline.
 """
 import json, unittest
 from datetime import datetime, timedelta
@@ -66,90 +65,15 @@ class DossierTests(unittest.TestCase):
         self.assertEqual(counsel.dossier(_store(), {'from_email': 'new@nowhere.com', 'subject': 'Hello'}), '')
 
 
-class BriefTests(unittest.TestCase):
-    def test_brief_is_written_from_counsel_doc_and_stored_as_json(self):
-        s = _store()
-        s.set_setting('owner_name', 'Uri Nussbaum', 't')
-        mid = _mail(s, DANA, 'Q3 ledger reconciliation', 'Ledger attached; auditors want sign-off by the 15th.', days=0)
-        seen = {}
-        def llm(system, user, max_tokens=None, **k):
-            seen.update(system=system, user=user, max_tokens=max_tokens)
-            return ('```json\n{"read": "Dana needs your sign-off; I would clear it this week.", "do": "Reply with a date.", '
-                    '"ahead": ["Auditor deadline on the 15th"], "prep": [], "suggest": {"title": "Sign off Q3 ledger before the 15th", "why": "auditors are waiting"}, "nothing": false}\n```')
-        b = counsel.brief(s, counsel.msg_of(s.get_message(mid)), mid, 'fyi', llm=llm)
-        self.assertIn("I have Uri's back", seen['system'])                    # COUNSEL.md, owner tokens filled
-        self.assertIn('Answer JSON only', seen['system']); self.assertNotIn('<!--', seen['system'])
-        self.assertIn('nothing on file about this sender', seen['user'])      # thin history is said, not hidden
-        self.assertEqual(b['suggest']['title'], 'Sign off Q3 ledger before the 15th'); self.assertFalse(b['history'])
-        stored = json.loads(s.get_message(mid)['Brief'])
-        self.assertEqual(stored['read'], b['read']); self.assertEqual(stored['ahead'], ['Auditor deadline on the 15th'])
-        self.assertIn('Sign off Q3 ledger', counsel.render(b)); self.assertIn('⏳ Auditor deadline', counsel.render(b))
-        self.assertIn('Brief', s.feed(limit=5)[0])                            # the panel gets it with the row
-
-    def test_an_unreadable_answer_stores_nothing(self):
-        s = _store()
-        mid = _mail(s, DANA, 'hi', 'hello', days=0)
-        self.assertIsNone(counsel.brief(s, counsel.msg_of(s.get_message(mid)), mid, 'fyi', llm=lambda *a, **k: 'Sure! Here is my read: ...'))
-        self.assertIsNone(counsel.brief(s, counsel.msg_of(s.get_message(mid)), mid, 'fyi', llm=lambda *a, **k: '{"do": "x"}'))   # no read = no brief
-        self.assertIsNone(s.get_message(mid)['Brief'])
-        self.assertIsNone(counsel.parse('{"read": "ok", "suggest": {"why": "no title"}, "ahead": "not a list"}')['suggest'])
-
-    def test_invite_asks_for_a_prep_note(self):
-        s = _store()
-        mid = _mail(s, LEE, 'Invitation: Vendor review @ Thu 2pm', 'Agenda: Q3 ledger', days=0)
-        seen = {}
-        def llm(system, user, **k): seen['system'] = system; return '{"read": "Lee wants the ledger settled.", "prep": ["Dana still owes the reconciliation"], "nothing": false}'
-        b = counsel.brief(s, counsel.msg_of(s.get_message(mid)), mid, 'fyi', llm=llm, invite=True)
-        self.assertIn('CALENDAR INVITE', seen['system']); self.assertEqual(b['prep'], ['Dana still owes the reconciliation'])
-
-
 class IngestRoadTests(unittest.TestCase):
     def test_an_invite_files_as_fyi_without_asking_the_model(self):
         s = _store()
         calls = []
         def llm(system, user, **k): calls.append(1); return '{"intent": "task", "kind": "coding", "why": "x"}'
-        with mock.patch.object(counsel, 'later') as spawn:
-            out = ingest.ingest_message(s, {'external_id': 'g:1', 'channel': 'email', 'subject': 'Invitation: Budget sync @ Mon 10am', 'body': 'Teams link',
-                                            'from_email': LEE, 'from_name': 'Lee', 'source_name': ME, 'sent_at': _ago(), 'invite': True}, llm=llm)
+        out = ingest.ingest_message(s, {'external_id': 'g:1', 'channel': 'email', 'subject': 'Invitation: Budget sync @ Mon 10am', 'body': 'Teams link',
+                                    'from_email': LEE, 'from_name': 'Lee', 'source_name': ME, 'sent_at': _ago(), 'invite': True}, llm=llm)
         self.assertEqual(out['status'], 'filed'); self.assertEqual(calls, [])                 # no verdict to ask for
         self.assertIn('calendar invite', s.feed(limit=3)[0]['RouteReason'])
-        fn, *args = spawn.call_args[0]
-        self.assertIs(fn, counsel.after_triage); self.assertTrue(args[-1])                    # the prep note is on its way, in invite mode
-
-    def test_a_model_judged_fyi_gets_a_brief_and_keyword_noise_does_not(self):
-        s = _store()
-        llm = lambda system, user, **k: '{"intent": "fyi", "why": "a status note"}'
-        with mock.patch.object(counsel, 'later') as spawn:
-            ingest.ingest_message(s, {'external_id': 'g:2', 'channel': 'email', 'subject': 'Ledger status', 'body': 'Reconciliation is done; auditors sign next week.',
-                                      'from_email': DANA, 'source_name': ME, 'sent_at': _ago()}, llm=llm)
-            self.assertEqual(spawn.call_args[0][0], counsel.after_triage)
-            spawn.reset_mock()
-            ingest.ingest_message(s, {'external_id': 'g:3', 'channel': 'email', 'subject': 'Nightly report', 'body': 'This is an automated message. Do not reply.',
-                                      'from_email': 'noreply@robot.com', 'source_name': ME, 'sent_at': _ago()}, llm=llm)
-            self.assertFalse(spawn.called)                                                     # the keyword pass filed it: not worth a call
-
-    def test_after_triage_pings_only_when_there_is_something_to_get_ahead_of(self):
-        s = _store()
-        mid = _mail(s, DANA, 'Ledger status', 'Auditors sign on the 15th.', days=0)
-        msg = counsel.msg_of(s.get_message(mid))
-        quiet = lambda *a, **k: '{"read": "Routine status.", "nothing": false}'
-        loud = lambda *a, **k: '{"read": "The 15th is a hard date.", "do": "Book the sign-off.", "ahead": ["Auditor deadline 15th"], "nothing": false}'
-        with mock.patch('taskuary.outbound.notify') as ping:
-            counsel.after_triage(s, msg, mid, None, 'fyi', llm=quiet); self.assertFalse(ping.called)
-            counsel.after_triage(s, msg, mid, None, 'fyi', llm=loud)
-            self.assertTrue(ping.called); self.assertIn('Heads-up', ping.call_args[0][1]); self.assertIn('Auditor deadline', ping.call_args[0][1])
-            s.set_setting('counsel_enabled', '0', 't'); ping.reset_mock(); s.set_brief(mid, None)
-            counsel.after_triage(s, msg, mid, None, 'fyi', llm=loud)
-            self.assertFalse(ping.called); self.assertIsNone(s.get_message(mid)['Brief'])      # the switch is a switch
-
-    def test_a_brief_on_a_task_lands_on_the_task_too(self):
-        s = _store()
-        tid = s.create_task({'Title': 'Ledger', 'Kind': 'reply', 'Status': 'open'}, 't')
-        mid = _mail(s, DANA, 'Ledger', 'When can you sign?', days=0, tid=tid, status='routed')
-        counsel.after_triage(s, counsel.msg_of(s.get_message(mid)), mid, tid, 'reply_only',
-                             llm=lambda *a, **k: '{"read": "She has asked twice; answer with a date.", "nothing": false}')
-        self.assertTrue(any(c['Body'].startswith('ASSISTANT BRIEF') for c in s.list_comments(tid)))
-
 
 class ResponderHistoryTests(unittest.TestCase):
     def test_a_reply_draft_knows_what_the_sender_asked_last_week(self):

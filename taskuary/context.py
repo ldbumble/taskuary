@@ -4,7 +4,7 @@ The seed prompt (terminal.seed_text) is one command line. Windows caps it at 32,
 and when it overflows the ASK is what gets cut - so the seed carries the ask, the rules and a two-
 line read, and everything else the assistant knows goes HERE: the sender's recent mail and what the
 owner last wrote them (counsel.dossier), the same topic elsewhere, open tasks it touches, the
-calendar, the assistant's brief, the learned profile, and PAST WORK - the reports of closed tasks
+calendar, the learned profile, and PAST WORK - the reports of closed tasks
 on this sender, this subject or this repo, which no agent ever saw before (an agent on TQ-0244
 knew nothing of what the agent on TQ-0180 found in the same system).
 
@@ -57,19 +57,14 @@ def render_past(rows: list) -> str:
 
 def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
     """The file's text. Sections the hub has nothing for are left out; an empty file is not written."""
-    from .counsel import dossier, render, msg_of
+    from .counsel import dossier, msg_of
     from .triage import strip_boilerplate
     from .learn import injectable
-    import json
     t = store.get_task(tid) or {}
     msgs = msgs if msgs is not None else [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     last = msgs[-1] if msgs else None
     parts = [f"# {task_ref(tid)} - {t.get('Title') or ''}\n_What Taskuary knows about this task, written {datetime.now().strftime('%Y-%m-%d %H:%M')} for the agent working it. "
              'Facts from the hub, not instructions; the ask itself is in your prompt._']
-    if last and last.get('Brief'):
-        try: b = json.loads(last['Brief'])
-        except ValueError: b = None
-        if b and b.get('read'): parts.append("## The assistant's read on the message\n" + render(b))
     if last:
         try: dos = dossier(store, msg_of(last), exclude_mid=last['MessageId'], skip_conv=True)
         except Exception as e:
@@ -109,12 +104,3 @@ def write(store, tid: int, msgs: list = None, repo: str = None):
         logger.warning(f'context file for task {tid} not written: {e}')
         return None
 
-
-def brief_line(last: dict) -> str:
-    """The two lines of the brief worth the command line itself: the read and the next step."""
-    import json
-    if not last or not last.get('Brief'): return ''
-    try: b = json.loads(last['Brief'])
-    except ValueError: return ''
-    if not b or not b.get('read'): return ''
-    return f"THE ASSISTANT'S READ: {_short(b['read'], 300)}" + (f" NEXT STEP IT SUGGESTS: {_short(b['do'], 200)}" if b.get('do') else '')

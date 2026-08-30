@@ -706,11 +706,6 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                        f"subject \"{m.get('Subject') or ''}\": "
                        f"{_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS)}")
     elif t.get('Summary'): parts.append(f"ASK: {_cut(strip_boilerplate(str(t['Summary'])), ASK_CHARS)}")
-    # the assistant already read this message against the sender's history and formed a view
-    # (counsel.py) - the two lines of it worth the command line ride here; the rest is in the file
-    from . import context as ctx
-    bl = ctx.brief_line(m) if m else ''
-    if bl: parts.append(no_emails(bl))
     # the source's standing instruction: a PR is judged before it is worked, a Jira item may
     # have its own house rules - configured per connector card, defaulted for GitHub
     from .ingest import source_rules
@@ -749,9 +744,10 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # the topic elsewhere, the calendar, the learned profile, the whole thread - and PAST WORK, the
     # reports of closed tasks on this sender/subject/repo, which no agent ever saw before. Under
     # Taskuary's own home, never in the checkout (a stray file there gets staged - 8abb175).
+    from . import context as ctx
     cpath = ctx.write(store, tid, msgs, repo)
     if cpath: parts.append(f'CONTEXT FILE: {cpath} - what Taskuary knows about this sender, this topic and past work on it '
-                           '(history, closed tasks and how they ended, the assistant\'s read). Read it first, before anything else.')
+                           '(history, closed tasks and how they ended). Read it first, before anything else.')
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.

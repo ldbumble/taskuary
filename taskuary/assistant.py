@@ -1,11 +1,10 @@
 """The assistant on the Timeline: an hourly post of what it noticed and what it would do.
 
-counsel.py briefs the owner on ONE message as it arrives. Nothing ever spoke up later - the reply
-the owner sent on Monday and never heard back on, the meeting in two hours with five mails of
-history behind it, the task that went quiet, the "bites in a week" line a brief wrote and nobody
-read again. This is the voice that does: on its own clock it gathers what the hub can see
+Triage judges each message as it arrives and then nothing ever spoke up later - the reply the
+owner sent on Monday and never heard back on, the meeting in two hours with five mails of
+history behind it, the task that went quiet. This is the voice that does: on its own clock it gathers what the hub can see
 (followups: the owner wrote last and asked for something; prep: meetings ahead, with what came
-before them; cold: work nothing has touched; ahead: the briefs' dated warnings; and its own ideas
+before them; cold: work nothing has touched; and its own ideas
 from the day's mail), asks the model for its read GIVEN WHAT IT ALREADY SAID, and posts only what
 is new as ONE row on the Timeline - each line with its buttons on the panel: Follow up (the chase
 is drafted in the owner's voice, into Review), Make it a task (the agent starts), Not this, Snooze.
@@ -26,8 +25,8 @@ from loguru import logger
 from .store import task_ref
 
 CHANNEL = 'assistant'
-PRODUCERS = ('followup', 'prep', 'cold', 'ahead', 'idea')
-DAYS = 30                  # how far back followups and briefs are read
+PRODUCERS = ('followup', 'prep', 'cold', 'idea')
+DAYS = 30                  # how far back followups are read
 MAX_SAY = 6                # lines per post - a post nobody reads to the end is a post that failed
 POST_TOKENS = 700
 # the owner's last word on a thread asked or promised something - that is what a chase is for
@@ -126,23 +125,10 @@ def prep(store) -> list:
     return out
 
 
-def ahead(store) -> list:
-    """What the briefs said would bite later - read once when they were written, never again."""
-    out = []
-    for r in store.briefed_messages(_since(DAYS)):
-        try: b = json.loads(r.get('Brief') or '{}')
-        except ValueError: continue
-        for i, a in enumerate((b.get('ahead') or [])[:3]):
-            out.append({'key': f"ahead:{r['MessageId']}:{i}", 'kind': 'ahead', 'sig': _short(a, 60),
-                        'facts': f"From the brief on \"{_short(r.get('Subject'), 60)}\" ({r.get('FromName') or '?'}, {_ts(r['SentAt'])[:10]}): {a}",
-                        'text': str(a).strip(), 'action': {'type': 'message', 'mid': r['MessageId'], 'tid': r.get('TaskId')}})
-    return out
-
-
 def candidates(store, c: dict) -> list:
     out = []
     for name, fn in (('followup', lambda: followups(store, c['followup_h'])), ('prep', lambda: prep(store)),
-                     ('cold', lambda: cold(store, c['cold_d'])), ('ahead', lambda: ahead(store))):
+                     ('cold', lambda: cold(store, c['cold_d']))):
         if name not in c['producers']: continue
         try: out += fn()
         except Exception as e: logger.warning(f'assistant: {name} candidates failed - {e}')

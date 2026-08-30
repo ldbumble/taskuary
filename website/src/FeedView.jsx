@@ -1139,10 +1139,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   <Box component="b" sx={{ color: DIM }}>Why it's here:</Box> {sel.RouteReason}
                 </Typography>
               )}
-              {/* the assistant's own read - private, opinionated, written against what the hub already
-                  knows about this sender and topic (counsel.py, COUNSEL.md). Above the mail on purpose:
-                  it is what a good assistant says as they hand you the letter */}
-              {sel.Channel !== "assistant" && sel.Brief && <AssistantBrief brief={sel.Brief} messageId={sel.MessageId} taskId={sel.TaskId} onMade={() => onRefresh?.()} />}
               {/* the assistant's own post: what it noticed, each line with its buttons (assistant.py) */}
               {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
               {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayStrip />}
@@ -1278,7 +1274,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   icon={<CloseIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
                   label="Not a coding task" hint={`keep ${ref(sel.TaskId)} on your list, take the agent off it — and remember that for mail like this`} />
               )}
-              {!["report", "assistant"].includes(sel.Channel) && <AskAssistant sel={sel} onDone={() => onRefresh?.()} />}
               <VoiceNoteRow sel={sel} onRefresh={onRefresh} />
               <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               {sel.TaskId && (
@@ -1636,72 +1631,6 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
         );
       })}
     </Box>
-  );
-};
-
-const AssistantBrief = ({ brief, messageId, taskId, onMade }) => {
-  const b = briefOf(brief);
-  const [busy, setBusy] = useState(false);
-  const [made, setMade] = useState(null);
-  if (!b || b.nothing) return null;
-  const accept = async () => {
-    setBusy(true);
-    try {
-      const { data } = await api.post(`/api/messages/${messageId}/mine`, { kind: "general", title: b.suggest.title });
-      setMade(data.ref); onMade?.(data.taskId);
-    } catch { /* the button simply stays; the panel's other exits still work */ }
-    setBusy(false);
-  };
-  return (
-    <Box sx={{ mb: 1.25, px: 1.25, py: 0.9, borderRadius: 1.5, border: "1px solid #cfd8c8", bgcolor: "#eef3ea",
-      // breathes in once: the assistant leaning over to say something, not a panel appearing
-      "@keyframes thubBrief": { from: { opacity: 0, transform: "translateY(-4px)" }, to: { opacity: 1, transform: "none" } },
-      animation: "thubBrief .35s ease-out both" }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.4 }}>
-        <SmartToyIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />
-        <Typography variant="caption" sx={{ color: "#4f6b4e", fontWeight: 700, letterSpacing: 0.3 }}>{(b.prep || []).length ? "PREP NOTE" : "MY READ"}</Typography>
-        {b.history === false && <Typography variant="caption" sx={{ color: FAINT }}>· from the message alone</Typography>}
-      </Box>
-      <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45 }}>{b.read}</Typography>
-      {b.do && <Typography variant="body2" sx={{ color: INK, mt: 0.4 }}><Box component="b" sx={{ color: "#4f6b4e" }}>→</Box> {b.do}</Typography>}
-      {(b.ahead || []).map((a, i) => <Typography key={`a${i}`} variant="caption" sx={{ display: "block", color: DIM, mt: 0.25 }}>⏳ {a}</Typography>)}
-      {(b.prep || []).map((p, i) => <Typography key={`p${i}`} variant="caption" sx={{ display: "block", color: DIM, mt: 0.25 }}>📝 {p}</Typography>)}
-      {/* the task the assistant thinks you are missing. It never opens itself - one click here does */}
-      {b.suggest && !taskId && (
-        <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-          <Button size="small" variant="contained" disableElevation disabled={busy || !!made} onClick={accept}
-            sx={{ bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b745a" }, textTransform: "none", fontSize: 12 }}>
-            {made ? `${made} — on your list` : busy ? "making it…" : `Make it a task: ${b.suggest.title}`}
-          </Button>
-          {b.suggest.why && !made && <Typography variant="caption" sx={{ color: FAINT }}>{b.suggest.why}</Typography>}
-        </Box>
-      )}
-    </Box>
-  );
-};
-
-// mail that arrived before the brief existed, or a second look: one click writes it now
-const AskAssistant = ({ sel, onDone }) => {
-  const [busy, setBusy] = useState(false);
-  const [brief, setBrief] = useState(null);
-  const [err, setErr] = useState("");
-  if (sel.Brief) return null;
-  if (brief) return (
-    <Box sx={{ width: "100%", px: 1.25, pt: 1, bgcolor: PANEL2, borderTop: `1px solid ${BORDER}` }}>
-      <AssistantBrief brief={brief} messageId={sel.MessageId} taskId={sel.TaskId} onMade={onDone} />
-    </Box>
-  );
-  const go = async () => {
-    setBusy(true); setErr("");
-    try { const { data } = await api.post(`/api/messages/${sel.MessageId}/brief`, {}); setBrief(data.brief); onDone?.(); }
-    catch (e) { setErr(e?.response?.data?.detail || "The assistant could not write a brief"); }
-    setBusy(false);
-  };
-  return (
-    <ChoiceRow tint="#e3e6e1" busy={busy} onClick={go}
-      icon={<SmartToyIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />}
-      label={busy ? "reading what I know…" : "What's my assistant's read?"}
-      hint={err || "this sender's recent mail, what you last told them, the topic elsewhere, open tasks, your calendar"} />
   );
 };
 

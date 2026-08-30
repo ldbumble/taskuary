@@ -22,7 +22,7 @@ const DOCS = {
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "How you write replies — greeting, tone, length, phrasing — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
   counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "#55697a" }} />,
-    blurb: "How the assistant briefs YOU — privately, on every message it judged: what it's really about, what it would do, what to get ahead of, and the task nobody named yet. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
+    blurb: "How the assistant speaks to YOU — its posts on the Timeline: the reply you never heard back on, the meeting ahead, the task gone quiet, its own ideas. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
   coder: { label: "CODER.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#55697a" }} />,

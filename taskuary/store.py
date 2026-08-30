@@ -201,11 +201,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
-                    'counsel_enabled': '1',       # the assistant's private brief on every judged message (counsel.py)
                     # the assistant's POST on the Timeline (assistant.py): its clock, what it looks for, the
                     # silence and quiet that count as news, and whether the status card shows at the top
                     'assistant_enabled': '1', 'assistant_every_minutes': '60', 'assistant_followup_hours': '24',
-                    'assistant_cold_days': '3', 'assistant_card': '1', 'assistant_producers': 'followup,prep,cold,ahead,idea',
+                    'assistant_cold_days': '3', 'assistant_card': '1', 'assistant_producers': 'followup,prep,cold,idea',
                     # the coder's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'coder_context_file': '1',
@@ -663,9 +662,6 @@ class SQLiteStore:
         if not s: return []
         return self._rows(f"SELECT DISTINCT t.TaskId FROM task t JOIN message m ON m.TaskId=t.TaskId WHERE t.Status='done' "
                           f"AND lower(m.FromEmail) IN ({','.join('?' * len(s))}) ORDER BY t.TaskId DESC LIMIT ?", [*s, limit])
-    def briefed_messages(self, since, limit=200):
-        return self._rows('SELECT MessageId, TaskId, Subject, FromName, SentAt, Brief FROM message WHERE Brief IS NOT NULL AND SentAt>=? '
-                          "AND Status NOT IN ('context','skipped') ORDER BY SentAt DESC LIMIT ?", (since, limit))
     # ── ideas: what the assistant said, and what the owner did about it ──────────────────────
     def list_ideas(self, status=None, mid=None):
         q, p = 'SELECT * FROM idea', []

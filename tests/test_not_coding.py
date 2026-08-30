@@ -67,24 +67,24 @@ class DispatchGateTests(unittest.TestCase):
         started = [c for c in spawn.call_args_list if getattr(c[0][0], '__name__', '') == '_auto_code']
         return s, out, started
 
-    def test_a_task_with_no_code_in_it_still_reaches_the_coder(self):
-        """The owner's rule (2026-08-29): every task goes to the agent, general ones included - it
-        looks and says "nothing to do here", which is cheap; a job sitting on a list is not. The
-        KIND still records what triage saw, so the Board can tell the two apart."""
+    def test_a_task_with_no_code_in_it_waits_on_your_list(self):
+        """The owner's rule as it now stands (2026-08-30): almost everything goes to the agent,
+        and the one exception is work that is clearly not a coding job. `kind` carries that
+        verdict - here from the keyword scan, because this path has triage switched off."""
         s, out, started = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        self.assertEqual(len(started), 1)                              # dispatched like any other task
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # and still labelled honestly
+        self.assertEqual(started, [])                                    # no session bought
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # and labelled honestly
 
     def test_a_real_bug_report_still_reaches_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.')
         self.assertEqual(len(started), 1)
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
 
-    def test_the_route_line_says_the_agent_was_sent(self):
-        s, out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertIn('sent to the coding agent', reason)
-        self.assertNotIn('no agent dispatched', reason)
+    def test_the_route_line_says_which_way_it_went(self):
+        s, _out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
+        self.assertIn('not a coding job', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.')
+        self.assertIn('sent to the coding agent', s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
 
 class HarmlessExitTests(unittest.TestCase):

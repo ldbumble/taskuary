@@ -8,19 +8,28 @@ import re as _re
 # What each verdict COSTS is part of the judgement, so it is in the prompt: a task starts a
 # real agent in a real repo; a reply is one cheap draft the owner approves. Defaulting to
 # "task" turned questions into background work nobody asked for.
+# `kind` costs something too, and this is the ONE place that decides it: coding starts a
+# session, general leaves the job on the owner's list. Nothing downstream re-reads the mail
+# to second-guess it - no keyword, sender or category rule anywhere else (owner, 2026-08-30,
+# after a training reminder got a coder run: the exception is "clearly not a coding job",
+# and it is judged here, in a document that can be argued with).
 # This text also ships as templates/triage.md - the editable TRIAGE.md doc that overrides it
 # (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "kind": "coding|general", "why": "<one concrete sentence: what you saw in the message '
     'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
-    'Almost everything that asks for anything is a task, and a task from a PERSON goes to the coding agent '
-    'automatically: it does what can be done from a keyboard or says "nothing to do here" and stops - a cheap ending. '
-    'A task from a MACHINE lands on the owner\'s board instead, because an agent can only read a mailshot and say '
-    '"nothing to do here", which is a run and a drafted reply for nothing. The funnel decides that from the sender, '
-    'after you have answered: classify what the message IS and never trim a verdict to steer who works it. kind is a '
-    'label, coding by default; say general ONLY when the owner\'s past verdicts say this kind of work is not for the '
-    'agent, or it plainly cannot be done from a computer.\n'
+    'Almost everything that asks for anything is a task, and almost every task goes to the coding agent '
+    'automatically: it does what can be done from a keyboard or says "nothing to do here" and stops - a cheap ending.\n'
+    'kind ROUTES the task, so answer it as its own question: could a capable person do this from a keyboard, given '
+    'access to the systems? Yes = coding, and an agent starts on it. No = general, and it goes on the owner\'s own '
+    'list. coding is the default and the bar for general is high - the test is not "is there a repository in this". '
+    'A system to change, an account to unlock, a database to query, a file or report to produce, a document to draft, '
+    'a vendor to chase by writing to them, something to look up: all coding. Say general only when no amount of '
+    'typing does it - a course to sit, a form to physically sign, a meeting to attend, a call somebody has to make, '
+    'a decision only the owner can take - or when the owner\'s past verdicts say this kind of work is not for the '
+    'agent. Cannot tell? Say coding: an agent looking and finding nothing is cheap, a job nobody started is not.\n'
+    'Both verdicts are yours and nothing downstream second-guesses either. Never shade one to steer the other.\n'
     'task = someone must DO something beyond writing back: change a system, fix or build something, produce or '
     'chase something, look something up that takes more than a sentence.\n'
     'reply_only = the answer is a sentence the owner already knows - "what time are you free", "are you around '
@@ -30,7 +39,8 @@ INTENT_SYSTEM = (
     'newsletters, thanks, threads the owner is merely copied on. Read the ask, not the sender: an automated '
     'notice that puts something on the owner\'s plate - a training assignment with a due date, an expiring '
     'password, a form to sign - is a task, because somebody has to do it; one that only says what already '
-    'happened is fyi.\n'
+    'happened is fyi. Whether an AGENT could do that task is kind\'s question, not this one - never downgrade '
+    'a real obligation to fyi because no agent can help with it.\n'
     'Chat is not mail (no subject, no recipient lines) but an ask in chat is still an ask - a task for the agent. '
     'reply_only is for what a sentence settles with nothing to do behind it; fyi is thanks, status, and threads '
     'between other people where the owner is neither asked nor named.\n'
@@ -131,7 +141,13 @@ def strip_boilerplate(text: str) -> str:
     return out if out.strip() else (text or '')
 
 
-_VERDICT_MARK = re.compile(r'\b(NOT OURS|NOT A TASK|NOT A CODING TASK)\b')
+# The owner's three verdict marks do not mean the same thing, and lumping them together said
+# the wrong one out loud: "NOT A CODING TASK" is the button for real work that stays on their
+# list (server.not_coding), and two of those on a topic used to settle it as fyi - deleting an
+# obligation the owner had just confirmed was theirs. Now the mark carries its own answer, and
+# `general` is the verdict this whole exception exists for, so it is the likeliest to pile up.
+_VERDICT_MARK = re.compile(r'\b(NOT A CODING TASK|NOT OURS|NOT A TASK)\b')
+SETTLED_INTENT = {'NOT A CODING TASK': 'task'}          # everything else settles as fyi
 
 def _agreement(notes) -> tuple:
     """(verdict, n) when two or more retrieved notes carry a verdict mark and they all agree;
@@ -176,11 +192,20 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # refund thread with two NOT OURS on file still opened a reply task while the model
                 # "judged likeness". No topic is named here: it counts the verdicts it was handed.
                 agree = _agreement(notes)
-                if agree: system += (f'\n\nSETTLED BY YOUR OWNER: all {agree[1]} past verdicts on this sender or topic say '
-                                     f'{agree[0]}. Answer fyi - no exceptions. A question in the message does not reopen '
-                                     'it: mail on a settled topic always asks somebody something, and that somebody is '
-                                     'whoever does this work - not the owner, who is copied on it. The owner reads the '
-                                     'timeline and will say so if a thread has become theirs.')
+                if agree:
+                    # WHICH verdict was settled decides what it settles TO. "Not a coding task" is
+                    # the owner keeping the work and taking the agent off it - answering fyi there
+                    # drops a job they had just claimed.
+                    settled = ('Answer task with kind general - no exceptions, and never fyi. The owner has '
+                               'already ruled that work like this is theirs and that no agent works it; what is '
+                               'settled is WHO does it, not whether it needs doing.'
+                               if SETTLED_INTENT.get(agree[0]) == 'task' else
+                               'Answer fyi - no exceptions. A question in the message does not reopen it: mail on a '
+                               'settled topic always asks somebody something, and that somebody is whoever does this '
+                               'work - not the owner, who is copied on it.')
+                    system += (f'\n\nSETTLED BY YOUR OWNER: all {agree[1]} past verdicts on this sender or topic say '
+                               f'{agree[0]}. {settled} The owner reads the timeline and will say so if a thread has '
+                               'become theirs.')
                 system += ('\n\nEVIDENCE - verdicts the owner gave on earlier mail that looks related '
                            '(pulled by sender and by topic; each names the sender and subject it was given on). '
                            'Judge how alike THIS message really is: the same sender asking the same kind of '
@@ -206,10 +231,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             out = llm(system, user, images=images) if images else llm(system, user)
             j = json.loads(re.sub(r'^```(json)?|```$', '', out.strip(), flags=re.M))
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
-                # `kind` is the model's SECOND verdict - coding or general - and only means anything
-                # on a task. It used to be a regex over the body (routing.draft_task_fields), which
-                # is how a Teams line about someone's job scope opened a coding session; the model
-                # has read the whole message and TRIAGE.md's definition, so its word wins when given.
+                # `kind` is the model's SECOND verdict - coding or general - and it ROUTES the task:
+                # coding starts an agent, general goes on the owner's own list (ingest.auto_code_ok,
+                # which asks nothing else about it). It used to be a regex over the body
+                # (routing.draft_task_fields), which is how a Teams line about someone's job scope
+                # opened a coding session; the model has read the whole message and TRIAGE.md's
+                # definition, so its word wins when given, and the regex is only the fallback.
                 out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
                 if j['intent'] == 'task' and j.get('kind') in ('coding', 'general'): out['kind'] = j['kind']
                 return out

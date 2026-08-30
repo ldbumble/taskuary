@@ -89,7 +89,7 @@ def reply_target(store, task_id: int):
 
 
 # ── the cheap ending ────────────────────────────────────────────────────────────────────
-# Every task goes to the coding agent, `general` included (the owner's rule, 2026-08-29), and the
+# Almost everything a keyboard can do goes to the coding agent (the owner's rule), and the
 # whole bargain is that an agent with nothing to do says "nothing to do here" and stops CHEAPLY.
 # It did not stop cheaply: finish() drafted a reply whatever the session found, so a CyberHoot
 # training reminder came back as mail to hoots@cyberhoot.com reading "Done. This was just a

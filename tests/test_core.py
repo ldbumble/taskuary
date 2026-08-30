@@ -82,18 +82,19 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(start.call_args.args[1], out['task_id'])
         self.assertTrue(any('auto-started a live coder session' in c['Body'] for c in s.list_comments(out['task_id'])))
 
-    def test_work_the_brain_calls_general_still_opens_a_session(self):
-        """"Add the new user to the system" is real work with no repository in it. The owner's
-        rule (2026-08-29): it goes to the agent like everything else - the agent looks and says
-        "nothing to do here" if a keyboard cannot do it. The KIND keeps what triage saw."""
+    def test_work_the_brain_calls_general_goes_on_your_list(self):
+        """`kind` routes the task and triage alone decides it (owner, 2026-08-30): general means
+        it looked and saw nothing a keyboard does, so the task lands on the Board and waits for
+        a click rather than buying a session that can only say "nothing to do here"."""
         from unittest import mock
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 't')
-        general = lambda *a, **k: '{"intent": "task", "kind": "general", "why": "no code in it"}'
+        general = lambda *a, **k: '{"intent": "task", "kind": "general", "why": "nobody can type this"}'
         with mock.patch('taskuary.ingest._spawn') as spawn:
             out = ingest_message(s, self.msg(external_id='ac3'), llm=general)
-        self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_code'])
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+        spawn.assert_not_called()
+        t = s.get_task(out['task_id'])
+        self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))     # a real task, just yours
 
     def test_a_task_the_brain_did_not_call_general_goes_to_the_coder(self):
         """The owner's call (2026-08-27): err toward the coding agent. A task the brain did not

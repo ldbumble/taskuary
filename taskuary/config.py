@@ -12,11 +12,36 @@ try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
 from pathlib import Path
 
+def _under_test() -> bool:
+    """Are we inside a test run? sys.modules is the honest signal: pytest and unittest are both
+    imported by the time anything of ours is."""
+    import sys
+    return ('pytest' in sys.modules or 'unittest' in sys.modules) and not os.getenv('TASKUARY_ALLOW_TEST_HOME')
+
+
 def home() -> Path:
-    p = Path(os.getenv('TASKUARY_HOME') or Path.home() / '.taskuary')
+    """Where the owner's data lives - unless a test is asking, in which case it never is.
+
+    tests/conftest.py points TASKUARY_HOME at a temp dir before anything of ours is imported, and
+    that works for `pytest`. It does NOT work for `python tests/test_terminal.py`, because every
+    test file here ends in unittest.main() and running one directly loads no conftest at all. That
+    door was open, and something went through it: two copies of test_terminal's fixture task, and
+    its graph:E2E message, in the owner's live database (2026-09-01; and the same class of
+    accident on 2026-08-27, which cost SOUL.md and left 140 fixture tasks on the board).
+
+    So the guard moves to where the decision is actually made. A test that has not been given a
+    home gets a temp one and is told so - loudly, once - instead of quietly opening the real
+    database. Set TASKUARY_ALLOW_TEST_HOME=1 for the rare test that means it."""
+    env = os.getenv('TASKUARY_HOME')
+    if not env and _under_test():
+        import tempfile
+        env = os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='taskuary_test_')
+        print(f'taskuary: test run with no TASKUARY_HOME - using {env}, not your real data',
+              file=__import__('sys').stderr)
+    p = Path(env or Path.home() / '.taskuary')
     old = Path.home() / '.taskhub'
     # one-time migration from the pre-rename data dir
-    if not os.getenv('TASKUARY_HOME') and not p.exists() and old.exists(): old.rename(p)
+    if not env and not p.exists() and old.exists(): old.rename(p)
     p.mkdir(parents=True, exist_ok=True)
     return p
 

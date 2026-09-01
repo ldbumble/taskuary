@@ -586,7 +586,11 @@ class TerminalTests(unittest.TestCase):
         try:
             # the TUI echoes the ask only when a whole line arrives, so this passing IS the proof
             # that the prompt was submitted and not just typed into the box
-            self.assertTrue(_wait(lambda: 'run_pto_intacct.py' in terminal.plain(t.scrollback()), 40),
+            # A loaded macOS runner can spend most of the first 40 seconds proving the canonical
+            # PTY accepted the prompt (the failure transcript had already reached "Working…" at
+            # the cutoff). The seed path deliberately owns a longer retry window, so this test
+            # must allow the work line to arrive instead of racing that recovery machinery.
+            self.assertTrue(_wait(lambda: 'run_pto_intacct.py' in terminal.plain(t.scrollback()), 75),
                             terminal.plain(t.scrollback())[-400:])
             self.assertIn('Payroll File Imports', terminal.plain(t.scrollback()))   # the mail rode in
             got = terminal.harvest(t)

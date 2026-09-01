@@ -20,6 +20,7 @@ import ReportsView from "./ReportsView.jsx";
 import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
+import { DEMO } from "./demoApi.js";
 import { isStale, loadedAsset } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
@@ -190,7 +191,7 @@ export default function TaskHubPage() {
   // a first run opens it once, unprompted: somebody who has just installed this should not have
   // to find the checklist. Once put away (or once required steps are done) it never opens itself.
   useEffect(() => {
-    if (greeted || !setup || setup.ready || setup.dismissed) return;
+    if (DEMO || greeted || !setup || setup.ready || setup.dismissed) return;
     if (setup.done === 0) setSetupOpen(true);
     setGreeted(true);
   }, [setup, greeted]);
@@ -334,7 +335,7 @@ export default function TaskHubPage() {
             ))}
           </Box>
           <Box sx={{ flex: 1 }} />
-          <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />
+          {!DEMO && <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />}
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connections"); }} />
           <Tooltip title="Refresh">
@@ -342,9 +343,11 @@ export default function TaskHubPage() {
           </Tooltip>
         </Box>
 
-        <SetupPanel open={setupOpen} state={setup} onClose={() => { setSetupOpen(false); reloadSetup(); }}
-          onDismiss={dismissSetup} onRefresh={reloadSetup}
-          onGo={(where) => { setSetupOpen(false); go(where); }} />
+        {!DEMO && (
+          <SetupPanel open={setupOpen} state={setup} onClose={() => { setSetupOpen(false); reloadSetup(); }}
+            onDismiss={dismissSetup} onRefresh={reloadSetup}
+            onGo={(where) => { setSetupOpen(false); go(where); }} />
+        )}
 
         {/* tighter side padding than top/bottom: the horizontal margin is dead space on a wide
             window, and every tab inside already caps its own content width where it wants to */}

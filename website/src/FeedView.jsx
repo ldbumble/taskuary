@@ -43,6 +43,8 @@ import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
 import { TerminalPreview } from "./TerminalView.jsx";
 
+const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.GeneralWorkspace })));
+
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
 // Two different dimensions, two controls: WHAT STATE it's in (everything vs needs me)
@@ -1376,35 +1378,33 @@ const PanelLabel = ({ children }) => (
   </Typography>
 );
 
-// Summary reads as progress, not four smaller copies of the detail pages. The line establishes
-// order, the status answers "where is this now?", and the arrow is the one door into detail.
-const StoryTimelineRow = ({ title, status, summary, onOpen, last, active }) => (
-  <Box sx={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr) 34px", minHeight: 64 }}>
-    <Box sx={{ position: "relative", display: "flex", justifyContent: "center", pt: 1.45 }}>
-      {!last && <Box sx={{ position: "absolute", top: 20, bottom: -12, width: 1, bgcolor: BORDER }} />}
-      <Box sx={{ position: "relative", zIndex: 1, width: 10, height: 10, borderRadius: "50%",
-        bgcolor: active ? ACCENT2 : PANEL, border: `2px solid ${active ? ACCENT2 : "#cfc8bc"}` }} />
-    </Box>
-    <Box sx={{ minWidth: 0, py: 1.05, pr: 1, borderBottom: last ? "none" : `1px solid ${BORDER}` }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25, minWidth: 0 }}>
-        <Typography sx={{ color: INK, fontWeight: 700, fontSize: 12.5 }}>{title}</Typography>
-        <Box component="span" sx={{ ...mono, px: 0.7, py: 0.15, borderRadius: 4,
-          bgcolor: active ? "#edf1eb" : PANEL2, color: active ? ACCENT2 : FAINT,
-          fontSize: 9, fontWeight: 700, whiteSpace: "nowrap" }}>{status}</Box>
+// One quiet progress rail. Detail belongs in the four tabs, not repeated in a stack of cards.
+// The whole stop is clickable so the summary remains a fast way into any stage.
+const StoryTimelineStep = ({ title, status, onOpen, first, last, state = "idle" }) => {
+  const dot = state === "current" ? "#c7a258" : state === "done" ? "#718f74" : "#cfc8bc";
+  return (
+    <Box component="button" type="button" onClick={onOpen} aria-label={`Open ${title} details`}
+      sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0, minWidth: 0, flex: 1,
+        position: "relative", cursor: "pointer", font: "inherit", color: "inherit",
+        "&:hover .tq-story-title": { color: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 3 } }}>
+      <Box sx={{ height: 18, position: "relative" }}>
+        <Box sx={{ position: "absolute", top: 8, left: first ? "50%" : 0, right: last ? "50%" : 0,
+          height: 1, bgcolor: "#d8d2c8" }} />
+        <Box sx={{ position: "absolute", zIndex: 1, top: 3.5, left: "50%", transform: "translateX(-50%)",
+          width: 10, height: 10, borderRadius: "50%", bgcolor: dot, border: `2px solid ${PANEL}`,
+          boxShadow: `0 0 0 1px ${dot}` }} />
       </Box>
-      <Typography sx={{ color: FAINT, fontSize: 11.5, lineHeight: 1.45, whiteSpace: "nowrap",
-        overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</Typography>
+      <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 0.55,
+        px: 0.5, minWidth: 0 }}>
+        <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
+          transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
+        <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
+          fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
+        <ChevronRightIcon sx={{ color: FAINT, fontSize: 12, flexShrink: 0 }} />
+      </Box>
     </Box>
-    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center",
-      borderBottom: last ? "none" : `1px solid ${BORDER}` }}>
-      <IconButton size="small" onClick={onOpen} aria-label={`Open ${title} details`}
-        sx={{ width: 28, height: 28, color: FAINT, border: `1px solid ${BORDER}`, bgcolor: PANEL,
-          "&:hover": { color: ACCENT, borderColor: ACCENT, bgcolor: "#fff" } }}>
-        <ChevronRightIcon sx={{ fontSize: 17 }} />
-      </IconButton>
-    </Box>
-  </Box>
-);
+  );
+};
 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
@@ -1485,19 +1485,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const st = stateOf(sel);
   const held = hasTag(sel, HOLD_TAG);
   const replyOpen = pending || !!opened;
+  const chatTask = !!sel.TaskId && ["general", "research", "marketing", "triage", "assistant"]
+    .includes(String(detail?.task?.Kind || sel.TaskKind || "").toLowerCase());
   const tabs = [
     { key: "summary", label: "Summary" },
     { key: "msg", label: "Message" },
     { key: "why", label: "Triage" },
-    { key: "agent", label: "Agent", mark: onIt ? "live" : rep ? "done" : "" },
+    { key: "agent", label: "Agent", mark: onIt ? "live" : chatTask ? "chat" : rep ? "done" : "" },
     { key: "reply", label: "Reply", mark: pending ? "waiting" : opened ? "open" : "" },
   ];
   const replyDraft = pending ? pendingDraft(detail || { runs: [] }, sel) : (opened?.draft || "");
-  const triageLine = cleanText(String(sel.RouteReason || "")
-    .replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0]) || "No routing decision was recorded.";
-  const reportText = String(rep?.Body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/i, "").trim();
-  const reportResult = ((/(?:^|\n)Summary:[ \t]*([^\n]+)/im.exec(reportText) ||
-    /(?:^|\n)Result:[ \t]*([^\n]+)/im.exec(reportText) || [])[1] || cleanText(reportText)).trim();
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
   const [releasing, setReleasing] = useState(false);
@@ -1579,28 +1576,20 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
               {tab === "summary" && (
-                <Box aria-label="Workflow summary" sx={{ border: `1px solid ${BORDER}`, borderRadius: 2,
-                  bgcolor: "#fcfaf7", px: 1.1, py: 0.35 }}>
-                  <StoryTimelineRow title="Message"
+                <Box aria-label="Workflow summary" sx={{ display: "flex", alignItems: "flex-start",
+                  px: 0.75, pt: 1.1, pb: 1.35 }}>
+                  <StoryTimelineStep title="Message" first state="done"
                     status={(detail?.messages || []).length > 1 ? `${detail.messages.length} messages` : "received"}
-                    summary={cleanText(sel.Preview || sel.Subject || "No message preview available.")}
-                    active onOpen={() => setTab("msg")} />
-                  <StoryTimelineRow title="Triage" status={roadOf(sel) || "not routed"}
-                    summary={triageLine} active={!!roadOf(sel)} onOpen={() => setTab("why")} />
-                  <StoryTimelineRow title="Agent"
-                    status={onIt ? (onIt.waiting ? "waiting on you" : "working") : rep ? "finished" : "not started"}
-                    summary={onIt ? (onIt.waiting ? `${onIt.agent} is paused and needs your answer.`
-                      : `${onIt.agent} is working in the live terminal.`)
-                      : rep ? reportResult || "The agent finished; open the result for details."
-                      : held ? "Held until you release it."
-                      : codeless ? "Triage decided an agent was not needed."
-                      : "No agent work has started."}
-                    active={!!(onIt || rep || diffRun)} onOpen={() => setTab("agent")} />
-                  <StoryTimelineRow title="Reply"
+                    onOpen={() => setTab("msg")} />
+                  <StoryTimelineStep title="Triage" status={roadOf(sel) || "not routed"}
+                    state={roadOf(sel) ? "done" : "idle"} onOpen={() => setTab("why")} />
+                  <StoryTimelineStep title="Agent"
+                    status={onIt ? (onIt.waiting ? "waiting" : "working") : chatTask ? "assistant chat" : rep ? "finished" : "not started"}
+                    state={onIt ? "current" : (chatTask || rep || diffRun) ? "done" : "idle"}
+                    onOpen={() => setTab("agent")} />
+                  <StoryTimelineStep title="Reply" last
                     status={pending ? "waiting on you" : opened ? "draft open" : "not drafted"}
-                    summary={replyDraft ? cleanText(replyDraft) : (["report", "assistant"].includes(sel.Channel)
-                      ? "This item has nobody to reply to." : "No reply has been drafted yet.")}
-                    active={replyOpen} last onOpen={() => setTab("reply")} />
+                    state={replyOpen ? "current" : "idle"} onOpen={() => setTab("reply")} />
                 </Box>
               )}
 
@@ -1630,37 +1619,18 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {tab === "why" && (
                 <Box>
                   <TriagePane sel={sel} detail={detail} onRefresh={onRefresh} />
-                  <PanelLabel>Correct the route</PanelLabel>
-                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-                    Pick the correction that matches the work. Rows that remember it say so explicitly.
-                  </Typography>
-                  <ChoiceList>
-                    {sel.TaskId && (
-                      <ChoiceRow first tint="#edf1eb"
-                        icon={<AssignmentIndIcon sx={{ fontSize: 14, color: ACCENT2 }} />}
-                        label="This is mine, not an agent’s"
-                        hint="stop treating this kind of work as coding and remember that choice"
-                        onClick={async () => {
-                          await api.post(`/api/tasks/${sel.TaskId}/not-coding`); onRefresh?.();
-                        }} />
-                    )}
-                    {sel.TaskId && (
-                      <ChoiceRow tint={PANEL2}
-                        icon={<CallSplitIcon sx={{ fontSize: 14, color: ACCENT2 }} />}
-                        label="Split or merge this work"
-                        hint="separate two jobs, or mark this as a duplicate"
-                        onClick={() => setReshape(true)} />
-                    )}
-                    <NotMine first={!sel.TaskId} row messageId={sel.MessageId}
-                      onDone={onSkipped} onLock={onLock} />
-                    <SplitTask row={sel} onSplit={() => onRefresh?.()} />
-                  </ChoiceList>
                 </Box>
               )}
 
               {tab === "agent" && (
                 <Box>
-                  {onIt && (
+                  {chatTask ? (
+                    <Box sx={{ height: 480 }}>
+                      <React.Suspense fallback={<Box sx={{ height: "100%", display: "grid", placeItems: "center" }}><CircularProgress size={20} /></Box>}>
+                        <GeneralWorkspace task={detail.task} compact />
+                      </React.Suspense>
+                    </Box>
+                  ) : onIt && (
                     <>
                       <PanelLabel>{onIt.waiting ? `${onIt.agent} is waiting on you` : `${onIt.agent} is working now`}</PanelLabel>
                       {ses?.sid
@@ -1678,7 +1648,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   )}
                   {diffRun && <Box sx={{ mt: 1 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                   {sel.TaskId && (rep || diffRun) && <Box sx={{ mt: 1 }}><ProofCard taskId={sel.TaskId} onOpenTask={onOpenTask} /></Box>}
-                  {!onIt && !rep && !diffRun && (
+                  {!chatTask && !onIt && !rep && !diffRun && (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
                       {held ? "Nothing is working this — it is held until you release it."
                         : codeless ? "No agent was sent: triage read this as something a reply settles."
@@ -1716,8 +1686,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
           )}
         </Box>
 
-        {/* The actions stay stable while details change, but each kind lives in a named bucket.
-            Routing corrections themselves live in Triage, where their consequence is visible. */}
+        {/* The actions stay stable while details change, and routing corrections are consolidated
+            here so they are reachable from Summary or any detail tab without being duplicated. */}
         {!loading && sel.Channel !== "assistant" && (
           <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: "#fcfaf7", px: 2, py: 1.35 }}>
             <TrayGroupLabel note="continue or inspect the work">WORK ON IT</TrayGroupLabel>
@@ -1762,10 +1732,29 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             {more && (
               <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}`, display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 1.25 }}>
-                <Box>
+                <Box sx={{ gridColumn: "1 / -1" }}>
                   <TrayGroupLabel note="change ownership or split the work">ROUTING</TrayGroupLabel>
-                  <TrayBtn onClick={() => { setTab("why"); setMore(false); }}
-                    icon={<CallSplitIcon sx={{ fontSize: 15 }} />}>Review routing</TrayBtn>
+                  <ChoiceList>
+                    {sel.TaskId && (
+                      <ChoiceRow first tint="#edf1eb"
+                        icon={<AssignmentIndIcon sx={{ fontSize: 14, color: ACCENT2 }} />}
+                        label="This is mine, not an agent’s"
+                        hint="make it your task instead of agent work, and remember that choice"
+                        onClick={async () => {
+                          await api.post(`/api/tasks/${sel.TaskId}/not-coding`); onRefresh?.();
+                        }} />
+                    )}
+                    {sel.TaskId && (
+                      <ChoiceRow tint={PANEL2}
+                        icon={<CallSplitIcon sx={{ fontSize: 14, color: ACCENT2 }} />}
+                        label="Split or merge this work"
+                        hint="separate two jobs, or mark this as a duplicate"
+                        onClick={() => setReshape(true)} />
+                    )}
+                    <NotMine first={!sel.TaskId} row messageId={sel.MessageId}
+                      onDone={onSkipped} onLock={onLock} />
+                    <SplitTask row={sel} onSplit={() => onRefresh?.()} />
+                  </ChoiceList>
                 </Box>
                 {!onIt && (
                   <Box>

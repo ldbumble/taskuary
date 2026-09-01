@@ -12,6 +12,7 @@
 // reload, which is exactly what a visitor expects of a demo.
 import FIXTURES from "./demoFixtures.json";
 import { track } from "./demoTrack";
+import { demoTerminalRecording } from "./demoTerminal.js";
 
 export const DEMO = import.meta.env.VITE_DEMO === "1";
 
@@ -37,8 +38,10 @@ const read = (url) => {
   if (m) return clone(state["/api/messages/attachments"]?.[m[1]]) || { data: [] };
   m = p.match(/^\/api\/doc\/([a-z]+)$/);
   if (m) return clone(state["/api/doc"]?.[m[1]]) || { content: "" };
+  m = p.match(/^\/api\/terminals\/([a-z0-9]+)\/screen$/);
+  if (m) return clone(demoTerminalRecording(m[1], state));
   m = p.match(/^\/api\/terminals\/([a-z0-9]+)$/);
-  if (m) return clone(state["/api/terminals/scrollback"]?.[m[1]]) || null;
+  if (m) return clone(state["/api/terminals/scrollback"]?.[m[1]]) || clone(demoTerminalRecording(m[1], state));
   if (p.startsWith("/api/feed")) return clone(state["/api/feed"]);
   if (p.startsWith("/api/tasks")) return clone(state["/api/tasks"]);
   return { data: [] };                 // an unrecorded list reads as empty, never as a crash

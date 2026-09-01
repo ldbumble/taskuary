@@ -16,6 +16,13 @@ export const ASK_TAG = "ask:assistant";
 // STARTS one (bound to it, restored from your saved cookies, closed with it) instead of
 // waiting for the agent to think of running agent-browser - and the agent is told it is there.
 export const BROWSER_TAG = "needs:browser";
+
+// ...and the one that says WHO this session is for. A task the router made has somebody waiting
+// on an answer, so finishing it should close it and draft the reply - that is the funnel working.
+// A session you opened to sit in is the opposite: you alt-tab, the agent goes quiet, the judge
+// reads the last screen as finished, and the task closes out from under you with a reply drafted
+// to nobody. Tagged, only an explicit `taskuary --done` ends it (selfclose.STAY_TAG).
+export const STAY_TAG = "stay:open";
 export const wantsAsk = (task) => new RegExp(`(^|[\\s,])${ASK_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));
 export const withoutAsk = (tags) => String(tags || "").split(/[\s,]+/).filter((t) => t && t !== ASK_TAG).join(",");
 
@@ -25,11 +32,12 @@ export const repoOf = (pick) => (pick && pick !== NO_REPO ? pick : null);
 // how: "live" (an agent starts now), "file" (nobody starts), or "terminal" - which is "live"
 // for a question you would rather work in a CLI than in the chat. Asked for explicitly, because
 // a General task landing in a terminal by ACCIDENT is the bug this module exists to stop.
-export const planTask = (pick, how, browser = false) => {
+export const planTask = (pick, how, browser = false, stayOpen = false) => {
   const repo = repoOf(pick);
   const chat = !repo && how !== "terminal";
   const ask = chat && how === "live";              // "Ask the assistant", not "just file it"
-  const tags = [repo ? `repo:${repo}` : (ask ? ASK_TAG : ""), browser ? BROWSER_TAG : ""].filter(Boolean);
-  return { repo, kind: chat ? "general" : "coding", chat, ask, browser,
+  const tags = [repo ? `repo:${repo}` : (ask ? ASK_TAG : ""), browser ? BROWSER_TAG : "",
+    stayOpen ? STAY_TAG : ""].filter(Boolean);
+  return { repo, kind: chat ? "general" : "coding", chat, ask, browser, stayOpen: !!stayOpen,
     tags: tags.join(",") || null, start: how === "live" || how === "terminal" };
 };

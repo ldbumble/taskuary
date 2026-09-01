@@ -106,8 +106,12 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
 # Jira or Sentry by design. github is gated on its own card switch (a public comment is the
 # owner's call). Everything else is the owner's setting.
 SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord', 'github')
-NEVER = {'report', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab', 'azdo',
-         'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
+# 'own' and 'assistant' are rows TASKUARY WROTE: work you started here, a note to yourself, a
+# meeting prep, the assistant speaking up. Nobody sent them, so there is nobody to answer - and
+# without them here a prep task closing drafted a reply, signed it in the owner's name, and put
+# it in Review addressed to no one at all.
+NEVER = {'report', 'own', 'assistant', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab',
+         'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
 
 
 def reply_channels(store) -> set:

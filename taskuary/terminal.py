@@ -280,7 +280,14 @@ class Term:
                 end = time.time() + 8
                 while self.alive and not self._echoed() and time.time() < end: time.sleep(.25)
                 if self.alive and not self._echoed():
-                    logger.warning(f'terminal {self.sid}: the prompt landed incomplete - clearing and retyping')
+                    # SAY HOW incomplete. 'landed incomplete' with no numbers is unactionable in
+                    # production and unfixable from a CI log: macOS runners have failed here for
+                    # a while and the line never said whether the tail was missing by forty
+                    # characters or by four hundred, nor how much the child echoed back.
+                    raw = ''.join(self.scrollback().split())
+                    logger.warning(f'terminal {self.sid}: the prompt landed incomplete - clearing and retyping '
+                                   f'(typed {len(self.seeded)} chars, {len(raw)} echoed back, '
+                                   f'looking for {self.seeded[-40:]!r})')
                     self.write('\x15')                    # kill-line: a retype must not glue onto the wreckage
                     time.sleep(.4)
                     if not self.settle(SEED_SETTLE): return

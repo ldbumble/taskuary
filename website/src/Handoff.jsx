@@ -16,6 +16,11 @@ const msgOf = (e, fallback) => (e?.response?.status === 404
 export const Handoff = ({ taskId, onSent }) => {
   const [to, setTo] = useState("");
   const [channel, setChannel] = useState("email");
+  // the channels with a connection behind them - the same list + New offers
+  const [targets, setTargets] = useState([]);
+  useEffect(() => {
+    api.get("/api/send-targets").then(({ data }) => setTargets((data.data || []).map((x) => x.channel))).catch(() => {});
+  }, []);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState("");
   const [people, setPeople] = useState([]);
@@ -43,9 +48,14 @@ export const Handoff = ({ taskId, onSent }) => {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+        {/* whatever this install can actually send on, not a hardcoded two. "teams" with nobody
+            named still posts into the task's OWN chat, which is why it stays listed separately. */}
         <Select size="small" value={channel} onChange={(e) => setChannel(e.target.value)} sx={{ ...selSx, minWidth: 110 }}>
           <MenuItem value="email" sx={{ fontSize: 12.5 }}>email</MenuItem>
           <MenuItem value="teams" sx={{ fontSize: 12.5 }}>Teams chat</MenuItem>
+          {targets.filter((x) => !["email", "teams"].includes(x)).map((x) => (
+            <MenuItem key={x} value={x} sx={{ fontSize: 12.5 }}>{x}</MenuItem>
+          ))}
         </Select>
         <Autocomplete freeSolo size="small" sx={{ flex: 1, minWidth: 220 }} options={people.map((p) => p.Email)}
           value={to} onInputChange={(_e, v) => setTo(v || "")}

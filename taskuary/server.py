@@ -1135,15 +1135,27 @@ def handoff(task_id: int, body: HandoffBody):
     try:
         text = (body.text or '').strip() or outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
         if body.draft_only: return {'draft': text}
-        if not body.to: raise HTTPException(422, 'who is it going to?')
-        if body.channel == 'email':
-            sent = outbound.send_email(store, [body.to], f"{task_ref(task_id)} {t.get('Title') or ''}".strip(), text)
-        elif body.channel == 'teams':
-            msgs = [m for m in store.list_messages(task_id) if m['Channel'] == 'teams']
-            if not msgs: raise HTTPException(422, 'this task did not come from a chat, so there is no chat to post in - use email')
-            sent = outbound.send_teams(store, (msgs[-1].get('ConversationId') or '')[6:], text)
+        subject = f"{task_ref(task_id)} {t.get('Title') or ''}".strip()
+        chat = [m for m in store.list_messages(task_id) if m['Channel'] == 'teams'] if body.channel == 'teams' else []
+        if chat:
+            # back into the conversation this task CAME from: no address to give, because the
+            # thread is the recipient. (The old code demanded one anyway and then ignored it.)
+            sent = outbound.send_teams(store, (chat[-1].get('ConversationId') or '')[6:], text)
+        elif not body.to:
+            raise HTTPException(422, 'who is it going to?')
+        elif body.channel == 'email':
+            sent = outbound.send_email(store, [body.to], subject, text)
         else:
-            raise HTTPException(422, f'cannot send on {body.channel}')
+            # ...and everywhere else this install can send. Handing work to a person was email or
+            # the task's own Teams chat and nothing else, while the app has been able to send on
+            # WhatsApp, Slack and Telegram for months - so "hand this to Gabi" meant opening
+            # WhatsApp yourself, which is the app this one exists to keep you out of. send_out is
+            # the same road a report's delivery takes: same senders, same credentials, and a
+            # channel switched off for replies is off for this too.
+            if not outbound.can_reply(store, body.channel):
+                raise HTTPException(422, f'{body.channel} cannot send from here - turn its replies '
+                                         'on in Connections, or pick another channel')
+            sent = outbound.send_out(store, body.channel, body.to, subject, text)
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
     store.add_comment(task_id, ACTOR, 'human', f'Handed off to {body.to} by {body.channel}:\n{text}')

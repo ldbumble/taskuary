@@ -783,10 +783,19 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </Box>
                       </Box>
                     ) : (
-                      <Button size="small" variant="outlined" startIcon={<TerminalIcon sx={{ fontSize: 15 }} />}
-                        sx={{ mt: 1 }} onClick={() => setContinueOpen(true)}>
-                        Continue with {detail?.transcript?.agent || report.Actor || "coder"}
-                      </Button>
+                      <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
+                        <Button size="small" variant="outlined" startIcon={<TerminalIcon sx={{ fontSize: 15 }} />}
+                          onClick={() => setContinueOpen(true)}>
+                          Continue with {detail?.transcript?.agent || report.Actor || "coder"}
+                        </Button>
+                        {/* the other thing you want when an agent has finished: TELL SOMEONE. It
+                            existed, in the overflow menu, phrased as "not ours to do" - which is
+                            a different act from sending on a result you are pleased with. */}
+                        <Button size="small" variant="outlined" startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                          onClick={() => setHandoff(true)}>
+                          Send this to someone
+                        </Button>
+                      </Box>
                     ))}
                   </Block>
                 )}

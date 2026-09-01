@@ -16,6 +16,24 @@ const FILTERS = [
   { key: "", label: "all" },
 ];
 
+const deliveryTo = (review) => {
+  try {
+    const raw = JSON.parse(review.Deliver || "null")?.to;
+    const to = Array.isArray(raw) ? raw.filter(Boolean).join(", ") : String(raw || "").trim();
+    if (to) return to;
+  } catch { /* replies to inbound messages do not carry Deliver */ }
+  if (review.FromName && review.FromEmail) return `${review.FromName} <${review.FromEmail}>`;
+  return review.FromName || review.FromEmail || review.ConversationId || "this conversation";
+};
+
+const replyContext = (review) => {
+  const channel = String(review.Channel || "").toLowerCase();
+  if (["whatsapp", "teams", "slack", "telegram", "discord", "imessage"].includes(channel)) {
+    return `${deliveryTo(review)} in ${review.SourceName || (channel === "whatsapp" ? "the chat" : channel)}`;
+  }
+  return deliveryTo(review);
+};
+
 export default function ReviewView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("pending");
@@ -87,7 +105,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
               </Typography>
               <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
                 {r.Status === "held" ? "Reply on hold" : r.Kind === "auto" ? "Auto-answered" : "Draft reply"}
-                {" · "}{r.FromEmail} · {timeAgo(r.CreatedAt)}
+                {" · To "}{replyContext(r)} · {timeAgo(r.CreatedAt)}
               </Typography>
             </Box>
             <ChannelIcon channel={r.Channel} />
@@ -99,6 +117,13 @@ export default function ReviewView({ onOpenTask, onChanged }) {
 
             {r.Status === "pending" && (
               <Box sx={{ mt: 0.5 }}>
+                <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
+                  <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800,
+                    letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
+                  <Typography variant="body2" sx={{ color: INK, fontWeight: 650 }} noWrap>
+                    {replyContext(r)}
+                  </Typography>
+                </Box>
                 <TextField fullWidth multiline minRows={2} maxRows={8}
                   value={edits[r.ReviewId] ?? (r.DraftText || "")}
                   onChange={(e) => setEdits({ ...edits, [r.ReviewId]: e.target.value })}
@@ -122,7 +147,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     <Button size="small" variant="contained"
                       disabled={busy === r.ReviewId || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
                       onClick={() => decide(r, "approve")}
-                      title="Sends the text above on the channel it arrived on">
+                      title={`Sends this response to ${replyContext(r)}`}>
                       {busy === r.ReviewId ? "sending…" : "Approve & send"}
                     </Button>
                   )}

@@ -49,6 +49,18 @@ class ReviewVisibilityTests(unittest.TestCase):
         s.update_task(tid, {'Status': 'done'}, 't')
         self.assertEqual(len(s.list_reviews('approved')), 1)
 
+    def test_review_queue_names_the_reply_recipient(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Answer Dana', 'Kind': 'reply'}, 'router')
+        mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'A question',
+                             'FromName': 'Dana Reyes', 'FromEmail': 'dana@example.com',
+                             'ConversationId': 'thread-1', 'Status': 'routed'})
+        s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply',
+                      'DraftText': 'Yes.', 'Status': 'pending'})
+        row = s.list_reviews('pending')[0]
+        self.assertEqual((row['FromName'], row['FromEmail'], row['ConversationId']),
+                         ('Dana Reyes', 'dana@example.com', 'thread-1'))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1079,7 +1079,8 @@ class SQLiteStore:
     def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def list_reviews(self, status=None):
-        q = f'''SELECT rv.*, t.Title, m.Subject, m.FromEmail, m.Channel {_REVIEW_FROM}
+        q = f'''SELECT rv.*, t.Title, m.Subject, m.FromName, m.FromEmail,
+                       m.Channel, m.SourceName, m.ConversationId {_REVIEW_FROM}
                 WHERE {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'''
         return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
     def decide_review(self, rid, status, final, by, note=None):

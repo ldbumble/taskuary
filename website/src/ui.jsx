@@ -4,6 +4,7 @@ import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, Dial
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
+import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -626,7 +627,7 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
 // keyed on the selected message - unmounted with the half-typed verdict inside it. That read
 // as "Not our task doesn't work while syncing", and nothing said otherwise because the save
 // error was swallowed. Both ends are fixed here: the lock, and a visible failure.
-export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
+export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false }) => {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   // no default here on purpose: the server picks the scope this message calls for (a topic when
@@ -680,6 +681,19 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
       )}
     </Box>
   );
+  if (!open && compact) return (
+    <Button size="small" disableElevation startIcon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
+      onClick={() => setOpen(true)} title="Not our responsibility — explain why once so triage remembers"
+      sx={{ width: 190, height: 34, px: 1.5, justifyContent: "flex-start", borderRadius: 2,
+        textTransform: "none", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap", boxShadow: "none",
+        color: "#5a3e83", bgcolor: "#f8f5fc", border: "1px solid #d9cbea",
+        "&:hover": { bgcolor: "#f1eafa", borderColor: "#bca3d8", boxShadow: "none" } }}>
+      Not ours
+      <Box component="span" aria-hidden sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8,
+        bgcolor: "rgba(90,62,131,.1)", fontSize: 8.5, fontWeight: 800, letterSpacing: 0.7,
+        lineHeight: 1.5 }}>MEMORY</Box>
+    </Button>
+  );
   if (!open) return row ? (
     <ChoiceRow first={first} tint="#e9e3d8" onClick={() => setOpen(true)}
       icon={<BlockIcon sx={{ fontSize: 15, color: "#867f74" }} />}
@@ -689,7 +703,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
       title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
   );
   return (
-    <Box sx={{ width: "100%", mt: row ? 0 : 1, p: 1.25, bgcolor: PANEL2,
+    <Box sx={{ width: "100%", flexBasis: compact ? "100%" : "auto", mt: row ? 0 : 1, p: 1.25, bgcolor: PANEL2,
       border: row ? "none" : `1px solid ${BORDER}`, borderRadius: row ? 0 : 1.5 }}>
       <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>
         Not our task — what should triage remember?
@@ -774,8 +788,8 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
   ) : (
     <Button size="small" disableElevation startIcon={<TaskuaryMark size={15} />}
       onClick={() => setOpen(true)}
-      sx={{ minHeight: 32, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
-        fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
+      sx={{ width: 190, height: 34, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
+        justifyContent: "flex-start", fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
         border: `1px solid ${BORDER}`, boxShadow: "none",
         "&:hover": { color: INK, bgcolor: PANEL, borderColor: "#d8cfbe", boxShadow: "none" } }}>
       Send to coding agent
@@ -1247,8 +1261,8 @@ export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) =
       ) : (
         <Button size="small" disableElevation onClick={show} title="Tell the agent something — queued until it stops"
           startIcon={<Box component="span" aria-hidden sx={{ fontSize: 13, lineHeight: 1 }}>✎</Box>}
-          sx={{ minHeight: 32, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
-            fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
+          sx={{ width: 190, height: 34, px: 1.5, justifyContent: "flex-start", borderRadius: 2,
+            textTransform: "none", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
             border: `1px solid ${BORDER}`, boxShadow: "none",
             "&:hover": { color: INK, bgcolor: PANEL, borderColor: "#d8cfbe", boxShadow: "none" } }}>
           {label}

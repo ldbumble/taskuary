@@ -693,6 +693,13 @@ class SQLiteStore:
         cols = list(d)
         return self._exec(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?'*len(cols))})",
                           [d[c] for c in cols])
+    def _poke(self, *kinds, **payload):
+        """Wake the UI. A write that does not change what a tab is looking at stays quiet."""
+        try:
+            from . import live
+            for k in kinds: live.emit(k, **payload)
+        except Exception:
+            pass
 
     # tasks
     def create_task(self, fields, actor):
@@ -887,6 +894,9 @@ class SQLiteStore:
         mid = self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
         if fields.get('TaskId'):
             self._bump_snapshots()
+            self._poke('feed-changed', 'task-changed', message_id=mid, task_id=fields['TaskId'])
+        else:
+            self._poke('feed-changed', message_id=mid)
         return mid
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def message_by_external(self, external_id):
@@ -1060,7 +1070,9 @@ class SQLiteStore:
         return self._rows('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, '
                           'substr(BodyText, 1, 2000) BodyText '
                           'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
-    def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
+    def set_message_status(self, mid, status):
+        self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
+        self._poke('feed-changed', message_id=mid)
     def update_message_body(self, mid, body): self._exec('UPDATE message SET BodyText=? WHERE MessageId=?', (body, mid))   # a voice note, transcribed later
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def place_message(self, mid, task_id, status):
@@ -1068,6 +1080,9 @@ class SQLiteStore:
         self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
         if task_id is not None:
             self._bump_snapshots()
+            self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
+        else:
+            self._poke('feed-changed', message_id=mid)
     def claim_retriage(self, mid: int) -> bool:
         """Atomically move one failed, taskless row back into triage.
 
@@ -1078,12 +1093,16 @@ class SQLiteStore:
             cur = self.cx.execute("""UPDATE message SET Status='triaging'
                                    WHERE MessageId=? AND TaskId IS NULL AND Status='filed'""", (mid,))
             self.cx.commit(); self._writes += 1
-            return cur.rowcount == 1
+            ok = cur.rowcount == 1
+        if ok:
+            self._poke('feed-changed', message_id=mid)
+        return ok
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
         self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
         self._bump_snapshots()
+        self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
     # What was ON the mail: the screenshot of the spreadsheet, the invoice PDF. The bytes live on
     # disk (`Path`) - a database that grows by 8MB a mail is a database nobody backs up.
     def add_attachment(self, fields): return self._insert('attachment', fields, ATT_COLS, {'CreatedAt': _now()})

@@ -1185,9 +1185,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     const st = stateOf(r);
                     const fold = foldOf.get(r.MessageId);
                     const inFold = memberOf.get(r.MessageId);
-                    // display:none rather than skipping the entry: the meeting slots are placed by
-                    // INDEX into this day's rows, so dropping one would move the meetings
-                    const showRow = !inFold || openFolds.has(inFold);
+                    // A member is never drawn HERE, open or shut - the fold draws its own, in one
+                    // block. Revealing them in place looked right until a fold opened: its members
+                    // are not contiguous, so an unrelated row landing between two of them (a CI
+                    // email in the same minute as two chat lines) appeared inside the group.
+                    // display:none rather than skipping the entry, because the meeting slots are
+                    // placed by INDEX into this day's rows and dropping one would move them.
+                    const showRow = !inFold;
                     const open = sel?.MessageId === r.MessageId;
                     // hovering PREVIEWS (a soft edge, the stage follows the cursor); clicking
                     // PINS (a ring in the brand colour, the stage holds). Both used to draw the
@@ -1204,7 +1208,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                             onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                         ))}
                         {fold && (
-                          <ThreadFold entry={fold} open={openFolds.has(fold.tid)}
+                          <ThreadFold entry={fold} open={openFolds.has(fold.tid)} onOpenRow={drill} sel={sel}
                             onToggle={() => setOpenFolds((cur) => {
                               const next = new Set(cur);
                               if (next.has(fold.tid)) next.delete(fold.tid); else next.add(fold.tid);
@@ -1213,9 +1217,6 @@ export default function FeedView({ onOpenTask, onChanged }) {
                         )}
                         <Box className="tqRow" sx={{ display: showRow ? "grid" : "none", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
                           alignItems: "stretch", mb: "3px",
-                          // a member of an open fold is indented - the CARD only, so the clock and the
-                          // rail stay in the column they occupy on every other row of the day
-                          ...(inFold ? { "& > :nth-of-type(3)": { marginLeft: "26px" } } : {}),
                           ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 35, 320)}ms`, animationFillMode: "backwards" }) }}>
                           {/* the clock sits in its own gutter with air on BOTH sides - 8px off the
                               container edge, 12px off the rail - so it never reads as crushed
@@ -2010,7 +2011,7 @@ const TalkItThrough = ({ messageId, onOpenTask }) => {
 //
 // The state is the LOUDEST member's, never the newest: a reply waiting two messages down must not
 // be hidden by a fold whose top line happens to be fyi. Folding is not a way to lose work.
-const ThreadFold = ({ entry, open, onToggle }) => {
+const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
   const rows = entry.rows;
   const st = loudest(rows, stateOf, LOUDNESS);
   const head = rows[0];
@@ -2059,6 +2060,27 @@ const ThreadFold = ({ entry, open, onToggle }) => {
             </Typography>
           </Box>
         </Box>
+        {/* the members, INSIDE the card and indented under the caret - so the group is one block
+            and nothing that merely shares a minute with it can land in the middle */}
+        {open && rows.map((m) => (
+          <Box key={m.MessageId} onClick={(ev) => { ev.stopPropagation(); onOpenRow?.(m); }}
+            sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, py: 0.5, pl: "20px",
+              borderTop: `1px solid ${BORDER}`, cursor: "pointer",
+              bgcolor: sel?.MessageId === m.MessageId ? PANEL2 : "transparent",
+              "&:hover .tqKid": { color: INK } }}>
+            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, flexShrink: 0,
+              fontVariantNumeric: "tabular-nums" }}>{fmtTime12(m.SentAt)}</Typography>
+            <Box sx={{ display: "flex", flexShrink: 0 }}><ChannelIcon channel={m.Channel} sx={{ fontSize: 14 }} /></Box>
+            <Typography noWrap className="tqKid" sx={{ fontSize: 11.5, fontWeight: 600, color: DIM,
+              flexShrink: 0, maxWidth: 120, transition: "color .15s" }}>
+              {m.FromName || m.SourceName || "—"}
+            </Typography>
+            <Typography noWrap sx={{ fontSize: 11, color: FAINT, flex: 1, minWidth: 0 }}>
+              {cleanText(String(m.Preview || m.Subject || ""))}
+            </Typography>
+            <StateMark row={m} showWord={false} />
+          </Box>
+        ))}
       </Box>
     </Box>
   );

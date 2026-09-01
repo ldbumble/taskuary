@@ -499,6 +499,15 @@ class SQLiteStore:
                     txt = f.read_text(encoding='utf-8')
                     self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',
                                     (name, txt, 'template', _now()))
+                    # SOUL is the safety constitution every prompt is stacked on. An old UI/test
+                    # path could save it as an empty edited document, which disabled the shipped
+                    # boundaries forever because edited docs correctly stop following templates.
+                    # Empty carries no owner intent to preserve: restore the complete default, and
+                    # let the interview replace it only after the owner actually answers.
+                    if name == 'soul':
+                        self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? "
+                                        "WHERE Name='soul' AND TRIM(IFNULL(Content,''))=''",
+                                        (txt, _now()))
                     # a doc NOBODY ever touched keeps tracking the shipped template, so template
                     # improvements reach existing installs - the first edit (owner or machine)
                     # changes UpdatedBy and makes the document theirs, never overwritten again

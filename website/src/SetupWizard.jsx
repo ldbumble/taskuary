@@ -20,6 +20,7 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
+import SoulInterview from "./SoulInterview.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
 
 // "Three things and Taskuary works" was prose. Steps were added to the wizard and it went on
@@ -387,8 +388,25 @@ const HistoryForm = ({ name, onDone, onGo }) => {
 
 const StyleForm = (props) => <HistoryForm name="style" {...props} />;
 const TriageForm = (props) => <HistoryForm name="triage" {...props} />;
+const SoulForm = ({ onDone, onGo }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Button variant="contained" disableElevation size="small" onClick={() => setOpen(true)}>
+        Answer seven questions
+      </Button>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.5 }}>
+        Your current SOUL.md remains in force until the new version is written. You can inspect and edit the result in{" "}
+        <Box component="span" onClick={() => onGo("Docs")} sx={{ color: "#55697a", cursor: "pointer" }}>
+          Docs
+        </Box>.
+      </Typography>
+      <SoulInterview open={open} onClose={() => setOpen(false)} onWritten={() => onDone()} />
+    </Box>
+  );
+};
 const FORMS = { owner: OwnerForm, ai: BrainForm, inbound: MailboxForm, sync: SyncForm,
-  style: StyleForm, triage: TriageForm, agent: AgentForm };
+  soul: SoulForm, style: StyleForm, triage: TriageForm, agent: AgentForm };
 
 /* A done step collapses to ONE line. Its reason mattered while you were deciding whether to do
    it; afterwards it is six lines of history pushing the thing you are actually working on below
@@ -432,7 +450,8 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
         {!s.done && !open && Form && (
           <Button size="small" variant="outlined" onClick={onOpen}
             sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>
-            {s.key === "sync" ? "Sync" : ["style", "triage"].includes(s.key) ? "Generate" : "Set up"}
+            {s.key === "sync" ? "Sync" : s.key === "soul" ? "Personalize"
+              : ["style", "triage"].includes(s.key) ? "Generate" : "Set up"}
           </Button>
         )}
         {!s.done && !Form && (
@@ -510,7 +529,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
               {state.complete
                 ? "Connections and personalization are complete. It will keep learning from your verdicts."
                 : state.ready
-                  ? `${guideLeft} recommended ${guideLeft === 1 ? "step" : "steps"} left to personalize Taskuary. Each is generated from your own history and remains editable.`
+                  ? `${guideLeft} recommended ${guideLeft === 1 ? "step" : "steps"} left to personalize Taskuary. They use your answers or your own history, and remain editable.`
                 : `${guideDone} of ${guideTotal} done${guideLeft ? ` — ${guideLeft} to go` : ""}. `
                   + `The first ${state.total} are what make the funnel work at all: without them the `
                   + "Timeline stays empty and looks like a quiet day."}

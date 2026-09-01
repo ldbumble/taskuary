@@ -253,6 +253,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [threadKey, setThreadKey] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
   const fileRef = useRef(null);
   const selectionRef = useRef({ connectorId: "", model: "" });
@@ -278,7 +279,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
 
   useEffect(() => {
     let live = true;
-    setData(null); setError(""); setAttachments([]);
+    setData(null); setError(""); setNotice(""); setAttachments([]);
     api.post(`/api/tasks/${task.TaskId}/assistant/session`, {}).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
   }, [accept, task.TaskId]);
@@ -341,13 +342,13 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     return () => { live = false; clearInterval(timer); };
   }, [busy, task.TaskId, data?.messages]);
   const makeReport = async () => {
-    setError(""); setReportBusy(true);
+    setError(""); setNotice(""); setReportBusy(true);
     try {
       const { data: made } = await api.post(`/api/tasks/${task.TaskId}/assistant/report`, {
         pick: connectorId || null, model: model || null,
       });
       if (onOpenReports) onOpenReports(made.sourceId);
-      else setError(`Created “${made.title}” in Reports.`);
+      else setNotice(`Created “${made.title}” in Reports.`);
     } catch (e) { setError(errText(e)); }
     finally { setReportBusy(false); }
   };
@@ -390,6 +391,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           onClick={() => chooseView("numbers")} sx={{ minWidth: 0, fontSize: 11 }}>Numbers</Button>
       </Box>
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
+      {notice && <Alert severity="success" onClose={() => setNotice("")} sx={{ borderRadius: 0, py: 0 }}>{notice}</Alert>}
       {busy && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.5, bgcolor: PANEL2,
           borderBottom: `1px solid ${BORDER}` }}>

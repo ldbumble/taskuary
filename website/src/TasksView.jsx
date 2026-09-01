@@ -13,6 +13,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { taskMatchesQuery } from "./taskSearch.js";
+import { filterForSelectedState } from "./taskFilter.js";
 import { pollWhileActive, pollWhileVisible } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
@@ -354,6 +355,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const cut = !search && filter !== "live" && !older;
   const shown = cut ? bucket.filter(touchedToday) : bucket;
   const nOlder = bucket.length - shown.length;
+  // A task may finish while its detail stays open (especially an assistant conversation). Move
+  // the selected bucket with it so Done never sits under an In progress filter. Search and All
+  // are deliberate cross-status views, so neither is changed.
+  useEffect(() => {
+    if (!active || !selected || !tasks || search || !filter) return;
+    const row = tasks.find((x) => x.TaskId === selected);
+    if (!row) return;
+    const next = filterForSelectedState(filter, stateOf(row).key);
+    if (next !== filter) { setFilter(next); setOlder(false); }
+  }, [active, selected, tasks, search, filter]);
   // The desktop page is a master/detail workspace. Opening it with a populated list but no
   // detail selected leaves most of the screen as a dead blank panel and makes the first click
   // compulsory. Follow the visible list to its first task on arrival (and after removing the

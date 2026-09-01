@@ -231,7 +231,10 @@ export default function DocsView() {
         </Typography>
       </Box>
       <SoulInterview open={interview} onClose={() => setInterview(false)}
-        onWritten={(doc) => setDocs((d) => ({ ...d, soul: doc }))} />
+        onWritten={(doc) => {
+          setDocs((d) => ({ ...d, soul: doc }));
+          setSaved((d) => ({ ...d, soul: doc }));
+        }} />
     </Box>
   );
 }

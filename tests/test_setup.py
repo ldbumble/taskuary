@@ -7,12 +7,14 @@ and un-does itself when the connection behind it is removed. A stored checklist 
 saying "done" after somebody deleted the mailbox.
 """
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from fastapi.testclient import TestClient
 from taskuary import server, setup
-from taskuary.store import MemoryStore
+from taskuary.store import MemoryStore, SQLiteStore
 
 c = TestClient(server.app)
 
@@ -52,12 +54,32 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s = _fresh()
         st = setup.state(s)
         self.assertEqual([x['key'] for x in st['steps'] if x.get('recommended')],
-                         ['sync', 'style', 'triage'])
-        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (0, 6, False))
+                         ['soul', 'sync', 'style', 'triage'])
+        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (0, 7, False))
         # The templates already have history marker blocks. They are placeholders, not evidence
         # that either generator ran.
         self.assertFalse(_step(st, 'style')['done'])
         self.assertFalse(_step(st, 'triage')['done'])
+
+    def test_soul_keeps_its_full_default_until_the_owner_personalizes_it(self):
+        s = _fresh()
+        self.assertIn('## What counts as a task', s.get_doc('soul') or '')
+        self.assertIn('Nothing sends or ships without', s.get_doc('soul') or '')
+        self.assertFalse(_step(setup.state(s), 'soul')['done'])
+        s.save_doc('soul', '# SOUL.md\n\nMy real boundaries.', 'owner')
+        self.assertTrue(_step(setup.state(s), 'soul')['done'])
+
+    def test_an_accidentally_blank_saved_soul_is_repaired_from_the_full_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'taskuary.db'
+            first = SQLiteStore(path)
+            first.save_doc('soul', '', 'test')
+            first.cx.close()
+            reopened = SQLiteStore(path)
+            self.assertIn('## What counts as a task', reopened.get_doc('soul') or '')
+            self.assertIn('Nothing sends or ships without', reopened.get_doc('soul') or '')
+            self.assertEqual(reopened.doc_owner('soul'), 'template')
+            reopened.cx.close()
 
     def test_generated_personalization_is_derived_from_the_documents(self):
         s = _fresh()
@@ -168,12 +190,13 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s = _fresh()
         s.set_setting('owner_name', 'Dana Example', 't')
         _with_ai(s); _with_mailbox(s)
+        s.save_doc('soul', '# SOUL.md\n\nDana owns this.', 'owner')
         s.add_message({'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'hello',
                        'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
         s.save_doc('style', '_generated 2026-08-30 — history_', 'histgen')
         s.save_doc('triage', '_generated 2026-08-30 — history_', 'histgen')
         st = setup.state(s)
-        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (6, 6, True))
+        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (7, 7, True))
         self.assertFalse(_step(st, 'agent')['done'])      # genuinely optional, never blocks completion
 
     def test_it_un_does_itself_when_a_connection_is_removed(self):

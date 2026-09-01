@@ -58,11 +58,12 @@ def state(store) -> dict:
     ai, inbound = _ai(store), _inbound(store)
     # Generate-from-history always stamps the block it owns. The templates already contain the
     # marker pair, so marker presence alone would call an untouched fresh install personalized.
-    # A real manual edit counts too: onboarding must not insist on replacing guidance somebody
-    # already wrote themselves just because it did not come from the generator.
+    # SOUL has no generated block: its interview and a manual edit both change its owner away
+    # from `template`. A real manual edit counts for every doc; onboarding must not insist on
+    # replacing guidance somebody already wrote themselves.
     personalized = {name: ('_generated ' in (store.get_doc(name) or '')
                            or store.doc_owner(name) not in (None, 'template', 'startup'))
-                    for name in ('style', 'triage')}
+                    for name in ('soul', 'style', 'triage')}
     # Both of these read as DONE on a brand-new install unless you are careful, which is worse
     # than useless: a checklist that ticks itself teaches you not to read it.
     #
@@ -92,9 +93,15 @@ def state(store) -> dict:
          'why': 'A mailbox, a chat, a tracker - anything that brings work in. Without one the '
                 'Timeline is empty because nothing is being read, not because nothing happened.',
          'done': bool(inbound), 'detail': ', '.join(inbound[:3]), 'where': 'Connections'},
+        {'key': 'soul', 'title': 'Make SOUL.md yours', 'optional': True, 'recommended': True,
+         'why': 'The full safety-first SOUL.md is already active by default. Seven short questions '
+                'replace its placeholder owner with your work, boundaries, systems, people, and voice; '
+                'the result stays editable in Docs.',
+         'done': personalized['soul'], 'detail': 'operator guidance personalized' if personalized['soul'] else '',
+         'where': 'Docs'},
         {'key': 'sync', 'title': 'Read your first messages', 'optional': True, 'recommended': True,
          'why': 'With the three above in place, one sync pulls your mail in and the AI triages it. '
-                'It also gives the two personalization steps below real history to learn from.',
+                'It also gives the reply-style and triage steps below real history to learn from.',
          # no count: this samples the feed, so any number it printed would be the sample size
          # rather than the truth ("2 read" on an install holding thousands)
          'done': bool(inbox), 'detail': 'messages are arriving' if inbox else '',

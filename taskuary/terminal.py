@@ -858,11 +858,14 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # what earlier agents worked out about this ground, and how to add to it (handbook.py). The
     # wall says what is happening in this checkout this hour; the handbook says what is still
     # true next month, and no agent could see it before.
+    # HOW to write one is not here: it is a standing rule, and standing rules ride in CODER.md,
+    # which is already in this prompt and already capped (DOC_CHARS). An unconditional line here
+    # is paid for by every session forever - and it pushed the seed past its budget the day the
+    # handbook was switched on, which is how we found out it was ever off.
     from . import handbook
     if handbook.enabled(store):
         known = handbook.block(store, task_blob(store, tid))
         if known: parts.append(no_emails(' '.join(known.split())))
-        parts.append(handbook.SEED_LINE)
     out = ' '.join(' '.join(parts).split())
     # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses
     # or clips. If we are over, the ASK is what gives, never the rules that keep an agent
@@ -1097,6 +1100,21 @@ def for_task(task_id, tail=0):
     though no headless run exists."""
     t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     return t.info(tail) if t else None
+
+
+def screen(sid: str, lines: int = 32) -> dict | None:
+    """A read-only snapshot of exactly what the PTY screen currently renders.
+
+    A second xterm cannot ask a full-screen TUI to repaint at a preview size without resizing
+    the real working session. Replay the same byte stream through the server's VT emulator at
+    the PTY's actual geometry instead, then return the visible tail for compact viewers.
+    """
+    t = get(sid)
+    if not t: return None
+    n = max(1, min(int(lines or 32), 120))
+    shown = render(t.scrollback(), t.cols, t.rows).splitlines()
+    return {'sid': t.sid, 'alive': bool(t.alive), 'rows': t.rows, 'cols': t.cols,
+            'lines': shown[-n:]}
 
 
 def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:

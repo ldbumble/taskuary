@@ -171,11 +171,11 @@ def enabled(store) -> bool:
 
 
 # ── what the session is told ────────────────────────────────────────────────────────────
-# The seed is the most expensive text in the app - every session pays for it - and this line was
-# free until now only because the handbook was switched off. Earning its place means saying the
-# rule (lasting, not a diary) in one clause, not three sentences.
-SEED_LINE = ('HANDBOOK: `taskuary --learned "<lasting fact>" --topic <repo-or-system>` - a trap, how '
-             'something works, who owns what. Never what you did.')
+# There is no SEED_LINE any more. Telling an agent HOW to write an entry is a standing rule, and
+# standing rules live in CODER.md (templates/coder.md), which already rides in the prompt under a
+# cap - so the rule costs nothing extra, where an unconditional seed line was paid for by every
+# session forever. What the handbook already KNOWS still goes in the seed: that is block(), and it
+# is about this task rather than about the rules.
 
 
 # ── report / tool surface, so an agent or a schedule can reach it ───────────────────────

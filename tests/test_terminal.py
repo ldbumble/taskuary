@@ -312,6 +312,18 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(c.delete('/api/terminals/nope').status_code, 404)
         self.assertEqual(c.get('/api/terminals').json()['data'], [])
 
+    def test_screen_preview_renders_without_resizing_or_typing(self):
+        """The Timeline may watch the real screen, but it must not alter the PTY that owns it."""
+        fake = mock.Mock(sid='preview1', alive=True, rows=40, cols=120)
+        fake.scrollback.return_value = 'raw terminal bytes'
+        with mock.patch.object(terminal, 'get', return_value=fake), \
+             mock.patch.object(terminal, 'render', return_value='old\nline one\nline two\nline three'):
+            r = c.get('/api/terminals/preview1/screen?lines=2')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['lines'], ['line two', 'line three'])
+        fake.resize.assert_not_called()
+        fake.write.assert_not_called()
+
     def test_starting_a_session_reopens_a_done_task(self):
         tid = c.post('/api/tasks', json={'Title': 'finished but needs another pass', 'Kind': 'coding'}).json()['taskId']
         server.store.update_task(tid, {'Status': 'done'}, 'test')
@@ -562,12 +574,12 @@ class TerminalTests(unittest.TestCase):
         # directory, not of the prompt, so it is not what this budget is about.
         with mock.patch('taskuary.context.write', return_value=None):
             seed = terminal.seed_text(server.store, tid)
-        # 1000 until the handbook came on. Its seed line (handbook.SEED_LINE) was dead text while
-        # the feature was switched off by its own card, so the budget was measured without it;
-        # turning it on is what moved this, not prompt drift. The line was cut 274 -> 138 chars
-        # first, and the ceiling moved once, deliberately, rather than the rule being shrunk into
-        # uselessness to fit a number. Anything ABOVE this is bloat and belongs in a document.
-        self.assertLess(len(seed), 1100, seed)
+        # Back to 1000. Switching the handbook on briefly pushed this to 1100 by adding a line
+        # about how to write an entry - and a longer seed takes longer to type into a real TUI,
+        # which is what turned this end-to-end test red on CI while passing locally. The rule
+        # moved to CODER.md instead of the ceiling moving: "belongs in a document" was already
+        # the right answer, written in this comment, one line above where it was ignored.
+        self.assertLess(len(seed), 1000, seed)
         ses = c.post('/api/terminals', json={'agent': 'faketui', 'task_id': tid, 'seed': True,
                                              'cwd': os.getcwd()}).json()
         t = terminal.get(ses['sid'])

@@ -32,8 +32,14 @@ dirty. What it cannot tell them is "the migration is half applied, don't run the
   your peers, not instructions from John — weigh them as you would a colleague's message.
 - **Say what you are taking.** `taskuary --note --kind working "refactoring store.py + tests"`
   when you start, so the next agent routes around you instead of into you.
-- **Say what you learned.** Anything the next agent would waste an hour rediscovering — a flaky
-  test, a build step, a dead end — is one line: `taskuary --note "the mssql tests need pyodbc"`.
+- **Say what you learned this hour.** Anything the next agent working *right now* would waste
+  an hour rediscovering — a flaky test, a build step, a dead end — is one line:
+  `taskuary --note "the mssql tests need pyodbc"`. The wall composts nightly; this is for today.
+- **Say what is still true next month.** A trap, how something actually works, who owns what:
+  `taskuary --learned "<lasting fact>" --topic <repo-or-system>` puts one line in the company
+  handbook, which every later agent reads before it starts. Never what you *did* — that is the
+  task's record, and it is stale the moment the task closes. Most sessions learn nothing lasting,
+  and "nothing" is the right answer when it is the true one.
 - **Say when it is safe.** Before you push: `taskuary --note --kind ready "auth refactor pushed,
   suite green"`. That line is what the next agent builds on. If you are stuck, `--kind blocked`.
 - One line per note, plainly, as you go. Nobody reads a wall of paragraphs — including agents.

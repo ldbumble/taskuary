@@ -568,7 +568,15 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
     for m in reversed(_teams_delta(tok, upn, since_iso)):          # oldest first, so threads read in order
         user = (m.get('from') or {}).get('user') or {}
         body = _clean((m.get('body') or {}).get('content'))
-        if m.get('messageType') != 'message' or m.get('deletedDateTime') or not user.get('id') or not body: continue
+        # Deleted at the source. Teams' delta reports it (mail's plain $top list does not, so
+        # the mailbox side of this needs a delta migration before it can say the same). If we
+        # already carry the row, say so on it rather than leaving a message on the Timeline that
+        # no longer exists in the chat - and never remove it: work may hang off it.
+        if m.get('deletedDateTime'):
+            cid_d = m.get('chatId') or ''
+            if cid_d: store.withdraw_message(f'teams:{cid_d}:{m["id"]}')
+            continue
+        if m.get('messageType') != 'message' or not user.get('id') or not body: continue
         cid = m.get('chatId') or ''
         topic, kind = _chat_meta(tok, cid, chats) if cid else ('', 'chat')
         name, addr = _graph_user(tok, user['id'], users)

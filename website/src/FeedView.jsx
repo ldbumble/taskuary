@@ -121,7 +121,7 @@ const GUTTER = 70;
 const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
   : r.Channel === "assistant" ? ASSISTANT.solid             // the assistant speaking up
   : r.Category === "info" ? "#6f8a6e"                      // a person told you something: worth the eye
-  : ["ignored", "filed", "triaging"].includes(r.MsgStatus) ? "#cfc9bf"
+  : ["ignored", "filed", "triaging", "withdrawn"].includes(r.MsgStatus) ? "#cfc9bf"
     : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
       : r.TaskId ? ACCENT2 : "#a7b0a8");
 
@@ -1194,7 +1194,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                               row below it. */}
                           <Box data-tq-keep data-tq-open={open ? "true" : "false"} onClick={() => drill(r)}
                             onMouseMove={() => hoverSelect(r)} onMouseLeave={hoverCancel}
-                            sx={{ "--tq-row-edge": edgeOf(st), bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
+                            sx={{ "--tq-row-edge": edgeOf(st), bgcolor: ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
                               border: `1px solid ${BORDER}`, borderLeft: `2px solid ${edgeOf(st)}`,
                               borderRadius: "8px", px: "10px", pt: "3px", pb: "4px", ml: "8px",
                               minWidth: 0, overflow: "hidden",
@@ -1211,7 +1211,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                               <Box sx={{ display: "flex", flexShrink: 0 }}>
                                 <ChannelIcon channel={r.Channel} sx={{ fontSize: 16 }} />
                               </Box>
-                              <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: ["ignored", "filed"].includes(r.MsgStatus) ? DIM : INK,
+                              <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? DIM : INK,
                                 fontSize: 12, letterSpacing: "-.1px", maxWidth: 118, minWidth: 0, flexShrink: 0 }}>
                                 {r.FromName || r.FromEmail || "unknown"}
                               </Typography>
@@ -1438,13 +1438,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // the same realisation - "this is not one job" - usually arrives while reading the mail,
   // so the fix is offered here too; the form itself is a drawer, since this panel is narrow
   const [reshape, setReshape] = useState(false);
+  // Handing work to another person is occasional, not another permanent form in the action tray.
+  // Keep one clear action visible and put the recipient/message fields in their own focused sheet.
+  const [handoff, setHandoff] = useState(false);
   // "type their answer into the working session" - the round trip's last leg (answer_to_agent=ask)
   const [handed, setHanded] = useState(false);
   const handToAgent = async () => {
     try { await api.post(`/api/tasks/${sel.TaskId}/answer`, { message_id: sel.MessageId }); setHanded(true); }
     catch { /* session gone between render and click: the row's hint still points at the task */ }
   };
-  useEffect(() => { setReshape(false); setOpened(null); setOpening(false); setHanded(false);
+  useEffect(() => { setReshape(false); setHandoff(false); setOpened(null); setOpening(false); setHanded(false);
     setTab("summary"); setFiling(""); setFileErr(""); }, [sel.MessageId]);
   const fileMessage = async (learn) => {
     setFiling(learn ? "learn" : "once"); setFileErr("");
@@ -1771,6 +1774,11 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
               )}
               {!onIt && <TalkItThrough messageId={sel.MessageId} onOpenTask={onOpenTask} />}
+              {sel.TaskId && (
+                <TrayBtn onClick={() => setHandoff(true)} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                  title="send the full task and its context to another person">
+                  Hand off</TrayBtn>
+              )}
             </Box>
 
             <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
@@ -1815,16 +1823,23 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     {skipped !== null ? `Skipped${skipped ? ` · ${skipped} hidden` : ""}` : "Skip sender"}</TrayBtn>
                 </Box>
               )}
-              {sel.TaskId && (
-                <Box sx={{ mt: 1.1 }}>
-                  <TrayGroupLabel note="send the full task and context to another person">HAND OFF</TrayGroupLabel>
-                  <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
-                </Box>
-              )}
             </Box>
             <VoiceNoteRow sel={sel}
               body={voiceNoteBody(sel, (detail?.messages || []).find((m) => m.MessageId === sel.MessageId))}
               onRefresh={onRefresh} onMessageChanged={onMessageChanged} />
+
+            <Drawer anchor="right" open={handoff && !!sel.TaskId} onClose={() => setHandoff(false)}
+              PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+                <ForwardToInboxIcon sx={{ fontSize: 18, color: ACCENT }} />
+                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
+                <IconButton size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+              </Box>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
+                {sel.TaskId ? ref(sel.TaskId) : ""} · {sel.Subject}
+              </Typography>
+              {handoff && sel.TaskId && <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />}
+            </Drawer>
 
             <Drawer anchor="right" open={!!reshape && !!sel.TaskId} onClose={() => setReshape(false)}
               PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>

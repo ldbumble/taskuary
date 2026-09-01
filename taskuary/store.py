@@ -769,6 +769,24 @@ class SQLiteStore:
         return list(out.values())
 
     # messages / routes / comments
+    def withdraw_message(self, external_id: str, actor: str = 'sync') -> bool:
+        """The sender deleted it where it came from. Mark the row - do NOT remove it.
+
+        A Timeline row can have a task, an agent session, a drafted reply and an audit trail
+        hanging off it, and a message vanishing from a mailbox must not silently destroy that
+        work. Withdrawn is a state, not a deletion: the row stays readable and its history
+        intact, it stops counting as waiting on the owner, and the screen says the sender took
+        it back."""
+        row = self._one('SELECT MessageId, TaskId, Status FROM message WHERE ExternalId=?', (external_id,))
+        if not row or row['Status'] == 'withdrawn': return False
+        self._exec("UPDATE message SET Status='withdrawn' WHERE MessageId=?", (row['MessageId'],))
+        if row['TaskId']:
+            self.add_comment(row['TaskId'], actor, 'agent',
+                             'The sender deleted this message where it came from. The task is left '
+                             'as it is - only the message is marked withdrawn.')
+        self.audit('message', row['MessageId'], 'withdrawn', actor, 'agent', {'external_id': external_id})
+        return True
+
     def message_exists(self, external_id):
         return self._one('SELECT 1 x FROM message WHERE ExternalId=?', (external_id,)) is not None
     def add_message(self, fields):
@@ -1308,6 +1326,7 @@ class SQLiteStore:
                           OR (m.TaskId IS NOT NULL AND IFNULL(t.Status,'') NOT IN ('done', 'dropped')
                               AND rn.TaskId IS NULL
                               AND (IFNULL(t.Kind,'') <> 'note' OR m.SentAt <= datetime('now', 'localtime'))
+                              AND m.Status <> 'withdrawn'
                               AND {answered} IS NULL)
                     THEN 1 ELSE 0 END)"""
     NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT)

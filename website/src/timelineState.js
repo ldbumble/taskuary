@@ -29,6 +29,8 @@ export const STATES = {
              hint: "a note you left yourself — nothing is working it, and nothing will" },
   done:    { mark: "✅", word: "done",          role: "done",
              hint: "closed out — kept for the record" },
+  withdrawn: { mark: "🚫", word: "withdrawn",  role: "muted",
+             hint: "the sender deleted this where it came from — kept here, with whatever was done about it" },
   answered: { mark: "↩️", word: "you answered", role: "done",
              hint: "you replied to this yourself, outside Taskuary — nothing here is waiting on you" },
   todo:    { mark: "📋", word: "on your list",  role: "working",
@@ -50,6 +52,9 @@ export const hasTag = (row, tag) => String(row?.TaskTags || "").split(/[\s,]+/).
 // not advertise work in progress.
 export function stateOf(row) {
   if (!row) return "fyi";
+  // gone at the source. Above everything: a message that no longer exists cannot be the thing
+  // you act on, whatever it was classified as while it did.
+  if (row.MsgStatus === "withdrawn") return "withdrawn";
   const pending = row.ReviewStatus === "pending";
   if (row.TaskStatus === "done" || row.TaskStatus === "dropped") return pending ? "reply" : "done";
   if (pending) return "reply";                          // a draft on the table is always the headline

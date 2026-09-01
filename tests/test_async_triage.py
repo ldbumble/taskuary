@@ -103,6 +103,34 @@ class DeferredIngestTests(unittest.TestCase):
         self.assertEqual(out['status'], 'created')
         self.assertEqual(self.s.pending_triage(), [])
 
+    def test_a_worker_thread_still_stores_instead_of_judging(self):
+        """poll_channels overlaps HTTP on worker threads; those workers must still see the
+        process-wide deferred() the poll thread is holding, not triage in parallel."""
+        import threading
+        asked, started, mid = [], threading.Event(), {}
+        def worker():
+            started.wait(1)
+            mid['id'] = ingest.ingest_message(self.s, mail(9), llm=oracle('task', asked))['message_id']
+        t = threading.Thread(target=worker)
+        t.start()
+        with ingest.deferred():
+            started.set()
+            t.join(2)
+        self.assertFalse(t.is_alive())
+        self.assertEqual(asked, [])
+        self.assertEqual(self.s.get_message(mid['id'])['Status'], 'triaging')
+        self.assertEqual(ingest.drain(self.s, llm=oracle('task', asked)), 1)
+        self.assertEqual(len(asked), 1)   # judged once, on drain, not on the worker
+
+    def test_inner_deferred_does_not_turn_the_outer_off(self):
+        asked = []
+        with ingest.deferred():
+            with ingest.deferred():
+                pass
+            ingest.ingest_message(self.s, mail(3), llm=oracle('task', asked))
+        self.assertEqual(asked, [])
+        self.assertEqual(self.s.pending_triage()[0]['Status'], 'triaging')
+
 
 if __name__ == '__main__':
     unittest.main()

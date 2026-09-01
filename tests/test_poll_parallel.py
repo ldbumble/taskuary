@@ -71,6 +71,19 @@ class ParallelPollTests(unittest.TestCase):
             channels.poll_channels(s)
         poll.assert_called_once()
 
+    def test_poll_does_not_drain(self):
+        """Drain of the same conversation stays sequential, on the poll thread, after
+        the workers close. poll_channels itself must not judge."""
+        s = MemoryStore()
+        arm(s, 'outlook')
+        arm(s, 'slack')
+        with mock.patch.object(channels, '_mail_msgs', return_value=[]), \
+             mock.patch.object(channels, '_slack', return_value={}), \
+             mock.patch.object(channels, 'graph_token', return_value='t'), \
+             mock.patch('taskuary.ingest.drain') as drain:
+            channels.poll_channels(s)
+        drain.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

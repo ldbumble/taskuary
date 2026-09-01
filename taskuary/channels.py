@@ -4,7 +4,8 @@ live probe (token/chat-read/repo-discovery); poll_channels is the scheduled inge
 funnels mail and chats through the same triage as everything else. Credentials left blank
 fall back to AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET env vars.
 """
-import base64, hashlib, json, os, re, time
+import base64, hashlib, json, os, queue, re, threading, time
+from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from datetime import datetime, timedelta
 import requests
@@ -834,14 +835,225 @@ def _since(s, backfill_days: int = 0):
     return min(last, datetime.now() - timedelta(days=backfill_days)) if backfill_days else last
 
 
+class _Writer:
+    """One thread talks to SQLite; connector polls wait on HTTP in others.
+
+    WAL still wants a single writer. Outlook vs Slack vs GitHub waits do not share a
+    conversation, so they overlap. Every store call from a worker hops onto this thread
+    and waits. Drain stays on the poll thread, after this closes, and is still sequential.
+    """
+    def __init__(self, store):
+        self._store = store
+        self._q = queue.Queue()
+        self._t = threading.Thread(target=self._loop, daemon=True, name='taskuary-sqlite')
+        self._t.start()
+        self.ident = self._t.ident
+
+    def _loop(self):
+        while True:
+            item = self._q.get()
+            if item is None: return
+            name, args, kwargs, box, ev = item
+            try:
+                box['r'] = args[0]() if name == '__fn__' else getattr(self._store, name)(*args, **kwargs)
+            except Exception as e:
+                box['e'] = e
+            finally:
+                ev.set()
+
+    def do(self, fn):
+        box, ev = {}, threading.Event()
+        self._q.put(('__fn__', (fn,), {}, box, ev))
+        ev.wait()
+        if 'e' in box: raise box['e']
+        return box.get('r')
+
+    def __getattr__(self, name):
+        attr = getattr(self._store, name)
+        if not callable(attr): return attr
+        def call(*a, **k):
+            box, ev = {}, threading.Event()
+            self._q.put((name, a, k, box, ev))
+            ev.wait()
+            if 'e' in box: raise box['e']
+            return box.get('r')
+        return call
+
+    def close(self):
+        self._q.put(None)
+        self._t.join(timeout=30)
+
+
+def _poll_jobs(store, only=None):
+    from .store import roles_of
+    jobs = []
+    for c in store.list_connectors():
+        if not c['Active'] or c['Type'] not in CH2SRC: continue
+        if only is not None and c['Type'] not in only: continue
+        roles = roles_of(c)
+        # trigger = becomes work; feed = shows on the timeline and stops there; neither = never
+        # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two
+        # switches where one reads as enough was a trap (a repo set to "PRs: tasks" on a
+        # tool-only card, a Sync that pulled nothing, and no error anywhere).
+        phone_guide = (c['Type'] == 'whatsapp'
+                       and store.get_settings().get('phone_assistant') == '1'
+                       and 'notify' in roles)
+        if (not roles & {'trigger', 'feed'} and not phone_guide
+                and not (c['Type'] == 'github' and _gh_explicit(store))
+                and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue
+        jobs.append((c, 'trigger' not in roles))
+    return jobs
+
+
+def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
+    """One connector. HTTP lives here; store writes go through whatever store was handed
+    (the writer thread when polls overlap). Messages of one conversation still land in
+    arrival order because a connector is one worker."""
+    n = 0
+    full = store.get_connector(c['ConnectorId'], with_secret=True)
+    try:
+        if c['Type'] in ('outlook', 'teams'):
+            gcfg, gsec, _ = graph_creds(store, full)
+            tok = graph_token(gcfg, gsec)
+        else:
+            tok = full.get('Secret')
+        # ── connections whose SOURCE ROW IS ONLY A MARKER poll once per connector, and
+        # they must poll even with NO source row at all. This used to live inside the
+        # per-source loop, so a Telegram card whose '*' marker was never created (Test
+        # skipped) or was deleted polled NOTHING: getUpdates never ran, so no chat could
+        # ever announce itself, and Sync now looked broken with no error anywhere.
+        if c['Type'] in PER_CONNECTOR:
+            mine = [x for x in store.list_sources()
+                    if x['Channel'] == CH2SRC[c['Type']]
+                    and (not x.get('ConnectorId') or x['ConnectorId'] == c['ConnectorId'])]
+            since = _since(mine[0] if mine else {}, backfill_days)
+            if c['Type'] in ('telegram', 'whatsapp'):
+                from . import messengers
+                poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
+                n += poll(store, full, mine, llm, file_only)
+            elif c['Type'] == 'imessage':
+                from . import imessage
+                n += imessage.poll(store, full, mine, llm, file_only)
+            elif c['Type'] in ('jira', 'asana', 'monday', 'clickup', 'todoist'):
+                from . import pm
+                n += pm.poll(store, full, since, llm, file_only)
+            else:
+                from . import devtools
+                n += devtools.poll(store, full, since, llm, file_only)
+            for s in mine: store.touch_source(s['SourceId'])
+            store.touch_connector(c['ConnectorId'])
+            return n
+        for s in store.list_sources():
+            if s['Channel'] != CH2SRC[c['Type']]: continue
+            # a source belongs to ONE connector: outlook and an IMAP mailbox are both
+            # channel 'email', and without this the Graph poller tried the Gmail address.
+            # (Orphans are adopted at startup, so ownership is always present now.)
+            if s.get('ConnectorId') and s['ConnectorId'] != c['ConnectorId']: continue
+            since = _since(s, backfill_days)
+            if c['Type'] == 'outlook':
+                since_iso = since.astimezone().isoformat()
+                # your replies ride along as CONTEXT: attached to the thread's task,
+                # visible on the timeline, never triaged into work
+                for m in reversed(_mail_msgs(tok, s['Address'], since_iso, folder='sentitems')):
+                    n += ingest_outbound_mail(store, s['Address'], m)
+                # every folder the source asks for (the Inbox alone unless the card says otherwise), oldest first
+                inbound = [(f, m) for f in source_folders(s)
+                           for m in _mail_msgs(tok, s['Address'], since_iso, folder=f)]
+                inbound.sort(key=lambda fm: fm[1].get('receivedDateTime') or '')
+                for folder, m in inbound:
+                    frm = (m.get('from') or {}).get('emailAddress') or {}
+                    if (frm.get('address') or '').lower() == s['Address'].lower():
+                        continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
+                    # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
+                    # triage and handed to it - then saved once the message row exists
+                    atts = []
+                    if m.get('hasAttachments'):
+                        try: atts = mail_attachments(tok, s['Address'], m['id'])
+                        except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
+                    out = ingest_message(store, file_only=file_only, msg={
+                        'external_id': f"graph:{m['id']}", 'channel': 'email',
+                        'subject': m.get('subject'), 'body': _body(m),
+                        'from_name': frm.get('name'), 'from_email': frm.get('address'),
+                        'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
+                        'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
+                        'source_link': m.get('webLink'), 'source_name': s['Address'],
+                        'images': images_for_triage(store, atts), 'invite': is_invite(m),
+                        'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
+                                      'flag': (m.get('flag') or {}).get('flagStatus'),
+                                      'invite': is_invite(m)}}, llm=llm)
+                    n += out['status'] != 'duplicate'
+                    if atts and out.get('message_id') and out['status'] != 'duplicate':
+                        try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
+                        except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")
+                    # a duplicate is still mail the hub has read - the flag may just be
+                    # older than the switch, and skipping it would strand those bold rows
+                    if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
+            elif c['Type'] == 'teams':
+                n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)
+            elif c['Type'] == 'github':
+                # a repo with BOTH kinds off was not read, so its watermark must not
+                # move: advancing it would step over the issues sitting there, and
+                # switching the repo on later would only ever see what came next
+                if set(gh_modes(s, file_only)) == {'off'}: continue
+                n += ingest_github_issues(store, s, tok, since, llm, file_only)
+            elif c['Type'] in ('gmail', 'imap'):
+                # one poll per connector (the UID watermark lives there); its own source only
+                from . import imapmail
+                if s['ConnectorId'] != c['ConnectorId']: continue
+                n += imapmail.poll_imap(store, full, [s], llm, file_only, backfill_days)
+            elif c['Type'] in CLOUD:
+                # per SOURCE: each discovered object carries its own mode, and 'report'
+                # (the default) means the Reports tab may use it but nothing is polled.
+                # The picker OUTRANKS the card's role, like github's per-repo pickers:
+                # 'tasks' on a tool-only card means tasks, not a filed feed row.
+                mode = json.loads(s.get('ConfigJson') or '{}').get('mode') or 'report'
+                if mode not in ('feed', 'tasks'): continue
+                from .reports import aws_connection, azure_connection
+                mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
+                conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store, c['ConnectorId'])
+                n += mod.poll_source(store, conn_cfg, s, since, llm, mode == 'feed')
+            elif c['Type'] == 'discord':
+                # per SOURCE, like slack: each watched channel id is its own source
+                from . import devtools
+                n += devtools.poll_discord(store, full, s, since, llm, file_only)
+            elif c['Type'] == 'slack':
+                # paged like mail: one page of 25 and a watermark at 'now' lost the rest (audit 2026-09-02)
+                hist_all, cursor = [], None
+                while len(hist_all) < 500:
+                    hist = _slack(tok, 'conversations.history', channel=s['Address'], oldest=since.timestamp(),
+                                  limit=100, **({'cursor': cursor} if cursor else {}))
+                    hist_all += hist.get('messages', [])
+                    cursor = (hist.get('response_metadata') or {}).get('next_cursor')
+                    if not cursor: break
+                msgs = [m for m in reversed(hist_all) if not m.get('subtype')]
+                # the channel's read cursor is ONE timestamp - the newest line we took
+                if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))
+                for m in msgs:
+                    out = ingest_message(store, file_only=file_only, msg={
+                        'external_id': f"slack:{s['Address']}:{m.get('ts')}", 'channel': 'slack',
+                        'subject': None, 'body': m.get('text'), 'from_name': m.get('user'),
+                        'conversation_id': f"slack:{s['Address']}",
+                        'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'),
+                        'source_name': s['Address']}, llm=llm)
+                    n += out['status'] != 'duplicate'
+            store.touch_source(s['SourceId'])
+        store.touch_connector(c['ConnectorId'])
+    except Exception as e:
+        logger.warning(f"channel poll failed ({c['Type']}): {e}")
+        store.touch_connector(c['ConnectorId'], str(e))
+    return n
+
+
 def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> int:
     """Ingest new items for every connection the owner marked as a TRIGGER, through the
     same triage funnel (incl. the configured AI, if any). A connection without the trigger
     role is still usable by agents and reports - it just never creates work on its own.
     Failures land on the card. `backfill_days` reaches further back than the watermark - see
-    _since; it is how startup catches up on mail that arrived while the app was closed."""
+    _since; it is how startup catches up on mail that arrived while the app was closed.
+
+    Independent HTTP waits overlap. SQLite writes hop onto one writer thread. Drain of
+    the same conversation stays sequential - that is a later pass, not this one."""
     from .llm import build_llm
-    from .store import roles_of
     try: llm = build_llm(store)
     except Exception: llm = None
     read_it = wants_read(store)   # asked once per run, not once per message
@@ -854,156 +1066,38 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
                 imapmail.ensure_source(store, store.get_connector(c['ConnectorId']))
             except Exception as e:
                 logger.debug(f"imap: could not heal the source row for {c.get('Name')} - {e}")
-    n = 0
-    for c in store.list_connectors():
-        if not c['Active'] or c['Type'] not in CH2SRC: continue
-        if only is not None and c['Type'] not in only: continue     # a quick poll of the chatty ones
-        roles = roles_of(c)
-        # trigger = becomes work; feed = shows on the timeline and stops there; neither = never
-        # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two
-        # switches where one reads as enough was a trap (a repo set to "PRs: tasks" on a
-        # tool-only card, a Sync that pulled nothing, and no error anywhere).
-        phone_guide = (c['Type'] == 'whatsapp'
-                       and store.get_settings().get('phone_assistant') == '1'
-                       and 'notify' in roles)
-        if (not roles & {'trigger', 'feed'} and not phone_guide
-                and not (c['Type'] == 'github' and _gh_explicit(store))
-                and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue
-        file_only = 'trigger' not in roles
-        # said as it happens, not at the end: the timeline is refreshing while this runs, so
-        # "reading Outlook" beside rows that are already arriving beats a spinner and a wait
-        if progress:
-            try: progress(c['Type'], n)
-            except Exception: pass
-        full = store.get_connector(c['ConnectorId'], with_secret=True)
+    jobs = _poll_jobs(store, only)
+    if not jobs: return 0
+
+    def _say(kind, so_far, st):
+        if not progress: return
         try:
-            if c['Type'] in ('outlook', 'teams'):
-                gcfg, gsec, _ = graph_creds(store, full)
-                tok = graph_token(gcfg, gsec)
-            else:
-                tok = full.get('Secret')
-            # ── connections whose SOURCE ROW IS ONLY A MARKER poll once per connector, and
-            # they must poll even with NO source row at all. This used to live inside the
-            # per-source loop, so a Telegram card whose '*' marker was never created (Test
-            # skipped) or was deleted polled NOTHING: getUpdates never ran, so no chat could
-            # ever announce itself, and Sync now looked broken with no error anywhere.
-            if c['Type'] in PER_CONNECTOR:
-                mine = [x for x in store.list_sources()
-                        if x['Channel'] == CH2SRC[c['Type']]
-                        and (not x.get('ConnectorId') or x['ConnectorId'] == c['ConnectorId'])]
-                since = _since(mine[0] if mine else {}, backfill_days)
-                if c['Type'] in ('telegram', 'whatsapp'):
-                    from . import messengers
-                    poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
-                    n += poll(store, full, mine, llm, file_only)
-                elif c['Type'] == 'imessage':
-                    from . import imessage
-                    n += imessage.poll(store, full, mine, llm, file_only)
-                elif c['Type'] in ('jira', 'asana', 'monday', 'clickup', 'todoist'):
-                    from . import pm
-                    n += pm.poll(store, full, since, llm, file_only)
-                else:
-                    from . import devtools
-                    n += devtools.poll(store, full, since, llm, file_only)
-                for s in mine: store.touch_source(s['SourceId'])
-                store.touch_connector(c['ConnectorId'])
-                continue
-            for s in store.list_sources():
-                if s['Channel'] != CH2SRC[c['Type']]: continue
-                # a source belongs to ONE connector: outlook and an IMAP mailbox are both
-                # channel 'email', and without this the Graph poller tried the Gmail address.
-                # (Orphans are adopted at startup, so ownership is always present now.)
-                if s.get('ConnectorId') and s['ConnectorId'] != c['ConnectorId']: continue
-                since = _since(s, backfill_days)
-                if c['Type'] == 'outlook':
-                    since_iso = since.astimezone().isoformat()
-                    # your replies ride along as CONTEXT: attached to the thread's task,
-                    # visible on the timeline, never triaged into work
-                    for m in reversed(_mail_msgs(tok, s['Address'], since_iso, folder='sentitems')):
-                        n += ingest_outbound_mail(store, s['Address'], m)
-                    # every folder the source asks for (the Inbox alone unless the card says otherwise), oldest first
-                    inbound = [(f, m) for f in source_folders(s)
-                               for m in _mail_msgs(tok, s['Address'], since_iso, folder=f)]
-                    inbound.sort(key=lambda fm: fm[1].get('receivedDateTime') or '')
-                    for folder, m in inbound:
-                        frm = (m.get('from') or {}).get('emailAddress') or {}
-                        if (frm.get('address') or '').lower() == s['Address'].lower():
-                            continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
-                        # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
-                        # triage and handed to it - then saved once the message row exists
-                        atts = []
-                        if m.get('hasAttachments'):
-                            try: atts = mail_attachments(tok, s['Address'], m['id'])
-                            except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
-                        out = ingest_message(store, file_only=file_only, msg={
-                            'external_id': f"graph:{m['id']}", 'channel': 'email',
-                            'subject': m.get('subject'), 'body': _body(m),
-                            'from_name': frm.get('name'), 'from_email': frm.get('address'),
-                            'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
-                            'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
-                            'source_link': m.get('webLink'), 'source_name': s['Address'],
-                            'images': images_for_triage(store, atts), 'invite': is_invite(m),
-                            'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
-                                          'flag': (m.get('flag') or {}).get('flagStatus'),
-                                          'invite': is_invite(m)}}, llm=llm)
-                        n += out['status'] != 'duplicate'
-                        if atts and out.get('message_id') and out['status'] != 'duplicate':
-                            try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
-                            except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")
-                        # a duplicate is still mail the hub has read - the flag may just be
-                        # older than the switch, and skipping it would strand those bold rows
-                        if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
-                elif c['Type'] == 'teams':
-                    n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)
-                elif c['Type'] == 'github':
-                    # a repo with BOTH kinds off was not read, so its watermark must not
-                    # move: advancing it would step over the issues sitting there, and
-                    # switching the repo on later would only ever see what came next
-                    if set(gh_modes(s, file_only)) == {'off'}: continue
-                    n += ingest_github_issues(store, s, tok, since, llm, file_only)
-                elif c['Type'] in ('gmail', 'imap'):
-                    # one poll per connector (the UID watermark lives there); its own source only
-                    from . import imapmail
-                    if s['ConnectorId'] != c['ConnectorId']: continue
-                    n += imapmail.poll_imap(store, full, [s], llm, file_only, backfill_days)
-                elif c['Type'] in CLOUD:
-                    # per SOURCE: each discovered object carries its own mode, and 'report'
-                    # (the default) means the Reports tab may use it but nothing is polled.
-                    # The picker OUTRANKS the card's role, like github's per-repo pickers:
-                    # 'tasks' on a tool-only card means tasks, not a filed feed row.
-                    mode = json.loads(s.get('ConfigJson') or '{}').get('mode') or 'report'
-                    if mode not in ('feed', 'tasks'): continue
-                    from .reports import aws_connection, azure_connection
-                    mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
-                    conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store, c['ConnectorId'])
-                    n += mod.poll_source(store, conn_cfg, s, since, llm, mode == 'feed')
-                elif c['Type'] == 'discord':
-                    # per SOURCE, like slack: each watched channel id is its own source
-                    from . import devtools
-                    n += devtools.poll_discord(store, full, s, since, llm, file_only)
-                elif c['Type'] == 'slack':
-                    # paged like mail: one page of 25 and a watermark at 'now' lost the rest (audit 2026-09-02)
-                    hist_all, cursor = [], None
-                    while len(hist_all) < 500:
-                        hist = _slack(tok, 'conversations.history', channel=s['Address'], oldest=since.timestamp(),
-                                      limit=100, **({'cursor': cursor} if cursor else {}))
-                        hist_all += hist.get('messages', [])
-                        cursor = (hist.get('response_metadata') or {}).get('next_cursor')
-                        if not cursor: break
-                    msgs = [m for m in reversed(hist_all) if not m.get('subtype')]
-                    # the channel's read cursor is ONE timestamp - the newest line we took
-                    if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))
-                    for m in msgs:
-                        out = ingest_message(store, file_only=file_only, msg={
-                            'external_id': f"slack:{s['Address']}:{m.get('ts')}", 'channel': 'slack',
-                            'subject': None, 'body': m.get('text'), 'from_name': m.get('user'),
-                            'conversation_id': f"slack:{s['Address']}",
-                            'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'),
-                            'source_name': s['Address']}, llm=llm)
-                        n += out['status'] != 'duplicate'
-                store.touch_source(s['SourceId'])
-            store.touch_connector(c['ConnectorId'])
-        except Exception as e:
-            logger.warning(f"channel poll failed ({c['Type']}): {e}")
-            store.touch_connector(c['ConnectorId'], str(e))
-    return n
+            st.do(lambda: progress(kind, so_far)) if hasattr(st, 'do') else progress(kind, so_far)
+        except Exception:
+            pass
+
+    if len(jobs) == 1:
+        c, file_only = jobs[0]
+        _say(c['Type'], 0, store)
+        return _poll_one(store, c, file_only, backfill_days, llm, read_it)
+
+    # said as it happens, not at the end: the timeline is refreshing while this runs, so
+    # "reading Outlook" beside rows that are already arriving beats a spinner and a wait
+    writer = _Writer(store)
+    tally, tally_lock = [0], threading.Lock()
+    try:
+        def run(c, file_only):
+            with tally_lock: so_far = tally[0]
+            _say(c['Type'], so_far, writer)
+            added = _poll_one(writer, c, file_only, backfill_days, llm, read_it)
+            with tally_lock: tally[0] += added
+            return added
+        with ThreadPoolExecutor(max_workers=min(8, len(jobs)), thread_name_prefix='poll') as pool:
+            futs = [pool.submit(run, c, fo) for c, fo in jobs]
+            n = 0
+            for f in futs:
+                try: n += f.result()
+                except Exception as e: logger.warning(f'channel poll worker failed: {e}')
+            return n
+    finally:
+        writer.close()

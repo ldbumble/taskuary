@@ -37,6 +37,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 const GENERAL_CHUNK_RELOAD = "tq-general-chunk-reload";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { ASK_TAG } from "./newTask.js";
+import { continueCoding } from "./continueCoding.js";
 
 const loadGeneralWorkspace = () => import("./GeneralWorkspace.jsx").then((module) => {
   try { sessionStorage.removeItem(GENERAL_CHUNK_RELOAD); } catch { /* storage disabled */ }
@@ -315,7 +316,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = selected;
     setContinuing(true); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${id}/continue`, { instruction: continueText.trim() });
+      const agent = detail?.transcript?.agent || report?.Actor || "coder";
+      const { data } = await continueCoding(api, id, continueText.trim(), agent);
       if (stale(id)) return;
       setTerm(data.session); setContinueOpen(false); setContinueText("");
       loadDetail(id); loadTasks(); onChanged?.();

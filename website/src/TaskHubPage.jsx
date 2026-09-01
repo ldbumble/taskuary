@@ -285,7 +285,6 @@ export default function TaskHubPage() {
           </Typography>
           <ServerVersion />
           <DemoBadge demo={demo} />
-          <StaleBuild />
 
           {/* Below 900px the full tab strip had no room: it began under the brand and its
               off-screen pages had no visible affordance. One labelled selector keeps the
@@ -335,6 +334,10 @@ export default function TaskHubPage() {
             ))}
           </Box>
           <Box sx={{ flex: 1 }} />
+          {/* on the RIGHT, with the other transient chrome. On the left it grew the brand cluster
+              until it slid UNDER the tab strip, which is absolutely centred on the window and so
+              yields to nothing - the banner sat on top of "Timeline". */}
+          <StaleBuild />
           {!DEMO && <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />}
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connections"); }} />

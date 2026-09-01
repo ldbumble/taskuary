@@ -25,6 +25,9 @@ def _run(coro):
 
 
 class LiveSocketTests(unittest.TestCase):
+    def setUp(self):
+        live.reset()
+
     def tearDown(self):
         live.reset()
 
@@ -32,12 +35,15 @@ class LiveSocketTests(unittest.TestCase):
         tab = _Tab()
         async def once():
             t = asyncio.create_task(live.serve(tab))
-            for _ in range(20):
-                await asyncio.sleep(0)
-                if tab.sent: break
-            t.cancel()
-            try: await t
-            except (asyncio.CancelledError, Exception): pass
+            try:
+                for _ in range(20):
+                    await asyncio.sleep(0)
+                    if tab.sent: break
+            finally:
+                t.cancel()
+                try: await t
+                except (asyncio.CancelledError, Exception): pass
+                live.reset()
         _run(once())
         self.assertEqual(tab.sent[0]['type'], 'hello')
 
@@ -46,14 +52,17 @@ class LiveSocketTests(unittest.TestCase):
         async def once():
             live.bind(asyncio.get_running_loop())
             live.attach(tab)
-            mid = s.add_message({
-                'external_id': 'live-sock-1', 'channel': 'email', 'subject': 'hi',
-                'body': 'there', 'from_email': 'a@b.c', 'status': 'feed'})
-            live.flush()
-            for _ in range(20):
-                await asyncio.sleep(0)
-                if any(m.get('type') == 'feed-changed' for m in tab.sent): break
-            return mid
+            try:
+                mid = s.add_message({
+                    'external_id': 'live-sock-1', 'channel': 'email', 'subject': 'hi',
+                    'body': 'there', 'from_email': 'a@b.c', 'status': 'feed'})
+                live.flush()
+                for _ in range(20):
+                    await asyncio.sleep(0)
+                    if any(m.get('type') == 'feed-changed' for m in tab.sent): break
+                return mid
+            finally:
+                live.reset()
         mid = _run(once())
         self.assertIn('feed-changed', [m['type'] for m in tab.sent])
         self.assertTrue(mid)
@@ -63,12 +72,15 @@ class LiveSocketTests(unittest.TestCase):
         async def once():
             live.bind(asyncio.get_running_loop())
             live.attach(tab)
-            tid = s.create_task({'Title': 'live-task', 'Status': 'open'}, 't')
-            live.flush()
-            for _ in range(20):
-                await asyncio.sleep(0)
-                if any(m.get('type') == 'task-changed' for m in tab.sent): break
-            return tid
+            try:
+                tid = s.create_task({'Title': 'live-task', 'Status': 'open'}, 't')
+                live.flush()
+                for _ in range(20):
+                    await asyncio.sleep(0)
+                    if any(m.get('type') == 'task-changed' for m in tab.sent): break
+                return tid
+            finally:
+                live.reset()
         tid = _run(once())
         self.assertIn('task-changed', [m['type'] for m in tab.sent])
         self.assertTrue(tid)

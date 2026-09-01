@@ -103,9 +103,10 @@ class DeferredIngestTests(unittest.TestCase):
         self.assertEqual(out['status'], 'created')
         self.assertEqual(self.s.pending_triage(), [])
 
-    def test_a_worker_thread_still_stores_instead_of_judging(self):
-        """poll_channels overlaps HTTP on worker threads; those workers must still see the
-        process-wide deferred() the poll thread is holding, not triage in parallel."""
+    def test_a_nameless_thread_does_not_inherit_deferred(self):
+        """A TestClient poll holds deferred() on its own thread. Unittest's MainThread, and a
+        random worker, must still judge - or the rest of the suite queues forever. poll_channels'
+        pool inherits on purpose; that is a different test."""
         import threading
         asked, started, mid = [], threading.Event(), {}
         def worker():
@@ -117,10 +118,8 @@ class DeferredIngestTests(unittest.TestCase):
             started.set()
             t.join(2)
         self.assertFalse(t.is_alive())
-        self.assertEqual(asked, [])
-        self.assertEqual(self.s.get_message(mid['id'])['Status'], 'triaging')
-        self.assertEqual(ingest.drain(self.s, llm=oracle('task', asked)), 1)
-        self.assertEqual(len(asked), 1)   # judged once, on drain, not on the worker
+        self.assertNotEqual(self.s.get_message(mid['id'])['Status'], 'triaging')
+        self.assertEqual(len(asked), 1)
 
     def test_inner_deferred_does_not_turn_the_outer_off(self):
         asked = []

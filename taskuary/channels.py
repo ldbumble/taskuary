@@ -4,7 +4,7 @@ live probe (token/chat-read/repo-discovery); poll_channels is the scheduled inge
 funnels mail and chats through the same triage as everything else. Credentials left blank
 fall back to AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET env vars.
 """
-import base64, hashlib, json, os, queue, re, threading, time
+import base64, contextlib, hashlib, json, os, queue, re, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from datetime import datetime, timedelta
@@ -1087,9 +1087,13 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
     tally, tally_lock = [0], threading.Lock()
     try:
         def run(c, file_only):
+            from . import ingest as ingest_mod
             with tally_lock: so_far = tally[0]
             _say(c['Type'], so_far, writer)
-            added = _poll_one(writer, c, file_only, backfill_days, llm, read_it)
+            # inherit the poll thread's deferred(): our threading.local is off, and without
+            # this wrap we would triage in parallel - the thing drain exists to prevent
+            with ingest_mod.deferred() if ingest_mod._parent_deferring() else contextlib.nullcontext():
+                added = _poll_one(writer, c, file_only, backfill_days, llm, read_it)
             with tally_lock: tally[0] += added
             return added
         with ThreadPoolExecutor(max_workers=min(8, len(jobs)), thread_name_prefix='poll') as pool:

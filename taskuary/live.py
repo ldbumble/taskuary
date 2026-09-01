@@ -95,9 +95,11 @@ def _flush_kind(kind):
 
 def _broadcast(msg):
     loop = _loop
-    if loop is None or not loop.is_running():
+    if loop is None:
         return
     try:
+        if not loop.is_running():
+            return
         asyncio.run_coroutine_threadsafe(_fanout(msg), loop)
     except RuntimeError:
         pass

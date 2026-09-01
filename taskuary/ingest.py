@@ -64,10 +64,11 @@ def source_rules(store, msg: dict) -> str:
 # timeline shows it at once wearing a "triaging" pill; drain() then judges the queue in arrival
 # order and each row lands where its verdict puts it. Dedupe, feeds and policies stay immediate:
 # they cost nothing and their answer is final.
-# A process-wide flag, not threading.local: poll_channels runs each connector on its own
-# thread so Graph/Slack/GitHub waits overlap, and those workers must still STORE rather
-# than judge. A thread-local "on" would have them triage in parallel - the thing drain
-# exists to prevent. Nesting is a counter so an inner deferred() cannot turn the outer off.
+# The ON/OFF is thread-local: a TestClient that starts the mailbox clock must not make the
+# next unittest on MainThread store-instead-of-judge. Poll workers are other threads, so they
+# wrap themselves in deferred() when the parent poll is already deferring (see channels).
+# Nesting is a counter so an inner deferred() cannot turn the outer off.
+_DEFER = threading.local()
 _DEFER_DEPTH = 0
 _DEFER_LOCK = threading.Lock()
 _PENDING = {}        # MessageId -> the message as it arrived (images, no_auto...), for drain in this process
@@ -77,14 +78,23 @@ _PENDING_LOCK = threading.Lock()
 @contextlib.contextmanager
 def deferred():
     global _DEFER_DEPTH
+    prev = getattr(_DEFER, 'on', False)
+    _DEFER.on = True
     with _DEFER_LOCK: _DEFER_DEPTH += 1
     try: yield
     finally:
+        _DEFER.on = prev
         with _DEFER_LOCK: _DEFER_DEPTH -= 1
 
 
 def _deferring() -> bool:
-    return _DEFER_DEPTH > 0
+    return getattr(_DEFER, 'on', False)
+
+
+def _parent_deferring() -> bool:
+    """True while SOME thread is inside deferred() - poll workers inherit that, MainThread does not."""
+    with _DEFER_LOCK:
+        return _DEFER_DEPTH > 0
 
 
 def _land(store, msg: dict, task_id, status: str) -> int:

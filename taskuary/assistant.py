@@ -582,6 +582,36 @@ def system_checks(store, source_ids=None, inline=None) -> str:
     return '\n\n'.join(blocks)
 
 
+def _verdicts_block(store, cands: list) -> str:
+    """The owner's standing verdicts - the SAME memory triage reads before it classifies
+    (ingest.relevant_notes / applicable_notes).
+
+    The assistant was the one brain in this app that never saw them. So "resident refunds are not
+    our problem" stayed true for triage - which quietly files them - and was news to the brief,
+    which went on raising the next refund thread as an idea worth acting on. A verdict the owner
+    gives once should not have to be given again per surface.
+
+    Scoped by the candidates' OWN words, so a note about a topic nothing today touches costs
+    nothing; global notes always apply."""
+    from .ingest import relevant_notes
+    text = ' '.join(str(c.get('facts') or c.get('text') or '') for c in cands)[:4000]
+    if not text.strip():
+        return ''
+    try:
+        emails = sorted({(r.get('FromEmail') or '').lower()
+                         for r in store.recent_messages(_since(2), limit=500) if r.get('FromEmail')})
+        notes_, left = relevant_notes(store, emails, text)
+    except Exception as e:
+        logger.debug(f'assistant: standing verdicts skipped - {e}')
+        return ''
+    if not notes_:
+        return ''
+    more = f' ({left} more matched and were left out)' if left else ''
+    return ('\n\nWHAT THE OWNER HAS ALREADY DECIDED - their standing verdicts, the same ones triage '
+            f'reads before it files anything{more}. Never raise something they have ruled out, and '
+            'never argue with one:\n' + '\n'.join(f'- {n}' for n in notes_))
+
+
 def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None) -> str:
     """Everything one check reads, as the model sees it - the same text is the Reports tab's Preview
     (facts) and the run record (reports.run_report_source), so what it was given is never a guess."""
@@ -597,7 +627,9 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
             + f"\n\nCALENDAR (the next two days):\n{_calendar(store)}"
             + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):\n{_recent(store)}"
             + f"\n\nDONE THIS WEEK (my own work, with the agent's summary):\n{_week(store)}"
-            + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}\n\n{_notes_block(store)}")
+            + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}"
+            + _verdicts_block(store, cands)
+            + f"\n\n{_notes_block(store)}")
 
 
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES) -> list:

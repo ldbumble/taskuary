@@ -1338,7 +1338,10 @@ class MeetingPrepBody(BaseModel):
     where: str | None = None; organizer: str | None = None; who: list[str] = []
     about: str | None = None; link: str | None = None; status: str | None = None
     all_day: bool = False
-    instruction: str | None = None; agent: str = 'coder'; model: str | None = None
+    instruction: str | None = None
+    # kept so a page loaded before the switch to the chat assistant still posts cleanly; the
+    # prep conversation picks its own provider inside the workspace
+    agent: str = 'coder'; model: str | None = None
 
 @app.post('/api/calendar/prep')
 def calendar_prep(body: MeetingPrepBody):
@@ -1346,19 +1349,21 @@ def calendar_prep(body: MeetingPrepBody):
     own prompt. The invite (when, where, who, what it says) becomes the task's context and your
     prompt is the ask, so the session opens already knowing which meeting it is about.
 
-    It is tagged `repo:none` - preparing for a meeting is not a change to a codebase, and
-    without the tag the router would pick whichever checkout the words happened to match.
+    It opens the ASSISTANT'S CHAT, not a coding session (owner, 2026-09-01). Getting ready for
+    a meeting is reading, checking and thinking - there is no checkout to work in, and a CLI in
+    the agent's own folder was the wrong tool wearing the right name. Kind `general` plus the ask
+    tag is exactly what the Board and + New create, so the chat opens with the brief already
+    asked (website/src/newTask.js, GeneralWorkspace).
     """
     from . import calendar as cal
-    if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
     subject = (body.subject or 'the meeting').strip()[:120]
     brief = cal.prep_brief(body.dict())
-    tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': brief, 'Kind': 'coding',
-                             'Tags': f'repo:{hub_term.NO_REPO}', 'Source': 'calendar',
+    ask = (body.instruction or '').strip() or 'Get me ready for this meeting.'
+    tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}',
+                             'Kind': 'general', 'Tags': 'ask:assistant', 'Source': 'calendar',
                              'SourceRef': f"calendar:{body.start or ''}:{subject}"[:200]}, ACTOR)
     store.audit('task', tid, 'create_from_meeting', ACTOR, detail={'subject': subject, 'start': body.start})
-    ses = start_session(store, tid, body.agent, body.model, body.instruction)
-    return {'taskId': tid, 'ref': task_ref(tid), 'agent': body.agent, 'session': ses}
+    return {'taskId': tid, 'ref': task_ref(tid), 'agent': 'assistant', 'chat': True}
 
 @app.get('/api/calendar/upcoming')
 def calendar_upcoming(hours: int = 72, force: bool = False):

@@ -1476,7 +1476,10 @@ export const WorkStrip = ({ taskId, live, session, provenance }) => {
   );
 };
 
-export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
+// `fill` hands the console the whole pane instead of a five-line letterbox: the Timeline's
+// Agent tab was a small dark box above 600px of nothing while an agent worked in it. Filling,
+// the tail scrolls inside and the header stays put.
+export const LiveConsole = ({ run, agent, lines = 5, onOpen, fill }) => {
   const waiting = run ? (run.kind === "session" && (run.asking || isWaiting(run))) : false;
   const tail = (run?.tail || []).slice(-lines);
   const files = run?.files || [];
@@ -1484,8 +1487,9 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
   return (
     <Box onClick={onOpen} title="Open the task - the real terminal"
       sx={{ bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.5, px: 1.25, py: 0.9, cursor: onOpen ? "pointer" : "default",
+        ...(fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : {}),
         "&:hover": onOpen ? { borderColor: CATPPUCCIN.overlay } : {} }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: tail.length ? 0.5 : 0 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: tail.length ? 0.5 : 0, flexShrink: 0 }}>
         <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
           ...(waiting ? {} : { "@keyframes tqBlink2": { "50%": { opacity: 0.25 } }, animation: "tqBlink2 1.1s step-end infinite" }) }}>
           {waiting ? `⏸ ${who} ${run?.asking ? "asked you something" : "stopped - waiting on you"}` : `▮ ${who} working${run?.StartedAt ? ` · ${_elapsed(run.StartedAt)}` : ""}`}
@@ -1498,6 +1502,7 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
         ))}
         {onOpen && <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: CATPPUCCIN.faint }}>open ↗</Typography>}
       </Box>
+      <Box sx={fill ? { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "flex-end" } : {}}>
       {tail.map((l, i, all) => (
         <Typography key={i} noWrap variant="caption" sx={{ ...mono, display: "block", fontSize: 10, lineHeight: 1.55,
           color: l.startsWith("→") ? CATPPUCCIN.blue : l.startsWith("✗") ? CATPPUCCIN.red : CATPPUCCIN.fg, opacity: 0.45 + 0.55 * ((i + 1) / all.length) }}>
@@ -1505,6 +1510,7 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen }) => {
         </Typography>
       ))}
       {!tail.length && <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.faint }}>…</Typography>}
+      </Box>
     </Box>
   );
 };
@@ -1513,7 +1519,8 @@ export const FilterPills = ({ options, value, onChange }) => (
   // A segmented control reads as one control only in one row, so it never wraps - which on a
   // phone dragged the whole page sideways. It scrolls inside itself instead, with the scrollbar
   // hidden: the pills are the affordance.
-  <Box sx={{ display: "inline-flex", gap: 0.25, p: 0.4, bgcolor: "#e9e3d8", maxWidth: "100%",
+  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.25, p: 0.4, height: 34, boxSizing: "border-box",
+    bgcolor: "#e9e3d8", maxWidth: "100%",
     overflowX: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" },
     border: "1px solid #e1dcd5", borderRadius: 2.5 }}>
     {options.map((o) => {

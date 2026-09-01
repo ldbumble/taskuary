@@ -265,14 +265,10 @@ const ComingUp = ({ events, onPick, picked }) => {
 // knowing which meeting it is; the task carries repo:none, because preparing for a meeting is
 // not a change to a codebase.
 const MeetingPrep = ({ e, onOpenTask }) => {
-  const { agents, models } = useAgents();
-  const [agent, setAgent] = useState("coder");
-  const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
   const [err, setErr] = useState("");
-  useEffect(() => { if (agents.length && !agents.includes(agent)) setAgent(agents[0]); }, [agents, agent]);
   useEffect(() => { setSent(null); setErr(""); setPrompt(""); }, [e.start, e.subject]);
   const send = async () => {
     setBusy(true); setErr("");
@@ -280,7 +276,7 @@ const MeetingPrep = ({ e, onOpenTask }) => {
       const { data } = await api.post("/api/calendar/prep", {
         subject: e.subject, start: e.start, end: e.end, where: e.where, organizer: e.organizer,
         who: e.who || [], about: e.about, link: e.link, status: e.status, all_day: !!e.all_day,
-        instruction: prompt.trim() || null, agent, model: model || null });
+        instruction: prompt.trim() || null });
       setSent(data); setPrompt("");
       onOpenTask?.(data.taskId);
     } catch (x) { setErr(x?.response?.data?.detail || "Could not reach the agent"); }
@@ -290,20 +286,17 @@ const MeetingPrep = ({ e, onOpenTask }) => {
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
       <TaskuaryMark size={15} />
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>
-        {sent.agent} is prepping it — {sent.ref}
+        Your assistant is prepping it — {sent.ref}
       </Typography>
-      <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
+      <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>open the chat →</Button>
       <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>ask something else</Button>
     </Box>
   );
   return (
     <Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-        <PanelLabel>Prepare me for it</PanelLabel>
-        <Box sx={{ flex: 1 }} />
-        <AgentPicker agents={agents} models={models} agent={agent} model={model}
-          onAgent={setAgent} onModel={setModel} size={24} />
-      </Box>
+      {/* no agent picker: preparing for a meeting is reading and thinking, so it opens the
+          ASSISTANT'S CHAT rather than a CLI in a checkout, and the chat picks its own provider */}
+      <PanelLabel>Prepare me for it</PanelLabel>
       <TextField fullWidth multiline minRows={2} maxRows={8} size="small" value={prompt}
         onChange={(x) => setPrompt(x.target.value)}
         placeholder={`What should it get ready? e.g. "Pull last month's numbers for these facilities and give me three questions to ask."`}
@@ -315,7 +308,7 @@ const MeetingPrep = ({ e, onOpenTask }) => {
         <Button size="small" variant="contained" disableElevation disabled={busy || !prompt.trim()} onClick={send}
           startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <TaskuaryMark size={14} />}
           sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
-          {busy ? "sending…" : "Send to an agent"}
+          {busy ? "opening…" : "Ask the assistant"}
         </Button>
       </Box>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block", mt: 0.5 }}>{err}</Typography>}
@@ -895,13 +888,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             opacity: 0, transition: "opacity .25s", zIndex: 3 },
           "&[data-sc='1']::after": { opacity: 1 } }}>
 
-          {/* ONE date line: everything above it stays exactly the same however far the rail
-              scrolls, and only the LABEL changes as a new day crosses the header's edge. */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
-              flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {fmtDay(curDay || dayEntries[0]?.[0] || "")}
-            </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
             <Button size="small" variant="outlined" disabled={syncing || bgSync} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
               startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: ACCENT }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
@@ -924,7 +911,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <Select size="small" value={cat} displayEmpty onChange={(e) => setCat(e.target.value)}
               inputProps={{ "aria-label": "Timeline category" }}
               renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "everything"}
-              sx={{ height: 26, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: cat ? PANEL2 : "#fff",
+              sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
                 color: cat ? INK : DIM, flexShrink: 0,
                 "& .MuiSelect-select": { py: 0.25, px: 1.15 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
@@ -937,10 +924,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
               renderValue={(v) => (!v ? "all sources"
                 : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
                   : String(v.split(":").slice(2).join(":")).split("@")[0])}
-              sx={{ height: 26, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: pick ? PANEL2 : "#fff",
+              sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
                 color: pick ? INK : DIM, flex: 1, minWidth: 0,
                 "& .MuiSelect-select": { py: 0.25, px: 1.15 },
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: pick ? "#d2d6cf" : BORDER } }}>
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
               {/* 96 discovered buckets turned this into a page-long wall. It is a bounded,
                   searchable list: type to narrow, and each channel shows a few with a count
                   for the rest rather than every object it has ever seen. */}
@@ -1016,6 +1003,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
               {err}
             </Alert>
           )}
+          {/* The date names the rows, not the toolbar. Keep it at the bottom of the fixed dock so
+              it sits directly above the Timeline and only its label changes while scrolling. */}
+          <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
+            minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {fmtDay(curDay || dayEntries[0]?.[0] || "")}
+          </Typography>
         </Box>
 
         {/* ── the scroller ── */}
@@ -1326,7 +1319,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   useEffect(() => {
     if (!onIt || !sel?.TaskId) { setLiveRow(null); return; }
     let alive = true;
-    const poll = async () => { try { const { data } = await api.get("/api/runs/live", { params: { lines: 6 } }); if (alive) setLiveRow((data.data || []).find((r) => r.TaskId === sel.TaskId) || null); } catch { /* keep the last */ } };
+    const poll = async () => { try { const { data } = await api.get("/api/runs/live", { params: { lines: 120 } }); if (alive) setLiveRow((data.data || []).find((r) => r.TaskId === sel.TaskId) || null); } catch { /* keep the last */ } };
     poll(); const id = setInterval(poll, 3000);
     return () => { alive = false; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1434,7 +1427,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
           ))}
         </Box>
 
-        <Box sx={{ px: 2, py: 1.75, overflowY: "auto", flex: 1, minHeight: 0 }}>
+        <Box sx={{ px: 2, py: 1.75, overflowY: "auto", flex: 1, minHeight: 0,
+          ...(tab === "agent" && onIt && !rep && !diffRun ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : {}) }}>
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
               {/* ── what arrived ── */}
@@ -1477,7 +1471,10 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   {onIt && (
                     <>
                       <PanelLabel>{onIt.waiting ? `${onIt.agent} stopped and is waiting on you` : `${onIt.agent} is on it now`}</PanelLabel>
-                      <LiveConsole run={liveRow} agent={onIt.agent} onOpen={() => onOpenTask(sel.TaskId)} />
+                      {/* with nothing else to show yet, the session gets the whole pane rather than
+                          five lines over an empty screen - the tray below stays where it is */}
+                      <LiveConsole run={liveRow} agent={onIt.agent} lines={rep || diffRun ? 5 : 120}
+                        fill={!rep && !diffRun} onOpen={() => onOpenTask(sel.TaskId)} />
                     </>
                   )}
                   {rep && (

@@ -61,6 +61,54 @@ def topic_of(raw: str, cwd: str = '', task_repo: str = '') -> str:
     return (t or 'general')[:TOPIC_MAX]
 
 
+# Tokens too generic to justify merging two shelves on their own: every system has an api and a
+# db, and snapping `viventium-api` onto a bare `api` shelf would be worse than the sprawl.
+TOPIC_GENERIC = {'api', 'app', 'web', 'db', 'data', 'test', 'tests', 'code', 'main', 'core',
+                 'misc', 'tool', 'tools', 'system', 'general', 'stuff', 'notes'}
+
+
+def _toks(t) -> list:
+    return [w for w in str(t or '').split('-') if w]
+
+
+def snap_topic(candidate: str, existing) -> str:
+    """The shelf this really belongs on, given the shelves there already are.
+
+    topic_of only slugifies, so it answers "Intacct", "intacct " and "Sage Intacct" with two
+    different shelves - which is the sprawl its own docstring promised to prevent. Left alone it
+    compounds: this install already had `viventium-api` and `viventium-reimbursements`, one system
+    on two shelves, after a single afternoon.
+
+    Conservative on purpose, because a WRONG merge is worse than a duplicate - it files a fact
+    where nobody looking for it will read it. Two rules only:
+
+      - the same word, singular or plural (`invoice` / `invoices`)
+      - an existing topic whose words are ALL in the new one (`viventium` already there, an agent
+        writes `viventium-api`) - the established, broader shelf wins, and ties go to the one
+        carrying more entries
+
+    Deliberately NOT the reverse: a new broader topic never gets filed under a narrower existing
+    one. `viventium` arriving while only `viventium-api` exists creates the broad shelf, and the
+    next specific topic snaps onto it. The sprawl unwinds itself rather than deepening.
+
+    `existing` is store.lore_topics() - rows of Topic and n."""
+    cand = str(candidate or '').strip('-')
+    ct = set(_toks(cand))
+    if not ct: return cand
+    rows = [(str(r['Topic'] or ''), int(r['n'] or 0)) for r in (existing or [])]
+    if any(t == cand for t, _ in rows): return cand           # it already is a shelf
+    stem = {w.rstrip('s') for w in ct}
+    best, best_n = None, -1
+    for topic, n in rows:
+        et = set(_toks(topic))
+        if not et: continue
+        if {w.rstrip('s') for w in et} == stem: return topic  # invoice / invoices
+        # the existing shelf is the broader one, and what they share is worth merging on
+        if et < ct and all(len(w) >= 4 and w not in TOPIC_GENERIC for w in et) and n > best_n:
+            best, best_n = topic, n
+    return best or cand
+
+
 def sig_of(topic: str, title: str) -> str:
     """What makes two posts THE SAME post. Topic plus the distinctive words of the title, so an
     agent that re-learns the same thing next month updates the entry instead of adding a
@@ -77,7 +125,8 @@ def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto'
     if not title: raise ValueError('a handbook entry needs a title - one line saying what is true')
     kind = str(kind or 'howto').lower().strip()
     if kind not in KINDS: kind = 'howto'
-    tp = topic_of(topic, cwd, repo)
+    # the shelf it belongs on, not merely the one the agent typed (snap_topic)
+    tp = snap_topic(topic_of(topic, cwd, repo), store.lore_topics())
     lid = store.lore_put({'Topic': tp, 'Title': title, 'Body': ' '.join(str(body or '').split())[:4000],
                           'Kind': kind, 'TaskId': task_id, 'Cwd': cwd or '', 'Sig': sig_of(tp, title)}, author)
     store.audit('lore', lid, 'post', author, 'agent', {'topic': tp, 'kind': kind})

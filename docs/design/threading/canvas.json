@@ -1,0 +1,14 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 520, "h": 500, "title": "A — the tie (leading)" },
+    { "file": "OptionB.dc.html", "x": 620, "y": 0, "w": 520, "h": 500, "title": "B — folded into one row" },
+    { "file": "OptionC.dc.html", "x": 1240, "y": 0, "w": 520, "h": 500, "title": "C — lines, one to another" }
+  ],
+  "annotations": [
+    { "id": "brief", "x": 0, "y": -150, "w": 560,
+      "text": "Three ways to say \"these rows are one thing\", on the real rail.\nSame four rows in each: Nolan's mail, two Teams lines from Jessica, and the meeting — the cluster from your screenshot.\nBelow each: what it costs." },
+    { "id": "pick", "x": 620, "y": -150, "w": 520,
+      "text": "The question underneath: is a thread something you SCAN past (A), something you FOLD away (B), or something you TRACE (C)?" }
+  ],
+  "launch": { "view": "canvas" }
+}

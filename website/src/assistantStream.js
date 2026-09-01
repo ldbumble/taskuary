@@ -16,14 +16,21 @@ export async function* readNdjson(body) {
 // the static demo has no server to stream from: the same events, from a script, at reading
 // speed - the chat is the thing visitors try first and it has to answer
 async function* demoStream(taskId, body) {
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const api = (await import("./api.js")).default;
-  yield { type: "start", session: { provider: "Claude Code · coder (your CLI)" } };
-  await wait(500);
-  yield { type: "progress", detail: "reading the task and the thread it came from" };
-  await wait(800);
-  const { data } = await api.post(`/api/tasks/${taskId}/assistant/messages`, body);
-  yield { type: "done", reply: data.reply, payload: data };
+  const { startDemoAssistant } = await import("./demoApi.js");
+  const queued = [];
+  let wake;
+  const push = (event) => { queued.push(event); wake?.(); wake = null; };
+  // Do not await this promise here. Closing this generator means the view walked away, not
+  // that the task stopped; startDemoAssistant owns the background run and recorded result.
+  startDemoAssistant(taskId, body, push).catch((e) => push({ type: "error", error: e.message }));
+  while (true) {
+    if (!queued.length) await new Promise((resolve) => { wake = resolve; });
+    while (queued.length) {
+      const event = queued.shift();
+      yield event;
+      if (event.type === "done" || event.type === "error") return;
+    }
+  }
 }
 
 export async function* streamAssistant(taskId, body, signal) {

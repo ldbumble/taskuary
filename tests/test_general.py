@@ -1,5 +1,6 @@
 """General work: assistant-ui and xterm are two renderers of one persistent session."""
 import json
+import threading
 import time
 import unittest
 from unittest import mock
@@ -64,6 +65,59 @@ class SharedSessionTests(unittest.TestCase):
             while len(general.history(store, tid)) < 2 and time.time() < limit: time.sleep(.02)
         self.assertEqual([m['role'] for m in general.history(store, tid)], ['user', 'assistant'])
         self.assertIn('Done from terminal.', session.scrollback())
+
+    def test_session_state_keeps_busy_and_the_live_tool_trace_for_a_returning_view(self):
+        store = MemoryStore(); tid = general_task(store)
+        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        entered, release = threading.Event(), threading.Event()
+
+        def fake_build(*args, trace=None, **kwargs):
+            def brain(system, user, **brain_kwargs):
+                trace('tool_call', 'WebSearch', {'tool_call_id': 'search-1', 'args': {'query': 'competitors'}})
+                entered.set(); release.wait(5)
+                trace('tool_result', 'search-1', {'result': 'three sources', 'is_error': False})
+                return 'Here is the comparison.'
+            return brain
+
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(llm, 'build_llm', side_effect=fake_build):
+            session = general.start_session(store, tid, pick='cli:my-claude')
+            worker = threading.Thread(target=lambda: session.send_prompt('Compare them'), daemon=True)
+            worker.start(); self.assertTrue(entered.wait(2))
+            live = session.info()
+            self.assertTrue(live['busy'])
+            self.assertEqual([e['type'] for e in live['trace']], ['start', 'tool_call'])
+            release.set(); worker.join(5)
+        finished = session.info()
+        self.assertFalse(finished['busy'])
+        self.assertEqual([e['type'] for e in finished['trace']], ['start', 'tool_call', 'tool_result'])
+        self.assertGreater(finished['trace_revision'], live['trace_revision'])
+
+    def test_an_owner_started_conversation_does_not_close_itself_after_answering(self):
+        store = MemoryStore(); tid = general_task(store)
+        session = general.GeneralSession(store, tid)
+        session.pick, session.provider = 'cli:coder', 'coder'
+        answer = 'Here is the comparison.\n[[TASKUARY-DONE]] Finished the comparison.'
+        with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), \
+             mock.patch.object(session, '_close_out') as close:
+            self.assertEqual(session.send_prompt('Compare them'), 'Here is the comparison.')
+        close.assert_not_called()
+        self.assertNotEqual(store.get_task(tid)['Status'], 'done')
+
+    def test_source_backed_work_can_still_close_after_answering(self):
+        store = MemoryStore(); tid = general_task(store)
+        mid = store.add_message({'ExternalId': 'source-backed', 'Channel': 'email',
+                                 'Subject': 'Please compare these', 'BodyText': 'Compare them'})
+        store.attach_message(mid, tid)
+        session = general.GeneralSession(store, tid)
+        session.pick, session.provider = 'cli:coder', 'coder'
+        answer = 'Here is the comparison.\n[[TASKUARY-DONE]] Finished the comparison.'
+        timer = mock.Mock()
+        with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), \
+             mock.patch.object(general.threading, 'Timer', return_value=timer) as make_timer:
+            session.send_prompt('Compare them')
+        make_timer.assert_called_once()
+        timer.start.assert_called_once()
 
 
 class GeneralApiTests(unittest.TestCase):

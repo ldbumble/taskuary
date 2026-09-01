@@ -14,7 +14,7 @@ import FIXTURES from "./demoFixtures.json";
 import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
 
-export const DEMO = import.meta.env.VITE_DEMO === "1";
+export const DEMO = import.meta.env?.VITE_DEMO === "1";
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const state = clone(FIXTURES);          // the recording, as this visitor has changed it
@@ -57,6 +57,43 @@ const REPLIES = [
 
 const feedRows = () => (state["/api/feed"]?.data) || [];
 const taskRows = () => (state["/api/tasks"]?.data) || [];
+
+const assistantBox = (taskId) => {
+  const key = `${taskId}:assistant`;
+  const box = state["/api/tasks/detail"][key] ||= { messages: [], providers: [], session: null };
+  box.session ||= { sid: `demo${taskId}`, alive: true, provider: "Claude Code · coder (your CLI)",
+    label: "Taskuary assistant", mode: "assistant", model: "", pick: "cli:coder", busy: false,
+    trace: [], trace_revision: 0 };
+  return box;
+};
+
+// Start the demo's answer OUTSIDE the mounted assistant-ui generator. If the visitor clicks
+// another task, React stops listening but this timer still completes and files the reply in the
+// recorded task state. Coming back therefore behaves like the desktop server instead of losing
+// both the progress and the answer at navigation time.
+export const startDemoAssistant = (taskId, body, emit = () => {}) => {
+  const box = assistantBox(taskId);
+  const asked = String(body?.text || "").trim();
+  if (!asked) return Promise.reject(new Error("empty message"));
+  box.messages.push({ id: `u${++nextId}`, role: "user", content: [{ type: "text", text: asked }] });
+  box.session.busy = true;
+  box.session.trace = [{ type: "start", session: { provider: box.session.provider } }];
+  box.session.trace_revision += 1;
+  emit({ type: "start", session: clone(box.session) });
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const progress = { type: "progress", name: "text", detail: "reading the task and the thread it came from" };
+      box.session.trace.push(progress); box.session.trace_revision += 1; emit(clone(progress));
+      setTimeout(() => {
+        const said = REPLIES[box.messages.length % REPLIES.length];
+        box.messages.push({ id: `a${++nextId}`, role: "assistant", content: [{ type: "text", text: said }] });
+        box.session.busy = false;
+        const done = { type: "done", reply: said, payload: clone(box) };
+        emit(done); resolve(done);
+      }, 800);
+    }, 500);
+  });
+};
 
 // what the visitor DID, named. Every write goes through here and the panel's reads of one
 // message or one task are the only reads that mean "they opened something", so this is the
@@ -122,9 +159,7 @@ const write = (method, url, body) => {
   }
 
   if ((m = p.match(/^\/api\/tasks\/(\d+)\/assistant\/(messages|session)$/))) {
-    const box = state["/api/tasks/detail"][`${m[1]}:assistant`] ||= { messages: [], providers: [], session: null };
-    box.session = box.session || { sid: `demo${m[1]}`, alive: true, provider: "Claude Code · coder (your CLI)",
-      label: "Taskuary assistant", mode: "assistant", model: "", pick: "cli:coder", busy: false };
+    const box = assistantBox(m[1]);
     if (m[2] === "session") return { ...box, providers: box.providers || [] };
     const asked = String(body?.text || "").trim();
     if (asked) {

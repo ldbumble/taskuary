@@ -296,6 +296,12 @@ class GeneralSession:
         self._input, self._lock = '', threading.Lock()
         self._cancel = None                  # the stop switch for the answer being written now
         self.cli_sid = ''                    # the CLI's OWN conversation, resumed turn to turn
+        # The browser that asked the question is only one VIEW of this session. Keep the
+        # structured tool/progress stream here as well as sending it down that browser's
+        # request, so leaving this task and coming back does not turn visible work into a blank
+        # assistant message. This is intentionally the latest turn only; the final prose is
+        # already durable in task comments, while the trace explains how that answer was made.
+        self.trace, self.trace_revision = [], 0
         from .witness import Witness
         self.witness = Witness()
         self._restore_terminal()
@@ -338,6 +344,26 @@ class GeneralSession:
     def tail(self, n=3):
         from .terminal import plain
         return [line for line in plain(self.scrollback()[-8000:]).splitlines() if line.strip()][-n:]
+
+    @staticmethod
+    def _trace_detail(kind, detail):
+        """Bound provider output before it becomes part of every assistant-state response."""
+        if not isinstance(detail, dict): return str(detail or '')[:1600]
+        clean = dict(detail)
+        if 'result' in clean: clean['result'] = str(clean.get('result') or '')[:6000]
+        if 'args' in clean:
+            try:
+                raw = json.dumps(clean['args'], default=str)
+                if len(raw) > 6000: clean['args'] = {'summary': raw[:6000] + '…'}
+            except (TypeError, ValueError): clean['args'] = {'summary': str(clean['args'])[:6000]}
+        return clean
+
+    def _remember_trace(self, kind, name='', detail=None):
+        event = {'type': str(kind or ''), 'name': str(name or ''),
+                 'detail': self._trace_detail(kind, detail)}
+        self.trace.append(event)
+        if len(self.trace) > 100: self.trace = self.trace[-100:]
+        self.trace_revision += 1
 
     def _take(self, wait: float, cancel=None) -> bool:
         """Wait our turn to speak.
@@ -388,6 +414,8 @@ class GeneralSession:
         self.busy, self.last = True, time.time()
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
+        self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]
+        self.trace_revision += 1
         try:
             if connector_id is not None or model or pick:
                 self.pick, self.provider, self.model = _selected(self.store, connector_id, model, pick)
@@ -403,6 +431,7 @@ class GeneralSession:
             if paths and self.pick.startswith('cli:'):
                 user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
             def visible(kind, name, detail):
+                self._remember_trace(kind, name, detail)
                 if trace: trace(kind, name, detail)
                 if kind == 'tool_call':
                     target = next(iter((detail.get('args') or {}).values()), '') if isinstance(detail, dict) else ''
@@ -444,9 +473,16 @@ class GeneralSession:
             self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')
             # AFTER the turn is filed, and off this thread: closing runs coder.wrap, which closes
             # this very session - doing it inline would kill the pty from inside its own answer.
-            if closing is not None: threading.Timer(0.1, self._close_out, args=(closing,)).start()
+            # A close marker only has meaning for source-backed work: there is an inbound
+            # message/event waiting for a completed answer. A conversation the owner opened
+            # manually is still a conversation after one answer. Enforce that boundary here,
+            # even if a resumed model remembers an older close instruction and emits the marker.
+            has_source = bool((self.store.task_detail(self.task_id) or {}).get('messages'))
+            if closing is not None and has_source:
+                threading.Timer(0.1, self._close_out, args=(closing,)).start()
             return reply
         except Exception as e:
+            self._remember_trace('error', 'assistant', {'result': str(e), 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {e}\r\n\r\n')
             raise
         finally:
@@ -487,6 +523,7 @@ class GeneralSession:
         from . import browserview
         return {'sid': self.sid, 'label': self.label, 'cwd': '', 'taskId': self.task_id,
                 'agent': self.agent, 'cli': 'taskuary', 'mode': self.mode, 'alive': self.alive,
+                'busy': self.busy, 'trace': list(self.trace), 'trace_revision': self.trace_revision,
                 'started': self.started, 'idle': self.idle(), 'phase': self.phase(),
                 'waiting': self.waiting(), 'cmd': f'{self.provider or "AI connector"} {self.model}'.strip(),
                 'provider': self.provider, 'pick': self.pick,

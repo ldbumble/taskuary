@@ -2255,11 +2255,31 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
   const shown = full || !long ? text : excerpt;
   const today = new Date().toLocaleDateString("sv-SE");
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
+  // The strip is for PICKING a message. It drew one chip per message in the thread, which was
+  // fine while a task-less row fetched only itself - then /thread started handing over the whole
+  // conversation and a WhatsApp group chat filled six rows with a month of "Gabi · 08-30". The
+  // recent ones, and a way back to the rest.
+  const CHIPS = 10;
+  const [allChips, setAllChips] = useState(false);
+  useEffect(() => setAllChips(false), [focusId]);
+  const earlier = Math.max(0, msgs.length - CHIPS);
+  let chips = allChips || !earlier ? msgs : msgs.slice(-CHIPS);
+  // ...and never hide the one being read: an old message opened from the rail must show as picked
+  if (cur && !chips.some((m) => m.MessageId === cur.MessageId)) chips = [cur, ...chips];
   return (
     <>
       {msgs.length > 1 && (
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 0.75 }}>
-          {msgs.map((m) => {
+          {!!earlier && !allChips && (
+            <Box onClick={() => setAllChips(true)}
+              title={`show the other ${earlier} on this thread`}
+              sx={{ px: 1.1, py: 0.35, borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                border: `1px dashed ${BORDER}`, color: FAINT, bgcolor: "transparent", whiteSpace: "nowrap",
+                "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
+              +{earlier} earlier
+            </Box>
+          )}
+          {chips.map((m) => {
             const on = cur && m.MessageId === cur.MessageId;
             const you = m.Status === "context";
             return (

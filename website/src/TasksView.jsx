@@ -109,6 +109,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // one you had moved to, while the funnel below still belonged to the new one - two tasks
   // in one pane, and "Done" a click away from the wrong session.
   const selRef = useRef(selected); selRef.current = selected;
+  // The Board's new-task box asks which checkout a coding task lands in; this one did not, so the
+  // same task made here fell back to guess_repo matching the words against SOUL.md's repo map -
+  // right often enough to be trusted, and wrong silently when it was not.
+  const [repos, setRepos] = useState([]);
+  useEffect(() => {
+    api.get("/api/sources").then(({ data }) => setRepos(
+      (data.data || []).filter((x) => x.Channel === "github" && x.Active).map((x) => x.Address)
+    )).catch(() => {});
+  }, []);
   // A refresh already in flight when the tab is left can finish after the refresh
   // fired on return. Only the newest request is allowed to repaint the list.
   const taskLoadSeq = useRef(0);
@@ -196,7 +205,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     // wanted. It gets the same ask tag, so the chat opens with the question already asked
     // instead of with the owner's own words sitting in a box above an empty thread.
     const ask = isGeneralKind(nt.Kind) && String(nt.Summary || "").trim();
-    const { data } = await api.post("/api/tasks", { ...nt, ...(ask ? { Tags: ASK_TAG } : {}) });
+    // `repo` is not a task column - it rides as a tag, the same one the Board writes
+    const { repo, ...fields } = nt;
+    const tags = [repo && nt.Kind === "coding" ? `repo:${repo}` : "", ask ? ASK_TAG : ""].filter(Boolean);
+    const { data } = await api.post("/api/tasks", { ...fields, ...(tags.length ? { Tags: tags.join(",") } : {}) });
     setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
     setFilter("live"); loadTasks(); onSelect(data.taskId);
   };
@@ -950,6 +962,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
               {PRIORITIES.map((p) => <MenuItem key={p} value={p}>{p}</MenuItem>)}
             </Select>
           </Box>
+          {nt.Kind === "coding" && !!repos.length && (
+            <Box>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
+                Repository — the agent works in this checkout
+              </Typography>
+              <Select fullWidth size="small" value={nt.repo || ""} displayEmpty
+                onChange={(e) => setNt({ ...nt, repo: e.target.value })}>
+                {/* empty is not "none": it is "you decide", which is guess_repo reading the ask
+                    against SOUL.md's repo map - the behaviour this box used to have unavoidably */}
+                <MenuItem value="" sx={{ fontSize: 12.5 }}>Let Taskuary pick from what I wrote</MenuItem>
+                {repos.map((r) => <MenuItem key={r} value={r} sx={{ fontSize: 12.5 }}>{r}</MenuItem>)}
+              </Select>
+            </Box>
+          )}
           <Typography variant="caption" sx={{ color: DIM }}>
             General / non-coding opens the visual assistant without a repository. Coding opens the agent's repository terminal. Reply creates a draft in Review.
           </Typography>

@@ -1384,24 +1384,24 @@ const StoryTimelineStep = ({ title, status, onOpen, first, last, state = "idle" 
   const dot = state === "current" ? "#c7a258" : state === "done" ? "#718f74" : "#cfc8bc";
   return (
     <Box component="button" type="button" onClick={onOpen} aria-label={`Open ${title} details`}
-      sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0, minWidth: 0, flex: 1,
-        position: "relative", cursor: "pointer", font: "inherit", color: "inherit",
-        "&:hover .tq-story-title": { color: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 3 } }}>
-      <Box sx={{ height: 18, position: "relative" }}>
-        <Box sx={{ position: "absolute", top: 8, left: first ? "50%" : 0, right: last ? "50%" : 0,
-          height: 1, bgcolor: "#d8d2c8" }} />
-        <Box sx={{ position: "absolute", zIndex: 1, top: 3.5, left: "50%", transform: "translateX(-50%)",
-          width: 10, height: 10, borderRadius: "50%", bgcolor: dot, border: `2px solid ${PANEL}`,
+      sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0, width: "100%", minWidth: 0,
+        display: "grid", gridTemplateColumns: "22px 82px minmax(0, 1fr) 18px", alignItems: "center",
+        minHeight: 38, textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit",
+        borderRadius: 1, "&:hover": { bgcolor: "#f7f4ef" },
+        "&:hover .tq-story-title": { color: ACCENT },
+        "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+      <Box sx={{ alignSelf: "stretch", position: "relative" }}>
+        <Box sx={{ position: "absolute", left: 10.5, top: first ? "50%" : 0, bottom: last ? "50%" : 0,
+          width: 1, bgcolor: "#d8d2c8" }} />
+        <Box sx={{ position: "absolute", zIndex: 1, top: "50%", left: 6.5, transform: "translateY(-50%)",
+          width: 9, height: 9, borderRadius: "50%", bgcolor: dot, border: `2px solid ${PANEL}`,
           boxShadow: `0 0 0 1px ${dot}` }} />
       </Box>
-      <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 0.55,
-        px: 0.5, minWidth: 0 }}>
-        <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
-          transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
-        <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
-          fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
-        <ChevronRightIcon sx={{ color: FAINT, fontSize: 12, flexShrink: 0 }} />
-      </Box>
+      <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
+        transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
+      <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
+        fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
+      <ChevronRightIcon sx={{ color: FAINT, fontSize: 13 }} />
     </Box>
   );
 };
@@ -1576,8 +1576,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
               {tab === "summary" && (
-                <Box aria-label="Workflow summary" sx={{ display: "flex", alignItems: "flex-start",
-                  px: 0.75, pt: 1.1, pb: 1.35 }}>
+                <Box aria-label="Workflow summary" sx={{ width: "100%", maxWidth: 540,
+                  px: 0.75, pt: 0.45, pb: 0.75 }}>
                   <StoryTimelineStep title="Message" first state="done"
                     status={(detail?.messages || []).length > 1 ? `${detail.messages.length} messages` : "received"}
                     onOpen={() => setTab("msg")} />

@@ -37,3 +37,19 @@ test("a visible tab applies the event immediately", () => {
   stop();
   delete globalThis.document;
 });
+
+test("hello wakes every subscriber so a reconnect refetches", () => {
+  const listeners = {};
+  globalThis.document = {
+    visibilityState: "visible",
+    addEventListener: (e, fn) => { listeners[e] = fn; },
+    removeEventListener: (e) => { delete listeners[e]; },
+  };
+  const seen = [];
+  const a = onLive("feed-changed", (ev) => seen.push("a:" + ev.type));
+  const b = onLive("task-changed", (ev) => seen.push("b:" + ev.type));
+  __testFanout({ type: "hello" });
+  assert.deepEqual(seen, ["a:hello", "b:hello"]);
+  a(); b();
+  delete globalThis.document;
+});

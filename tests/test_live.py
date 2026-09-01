@@ -4,30 +4,74 @@ feed-changed / task-changed / run-tail are invalidation, not payloads: the tab a
 knows how to GET /api/feed with an ETag. emit() is safe from a worker thread (the poll,
 a pty byte) because the fan-out hops onto the asyncio loop that owns the sockets.
 """
-import unittest
+import asyncio, unittest
 
-from fastapi.testclient import TestClient
+from taskuary import live
+from taskuary.store import MemoryStore
 
-from taskuary import live, server
+
+class _Tab:
+    """A socket the bus can send_json to, without standing up FastAPI."""
+    def __init__(self):
+        self.sent = []
+    async def send_json(self, msg):
+        self.sent.append(msg)
+    async def receive_text(self):
+        await asyncio.Event().wait()
+
+
+def _run(coro):
+    return asyncio.run(coro)
 
 
 class LiveSocketTests(unittest.TestCase):
     def tearDown(self):
         live.reset()
+
+    def test_serve_says_hello(self):
+        tab = _Tab()
+        async def once():
+            t = asyncio.create_task(live.serve(tab))
+            for _ in range(20):
+                await asyncio.sleep(0)
+                if tab.sent: break
+            t.cancel()
+            try: await t
+            except (asyncio.CancelledError, Exception): pass
+        _run(once())
+        self.assertEqual(tab.sent[0]['type'], 'hello')
+
     def test_a_write_reaches_the_tab(self):
-        with TestClient(server.app) as c:
-            with c.websocket_connect('/api/events/ws') as ws:
-                self.assertEqual(ws.receive_json()['type'], 'hello')
-                mid = server.store.add_message({
-                    'external_id': 'live-sock-1', 'channel': 'email', 'subject': 'hi',
-                    'body': 'there', 'from_email': 'a@b.c', 'status': 'feed'})
-                live.flush()
-                kinds = [ws.receive_json()['type']]
-                for _ in range(3):
-                    if 'feed-changed' in kinds: break
-                    kinds.append(ws.receive_json()['type'])
-                self.assertIn('feed-changed', kinds)
-                self.assertTrue(mid)
+        tab, s = _Tab(), MemoryStore()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            mid = s.add_message({
+                'external_id': 'live-sock-1', 'channel': 'email', 'subject': 'hi',
+                'body': 'there', 'from_email': 'a@b.c', 'status': 'feed'})
+            live.flush()
+            for _ in range(20):
+                await asyncio.sleep(0)
+                if any(m.get('type') == 'feed-changed' for m in tab.sent): break
+            return mid
+        mid = _run(once())
+        self.assertIn('feed-changed', [m['type'] for m in tab.sent])
+        self.assertTrue(mid)
+
+    def test_a_task_write_reaches_the_tab(self):
+        tab, s = _Tab(), MemoryStore()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            tid = s.create_task({'Title': 'live-task', 'Status': 'open'}, 't')
+            live.flush()
+            for _ in range(20):
+                await asyncio.sleep(0)
+                if any(m.get('type') == 'task-changed' for m in tab.sent): break
+            return tid
+        tid = _run(once())
+        self.assertIn('task-changed', [m['type'] for m in tab.sent])
+        self.assertTrue(tid)
 
     def test_unknown_kinds_are_dropped(self):
         live.emit('not-a-kind')
@@ -44,6 +88,12 @@ class LiveSocketTests(unittest.TestCase):
             self.assertEqual(live._pending, {})
         finally:
             live.detach(dummy)
+
+    def test_no_listeners_means_no_timer(self):
+        """A poll writing forty rows must not spawn forty Timers when nobody has the UI open."""
+        live.emit('feed-changed', message_id=1)
+        self.assertEqual(live._pending, {})
+        self.assertEqual(live._timers, {})
 
 
 if __name__ == '__main__':

@@ -1471,9 +1471,9 @@ export const WorkStrip = ({ taskId, live, session, provenance }) => {
       } catch { if (alive) setFailed(true); }
     };
     load(true);
-    // the witness is cheap and polled; git's per-file diff is not, so it refreshes only when the session ends
-    const id = live ? setInterval(() => load(false), 5000) : 0;
-    return () => { alive = false; clearInterval(id); };
+    // the witness is cheap and pushed as run-tail; git's per-file diff is not, so it refreshes only when the session ends
+    const stop = live ? onLive("run-tail", () => load(false)) : undefined;
+    return () => { alive = false; stop?.(); };
   }, [taskId, live]);
   const w = d?.work;
   if (!d) return failed ? (

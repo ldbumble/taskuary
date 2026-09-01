@@ -1693,6 +1693,19 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
 
               {tab === "reply" && (
                 <Box>
+                  {/* YOU answered it, somewhere else. Not the same fact as "Sent reply", which
+                      means Taskuary drafted it and something here sent it - and the panel said
+                      that about both, so a message handled in Teams read as one we had answered
+                      for you. The reply itself is on the Message tab, in the thread. */}
+                  {sel.AnsweredAt && !replied && !pending && (
+                    <Box sx={{ mb: 1.25 }}>
+                      <PanelLabel>You answered this</PanelLabel>
+                      <Typography variant="caption" sx={{ color: DIM, display: "block" }}>
+                        in {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt)}
+                        {" "}— nothing here sent it, and nothing is waiting on you.
+                      </Typography>
+                    </Box>
+                  )}
                   {replied && (
                     <Box>
                       <PanelLabel>Sent reply</PanelLabel>

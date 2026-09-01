@@ -29,6 +29,8 @@ export const STATES = {
              hint: "a note you left yourself — nothing is working it, and nothing will" },
   done:    { mark: "✅", word: "done",          role: "done",
              hint: "closed out — kept for the record" },
+  answered: { mark: "↩️", word: "you answered", role: "done",
+             hint: "you replied to this yourself, outside Taskuary — nothing here is waiting on you" },
   todo:    { mark: "📋", word: "on your list",  role: "working",
              hint: "real work with nobody on it — send it to an agent, or do it yourself" },
   fyi:     { mark: "👀", word: "fyi",           role: null,
@@ -55,6 +57,10 @@ export function stateOf(row) {
   if (row.Working) return "working";
   if (hasTag(row, HOLD_TAG)) return "held";
   if (row.TaskKind === "note") return "mine";
+  // you answered it in Teams or Outlook and never came back here. The reply is ingested as a
+  // `context` row (channels.ingest_own_message); until now nothing read it, so a message you
+  // had already dealt with sat on your list for good.
+  if (row.AnsweredAt) return "answered";
   // "waving" means an AGENT stopped and asked. It is not a synonym for NeedsYou, which only
   // says nobody is moving this - conflating them put the one loud mark on every open task and
   // made the two rows that were genuinely stuck invisible among them.

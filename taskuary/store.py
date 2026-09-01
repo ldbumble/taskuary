@@ -1295,11 +1295,22 @@ class SQLiteStore:
     # A note you left yourself is work on your list, but it is not work waiting on you UNTIL
     # ITS TIME: "chase this Tuesday" nagging from Monday is the thing that makes a reminder
     # useless. A note's row is stamped with when it is FOR (ownwork.note), so the clock decides.
-    NEEDS_YOU = """(CASE WHEN rv.Status='pending'
+    # ...and it is NOT on you once you have already answered it yourself, somewhere else.
+    # channels.ingest_own_message stores the owner's own lines as `context` rows on the same
+    # conversation - its docstring has said "so the panel shows it was answered" since it was
+    # written, and nothing ever read them. So a Teams message answered in Teams thirty seconds
+    # later still counted as waiting on the owner, forever. A pending draft still wins: that is
+    # a decision nobody has taken.
+    ANSWERED_AT = """(SELECT MAX(o.SentAt) FROM message o
+                       WHERE o.ConversationId = m.ConversationId AND IFNULL(m.ConversationId,'') <> ''
+                         AND o.Status = 'context' AND o.SentAt > m.SentAt)"""
+    NEEDS_YOU_T = """(CASE WHEN rv.Status='pending'
                           OR (m.TaskId IS NOT NULL AND IFNULL(t.Status,'') NOT IN ('done', 'dropped')
                               AND rn.TaskId IS NULL
-                              AND (IFNULL(t.Kind,'') <> 'note' OR m.SentAt <= datetime('now', 'localtime')))
+                              AND (IFNULL(t.Kind,'') <> 'note' OR m.SentAt <= datetime('now', 'localtime'))
+                              AND {answered} IS NULL)
                     THEN 1 ELSE 0 END)"""
+    NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT)
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
@@ -1309,7 +1320,8 @@ class SQLiteStore:
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,
                        rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind,
-                       IFNULL(att.n, 0) Attachments
+                       IFNULL(att.n, 0) Attachments,
+                       {self.ANSWERED_AT} AnsweredAt
                 FROM message m
                 LEFT JOIN task t ON t.TaskId=m.TaskId
                 LEFT JOIN (

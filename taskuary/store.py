@@ -1197,13 +1197,17 @@ class SQLiteStore:
         if self.get_agent(name): self._exec('UPDATE agent SET Kind=?, Runner=?, Config=? WHERE Name=?', (kind, runner, config, name))
         else: self._exec('INSERT INTO agent (Name,Kind,Runner,Config) VALUES (?,?,?,?)', (name, kind, runner, config))
     def start_run(self, task_id, agent_name, instruction, by):
-        return self._exec('INSERT INTO run (TaskId,AgentName,Instruction,DispatchedBy,StartedAt) VALUES (?,?,?,?,?)',
-                          (task_id, agent_name, instruction, by, _now()))
+        rid = self._exec('INSERT INTO run (TaskId,AgentName,Instruction,DispatchedBy,StartedAt) VALUES (?,?,?,?,?)',
+                         (task_id, agent_name, instruction, by, _now()))
+        self._poke('run-tail', 'task-changed', task_id=task_id, run_id=rid)
+        return rid
     def update_run(self, run_id, fields, finished=False):
         cols = [c for c in RUN_COLS if c in fields]
         fin = f", FinishedAt='{_now()}'" if finished else ''
         self._exec(f"UPDATE run SET {','.join(f'{c}=?' for c in cols)}, UpdatedAt=?{fin} WHERE RunId=?",
                    [fields[c] for c in cols] + [_now(), run_id])
+        row = self.get_run(run_id)
+        if row: self._poke('run-tail', 'task-changed', task_id=row.get('TaskId'), run_id=run_id)
     def get_run(self, run_id): return self._one('SELECT * FROM run WHERE RunId=?', (run_id,))
     def running_runs(self):
         return self._rows("SELECT * FROM run WHERE Status='running' ORDER BY RunId DESC")

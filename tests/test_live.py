@@ -107,6 +107,131 @@ class LiveSocketTests(unittest.TestCase):
         self.assertEqual(live._pending, {})
         self.assertEqual(live._timers, {})
 
+    def test_a_closed_loop_is_a_noop(self):
+        """The poll thread can emit after a TestClient's asyncio.run has finished. That used
+        to surface as 'Event loop is closed' on the next test."""
+        tab = _Tab()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+        _run(once())
+        live.emit('feed-changed', message_id=1)   # loop is gone
+        live.flush()                              # must not raise
+
+    def test_a_dead_tab_is_dropped(self):
+        class Dead:
+            async def send_json(self, msg):
+                raise RuntimeError('gone')
+        dead = Dead()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(dead)
+            live.emit('feed-changed', message_id=1)
+            live.flush()
+            for _ in range(20):
+                await asyncio.sleep(0)
+                if dead not in live._clients: break
+        _run(once())
+        self.assertNotIn(dead, live._clients)
+
+    def test_a_worker_thread_reaches_the_tab(self):
+        """The mailbox clock and a pty byte both emit off the asyncio thread."""
+        import threading
+        tab = _Tab()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            def poke():
+                live.emit('run-tail', run_id=3)
+                live.flush()
+            threading.Thread(target=poke).start()
+            for _ in range(40):
+                await asyncio.sleep(0.01)
+                if any(m.get('type') == 'run-tail' for m in tab.sent): break
+        _run(once())
+        self.assertIn('run-tail', [m['type'] for m in tab.sent])
+
+    def test_feed_and_task_coalesce_separately(self):
+        dummy = object()
+        live.attach(dummy)
+        try:
+            live.emit('feed-changed', message_id=1)
+            live.emit('task-changed', task_id=2)
+            live.emit('feed-changed', message_id=9)
+            self.assertEqual(live._pending['feed-changed']['message_id'], 9)
+            self.assertEqual(live._pending['task-changed']['task_id'], 2)
+        finally:
+            live.detach(dummy)
+
+    def test_ingest_status_pokes_the_timeline(self):
+        tab, s = _Tab(), MemoryStore()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            try:
+                s.set_setting('ingest_status', '{"state":"running"}', 't')
+                live.flush()
+                for _ in range(20):
+                    await asyncio.sleep(0)
+                    if any(m.get('type') == 'feed-changed' for m in tab.sent): break
+            finally:
+                live.reset()
+        _run(once())
+        self.assertIn('feed-changed', [m['type'] for m in tab.sent])
+
+    def test_a_run_pokes_the_studio(self):
+        tab, s = _Tab(), MemoryStore()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            try:
+                tid = s.create_task({'Title': 'run-poke', 'Status': 'open'}, 't')
+                live.flush()
+                tab.sent.clear()
+                s.start_run(tid, 'coder', 'go', 't')
+                live.flush()
+                for _ in range(20):
+                    await asyncio.sleep(0)
+                    if any(m.get('type') == 'run-tail' for m in tab.sent): break
+            finally:
+                live.reset()
+        _run(once())
+        kinds = [m['type'] for m in tab.sent]
+        self.assertIn('run-tail', kinds)
+        self.assertIn('task-changed', kinds)
+
+
+class EventsSocketTests(unittest.TestCase):
+    """The real FastAPI socket, not the bus unit tests above."""
+
+    def tearDown(self):
+        live.reset()
+
+    def test_the_events_socket_says_hello(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        with TestClient(server.app) as c:
+            with c.websocket_connect('/api/events/ws') as ws:
+                self.assertEqual(ws.receive_json()['type'], 'hello')
+                server.store.create_task({'Title': 'ws-task', 'Status': 'open'}, 't')
+                live.flush()
+                self.assertEqual(ws.receive_json()['type'], 'task-changed')
+
+    def test_the_events_socket_wants_the_same_token_as_the_rest(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        from starlette.websockets import WebSocketDisconnect
+        server.cfg['server']['token'] = 's3cret'
+        try:
+            with TestClient(server.app) as c:
+                with self.assertRaises(WebSocketDisconnect):
+                    with c.websocket_connect('/api/events/ws') as ws:
+                        ws.receive_json()
+                with c.websocket_connect('/api/events/ws?token=s3cret') as ws:
+                    self.assertEqual(ws.receive_json()['type'], 'hello')
+        finally:
+            server.cfg['server'].pop('token', None)
+
 
 if __name__ == '__main__':
     unittest.main()

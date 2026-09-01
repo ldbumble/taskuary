@@ -92,3 +92,15 @@ export function onLive(kinds, fn) {
 export function __testFanout(ev) {
   fanout(ev);
 }
+
+export function __testReset() {
+  if (ws) {
+    ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.onopen = null;
+    try { ws.close(); } catch { /* already gone */ }
+  }
+  ws = null;
+  retry = 0;
+  clearTimeout(timer); timer = 0;
+  if (fallback) { clearInterval(fallback); fallback = 0; }
+  subs.clear();
+}

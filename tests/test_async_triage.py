@@ -130,6 +130,32 @@ class DeferredIngestTests(unittest.TestCase):
         self.assertEqual(asked, [])
         self.assertEqual(self.s.pending_triage()[0]['Status'], 'triaging')
 
+    def test_the_next_call_after_deferred_judges(self):
+        """A TestClient lifespan used to leave deferred() on for the whole process, so the
+        next test stored instead of judging (macOS: 'queued' where 'filed' was due)."""
+        asked = []
+        with ingest.deferred():
+            ingest.ingest_message(self.s, mail(1), llm=oracle('task', asked))
+        self.assertEqual(asked, [])
+        out = ingest.ingest_message(self.s, mail(2), llm=oracle('task', asked))
+        self.assertEqual(out['status'], 'created')
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(self.s.get_message(out['message_id'])['Status'], 'routed')
+        self.assertEqual(self.s.pending_triage()[0]['ExternalId'], 'q1')   # the deferred one is still waiting
+
+    def test_a_worker_sees_the_parent_is_deferring_without_inheriting_it(self):
+        """poll_channels' pool asks _parent_deferring(); a random thread must not start
+        storing just because some other thread is inside deferred()."""
+        import threading
+        seen = {}
+        def worker():
+            seen['parent'] = ingest._parent_deferring()
+            seen['self'] = ingest._deferring()
+        t = threading.Thread(target=worker)
+        with ingest.deferred():
+            t.start(); t.join(2)
+        self.assertEqual(seen, {'parent': True, 'self': False})
+
 
 if __name__ == '__main__':
     unittest.main()

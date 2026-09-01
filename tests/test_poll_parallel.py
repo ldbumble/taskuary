@@ -114,6 +114,33 @@ class ParallelPollTests(unittest.TestCase):
         self.assertTrue(asked)
         self.assertEqual(s.pending_triage(), [])
 
+    def test_workers_judge_when_the_parent_is_not_deferring(self):
+        """Without a parent deferred(), the pool must not wrap itself in one - that would
+        queue every catch-up that is not a TestClient poll."""
+        from taskuary import ingest
+        s = MemoryStore()
+        arm(s, 'outlook')
+        arm(s, 'slack')
+        mail = {'id': 'm2', 'subject': 'hi', 'isRead': True, 'hasAttachments': False,
+                'from': {'emailAddress': {'name': 'A', 'address': 'a@b.c'}},
+                'body': {'content': 'please look', 'contentType': 'text'},
+                'conversationId': 'c2', 'receivedDateTime': '2026-08-20T19:03:00Z',
+                'webLink': 'https://outlook/2', 'toRecipients': [], 'ccRecipients': []}
+        def mails(*a, **k):
+            if k.get('folder') == 'sentitems': return []
+            return [mail]
+        asked = []
+        def llm(*a, **k):
+            asked.append(1)
+            return '{"intent": "fyi", "why": "t"}'
+        with mock.patch.object(channels, '_mail_msgs', side_effect=mails), \
+             mock.patch.object(channels, '_slack', return_value={'messages': [{'ts': '1.0', 'text': 'hi', 'user': 'U'}]}), \
+             mock.patch.object(channels, 'graph_token', return_value='t'), \
+             mock.patch('taskuary.llm.build_llm', return_value=llm):
+            channels.poll_channels(s)
+        self.assertTrue(asked, 'workers must judge when nobody is deferring')
+        self.assertEqual(s.pending_triage(), [])
+
 
 if __name__ == '__main__':
     unittest.main()

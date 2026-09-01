@@ -1048,6 +1048,18 @@ class FindCheckoutTests(unittest.TestCase):
         finally:
             locked.chmod(0o755)
 
+    def test_the_filesystem_root_is_not_a_search_root(self):
+        """A checkout at /workspace used to walk from /. Pin that we never iterdir '/'."""
+        walked = []
+        real = Path.iterdir
+        def spy(self):
+            walked.append(str(self))
+            return real(self)
+        with mock.patch.object(Path, 'iterdir', spy):
+            terminal.find_checkout('acme/nowhere', {'cwd': '/workspace'}, budget=80, seconds=1)
+        self.assertNotIn('/', walked)
+        self.assertNotIn('/etc', walked)
+
     def test_open_session_adopts_the_found_path_and_remembers_it(self):
         root, co = self._tree()
         server.store.upsert_agent('finder', 'coding', 'cli',

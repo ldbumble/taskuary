@@ -130,6 +130,17 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('after the last session ended', start.call_args[1]['instruction'])
         self.assertEqual({w['How'] for w in s.waitroom(tid)}, {'seeded'})
 
+    def test_reopen_keeps_the_previous_coder_and_checkout(self):
+        import os
+        s = MemoryStore(); tid = task(s)
+        s.add_transcript(tid, 'old', 'worked here', 'codex-specialist', os.getcwd())
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(terminal, 'start_on_task', return_value={'sid': 'new'}) as start:
+            out = waitroom.add(s, tid, 'make the implementation changes')
+        self.assertEqual((out['delivered'], out['state']), (1, 'restarted'))
+        self.assertEqual(start.call_args.args[:3], (s, tid, 'codex-specialist'))
+        self.assertEqual(start.call_args.kwargs['cwd'], os.getcwd())
+
     def test_a_closed_task_holds_and_a_full_house_waits(self):
         s = MemoryStore(); done = task(s, 'done'); open_ = task(s, 'open')
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'start_on_task') as start:

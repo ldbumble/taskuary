@@ -251,7 +251,8 @@ def task_detail(task_id: int):
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
     return {**d, 'session': hub_term.for_task(task_id, tail=3),
-            'transcript': {'agent': tr['Agent'], 'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
+            'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'],
+                           'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
 
 def _assistant_payload(task_id: int, session=None):
     from . import general
@@ -452,6 +453,33 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
     ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None))
     return {'coder': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
+
+@app.post('/api/tasks/{task_id}/continue')
+def continue_task(task_id: int, body: CodeBody):
+    """Continue completed coding work without pretending a dead PTY is still alive.
+
+    The transcript is the durable session record. Reopen the same configured agent in the same
+    checkout and seed the new terminal with the owner's next instruction plus the saved result.
+    If that agent profile was removed, stop and say so instead of silently changing coders.
+    """
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    instruction = str(body.instruction or '').strip()
+    if not instruction: raise HTTPException(422, 'say what code changes you want next')
+    previous = store.last_transcript(task_id) or {}
+    if hub_term.for_task(task_id): raise HTTPException(409, 'this task already has a live coding session')
+    from . import agents as hub_agents
+    agent = str(previous.get('Agent') or body.agent or hub_agents.default_agent(store)).strip()
+    if not store.get_agent(agent):
+        raise HTTPException(422, f'the previous coder "{agent}" is no longer configured; choose a coder from Start session')
+    try:
+        session = hub_term.start_on_task(store, task_id, agent, body.model, instruction, ACTOR,
+                                         cwd=previous.get('Cwd') or None)
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        raise HTTPException(422, str(e))
+    store.audit('task', task_id, 'continue', ACTOR,
+                detail={'agent': agent, 'fromSid': previous.get('Sid'), 'cwd': previous.get('Cwd')})
+    return {'continued': True, 'agent': agent, 'fromSession': previous.get('Sid'), 'session': session}
 
 @app.post('/api/tasks/{task_id}/comments')
 def comment(task_id: int, body: TextBody):

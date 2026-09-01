@@ -89,6 +89,27 @@ const write = (method, url, body) => {
     return { taskId: id, ref: row.ref };
   }
 
+  if (method === "post" && (m = p.match(/^\/api\/tasks\/(\d+)\/continue$/))) {
+    const id = Number(m[1]);
+    const detail = state["/api/tasks/detail"]?.[m[1]];
+    if (!detail) throw new Error("task not found");
+    const report = [...(detail.comments || [])].reverse().find((c) => String(c.Body || "").startsWith("CODER REPORT"));
+    const agent = detail.transcript?.agent || report?.Actor || "coder";
+    const sid = `continued${id}`;
+    const cwd = detail.transcript?.cwd || detail.runs?.find((r) => r.AgentName === agent)?.Cwd || "~/northwind/importers";
+    const instruction = String(body?.instruction || "").trim();
+    const terminal = { sid, taskId: id, agent, label: agent, cwd, alive: true,
+      tail: [`Owner asked next: ${instruction}`, "Opening the saved task context and checking the current checkout…"] };
+    state["/api/terminals"] ||= { data: [] };
+    const terminals = state["/api/terminals"].data ||= [];
+    terminals.splice(0, terminals.length, terminal, ...terminals.filter((t) => Number(t.taskId) !== id));
+    detail.session = terminal;
+    detail.task.Status = "in_progress";
+    const row = taskRows().find((t) => Number(t.TaskId) === id);
+    if (row) row.Status = "in_progress";
+    return { continued: true, agent, fromSession: detail.transcript?.sid || null, session: terminal };
+  }
+
   if ((m = p.match(/^\/api\/messages\/(\d+)\/(file|promote)$/))) {
     const row = feedRows().find((r) => String(r.MessageId) === m[1]);
     if (row) {

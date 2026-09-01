@@ -133,8 +133,13 @@ def deliver(store, tid: int) -> dict:
             how = 'assistant'
         else:
             from . import agents as hub_agents
-            agent = hub_agents.default_agent(store)
-            term.start_on_task(store, tid, agent, instruction=batch(notes, after_restart=True, remaining=left), actor='router')
+            previous = store.last_transcript(tid) or {}
+            agent = previous.get('Agent') or hub_agents.default_agent(store)
+            # Reopening a task is continuity, not a new dispatch decision: keep the coder and
+            # checkout that already know this work. A missing old profile is allowed to fail
+            # visibly rather than silently handing private context to a different configured CLI.
+            term.start_on_task(store, tid, agent, instruction=batch(notes, after_restart=True, remaining=left),
+                               actor='router', cwd=previous.get('Cwd') or None)
             how = 'seeded'
         store.deliver_waiting([x['WId'] for x in notes], 'seeded')
         store.add_comment(tid, 'router', 'agent', f'Reopened a session for {len(notes)} waiting-room note(s) - the previous one had ended.'

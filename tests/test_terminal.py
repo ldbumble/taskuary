@@ -336,6 +336,33 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid}).status_code, 200)
         self.assertEqual(server.store.get_task(tid)['Status'], 'in_progress')
 
+    def test_continue_reopens_the_same_coder_checkout_with_the_saved_result(self):
+        tid = c.post('/api/tasks', json={'Title': 'investigate then implement', 'Kind': 'coding'}).json()['taskId']
+        server.store.upsert_agent('codex-continuation', 'coding', 'cli', '{"cmd": "codex"}')
+        server.store.add_transcript(tid, 'old-session', 'the old terminal', 'codex-continuation', os.getcwd())
+        server.store.add_comment(tid, 'codex-continuation', 'agent',
+                                 'CODER REPORT\nSummary: found the missing mapper\nActions: documented the approach')
+        server.store.update_task(tid, {'Status': 'waiting'}, 'test')
+        opened = {'sid': 'continued-session', 'alive': True, 'agent': 'codex-continuation'}
+        with mock.patch.object(terminal, 'start_on_task', return_value=opened) as start:
+            out = c.post(f'/api/tasks/{tid}/continue', json={'instruction': 'implement the mapper and tests'}).json()
+        self.assertEqual((out['agent'], out['fromSession'], out['session']['sid']),
+                         ('codex-continuation', 'old-session', 'continued-session'))
+        self.assertEqual(start.call_args.args[:5],
+                         (server.store, tid, 'codex-continuation', None, 'implement the mapper and tests'))
+        self.assertEqual(start.call_args.kwargs['cwd'], os.getcwd())
+        seed = terminal.seed_text(server.store, tid, 'implement the mapper and tests')
+        self.assertIn('PREVIOUS SESSION RESULT', seed)
+        self.assertIn('found the missing mapper', seed)
+        self.assertIn('implement the mapper and tests', seed)
+
+    def test_continue_does_not_silently_replace_a_removed_coder(self):
+        tid = c.post('/api/tasks', json={'Title': 'continue it', 'Kind': 'coding'}).json()['taskId']
+        server.store.add_transcript(tid, 'gone-session', 'work', 'removed-coder', os.getcwd())
+        r = c.post(f'/api/tasks/{tid}/continue', json={'instruction': 'make the changes'})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn('removed-coder', r.json()['detail'])
+
     def test_an_image_pasted_into_a_task_terminal_is_saved_for_its_prompt(self):
         tid = c.post('/api/tasks', json={'Title': 'inspect this screenshot', 'Kind': 'coding'}).json()['taskId']
         t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(5)'], os.getcwd(), 'test', tid)

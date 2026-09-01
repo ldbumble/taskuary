@@ -812,6 +812,15 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         said = bb.wall_text(store, cwd)
         if said: parts.append(said)
     if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
+    # A finished session can be continued with a new ask. Its PTY is gone, but its result is
+    # durable task context: hand that result to the next terminal so "now make the changes" does
+    # not send the same coder back through the investigation it just completed.
+    previous = next((str(c.get('Body') or '')[len('CODER REPORT'):].strip()
+                     for c in reversed(store.list_comments(tid))
+                     if str(c.get('Body') or '').startswith('CODER REPORT')), '')
+    if previous:
+        parts.append('PREVIOUS SESSION RESULT: continue from this saved result; verify the current checkout '
+                     f'before changing it and do not repeat finished work: {no_emails(_cut(previous, 3000, "previous result"))}')
     from .triage import strip_boilerplate
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
                        f"subject \"{m.get('Subject') or ''}\": "
@@ -1064,7 +1073,7 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
 
 
 def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
-                  actor: str = 'owner') -> dict:
+                  actor: str = 'owner', cwd: str = None) -> dict:
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
     agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
     import json
@@ -1077,7 +1086,10 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     row = store.get_agent(agent or '')
     if not row: raise ValueError(f'unknown agent: {agent}')
     repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
-    term = open_session(store, agent, tid, repo, None, 32, 110, actor, model,
+    # A continuation names the exact checkout from the saved transcript. Use it when it still
+    # exists; a moved/deleted checkout falls back through the normal guarded repo resolution.
+    continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
+    term = open_session(store, agent, tid, repo, continued_cwd, 32, 110, actor, model,
                         seed_fn=lambda cwd: seed_text(store, tid, instruction, repo, cwd))
     store.clear_dispatch(tid)          # started (by whatever road): it is no longer waiting
     if repo and why != 'tagged on the task':

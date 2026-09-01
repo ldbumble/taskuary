@@ -116,6 +116,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [newOpen, setNewOpen] = useState(false);
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
+  const [continueOpen, setContinueOpen] = useState(false);
+  const [continueText, setContinueText] = useState("");
+  const [continuing, setContinuing] = useState(false);
   const [comment, setComment] = useState("");
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [wait, setWait] = useState({ data: [], state: null });
@@ -243,6 +246,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (!stale(id)) setWrapping(false);
   };
   useEffect(() => { setWrapping(false); setWrapped(null); }, [selected]);
+  useEffect(() => { setContinueOpen(false); setContinueText(""); setContinuing(false); }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
   const [reshape, setReshape] = useState(false);
@@ -306,6 +310,21 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (/no local path/i.test(msg)) setRepoPick(true);
     }
   }, [loadDetail, loadTasks, onChanged]);
+  const continueWork = async () => {
+    if (!continueText.trim() || !selected || continuing) return;
+    const id = selected;
+    setContinuing(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/tasks/${id}/continue`, { instruction: continueText.trim() });
+      if (stale(id)) return;
+      setTerm(data.session); setContinueOpen(false); setContinueText("");
+      loadDetail(id); loadTasks(); onChanged?.();
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not continue the coding work");
+    } finally {
+      if (!stale(id)) setContinuing(false);
+    }
+  };
   const generalSession = useCallback((session) => setTerm(session), []);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one.
@@ -710,6 +729,31 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       Finished by {report.Actor || "the coding agent"}{report.CreatedAt ? ` · ${fmtDateTime(report.CreatedAt)}` : ""}
                     </Typography>
                     {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
+                    {!liveCodingSession && (continueOpen ? (
+                      <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${BORDER}` }}>
+                        <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.65 }}>
+                          Tell {detail?.transcript?.agent || report.Actor || "the coder"} what to change next. Taskuary opens a new
+                          live terminal in {detail?.transcript?.cwd || "the same repository"} with this saved result and task history.
+                        </Typography>
+                        <TextField fullWidth multiline minRows={2} maxRows={6} size="small" autoFocus
+                          value={continueText} onChange={(e) => setContinueText(e.target.value)}
+                          placeholder="What code changes should it make now?"
+                          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) continueWork(); }} />
+                        <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
+                          <Button size="small" variant="contained" disableElevation disabled={!continueText.trim() || continuing}
+                            startIcon={continuing ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <TerminalIcon sx={{ fontSize: 15 }} />}
+                            onClick={continueWork}>{continuing ? "opening terminal…" : "Continue coding"}</Button>
+                          <Button size="small" disabled={continuing} onClick={() => { setContinueOpen(false); setContinueText(""); }}>
+                            Cancel
+                          </Button>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <Button size="small" variant="outlined" startIcon={<TerminalIcon sx={{ fontSize: 15 }} />}
+                        sx={{ mt: 1 }} onClick={() => setContinueOpen(true)}>
+                        Continue with {detail?.transcript?.agent || report.Actor || "coder"}
+                      </Button>
+                    ))}
                   </Block>
                 )}
 

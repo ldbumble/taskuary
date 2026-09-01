@@ -122,6 +122,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
+  // Once a live session disappears, its report and reply draft are still being filed. Keep
+  // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
+  const sessionSettleUntil = useRef(0);
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
   const [feedOpen, setFeedOpen] = useState(false);   // Feed the agent, for THIS task
   const waitingN = (tasks || []).find((x) => x.TaskId === selected)?.Waiting || 0;   // prompts in this task's funnel
@@ -174,7 +177,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     // how long the pty has been quiet, so without re-asking it froze on whatever it said
     // when the task was opened - "needs you" over an agent that was mid-thought
     const running = (detail?.runs || []).some((r) => r.Status === "running") || detail?.session?.alive;
-    if (!((running || wrapping) && selected)) return undefined;
+    if (detail?.session?.alive) sessionSettleUntil.current = Date.now() + 120000;
+    const filedReport = (detail?.comments || []).some((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
+    const settling = detail?.task?.Status === "in_progress" && !!detail?.transcript
+      && (filedReport || Date.now() < sessionSettleUntil.current);
+    if (!((running || wrapping || settling) && selected)) return undefined;
     return pollWhileVisible(() => loadDetail(selected), 3000);
   }, [detail, selected, loadDetail, wrapping]);
 
@@ -334,11 +341,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => {
     if (active && !selected && firstShownId) onSelect(firstShownId);
   }, [active, selected, firstShownId, onSelect]);
-  const report = [...(detail?.comments || [])].reverse().find(
-    (c) => c.ActorType === "agent" && String(c.Body || "").replace("CODER REPORT", "").trim()
-      && String(c.Body || "").startsWith("CODER REPORT"));
+  // The report is identified by its durable marker, not the actor label. Named coding agents
+  // appear as coder/claude/codex in the record; requiring ActorType === "agent" hid valid results.
+  const report = [...(detail?.comments || [])].reverse().find((c) => {
+    const body = String(c.Body || "").trimStart();
+    return /^CODER REPORT(?:\r?\n|$)/.test(body) && body.replace(/^CODER REPORT/, "").trim();
+  });
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
+  const liveCodingSession = !isGeneral && !!term?.alive;
+  const pendingReview = (detail?.reviews || []).find((r) => r.Status === "pending");
+  // A completed report is stronger evidence than an old in_progress value. This covers the few
+  // seconds while the reply is being drafted, and old rows left behind by that former race.
+  const effectiveStatus = t?.Status === "in_progress" && report && !liveCodingSession && !liveRun
+    ? (pendingReview ? "waiting" : "done") : t?.Status;
+  const displayTask = t ? { ...t, Status: effectiveStatus } : t;
+  useEffect(() => { if (!liveCodingSession) setFeedOpen(false); }, [liveCodingSession]);
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
       {/* ── list: one anchored panel - filter header on top, rows scroll inside ── */}
@@ -429,9 +447,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     minWidth: { xs: 110, sm: 200 }, letterSpacing: "-.01em" }} noWrap>
                     {t.Title}
                   </Typography>
-                  <StateChip task={{ ...t, ReviewStatus: (detail.reviews || [])[0]?.Status,
+                  <StateChip task={{ ...displayTask, ReviewStatus: (detail.reviews || [])[0]?.Status,
                     RunStatus: (detail.runs || [])[0]?.Status, Session: detail.session }} />
-                  {t.Kind !== "reply" && t.Status !== "done" && (
+                  {liveCodingSession && (
                     <Tooltip title="Queue prompts for this task's agent - one or a whole list; they land one per stop, never mid-turn">
                       <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
                         sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, px: 1.25 }}>
@@ -439,7 +457,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Button>
                     </Tooltip>
                   )}
-                  {t.Status !== "done" && (
+                  {effectiveStatus !== "done" && (
                     <Tooltip title="I took care of it — close the task and wrap anything running">
                       <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
                         sx={{ color: "#47654a", borderColor: "#47654a66", px: 1.25,
@@ -492,7 +510,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
                       </MenuItem>)}
                   </Select>
-                  <Select value={t.Status} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
+                  <Select value={effectiveStatus} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
                     title="the raw status, if you need to move it by hand">
                     {STATUSES.map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{s}</MenuItem>)}
                   </Select>
@@ -573,7 +591,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         onClick={onGoReview}>Read the draft in Review</Button>
                     )}
                   </Box>
-                ) : term ? (
+                ) : term?.alive ? (
                   <>
                     {/* said and did, above the session: the agent's own list beside the files it wrote */}
                     <WorkStrip taskId={selected} live={!!term.alive} session={term}
@@ -620,7 +638,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Box>
                     {/* the waiting room, right under the session it feeds: type here instead of into the
                         terminal, and it goes in when the agent stops rather than on top of its work */}
-                    <Box sx={{ mt: 0.75, flexShrink: 0 }}><TellAgent taskId={selected} taskRef={detail?.ref} compact onQueued={() => loadDetail(selected)} /></Box>
+                    {term.alive && <Box sx={{ mt: 0.75, flexShrink: 0 }}><TellAgent taskId={selected} taskRef={detail?.ref} compact onQueued={() => loadDetail(selected)} /></Box>}
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
                         {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."
@@ -628,7 +646,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                     )}
                   </>
-                ) : (
+                ) : report ? null : (
                   <Box sx={{ ...card, p: 2, textAlign: "center", bgcolor: PANEL2 }}>
                     <Typography variant="body2" sx={{ color: DIM, mb: 1.25 }}>
                       Start your CLI on this task — a real session in {repoOf(t) || "the agent's folder"}: its own
@@ -681,12 +699,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Box>
                 )}
 
-                {/* the summary the agent left behind, once it has finished */}
+                {/* The completed outcome is the first permanent record below the session. Lead
+                    with Result; determination and actions are evidence, not the punchline. */}
                 {report && !wrapped && (
-                  <Block title="What the agent did">
-                    <Box sx={{ bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.5 }}>
+                  <Block title="Agent result">
+                    <Box sx={{ bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
                       <CoderReport body={report.Body} />
                     </Box>
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                      Finished by {report.Actor || "the coding agent"}{report.CreatedAt ? ` · ${fmtDateTime(report.CreatedAt)}` : ""}
+                    </Typography>
                     {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                   </Block>
                 )}
@@ -746,11 +768,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Box>
                     ))}
                   </Fold>
-                )}
-
-                {/* no live session: the same box, so a note left now reopens one with it as the ask */}
-                {detail.task.Kind !== "reply" && !isGeneral && !term && (
-                  <Box sx={{ mt: 1.5 }}><TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} /></Box>
                 )}
 
                 <Fold title={`Notes & history · ${detail.comments.length}`}>
@@ -848,7 +865,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           </Typography>
         </DialogTitle>
         <DialogContent>
-          {selected && <TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} />}
+          {selected && liveCodingSession && <TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} />}
         </DialogContent>
       </Dialog>
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">

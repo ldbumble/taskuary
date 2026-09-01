@@ -1,6 +1,6 @@
 // Freeze a running demo into a file the browser can serve on its own.
 //
-// taskuary.com/taskuary has no server behind it - it is the real React app with its API client
+// taskuary.com/demo has no server behind it - it is the real React app with its API client
 // swapped for a fixture (demoApi.js). The fixture is DUMPED from a real `taskuary --demo`
 // instance rather than written by hand, so every shape is one the app actually produced: a
 // hand-written fixture drifts the first time a field is renamed, and a demo that renders a

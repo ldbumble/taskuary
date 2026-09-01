@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:demo": "vite build --mode demo --outDir ../site/taskuary --base=./",
+    "build:demo": "vite build --mode demo --outDir ../site/demo --base=./",
     "test": "node --test test/"
   },
   "dependencies": {

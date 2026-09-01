@@ -1,4 +1,4 @@
-// taskuary.com/taskuary: the real app, with nothing behind it.
+// taskuary.com/demo: the real app, with nothing behind it.
 //
 // Not a mock-up and not a video - the same React application, the same components, the same
 // screens, served as static files with its API client swapped for this. Every response comes

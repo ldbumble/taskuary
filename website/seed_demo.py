@@ -176,6 +176,33 @@ m15 = fx.message(external_id='demodigest', channel='report', source_name='Mornin
         '- The nightly export failed twice this week before the fix that closed TQ-0002.'))
 fx.route(m15, None, 'file', 'scheduled report - informational, never a task', by='report')
 
+# A deterministic Assistant post for the browser demo and README screenshot. It carries the same
+# stored shape assistant.run writes, including provenance about what it reviewed.
+from taskuary import assistant
+stamp = t(0, 2)
+idea_specs = [
+    {'key': 'idea:summit-filter', 'kind': 'idea',
+     'text': 'Summit is missing from more than one report; fix the shared site filter once.',
+     'action': {'type': 'task', 'task': tid10, 'section': 'ideas',
+                'why': 'The headcount task and the CSV export both use the same site list.'}},
+    {'key': 'followup:q3-spend', 'kind': 'followup',
+     'text': 'Sarah still needs the Q3 vendor-spend breakdown before Thursday.',
+     'action': {'type': 'followup', 'mid': m1, 'task': tid1, 'section': 'loose',
+                'why': 'Her reply is drafted, but it has not been approved.'}},
+]
+ideas = [s.upsert_idea(spec, stamp) for spec in idea_specs]
+public = [assistant._public(i) for i in ideas]
+amid = s.add_message({'ExternalId': f'assistant:{stamp}', 'ConversationId': 'assistant',
+    'Channel': 'assistant', 'SourceName': 'Assistant', 'Subject': public[0]['text'] + ' (+1 more)',
+    'FromName': 'Assistant', 'SentAt': stamp,
+    'BodyText': '\n'.join(f"- {i['text']}\n    why: {i['why']}" for i in public), 'Status': 'feed'})
+s.add_route(amid, None, 'feed', None, "the assistant's post: what it noticed and what it would do", [], 'assistant')
+s.set_brief(amid, _json.dumps({'ideas': public, 'reviewed': {
+    'candidates': {'followup': 1, 'idea': 1}, 'skipped': [], 'recent': 14,
+    'week': 2, 'open': 7, 'said': 0, 'model': True, 'people': 4},
+    'flight': [], 'stats': {}}))
+s.set_ideas_message([i['id'] for i in public], amid)
+
 # every report source reads as freshly polled, or the server's STARTUP run files its own
 # rows on top of the fiction (a FAILED headcount, a raw digest) and they photobomb the shots
 s._exec("UPDATE source SET LastPolledAt=? WHERE Channel='report'", (t(0, 0),))

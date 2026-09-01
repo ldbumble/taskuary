@@ -418,9 +418,10 @@ export const DiffFiles = ({ files, cwd, branch }) => {
   );
 };
 
-// The coder's report, parsed into labeled sections instead of a wall of text.
-const REPORT_COLORS = { Triage: "#6f8a6e", Determination: "#6f8a6e", Actions: "#55697a", Summary: "#47654a",
-  Found: "#6f8a6e", Did: "#55697a", Next: "#6f8a6e" };
+// The stored fields stay structured for reply drafting and future agents, but the owner should
+// not have to read an internal three-row agent form every time a task finishes.
+const REPORT_LABELS = { Triage: "Triage", Determination: "What it found", Actions: "What it did",
+  Found: "What it found", Did: "What it did", Next: "What comes next" };
 /* The four things you can do with a timeline item were four buttons of four different sizes
    and colours, two rows apart, half of them right-aligned - so the reader had to hunt for
    the set. One list, one shape per row: what it is, and what it does. */
@@ -538,23 +539,40 @@ export const CoderReport = ({ body }) => {
   if (!rows.length) {
     return text ? <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, overflowWrap: "anywhere" }}>{text}</Typography> : null;
   }
+  // Lead with one normal paragraph. The supporting fields are evidence, not the main reading
+  // experience, so keep them one click away instead of laying them out like a spreadsheet.
+  const result = rows.find((r) => r.label === "Summary");
+  const detailRows = rows.filter((r) => r !== result);
   return (
-    <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-      <Box component="tbody">
-        {rows.map((r, i) => (
-          <Box component="tr" key={r.label} sx={{ verticalAlign: "top" }}>
-            <Box component="td" sx={{ width: 104, px: 1, py: 0.85, bgcolor: PANEL2, whiteSpace: "nowrap",
-              borderTop: i ? `1px solid ${BORDER}` : "none", borderRight: `1px solid ${BORDER}` }}>
-              <Typography variant="caption" sx={{ ...mono, color: REPORT_COLORS[r.label] || DIM, fontWeight: 700,
-                fontSize: 9.5, letterSpacing: 1, textTransform: "uppercase" }}>{r.label}</Typography>
-            </Box>
-            <Box component="td" sx={{ px: 1.25, py: 0.85, borderTop: i ? `1px solid ${BORDER}` : "none" }}>
-              <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, whiteSpace: "pre-wrap",
-                overflowWrap: "anywhere" }}>{r.text}</Typography>
-            </Box>
+    <Box sx={{ width: "100%", bgcolor: PANEL }}>
+      {result && (
+        <Box sx={{ px: 1.35, py: 1.15 }}>
+          <Typography variant="body2" sx={{ color: INK, fontWeight: 500, lineHeight: 1.55,
+            whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{result.text}</Typography>
+        </Box>
+      )}
+      {!!detailRows.length && (
+        <Box component="details" sx={{ borderTop: result ? `1px solid ${BORDER}` : "none",
+          "&[open] > summary": { borderBottom: `1px solid ${BORDER}` } }}>
+          <Box component="summary" sx={{ px: 1.35, py: 0.7, cursor: "pointer", color: DIM,
+            fontSize: 11.5, fontWeight: 600, listStylePosition: "inside",
+            "&:hover": { color: INK, bgcolor: PANEL2 } }}>
+            Work details
           </Box>
-        ))}
-      </Box>
+          <Box sx={{ px: 1.35, py: 1 }}>
+            {detailRows.map((r, i) => (
+              <Box key={`${r.label}-${i}`} sx={{ mt: i ? 1.15 : 0 }}>
+                <Typography sx={{ ...mono, color: FAINT, fontWeight: 700, fontSize: 9.5,
+                  letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>
+                  {REPORT_LABELS[r.label] || r.label}
+                </Typography>
+                <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere" }}>{r.text}</Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 };
@@ -645,7 +663,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
     setBusy(false);
   };
   if (saved) return (
-    <Box>
+    <Box sx={row ? { px: 1.25, py: 1 } : undefined}>
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600, display: "block" }}>
         ✓ noted — triage will apply this to{" "}
         {saved.scope === "global" ? "every sender" : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey}
@@ -671,7 +689,8 @@ export const NotMine = ({ messageId, onDone, onLock, row, first }) => {
       title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
   );
   return (
-    <Box sx={{ width: "100%", mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
+    <Box sx={{ width: "100%", mt: row ? 0 : 1, p: 1.25, bgcolor: PANEL2,
+      border: row ? "none" : `1px solid ${BORDER}`, borderRadius: row ? 0 : 1.5 }}>
       <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>
         Not our task — what should triage remember?
       </Typography>

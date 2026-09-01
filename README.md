@@ -18,7 +18,7 @@ agent sessions, and reports pipeline are in daily use; breaking changes are stil
 before 1.0.
 
 <p align="center">
-  <a href="https://taskuary.com/taskuary/"><img
+  <a href="https://taskuary.com/demo/"><img
     src="https://img.shields.io/badge/%E2%96%B6%20Try%20it%20now-no%20install%2C%20in%20your%20browser-2f4858?style=for-the-badge&labelColor=1f2a22"
     alt="Try Taskuary now, in your browser"></a>
 </p>

@@ -10,6 +10,8 @@ venv/
 .env
 website/node_modules/
 website/ui.png
+.codex-tmp/
+site/taskuary/
 
 # scratch screenshots dropped in the repo root
 /*.png

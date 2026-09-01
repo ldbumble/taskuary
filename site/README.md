@@ -3,8 +3,8 @@
 The landing page. Static — one `index.html` with its CSS inline, the Studio screenshot as the
 hero, the icon, and a social card. No build step, no framework, nothing to install.
 
-The interactive demo is built to `site/taskuary/` with `npm --prefix website run build:demo`
-and is served at `https://taskuary.com/taskuary/`.
+The interactive demo is built to `site/demo/` with `npm --prefix website run build:demo`
+and is served at `https://taskuary.com/demo/`.
 
 ## Deploy (Cloudflare Pages)
 

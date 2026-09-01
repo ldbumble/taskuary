@@ -49,6 +49,18 @@ class NoOpEndingTests(unittest.TestCase):
         self.assertEqual((out['drafting'], out['message_id']), (True, mid))
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
+    def test_finished_state_is_visible_before_slow_reply_drafting(self):
+        """Closing the terminal is immediate; drafting may not be. The task must stop claiming
+        an agent is in progress before the potentially slow AI call begins."""
+        s = MemoryStore(); tid, _ = task_with(s, 'ap@client.com', 'Is the importer fixed?')
+        seen = []
+        def drafting(*_args, **_kwargs):
+            seen.append((s.get_task(tid)['Status'], len(s.list_reviews('pending'))))
+            return 'It is fixed.'
+        with mock.patch('taskuary.responder.write_draft', side_effect=drafting):
+            coder.finish(s, tid, {'summary': 'fixed', 'outcome': 'did_work'}, None, 'coder')
+        self.assertEqual(seen, [('waiting', 1)])
+
     def test_work_actually_done_always_drafts_however_it_came_in(self):
         s = MemoryStore(); tid, mid = task_with(s, 'noreply@vendor.com')
         rep = {'summary': 'fixed the feed', 'outcome': 'did_work'}

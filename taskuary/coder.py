@@ -14,8 +14,11 @@ TRANSCRIPT_SYSTEM = (
     'the transcript ALONE - never a step it did not take, never a claim it did not make.\n'
     'Output ONLY this JSON: {"determination": "...", "actions": "...", "summary": "...", '
     '"outcome": "did_work|nothing_to_do"} - '
-    'determination is what was decided and why, actions is what was actually changed (files, '
-    'commands, records, ids), summary is the two-sentence version for someone who read none of it.\n'
+    'determination is what was decided and why, in plain language and at most 80 words. '
+    'actions is only what was actually changed or produced (files, commands, records, ids), '
+    'at most 80 words; do not repeat the determination. summary is the concrete outcome for '
+    'someone who read none of the transcript: one or two natural sentences, at most 55 words, '
+    'with no headings, process narration, or repetition of the other fields.\n'
     'outcome is nothing_to_do ONLY when the session changed, produced and chased nothing because there '
     'was nothing here to do at all - the message turned out to be a notice, a reminder, a newsletter or '
     "somebody else's job. Anything the session did, found out or settled for the owner is did_work, and "
@@ -139,8 +142,12 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
         store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
                                                    'answer - filed with the report, no reply drafted.')
         mid = None
-    if mid: raise_reply(store, task_id, mid, run_id, rep)
+    # The terminal and report are already closed at this point. Publish that truth BEFORE the
+    # reply-writing AI call: it can take seconds (or fail), and during that time the task used to
+    # remain `in_progress` with no live agent. A pending review is already durable, so `waiting`
+    # is honest even while its draft text is being filled in.
     store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
+    if mid: raise_reply(store, task_id, mid, run_id, rep)
     return {'drafting': bool(mid), 'message_id': mid}
 
 

@@ -43,7 +43,7 @@ if (what === "all" || what === "timeline") {
   await applyReadmeTone();
   // Tight panel crop in CSS pixels. It is captured from the same live DOM as the Timeline,
   // so its text and colors cannot drift into a separately reconstructed mockup.
-  await shot("screenshot-assistant.png", { x: 1028.5, y: 181, width: 786, height: 466.5 });
+  await shot("screenshot-assistant.png", { x: 500, y: 181, width: 786, height: 466.5 });
   // A full 1846px desktop shrinks every label below reading size in GitHub's README column.
   // Reflow the real app to 1280px, then crop away global navigation and empty lower space:
   // enough Timeline rows to show the funnel, with the selected row and its panel still whole.

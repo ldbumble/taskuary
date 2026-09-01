@@ -89,7 +89,7 @@ const wsUrl = (sid) => {
 // The effect keys on `sid` ALONE: the task page re-renders every few seconds while a run
 // polls, and taking a fresh callback identity as a dependency tore the terminal down and
 // rebuilt it on every one of those renders - which is what "it just flashes" was.
-const TermOnly = ({ sid, height = "70vh", onExit }) => {
+const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false }) => {
   const host = useRef(null);
   const exit = useRef(onExit);
   exit.current = onExit;
@@ -124,7 +124,8 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
   }, [size]);
   useEffect(() => {
     const term = new Terminal({ fontSize: savedSize(), fontFamily: TERM_FONT, fontWeightBold: 600,
-      theme: THEMES[savedTheme()], cursorBlink: true, cursorStyle: "bar", scrollback: 10000,
+      theme: THEMES[savedTheme()], cursorBlink: !readOnly, cursorStyle: "bar", scrollback: 10000,
+      disableStdin: readOnly,
       allowProposedApi: true, drawBoldTextInBrightColors: false, letterSpacing: 0, lineHeight: leading(savedSize()) });
     termRef.current = term;
     const fit = new FitAddon();
@@ -170,7 +171,9 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
     // would be swallowed.
     let sentSize = "";
     const sendSize = () => {
-      if (ws.readyState !== 1) return;
+      // A Timeline preview watches the same PTY as the task page. It must never resize that PTY
+      // to its smaller card or make the real terminal redraw and reflow beneath the agent.
+      if (readOnly || ws.readyState !== 1) return;
       const sizeNow = changedTerminalSize(sentSize, term.rows, term.cols);
       if (!sizeNow) return;
       sentSize = sizeNow;
@@ -191,7 +194,7 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
     const lift = () => {
       clearTimeout(bail); cancelAnimationFrame(revealFrame);
       revealFrame = null; lifted = true;
-      term.scrollToBottom(); setRestoring(false); term.focus();
+      term.scrollToBottom(); setRestoring(false); if (!readOnly) term.focus();
     };
     const maybeLift = () => {
       if (canRevealTerminal(readySeen, pendingWrites, lifted) && !revealFrame) revealFrame = requestAnimationFrame(lift);
@@ -218,6 +221,9 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
       const m = JSON.parse(e.data);
       if (m.type === "out") {
         output.push(m.data, m.replay);                    // a fresh replay curtains again when this batch writes
+        // Read-only viewers deliberately send no resize, so the server has no redraw barrier to
+        // answer with `ready`. The replay itself is their complete initial screen.
+        if (readOnly && m.replay) { output.flush(); readySeen = true; maybeLift(); }
       }
       else if (m.type === "ready") { output.flush(); readySeen = true; maybeLift(); }
       else if (m.type === "exit") {
@@ -226,7 +232,7 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
       }
     };
     ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
-    term.onData((d) => send({ type: "in", data: d }));
+    const input = readOnly ? null : term.onData((d) => send({ type: "in", data: d }));
     let resizeTimer = null;
     const onResize = () => {
       const box = host.current?.getBoundingClientRect();
@@ -273,11 +279,11 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
     };
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
-    term.focus();
+    if (!readOnly) term.focus();
     return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame); output.dispose();
       el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
-      d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
-  }, [sid]);
+      input?.dispose(); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
+  }, [sid, readOnly]);
   return (
     // height="100%": the pane fills the flex slot its parent gives it (the task page sizes it to
     // whatever is left on screen); any other value is a fixed height as before
@@ -286,7 +292,7 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
       {/* the pane's two knobs, discreet until hovered: how it is painted, and how much of the
           run fits in it. Both restyle ANY CLI in the pane - codex and claude included - and
           both stick per browser. */}
-      <Box sx={{ position: "absolute", top: 5, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
+      {!readOnly && <Box sx={{ position: "absolute", top: 5, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
         opacity: 0.62, "&:hover": { opacity: 1 }, transition: "opacity .15s" }}>
         {/* one step smaller is a couple more rows of the run without touching the layout -
             far cheaper than scrolling back for what just went past */}
@@ -314,7 +320,7 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
             outline: "none", cursor: "pointer" }}>
           {Object.keys(THEMES).map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
         </Box>
-      </Box>
+      </Box>}
       {/* A scrollbar on the session itself, the way a console has one.
           xterm 6 does not use a native scrollbar: it embeds VS Code's scrollable element, which
           AUTO-HIDES - the bar ships as `class="invisible scrollbar vertical fade"`, opacity 0 and
@@ -326,7 +332,7 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
           the child larger than its slot, so overflow clipped the last TUI row. FitAddon measures
           this unpadded inner box and fitSafely keeps one row clear of pixel rounding. */}
       <Box sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, boxSizing: "border-box" }}>
-      <Box ref={host} onMouseDown={() => requestAnimationFrame(() => termRef.current?.focus())}
+      <Box ref={host} onMouseDown={() => !readOnly && requestAnimationFrame(() => termRef.current?.focus())}
         sx={{ width: "100%", height: "100%", minHeight: 0, "& .xterm": { height: "100%" },
         "& .xterm-scrollable-element > .scrollbar.vertical": {
           // pinned visible ONLY while scrollback exists (--sbar, set from the buffer state):
@@ -356,6 +362,40 @@ const TermOnly = ({ sid, height = "70vh", onExit }) => {
           {state}
         </Typography>
       )}
+    </Box>
+  );
+};
+
+// The Timeline's agent step is the real terminal, not a lossy text tail. This attaches as a
+// viewer only: clicking opens the task, while the websocket can neither type nor resize the PTY.
+export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
+  const [shot, setShot] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try { const { data } = await api.get(`/api/terminals/${sid}/screen`, { params: { lines: 36 } });
+        if (alive) setShot(data); } catch { /* server restart pending or session just ended */ }
+    };
+    load(); const id = setInterval(load, 850);
+    return () => { alive = false; clearInterval(id); };
+  }, [sid]);
+  return (
+    <Box onClick={onOpen} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined}
+      onKeyDown={(e) => { if (onOpen && (e.key === "Enter" || e.key === " ")) onOpen(); }}
+      title="Open the live session"
+      sx={{ height, boxSizing: "border-box", bgcolor: CATPPUCCIN.bg,
+        border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.5, overflow: "hidden",
+        cursor: onOpen ? "pointer" : "default", position: "relative",
+        "&:hover": onOpen ? { borderColor: CATPPUCCIN.overlay } : {} }}>
+      <Box sx={{ position: "absolute", top: 7, right: 10, display: "flex", alignItems: "center", gap: 0.55, zIndex: 1 }}>
+        <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: shot?.alive === false ? CATPPUCCIN.dim : CATPPUCCIN.green }} />
+        <Typography sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.faint }}>{shot ? "live terminal · open ↗" : "reading terminal…"}</Typography>
+      </Box>
+      <Box component="pre" aria-label="Live terminal screen" sx={{ m: 0, p: "22px 10px 10px", height: "100%",
+        boxSizing: "border-box", overflow: "hidden", whiteSpace: "pre", color: CATPPUCCIN.fg,
+        fontFamily: TERM_FONT, fontSize: 8.5, lineHeight: 1.15, letterSpacing: 0 }}>
+        {(shot?.lines || ["Reading the live terminal…"]).join("\n")}
+      </Box>
     </Box>
   );
 };

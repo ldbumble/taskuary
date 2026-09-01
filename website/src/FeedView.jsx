@@ -360,6 +360,11 @@ const EventPanel = ({ e, onClose, onOpenTask }) => {
       </Box>
       <Box sx={{ px: 2, py: 1.5, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1.5 }}>
         <Box>
+          <PanelLabel>What it’s about</PanelLabel>
+          {e.about ? <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{e.about}</Typography>
+            : <Typography variant="body2" sx={{ color: FAINT }}>The invite says nothing beyond its title{e.subject ? ` — “${e.subject}”` : ""}.</Typography>}
+        </Box>
+        <Box>
           <PanelLabel>Who’s in it</PanelLabel>
           {(e.who || []).length ? (
             <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}>
@@ -373,11 +378,6 @@ const EventPanel = ({ e, onClose, onOpenTask }) => {
               ))}
             </Box>
           ) : <Typography variant="body2" sx={{ color: FAINT }}>{e.organizer ? `organized by ${e.organizer} — no other attendees listed` : "no attendees listed — just you"}</Typography>}
-        </Box>
-        <Box>
-          <PanelLabel>What it’s about</PanelLabel>
-          {e.about ? <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{e.about}</Typography>
-            : <Typography variant="body2" sx={{ color: FAINT }}>The invite says nothing beyond its title{e.subject ? ` — “${e.subject}”` : ""}.</Typography>}
         </Box>
         {(e.join || e.link) && (
           <Box sx={{ display: "flex", gap: 1 }}>
@@ -1380,28 +1380,36 @@ const PanelLabel = ({ children }) => (
 
 // One quiet progress rail. Detail belongs in the four tabs, not repeated in a stack of cards.
 // The whole stop is clickable so the summary remains a fast way into any stage.
-const StoryTimelineStep = ({ title, status, onOpen, first, last, state = "idle" }) => {
+const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state = "idle" }) => {
   const dot = state === "current" ? "#c7a258" : state === "done" ? "#718f74" : "#cfc8bc";
   return (
     <Box component="button" type="button" onClick={onOpen} aria-label={`Open ${title} details`}
       sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0, width: "100%", minWidth: 0,
-        display: "grid", gridTemplateColumns: "22px 82px minmax(0, 1fr) 18px", alignItems: "center",
-        minHeight: 38, textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit",
+        display: "grid", gridTemplateColumns: "22px minmax(0, 1fr) 18px", alignItems: "stretch",
+        minHeight: 58, textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit",
         borderRadius: 1, "&:hover": { bgcolor: "#f7f4ef" },
         "&:hover .tq-story-title": { color: ACCENT },
         "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
       <Box sx={{ alignSelf: "stretch", position: "relative" }}>
         <Box sx={{ position: "absolute", left: 10.5, top: first ? "50%" : 0, bottom: last ? "50%" : 0,
-          width: 1, bgcolor: "#d8d2c8" }} />
+          width: "1px", bgcolor: "#d8d2c8" }} />
         <Box sx={{ position: "absolute", zIndex: 1, top: "50%", left: 6.5, transform: "translateY(-50%)",
           width: 9, height: 9, borderRadius: "50%", bgcolor: dot, border: `2px solid ${PANEL}`,
           boxShadow: `0 0 0 1px ${dot}` }} />
       </Box>
-      <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
-        transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
-      <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
-        fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
-      <ChevronRightIcon sx={{ color: FAINT, fontSize: 13 }} />
+      <Box sx={{ minWidth: 0, py: 0.65, pr: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0, mb: 0.15 }}>
+          <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
+            transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
+          <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
+            fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
+        </Box>
+        <Typography sx={{ color: DIM, fontSize: 11.5, lineHeight: 1.38, overflow: "hidden",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{summary}</Typography>
+      </Box>
+      <Box sx={{ display: "grid", placeItems: "center" }}>
+        <ChevronRightIcon sx={{ color: FAINT, fontSize: 13 }} />
+      </Box>
     </Box>
   );
 };
@@ -1495,6 +1503,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     { key: "reply", label: "Reply", mark: pending ? "waiting" : opened ? "open" : "" },
   ];
   const replyDraft = pending ? pendingDraft(detail || { runs: [] }, sel) : (opened?.draft || "");
+  const triageLine = cleanText(String(sel.RouteReason || "")
+    .replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0]) || "No routing reason was recorded.";
+  const reportText = String(rep?.Body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/i, "").trim();
+  const reportResult = ((/(?:^|\n)Summary:[ \t]*([^\n]+)/im.exec(reportText) ||
+    /(?:^|\n)Result:[ \t]*([^\n]+)/im.exec(reportText) || [])[1] || cleanText(reportText)).trim();
+  const messageSummary = cleanText(sel.Preview || sel.Subject || "No message preview available.");
+  const triageStatus = ["assistant", "report", "calendar"].includes(sel.Channel)
+    ? "fyi" : (roadOf(sel) || "not routed");
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
   const [releasing, setReleasing] = useState(false);
@@ -1576,19 +1592,28 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
               {tab === "summary" && (
-                <Box aria-label="Workflow summary" sx={{ width: "100%", maxWidth: 540,
+                <Box aria-label="Workflow summary" sx={{ width: "100%",
                   px: 0.75, pt: 0.45, pb: 0.75 }}>
                   <StoryTimelineStep title="Message" first state="done"
                     status={(detail?.messages || []).length > 1 ? `${detail.messages.length} messages` : "received"}
+                    summary={messageSummary}
                     onOpen={() => setTab("msg")} />
-                  <StoryTimelineStep title="Triage" status={roadOf(sel) || "not routed"}
-                    state={roadOf(sel) ? "done" : "idle"} onOpen={() => setTab("why")} />
+                  <StoryTimelineStep title="Triage" status={triageStatus} summary={triageLine}
+                    state={triageStatus !== "not routed" ? "done" : "idle"} onOpen={() => setTab("why")} />
                   <StoryTimelineStep title="Agent"
                     status={onIt ? (onIt.waiting ? "waiting" : "working") : chatTask ? "assistant chat" : rep ? "finished" : "not started"}
+                    summary={onIt ? (onIt.waiting ? `${onIt.agent} needs your answer.` : `${onIt.agent} is working in the live terminal.`)
+                      : chatTask ? "The assistant conversation is available here."
+                      : rep ? (reportResult || "The agent finished; open for the result.")
+                      : held ? "Held until you release it."
+                      : codeless ? "Triage decided an agent was not needed."
+                      : "No agent work has started."}
                     state={onIt ? "current" : (chatTask || rep || diffRun) ? "done" : "idle"}
                     onOpen={() => setTab("agent")} />
                   <StoryTimelineStep title="Reply" last
                     status={pending ? "waiting on you" : opened ? "draft open" : "not drafted"}
+                    summary={replyDraft ? cleanText(replyDraft) : (["report", "assistant"].includes(sel.Channel)
+                      ? "This item has nobody to reply to." : "No reply has been drafted yet.")}
                     state={replyOpen ? "current" : "idle"} onOpen={() => setTab("reply")} />
                 </Box>
               )}

@@ -1031,14 +1031,27 @@ def find_checkout(repo: str, profile: dict, budget: int = 4000, seconds: float =
              + [profile.get('cwd') or ''] if v]
     home = Path.home()
     roots += [home / 'Documents', home / 'source' / 'repos', home / 'repos', home / 'code', home / 'projects']
-    seen, queue, deadline = set(), [(r, 0) for r in roots if r.is_dir()], time.time() + seconds
+    # '/' (or 'C:\\') as a search root walks the whole machine. A checkout at /workspace
+    # used to do that, then Path.is_file() on an unreadable /etc/.../.git/config 500'd
+    # GET /api/tasks/:id/repos instead of listing the repos we already know about.
+    queue, seen, deadline = [], set(), time.time() + seconds
+    for r in roots:
+        try:
+            if not r.is_dir() or r == r.parent: continue
+        except OSError:
+            continue
+        queue.append((r, 0))
     while queue and budget > 0 and time.time() < deadline:
         d, depth = queue.pop(0)
         key = str(d).lower()
         if key in seen or d.name.lower() in _SKIP_DIRS or d.name.startswith('.'): continue
         seen.add(key); budget -= 1
         cfg = d / '.git' / 'config'
-        if cfg.is_file():
+        try:
+            is_repo = cfg.is_file()
+        except OSError:
+            continue                        # locked folder: neither a hit nor a place to descend
+        if is_repo:
             try:
                 if want in cfg.read_text(encoding='utf-8', errors='ignore').lower(): return str(d)
             except OSError: pass

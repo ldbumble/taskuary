@@ -1029,6 +1029,25 @@ class FindCheckoutTests(unittest.TestCase):
         self.assertEqual(found, str(co))                       # oddname, because its REMOTE matches
         self.assertIsNone(terminal.find_checkout('acme/nothere', hint, seconds=1.0))
 
+    def test_an_unreadable_git_config_does_not_crash_the_search(self):
+        """A folder we cannot read used to 500 the repo picker: Path.is_file() on
+        .git/config raises PermissionError, and that used to escape the walk."""
+        import tempfile
+        root = Path(tempfile.mkdtemp())
+        known = root / 'work' / 'known'
+        known.mkdir(parents=True)
+        locked = root / 'work' / 'secret'
+        (locked / '.git').mkdir(parents=True)
+        (locked / '.git' / 'config').write_text(
+            '[remote "origin"]\n\turl = https://github.com/acme/locked.git\n')
+        locked.chmod(0)
+        try:
+            found = terminal.find_checkout(
+                'acme/widget', {'cwd_map': {'acme/other': str(known)}}, budget=200, seconds=2)
+            self.assertIsNone(found)
+        finally:
+            locked.chmod(0o755)
+
     def test_open_session_adopts_the_found_path_and_remembers_it(self):
         root, co = self._tree()
         server.store.upsert_agent('finder', 'coding', 'cli',

@@ -9,6 +9,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
+import CheckIcon from "@mui/icons-material/Check";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
@@ -1152,7 +1153,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 if (el) dayRefs.current[day] = el; else delete dayRefs.current[day];
                 dayLayoutDirty.current = true;
               }}>
-                {di === 0 && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
+                {di === 0 && !view && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
                 <Box>
                   {items.map((r, i) => {
                     // ONE state per row, from one table (timelineState.js). It renders as a small
@@ -1167,7 +1168,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     const held = open && pinnedOn;
                     return (
                       <React.Fragment key={r.MessageId}>
-                        {!cat && !pick && meetingsAt(day, items, i).map((e, j) => (
+                        {/* the calendar is filtered like everything else. "needs me" means work waiting on
+                            you, and a meeting is never that - it sat in the list regardless, so a
+                            filter that should have shown three rows showed four. */}
+                        {!view && !cat && !pick && meetingsAt(day, items, i).map((e, j) => (
                           <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
                             preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); drill(p); }}
                             onPick={(ev) => { setSel(null); setCalSel(ev); }} />
@@ -1247,7 +1251,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     );
                   })}
                   {/* meetings that started before the oldest message of the day shown so far */}
-                  {!cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
+                  {!view && !cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
                     <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
                             preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); drill(p); }}
                             onPick={(ev) => { setSel(null); setCalSel(ev); }} />
@@ -1533,6 +1537,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     ? "fyi" : (roadOf(sel) || "not routed");
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
+  const [closed, setClosed] = useState(null);        // ...and closing one from the panel
   const [releasing, setReleasing] = useState(false);
   const release = async () => {
     setReleasing(true);
@@ -1775,6 +1780,19 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     try { const { data } = await api.post(`/api/messages/${sel.MessageId}/mine`, {});
                       setMined(data.ref); onRefresh?.(); } catch { /* the row keeps its state */ }
                   }}>{mined || "Add to my tasks"}</TrayBtn>
+              )}
+              {/* Closing it needed the Tasks tab, which is a trip away from the row you are
+                  reading - so a finished piece of work kept saying "on your list" because marking
+                  it done was somewhere else. */}
+              {sel.TaskId && !["done", "dropped"].includes(sel.TaskStatus) && (
+                <TrayBtn disabled={!!closed} icon={<CheckIcon sx={{ fontSize: 16 }} />}
+                  title="closes the task from here - the agent's report and the thread stay"
+                  onClick={async () => {
+                    try {
+                      await api.patch(`/api/tasks/${sel.TaskId}`, { Status: "done" });
+                      setClosed("Closed"); onRefresh?.();
+                    } catch { /* the row keeps its state */ }
+                  }}>{closed || "Mark done"}</TrayBtn>
               )}
               {onIt && sel.MessageId && (
                 <TrayBtn disabled={handed} onClick={handToAgent} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}

@@ -358,11 +358,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search and All
   // are deliberate cross-status views, so neither is changed.
+  // ...but ONLY when the task changed under you. This also fired on the filter itself, which
+  // made the pills unusable: with a done task selected, clicking "in progress" set the filter,
+  // this read the still-done selection and put it straight back - the pill lit for an instant
+  // and the list never moved.
+  const seenState = useRef({ id: null, key: null });
   useEffect(() => {
     if (!active || !selected || !tasks || search || !filter) return;
     const row = tasks.find((x) => x.TaskId === selected);
     if (!row) return;
-    const next = filterForSelectedState(filter, stateOf(row).key);
+    const key = stateOf(row).key;
+    const was = seenState.current;
+    seenState.current = { id: selected, key };
+    if (was.id !== selected || was.key === key) return;   // new selection, or nothing moved
+    const next = filterForSelectedState(filter, key);
     if (next !== filter) { setFilter(next); setOlder(false); }
   }, [active, selected, tasks, search, filter]);
   // The desktop page is a master/detail workspace. Opening it with a populated list but no

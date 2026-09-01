@@ -272,6 +272,15 @@ def assistant_state(task_id: int):
 def assistant_session(task_id: int, body: AssistantSessionBody = None):
     from . import general
     body = body or AssistantSessionBody()
+    # Opening a FINISHED chat must not resurrect it. GeneralWorkspace posts here on mount, so
+    # merely LOOKING at a closed conversation started a live session; it parked with nothing to
+    # answer, and BoardView.laneOf - which reads a session that began after ClosedAt as "somebody
+    # picked this back up" - filed a done task under Waiting on you, where TQ-0291 sat for
+    # forty-five minutes. Reading a closed conversation is reading, not resuming. Sending a
+    # message still starts one, because that IS picking it back up.
+    t = store.get_task(task_id) or {}
+    if t.get('Status') in ('done', 'dropped') and not general.session_for(task_id):
+        return _assistant_payload(task_id)
     try: session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
     except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
     return _assistant_payload(task_id, session)

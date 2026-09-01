@@ -240,7 +240,7 @@ class Term:
             start = time.time()
             while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
             if not self.settle(3): return                 # a breath after first output - the toe probes the rest
-            self.seeded = ' '.join(text.split())
+            self.seeded = fit_typed(text)
             toe, rest = self.seeded[:20], self.seeded[20:]
             for attempt in range(SEED_RETRIES):
                 self.write(toe)                           # attempt > 0 = retyped: the first toe was eaten
@@ -729,6 +729,31 @@ def rules_text(store, chars: int = DOC_CHARS) -> str:
 # useful slice of that on the thing the task is actually about.
 ASK_CHARS = 12000
 SEED_CEILING = 24000        # the whole prompt, leaving room for the exe path and its flags
+
+
+# What a canonical-mode tty holds on ONE LINE before it discards the rest - without an error,
+# without a signal, without anything. MAX_CANON is 4096 on Linux but 1024 on macOS/BSD, and a TUI
+# that has not yet switched the terminal to raw mode is still canonical, so the limit is real for
+# exactly the moment we type the first prompt into one. Over it the TAIL is what is lost - and the
+# tail is what _echoed() looks for, so seed() reads a fully-typed prompt as eaten and retypes it
+# until it gives up, leaving a full input box and no Enter. Typed seeds stay under the SMALLEST
+# limit, because we do not know whose tty this is. (SEED_ARGV CLIs never come through here: their
+# prompt goes on the command line, where the budget is SEED_CEILING.)
+TTY_CANON = 1000
+
+
+def fit_typed(text: str, ceiling: int = TTY_CANON) -> str:
+    """A seed trimmed to what a tty will actually take. The MESSAGE gives, never the rules that
+    keep an agent inside its checkout - the same order seed_text uses against SEED_CEILING - and
+    it gives out loud, because an agent cannot ask for the rest of something it was not told was
+    cut."""
+    out = ' '.join((text or '').split())
+    if len(out) <= ceiling: return out
+    over = len(out) - ceiling
+    head, sep, tail = out.partition('FROM ')
+    if sep and len(tail) > over + 300:
+        return head + sep + _cut(tail, len(tail) - over - 160, 'message')
+    return _cut(out, max(40, ceiling - 160), 'prompt')
 
 
 def _cut(text: str, n: int, what: str = 'message') -> str:

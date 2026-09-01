@@ -23,6 +23,7 @@ from . import reshape
 from . import terminal as hub_term
 from .coder import PAUSE_MARKER, pause_note, reply_target as coder_reply_target, wrap as coder_wrap
 from . import aisetup, assistant, demo, deps, learn, learnedgraph, outbound, playbooks, rank, responder, waitroom
+from . import live as live_bus
 
 # whatever the owner's Install button added lives beside their data, not in the build - and it has
 # to be importable BEFORE any card reaches for it (deps.py)
@@ -37,6 +38,7 @@ for name, prof in cfg.get('agents', {}).items():
     store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
 @asynccontextmanager
 async def _lifespan(_app):
+    live_bus.bind(asyncio.get_running_loop())
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and
     # never polls, never bridges, never catches up on a mailbox that does not exist
     if demo.enabled():
@@ -3353,6 +3355,19 @@ def ingest_status():
             'timelineFade': store.get_settings().get('timeline_fade') or 'normal'}  # how old rows dim (FeedView)
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──
+# And one socket for the rest of the UI: Timeline/Board/Studio subscribe instead of polling.
+@app.websocket('/api/events/ws')
+async def events_ws(ws: WebSocket):
+    """feed-changed, task-changed, run-tail. Same token-on-query as the terminal socket."""
+    tok = cfg['server'].get('token')
+    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    await ws.accept()
+    try:
+        await live_bus.serve(ws)
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+
+
 class TermBody(BaseModel):
     agent: str | None = None; task_id: int | None = None; repo: str | None = None
     cwd: str | None = None; rows: int = 32; cols: int = 110; seed: bool = False

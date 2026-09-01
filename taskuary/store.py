@@ -1475,6 +1475,10 @@ class SQLiteStore:
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
+        if name == 'ingest_status':
+            try: extra = json.loads(value) if isinstance(value, str) else {}
+            except (TypeError, ValueError): extra = {}
+            self._poke('feed-changed', ingest=extra if isinstance(extra, dict) else {})
     def last_report(self, title):
         """The previous filed run of a report, by title - its shape anchors the next run (reports.run_agent).
         Failed runs and outbound copies do not count: a table of refusals is not a structure to keep."""

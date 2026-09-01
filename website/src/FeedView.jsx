@@ -23,6 +23,7 @@ import { syncStatusDelay } from "./syncTiming.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
 import { timelineDayLabel } from "./timelineDay.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
+import { groupThreads, loudest, spanText } from "./threadGroups.js";
 import EventIcon from "@mui/icons-material/Event";
 import { pollWhileVisible } from "./visible.js";
 import { feedHeaders, feedOk, takeFeed } from "./feedLoad.js";
@@ -125,6 +126,13 @@ const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
   : ["ignored", "filed", "triaging", "withdrawn"].includes(r.MsgStatus) ? "#cfc9bf"
     : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
       : r.TaskId ? ACCENT2 : "#a7b0a8");
+
+// How much each state DEMANDS of you, most first - which is what a fold has to sort by to pick
+// the face it wears. Deliberately NOT stateOf's evaluation order: that reads withdrawn first,
+// because a message that no longer exists cannot be what you act on, and for one row that is
+// right. For a fold it is backwards - a withdrawn line must never speak for four others, one of
+// which is a reply waiting on you.
+const LOUDNESS = ["reply", "waving", "working", "held", "answered", "todo", "mine", "done", "withdrawn", "fyi"];
 
 const PAGE = 100;
 
@@ -531,6 +539,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
+  const [openFolds, setOpenFolds] = useState(() => new Set());   // conversations unfolded by hand
   const [cat, setCat] = useState("");                // broad content family; exact choices live in the source picker
   const [pick, setPick] = useState("");              // "" all in category | "channel:x" | "src:channel:name"
   const [srcByChannel, setSrcByChannel] = useState({});   // channel -> connection names
@@ -907,6 +916,19 @@ export default function FeedView({ onOpenTask, onChanged }) {
     if (day) days[day] = [];
   }
   const dayEntries = Object.entries(days).sort(([a], [b]) => b.localeCompare(a));
+  // ONE TASK, ONE ROW. Not one conversation: on a report, on the assistant's posts and in a
+  // WhatsApp chat the conversation id is the CHANNEL, so grouping on it collapsed five runs of
+  // one report, twelve assistant posts and a day of one person into single lines - and hid a
+  // photo the owner was hunting for. A task is the honest unit: triage or a thread put those
+  // messages together. Rows nothing has judged to be one thing never fold.
+  const foldOf = new Map(), memberOf = new Map();
+  for (const [, dayRows] of dayEntries) {
+    for (const e of groupThreads(dayRows)) {
+      if (e.kind !== "fold") continue;
+      foldOf.set(e.row.MessageId, e);                 // the newest member is where the fold sits
+      for (const m of e.rows) memberOf.set(m.MessageId, e.tid);
+    }
+  }
   const shownDay = dayEntries.some(([day]) => day === curDay) ? curDay : (dayEntries[0]?.[0] || "");
   const jumpToDay = (day) => {
     dateJump.current = day;
@@ -1161,6 +1183,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     // a coloured pill on every row makes the whole column loud, which is the same
                     // as making none of it loud.
                     const st = stateOf(r);
+                    const fold = foldOf.get(r.MessageId);
+                    const inFold = memberOf.get(r.MessageId);
+                    // display:none rather than skipping the entry: the meeting slots are placed by
+                    // INDEX into this day's rows, so dropping one would move the meetings
+                    const showRow = !inFold || openFolds.has(inFold);
                     const open = sel?.MessageId === r.MessageId;
                     // hovering PREVIEWS (a soft edge, the stage follows the cursor); clicking
                     // PINS (a ring in the brand colour, the stage holds). Both used to draw the
@@ -1176,8 +1203,19 @@ export default function FeedView({ onOpenTask, onChanged }) {
                             preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); drill(p); }}
                             onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                         ))}
-                        <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
+                        {fold && (
+                          <ThreadFold entry={fold} open={openFolds.has(fold.tid)}
+                            onToggle={() => setOpenFolds((cur) => {
+                              const next = new Set(cur);
+                              if (next.has(fold.tid)) next.delete(fold.tid); else next.add(fold.tid);
+                              return next;
+                            })} />
+                        )}
+                        <Box className="tqRow" sx={{ display: showRow ? "grid" : "none", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
                           alignItems: "stretch", mb: "3px",
+                          // a member of an open fold is indented - the CARD only, so the clock and the
+                          // rail stay in the column they occupy on every other row of the day
+                          ...(inFold ? { "& > :nth-of-type(3)": { marginLeft: "26px" } } : {}),
                           ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 35, 320)}ms`, animationFillMode: "backwards" }) }}>
                           {/* the clock sits in its own gutter with air on BOTH sides - 8px off the
                               container edge, 12px off the rail - so it never reads as crushed
@@ -1963,6 +2001,66 @@ const TalkItThrough = ({ messageId, onOpenTask }) => {
         {busy ? "Opening…" : "Talk it through"}</TrayBtn>
       {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
     </>
+  );
+};
+
+// A conversation, folded. Nine rows reading "Teams chat with Mindy Gorelick" is not a day you can
+// read - so the rail carries ONE line for the thread, with the count, the span it covers and the
+// loudest thing inside it. Expanding reveals the real rows, unchanged, underneath.
+//
+// The state is the LOUDEST member's, never the newest: a reply waiting two messages down must not
+// be hidden by a fold whose top line happens to be fyi. Folding is not a way to lose work.
+const ThreadFold = ({ entry, open, onToggle }) => {
+  const rows = entry.rows;
+  const st = loudest(rows, stateOf, LOUDNESS);
+  const head = rows[0];
+  const who = [...new Set(rows.map((r) => r.FromName || r.SourceName).filter(Boolean))];
+  return (
+    <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
+      alignItems: "stretch", mb: "3px" }}>
+      <Typography sx={{ ...mono, fontSize: 10, color: FAINT, textAlign: "right",
+        pt: "6px", pl: "8px", pr: "12px", whiteSpace: "nowrap", letterSpacing: "-.2px",
+        fontVariantNumeric: "tabular-nums" }}>
+        {fmtTime12(head.SentAt)}
+      </Typography>
+      <Box sx={{ position: "relative" }}>
+        <Box sx={{ position: "absolute", left: "6px", top: "-5px", bottom: "-5px", width: "1px", bgcolor: BORDER }} />
+        <Box sx={{ position: "absolute", left: "2.5px", top: "9px", width: 8, height: 8, borderRadius: "50%",
+          bgcolor: edgeOf(st), boxShadow: `0 0 0 3px ${PANEL}` }} />
+      </Box>
+      <Box onClick={onToggle} data-tq-keep
+        title={open ? "fold this conversation back up" : `${rows.length} messages on one conversation - open it`}
+        sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${edgeOf(st)}`,
+          borderRadius: "8px", px: "10px", pt: "3px", pb: "4px", ml: "8px", minWidth: 0, overflow: "hidden",
+          cursor: "pointer", transition: "box-shadow .18s, border-color .18s",
+          "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }}>
+        <Box sx={{ display: "flex", gap: 0.85, alignItems: "center", minWidth: 0, minHeight: 22 }}>
+          <Box component="span" aria-hidden sx={{ display: "flex", flexShrink: 0, color: FAINT,
+            transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }}>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+              strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4" /></svg>
+          </Box>
+          <Box sx={{ display: "flex", flexShrink: 0 }}><ChannelIcon channel={head.Channel} sx={{ fontSize: 16 }} /></Box>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12, flexShrink: 0, maxWidth: 150 }}>
+            {who.slice(0, 2).join(", ")}{who.length > 2 ? ` +${who.length - 2}` : ""}
+          </Typography>
+          <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
+            {cleanText(String(head.Subject || "")) || "conversation"}
+          </Typography>
+          <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, fontWeight: 600, color: ROLES.info.ink,
+            bgcolor: ROLES.info.tint, border: `1px solid ${ROLES.info.bd}`, borderRadius: 99, px: 0.75,
+            lineHeight: "15px", flexShrink: 0 }}>{rows.length}</Typography>
+          <StateMark row={head} state={st} />
+        </Box>
+        <Box sx={{ display: "grid", gridTemplateRows: open ? "0fr" : "1fr", transition: "grid-template-rows .2s ease" }}>
+          <Box sx={{ overflow: "hidden" }}>
+            <Typography noWrap sx={{ fontSize: 10.5, lineHeight: 1.5, pt: "2px", pl: "20px", color: FAINT }}>
+              {spanText(rows, fmtTime12)}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 

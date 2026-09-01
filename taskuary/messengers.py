@@ -264,7 +264,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             if jid not in want: continue                      # groups are opt-in, always
         elif not (star or jid in want): continue              # direct chats ride on '*'
         body, audio, image = (m.get('text') or '').strip(), m.get('audio'), m.get('image')
-        if not body and not audio and not image: continue
+        doc = m.get('doc')
+        # a DOCUMENT counts. Without it in this list a .docx with no caption was dropped whole -
+        # the owner watched a file they had just been sent never reach the Timeline (2026-09-01).
+        if not body and not audio and not image and not doc: continue
         # a voice note lands like any message: transcribed when a voice connector exists, and
         # otherwise filed with the reason and the audio attached (voice.py) - it never vanishes
         atts, transcribed, why = [], True, ''
@@ -284,6 +287,14 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                 mime, name = (m.get('imageMime') or 'image/jpeg').split(';')[0], os.path.basename(image)
                 atts.append({'id': f"image:{m.get('id')}", 'name': name, 'contentType': mime, 'size': len(data),
                              'contentBytes': base64.b64encode(data).decode(), 'isInline': True})
+        # a file is the message when nothing was typed with it
+        if doc:
+            data = _read_media(doc)
+            if data is not None:
+                mime = (m.get('docMime') or 'application/octet-stream').split(';')[0]
+                name = m.get('docName') or os.path.basename(doc)
+                atts.append({'id': f"doc:{m.get('id')}", 'name': name, 'contentType': mime,
+                             'size': len(data), 'contentBytes': base64.b64encode(data).decode()})
         ext_id = f"whatsapp:{jid}:{m.get('id')}"
         r = ingest_message(store, file_only=file_only or not transcribed, msg={
             'external_id': ext_id, 'channel': 'whatsapp',

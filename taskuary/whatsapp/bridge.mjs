@@ -65,6 +65,12 @@ async function connect() {
       const body = text(m.message || {}), quoted = text(context(m.message || {})?.quotedMessage || {});
       if (!body && !m.message) continue;
       const am = m.message?.audioMessage, im = m.message?.imageMessage;
+      // ...and a DOCUMENT. Only audio and images were ever fetched, so a .docx dropped into
+      // the chat had no text, no audio and no image - and messengers.py, which requires one
+      // of those three, discarded the whole message. A file somebody sent you simply never
+      // existed. (documentWithCaptionMessage is the same thing wearing a caption.)
+      const dm = m.message?.documentMessage
+        || m.message?.documentWithCaptionMessage?.message?.documentMessage;
       // A PHOTO is the message. Downloading only the audio meant a screenshot arrived as its
       // caption or as nothing at all - "on my laptop, words look weird" with the picture of the
       // broken words dropped on the floor, and triage ruling on a sentence about nothing.
@@ -83,10 +89,15 @@ async function connect() {
         (mt) => (mt.includes("ogg") ? "ogg" : mt.includes("mp4") ? "m4a" : "bin"));
       const [image, imageMime] = await grab(im, "image/jpeg",
         (mt) => (mt.includes("png") ? "png" : mt.includes("webp") ? "webp" : "jpg"));
+      // keep the sender's own extension where there is one: "Homepage Copy.docx" is the name the
+      // owner will look for, and a .bin they cannot open is barely better than losing it
+      const [doc, docMime] = await grab(dm, "application/octet-stream",
+        () => (String(dm?.fileName || "").split(".").pop() || "bin").slice(0, 8).toLowerCase());
       messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid, group: m.key.remoteJid?.endsWith("@g.us"),
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
         fromMe: !!m.key.fromMe, quoted, key: m.key, // quote routes phone answers; key is for read receipts
-        audio, mime, seconds: Number(am?.seconds) || 0, voice: !!am?.ptt, image, imageMime });
+        audio, mime, seconds: Number(am?.seconds) || 0, voice: !!am?.ptt, image, imageMime,
+        doc, docMime, docName: dm?.fileName || "" });
       while (messages.length > MAX_KEPT) messages.shift();
     }
   });

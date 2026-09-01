@@ -44,6 +44,27 @@ class PrepOpensTheChat(unittest.TestCase):
         _, t = self._prep()
         self.assertIn('Get me ready', (t.get('task', t))['Summary'])
 
+    def test_the_prep_row_belongs_to_the_invite(self):
+        """Not a separate line an hour down the rail: the row carries the event's own key, which
+        is how the Timeline draws it UNDER the meeting instead of beside it."""
+        d, _ = self._prep()
+        msgs = server.store.list_messages(d['taskId'])
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]['ConversationId'], server.prep_key(EVENT['start'], EVENT['subject']))
+        self.assertEqual(msgs[0]['Channel'], 'own')
+
+    def test_the_key_is_built_the_same_way_from_either_end(self):
+        """FeedView.evKey builds this string from the event it is drawing. If they drift the prep
+        floats loose again, so the shape is pinned here."""
+        self.assertEqual(server.prep_key('2026-09-02T13:00:00', '  Review  '),
+                         'calendar:2026-09-02T13:00:00:Review')
+        self.assertEqual(server.prep_key(None, None), 'calendar::the meeting')
+
+    def test_the_prep_row_cannot_be_replied_to(self):
+        """It is on channel own - nobody sent it, so nothing drafts an answer to nobody."""
+        from taskuary.outbound import can_reply
+        self.assertFalse(can_reply(server.store, 'own'))
+
     def test_an_old_page_posting_an_agent_still_works(self):
         """The agent/model fields stayed on the body so a tab loaded before the switch does not 422."""
         r = c.post('/api/calendar/prep', json={**EVENT, 'agent': 'coder', 'model': 'whatever'})

@@ -1302,6 +1302,7 @@ class SQLiteStore:
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
+                       m.ConversationId,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,

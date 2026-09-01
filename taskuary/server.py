@@ -1377,6 +1377,12 @@ def calendar_today():
     try: return cal.today(store)
     except Exception as e: return {'date': None, 'now': None, 'events': [], 'tz': None, 'errors': [str(e)[:200]]}
 
+def prep_key(start, subject) -> str:
+    """What ties a prep row to the invite it is about. The front end builds the same string from
+    the event it is drawing (FeedView.evKey), so the two must not drift - hence one function and
+    one comment saying so."""
+    return f"calendar:{start or ''}:{(subject or 'the meeting').strip()[:120]}"
+
 class MeetingPrepBody(BaseModel):
     """The event as the Timeline panel already has it, plus what the owner wants done about it."""
     subject: str | None = None; start: str | None = None; end: str | None = None
@@ -1400,13 +1406,21 @@ def calendar_prep(body: MeetingPrepBody):
     tag is exactly what the Board and + New create, so the chat opens with the brief already
     asked (website/src/newTask.js, GeneralWorkspace).
     """
-    from . import calendar as cal
+    from . import calendar as cal, ownwork
     subject = (body.subject or 'the meeting').strip()[:120]
     brief = cal.prep_brief(body.dict())
     ask = (body.instruction or '').strip() or 'Get me ready for this meeting.'
     tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}',
                              'Kind': 'general', 'Tags': ASK_TAG, 'Source': 'calendar',
                              'SourceRef': f"calendar:{body.start or ''}:{subject}"[:200]}, ACTOR)
+    # The row for this work belongs to the INVITE. Left to ownwork.ensure it became a separate
+    # line stamped whenever the session happened to open - so a meeting and the prep for it sat an
+    # hour apart on a rail that is meant to read as a day. Same ConversationId as the event keys
+    # them together, and ensure() then finds a row already here and adds nothing.
+    store.add_message({'TaskId': tid, 'ExternalId': f'prep:{tid}', 'ConversationId': prep_key(body.start, subject),
+                       'Channel': ownwork.CHANNEL, 'SourceName': ownwork.SOURCE,
+                       'Subject': f'Prep: {subject}'[:200], 'FromName': 'You', 'Status': 'routed',
+                       'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': ask})
     store.audit('task', tid, 'create_from_meeting', ACTOR, detail={'subject': subject, 'start': body.start})
     return {'taskId': tid, 'ref': task_ref(tid), 'agent': 'assistant', 'chat': True}
 

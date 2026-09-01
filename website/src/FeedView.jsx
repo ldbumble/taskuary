@@ -19,6 +19,7 @@ import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { fadeBand } from "./timelineFade.js";
+import { syncStatusDelay } from "./syncTiming.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
 import { timelineDayLabel } from "./timelineDay.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
@@ -204,7 +205,11 @@ const useCalToday = () => {
 };
 // One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it
 // after the same beat a message takes, click opens it now; the panel shows who is in it and why.
-const MeetingRow = ({ e, onPick, picked }) => {
+// What ties a prep row to the invite it is about. server.prep_key builds the same string when
+// the prep is created; if the two drift, the prep goes back to floating an hour down the rail.
+export const evKey = (e) => `calendar:${e?.start || ""}:${String(e?.subject || "the meeting").trim().slice(0, 120)}`;
+
+const MeetingRow = ({ e, onPick, picked, preps = [], onOpenRow }) => {
   const hover = useRef(null);
   useEffect(() => () => clearTimeout(hover.current), []);
   const u = untilText(e.start, e.end), open = picked && picked.start === e.start && picked.subject === e.subject;
@@ -248,6 +253,22 @@ const MeetingRow = ({ e, onPick, picked }) => {
             </Typography>
           </Box>
         </Box>
+        {/* What you asked for ABOUT THIS MEETING, on the meeting. It used to be a row of its own,
+            stamped whenever the session happened to open, so the invite and the prep for it sat
+            an hour apart on a rail that is meant to read as a day. */}
+        {preps.map((p) => (
+          <Box key={p.MessageId} onClick={(ev) => { ev.stopPropagation(); onOpenRow?.(p); }}
+            sx={{ display: "flex", alignItems: "center", gap: 0.7, mt: 0.4, pt: 0.4, minWidth: 0,
+              borderTop: `1px dashed ${BORDER}`, cursor: "pointer",
+              "&:hover .tqPrepTitle": { color: INK } }}>
+            <Box component="span" aria-hidden sx={{ fontSize: 10.5, lineHeight: 1, flexShrink: 0 }}>💡</Box>
+            <Typography className="tqPrepTitle" variant="caption" noWrap
+              sx={{ color: DIM, fontWeight: 600, fontSize: 11, flex: 1, minWidth: 0, transition: "color .15s" }}>
+              {String(p.Subject || "").replace(/^Prep:\s*/i, "") || "prep"}
+            </Typography>
+            <StateMark row={p} size="sm" />
+          </Box>
+        ))}
       </Box>
     </Box>
   );
@@ -468,17 +489,26 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // regardless of scroll. The rows slide into the date's underside and only the LABEL updates -
   // a scroll spy reads which day group currently crosses the header's bottom edge.
   const dayRefs = useRef({});                        // day (YYYY-MM-DD) -> group element
+  const dayLayout = useRef([]);                      // cached content offsets; scrolling must not force layout
+  const dayLayoutDirty = useRef(true);
   const [curDay, setCurDay] = useState("");
   const spy = useCallback(() => {
     const rail = railRef.current; if (!rail) return;
-    const edge = rail.getBoundingClientRect().top + 1;
-    // the current day is the one whose group top sits furthest BELOW all others yet above the edge -
-    // i.e. of the groups already scrolled past the date line, the lowest (most recently entered) one
-    let cur = "", curTop = -Infinity;
-    for (const [d, el] of Object.entries(dayRefs.current)) {
-      if (!el) continue;
-      const top = el.getBoundingClientRect().top;
-      if (top <= edge && top > curTop) { cur = d; curTop = top; }
+    if (dayLayoutDirty.current) {
+      // Measure once after the rows/layout change. Reading every group's bounding box on every
+      // wheel frame made Chromium synchronously lay out the whole rail while it was scrolling.
+      const railTop = rail.getBoundingClientRect().top;
+      dayLayout.current = Object.entries(dayRefs.current).flatMap(([day, el]) => el
+        ? [{ day, top: el.getBoundingClientRect().top - railTop + rail.scrollTop }]
+        : []).sort((a, b) => a.top - b.top);
+      dayLayoutDirty.current = false;
+    }
+    const edge = rail.scrollTop + 1;
+    // the current day is the last group whose cached content edge has crossed the dock
+    let cur = "";
+    for (const entry of dayLayout.current) {
+      if (entry.top > edge) break;
+      cur = entry.day;
     }
     setCurDay((was) => cur || was);
   }, []);
@@ -592,7 +622,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
   useEffect(() => {
-    let alive = true, timer = null, wasRunning = false;
+    let alive = true, timer = null, completionTimer = null, wasRunning = false, seenPollAt = null;
     const ask = async () => {
       if (!alive) return;
       let running = false;
@@ -600,21 +630,36 @@ export default function FeedView({ onOpenTask, onChanged }) {
         const { data } = await api.get("/api/ingest/status");
         if (!alive) return;
         if (data.everyMinutes != null) setEvery(data.everyMinutes);
-        if (data.lastPollAt) setLastSync(new Date(Date.now() - (data.now - data.lastPollAt) * 1000));
+        const pollAt = Number(data.lastPollAt) || null;
+        const completedBetweenChecks = seenPollAt != null && pollAt != null && pollAt > seenPollAt;
+        if (pollAt) setLastSync(new Date(Date.now() - (data.now - pollAt) * 1000));
+        seenPollAt = pollAt;
         nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
         setTriageErr(data.triageError || "");
         if (data.timelineFade) setFade(data.timelineFade);
         // the server's OWN ten-minute sync wears the same face as pressing the button: the
         // button says Syncing…, the caption says what it is reading, rows land as they arrive
         running = data.status?.state === "running";
-        if (running) { setBgSync(true); setSyncWhat(data.status.what || ""); load(rowsLen.current); }
+        if (running) {
+          clearTimeout(completionTimer);
+          setBgSync(true); setSyncWhat(data.status.what || ""); load(rowsLen.current);
+        }
         else if (wasRunning) { setBgSync(false); setSyncWhat(""); load(rowsLen.current); }
+        else if (completedBetweenChecks) {
+          // Even a sub-second automatic poll gets a visible receipt. The clock changing proves
+          // a real refresh ran, even if it completed between the two status requests.
+          setBgSync(true); setSyncWhat("timeline refreshed"); load(rowsLen.current);
+          clearTimeout(completionTimer);
+          completionTimer = setTimeout(() => {
+            if (alive) { setBgSync(false); setSyncWhat(""); }
+          }, 900);
+        }
         wasRunning = running;
       } catch { /* the caption just stops counting */ }
-      timer = setTimeout(ask, running ? 2000 : 30000);   // watch a sync closely; otherwise re-anchor every half minute
+      timer = setTimeout(ask, syncStatusDelay({ running, nextAt: nextAtRef.current }));
     };
     ask();
-    return () => { alive = false; clearTimeout(timer); };
+    return () => { alive = false; clearTimeout(timer); clearTimeout(completionTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
@@ -697,11 +742,23 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // locks the panel in place. Rows sliding under a STILL cursor fire mouseenter too - that is
   // scrolling, not hovering, so nothing opens until the mouse itself moves again.
   const lastScroll = useRef(0);
+  const hoverArmed = useRef(true);
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;
-    const h = () => { lastScroll.current = Date.now(); clearTimeout(hoverTimer.current); };
+    let stopped = null;
+    const h = () => {
+      lastScroll.current = Date.now(); clearTimeout(hoverTimer.current);
+      // Scrolling moves rows under a stationary pointer. Keep hover locked even after the wheel
+      // settles; only an intentional pointer move should make a newly arrived email react.
+      hoverArmed.current = false;
+      rail.dataset.tqScrolling = "true";
+      rail.dataset.tqHoverLocked = "true";
+      clearTimeout(stopped);
+      stopped = setTimeout(() => { delete rail.dataset.tqScrolling; }, 120);
+    };
     rail.addEventListener("scroll", h, { passive: true });
-    return () => rail.removeEventListener("scroll", h);
+    return () => { rail.removeEventListener("scroll", h); clearTimeout(stopped);
+      delete rail.dataset.tqScrolling; delete rail.dataset.tqHoverLocked; };
   }, []);
   const [sel, setSel] = useState(null);
   const [sendErr, setSendErr] = useState("");     // approved, but the channel refused it
@@ -768,6 +825,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [panelLock, setPanelLock] = useState(false);
   const hoverSelect = (row) => {
     clearTimeout(hoverTimer.current);
+    if (!hoverArmed.current) return;
     if (sel?.MessageId === row.MessageId) return;
     if (sel && ((editText ?? "").trim() || panelLock)) return;   // don't yank an OPEN panel mid-edit
     // a meeting you CLICKED stays until you click something else; one that opened on hover gives
@@ -806,7 +864,16 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // The category is enforced here too: whatever the request returned, a row outside the
   // picked category never renders under its pill (mail was showing under "code").
   const catChans = channelsForCategory(cat, Object.keys(srcByChannel));
-  const sorted = [...(rows || [])].filter((r) => !catChans || catChans.includes(r.Channel))
+  // a prep row is drawn BY its meeting (MeetingRow), so it must not also be drawn as a line of
+  // its own - keyed on the conversation id server.prep_key gave it
+  const prepFor = {};
+  for (const r of rows || []) {
+    const cid = String(r.ConversationId || "");
+    if (cid.startsWith("calendar:")) (prepFor[cid] = prepFor[cid] || []).push(r);
+  }
+  const sorted = [...(rows || [])]
+    .filter((r) => !String(r.ConversationId || "").startsWith("calendar:"))
+    .filter((r) => !catChans || catChans.includes(r.Channel))
     .sort((a, b) => (b.SentAt || "").localeCompare(a.SentAt || ""));
   const days = sorted.reduce((acc, r) => {
     const d = localDay(r.SentAt) || "undated";
@@ -843,7 +910,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
   const today = new Date().toLocaleDateString("sv-SE");
   const todays = (rows || []).filter((r) => localDay(r.SentAt) === today);
-  const stats = [{ label: "in today", n: todays.length, f: "" }, ...[
+  // meetings are rows too. Counting only messages meant the rail showed three lines under a
+  // heading that said two - the invite was on screen and in no total.
+  const todayMeetings = timelineMeetings.filter((e) => localDay(e.start) === today).length;
+  const stats = [{ label: "in today", n: todays.length + todayMeetings, f: "" }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
     { label: "needs me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true },
     { label: "info", n: todays.filter((r) => r.Category === "info").length, f: "" },
@@ -884,7 +954,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
               inputProps={{ "aria-label": "Timeline category" }}
               renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "everything"}
               sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
-                color: cat ? INK : DIM, flexShrink: 0,
+                color: cat ? INK : DIM, flexShrink: 0, ml: "auto",
                 "& .MuiSelect-select": { py: 0.25, px: 1.15 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
               {CATEGORIES.map((o) => <MenuItem key={o.key} value={o.key} sx={{ fontSize: 12 }}>{o.label}</MenuItem>)}
@@ -940,7 +1010,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 not alone on a wasteful row above it. */}
             <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
               startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-              sx={{ flexShrink: 0, height: 34, minWidth: 68, py: 0.25, px: 1.1, ml: "auto", borderRadius: 2,
+              sx={{ flexShrink: 0, height: 34, minWidth: 68, py: 0.25, px: 1.1, borderRadius: 2,
                 fontSize: 11.5, background: GRADIENT }}>New</Button>
           </Box>
 
@@ -1005,8 +1075,28 @@ export default function FeedView({ onOpenTask, onChanged }) {
         </Box>
 
         {/* ── the scroller ── */}
-        <Box ref={railRef} sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
-          position: "relative", px: 1, pt: 1, pb: 3 }}>
+        <Box ref={railRef}
+          onPointerMoveCapture={() => {
+            // Capture runs before the row's mousemove. The first real pointer move after the rail
+            // settles arms that row; wheel movement by itself never does.
+            if (!hoverArmed.current && Date.now() - lastScroll.current >= 120) {
+              hoverArmed.current = true;
+              delete railRef.current?.dataset.tqHoverLocked;
+            }
+          }}
+          onPointerLeave={() => {
+            hoverArmed.current = true;
+            delete railRef.current?.dataset.tqHoverLocked;
+          }}
+          sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
+          position: "relative", px: 1, pt: 1, pb: 3,
+          "&[data-tq-scrolling='true'] .tqRow [data-tq-keep]": {
+            transition: "none !important",
+          },
+          "&[data-tq-hover-locked='true'] .tqRow [data-tq-open='false'], &[data-tq-hover-locked='true'] .tqRow [data-tq-open='false']:hover": {
+            borderColor: `${BORDER} !important`, borderLeftColor: "var(--tq-row-edge) !important",
+            boxShadow: "none !important", transition: "none !important", cursor: "default",
+          } }}>
           <FunnelBar onOpenTask={onOpenTask} />
           <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
             {syncing && (
@@ -1021,7 +1111,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 : "Nothing in the feed yet — connect a source in Connections (a mailbox, a chat, a repo, a board…) and hit Sync now."}</Empty>
             ) : dayEntries.map(([day, items], di) => (
               // the group's top edge is what the date spy watches - no header row of its own
-              <Box key={day} sx={{ mt: di ? 1.25 : 0.5 }} ref={(el) => { if (el) dayRefs.current[day] = el; else delete dayRefs.current[day]; }}>
+              <Box key={day} sx={{ mt: di ? 1.25 : 0.5 }} ref={(el) => {
+                if (el) dayRefs.current[day] = el; else delete dayRefs.current[day];
+                dayLayoutDirty.current = true;
+              }}>
                 {di === 0 && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
                 <Box>
                   {items.map((r, i) => {
@@ -1038,7 +1131,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     return (
                       <React.Fragment key={r.MessageId}>
                         {!cat && !pick && meetingsAt(day, items, i).map((e, j) => (
-                          <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                          <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
+                            preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); drill(p); }}
+                            onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                         ))}
                         <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
                           alignItems: "stretch", mb: "3px",
@@ -1061,8 +1156,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
                               short rest and unfolds a second line; click pins it. It used to
                               unfold on hover alone, and a cursor sweeping the list heaved every
                               row below it. */}
-                          <Box data-tq-keep onClick={() => drill(r)} onMouseEnter={() => hoverSelect(r)} onMouseMove={() => hoverSelect(r)} onMouseLeave={hoverCancel}
-                            sx={{ bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
+                          <Box data-tq-keep data-tq-open={open ? "true" : "false"} onClick={() => drill(r)}
+                            onMouseMove={() => hoverSelect(r)} onMouseLeave={hoverCancel}
+                            sx={{ "--tq-row-edge": edgeOf(st), bgcolor: ["ignored", "filed"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
                               border: `1px solid ${BORDER}`, borderLeft: `2px solid ${edgeOf(st)}`,
                               borderRadius: "8px", px: "10px", pt: "3px", pb: "4px", ml: "8px",
                               minWidth: 0, overflow: "hidden",
@@ -1115,7 +1211,9 @@ export default function FeedView({ onOpenTask, onChanged }) {
                   })}
                   {/* meetings that started before the oldest message of the day shown so far */}
                   {!cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
-                    <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                    <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
+                            preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); drill(p); }}
+                            onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                   ))}
                 </Box>
               </Box>

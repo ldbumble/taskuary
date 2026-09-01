@@ -19,7 +19,7 @@
 export const STATES = {
   waving:  { mark: "👋", word: "agent waving",  role: "you",     loud: true,
              hint: "the agent stopped and asked you something — open it and answer" },
-  working: { mark: "🤖", word: "agent working", role: "working",
+  working: { mark: "taskuary", word: "agent working", role: "working",
              hint: "a session has this open right now" },
   reply:   { mark: "✉️", word: "reply ready",   role: "you",     loud: true,
              hint: "the agent finished and drafted the answer — read it and send" },

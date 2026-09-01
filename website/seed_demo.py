@@ -145,6 +145,19 @@ fx.comment(tid11, 'Queued behind TQ-%04d "Report charts render blank in dark mod
            'both would modify website/src/ReportsView.jsx. It starts by itself when that agent finishes.' % tid9,
            actor='router')
 
+# 7b. The durable handbook is deliberately separate from the Board's live handoffs. Each entry
+# names the agent and the task that taught it, so Social demonstrates provenance instead of
+# looking like an anonymous robot feed.
+from taskuary import handbook
+lore1 = handbook.post(s, 'Report charts must read theme tokens, not fixed colors',
+    'Use the report palette from website/src/theme.jsx. Fixed light colors disappear when the canvas is rendered in dark mode.',
+    'reports', 'gotcha', 'claude', task_id=tid9, cwd='website/src', repo='taskuary')
+s.lore_vote(lore1['LoreId'], 2)
+lore2 = handbook.post(s, 'New sites belong in the shared site filter',
+    'The weekly headcount query and every export share the site filter in taskuary/reports.py. Add a site there rather than patching one report.',
+    'reporting', 'howto', 'codex', task_id=tid10, cwd='taskuary', repo='taskuary')
+s.lore_comment(lore2['LoreId'], 'This also covers scheduled CSV exports.', 'owner')
+
 # 8. the Morning digest, sectioned - the panel renders the emoji headers as real headings,
 # and the digest screenshot is cropped off this row's open panel
 m15 = fx.message(external_id='demodigest', channel='report', source_name='Morning digest',

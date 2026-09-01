@@ -13,9 +13,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Button, CircularProgress, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, card, mono } from "./theme.jsx";
-import { Empty, timeAgo } from "./ui.jsx";
+import { Empty, timeAgo, TaskuaryMark } from "./ui.jsx";
 
 // what a note IS, in the agents' own vocabulary. The colour is a dot beside the word, never a
 // wash over the card: one oxblood surface in this app means ALERT, and a note is not an alert.
@@ -43,11 +44,11 @@ const short = (p) => String(p || "").split(/[\\/]/).filter(Boolean).slice(-1)[0]
 const dayOf = (t) => String(t || "").slice(0, 10);
 
 const Face = ({ who, size = 30 }) => {
-  const f = faceOf(who);
+  const owner = /^(you|owner|dana whitfield)$/i.test(String(who || "").trim());
   return (
-    <Box sx={{ width: size, height: size, borderRadius: "50%", bgcolor: f.bg, color: "#fff", flexShrink: 0,
-      display: "grid", placeItems: "center", fontSize: size * 0.42, fontWeight: 700, letterSpacing: 0 }}>
-      {f.letter}
+    <Box sx={{ width: size, height: size, borderRadius: "50%", bgcolor: owner ? "#eae4d8" : PANEL2,
+      border: `1px solid ${BORDER}`, color: DIM, flexShrink: 0, display: "grid", placeItems: "center" }}>
+      {owner ? <PersonOutlineIcon sx={{ fontSize: size * 0.58 }} /> : <TaskuaryMark size={size * 0.64} />}
     </Box>
   );
 };
@@ -144,7 +145,7 @@ export default function AgentWall({ onOpenTask, refresh }) {
       <Box sx={{ ...card, p: 1.5, mb: 1.5 }}>
         <Box sx={{ display: "flex", gap: 1.25, alignItems: "flex-start" }}>
           <Face who="you" />
-          <TextField fullWidth multiline maxRows={4} size="small" value={body} placeholder="Leave a note for the agents…"
+          <TextField fullWidth multiline maxRows={4} size="small" value={body} placeholder="Leave a live handoff for the agents…"
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); post(); } }}
             sx={{ bgcolor: "#fff", "& textarea": { fontSize: 13 } }} />
@@ -160,7 +161,7 @@ export default function AgentWall({ onOpenTask, refresh }) {
             ))}
           </Select>
           <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
-            Agents read this before they start — and post here themselves with <code>taskuary --note</code>.
+            Task-specific and short-lived; durable company or repo knowledge belongs in Social. Agents post with <code>taskuary --note</code>.
           </Typography>
           {/* the older days are still here, folded - one summary each, per checkout */}
           <Button size="small" onClick={() => setAll((x) => !x)} sx={{ fontSize: 11, color: DIM, textTransform: "none" }}>

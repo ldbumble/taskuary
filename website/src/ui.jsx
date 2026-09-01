@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import BlockIcon from "@mui/icons-material/Block";
 import api from "./api";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -11,7 +10,6 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import GitHubIcon from "@mui/icons-material/GitHub";
 // the assistant wears TASKUARY's own mark, not a robot head: it is this app talking, and a
 // generic bot glyph read as some third party bolted on the side
-import HubIcon from "@mui/icons-material/Hub";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import TerminalIcon from "@mui/icons-material/Terminal";
@@ -35,6 +33,13 @@ import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/materia
 import { Logo, hasLogo } from "./logos.jsx";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
+// Taskuary actions wear Taskuary's actual product mark. The generic robot glyph suggested a
+// third-party bot and, on a quiet text button, did not make the dispatch action read as a button.
+export const TaskuaryMark = ({ size = 18, sx }) => (
+  <Box component="img" src={`${import.meta.env.BASE_URL}favicon.png`} alt="" aria-hidden
+    sx={{ width: size, height: size, display: "block", flexShrink: 0, borderRadius: "27%", ...sx }} />
+);
+
 // Brand colors so a glance says where a message came from: Teams purple, Outlook blue - and
 // amber for scheduled reports, the one row that is ours and not a person, so it has to read
 // from across the room rather than blend into the paper the way sage did.
@@ -45,7 +50,7 @@ export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
   aws: "#ff9900", azure: "#0078d4", database: "#6b6459", smb_file: "#6b6459", own: "#8a7a5c" };
-const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon, assistant: HubIcon,
+const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon,
   followup: SendIcon, promise: ChecklistIcon, prep: GroupsIcon, cold: ErrorOutlineIcon, idea: AutoAwesomeIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon, imessage: SendIcon,
   ai: AutoAwesomeIcon, jira: BugReportIcon, asana: ChecklistIcon, monday: ViewKanbanIcon,
@@ -57,6 +62,7 @@ const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: Assessmen
 // A product named on a card wears its OWN logo where we have one (logos.jsx, self-colored);
 // everything else falls back to a Material glyph tinted with the channel's brand color.
 export const ChannelIcon = ({ channel, sx }) => {
+  if (channel === "assistant") return <TaskuaryMark size={15} sx={sx} />;
   if (hasLogo(channel)) return <Logo name={channel} sx={sx} />;
   const Icon = CHANNEL_ICONS[channel] || TerminalIcon;
   return <Icon sx={{ fontSize: 15, color: CHANNEL_COLORS[channel] || "#a9a294", ...sx }} />;
@@ -734,7 +740,7 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
   };
   if (sent) return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: dense ? 0.5 : 1 }}>
-      <SmartToyIcon sx={{ fontSize: 15, color: "#47654a" }} />
+      <TaskuaryMark size={16} />
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>
         {sent.agent} is on it in a live session — {sent.ref}
       </Typography>
@@ -744,17 +750,23 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
   );
   if (!open) return row ? (
     <ChoiceRow first={first} tint="#e3e6e1" onClick={() => setOpen(true)}
-      icon={<SmartToyIcon sx={{ fontSize: 15, color: "#6f8a6e" }} />}
+      icon={<TaskuaryMark size={17} />}
       label="Send it to a coding agent" hint="opens a live session on a new task — you watch it work" />
   ) : (
-    <Button size="small" startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />} onClick={() => setOpen(true)}
-      sx={{ fontSize: 11.5, color: "#6f8a6e" }}>Send to coding agent</Button>
+    <Button size="small" variant="contained" disableElevation startIcon={<TaskuaryMark size={18} />}
+      onClick={() => setOpen(true)}
+      sx={{ minHeight: 36, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
+        fontWeight: 700, color: "#fff", background: "linear-gradient(135deg, #4f46e5, #735eea)",
+        border: "1px solid #4f46e5", boxShadow: "0 1px 2px rgba(63, 54, 160, .18)",
+        "&:hover": { background: "linear-gradient(135deg, #4438d7, #6652dd)", boxShadow: "0 2px 5px rgba(63, 54, 160, .22)" } }}>
+      Send to coding agent
+    </Button>
   );
   return (
     <Box sx={{ mt: 1, p: 1.25, bgcolor: "#faf8ff", border: "1px solid #e9ddfb", borderRadius: 1.5 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
-        <SmartToyIcon sx={{ fontSize: 15, color: "#6f8a6e" }} />
-        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700 }}>Send to an agent</Typography>
+        <TaskuaryMark size={17} />
+        <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 700 }}>Send to a coding agent</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         <AgentPicker agents={agents} models={models} agent={agent} model={model}
           onAgent={setAgent} onModel={setModel} size={26} />

@@ -14,6 +14,8 @@ import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
+import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { timelineOpacity } from "./timelineFade.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
@@ -24,11 +26,10 @@ import { pollWhileVisible } from "./visible.js";
 import { feedHeaders, feedOk, takeFeed } from "./feedLoad.js";
 import { ALERT, ALERT_BD, ALERT_INK, ASSISTANT, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, GRADIENT, card, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, RefChip, ChoiceRow, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useAgents, useVoiceReady } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, RefChip, ChoiceRow, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -231,10 +232,10 @@ const MeetingRow = ({ e, onPick, picked, fade }) => {
         onMouseLeave={() => clearTimeout(hover.current)}
         sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${u.hot ? ALERT : ROLES.info.solid}`,
           borderRadius: "8px", px: "10px", pt: "3px", pb: "4px", ml: "8px", minWidth: 0, overflow: "hidden",
-          opacity: fade ? 0.66 : 1, cursor: "pointer",
+          opacity: open ? 1 : rowOpacity(e.start, fade, false), cursor: "pointer",
           transition: "box-shadow .18s, border-color .18s, opacity .15s",
-          ...(open ? { borderColor: ACCENT, boxShadow: `inset 0 0 0 1px ${ACCENT}, 0 1px 3px rgba(30,50,38,.08)`, opacity: 1 } : {}),
-          "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)", opacity: 1 } }}>
+          ...(open ? { borderColor: ACCENT, boxShadow: `inset 0 0 0 1px ${ACCENT}, 0 1px 3px rgba(30,50,38,.08)` } : {}),
+          "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }}>
         <Box sx={{ display: "flex", gap: 0.85, alignItems: "center", minWidth: 0, minHeight: 22 }}>
           <EventIcon sx={{ fontSize: 16, color: ROLES.info.solid, flexShrink: 0 }} />
           <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12, flex: 1, minWidth: 0 }}>{e.subject}</Typography>
@@ -292,7 +293,7 @@ const MeetingPrep = ({ e, onOpenTask }) => {
   };
   if (sent) return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-      <SmartToyIcon sx={{ fontSize: 15, color: "#47654a" }} />
+      <TaskuaryMark size={15} />
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>
         {sent.agent} is prepping it — {sent.ref}
       </Typography>
@@ -317,7 +318,7 @@ const MeetingPrep = ({ e, onOpenTask }) => {
           it gets the invite — when, where, who is in it and what it says
         </Typography>
         <Button size="small" variant="contained" disableElevation disabled={busy || !prompt.trim()} onClick={send}
-          startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SmartToyIcon sx={{ fontSize: 14 }} />}
+          startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <TaskuaryMark size={14} />}
           sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
           {busy ? "sending…" : "Send to an agent"}
         </Button>
@@ -458,7 +459,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const calEvents = useCalToday();
   // the filter dock freezes at the top (Excel-style); the day header sticks just under it and the
-  // rows dissolve into the top going under, and into nothing at the bottom of the screen. dockH is
+  // rows dissolve into the top as they pass under the fixed header. dockH is
   // measured so the sticky date sits exactly below the frozen dock whatever its wrapped height.
   const dockRef = useRef(null);
   // the rail's own scroller. The Timeline used to BE the page: it scrolled the window, its
@@ -601,42 +602,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [nextIn, setNextIn] = useState(null);        // seconds until the next background sync, from the server
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
-  const [fade, setFade] = useState("normal");        // how old rows dim (Settings > Display), from ingest/status
-  // the fade is a RESTING state, not a filter: scrolling or hovering brings every row back to full,
-  // so nothing is ever hidden from someone actually reading the list
-  const listRef = useRef(null);
-  const [bottomFade, setBottomFade] = useState(false);
-  // the dissolve at the foot of the RAIL, not of the window: the list has its own scrollbar now,
-  // so "there is nothing further down" is a fact about this container and nothing else
-  useEffect(() => {
-    const rail = railRef.current; if (!rail) return undefined;
-    let raf = 0;
-    const measure = () => { raf = 0; setBottomFade(rail.scrollHeight - rail.scrollTop - rail.clientHeight > 24); };
-    const queue = () => { if (!raf) raf = requestAnimationFrame(measure); };
-    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(queue);
-    resize?.observe(rail);
-    rail.addEventListener("scroll", queue, { passive: true });
-    window.addEventListener("resize", queue, { passive: true });
-    queue();
-    return () => {
-      resize?.disconnect();
-      rail.removeEventListener("scroll", queue);
-      window.removeEventListener("resize", queue);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-  useEffect(() => {
-    const rail = railRef.current; if (!rail) return undefined;
-    let tm = 0;
-    const wake = () => {
-      const el = listRef.current; if (!el) return;
-      el.dataset.live = "1"; clearTimeout(tm);
-      tm = setTimeout(() => { if (listRef.current) listRef.current.dataset.live = "0"; }, 2500);
-    };
-    rail.addEventListener("scroll", wake, { passive: true });
-    rail.addEventListener("wheel", wake, { passive: true });
-    return () => { clearTimeout(tm); rail.removeEventListener("scroll", wake); rail.removeEventListener("wheel", wake); };
-  }, []);
+  const [fade, setFade] = useState("normal");        // Settings > Display; normal is the useful default
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
@@ -1060,8 +1026,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
         <Box ref={railRef} sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
           position: "relative", px: 1, pb: 3 }}>
           <FunnelBar onOpenTask={onOpenTask} />
-          <Box ref={listRef} sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s",
-            "&[data-live='1'] .tqRow, & .tqRow:hover": { opacity: "1 !important" } }}>
+          <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
             {syncing && (
               <Box sx={{ position: "absolute", inset: 0, zIndex: 4, display: "flex",
                 alignItems: "flex-start", justifyContent: "center", pointerEvents: "none" }}>
@@ -1091,10 +1056,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     return (
                       <React.Fragment key={r.MessageId}>
                         {!cat && !pick && meetingsAt(day, items, i).map((e, j) => (
-                          <MeetingRow key={`m-${e.start}-${j}`} e={e} fade picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                          <MeetingRow key={`m-${e.start}-${j}`} e={e} fade={fade} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                         ))}
                         <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                          alignItems: "stretch", mb: "3px", opacity: rowOpacity(r.SentAt, fade, !!(view || cat || pick)), transition: "opacity .9s ease",
+                          alignItems: "stretch", mb: "3px", opacity: open ? 1 : rowOpacity(r.SentAt, fade, !!(view || cat || pick)), transition: "opacity .35s ease",
                           ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 35, 320)}ms`, animationFillMode: "backwards" }) }}>
                           {/* the clock sits in its own gutter with air on BOTH sides - 8px off the
                               container edge, 12px off the rail - so it never reads as crushed
@@ -1168,7 +1133,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                   })}
                   {/* meetings that started before the oldest message of the day shown so far */}
                   {!cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
-                    <MeetingRow key={`m-${e.start}-${j}`} e={e} fade picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                    <MeetingRow key={`m-${e.start}-${j}`} e={e} fade={fade} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                   ))}
                 </Box>
               </Box>
@@ -1177,14 +1142,6 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <Box ref={endRef} sx={{ height: 8 }} />
             {!!sorted.length && !noMore && <CircularProgress size={16} sx={{ display: "block", mx: "auto", my: 1 }} />}
           </Box>
-          {/* the bottom dissolve: the last rows fade into the foot of the rail, so "there is
-              nothing further down" is something you see rather than scroll to find out */}
-          {bottomFade && (
-            <Box aria-hidden sx={{ position: "sticky", bottom: 0, height: 0, zIndex: 6, pointerEvents: "none" }}>
-              <Box sx={{ height: 90, transform: "translateY(-90px)",
-                background: `linear-gradient(transparent, ${PANEL} 85%)` }} />
-            </Box>
-          )}
         </Box>
       </Box>
 
@@ -1267,19 +1224,27 @@ const TRAY_BTN = {
   plain: { color: DIM, bgcolor: PANEL, border: `1px solid ${BORDER}`, "&:hover": { borderColor: "#d8cfbe", bgcolor: PANEL } },
   quiet: { color: FAINT, bgcolor: "transparent", border: `1px dashed ${BORDER}`, fontWeight: 500,
     "&:hover": { borderColor: "#d8cfbe", bgcolor: PANEL } },
-  teach: { color: ALERT_INK, bgcolor: "transparent", border: `1px solid ${ALERT_BD}`,
-    "&:hover": { bgcolor: "#fcf4f5", borderColor: ALERT } },
+  teach: { color: "#5a3e83", bgcolor: "#f8f5fc", border: "1px solid #d9cbea",
+    "&:hover": { bgcolor: "#f1eafa", borderColor: "#bca3d8" } },
 };
 const TrayBtn = ({ tone = "plain", icon, children, teaches, ...rest }) => (
   <Button size="small" disableElevation startIcon={icon} {...rest}
     sx={{ ...TRAY_BTN.base, ...TRAY_BTN[tone], ...(rest.sx || {}) }}>
     {children}
-    {/* the dot says "this one is remembered". A verdict that changes how the next message is
-        judged should never look like a verdict that files one row, and until now they looked
-        identical - see LearnScope, which is where the remembering is actually chosen. */}
-    {teaches && <Box component="span" aria-hidden title="remembered — this changes how the next message like it is handled"
-      sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "currentColor", opacity: 0.65, ml: 0.85 }} />}
+    {/* Spell the consequence out. A tiny dot was technically a legend, but nobody could infer
+        that it meant this verdict changes later routing. */}
+    {teaches && <Box component="span" aria-hidden
+      sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8, bgcolor: "rgba(90,62,131,.1)",
+        fontSize: 8.5, fontWeight: 800, letterSpacing: 0.7, lineHeight: 1.5 }}>MEMORY</Box>}
   </Button>
+);
+
+const TrayGroupLabel = ({ children, note }) => (
+  <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, mb: 0.7 }}>
+    <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35, fontSize: 9.5,
+      fontWeight: 800, lineHeight: 1 }}>{children}</Typography>
+    {note && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, lineHeight: 1 }}>{note}</Typography>}
+  </Box>
 );
 
 const PanelLabel = ({ children }) => (
@@ -1300,7 +1265,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // the Tasks tab - so the hand-off form opens in this panel too
   const [handoff, setHandoff] = useState(false);
   const [more, setMore] = useState(false);        // the rest of the tray, folded away
-  const [filed, setFiled] = useState(false);      // ...and the scope line that follows a filing
+  const [filing, setFiling] = useState("");       // "once" teaches nothing; "learn" writes one Memory verdict
+  const [fileErr, setFileErr] = useState("");
   // a reply opened from THIS panel on a message with no pending review
   const [opened, setOpened] = useState(null);
   const [opening, setOpening] = useState(false);
@@ -1323,7 +1289,18 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     catch { /* session gone between render and click: the row's hint still points at the task */ }
   };
   useEffect(() => { setHandoff(false); setReshape(false); setOpened(null); setOpening(false); setHanded(false);
-    setMore(false); setFiled(false); }, [sel.MessageId]);
+    setMore(false); setFiling(""); setFileErr(""); }, [sel.MessageId]);
+  const fileMessage = async (learn) => {
+    setFiling(learn ? "learn" : "once"); setFileErr("");
+    try {
+      // /file historically learned by default, so the one-off road must send false explicitly.
+      await api.post(`/api/messages/${sel.MessageId}/file`, { learn });
+      onSkipped?.();
+    } catch (e) {
+      setFileErr(e?.response?.data?.detail || e?.message || "Could not file this message");
+      setFiling("");
+    }
+  };
   const skipSender = async () => {
     const { data } = await api.post("/api/policies", { Name: `skip:${sel.FromEmail}`, Kind: "sender", Pattern: sel.FromEmail,
       Action: "skip", Reason: "flood sender — skipped from the timeline", SortOrder: 10, Active: true });
@@ -1366,7 +1343,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const TABS = [
     { key: "msg",   label: "Message" },
     { key: "why",   label: "Triage" },
-    { key: "agent", label: "Agent", mark: onIt ? (onIt.waiting ? "👋" : "🤖") : null },
+    { key: "agent", label: "Agent", mark: onIt ? (onIt.waiting ? "👋" : <TaskuaryMark size={12} />) : null },
     { key: "reply", label: "Reply", mark: replyOpen ? "✉️" : null },
   ];
   // where you land: whatever is actually asking for you. A drafted reply beats a live agent
@@ -1419,7 +1396,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             </Typography>
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
               <Button size="small" variant="contained" disableElevation disabled={releasing} onClick={release}
-                startIcon={releasing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SmartToyIcon sx={{ fontSize: 15 }} />}
+                startIcon={releasing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <TaskuaryMark size={15} />}
                 sx={{ fontSize: 12, background: GRADIENT }}>Release to the agent</Button>
               <Typography variant="caption" sx={{ color: FAINT, alignSelf: "center" }}>
                 they are never held again after this
@@ -1563,38 +1540,45 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
             individual idea, so the generic message tray does not belong there at all - applying
             "Not our task" to a whole digest teaches the wrong sender and topic lesson. */}
         {!loading && sel.Channel !== "assistant" && (
-          <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: "#fcfaf7", px: 2, py: 1.25 }}>
+          <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: "#fcfaf7", px: 2, py: 1.35 }}>
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
               {tab === "msg" && (
-                <>
-                  {!onIt && !codeless && !held && (
-                    <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
-                  )}
-                  <TrayBtn tone={onIt || codeless || held ? "primary" : "plain"} onClick={() => setTab("reply")}
-                    icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}>Reply to this</TrayBtn>
-                  {sel.TaskId
-                    ? <TrayBtn onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
-                        Open {ref(sel.TaskId)}</TrayBtn>
-                    : <TrayBtn disabled={!!mined} icon={<AssignmentIndIcon sx={{ fontSize: 15 }} />}
-                        title="a task with your name on it - no agent is dispatched"
-                        onClick={async () => {
-                          try { const { data } = await api.post(`/api/messages/${sel.MessageId}/mine`, {});
-                            setMined(data.ref); onRefresh?.(); } catch { /* the row keeps its state */ }
-                        }}>{mined || "Mine to do"}</TrayBtn>}
-                  <Box sx={{ flex: 1, minWidth: 8 }} />
-                  {/* THE TWO EXITS, and the difference between them is the whole point. Dismiss
-                      hides this row and teaches nothing. "Nothing to do here" is a VERDICT: it
-                      files the conversation and then asks, once, how far it should apply — which
-                      is LearnScope, right below. The dot is what says so BEFORE you click, which
-                      is where it was missing: the two buttons looked identical and one of them
-                      quietly changed how the next message from that person is judged. */}
-                  <TrayBtn tone="quiet" disabled={!!filed}
-                    onClick={async () => { await api.post(`/api/messages/${sel.MessageId}/file`); setFiled(true); onRefresh?.(); }}>
-                    {filed ? "Filed" : "Dismiss just this one"}</TrayBtn>
-                  <TrayBtn tone="teach" teaches disabled={!!filed}
-                    onClick={async () => { await api.post(`/api/messages/${sel.MessageId}/file`); setFiled(true); onRefresh?.(); }}>
-                    Nothing to do here</TrayBtn>
-                </>
+                <Box sx={{ width: "100%" }}>
+                  <TrayGroupLabel note="does not change Memory">ACT ON THIS</TrayGroupLabel>
+                  <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
+                    {!onIt && !codeless && !held && (
+                      <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+                    )}
+                    <TrayBtn tone={onIt || codeless || held ? "primary" : "plain"} onClick={() => setTab("reply")}
+                      icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}>Draft a reply</TrayBtn>
+                    {sel.TaskId
+                      ? <TrayBtn onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
+                          Open {ref(sel.TaskId)}</TrayBtn>
+                      : <TrayBtn disabled={!!mined} icon={<AssignmentIndIcon sx={{ fontSize: 15 }} />}
+                          title="adds a task with your name on it; no coding agent is dispatched"
+                          onClick={async () => {
+                            try { const { data } = await api.post(`/api/messages/${sel.MessageId}/mine`, {});
+                              setMined(data.ref); onRefresh?.(); } catch { /* the row keeps its state */ }
+                          }}>{mined || "Add to my tasks"}</TrayBtn>}
+                  </Box>
+                  <Box sx={{ mt: 1.35, pt: 1.15, borderTop: `1px solid ${BORDER}` }}>
+                    <TrayGroupLabel note="choose whether this should change future routing">CLEAR FROM TIMELINE</TrayGroupLabel>
+                    <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
+                      {/* These are two different server actions, not two labels for /file's old
+                          learn-by-default behavior. The payload makes that distinction explicit. */}
+                      <TrayBtn tone="quiet" disabled={!!filing} icon={<ArchiveOutlinedIcon sx={{ fontSize: 15 }} />}
+                        title="files this message only; nothing is added to Memory"
+                        onClick={() => fileMessage(false)}>
+                        {filing === "once" ? "Dismissing…" : "Dismiss once — no memory"}</TrayBtn>
+                      <TrayBtn tone="teach" teaches disabled={!!filing} icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
+                        title="files this message and adds one verdict to Memory for later triage"
+                        onClick={() => fileMessage(true)}>
+                        {filing === "learn" ? "Teaching triage…" : "Nothing to do — remember"}</TrayBtn>
+                    </Box>
+                    {fileErr && <Typography variant="caption" sx={{ display: "block", color: "#b42318",
+                      fontWeight: 600, mt: 0.75 }}>{fileErr} — nothing changed.</Typography>}
+                  </Box>
+                </Box>
               )}
               {tab === "why" && (
                 <>
@@ -1652,11 +1636,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 </>
               )}
             </Box>
-
-            {/* THE SECOND QUESTION, asked once, after a verdict that corrects triage: how far
-                does it apply — just this one, this person, this kind of work? It only appears
-                after "Nothing to do here", which is what the dot on that button warns about. */}
-            {tab === "msg" && filed && <LearnScope row={sel} onDone={() => onSkipped?.()} />}
 
             {/* the extras that belong to a reply but are not the reply: hand it to a person, or
                 let the assistant re-say it. Folded, because the answer above is the point. */}
@@ -2118,7 +2097,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
   return (
     <Box sx={{ mb: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
-        <SmartToyIcon sx={{ fontSize: 15, color: ASSISTANT.solid }} />
+        <TaskuaryMark size={15} />
         <Typography sx={{ color: ASSISTANT.ink, fontWeight: 700, fontSize: 13 }}>Your assistant</Typography>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>{fmtDateTime(sel.SentAt)}</Typography>
         {err && <Typography variant="caption" sx={{ color: ALERT_INK }}>{err}</Typography>}
@@ -2195,62 +2174,6 @@ const MineToDo = ({ messageId, onMade }) => {
       icon={<AssignmentIndIcon sx={{ fontSize: 14, color: "#55697a" }} />}
       label={made ? `${made} — on your list` : "Mine to do"}
       hint={err || (made ? "a task with your name on it, no agent" : "a task on your own list — nobody is dispatched")} />
-  );
-};
-
-/* WHAT TRIAGE SHOULD LEARN, asked once, after a verdict that corrects it.
-   It used to be a button of its own ("Not our task"), which made teaching a different ACT from
-   deciding - so the quick verdict taught nothing and the teaching one felt heavy. It is the
-   same verdict at a different scope: this one, this person, this kind of work, or never ours.
-   Default is "just this one", so one click stays one click and nothing is learned by accident. */
-const LearnScope = ({ row, onDone }) => {
-  const [scope, setScope] = useState("");            // '' = just this one, the default
-  const [topic, setTopic] = useState("");
-  const [saved, setSaved] = useState(null);
-  const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
-  useEffect(() => {
-    api.get(`/api/messages/${row.MessageId}/not-mine/suggest`)
-      .then(({ data }) => setTopic(data.topic || "")).catch(() => {});
-  }, [row.MessageId]);
-  const learn = async (which) => {
-    setBusy(which); setErr("");
-    try {
-      const { data } = await api.post(`/api/messages/${row.MessageId}/not-mine`,
-        { scope: which === "topic" ? "subject" : which === "everyone" ? "global" : "sender",
-          topic: which === "topic" ? topic : null, note: null });
-      setSaved(data); onDone?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "that did not save"); }
-    setBusy("");
-  };
-  if (saved) return (
-    <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600, px: 1.25, py: 0.75, display: "block" }}>
-      ✓ triage will apply this to {saved.scope === "global" ? "every sender"
-        : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey} from now on
-      {!!saved.alsoCovered?.length && ` · ${saved.alsoCovered.length} open task${saved.alsoCovered.length === 1 ? "" : "s"} already match it`}
-    </Typography>
-  );
-  const chip = (key, label, hint) => (
-    <Box component="button" key={key} title={hint} disabled={!!busy} onClick={() => key !== "one" && learn(key)}
-      sx={{ px: 0.9, py: 0.3, borderRadius: 99, cursor: key === "one" ? "default" : "pointer", fontSize: 11,
-        fontWeight: key === "one" ? 700 : 500, border: `1px solid ${key === "one" ? "#c9c0ae" : BORDER}`,
-        bgcolor: key === "one" ? "#eae4d8" : PANEL, color: key === "one" ? "#55697a" : DIM,
-        "&:hover": key === "one" ? {} : { bgcolor: "#f1ead9", color: INK } }}>
-      {busy === key ? "…" : label}
-    </Box>
-  );
-  return (
-    <Box sx={{ width: "100%", px: 1.25, py: 0.85, bgcolor: PANEL2, borderTop: `1px solid ${BORDER}`,
-      display: "flex", alignItems: "center", gap: 0.6, flexWrap: "wrap" }}>
-      <Typography variant="caption" sx={{ color: FAINT, mr: 0.25 }}>Should triage learn this?</Typography>
-      {chip("one", "just this one", "nothing is learned - the default")}
-      {row.FromEmail || row.FromName ? chip("sender", `from ${(row.FromName || row.FromEmail || "").split(" ")[0] || "them"}`,
-        "mail from this person like this one") : null}
-      {topic ? chip("topic", `mail about “${topic.slice(0, 28)}${topic.length > 28 ? "…" : ""}”`,
-        "any mail about this, whoever sends it") : null}
-      {chip("everyone", "never ours", "nobody's mail like this is our work")}
-      {err && <Typography variant="caption" sx={{ color: "#b42318", fontWeight: 600 }}>{err}</Typography>}
-    </Box>
   );
 };
 

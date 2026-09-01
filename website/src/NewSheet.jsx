@@ -5,7 +5,8 @@
 // meant the Board; and a reminder had nowhere to go at all, so it went in a notebook and the
 // screen they watch all day knew nothing about it.
 //
-// Four things, one sheet, and all four land on the Timeline at the minute the button was
+// Three doors, one sheet - and the agent door forks again, into a CLI session or the
+// assistant's own chat. All of them land on the Timeline at the minute the button was
 // pressed. Nothing here sends: "Send something" produces a DRAFT the owner approves, which is
 // the one send path the app has and the only one that respects the per-channel reply switches.
 import React, { useCallback, useEffect, useState } from "react";
@@ -16,12 +17,12 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono } from "./theme.jsx";
-import { ChannelIcon, AgentPicker, useAgents } from "./ui.jsx";
-import { planTask } from "./newTask.js";
+import { ChannelIcon, AgentPicker, useAgents, TaskuaryMark } from "./ui.jsx";
+import { NO_REPO, planTask } from "./newTask.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
-  { key: "agent",  mark: "🤖", label: "Give an agent a job", hint: "the same live session triage would have opened" },
+  { key: "agent",  mark: <TaskuaryMark size={14} />, label: "Give an agent a job", hint: "a live CLI session, or the assistant's own chat — the two doors triage picks between" },
   { key: "note",   mark: "💡", label: "Note to self", hint: "a reminder or an idea — nothing works it, it just sits on the day you pick" },
 ];
 
@@ -57,6 +58,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
   const { agents, models } = useAgents();
   const [agent, setAgent] = useState("coder");
   const [model, setModel] = useState("");
+  // "terminal" = a CLI on a keyboard, "chat" = the assistant's own thread. Held here rather
+  // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
+  // newTask.planTask exists to stop, and it will not guess for us.
+  const [how, setHow] = useState("terminal");
   // note
   const [when, setWhen] = useState("");
 
@@ -84,11 +89,20 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
           : `${data.ref} — drafted. It is on the Timeline waiting for you to send it.`);
         setAbout(""); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "agent") {
-        const plan = planTask(null, "terminal");
+        // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
+        // never disagree about what "no repository" means
+        const chat = how === "chat";
+        const plan = planTask(chat ? NO_REPO : null, chat ? "live" : "terminal");
         const { data } = await api.post("/api/tasks", { Title: about.trim().slice(0, 300), Summary: about.trim(),
           Kind: plan.kind, Tags: plan.tags });
-        await api.post(`/api/tasks/${data.taskId}/dispatch`, { agent, model: model || null });
-        setOk(`${data.ref} — ${agent} is on it in a live session.`);
+        if (plan.chat) {
+          // nothing to dispatch: the chat opens its own session and asks the question off the tag
+          // planTask put on the task (GeneralWorkspace), which is why the words are not passed as a prop
+          setOk(`${data.ref} — open on Tasks; the assistant already has the question.`);
+        } else {
+          await api.post(`/api/tasks/${data.taskId}/dispatch`, { agent, model: model || null });
+          setOk(`${data.ref} — ${agent} is on it in a live session.`);
+        }
         setAbout(""); onDone?.(); onOpenTask?.(data.taskId);
       } else {
         const { data } = await api.post("/api/notes", { title: about.trim().slice(0, 300), body: "", when: when || null });
@@ -97,11 +111,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, about, mode, agent, model, when, onDone, onOpenTask]);
+  }, [kind, channel, to, about, mode, how, agent, model, when, onDone, onOpenTask]);
 
   const canGo = about.trim() && (kind !== "send" || (channel && to.trim()));
   const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
-    : kind === "agent" ? "Start the session" : "Note it";
+    : kind === "agent" ? (how === "chat" ? "Ask the assistant" : "Start the session") : "Note it";
 
   return (
     <Dialog open={!!open} onClose={close} fullWidth maxWidth="sm" data-tq-keep>
@@ -169,27 +183,47 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
         )}
 
         {kind === "agent" && (
-          <Box>
-            <Label>Agent</Label>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
-              <AgentPicker agents={agents} models={models} agent={agent} model={model}
-                onAgent={setAgent} onModel={setModel} size={30} />
-              {/* no repository picker here on purpose: guess_repo ranks the checkouts against
-                  what you just typed (SOUL.md's repo map), and a session that opens in the wrong
-                  tree refuses to start rather than guessing. Name the system in the ask. */}
-              <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 180 }}>
-                It picks the checkout from what you write — name the system if there is any doubt.
-              </Typography>
+          <>
+            {/* Not every job wants a keyboard. This sheet only ever opened a terminal, so a
+                question you just wanted TALKED THROUGH had to be filed as a coding task and then
+                walked back - the exact mistake newTask.js was written to prevent. Both doors,
+                stated, and the choice made before anything is created. */}
+            <Box>
+              <Label>Who works it</Label>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Fork on={how === "terminal"} onClick={() => setHow("terminal")} title="A live session"
+                  hint="a CLI agent on a keyboard, in a checkout — it edits, runs and reports back." />
+                <Fork on={how === "chat"} onClick={() => setHow("chat")} title="Just talk it through"
+                  hint="the assistant's own thread on the task. Research, plan, decide — no terminal, no repository." />
+              </Box>
             </Box>
-          </Box>
+            {how === "terminal" && (
+              <Box>
+                <Label>Agent</Label>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
+                  <AgentPicker agents={agents} models={models} agent={agent} model={model}
+                    onAgent={setAgent} onModel={setModel} size={30} />
+                  {/* no repository picker here on purpose: guess_repo ranks the checkouts against
+                      what you just typed (SOUL.md's repo map), and a session that opens in the wrong
+                      tree refuses to start rather than guessing. Name the system in the ask. */}
+                  <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 180 }}>
+                    It picks the checkout from what you write — name the system if there is any doubt.
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+          </>
         )}
 
         <Box>
-          <Label>{kind === "send" ? "What's this about" : kind === "agent" ? "What should it do" : "What do you want to remember"}</Label>
+          <Label>{kind === "send" ? "What's this about"
+            : kind === "agent" ? (how === "chat" ? "What do you want to work out" : "What should it do")
+            : "What do you want to remember"}</Label>
           <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={about} autoFocus
             onChange={(e) => setAbout(e.target.value)}
             placeholder={kind === "send" ? "the census numbers he asked for, plus why Ashgrove moved"
-              : kind === "agent" ? "work out why the nightly export drops the last facility"
+              : kind === "agent" ? (how === "chat" ? "why did Riverbend's census move four points in July?"
+                : "work out why the nightly export drops the last facility")
               : "chase the Ashgrove AP replacement"}
             sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
           {kind === "send" && (

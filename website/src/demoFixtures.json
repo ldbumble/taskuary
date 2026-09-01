@@ -133,7 +133,7 @@
    },
    {
     "Name": "ci_watch",
-    "Value": "off",
+    "Value": "normal",
     "Description": null,
     "UpdatedBy": null
    },
@@ -271,7 +271,7 @@
    },
    {
     "Name": "timeline_fade",
-    "Value": "normal",
+    "Value": "off",
     "Description": null,
     "UpdatedBy": null
    },

@@ -6,7 +6,6 @@ import { Alert, Box, Button, Chip, CircularProgress, IconButton, MenuItem, Selec
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import SendIcon from "@mui/icons-material/ArrowUpward";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import EventRepeatIcon from "@mui/icons-material/EventRepeat";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ViewDayIcon from "@mui/icons-material/ViewDay";
@@ -19,6 +18,7 @@ import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import SemanticPanel from "./SemanticPanel.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
+import { TaskuaryMark } from "./ui.jsx";
 
 const savedView = () => localStorage.getItem("taskuary_general_view") || "assistant";
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
@@ -149,7 +149,7 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
         <ThreadPrimitive.Viewport className="tq-aui-viewport">
           {!messages?.length && (
             <div className="tq-aui-welcome">
-              <SmartToyIcon sx={{ fontSize: 22 }} />
+              <TaskuaryMark size={22} />
               <div>
                 <div className="tq-aui-welcome-title">Work on this with your assistant</div>
                 <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div>

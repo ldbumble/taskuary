@@ -19,9 +19,9 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
+import { TaskuaryMark } from "./ui.jsx";
 import {
   ACCENT, ACCENT2, ALERT_INK, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono,
 } from "./theme.jsx";
@@ -49,7 +49,8 @@ const Label = ({ children }) => (
 );
 
 /* ── one entry, with its thread ─────────────────────────────────────────────── */
-const Post = ({ p, onChanged }) => {
+const byOwner = (author) => /^(owner|you|dana whitfield)$/i.test(String(author || "").trim());
+const Post = ({ p, onChanged, onOpenTask }) => {
   const [open, setOpen] = useState(false);
   const [full, setFull] = useState(null);
   const [draft, setDraft] = useState("");
@@ -95,10 +96,19 @@ const Post = ({ p, onChanged }) => {
             <Typography sx={{ fontSize: 13, color: DIM, lineHeight: 1.65, maxWidth: "72ch" }}>{p.Body}</Typography>
           )}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mt: 0.85, flexWrap: "wrap" }}>
-            <Typography variant="caption" sx={{ color: FAINT, display: "flex", alignItems: "center", gap: 0.5 }}>
-              <SmartToyIcon sx={{ fontSize: 13 }} />{p.Author} · {ago(p.UpdatedAt)}
-              {p.TaskId ? ` · learned on TQ-${String(p.TaskId).padStart(4, "0")}` : ""}
+            <Typography variant="caption" sx={{ color: FAINT, display: "flex", alignItems: "center", gap: 0.55 }}>
+              <TaskuaryMark size={13} />
+              {byOwner(p.Author) ? "written by you" : `agent ${p.Author || "unknown"}`} · {ago(p.UpdatedAt)}
             </Typography>
+            {p.TaskId ? (
+              <Button size="small" variant="outlined" onClick={() => onOpenTask?.(p.TaskId)}
+                sx={{ height: 23, px: 0.9, minWidth: 0, fontSize: 10.5, textTransform: "none",
+                  color: "#55697a", borderColor: BORDER }}>
+                from TQ-{String(p.TaskId).padStart(4, "0")}
+              </Button>
+            ) : (
+              <Typography variant="caption" sx={{ color: FAINT }}>manual handbook entry</Typography>
+            )}
             <Button size="small" onClick={() => setOpen((v) => !v)}
               startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
               sx={{ fontSize: 11.5, color: DIM, minWidth: 0 }}>
@@ -199,7 +209,7 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
 };
 
 /* ── the page ───────────────────────────────────────────────────────────────── */
-export default function SocialView() {
+export default function SocialView({ onOpenTask }) {
   const [d, setD] = useState(null);
   const [topic, setTopic] = useState("");
   const [q, setQ] = useState("");
@@ -272,7 +282,7 @@ export default function SocialView() {
         </Box>
 
         {!d ? <CircularProgress size={22} sx={{ m: 4 }} />
-          : posts.length ? posts.map((p) => <Post key={p.LoreId} p={p} onChanged={load} />)
+          : posts.length ? posts.map((p) => <Post key={p.LoreId} p={p} onChanged={load} onOpenTask={onOpenTask} />)
           : (
             <Box sx={{ border: `1px dashed ${BORDER}`, borderRadius: 2, p: 4, textAlign: "center" }}>
               <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM, mb: 0.75 }}>

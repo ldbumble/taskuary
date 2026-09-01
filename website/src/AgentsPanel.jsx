@@ -5,8 +5,7 @@ import { Alert, Box, Button, Chip, CircularProgress, ListSubheader, MenuItem, Se
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
-import { Crumb, Empty, LandingCard, ConfirmDelete } from "./ui.jsx";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
+import { Crumb, Empty, LandingCard, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import BoltIcon from "@mui/icons-material/Bolt";
 import StarIcon from "@mui/icons-material/Star";
 
@@ -144,7 +143,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(3, minmax(0, 1fr))" }, gap: 2.5, mb: 3 }}>
         {PRESETS.map((pr) => (
           <LandingCard key={pr.name} title={pr.label} desc={pr.desc}
-            icon={<SmartToyIcon sx={{ fontSize: 19, color: "#55697a" }} />} onOpen={() => usePreset(pr)} />
+            icon={<TaskuaryMark size={19} />} onOpen={() => usePreset(pr)} />
         ))}
       </Box>
       {brains.length > 0 && (

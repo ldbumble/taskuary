@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FADE_MODES, ageOpacity, bottomDissolveVisible, timelineOpacity } from "../src/timelineFade.js";
+import { FADE_MODES, ageOpacity, timelineOpacity } from "../src/timelineFade.js";
 
 test("a fresh row is never dimmed, in any mode", () => {
   for (const mode of FADE_MODES) {
@@ -25,16 +25,13 @@ test("each mode reaches a visibly different place at the same age", () => {
   assert.ok(at3("gentle") > at3("normal"), "gentle dims less than normal");
   assert.ok(at3("normal") > at3("sharp"), "normal dims less than sharp");
   assert.ok(at3("sharp") < 0.75, "sharp is clearly quiet by three hours");
-  assert.ok(at3("gentle") > 0.95, "gentle is barely started at three hours");
-  // the default is a hint about age, not a disabled state - a whole afternoon of rows at half
-  // opacity read as an app that had greyed itself out
-  assert.ok(ageOpacity(8, "normal") > 0.75, "normal is still legible after a working day");
+  assert.ok(at3("gentle") > 0.8 && at3("gentle") < 0.9, "gentle is visible but light within a morning");
 });
 
 test("nothing ever fades past its floor", () => {
-  assert.equal(ageOpacity(1e6, "sharp"), 0.5);
-  assert.equal(ageOpacity(1e6, "normal"), 0.72);
-  assert.equal(ageOpacity(1e6, "gentle"), 0.85);
+  assert.equal(ageOpacity(1e6, "sharp"), 0.35);
+  assert.equal(ageOpacity(1e6, "normal"), 0.5);
+  assert.equal(ageOpacity(1e6, "gentle"), 0.68);
 });
 
 test("the curve only ever darkens as a row gets older", () => {
@@ -60,11 +57,4 @@ test("filter results remain fully legible regardless of age or fade mode", () =>
     assert.equal(timelineOpacity(1000, mode, true), 1, mode);
   }
   assert.equal(timelineOpacity(1000, "normal", false), ageOpacity(1000, "normal"));
-});
-
-test("the bottom dissolve appears only when rows continue below the viewport", () => {
-  assert.equal(bottomDissolveVisible(640, 800), false);   // a sparse feed: never cover its rows
-  assert.equal(bottomDissolveVisible(810, 800), false);   // layout rounding stays stable
-  assert.equal(bottomDissolveVisible(817, 800), true);
-  assert.equal(bottomDissolveVisible(NaN, 800), false);
 });

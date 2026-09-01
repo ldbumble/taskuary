@@ -19,7 +19,7 @@ api.interceptors.response.use(null, (e) => {
   }
   return Promise.reject(e);
 });
-// taskuary.com/demo is this same bundle with no server behind it: every call is answered from
+// taskuary.com/taskuary is this same bundle with no server behind it: every call is answered from
 // a recording of a real --demo instance instead (demoApi.js). One swap, here, so no component
 // has to know which it is talking to.
 export default DEMO ? demoApi : api;

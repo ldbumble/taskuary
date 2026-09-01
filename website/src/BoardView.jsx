@@ -14,13 +14,12 @@ import GridViewIcon from "@mui/icons-material/GridView";
 import ForumIcon from "@mui/icons-material/Forum";
 import AddIcon from "@mui/icons-material/Add";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import api from "./api";
 import AgentWall from "./AgentWall.jsx";
 import { NO_REPO, planTask } from "./newTask.js";
 import { pollWhileVisible } from "./visible.js";
 import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark } from "./ui.jsx";
 
 // Not every ask is about a codebase - "what does this policy mean", "draft me a note", "prepare
 // me for this meeting". The task carries `repo:none`, which is the one answer the picker could
@@ -341,7 +340,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
       <Box sx={{ display: "flex", alignItems: "center", mb: 1.25, gap: 1.5, flexWrap: "wrap" }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: "1 1 auto" }}>Agent board</Typography>
         {view === "notes" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
-          What the agents leave for each other — they read it before they start, and post before they push.
+          Short-lived task and checkout coordination — agents read it before starting; durable knowledge belongs in Social.
         </Typography>}
         {view === "floor" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
           One desk per agent that can run at once — an empty desk is capacity you are not using.
@@ -352,7 +351,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
           {[{ k: "columns", label: "Columns", icon: <ViewKanbanIcon sx={{ fontSize: 14 }} /> },
             { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> },
             { k: "wall", label: "Wall", icon: <GridViewIcon sx={{ fontSize: 14 }} /> },
-            { k: "notes", label: "Notes", icon: <ForumIcon sx={{ fontSize: 14 }} /> }].map((o) => (
+            { k: "notes", label: "Live handoffs", icon: <ForumIcon sx={{ fontSize: 14 }} /> }].map((o) => (
               <Box key={o.k} onClick={() => setView(o.k)}
                 sx={{ display: "flex", alignItems: "center", gap: 0.6, height: 24, px: 1.1, borderRadius: 1.5,
                   fontSize: 12, fontWeight: view === o.k ? 700 : 500, cursor: "pointer",
@@ -449,7 +448,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
                     <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700, fontSize: 10,
                       whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 12 }} />
-                    {String(t.Assignee || "").startsWith("agent:") && <SmartToyIcon sx={{ fontSize: 12, color: "#6f8a6e" }} />}
+                    {String(t.Assignee || "").startsWith("agent:") && <TaskuaryMark size={12} />}
                     {t.RunStatus && (
                       <Chip size="small" label={`${cliName(t.RunAgent, cmds) || "agent"} · ${t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}

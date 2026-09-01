@@ -121,6 +121,21 @@ class HarmlessExitTests(unittest.TestCase):
         self.assertIsNone(r.json()['memoryId'])
         self.assertEqual(len(s.list_memories()), before)
 
+    def test_one_off_dismissal_explicitly_teaches_nothing(self):
+        """The Timeline's lighter exit must stay different from its neighboring Memory verdict."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = server.store
+        before = len(s.list_memories())
+        mid = s.add_message({'Channel': 'email', 'Subject': 'A real topic that could be learned',
+                             'FromEmail': 'updates@vendor.com', 'BodyText': 'one-off note',
+                             'ExternalId': 'dismiss-once', 'Status': 'filed'})
+        r = TestClient(server.app).post(f'/api/messages/{mid}/file', json={'learn': False})
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.json()['memoryId'])
+        self.assertEqual(len(s.list_memories()), before)
+        self.assertEqual(s.get_message(mid)['Status'], 'ignored')
+
     def test_filing_also_removes_a_task_the_message_had(self):
         from fastapi.testclient import TestClient
         from taskuary import server

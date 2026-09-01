@@ -18,7 +18,7 @@ agent sessions, and reports pipeline are in daily use; breaking changes are stil
 before 1.0.
 
 <p align="center">
-  <a href="https://taskuary.com/demo/"><img
+  <a href="https://taskuary.com/taskuary/"><img
     src="https://img.shields.io/badge/%E2%96%B6%20Try%20it%20now-no%20install%2C%20in%20your%20browser-2f4858?style=for-the-badge&labelColor=1f2a22"
     alt="Try Taskuary now, in your browser"></a>
 </p>
@@ -107,7 +107,9 @@ taskuary --demo                    # or: docker compose --profile demo up
 
 A full Taskuary over invented work — a morning's mail and chats already triaged with the
 reasons attached, drafts waiting in Review, agents on the board with their transcripts
-playing, the wall they leave each other notes on. The AI answers from a script and every door
+playing, live task handoffs on the Board, and the durable agent-written handbook in Social.
+Every Social entry names the agent and originating task; Board handoffs are short-lived
+checkout coordination that rolls up nightly. The AI answers from a script and every door
 to the outside world is shut at the API layer (`taskuary/demo.py`): nothing sends, no
 connection can be made or edited, no tool runs, and no CLI starts. Nobody's real data is in
 it — Dana Whitfield and Northwind Facilities are invented.

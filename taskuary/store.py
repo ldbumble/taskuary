@@ -249,7 +249,7 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'coder_context_file': '1',
                     'agent_hooks': '1',           # Claude Code tells the Board what it is doing, through its own hooks (hooks.py)
-                    'timeline_fade': 'normal',    # older Timeline rows rest quieter - off | gentle | normal | sharp (FeedView ageOpacity)
+                    'timeline_fade': 'normal',    # older Timeline rows rest quieter - off | gentle | normal | sharp
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
                     'default_agent': 'coder',

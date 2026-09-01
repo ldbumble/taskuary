@@ -50,6 +50,7 @@ ALLOWED_WRITES = (
     r'^/api/messages/\d+/(file|promote|read)$',        # the triage verdicts: the whole funnel
     r'^/api/reviews?/\d+/(hold|drop|edit)$',           # ...but never /send
     r'^/api/board/notes',                              # the wall
+    r'^/api/handbook',                                 # durable handbook entries and comments
     r'^/api/settings$',                                # display preferences
     r'^/api/setup/dismiss$',
     r'^/api/terminals/\d+/resize$',

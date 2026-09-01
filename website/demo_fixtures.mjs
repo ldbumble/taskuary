@@ -1,6 +1,6 @@
 // Freeze a running demo into a file the browser can serve on its own.
 //
-// taskuary.com/demo has no server behind it - it is the real React app with its API client
+// taskuary.com/taskuary has no server behind it - it is the real React app with its API client
 // swapped for a fixture (demoApi.js). The fixture is DUMPED from a real `taskuary --demo`
 // instance rather than written by hand, so every shape is one the app actually produced: a
 // hand-written fixture drifts the first time a field is renamed, and a demo that renders a
@@ -21,7 +21,7 @@ const PATHS = [
   "/api/feed?limit=200", "/api/tasks?active=1", "/api/tasks",
   "/api/reviews", "/api/terminals", "/api/agents", "/api/brains", "/api/cli/detect",
   "/api/connectors", "/api/sources", "/api/report-types", "/api/reports/last-runs",
-  "/api/board/notes", "/api/people", "/api/send-targets", "/api/memory", "/api/policies",
+  "/api/board/notes", "/api/handbook", "/api/people", "/api/send-targets", "/api/memory", "/api/policies",
   "/api/calendar/today", "/api/audit/recent", "/api/semantic/metrics", "/api/soul/interview",
   "/api/voice/status", "/api/learned/graph",
 ];

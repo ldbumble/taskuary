@@ -17,13 +17,12 @@ import VerifiedIcon from "@mui/icons-material/Verified";
 import TuneIcon from "@mui/icons-material/Tune";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import PsychologyIcon from "@mui/icons-material/Psychology";
-import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import AboutYou from "./AboutYou.jsx";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
-import { ChannelIcon, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, Empty, FilterPills, TaskuaryMark } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 
 
@@ -171,7 +170,7 @@ const KNOB_META = {
     desc: "How fast a Timeline row dims with age, so the last hour reads as the live part of the list.",
     help: ["gentle = barely, over most of a day; normal = noticeable within a few hours; sharp = the last hour or two",
       "stands out and everything older is clearly quiet; off = every row full brightness.",
-      "\n\nNormal is the default. On a light palette a subtle fade can be hard to see, so 'sharp' remains available. Purely visual - nothing is",
+      "\n\nNormal is the default. The fade stays continuous while you scroll; opening a row brings that one back to full contrast. Purely visual - nothing is",
       "hidden, and scrolling or hovering brings any row back to full."].join(" ") },
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
@@ -201,7 +200,7 @@ const PAGES = {
   config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
   memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
-  agents: { title: "Agents", icon: SmartToyIcon, desc: "Bring your own AI CLI — cmd, args, resumable sessions, repo → checkout map." },
+  agents: { title: "Agents", icon: (props) => <TaskuaryMark size={22} sx={props?.sx} />, desc: "Bring your own AI CLI — cmd, args, resumable sessions, repo → checkout map." },
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
 };
 

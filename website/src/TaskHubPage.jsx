@@ -6,7 +6,6 @@ import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { pollWhileVisible } from "./visible.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
-import HubIcon from "@mui/icons-material/Hub";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
 import { track } from "./demoTrack";
@@ -24,11 +23,19 @@ import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 import { isStale, loadedAsset } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
+import { TaskuaryMark } from "./ui.jsx";
 
-// Social sits beside Board on purpose: the Board is what the agents are doing this hour, Social
-// is what they have worked out that is still true next month (handbook.py). Nine tabs is the
-// most this strip holds at a readable size - the next one has to displace something.
-const TABS = ["Timeline", "Board", "Social", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
+// The strip reads left to right as the day does: what arrived (Timeline), what is being worked
+// (Board, Tasks), what is waiting on you (Review), then what has been WRITTEN DOWN - Reports and
+// Social, which is what the agents worked out that is still true next month (handbook.py) - and
+// last the plumbing. Social was next to Board first, which put a slow surface in the middle of
+// the two fast ones. Nine tabs is the most this strip holds at a readable size; the next one has
+// to displace something.
+//
+// Review stays even though a draft reply also shows on the Timeline: a proposal (proposals.py,
+// Kind 'action') carries no MessageId, so it has no Timeline row to live on. Drop this tab and an
+// agent asking permission has nowhere to ask.
+const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Social", "Connectors", "Docs", "Settings"];
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
 // report that failed today - each with the way to where it is fixed. The setup chip beside it says
@@ -251,7 +258,8 @@ export default function TaskHubPage() {
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
         <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised} autoHideDuration={12000}
           onClose={() => setRaisedQueue(dismissHandRaise)}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          anchorOrigin={{ vertical: "top", horizontal: "right" }}
+          sx={{ mt: 5.5 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
           action={raised && <Button size="small" sx={{ color: "#a6e3a1" }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
@@ -266,7 +274,7 @@ export default function TaskHubPage() {
           bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
           <Box sx={{ width: 26, height: 26, borderRadius: 1.5, background: GRADIENT, display: "flex",
             alignItems: "center", justifyContent: "center" }}>
-            <HubIcon sx={{ color: "#fff", fontSize: 17 }} />
+            <TaskuaryMark size={22} />
           </Box>
           <Typography sx={{ fontWeight: 800, fontSize: 14.5, color: INK, letterSpacing: 0.2 }}>Taskuary</Typography>
           {/* the tagline waits for xl. Below that its width is what pushed the tab strip off true
@@ -354,7 +362,7 @@ export default function TaskHubPage() {
           )}
           {tab === "Social" && (
             <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>
-              <SocialView key={`so${tick}`} />
+              <SocialView key={`so${tick}`} onOpenTask={openTask} />
             </React.Suspense>
           )}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}

@@ -716,6 +716,7 @@ class SQLiteStore:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
         self._bump_snapshots()
+        self._poke('task-changed', task_id=tid)
         return tid
 
     def _next_task_id(self) -> int:
@@ -741,6 +742,7 @@ class SQLiteStore:
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
         self._bump_snapshots()
+        self._poke('task-changed', task_id=task_id)
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
 
     def tag_task(self, task_id, tag, on=True, actor='router'):

@@ -53,7 +53,7 @@ def run_sqlite(cfg):
 
 def run_mssql(cfg):
     """{"server", "database", "auth", "username", "password", "driver", "query", "max_rows"} -
-    see mssql.py. Configure the connection entirely from the Connectors tab."""
+    see mssql.py. Configure the connection entirely from the Connections tab."""
     from .mssql import run_report
     return run_report(cfg)
 
@@ -146,7 +146,7 @@ def _outline(body: str) -> str:
 
 def run_agent(cfg):
     """{"agent": "coder", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
-    the AI itself as the source: a coding CLI agent (Connectors -> AI CLI agents) runs your saved
+    the AI itself as the source: a coding CLI agent (Connections -> AI CLI agents) runs your saved
     SKILL (a slash command - "/weekly-user-review") and/or a prompt, on the schedule, and what it
     answers is the report. "cwd" is optional: a project-level skill lives in its repo, a user-level
     one runs from anywhere. The AI summary pass is usually unnecessary - the agent already wrote prose.
@@ -160,7 +160,7 @@ def run_agent(cfg):
     if not skill and not prompt: raise RuntimeError('give the agent a skill (/name) or a prompt - or both')
     name = str(cfg.get('agent') or 'coder').strip()
     llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None)
-    if llm is None: raise RuntimeError(f'no CLI agent named {name!r} - add one under Connectors -> AI CLI agents')
+    if llm is None: raise RuntimeError(f'no CLI agent named {name!r} - add one under Connections -> AI CLI agents')
     # Long workflows promoted from an assistant conversation live in Taskuary's neutral skill
     # store. Expand them into the prompt so one skill works through Claude, Codex, Gemini, or any
     # custom CLI. A skill that is not there remains the provider's normal `/skill-name` command.
@@ -302,7 +302,7 @@ def run_prometheus(cfg):
     The base URL (and an optional bearer token) live on the Prometheus card."""
     import requests
     base = (cfg.get('base_url') or '').strip().rstrip('/')
-    if not base: raise RuntimeError('no Prometheus base URL set - Connectors → Prometheus')
+    if not base: raise RuntimeError('no Prometheus base URL set - Connections → Prometheus')
     hdr = {'Authorization': f"Bearer {cfg['token']}"} if cfg.get('token') else {}
     r = requests.get(f'{base}/api/v1/query', params={'query': cfg['query']}, headers=hdr, timeout=30)
     r.raise_for_status()

@@ -103,4 +103,4 @@ def require(c, action):
     want, have, t = needs(action), scope_of(c), c.get('Type') or 'this connection'
     raise PermissionError(
         f"'{action}' needs {want} authority on {t}, which is set to {have} - "
-        f"raise it under Connectors → {t} → Authority, or leave it and the agents stay hands-off")
+        f"raise it under Connections → {t} → Authority, or leave it and the agents stay hands-off")

@@ -17,7 +17,7 @@ import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
-import { timelineOpacity } from "./timelineFade.js";
+import { fadeBand } from "./timelineFade.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
 import { timelineDayLabel } from "./timelineDay.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
@@ -203,12 +203,7 @@ const useCalToday = () => {
 };
 // One meeting as a Timeline row - tinted so it reads as a different kind of thing. Hover opens it
 // after the same beat a message takes, click opens it now; the panel shows who is in it and why.
-// the resting opacity of a row by age, by the timeline_fade setting (Settings > Display); the curve
-// itself lives in timelineFade.js so it can be tested without the React tree
-const rowOpacity = (sentAt, mode, filtered) =>
-  timelineOpacity((Date.now() - tsMs(sentAt)) / 36e5, mode, filtered);
-
-const MeetingRow = ({ e, onPick, picked, fade }) => {
+const MeetingRow = ({ e, onPick, picked }) => {
   const hover = useRef(null);
   useEffect(() => () => clearTimeout(hover.current), []);
   const u = untilText(e.start, e.end), open = picked && picked.start === e.start && picked.subject === e.subject;
@@ -232,8 +227,8 @@ const MeetingRow = ({ e, onPick, picked, fade }) => {
         onMouseLeave={() => clearTimeout(hover.current)}
         sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${u.hot ? ALERT : ROLES.info.solid}`,
           borderRadius: "8px", px: "10px", pt: "3px", pb: "4px", ml: "8px", minWidth: 0, overflow: "hidden",
-          opacity: open ? 1 : rowOpacity(e.start, fade, false), cursor: "pointer",
-          transition: "box-shadow .18s, border-color .18s, opacity .15s",
+          cursor: "pointer",
+          transition: "box-shadow .18s, border-color .18s",
           ...(open ? { borderColor: ACCENT, boxShadow: `inset 0 0 0 1px ${ACCENT}, 0 1px 3px rgba(30,50,38,.08)` } : {}),
           "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }}>
         <Box sx={{ display: "flex", gap: 0.85, alignItems: "center", minWidth: 0, minHeight: 22 }}>
@@ -602,7 +597,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [nextIn, setNextIn] = useState(null);        // seconds until the next background sync, from the server
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
-  const [fade, setFade] = useState("normal");        // Settings > Display; normal is the useful default
+  const [fade, setFade] = useState("normal");        // Settings > Display; height of the viewport's bottom fade
+  const bottomFade = fadeBand(fade);
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
@@ -635,7 +631,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
   const syncNow = useCallback(async (silent) => {
     if (!silent) setSyncing(true);
-    try { await api.post("/api/ingest/poll"); } catch { /* poll failures surface in Connectors */ }
+    try { await api.post("/api/ingest/poll"); } catch { /* poll failures surface in Connections */ }
     const t0 = Date.now();
     const settle = async () => { await load(rowsLen.current); setSyncing(false); setLastSync(new Date()); };
     const check = async () => {
@@ -1036,7 +1032,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             {!rows ? (err ? null : <CircularProgress size={20} sx={{ m: 4 }} />) : !sorted.length && !calEvents.length ? (
               <Empty>{view || cat || pick
                 ? "Nothing here matches this filter — try “everything”, or widen the Timeline lookback in Settings."
-                : "Nothing in the feed yet — connect a source in Connectors (a mailbox, a chat, a repo, a board…) and hit Sync now."}</Empty>
+                : "Nothing in the feed yet — connect a source in Connections (a mailbox, a chat, a repo, a board…) and hit Sync now."}</Empty>
             ) : dayEntries.map(([day, items], di) => (
               // the group's top edge is what the date spy watches - no header row of its own
               <Box key={day} sx={{ mt: di ? 1.25 : 0.5 }} ref={(el) => { if (el) dayRefs.current[day] = el; else delete dayRefs.current[day]; }}>
@@ -1056,10 +1052,10 @@ export default function FeedView({ onOpenTask, onChanged }) {
                     return (
                       <React.Fragment key={r.MessageId}>
                         {!cat && !pick && meetingsAt(day, items, i).map((e, j) => (
-                          <MeetingRow key={`m-${e.start}-${j}`} e={e} fade={fade} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                          <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                         ))}
                         <Box className="tqRow" sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
-                          alignItems: "stretch", mb: "3px", opacity: open ? 1 : rowOpacity(r.SentAt, fade, !!(view || cat || pick)), transition: "opacity .35s ease",
+                          alignItems: "stretch", mb: "3px",
                           ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 35, 320)}ms`, animationFillMode: "backwards" }) }}>
                           {/* the clock sits in its own gutter with air on BOTH sides - 8px off the
                               container edge, 12px off the rail - so it never reads as crushed
@@ -1133,7 +1129,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                   })}
                   {/* meetings that started before the oldest message of the day shown so far */}
                   {!cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
-                    <MeetingRow key={`m-${e.start}-${j}`} e={e} fade={fade} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                    <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel} onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                   ))}
                 </Box>
               </Box>
@@ -1142,6 +1138,15 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <Box ref={endRef} sx={{ height: 8 }} />
             {!!sorted.length && !noMore && <CircularProgress size={16} sx={{ display: "block", mx: "auto", my: 1 }} />}
           </Box>
+          {bottomFade && (
+            <Box aria-hidden sx={{ position: "sticky", bottom: "-24px", height: 0, zIndex: 6, pointerEvents: "none" }}>
+              <Box data-tq-bottom-fade={fade} sx={{
+                height: bottomFade.height,
+                transform: `translateY(-${bottomFade.height}px)`,
+                background: `linear-gradient(transparent, ${PANEL} ${bottomFade.solidAt}%)`,
+              }} />
+            </Box>
+          )}
         </Box>
       </Box>
 
@@ -1344,7 +1349,11 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     { key: "msg",   label: "Message" },
     { key: "why",   label: "Triage" },
     { key: "agent", label: "Agent", mark: onIt ? (onIt.waiting ? "👋" : <TaskuaryMark size={12} />) : null },
-    { key: "reply", label: "Reply", mark: replyOpen ? "✉️" : null },
+    // PENDING and OPENED both used to wear the same envelope, which flattened the only
+    // difference that matters: a draft waiting on your approval is ON YOU, a composer you
+    // opened yourself is not. The tab says which - oxblood for the one that is asking.
+    { key: "reply", label: "Reply", mark: pending ? "✉️" : opened ? "✏️" : null,
+      tone: pending ? "alert" : null, hint: pending ? "a reply is drafted and waiting on you" : null },
   ];
   // where you land: whatever is actually asking for you. A drafted reply beats a live agent
   // beats the message, because that is the order in which they need a decision from you.
@@ -1409,13 +1418,18 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
         <Box sx={{ display: "flex", gap: 0.25, px: 2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
           {TABS.map((t) => (
             <Box key={t.key} onClick={() => setTab(t.key)} role="tab" aria-selected={tab === t.key}
+              title={t.hint || undefined}
               sx={{ display: "flex", alignItems: "center", gap: 0.7, px: 1.5, py: 1, cursor: "pointer",
-                fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", mb: "-1px",
-                color: tab === t.key ? INK : FAINT,
-                borderBottom: `2px solid ${tab === t.key ? ACCENT : "transparent"}`,
-                transition: "color .15s", "&:hover": { color: INK } }}>
+                fontSize: 12.5, fontWeight: t.tone === "alert" ? 700 : 600, whiteSpace: "nowrap", mb: "-1px",
+                color: t.tone === "alert" ? ALERT_INK : tab === t.key ? INK : FAINT,
+                borderBottom: `2px solid ${tab === t.key ? (t.tone === "alert" ? ALERT : ACCENT) : "transparent"}`,
+                transition: "color .15s", "&:hover": { color: t.tone === "alert" ? ALERT_INK : INK } }}>
               {t.label}
               {t.mark && <Box component="span" aria-hidden sx={{ fontSize: 12, lineHeight: 1 }}>{t.mark}</Box>}
+              {/* the word, not just a glyph: "Reply ✉ pending" is readable without knowing what
+                  an envelope on a tab is supposed to mean */}
+              {t.tone === "alert" && <Box component="span" sx={{ fontSize: 10, fontWeight: 700,
+                color: ALERT_INK, letterSpacing: .2 }}>pending</Box>}
             </Box>
           ))}
         </Box>
@@ -1605,7 +1619,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {tab === "agent" && (
                 <>
                   {sel.TaskId && (
-                    <TrayBtn tone="primary" onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
+                    <TrayBtn onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
                       {onIt ? "Open the session" : `Open ${ref(sel.TaskId)}`}</TrayBtn>
                   )}
                   {/* the agent asked, the person answered on the thread — one click puts the
@@ -1790,7 +1804,7 @@ const VoiceNoteRow = ({ sel, body, onRefresh, onMessageChanged }) => {
   ) : (
     <ChoiceRow tint="#eee7d6" icon={<MicOffIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
       label="Voice note — not transcribed: no AI voice connector"
-      hint="add one under Connectors → AI — voice (Groq has a free tier; Local Whisper needs no key), then come back and click Transcribe" />
+      hint="add one under Connections → AI — voice (Groq has a free tier; Local Whisper needs no key), then come back and click Transcribe" />
   );
 };
 

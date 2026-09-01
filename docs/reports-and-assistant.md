@@ -30,7 +30,7 @@ query, the results are stacked under labelled headers, and the prompt sees all o
 One source failing is reported in place and never takes the whole report down.
 
 The connections themselves are **not** configured here. A source names the connector card its
-credentials live on — Connectors owns the credential, Reports owns the question.
+credentials live on — Connections owns the credential, Reports owns the question.
 
 ## Sources
 

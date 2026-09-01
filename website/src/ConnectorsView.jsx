@@ -754,7 +754,7 @@ const VoiceVocabulary = ({ onBack }) => {
   };
   return (
     <Box sx={{ maxWidth: 760, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title="Shared voice vocabulary" />
+      <Crumb section="Connections" onBack={onBack} title="Shared voice vocabulary" />
       <Typography variant="body2" sx={{ color: DIM, mb: 2, lineHeight: 1.7 }}>
         One list for every AI voice connector, browser mic and voice note. Add unusual names, acronyms, products and internal system terms;
         each active provider receives the same hints automatically. Hints improve recognition but never force words into a transcript.
@@ -837,7 +837,7 @@ export default function ConnectorsView() {
 
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  if (open?.kind === "agents") return <AgentsPage section="Connectors" title="AI CLI agents" onBack={() => setOpen(null)} />;
+  if (open?.kind === "agents") return <AgentsPage section="Connections" title="AI CLI agents" onBack={() => setOpen(null)} />;
   if (open?.kind === "voice-vocabulary") return <VoiceVocabulary onBack={() => setOpen(null)} />;
   if (open?.kind === "connector") {
     const conn = connectors.find((c) => c.ConnectorId === open.id);
@@ -955,7 +955,7 @@ export default function ConnectorsView() {
   const shown = groups.find((g) => g.title === group) || groups[0];
 
   return (
-    <SideRail title="Connectors" q={q} setQ={setQ}
+    <SideRail title="Connections" q={q} setQ={setQ}
       placeholder="Search connectors — Slack, SQL Server…"
       items={groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null }))}
       value={group} onChange={setGroup}
@@ -1370,7 +1370,7 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
           itself (install Node is the owner's; the bridge starts on its own; the QR is scanned from a phone).
@@ -1405,7 +1405,7 @@ function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
   if (!conn) return null;
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
@@ -1518,7 +1518,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
@@ -1741,7 +1741,7 @@ function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connectors" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} agentSteps={meta.agent || []} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>

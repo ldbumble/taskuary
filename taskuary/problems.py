@@ -10,13 +10,13 @@ def collect(store) -> list:
         err = str(c.get('LastError') or '').strip()
         if c.get('Active') and err:
             out.append({'key': f"connector:{c['ConnectorId']}", 'title': f"{c.get('Name') or c['Type']}: the last poll failed",
-                        'detail': err[:400], 'since': c.get('LastSyncAt') or '', 'where': 'Connectors', 'connector': str(c['ConnectorId']),
+                        'detail': err[:400], 'since': c.get('LastSyncAt') or '', 'where': 'Connections', 'connector': str(c['ConnectorId']),
                         'fix': 'Open the card'})
     s = store.get_settings()
     if str(s.get('triage_last_error') or '').strip():
         pick = str(s.get('triage_ai') or '')
         out.append({'key': 'triage', 'title': 'The triage brain is not answering', 'detail': s['triage_last_error'][:400], 'since': '',
-                    'where': 'Connectors', 'connector': pick[10:] if pick.startswith('connector:') else None, 'fix': 'Check the AI card'})
+                    'where': 'Connections', 'connector': pick[10:] if pick.startswith('connector:') else None, 'fix': 'Check the AI card'})
     for r in store.feed(limit=60, days=1, channel='report'):
         if str(r.get('Subject') or '').endswith('FAILED'):
             out.append({'key': f"report:{r.get('SourceName') or r.get('Subject')}", 'title': f"Report failed: {r.get('SourceName') or r.get('Subject')}",

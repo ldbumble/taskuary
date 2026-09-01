@@ -157,7 +157,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
                 ))}
                 {!targets.length && (
                   <Typography variant="caption" sx={{ color: FAINT }}>
-                    No channel here can send yet — turn replies on for a mailbox or a chat in Connectors.
+                    No channel here can send yet — turn replies on for a mailbox or a chat in Connections.
                   </Typography>
                 )}
               </Box>

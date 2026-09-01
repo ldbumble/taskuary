@@ -52,7 +52,7 @@ class ExaTests(unittest.TestCase):
     def test_no_key_says_which_card_to_go_to(self):
         with self.assertRaises(RuntimeError) as e:
             research.run_exa({'query': 'q'})
-        self.assertIn('Connectors', str(e.exception))
+        self.assertIn('Connections', str(e.exception))
 
     def test_an_http_error_carries_the_providers_own_words(self):
         with mock.patch.object(research.requests, 'post', return_value=_Resp(None, 401, 'invalid api key')):

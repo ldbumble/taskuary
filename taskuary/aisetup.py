@@ -87,7 +87,7 @@ def start(store, server: dict, cid: int, guide: list, fields: list = None, secre
     if live: return {**live, 'existing': True}
     from . import agents as hub_agents
     agent = (agent or hub_agents.default_agent(store)).strip()
-    if not store.get_agent(agent): raise ValueError(f'no CLI agent named {agent!r} - add one under Connectors > AI CLI agents first')
+    if not store.get_agent(agent): raise ValueError(f'no CLI agent named {agent!r} - add one under Connections > AI CLI agents first')
     tid = store.create_task({'Title': f"Set up {c.get('Name') or c.get('Type')}", 'Kind': KIND, 'Status': 'in_progress', 'Tags': tag(cid),
                              'Summary': f"{agent} walks the owner through the {c.get('Type')} guide in a live session on the card and saves what they give it."}, actor)
     # no repo: the session sits in Taskuary's own data folder, where there is no checkout to attribute dirt to

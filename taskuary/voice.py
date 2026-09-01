@@ -29,7 +29,7 @@ COMPAT = {'groq_stt': ('https://api.groq.com/openai/v1', 'whisper-large-v3-turbo
           'openai_stt': ('https://api.openai.com/v1', 'gpt-4o-mini-transcribe'),
           'stt_server': ('http://127.0.0.1:8000/v1', 'Systran/faster-whisper-small')}
 MARK = '🎤 Voice note'
-NO_CONNECTOR = ('no AI voice connector is set up - add one under Connectors > AI - voice '
+NO_CONNECTOR = ('no AI voice connector is set up - add one under Connections > AI - voice '
                 '(Groq has a free tier; Local Whisper needs no key at all)')
 _EXT = {'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/wav': 'wav',
         'audio/x-wav': 'wav', 'audio/webm': 'webm', 'audio/flac': 'flac', 'audio/aac': 'aac', 'audio/opus': 'ogg'}
@@ -240,7 +240,7 @@ def note_body(store, data: bytes, mime: str, name: str, seconds: int = 0, where:
     except Exception as e:
         why = str(e)[:300]
         logger.warning(f'voice note not transcribed: {why}')
-        return (f"{MARK}{dur} from {where} - not transcribed: {why}. Add a connector under Connectors > AI - voice, "
+        return (f"{MARK}{dur} from {where} - not transcribed: {why}. Add a connector under Connections > AI - voice, "
                 "then click Transcribe on this message."), False, why
 
 

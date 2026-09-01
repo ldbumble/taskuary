@@ -36,7 +36,7 @@ def run_exa(cfg):
     afterwards is the thing this connector exists to avoid.
     """
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Exa API key saved - Connectors → Exa')
+    if not key: raise RuntimeError('no Exa API key saved - Connections → Exa')
     body = {'query': cfg['query'], 'numResults': int(cfg.get('num') or 8),
             'contents': {'text': {'maxCharacters': int(cfg.get('chars') or 2000)}}}
     if cfg.get('category'): body['category'] = cfg['category']
@@ -56,7 +56,7 @@ def run_tavily(cfg):
     """{"query", "depth", "num", "topic", "answer", "days"} - search built for agents: it can
     hand back a written ANSWER with the sources beside it, not only a result list."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Tavily API key saved - Connectors → Tavily')
+    if not key: raise RuntimeError('no Tavily API key saved - Connections → Tavily')
     body = {'query': cfg['query'], 'search_depth': cfg.get('depth') or 'basic',
             'max_results': min(int(cfg.get('num') or 8), 20),
             'topic': cfg.get('topic') or 'general',
@@ -80,7 +80,7 @@ def run_firecrawl(cfg):
     """{"url"} - one page, as clean markdown. onlyMainContent strips the nav and the cookie
     banner, which is most of what a raw fetch returns."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Firecrawl API key saved - Connectors → Firecrawl')
+    if not key: raise RuntimeError('no Firecrawl API key saved - Connections → Firecrawl')
     if not cfg.get('url'): raise RuntimeError('no url to read')
     body = {'url': cfg['url'], 'formats': ['markdown'],
             'onlyMainContent': cfg.get('main', True) is not False}

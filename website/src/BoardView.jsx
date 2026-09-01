@@ -549,7 +549,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
             </Box>
             {agents.length < 2 && (
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                Add more CLIs under Connectors → AI CLI agents to choose between them here.
+                Add more CLIs under Connections → AI CLI agents to choose between them here.
               </Typography>
             )}
           </Box>

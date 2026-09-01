@@ -338,7 +338,7 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
         if llm is None:
             from .llm import build_llm
             llm = build_llm(store)
-        if llm is None: raise SystemExit('no AI connector is configured - connect one under Connectors -> AI first')
+        if llm is None: raise SystemExit('no AI connector is configured - connect one under Connections -> AI first')
         strong = [c for c in cases if not c['weak']]
         return evaluate(store, strong, llm) if what == 'evaluate' else ablate(store, strong, llm, save=Path(home) / 'eval' / 'ablate_last.json')
     raise SystemExit(f'unknown evalset action {what!r}: build | share | evaluate | ablate')

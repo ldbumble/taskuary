@@ -44,7 +44,7 @@ The rest of the workspace answers a specific question:
   where the conversation started.
 - **Reports** turns connected data into scheduled Timeline items, spreadsheets, charts, and
   summaries. Every report can be previewed before it is scheduled.
-- **Connectors** controls sources and their roles: trigger, feed, report, tool, and notify.
+- **Connections** controls sources and their roles: trigger, feed, report, tool, and notify.
   The **Knowledge base** card there indexes the documents you already keep — SharePoint
   library folders and folders on this machine — into Taskuary's own database, on this
   machine. Once anything is indexed, a `kb_search` report answers questions from it on a

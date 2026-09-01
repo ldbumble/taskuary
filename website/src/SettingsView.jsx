@@ -47,7 +47,7 @@ const KNOB_META = {
     help: "The heart of the funnel. Every inbound message is read (by the triage brain below, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself." },
   triage_ai: { group: "Triage & routing", label: "Triage brain", type: "brain",
     desc: "Which AI reads and classifies inbound messages.",
-    help: "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Connectors → AI CLI agents → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way." },
+    help: "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Connections → AI CLI agents → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way." },
   default_action: { group: "Triage & routing", label: "When no rule matches", type: "select", options: ["draft", "task_only", "escalate"],
     desc: "The fallback when no routing policy claims a message.",
     help: "draft = reply-only questions get an AI draft waiting in Review; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.\n\nThis is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless." },
@@ -93,7 +93,7 @@ const KNOB_META = {
   // ── Coder agent: who works the tasks, and how eagerly ──
   default_agent: { group: "Coder agent", label: "Default agent", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
-    help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Connectors → AI CLI agents, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
+    help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Connections → AI CLI agents, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
   answer_to_agent: { group: "Coder agent", label: "Hand answers to the working agent", type: "select",
     options: ["ask", "auto", "off"],
     desc: "When someone answers a question on a task an agent is sitting on, their answer can go straight into the live session.",
@@ -165,13 +165,10 @@ const KNOB_META = {
   timezone: { group: "Display", label: "Timezone", type: "timezone",
     desc: "The zone the app's clock speaks. Blank = this machine's local time.",
     help: "Timestamps are stored in the server machine's local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.\n\nUse an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load." },
-  timeline_fade: { group: "Display", label: "Fade older Timeline items", type: "select",
+  timeline_fade: { group: "Display", label: "Fade bottom of Timeline", type: "select",
     options: ["off", "gentle", "normal", "sharp"],
-    desc: "How fast a Timeline row dims with age, so the last hour reads as the live part of the list.",
-    help: ["gentle = barely, over most of a day; normal = noticeable within a few hours; sharp = the last hour or two",
-      "stands out and everything older is clearly quiet; off = every row full brightness.",
-      "\n\nNormal is the default. The fade stays continuous while you scroll; opening a row brings that one back to full contrast. Purely visual - nothing is",
-      "hidden, and scrolling or hovering brings any row back to full."].join(" ") },
+    desc: "How tall the soft fade is at the bottom edge of the Timeline viewport.",
+    help: "Rows are never dimmed because they are old. A row only gets lighter while it passes through the bottom edge, then returns to full contrast as you scroll it upward. Gentle, normal, and sharp change the height of that band; off removes it. Purely visual - nothing is hidden or removed." },
   feed_days: { group: "Display", label: "Timeline lookback (days)", type: "number",
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
     help: "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search." },
@@ -257,7 +254,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
       <Select size="small" value={agentNames.includes(s.Value) ? s.Value : (agentNames[0] || "")}
         onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
         {agentNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{n}</MenuItem>)}
-        {!agentNames.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no agents yet — add one under Connectors</MenuItem>}
+        {!agentNames.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no agents yet — add one under Connections</MenuItem>}
       </Select>
     );
     // the brains list is dynamic: AI connectors that actually hold a key + your CLI agents

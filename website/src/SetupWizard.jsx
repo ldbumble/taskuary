@@ -6,7 +6,7 @@
 // back with directions attached.
 //
 // So every step that CAN be done in one or two fields is done here, against the same endpoints
-// the Connectors tab uses, and then TESTED - a key that is saved but wrong is not a connected
+// the Connections tab uses, and then TESTED - a key that is saved but wrong is not a connected
 // brain, and finding that out later, from an empty Timeline, is the failure this exists to
 // prevent. What genuinely cannot be (Outlook and Teams need an app registration; Slack needs a
 // bot token) says so plainly and opens the card.
@@ -179,7 +179,7 @@ const CliPicker = ({ asBrain, onDone }) => {
             </Typography>
             <Typography variant="caption" sx={{ color: cli.configured && !cli.installed ? "#8a3646" : FAINT, wordBreak: "break-all" }}>
               {cli.path ? cli.path
-                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — install it, or fix the command in Connectors → AI CLI agents`
+                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — install it, or fix the command in Connections → AI CLI agents`
                 : cli.cmd}
             </Typography>
             {/* found, runnable by hand, and still refused from a background process - so it is
@@ -245,8 +245,8 @@ const BrainForm = ({ onDone, onGo }) => {
       {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}</Alert>}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
         Running a local model, or on Azure OpenAI?{" "}
-        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connectors")}>
-          Set those up on the Connectors tab
+        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connections")}>
+          Set those up on the Connections tab
         </Box>{" "}— they need a model name or an endpoint, not just a key.
       </Typography>
     </Box>
@@ -292,7 +292,7 @@ const MailboxForm = ({ onDone, onGo }) => {
       {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}</Alert>}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
         Outlook, Teams, Slack, GitHub and the trackers need an app registration or a bot token —{" "}
-        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connectors")}>
+        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connections")}>
           their cards walk you through it
         </Box>.
       </Typography>
@@ -316,7 +316,7 @@ const SyncForm = ({ onDone }) => {
       }
       await onDone();
       setMsg("");
-    } catch { setMsg("the sync could not be started — check the Connectors tab"); }
+    } catch { setMsg("the sync could not be started — check the Connections tab"); }
     setBusy(false);
   };
   return (
@@ -533,7 +533,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
             {state.dismissed
               ? "Put away — the quiet counter in the top bar brings it back."
               : state.complete
-                ? "Revisit any of these choices later from Connectors, Docs, or Settings."
+                ? "Revisit any of these choices later from Connections, Docs, or Settings."
               : state.ready && !state.complete
                 ? "These are recommendations, not gates. Finish later and the counter keeps your place."
                 : "Not now? Put it away; the counter in the top bar brings it back."}

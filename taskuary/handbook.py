@@ -33,7 +33,7 @@ Writing happens on two roads, the same shape as the wall's:
   general - and takes "nothing" for an answer, which is the usual answer.
 
 Reading happens through `block()` (into an agent's seed prompt and the reply drafter, the same
-way knowledge.block works) and through the Handbook tab, where a person browses it.
+way knowledge.block works) and through the Social tab, where a person browses it.
 """
 import json, re
 from datetime import datetime
@@ -216,6 +216,6 @@ def test(store, c: dict) -> str:
     n = store.lore_count()
     if not n['posts']:
         return ('the handbook is empty - nothing is wrong with it. Agents fill it as they work, and '
-                'you can write the first entry yourself on the Handbook tab.')
+                'you can write the first entry yourself on the Social tab.')
     tops = ', '.join(f"{t['Topic']} ({t['n']})" for t in store.lore_topics()[:6])
     return f"{n['posts']} entries across {n['topics']} topics, {n['comments']} comments · {tops}"

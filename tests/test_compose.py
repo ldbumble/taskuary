@@ -134,7 +134,7 @@ class ItCannotInventTests(unittest.TestCase):
         self.assertEqual(compose.compose(self.s, 'x', llm_saying(fenced))['config']['type'], 'digest')
 
     def test_no_ai_configured_says_where_to_go(self):
-        self.assertIn('Connectors', compose.compose(self.s, 'x', None)['error'])
+        self.assertIn('Connections', compose.compose(self.s, 'x', None)['error'])
 
     def test_an_empty_ask_is_not_a_report(self):
         self.assertTrue(compose.compose(self.s, '   ', llm_saying(cfg_answer(type='digest', title='x')))['error'])

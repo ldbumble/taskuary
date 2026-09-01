@@ -13,7 +13,7 @@ class Problems(unittest.TestCase):
         got = {p['key']: p for p in problems.collect(s)}
         key = f"connector:{wa['ConnectorId']}"
         self.assertIn(key, got)
-        self.assertEqual((got[key]['where'], got[key]['connector']), ('Connectors', str(wa['ConnectorId'])))
+        self.assertEqual((got[key]['where'], got[key]['connector']), ('Connections', str(wa['ConnectorId'])))
         self.assertIn('bridge is not running', got[key]['detail'])
         s.touch_connector(wa['ConnectorId'])                         # a clean poll: the bell goes quiet
         self.assertNotIn(key, {p['key'] for p in problems.collect(s)})

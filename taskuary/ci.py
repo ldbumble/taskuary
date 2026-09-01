@@ -24,7 +24,7 @@ TOKEN_URL = re.compile(r'https://[^@/]*@')     # never let a PAT reach a log lin
 
 def _conn(store):
     c = store.get_connector_by_type('github', with_secret=True)
-    if not (c and c.get('Secret')): raise RuntimeError('no GitHub PAT saved (Connectors → GitHub)')
+    if not (c and c.get('Secret')): raise RuntimeError('no GitHub PAT saved (Connections → GitHub)')
     return c
 
 

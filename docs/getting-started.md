@@ -41,7 +41,7 @@ docker compose up
 ```
 
 Open `http://127.0.0.1:7787`. Data is kept in the `taskuary-data` volume. The container
-provides the Timeline, Review, Reports, and Connectors; coding CLIs and the optional
+provides the Timeline, Review, Reports, and Connections; coding CLIs and the optional
 WhatsApp bridge remain host programs.
 
 The compose file binds to localhost by default. Set `TASKUARY_TOKEN` before publishing the
@@ -49,7 +49,7 @@ port beyond the local machine.
 
 ## First-run setup
 
-Open **Connectors** and configure these in order:
+Open **Connections** and configure these in order:
 
 1. **A triage brain.** Add an Anthropic, OpenAI, Azure OpenAI, or OpenRouter key, or connect
    Ollama for a local model. A small inexpensive model is usually enough for triage.

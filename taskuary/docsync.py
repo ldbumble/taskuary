@@ -70,7 +70,7 @@ def sync_connections(store, actor='system'):
                      'intacct|intacct_fields", ...} — '
                      'saved credentials are filled in for you; if several cards have that type, pass '
                      '"connector_id": <the id named above>; the raw output comes back.'.replace('{auth}', auth))
-    block = '\n'.join(lines) or '_(no connections yet — add them in the Connectors tab)_'
+    block = '\n'.join(lines) or '_(no connections yet — add them in the Connections tab)_'
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)
     new = f'{head}{CONN_START}\n{block}\n{CONN_END}{tail}'

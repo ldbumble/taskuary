@@ -1,4 +1,4 @@
-"""Channel connectors - the cards on the Connectors tab: Outlook mail + Microsoft Teams
+"""Channel connectors - the cards on the Connections tab: Outlook mail + Microsoft Teams
 (Graph, app-only client credentials) and GitHub (fine-grained PAT). test_connector is a
 live probe (token/chat-read/repo-discovery); poll_channels is the scheduled ingest that
 funnels mail and chats through the same triage as everything else. Credentials left blank
@@ -655,7 +655,7 @@ def gh_modes(src: dict, file_only: bool) -> tuple:
 # GitHub's own author_association. Everyone else's items still become tasks (in 'tasks' mode)
 # and wait for the owner to promote them. Default off: a public repo would otherwise start an
 # agent per drive-by PR (the session cap still holds, but a queue full of strangers is not
-# what the cap is for). The Connectors card warns before switching a PUBLIC repo on.
+# what the cap is for). The Connections card warns before switching a PUBLIC repo on.
 GH_TEAM = ('OWNER', 'MEMBER', 'COLLABORATOR')
 GH_AUTO = {'off': (), 'team': GH_TEAM, 'contributors': GH_TEAM + ('CONTRIBUTOR',), 'anyone': None}
 

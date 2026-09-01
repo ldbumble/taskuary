@@ -119,7 +119,7 @@ class SameFenceTests(unittest.TestCase):
         self.assertIn('answers_to_your_questions', llm.seen[0]['user'])
 
     def test_no_ai_configured_says_where_to_go(self):
-        self.assertIn('Connectors', compose.compose_sources(self.s, 'x', None)['error'])
+        self.assertIn('Connections', compose.compose_sources(self.s, 'x', None)['error'])
 
     def test_an_empty_ask_is_not_a_source(self):
         self.assertTrue(compose.compose_sources(self.s, '  ', llm_saying(src_answer({'type': 'digest'})))['error'])

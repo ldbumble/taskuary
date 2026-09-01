@@ -424,7 +424,7 @@ const REPORT_COLORS = { Triage: "#6f8a6e", Determination: "#6f8a6e", Actions: "#
 /* The four things you can do with a timeline item were four buttons of four different sizes
    and colours, two rows apart, half of them right-aligned - so the reader had to hunt for
    the set. One list, one shape per row: what it is, and what it does. */
-/* ── Voice into prompts. Is there a speech-to-text connector at all (Connectors → AI — voice)?
+/* ── Voice into prompts. Is there a speech-to-text connector at all (Connections → AI — voice)?
    Asked once per mount; the mic explains itself when there is none. ── */
 export const useVoiceReady = () => {
   const [v, setV] = React.useState(null);
@@ -490,7 +490,7 @@ export const MicButton = ({ onText, size = 18, sx }) => {
     : rec ? "Stop and transcribe"
     : voice.ready ? `Dictate (${voice.label || voice.provider})`
     : viaBrowser ? "Dictate — your browser's own recogniser (free). Add an AI voice connector for voice notes and better accuracy."
-    : "Dictate — add an AI voice connector first (Connectors → AI — voice; Groq is free)");
+    : "Dictate — add an AI voice connector first (Connections → AI — voice; Groq is free)");
   return (
     <MuiTooltip title={title}><span>
       <MuiIconButton size="small" onClick={rec ? stop : start} disabled={busy || (voice && !voice.ready && !viaBrowser)} sx={sx}
@@ -753,20 +753,20 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
       icon={<TaskuaryMark size={17} />}
       label="Send it to a coding agent" hint="opens a live session on a new task — you watch it work" />
   ) : (
-    <Button size="small" variant="contained" disableElevation startIcon={<TaskuaryMark size={18} />}
+    <Button size="small" disableElevation startIcon={<TaskuaryMark size={15} />}
       onClick={() => setOpen(true)}
-      sx={{ minHeight: 36, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
-        fontWeight: 700, color: "#fff", background: "linear-gradient(135deg, #4f46e5, #735eea)",
-        border: "1px solid #4f46e5", boxShadow: "0 1px 2px rgba(63, 54, 160, .18)",
-        "&:hover": { background: "linear-gradient(135deg, #4438d7, #6652dd)", boxShadow: "0 2px 5px rgba(63, 54, 160, .22)" } }}>
+      sx={{ minHeight: 32, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
+        fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
+        border: `1px solid ${BORDER}`, boxShadow: "none",
+        "&:hover": { color: INK, bgcolor: PANEL, borderColor: "#d8cfbe", boxShadow: "none" } }}>
       Send to coding agent
     </Button>
   );
   return (
-    <Box sx={{ mt: 1, p: 1.25, bgcolor: "#faf8ff", border: "1px solid #e9ddfb", borderRadius: 1.5 }}>
+    <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
         <TaskuaryMark size={17} />
-        <Typography variant="caption" sx={{ color: "#4f46e5", fontWeight: 700 }}>Send to a coding agent</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Send to a coding agent</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         <AgentPicker agents={agents} models={models} agent={agent} model={model}
           onAgent={setAgent} onModel={setModel} size={26} />
@@ -1214,14 +1214,27 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
 // The same box behind one button, for places with no room for it (a Board card, the funnel bar).
 export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) => {
   const [open, setOpen] = React.useState(false);
+  const show = (e) => { e.stopPropagation(); setOpen(true); };
+  const label = count ? `${count} waiting` : "tell the agent";
   return (
     <>
-      <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen(true); }} title="Tell the agent something — queued until it stops"
-        sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: small ? 0.6 : 0.9, py: 0.15, borderRadius: 99, cursor: "pointer",
-          bgcolor: "#f1ead9", color: "#6b5f45", border: "1px solid #ddd2b9", fontSize: small ? 9.5 : 10.5, fontWeight: 700, whiteSpace: "nowrap",
-          "&:hover": { bgcolor: "#e9dfc5" } }}>
-        ✎ {count ? `${count} waiting` : "tell the agent"}
-      </Box>
+      {small ? (
+        <Box component="span" onClick={show} title="Tell the agent something — queued until it stops"
+          sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.6, py: 0.15, borderRadius: 99, cursor: "pointer",
+            bgcolor: "#f1ead9", color: "#6b5f45", border: "1px solid #ddd2b9", fontSize: 9.5, fontWeight: 700, whiteSpace: "nowrap",
+            "&:hover": { bgcolor: "#e9dfc5" } }}>
+          ✎ {label}
+        </Box>
+      ) : (
+        <Button size="small" disableElevation onClick={show} title="Tell the agent something — queued until it stops"
+          startIcon={<Box component="span" aria-hidden sx={{ fontSize: 13, lineHeight: 1 }}>✎</Box>}
+          sx={{ minHeight: 32, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
+            fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
+            border: `1px solid ${BORDER}`, boxShadow: "none",
+            "&:hover": { color: INK, bgcolor: PANEL, borderColor: "#d8cfbe", boxShadow: "none" } }}>
+          {label}
+        </Button>
+      )}
       <Dialog open={open} onClose={(e) => { e?.stopPropagation?.(); setOpen(false); }} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3, p: 1.5 }, onClick: (e) => e.stopPropagation() }}>
         <TellAgent taskId={taskId} taskRef={taskRef} />
       </Dialog>

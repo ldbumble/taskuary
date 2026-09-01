@@ -111,7 +111,7 @@ def compose(store, channel: str, to: str, about: str, mode: str = 'draft', subje
     if mode not in MODES: raise ValueError(f"mode must be one of {', '.join(MODES)}")
     if not outbound.can_reply(store, channel):
         raise ValueError(f'{channel or "that channel"} cannot send from here - turn its replies on '
-                         'in Connectors, or pick another channel')
+                         'in Connections, or pick another channel')
     subject = (subject or '').strip() or (subject_for(store, about, llm) if channel == 'email' else about[:120])
 
     tid = store.create_task({'Title': subject[:300], 'Summary': about,

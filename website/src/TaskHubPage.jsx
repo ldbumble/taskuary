@@ -1,5 +1,5 @@
 // Task Hub shell - clean light enterprise workspace, compact: slim top bar, pill tabs,
-// content underneath. Five spaces: Timeline, Tasks, Review, Connectors, Settings.
+// content underneath. Five spaces: Timeline, Tasks, Review, Connections, Settings.
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge, Box, Button, CircularProgress, IconButton, MenuItem, Popover, Select, Snackbar, Tooltip, Typography } from "@mui/material";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
@@ -35,7 +35,7 @@ import { TaskuaryMark } from "./ui.jsx";
 // Review stays even though a draft reply also shows on the Timeline: a proposal (proposals.py,
 // Kind 'action') carries no MessageId, so it has no Timeline row to live on. Drop this tab and an
 // agent asking permission has nowhere to ask.
-const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Social", "Connectors", "Docs", "Settings"];
+const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Social", "Connections", "Docs", "Settings"];
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
 // report that failed today - each with the way to where it is fixed. The setup chip beside it says
@@ -336,7 +336,7 @@ export default function TaskHubPage() {
           <Box sx={{ flex: 1 }} />
           <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
-          <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connectors"); }} />
+          <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connections"); }} />
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
@@ -367,7 +367,7 @@ export default function TaskHubPage() {
           )}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}-${reset}`} />}
-          {tab === "Connectors" && <ConnectorsView key={`c${tick}-${reset}`} />}
+          {tab === "Connections" && <ConnectorsView key={`c${tick}-${reset}`} />}
           {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} />}
         </Box>

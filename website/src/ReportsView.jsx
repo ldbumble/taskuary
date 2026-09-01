@@ -1,6 +1,6 @@
 // Scheduled reports - the pipeline builder: pick a source (a connection from the
-// Connectors tab, or an inline one), write the query, optionally an AI summary prompt,
-// preview the whole pipeline, schedule it - results land on the Timeline. Connectors
+// Connections tab, or an inline one), write the query, optionally an AI summary prompt,
+// preview the whole pipeline, schedule it - results land on the Timeline. Connections
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -250,7 +250,7 @@ export default function ReportsView() {
   return (
     <SideRail title="Reports" q={q} setQ={setQ} placeholder="Search reports…"
       items={railItems} value={bucket} onChange={setBucket}
-      note="A report is a pipeline: source → query → optional AI summary → your Timeline. The connections themselves live on the Connectors tab.">
+      note="A report is a pipeline: source → query → optional AI summary → your Timeline. The connections themselves live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {open ? (
         <ReportWizard key={String(bucket) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
@@ -626,7 +626,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               )}
               {cfg.ai_prompt && !aiActive && !cfg.ai_brain && (
                 <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#55697a" }}>
-                  ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connectors → AI).
+                  ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connections → AI).
                 </Typography>
               )}
               {!cfg.ai_prompt && (
@@ -1219,8 +1219,8 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
             </Select>
           )}
           <Typography variant="caption" sx={{ fontWeight: 600, color: connOk ? "#47654a" : "#55697a" }}>
-            {connOk ? `✓ uses ${conn.Name} from Connectors`
-              : `⚠ set up ${conn?.Name || CARD_LABELS[cardType] || cardType} in Connectors first`}
+            {connOk ? `✓ uses ${conn.Name} from Connections`
+              : `⚠ set up ${conn?.Name || CARD_LABELS[cardType] || cardType} in Connections first`}
           </Typography>
         </>
       )}

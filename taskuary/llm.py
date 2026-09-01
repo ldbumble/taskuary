@@ -54,7 +54,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
-    And the MODEL drops a tier: `light_model` on the agent profile (Connectors > AI CLI
+    And the MODEL drops a tier: `light_model` on the agent profile (Connections > AI CLI
     agents) is what runs here - triage, drafts, summaries, the digest - while the profile's
     main `model` stays reserved for the coding sessions. One brain, two gears: the classifier
     reads one email; it does not need the model that rewrites your codebase."""

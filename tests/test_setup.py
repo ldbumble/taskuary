@@ -44,7 +44,7 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         self.assertEqual((st['done'], st['total'], st['ready']), (0, 3, False))
         self.assertEqual([x['key'] for x in st['steps'] if not x.get('optional')],
                          ['owner', 'ai', 'inbound'])
-        # every step explains ITSELF - "go to Connectors" is navigation, not a reason
+        # every step explains ITSELF - "go to Connections" is navigation, not a reason
         for x in st['steps']:
             self.assertGreater(len(x['why']), 40, f"{x['key']} has no reason to exist")
 
@@ -102,7 +102,7 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         self.assertTrue(_step(setup.state(s), 'ai')['done'])
 
     def test_a_connector_with_no_source_behind_it_is_only_half_connected(self):
-        """It looks done on the Connectors tab and delivers nothing. That is exactly the state a
+        """It looks done on the Connections tab and delivers nothing. That is exactly the state a
         checklist exists to catch."""
         s = _fresh()
         cid = s.get_connector_by_type('outlook')['ConnectorId']

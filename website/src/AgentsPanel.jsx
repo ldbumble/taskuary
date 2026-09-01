@@ -1,4 +1,4 @@
-// Bring-your-own-AI-CLI editor - shared by Settings (Agents page) and Connectors
+// Bring-your-own-AI-CLI editor - shared by Settings (Agents page) and Connections
 // (AI CLI agents card). Any CLI that reads a prompt on stdin is a teammate.
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, ListSubheader, MenuItem, Select, TextField, Typography } from "@mui/material";

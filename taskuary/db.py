@@ -8,7 +8,7 @@ secret, so the saved config never carries the password itself.
 
 def conn_str(cfg: dict) -> str:
     cs = (cfg.get('conn_str') or '').strip()
-    if not cs: raise RuntimeError('no connection string set - Connectors → Any database (connection string)')
+    if not cs: raise RuntimeError('no connection string set - Connections → Any database (connection string)')
     return cs.replace('{password}', cfg.get('password') or '')
 
 

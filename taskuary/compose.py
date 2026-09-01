@@ -211,7 +211,7 @@ def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS)
 
     `answers` are the owner's replies to a previous round's questions, so asking is a
     conversation rather than a dead end."""
-    if not llm: return {'error': 'no AI connector is configured - Connectors → AI'}
+    if not llm: return {'error': 'no AI connector is configured - Connections → AI'}
     if not (ask or '').strip(): return {'error': 'say what you want the report to do'}
     cat = catalog(store)
     user = {'request': ask.strip(), 'catalog': cat,
@@ -235,7 +235,7 @@ def compose_sources(store, ask: str, llm, one_type: str = None, answers: dict = 
 
     `one_type` is the card the owner is standing on: exactly one source comes back, of that type
     unless the ask plainly needs another system - and then `explain` says which and why."""
-    if not llm: return {'error': 'no AI connector is configured - Connectors → AI'}
+    if not llm: return {'error': 'no AI connector is configured - Connections → AI'}
     if not (ask or '').strip(): return {'error': 'say what it should read'}
     cat = catalog(store)
     if one_type:

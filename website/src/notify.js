@@ -33,7 +33,7 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
       + ` — enable ${one(asleep) ? "it" : "them"} on the connector card.` + note };
   if (unnamed.length) return { kind: "unnamed", targets: unnamed, stale,
     text: `${names(unnamed)} ${one(unnamed) ? "has" : "have"} the Notifications role, but no chat is named yet`
-      + " — set it under Connectors → Credentials." + note };
+      + " — set it under Connections → Credentials." + note };
   return { kind: "none", targets: [], stale,
     text: "No notify chat yet — on a Telegram, WhatsApp or Teams card, add the Notifications role"
       + " and name the chat in Credentials." + note };

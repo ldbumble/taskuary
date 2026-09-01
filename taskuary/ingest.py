@@ -245,7 +245,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             elif llm is None:
                 mid = _land(store, msg, None, 'filed')
                 store.add_route(mid, None, 'file', None,
-                                'awaiting AI triage - connect an AI connector (Connectors → AI) to classify inbound automatically', [], 'triage')
+                                'awaiting AI triage - connect an AI connector (Connections → AI) to classify inbound automatically', [], 'triage')
                 logger.debug(f"ingest: filed (no AI connector) - {msg.get('subject') or ''}")
                 return {'status': 'filed', 'task_id': None, 'message_id': mid}
             else:

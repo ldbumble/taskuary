@@ -1928,9 +1928,9 @@ def tool_run(body: dict):
         raise HTTPException(422, f'connector {connector_id} is {conn.get("Type")}, not {card_of(t)}')
     if conn:
         if not conn.get('Active'):
-            raise HTTPException(403, f'the {t} connection is off - turn it on under Connectors')
+            raise HTTPException(403, f'the {t} connection is off - turn it on under Connections')
         if 'tool' not in store_mod.roles_of(conn):
-            raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connectors → {t} → Role)')
+            raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connections → {t} → Role)')
         try:
             scopes.require(conn, t)
         except PermissionError as e:
@@ -2067,7 +2067,7 @@ def mssql_test(body: dict):
     except ImportError:
         return {'ok': False, 'error': 'pyodbc is not installed - run: pip install pyodbc'}
 
-# Models each CLI can be pointed at. The agent profile's own `model` (Connectors → AI CLI
+# Models each CLI can be pointed at. The agent profile's own `model` (Connections → AI CLI
 # agents) always wins as the default; these are the quick picks the run dialogs offer.
 CLI_MODELS = {
     'claude': ['opus', 'sonnet', 'haiku', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],

@@ -311,7 +311,7 @@ def generate(store, name: str, days: int = DAYS) -> str:
     try:
         from .llm import build_llm
         llm = build_llm(store)
-        if not llm: raise RuntimeError('no active AI connector - set one up under Connectors → AI')
+        if not llm: raise RuntimeError('no active AI connector - set one up under Connections → AI')
         body, src, ev = gen(store, llm, days)
         body = re.sub(r'^```\w*\s*$|^```\s*$', '', (body or '').strip(), flags=re.M).strip()
         if name in SINKS: src = SINKS[name](store, body, src)

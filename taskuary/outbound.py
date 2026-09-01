@@ -37,7 +37,7 @@ def _mailbox(store, msg=None):
     """Which mailbox sends. The one the message arrived in, else the first email source."""
     if msg and msg.get('SourceName') and '@' in (msg['SourceName'] or ''): return msg['SourceName']
     src = next((s for s in store.list_sources() if s['Channel'] == 'email'), None)
-    if not src: raise RuntimeError('no mailbox configured - add one under Connectors → Outlook')
+    if not src: raise RuntimeError('no mailbox configured - add one under Connections → Outlook')
     return src['Address']
 
 

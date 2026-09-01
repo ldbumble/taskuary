@@ -41,7 +41,7 @@ def _ai(store) -> dict:
 
 def _inbound(store) -> list:
     """Connections that bring work in AND have a source to poll. A card with credentials and no
-    mailbox behind it is half-connected - it looks done on the Connectors tab and delivers
+    mailbox behind it is half-connected - it looks done on the Connections tab and delivers
     nothing, which is exactly the state a wizard exists to catch."""
     live = {s['Channel'] for s in store.list_sources() if s.get('Active')}
     from .channels import CH2SRC
@@ -87,11 +87,11 @@ def state(store) -> dict:
                 'noise. Until it exists every message just files itself onto the Timeline, '
                 'untriaged - the app runs, and does nothing for you. A coding CLI you already '
                 'pay for will do it; so will an API key.',
-         'done': bool(ai), 'detail': ai.get('Name') or '', 'where': 'Connectors'},
+         'done': bool(ai), 'detail': ai.get('Name') or '', 'where': 'Connections'},
         {'key': 'inbound', 'title': 'Connect where work arrives',
          'why': 'A mailbox, a chat, a tracker - anything that brings work in. Without one the '
                 'Timeline is empty because nothing is being read, not because nothing happened.',
-         'done': bool(inbound), 'detail': ', '.join(inbound[:3]), 'where': 'Connectors'},
+         'done': bool(inbound), 'detail': ', '.join(inbound[:3]), 'where': 'Connections'},
         {'key': 'sync', 'title': 'Read your first messages', 'optional': True, 'recommended': True,
          'why': 'With the three above in place, one sync pulls your mail in and the AI triages it. '
                 'It also gives the two personalization steps below real history to learn from.',

@@ -1950,6 +1950,13 @@ const TalkItThrough = ({ messageId, onOpenTask }) => {
 
 const TriagePane = ({ sel, detail, onRefresh }) => {
   const road = roadOf(sel);
+  // every judgement made about this message, oldest first. "And why" below is only the LATEST
+  // one, which is why a correction was invisible here: the owner clicks "not ours", the verdict
+  // changes, and the panel showed the new sentence with no sign that anyone had overruled
+  // anything. Routes are keyed on the message, so they survive the task the verdict deletes.
+  // ...about THIS message. On a task row detail.routes covers every message on the task, and a
+  // thread's other rows were judged separately - their reasons are not this row's history.
+  const trail = (detail?.routes || []).filter((r) => !r.MessageId || r.MessageId === sel.MessageId);
   // the sentence the classifier wrote, without the routing bookkeeping after it
   const why = String(sel.RouteReason || "").replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0];
   const rest = String(sel.RouteReason || "").split(" · ").slice(1);
@@ -1985,6 +1992,33 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
           </Typography>
         )}
       </Box>
+      {trail.length > 1 && (
+        <>
+          <PanelLabel>How it got here</PanelLabel>
+          <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.5, py: 0.25, bgcolor: "#fcfaf7" }}>
+            {trail.map((r, i) => {
+              const mine = r.Decision === "ignore";
+              return (
+                <Box key={r.RouteId || i} sx={{ display: "flex", alignItems: "baseline", gap: 1, py: 0.65,
+                  borderTop: i ? `1px solid ${BORDER}` : "none" }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, flexShrink: 0,
+                    color: mine ? ALERT_INK : DIM }}>
+                    {mine ? "You said: not ours" : `triage · ${r.Decision}`}
+                  </Typography>
+                  <Typography variant="caption" noWrap sx={{ color: FAINT, flex: 1, minWidth: 0 }}>
+                    {cleanText(String(r.Reason || "")).replace(/^(not ours|triage:)\s*[-\u2014:]?\s*/i, "").split(" \u00b7 ")[0]}
+                  </Typography>
+                  {r.CreatedAt && (
+                    <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: FAINT, flexShrink: 0 }}>
+                      {fmtDateTime(r.CreatedAt)}
+                    </Typography>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        </>
+      )}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.25, lineHeight: 1.6 }}>
         Correcting this teaches it: the verdict you give lands in TRIAGE.md and applies to the next
         message like this one, not as a rule about this sender.

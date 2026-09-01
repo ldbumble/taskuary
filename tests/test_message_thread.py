@@ -58,6 +58,28 @@ class TheWholeConversation(unittest.TestCase):
                                         'BodyText': 'just this', 'Status': 'filed'})
         self.assertEqual(len(c.get(f'/api/messages/{mid}/thread').json()['messages']), 1)
 
+    def test_it_carries_what_was_DECIDED_about_the_message(self):
+        """A row with no task has no task detail to read a history out of - and "not ours" is
+        exactly the verdict that leaves it without one, because it deletes the task. Routes are
+        keyed on the message, so they outlive it and the Triage tab can still show the trail."""
+        d = c.get(f'/api/messages/{self.last}/thread').json()
+        self.assertIn('routes', d)
+        self.assertIsInstance(d['routes'], list)
+
+    def test_the_owners_correction_is_in_the_trail_after_the_task_is_gone(self):
+        mid = _line('Rivka', 'please approve this refund', '2026-09-01 10:00:00', ext='thr:refund')
+        tid = c.post('/api/tasks', json={'Title': 'refund', 'Kind': 'coding'}).json()['taskId']
+        server.store.attach_message(mid, tid)
+        server.store.add_route(mid, tid, 'create', None, 'triage: task - a refund to approve', [], 'triage')
+        r = c.post(f'/api/messages/{mid}/not-mine',
+                   json={'scope': 'subject', 'topic': 'resident refund request',
+                         'note': 'resident refunds are not ours'})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()['taskDeleted'])
+        trail = c.get(f'/api/messages/{mid}/thread').json()['routes']
+        self.assertEqual([x['Decision'] for x in trail], ['create', 'ignore'])
+        self.assertIn('not ours', trail[-1]['Reason'])
+
     def test_an_unknown_message_is_a_404(self):
         self.assertEqual(c.get('/api/messages/99999999/thread').status_code, 404)
 

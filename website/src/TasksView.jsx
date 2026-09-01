@@ -14,7 +14,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { taskMatchesQuery } from "./taskSearch.js";
 import { filterForSelectedState } from "./taskFilter.js";
-import { pollWhileActive, pollWhileVisible } from "./visible.js";
+import { onLive } from "./live.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -211,9 +211,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // session that goes quiet is waiting on you); a row that states it has to be re-asked.
   // Only while this tab is the one on screen: it stays mounted behind the others.
   useEffect(() => {
-    // Refresh now as well as polling: otherwise returning from Board shows the hidden
-    // tab's old list for five seconds.
-    return pollWhileActive(active, loadTasks, 5000);
+    // Refresh now as well as on events: otherwise returning from Board shows the hidden
+    // tab's old list until the next task-changed.
+    if (!active) return undefined;
+    loadTasks();
+    return onLive("task-changed", loadTasks);
   }, [active, loadTasks]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
@@ -231,7 +233,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const settling = detail?.task?.Status === "in_progress" && !!detail?.transcript
       && (filedReport || Date.now() < sessionSettleUntil.current);
     if (!((running || wrapping || settling) && selected)) return undefined;
-    return pollWhileVisible(() => loadDetail(selected), 3000);
+    return onLive(["run-tail", "task-changed"], () => loadDetail(selected));
   }, [detail, selected, loadDetail, wrapping]);
 
   const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };

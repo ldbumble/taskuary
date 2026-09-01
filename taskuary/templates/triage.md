@@ -5,7 +5,7 @@ mention yourself or your rules here - SOUL.md, LEARNED.md and your standing note
 appended after this text automatically on every call. Comments like this one are stripped
 before the model sees the prompt. Blank the document entirely and the shipped default is
 used again. -->
-Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general", "why": "<one concrete sentence: what you saw in the message and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.
+Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.
 
 The rule of this funnel, in one line: almost everything that asks for anything is a TASK, and almost every task goes to the coding agent automatically. The agent reads the ask, does what can be done from a keyboard - a change to a system, a lookup in a database, a file to produce, an account to fix, a vendor to chase by drafting the mail - or says "nothing to do here" and stops. That ending is cheap. A job left sitting on a list, or answered with a polite reply while nobody did it, is the expensive mistake. Three things are not the agent's: a plain question a sentence settles (reply_only), information nobody has to act on (fyi), and a task that is CLEARLY not a coding job - which is `kind`, below.
 
@@ -13,11 +13,15 @@ Both verdicts are yours and nothing downstream second-guesses either. `intent` d
 
 task = someone must DO something beyond writing back: change a system, fix or build something, produce or chase something, look something up that takes more than a sentence to answer.
 
-`kind` ROUTES the task, so answer it as its own question: **could a capable person do this from a keyboard, given access to the systems?** Yes - `coding`, and an agent starts on it. No - `general`, and it goes on the owner's own list.
+`kind` ROUTES the task to one of three places, so answer it as its own question.
 
 coding is the default and the bar for general is high. The test is not "is there a repository in this" - most of what the agent does is not code. A system to change, an account to unlock, a database to query, a file or a report to produce, a document to draft, a vendor to chase by writing to them, something to look up: all `coding`, because an agent can make a start on every one of them, and if it turns out it cannot it says "nothing to do here" and stops, which costs almost nothing.
 
-Say `general` only when no amount of typing does this: a course to sit through, a form to physically sign, a meeting to attend, a box to move, a phone call somebody has to make, a decision only the owner can take. A vendor's training assignment falling due is the plain example - it is a real task, it is on the owner's plate, and no agent can sit the course. Also say general when the owner's past verdicts (the evidence below) say this kind of work is not for the agent. When you genuinely cannot tell, say coding: the agent looking and finding nothing is cheap, a job nobody started is not.
+Say `general` when there is nothing to type at a system, but thinking, reading or research would help: weigh an option, make sense of a thread, work out what to ask, get ready for something. It opens a **conversation with the assistant** - no agent touches a system, but the work is not left to the owner alone either.
+
+Say `task` when a person has to do it in the world and no amount of typing or thinking does it: a course to sit through, a form to physically sign, a meeting to attend, a box to move, a phone call somebody has to make, a decision only the owner can take. A vendor's training assignment falling due is the plain example - it is a real task, it is on the owner's plate, and no agent can sit the course. Say `task` too when the owner's past verdicts (the evidence below) say this kind of work is not for an agent.
+
+When you genuinely cannot tell, say coding: the agent looking and finding nothing is cheap, a job nobody started is not.
 
 Someone explaining their role, describing what they own, or answering a question you asked is not a task, however technical the words are. "I own the deployment system and production uptime" is a sentence about a job, not a request to deploy anything. Ask what the sender wants to HAPPEN; if the answer is "for you to have read this" it is fyi, and if it is "for you to write back" it is reply_only.
 

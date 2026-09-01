@@ -602,6 +602,18 @@ const DATA_META = {
       "POST {base}/api/knowledge/reindex{hdr} with {\"connector_id\": <id>} and read back what was indexed and what would not read (pdf needs pypdf). Then POST {base}/api/tools/run{hdr} with {\"type\": \"kb_search\", \"query\": \"...\"} to prove a question comes back with passages. SETUP DONE."],
     actions: [{ label: "Reindex now", post: "/api/knowledge/reindex", body: (c) => ({ connector_id: c.ConnectorId }),
       say: (r) => `${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed · ${r.docs} documents / ${r.chunks} passages` + (r.errors?.length ? ` · ${r.errors.length} problems: ${r.errors.slice(0, 3).join("; ")}` : "") }] },
+  // The handbook (handbook.py) had every control except the card they hang on: `enabled()` looked
+  // for a connector of this type, scopes.py classified handbook_write as a WRITE action, and
+  // /api/tools/run enforces Active + role + Authority - but only `if conn`, and no card meant no
+  // connector, so all three were inert. An entry is read into every later agent's seed prompt, so
+  // "who may put a fact in front of every future agent" needs an answer that is not "anyone".
+  handbook: { title: "Company handbook", types: ["handbook_search", "handbook_write"], noSecret: true,
+    fields: [],
+    desc: "What the agents work out about this company, written down by topic and read by the next one before it starts. Turn the card off to stop them writing it; set Authority to read to let them search it without adding to it.",
+    howto: ["It is on by default and needs no setup — an agent files an entry with `taskuary --learned \"...\"`, or is asked once when a session closes whether it learned anything that stays true.",
+      "Authority decides who may WRITE. read = agents search the handbook but cannot add to it; write = they can file entries. An entry is handed to every later session as fact, which is why writing is a write.",
+      "Browse, correct, vote and retire entries on the Social tab. A wrong entry left standing becomes folklore, so retire it rather than arguing with it."],
+    agent: ["GET {base}/api/handbook{hdr} to read what is already written down, and POST {base}/api/tools/run{hdr} with {\"type\": \"handbook_search\", \"query\": \"...\"} to search it. Do not file an entry unless you learned something that is still true next month. SETUP DONE."] },
 };
 
 /* A question typed on the Knowledge base card, answered from the index - the same search a

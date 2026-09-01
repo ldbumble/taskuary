@@ -121,7 +121,8 @@ _ASKS = ('can you', 'could you', 'please send', 'let me know', 'would you mind',
 
 def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     """Title/summary/kind/priority for a task created from a message. `kind` routes the work:
-    coding = an agent on a checkout, reply = the responder and Review, general = your list.
+    coding = an agent on a checkout, reply = the responder and Review, general = the assistant's
+    chat, task = the owner's own list with nothing working it.
     Pass `kind` when the classifier named one (triage.classify_intent) - it read the whole
     message against TRIAGE.md's definition and outranks the keyword scan below, which is the
     fallback for a brain that did not say.
@@ -136,8 +137,12 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     body = (msg.get('body') or '').strip()
     head = subj + '\n' + body[:2000]           # a trace usually sits below the pleasantries
     low = head.lower()
-    kind = (kind if kind in ('coding', 'general') else
+    # the last branch used to be 'general', back when general MEANT the owner's list. It means
+    # the assistant's chat now, and a keyword scan that could not tell what this is has no
+    # business opening one - `task` is the honest end of a guess: it lands on the owner's list
+    # and waits, which is what the old word did.
+    kind = (kind if kind in ('coding', 'general', 'task') else
             'coding' if _CODE_HARD.search(head) or sum(w in low for w in _CODE_SOFT) >= 2 else
-            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'general')
+            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'task')
     return {'title': subj[:300].capitalize(), 'summary': body[:1000], 'kind': kind,
             'priority': 'urgent' if urgent else 'normal'}

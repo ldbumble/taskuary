@@ -933,7 +933,7 @@ class ApiTests(unittest.TestCase):
                                         'Status': 'ignored'})
         out = c.post(f'/api/messages/{mid}/mine', json={}).json()
         t = server.store.get_task(out['taskId'])
-        self.assertEqual((t['Kind'], t['Status'], t['Assignee']), ('general', 'open', server.ACTOR))
+        self.assertEqual((t['Kind'], t['Status'], t['Assignee']), ('task', 'open', server.ACTOR))
         self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])   # off the filed pile
         self.assertEqual(server.store.list_runs(out['taskId']), [])                # nobody dispatched
         row = next(r for r in server.store.feed() if r['MessageId'] == mid)

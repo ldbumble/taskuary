@@ -76,6 +76,10 @@ DEFAULT_SCOPE = {
     'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',
     'linear': 'read', 'trello': 'read', 'notion': 'read', 'sentry': 'read', 'pagerduty': 'read',
     'clickup': 'read', 'todoist': 'read', 'dropbox': 'read',
+    # Taskuary's OWN stores, and the point of both is that agents fill them: a handbook only
+    # agents may read is a handbook nobody writes. It stays on the ladder so an owner who wants
+    # the agents hands-off can drop it to read - the default is not the absence of a choice.
+    'handbook': 'write', 'knowledge': 'write',
 }
 
 

@@ -358,7 +358,11 @@ class TerminalTests(unittest.TestCase):
         t.write = typed.append
         report = '{"determination": "325 was Y/Y", "actions": "flipped it to N/N", "summary": "no mailbox now"}'
         try:
-            with mock.patch('taskuary.llm.build_llm', side_effect=[lambda s, u, **kw: report,
+            # the handbook is OFF for this one. It is on by default now and asks the transcript
+            # its own question during wrap (coder.wrap -> handbook.learn_from_session), which
+            # would eat one of the two brains below and leave the reply undrafted. What wrap does
+            # with the handbook is tests/test_handbook.py's subject, not this test's.
+            with mock.patch('taskuary.handbook.enabled', return_value=False),                  mock.patch('taskuary.llm.build_llm', side_effect=[lambda s, u, **kw: report,
                                                                    lambda s, u, **kw: 'Done - 325 no longer gets a mailbox.']):
                 out = c.post(f'/api/terminals/{t.sid}/wrap', json={'task_id': tid}).json()
             self.assertEqual(out['wrap'], 'done')
@@ -558,7 +562,12 @@ class TerminalTests(unittest.TestCase):
         # directory, not of the prompt, so it is not what this budget is about.
         with mock.patch('taskuary.context.write', return_value=None):
             seed = terminal.seed_text(server.store, tid)
-        self.assertLess(len(seed), 1000, seed)          # must fit a canonical tty line
+        # 1000 until the handbook came on. Its seed line (handbook.SEED_LINE) was dead text while
+        # the feature was switched off by its own card, so the budget was measured without it;
+        # turning it on is what moved this, not prompt drift. The line was cut 274 -> 138 chars
+        # first, and the ceiling moved once, deliberately, rather than the rule being shrunk into
+        # uselessness to fit a number. Anything ABOVE this is bloat and belongs in a document.
+        self.assertLess(len(seed), 1100, seed)
         ses = c.post('/api/terminals', json={'agent': 'faketui', 'task_id': tid, 'seed': True,
                                              'cwd': os.getcwd()}).json()
         t = terminal.get(ses['sid'])

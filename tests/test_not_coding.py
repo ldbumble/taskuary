@@ -22,14 +22,17 @@ JOB_SCOPE = ("Not really velocity. I think the bigger change is what the job has
 
 
 class KindTests(unittest.TestCase):
+    """The keyword scan's "I cannot tell" answer is `task` - the owner's own list. It used to be
+    `general`, which meant the same thing until general came to mean the assistant's chat; a scan
+    that could not read the message has no business opening a conversation about it."""
     def test_prose_that_merely_mentions_deployment_is_not_coding(self):
-        self.assertEqual(draft_task_fields({'subject': 'Teams chat with Priya', 'body': JOB_SCOPE})['kind'], 'general')
+        self.assertEqual(draft_task_fields({'subject': 'Teams chat with Priya', 'body': JOB_SCOPE})['kind'], 'task')
 
     def test_one_soft_word_is_somebody_talking_about_their_week(self):
         for body in ("We had an error in judgement on the vendor call.",
                      "The deploy team is hiring two people this quarter.",
                      "My endpoint of the process is the monthly close."):
-            self.assertEqual(draft_task_fields({'subject': 'chat', 'body': body})['kind'], 'general', body)
+            self.assertEqual(draft_task_fields({'subject': 'chat', 'body': body})['kind'], 'task', body)
 
     def test_two_soft_words_together_are_a_report(self):
         f = draft_task_fields({'subject': 'export', 'body': 'The nightly export is broken and the deploy failed.'})
@@ -45,10 +48,10 @@ class KindTests(unittest.TestCase):
     def test_a_question_is_still_a_reply(self):
         self.assertEqual(draft_task_fields({'subject': 'T&E', 'body': 'Can you send me the numbers?'})['kind'], 'reply')
 
-    def test_real_work_with_no_code_in_it_is_general_not_coding(self):
+    def test_real_work_with_no_code_in_it_is_a_task_not_coding(self):
         """Chasing a vendor IS a task - it just has no repository, so no agent is dispatched."""
         f = draft_task_fields({'subject': 'March invoice', 'body': 'The vendor never sent it. Someone needs to chase them.'})
-        self.assertEqual(f['kind'], 'general')
+        self.assertEqual(f['kind'], 'task')
 
 
 class DispatchGateTests(unittest.TestCase):
@@ -73,7 +76,9 @@ class DispatchGateTests(unittest.TestCase):
         verdict - here from the keyword scan, because this path has triage switched off."""
         s, out, started = self._ingest('Teams chat with Priya', JOB_SCOPE)
         self.assertEqual(started, [])                                    # no session bought
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # and labelled honestly
+        # `task`, not `general`: general is the assistant's chat now, and a keyword scan that
+        # could not tell what this is should not open one
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')     # and labelled honestly
 
     def test_a_real_bug_report_still_reaches_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.')
@@ -82,7 +87,7 @@ class DispatchGateTests(unittest.TestCase):
 
     def test_the_route_line_says_which_way_it_went(self):
         s, _out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        self.assertIn('not a coding job', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertIn('yours to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
         s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.')
         self.assertIn('sent to the coding agent', s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 

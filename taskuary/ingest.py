@@ -116,7 +116,8 @@ def auto_code_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     Then the stranger gate: a first-time sender's mail can be a task, it cannot start an agent on
     this machine (senders.known). Second because it is the expensive one - a Sent Items search -
     which no task already staying on the Board should pay for."""
-    if kind != 'coding': return False, 'not a coding job - on your list for you'
+    if kind == 'general': return False, 'nothing to type at a system - talk it through with the assistant'
+    if kind != 'coding': return False, 'a person has to do this one - on your list for you'
     ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
     return ok, why if ok else (f'{why} - not one of your domains, and this mailbox has never '
                                'written to them; send it yourself if real')
@@ -338,10 +339,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 _spawn(_auto_draft, store, tid, rid)
         # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
         # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
-        # stops, and a job left on a list does not. The one exception is work that is CLEARLY not
-        # a coding job (2026-08-30), and triage says which - `kind`, judged against TRIAGE.md.
-        # A general task still lands on the Board; it just waits for the owner's click.
-        elif f['kind'] in ('coding', 'general') and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
+        # stops, and a job left on a list does not. Only CODING self-dispatches: `general` is a
+        # conversation the owner opens when they want it (starting a chat per inbound message
+        # would be noise), and `task` is theirs by definition. Both still land on the Board.
+        elif f['kind'] == 'coding' and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you.
             # The rest of the gate is auto_code_ok: what may start a session on this machine.
@@ -365,7 +366,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # answered a question nobody asked
     reason = r['reason']
     if r['decision'] != 'attach':
+        # every kind names its OWN ending. Without the two lines in the middle a general or a
+        # task fell through to "sent to the coding agent" - which nothing had done - and the
+        # Timeline quotes this verbatim, so the panel would have stated a lie under the verdict.
         act = ('a reply draft goes to Review for you' if f['kind'] == 'reply'
+               else 'talk it through with the assistant - nothing is working it' if f['kind'] == 'general'
+               else 'yours to do - nothing is working it' if f['kind'] == 'task'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
                else f'not auto-worked: {held}' if held
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
@@ -381,7 +387,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     lvl = cfg.get('notify_level') or 'needs_me'
     # on an attach there was no fresh triage (`f` only exists on create) - the task itself knows
     kind = f['kind'] if r['decision'] != 'attach' else (store.get_task(tid) or {}).get('Kind')
-    dispatched = kind != 'reply' and cfg.get('coder_auto_enabled') == '1' and not held
+    # only CODING is ever auto-dispatched now, so anything else is still waiting on the owner
+    dispatched = kind == 'coding' and cfg.get('coder_auto_enabled') == '1' and not held
     if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
         _notify_new(store, msg, tid, mid,
                     'a question for you' if kind == 'reply' else 'new task on your list', rid=new_rid)

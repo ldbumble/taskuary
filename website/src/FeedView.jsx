@@ -9,6 +9,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import AssignmentIndIcon from "@mui/icons-material/AssignmentInd";
@@ -446,10 +447,8 @@ const TodayStrip = () => {
 export default function FeedView({ onOpenTask, onChanged }) {
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const calEvents = useCalToday();
-  // the filter dock freezes at the top (Excel-style); the day header sticks just under it and the
-  // rows dissolve into the top as they pass under the fixed header. dockH is
-  // measured so the sticky date sits exactly below the frozen dock whatever its wrapped height.
-  const dockRef = useRef(null);
+  // The filter dock is a fixed flex sibling of the scroller. Rows never fade at its top edge;
+  // the only visual fade belongs to the true bottom edge of the rail.
   // the rail's own scroller. The Timeline used to BE the page: it scrolled the window, its
   // filters were a sticky dock floating over the whole width, and the review panel was a sticky
   // column beside it. That made the list the subject of the screen when the TASK is the subject
@@ -471,10 +470,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const dayRefs = useRef({});                        // day (YYYY-MM-DD) -> group element
   const [curDay, setCurDay] = useState("");
   const spy = useCallback(() => {
-    const rail = railRef.current, dock = dockRef.current; if (!rail) return;
-    // the dissolve band only exists once something can actually slide under the header - at rest
-    // it was washing out the first row before any scrolling happened
-    if (dock) dock.dataset.sc = rail.scrollTop > 8 ? "1" : "0";
+    const rail = railRef.current; if (!rail) return;
     const edge = rail.getBoundingClientRect().top + 1;
     // the current day is the one whose group top sits furthest BELOW all others yet above the edge -
     // i.e. of the groups already scrolled past the date line, the lowest (most recently entered) one
@@ -847,14 +843,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
   const today = new Date().toLocaleDateString("sv-SE");
   const todays = (rows || []).filter((r) => localDay(r.SentAt) === today);
-  const stats = [
-    { label: "in today", n: todays.length, f: "" },
+  const stats = [{ label: "in today", n: todays.length, f: "" }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
     { label: "needs me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true },
     { label: "info", n: todays.filter((r) => r.Category === "info").length, f: "" },
     { label: "promo", n: todays.filter((r) => r.Category === "promo").length, f: "" },
     { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
-  ];
+  ].filter((s) => s.n > 0)];
 
   return (
     // THE RAIL AND THE STAGE. The Timeline used to be the page - the window scrolled it, its
@@ -872,42 +867,19 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
       {/* ── the rail ────────────────────────────────────────────────────────────── */}
       <Box data-tq-keep onMouseEnter={disarmClose} onMouseLeave={armClose}
-        sx={{ display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden",
+        sx={{ display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", position: "relative",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
 
         {/* the header. Frozen by construction now rather than by position:sticky - it is a
             flex sibling of the scroller, so nothing can slide over it and nothing has to be
             measured to keep it out of the way. */}
-        <Box ref={dockRef} sx={{ flexShrink: 0, borderBottom: `1px solid ${BORDER}`,
-          px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1,
-          // the dissolve band under the header: rows melt as they rise into its underside, but
-          // only once you scroll (data-sc, set by the spy) - at rest the first row is untouched
-          position: "relative",
-          "&::after": { content: '""', position: "absolute", left: 0, right: 0, bottom: -30, height: 30,
-            background: `linear-gradient(${PANEL} 20%, transparent)`, pointerEvents: "none",
-            opacity: 0, transition: "opacity .25s", zIndex: 3 },
-          "&[data-sc='1']::after": { opacity: 1 } }}>
-
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
-            <Button size="small" variant="outlined" disabled={syncing || bgSync} onClick={() => syncNow(false)}
-              title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
-              startIcon={syncing || bgSync ? <CircularProgress size={11} sx={{ color: ACCENT }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ py: 0.25, px: 1.25, fontSize: 11.5, whiteSpace: "nowrap", borderColor: BORDER, color: DIM,
-                "&:hover": { borderColor: "#d8cfbe", bgcolor: PANEL2 } }}>
-              {syncing || bgSync ? "Syncing…" : "Sync now"}
-            </Button>
-            {/* the only button on this screen that STARTS something: a message, an agent, or a
-                note to yourself (NewSheet.jsx). Everything else here reacts to what arrived. */}
-            <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
-              startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-              sx={{ py: 0.25, px: 1.25, fontSize: 11.5, background: GRADIENT }}>New</Button>
-          </Box>
+        <Box sx={{ flexShrink: 0, bgcolor: "transparent",
+          px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
 
           {/* filters: one segmented control for STATE, one quiet picker for WHERE FROM. Two
               rows of loose pills of two different kinds read as a settings panel, not a filter. */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
             <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
-            <Box sx={{ width: "1px", height: 18, bgcolor: BORDER, flexShrink: 0 }} />
             <Select size="small" value={cat} displayEmpty onChange={(e) => setCat(e.target.value)}
               inputProps={{ "aria-label": "Timeline category" }}
               renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "everything"}
@@ -925,7 +897,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
                   : String(v.split(":").slice(2).join(":")).split("@")[0])}
               sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
-                color: pick ? INK : DIM, flex: 1, minWidth: 0,
+                color: pick ? INK : DIM, flex: "0 0 104px", width: 104, minWidth: 104, maxWidth: 104,
                 "& .MuiSelect-select": { py: 0.25, px: 1.15 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
               {/* 96 discovered buckets turned this into a page-long wall. It is a bounded,
@@ -964,27 +936,27 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 ];
               })}
             </Select>
+            {/* New starts work, so it stays visually distinct, but it belongs on this toolbar —
+                not alone on a wasteful row above it. */}
+            <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
+              startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+              sx={{ flexShrink: 0, height: 34, minWidth: 68, py: 0.25, px: 1.1, ml: "auto", borderRadius: 2,
+                fontSize: 11.5, background: GRADIENT }}>New</Button>
           </Box>
 
-          {/* the day in numbers, as a caption - still clickable where a tile was, and the sync
-              story rides the same line so the header never grows a row for it */}
+          {/* The counts describe what is in the rail. The date and sync clock belong together
+              below them: date first, centered over the quieter sync status/action. */}
           {rows && (
             <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, flexWrap: "wrap", justifyContent: "center" }}>
               {stats.map((s) => (
                 <Box key={s.label} onClick={() => s.f && setView(s.f)}
                   sx={{ display: "flex", alignItems: "baseline", gap: 0.4, cursor: s.f ? "pointer" : "default",
-                    ...(s.f ? { "&:hover .thubStatLbl": { color: ACCENT } } : {}) }}>
+                    ...(s.f ? { "&:hover .thubStatLbl": { color: ALERT_INK } } : {}) }}>
                   <Typography sx={{ fontWeight: 700, fontSize: 11.5,
-                    color: s.hot && s.n ? ALERT : s.n ? ACCENT : INK }}>{s.n}</Typography>
+                    color: s.hot && s.n ? ALERT_INK : INK }}>{s.n}</Typography>
                   <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, fontSize: 10.5, transition: "color .15s" }}>{s.label}</Typography>
                 </Box>
               ))}
-              <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, width: "100%", textAlign: "center" }}>
-                {syncing || bgSync ? (syncWhat || "syncing…")
-                  : !every ? "background sync off"
-                  : `synced ${lastSync ? lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}`
-                    + (nextIn != null ? ` · next ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}` : "")}
-              </Typography>
             </Box>
           )}
           {/* a brain that errors on every call used to look like slow triage: rows parked on
@@ -1003,17 +975,38 @@ export default function FeedView({ onOpenTask, onChanged }) {
               {err}
             </Alert>
           )}
-          {/* The date names the rows, not the toolbar. Keep it at the bottom of the fixed dock so
-              it sits directly above the Timeline and only its label changes while scrolling. */}
+          {/* Sync belongs to the controls above. The moving date is the label for the rows, so it
+              must be the final thing in the dock — otherwise scrolling changes a heading that
+              appears to describe the sync line beneath it. */}
+          <Box sx={{ minHeight: 20, display: "flex", justifyContent: "center", alignItems: "center", gap: 0.25 }}>
+            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
+              {syncing || bgSync ? (syncWhat || "syncing…")
+                : !every ? "background sync off"
+                : `synced ${lastSync ? lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}`
+                  + (nextIn != null ? ` · next ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}` : "")}
+            </Typography>
+            <Button size="small" variant="text" disabled={syncing || bgSync} onClick={() => syncNow(false)}
+              title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
+              startIcon={<SyncIcon data-tq-sync-icon sx={{ fontSize: 12,
+                color: syncing || bgSync ? ACCENT : "inherit",
+                ...(syncing || bgSync ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
+              sx={{ minWidth: 0, minHeight: 20, py: 0, px: 0.6, ml: 0.35, fontSize: 10.5,
+                lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
+                "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
+                "&.Mui-disabled": { color: DIM, opacity: 1 },
+                "& .MuiButton-startIcon": { mr: 0.35 }, "&:hover": { bgcolor: PANEL2 } }}>
+              {syncing || bgSync ? "Syncing" : "Sync now"}
+            </Button>
+          </Box>
           <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
-            minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>
             {fmtDay(curDay || dayEntries[0]?.[0] || "")}
           </Typography>
         </Box>
 
         {/* ── the scroller ── */}
         <Box ref={railRef} sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
-          position: "relative", px: 1, pb: 3 }}>
+          position: "relative", px: 1, pt: 1, pb: 3 }}>
           <FunnelBar onOpenTask={onOpenTask} />
           <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
             {syncing && (
@@ -1131,16 +1124,14 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <Box ref={endRef} sx={{ height: 8 }} />
             {!!sorted.length && !noMore && <CircularProgress size={16} sx={{ display: "block", mx: "auto", my: 1 }} />}
           </Box>
-          {bottomFade && (
-            <Box aria-hidden sx={{ position: "sticky", bottom: "-24px", height: 0, zIndex: 6, pointerEvents: "none" }}>
-              <Box data-tq-bottom-fade={fade} sx={{
-                height: bottomFade.height,
-                transform: `translateY(-${bottomFade.height}px)`,
-                background: `linear-gradient(transparent, ${PANEL} ${bottomFade.solidAt}%)`,
-              }} />
-            </Box>
-          )}
         </Box>
+        {bottomFade && (
+          <Box data-tq-bottom-fade={fade} aria-hidden sx={{
+            position: "absolute", left: "1px", right: "1px", bottom: "1px", zIndex: 6,
+            height: bottomFade.height, pointerEvents: "none",
+            background: `linear-gradient(transparent, ${PANEL} ${bottomFade.solidAt}%)`,
+          }} />
+        )}
       </Box>
 
       {/* ── the stage: the task, which is what this screen is actually for ────────── */}
@@ -1599,6 +1590,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                       It is mine, not an agent&rsquo;s</TrayBtn>
                   )}
                   {codeless && !onIt && <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />}
+                  {/* the fourth road's door. Triage could say "general" and the Timeline had no way
+                      to act on it - the only control here opened a CLI (see /api/messages/:id/chat) */}
+                  {!onIt && <TalkItThrough messageId={sel.MessageId} onOpenTask={onOpenTask} />}
                   {sel.TaskId && (
                     <TrayBtn onClick={() => setReshape(true)} icon={<CallSplitIcon sx={{ fontSize: 15 }} />}>
                       Two jobs, or a duplicate</TrayBtn>
@@ -1688,11 +1682,17 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
 // coding - …"), which said what happened without ever showing that there were four answers it
 // could have given. Four roads, the one it took lit, and its own sentence underneath: that is
 // the difference between a system you can correct and a system you have to trust.
+// FIVE roads, because there are five places a message can go and there were only ever four
+// words for them. `general` used to read "only you can do it" - triage's old meaning - while the
+// Board, + New and GeneralWorkspace all treated the same Kind as the assistant's chat. One value,
+// two meanings, and the road nobody could act on. general IS chat now, everywhere, and the work
+// a person genuinely has to do in the world is its own road.
 const ROADS = [
   { key: "fyi", label: "fyi", hint: "nothing to do" },
   { key: "reply", label: "reply", hint: "a sentence settles it" },
   { key: "coding", label: "coding", hint: "an agent on a keyboard" },
-  { key: "general", label: "general", hint: "only you can do it" },
+  { key: "general", label: "chat", hint: "talk it through with the assistant" },
+  { key: "task", label: "task", hint: "yours - nothing works it" },
 ];
 // which road the route line says it took. `kind` decides coding vs general and rides on the
 // task, so the two are read from different places on purpose.
@@ -1702,7 +1702,32 @@ const roadOf = (sel) => {
   if (/triage:\s*reply_only/.test(r) || sel.TaskKind === "reply") return "reply";
   if (sel.TaskKind === "coding") return "coding";
   if (sel.TaskKind === "note") return null;                 // you wrote it; nothing judged it
+  if (sel.TaskKind === "task") return "task";               // a person has to do it in the world
   return sel.TaskId ? "general" : null;
+};
+
+// "Talk it through" - the chat door for a Timeline row. Distinct from SendToAgent (a CLI in a
+// checkout) and from "this one is mine" (a plain task nothing works): this one opens the
+// assistant's own thread with the message as the question.
+const TalkItThrough = ({ messageId, onOpenTask }) => {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const go = async () => {
+    setBusy(true); setErr("");
+    try {
+      const { data } = await api.post(`/api/messages/${messageId}/chat`, {});
+      onOpenTask?.(data.taskId);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not open the chat"); }
+    setBusy(false);
+  };
+  return (
+    <>
+      <TrayBtn disabled={busy} onClick={go} icon={<ForumOutlinedIcon sx={{ fontSize: 15 }} />}
+        title="opens the assistant's chat on this, with the message as the question">
+        {busy ? "Opening…" : "Talk it through"}</TrayBtn>
+      {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
+    </>
+  );
 };
 
 const TriagePane = ({ sel, detail, onRefresh }) => {
@@ -1719,7 +1744,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
   return (
     <>
       <PanelLabel>Which road it took</PanelLabel>
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0.75, mb: 1.5 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 0.75, mb: 1.5 }}>
         {ROADS.map((r) => (
           <Box key={r.key} sx={{ border: `1px solid ${road === r.key ? ACCENT : BORDER}`, borderRadius: 1.5,
             px: 1, py: 0.85, bgcolor: road === r.key ? PANEL : "#fcfaf7",

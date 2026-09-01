@@ -17,18 +17,21 @@ import re as _re
 # (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
-    '{"intent": "task|reply_only|fyi", "kind": "coding|general", "why": "<one concrete sentence: what you saw in the message '
+    '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
     'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
     'Almost everything that asks for anything is a task, and almost every task goes to the coding agent '
     'automatically: it does what can be done from a keyboard or says "nothing to do here" and stops - a cheap ending.\n'
-    'kind ROUTES the task, so answer it as its own question: could a capable person do this from a keyboard, given '
-    'access to the systems? Yes = coding, and an agent starts on it. No = general, and it goes on the owner\'s own '
-    'list. coding is the default and the bar for general is high - the test is not "is there a repository in this". '
-    'A system to change, an account to unlock, a database to query, a file or report to produce, a document to draft, '
-    'a vendor to chase by writing to them, something to look up: all coding. Say general only when no amount of '
-    'typing does it - a course to sit, a form to physically sign, a meeting to attend, a call somebody has to make, '
-    'a decision only the owner can take - or when the owner\'s past verdicts say this kind of work is not for the '
-    'agent. Cannot tell? Say coding: an agent looking and finding nothing is cheap, a job nobody started is not.\n'
+    'kind ROUTES the task to one of three places, so answer it as its own question:\n'
+    '  coding - a capable person could do this from a keyboard, given access to the systems. An agent starts on '
+    'it. A system to change, an account to unlock, a database to query, a file or report to produce, a document to '
+    'draft, a vendor to chase by writing to them, something to look up: all coding. This is the DEFAULT.\n'
+    '  general - nothing to type at a system, but thinking, reading or research would help: weigh an option, make '
+    'sense of a thread, work out what to ask, get ready for something. It opens a CONVERSATION with the assistant.\n'
+    '  task - a person has to do it in the world, and no amount of typing or thinking does it: a course to sit, a '
+    'form to physically sign, a meeting to attend, a call somebody has to make, a decision only the owner can take. '
+    'It goes on the owner\'s own list and nothing works it. Say task, too, when the owner\'s past verdicts say this '
+    'kind of work is not for an agent.\n'
+    'Cannot tell? Say coding: an agent looking and finding nothing is cheap, a job nobody started is not.\n'
     'Both verdicts are yours and nothing downstream second-guesses either. Never shade one to steer the other.\n'
     'task = someone must DO something beyond writing back: change a system, fix or build something, produce or '
     'chase something, look something up that takes more than a sentence.\n'
@@ -248,14 +251,15 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             out = llm(system, user, images=images) if images else llm(system, user)
             j = json.loads(re.sub(r'^```(json)?|```$', '', out.strip(), flags=re.M))
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
-                # `kind` is the model's SECOND verdict - coding or general - and it ROUTES the task:
-                # coding starts an agent, general goes on the owner's own list (ingest.auto_code_ok,
-                # which asks nothing else about it). It used to be a regex over the body
+                # `kind` is the model's SECOND verdict and it ROUTES the task to one of three
+                # places: coding starts an agent, general opens the assistant's chat, task goes on
+                # the owner's own list with nothing working it (ingest.auto_code_ok gates the
+                # first and asks nothing about the other two). It used to be a regex over the body
                 # (routing.draft_task_fields), which is how a Teams line about someone's job scope
                 # opened a coding session; the model has read the whole message and TRIAGE.md's
                 # definition, so its word wins when given, and the regex is only the fallback.
                 out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
-                if j['intent'] == 'task' and j.get('kind') in ('coding', 'general'): out['kind'] = j['kind']
+                if j['intent'] == 'task' and j.get('kind') in ('coding', 'general', 'task'): out['kind'] = j['kind']
                 return out
         except Exception:
             pass

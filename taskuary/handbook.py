@@ -171,10 +171,11 @@ def enabled(store) -> bool:
 
 
 # ── what the session is told ────────────────────────────────────────────────────────────
-SEED_LINE = (
-    'THE HANDBOOK: `taskuary --learned "<what is true>" --topic <repo-or-system>` writes one line '
-    'into the company handbook the next agent reads. Only for what is still true next month - a '
-    'trap, how something actually works, who owns what. Never what you did (that is this task).')
+# The seed is the most expensive text in the app - every session pays for it - and this line was
+# free until now only because the handbook was switched off. Earning its place means saying the
+# rule (lasting, not a diary) in one clause, not three sentences.
+SEED_LINE = ('HANDBOOK: `taskuary --learned "<lasting fact>" --topic <repo-or-system>` - a trap, how '
+             'something works, who owns what. Never what you did.')
 
 
 # ── report / tool surface, so an agent or a schedule can reach it ───────────────────────

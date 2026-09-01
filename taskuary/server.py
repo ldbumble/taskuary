@@ -972,8 +972,13 @@ def assistant_talk(iid: int, body: TextBody):
     try: return assistant.talk(store, iid, body.body, ACTOR, _llm())
     except ValueError as e: raise HTTPException(422, str(e))
 
+# what GeneralWorkspace reads to open a chat with its question already asked (newTask.js)
+ASK_TAG = 'ask:assistant'
+
 class MineBody(BaseModel):
-    kind: str = 'general'
+    # a plain task: on the owner's list, nothing working it. NOT `general` - that kind opens the
+    # assistant's chat (general.GENERAL_KINDS), which is not what "this one is mine" means.
+    kind: str = 'task'
     title: str | None = None        # the assistant's suggested title, accepted as-is from the panel
 
 @app.post('/api/messages/{mid}/mine')
@@ -991,6 +996,29 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
     return {'taskId': tid, 'ref': task_ref(tid)}
+
+@app.post('/api/messages/{mid}/chat')
+def chat_message(mid: int, background: BackgroundTasks = None):
+    """"Talk this one through": the message becomes a `general` task and the assistant's chat
+    opens on it with the question already asked.
+
+    The THIRD door, beside /mine (a plain task, yours, nothing works it) and /dispatch (a coding
+    session). Triage could already rule a message `general` - and `general` means the assistant's
+    chat - but the Timeline had no way to act on that verdict: the only dispatch control on a row
+    opened a CLI. A road the classifier can take and the screen cannot is a road that does not
+    exist."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    _learn_promotion(m, background)
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, 'general', ACTOR)
+    t = store.get_task(tid) or {}
+    if (t.get('Kind') or '') != 'general': store.update_task(tid, {'Kind': 'general'}, ACTOR)
+    # the ask tag is what GeneralWorkspace reads to open with the question instead of an empty
+    # thread (website/src/newTask.js). It strips the tag as it asks, so a reload never re-asks.
+    tags = [x.strip() for x in str(t.get('Tags') or '').split(',') if x.strip()]
+    if ASK_TAG not in tags: store.update_task(tid, {'Tags': ','.join(tags + [ASK_TAG])}, ACTOR)
+    store.audit('task', tid, 'chat', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
+    return {'taskId': tid, 'ref': task_ref(tid), 'chat': True}
 
 class SplitBody(BaseModel): kind: str | None = None
 
@@ -1185,8 +1213,25 @@ def handbook_one(lid: int):
     return {**p, 'comments': store.lore_comments(lid)}
 
 @app.post('/api/handbook')
-def handbook_post(body: LoreBody):
-    from . import handbook
+def handbook_post(body: LoreBody, request: Request):
+    """File an entry. Gated the same way the handbook_write TOOL is, because it is the same act
+    through a different door - and this door was the way round the ladder.
+
+    An entry is not a note: handbook.block reads it into every later agent's seed prompt, so it is
+    a claim handed to every future session as company fact. scopes.py classifies that as a WRITE
+    for exactly that reason. Only AGENTS are measured against it - the owner writing on the Social
+    tab is the person the ladder exists to protect, not a caller to check."""
+    from . import guard, handbook, scopes
+    if not handbook.enabled(store):
+        raise HTTPException(403, 'the handbook is off - turn its card on under Connections')
+    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        conn = store.get_connector_by_type('handbook')
+        if conn:
+            try: scopes.require(conn, 'handbook_write')
+            except PermissionError as e:
+                store.audit('tool', conn['ConnectorId'], 'run_refused', ACTOR,
+                            detail={'type': 'handbook_write', 'scope': scopes.scope_of(conn)})
+                raise HTTPException(403, str(e))
     try: return handbook.post(store, body.title, body.body, body.topic, body.kind, body.author or ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -1360,7 +1405,7 @@ def calendar_prep(body: MeetingPrepBody):
     brief = cal.prep_brief(body.dict())
     ask = (body.instruction or '').strip() or 'Get me ready for this meeting.'
     tid = store.create_task({'Title': f'Prep: {subject}'[:200], 'Summary': f'{ask}\n\n{brief}',
-                             'Kind': 'general', 'Tags': 'ask:assistant', 'Source': 'calendar',
+                             'Kind': 'general', 'Tags': ASK_TAG, 'Source': 'calendar',
                              'SourceRef': f"calendar:{body.start or ''}:{subject}"[:200]}, ACTOR)
     store.audit('task', tid, 'create_from_meeting', ACTOR, detail={'subject': subject, 'start': body.start})
     return {'taskId': tid, 'ref': task_ref(tid), 'agent': 'assistant', 'chat': True}

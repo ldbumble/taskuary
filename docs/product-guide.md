@@ -12,10 +12,59 @@ Taskuary automates the ends and leaves you the middle:
 2. AI triage files noise, drafts answers to questions, and turns concrete work into tasks.
 3. Coding tasks run in the CLI and repository you configured. General, research, marketing,
    and triage tasks run in a conversational workspace; its assistant and terminal views share
-   one session, and both can sit beside the session browser.
+   one session, and both can sit beside the session browser. Plain tasks wait on your list.
+   See [The five roads](#the-five-roads) for what each verdict means.
 4. Results and replies return for review. Nothing sends, closes, or ships without approval.
 
 Nothing leaves the machine except calls to services you explicitly configure.
+
+## The five roads
+
+Every message that arrives gets one verdict, and there are only five places it can go. Triage
+writes the verdict; the Timeline shows which road was taken and lets you argue with it.
+
+| Road | What it means | What happens |
+|---|---|---|
+| **fyi** | nothing to do | filed; it stays readable, nothing is created |
+| **reply** | a sentence settles it | a draft goes to Review for you to approve |
+| **coding** | an agent on a keyboard | a CLI session starts in the checkout it picks |
+| **general** | talk it through with the assistant | a conversation opens on the task; no system is touched |
+| **task** | yours to do | it lands on your list and nothing works it |
+
+Three of those are task *kinds* stored on the task itself (`coding`, `general`, `task`), and they
+are what routes the work. `reply` is a kind too; `fyi` creates nothing.
+
+### general means the assistant's chat—everywhere
+
+This word used to mean two different things, which is worth knowing if you are reading older
+notes or an unedited `TRIAGE.md`. Triage used `general` for *"no agent can do this, it is yours"*,
+while the Board, ＋ New and the task workspace all treated the same value as *"the assistant's
+conversation"*. One stored value, two meanings, and the road nobody could act on from the
+Timeline.
+
+It now means the conversation, in every surface:
+
+- Triage rules a message `general` when there is nothing to type at a system but thinking,
+  reading or research would help—weigh an option, make sense of a thread, work out what to ask.
+- **Talk it through** on a Timeline row opens that conversation on the message.
+- ＋ New → *Give an agent a job* → **Just talk it through** starts one from nothing.
+- *Prepare me for it* on a calendar invite opens one with the invite as context.
+- The Board's *General—no repository* and the Tasks tab do what they always did.
+
+Work that a person genuinely has to do in the world—sit a course, sign a form, attend, decide,
+make a call—is the `task` road. Nothing is dispatched at it and nothing drafts a reply to it; it
+waits on your list. **This one is mine** on a Timeline row creates one directly.
+
+Only `coding` is ever dispatched automatically. A conversation you did not ask for is noise, and
+a `task` is yours by definition—so both land on the Board and wait for your click.
+
+### Correcting a verdict teaches it
+
+The roads on the Triage tab are not decoration. Correcting one writes the reason into
+`TRIAGE.md`, which is the document the classifier reads on the next message—so the correction
+applies to the next message *like* this one, not as a rule about this sender. Your standing
+verdicts are read by the assistant's brief as well, so a subject you have ruled out stops coming
+back on both surfaces.
 
 ## Timeline and workspace
 

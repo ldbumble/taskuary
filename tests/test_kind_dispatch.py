@@ -46,14 +46,27 @@ def ingested(s, m, kind):
 
 
 class DispatchTests(unittest.TestCase):
-    def test_general_makes_the_task_and_waits_for_you(self):
+    def test_general_makes_the_task_and_opens_no_session(self):
+        """general is the ASSISTANT'S CHAT now, not "only you can do it" - so nothing is spawned
+        and the route line says where it went, instead of apologising for an agent that was never
+        going to start."""
         s = store()
         out, spawned = ingested(s, mail(), 'general')
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))      # a real task, on the Board
         self.assertEqual(spawned, [])
-        self.assertTrue(any('not auto-started' in c['Body'] for c in s.list_comments(out['task_id'])))
-        self.assertIn('not a coding job', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
+        self.assertIn('talk it through with the assistant', reason)
+        self.assertNotIn('sent to the coding agent', reason)                 # it was not
+
+    def test_a_plain_task_is_nobodys_but_yours(self):
+        s = store()
+        out, spawned = ingested(s, mail(), 'task')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
+        self.assertEqual(spawned, [])
+        reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
+        self.assertIn('yours to do', reason)
+        self.assertNotIn('sent to the coding agent', reason)
 
     def test_coding_still_goes_straight_to_the_agent(self):
         """The rule that must not move: err toward the agent for anything a keyboard can do."""
@@ -96,7 +109,7 @@ class GateTests(unittest.TestCase):
         with mock.patch.object(senders, 'known') as known:
             ok, why = auto_code_ok(s, {'channel': 'email', 'from_email': 'a@b.c'}, self._mid(s, 'a@b.c'), 'general')
         known.assert_not_called()
-        self.assertEqual((ok, 'not a coding job' in why), (False, True))
+        self.assertEqual((ok, 'talk it through with the assistant' in why), (False, True))
 
     def test_coding_falls_through_to_the_stranger_gate(self):
         s = store()
@@ -120,8 +133,12 @@ class ConsistencyTests(unittest.TestCase):
         doc = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
         for text, name in ((doc, 'triage.md'), (INTENT_SYSTEM, 'INTENT_SYSTEM')):
             low = text.lower()
-            self.assertIn('from a keyboard', low, name)                   # the one test general has to pass
-            self.assertIn('bar for general is high', low, name)
+            self.assertIn('from a keyboard', low, name)                   # the one test coding has to pass
+            self.assertIn('say coding', low, name)                        # the tie-break, both ways
+            # three destinations, named in both - a kind the doc does not describe is a kind the
+            # model will not answer, and the router would then route on a value nothing produced
+            for k in ('coding', 'general', 'task'):
+                self.assertIn(k, low, f'{name} must name {k}')
             self.assertIn('almost every task goes to the coding agent', low, name)
             # the two claims that used to contradict the rest of the document
             self.assertNotIn('and every task goes to the coding agent', low, name)

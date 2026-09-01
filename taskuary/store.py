@@ -455,6 +455,15 @@ class SQLiteStore:
                                 (t, n, DEFAULT_ROLES.get(t, ''), t))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
                 self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
+            # The handbook ships ON - handbook.enabled has said so since it was written - but its
+            # card is seeded like every other, at Active 0, and enabled() reads the card when one
+            # exists. So the feature was off on every install that ever ran: coder.wrap skipped
+            # learn_from_session, `--learned` was refused, and the Social tab could only ever hold
+            # what a person typed. Flip it once and remember that we did, so an owner who turns it
+            # off later does not find it back on after a restart.
+            if self.cx.execute("SELECT 1 FROM setting WHERE Name='handbook_on_by_default'").fetchone() is None:
+                self.cx.execute("UPDATE connector SET Active=1 WHERE Type='handbook'")
+                self.cx.execute("INSERT OR REPLACE INTO setting (Name, Value) VALUES ('handbook_on_by_default','1')")
             # operator documents start from shipped templates (John Smith placeholder) -
             # first run only; the owner's edits are never overwritten
             from pathlib import Path

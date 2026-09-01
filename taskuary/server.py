@@ -715,6 +715,24 @@ def _att_filename(name: str) -> str:
     n = Path((str(name or 'attachment').splitlines() or ['attachment'])[0]).name[:120]
     return n or 'attachment'
 
+@app.get('/api/messages/{mid}/thread')
+def message_thread(mid: int, limit: int = 40):
+    """Everything said on this conversation, oldest last - INCLUDING the owner's own replies.
+
+    A chat row that never became a task showed only itself in the panel, so a reply sent from
+    Teams or Outlook was invisible here - even though it is ingested (channels.py stores the
+    owner's own lines as `context` rows) and the assistant reads it perfectly well when it writes
+    the brief. The history on screen disagreed with the history the assistant reasons from, and
+    the screen was the one that was wrong.
+
+    `context` rows are deliberately kept OUT of the feed - they are not things that happened TO
+    the owner - but they are exactly what makes a thread read as a conversation, so they belong
+    here."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    msgs = store.thread_messages(m.get('ConversationId'), m.get('Subject'), limit)
+    return {'messages': msgs or [m], 'conversationId': m.get('ConversationId') or ''}
+
 @app.get('/api/messages/{mid}/attachments')
 def message_attachments(mid: int):
     if not store.get_message(mid): raise HTTPException(404, 'message not found')
@@ -2598,6 +2616,13 @@ class TermBody(BaseModel):
 
 @app.get('/api/terminals')
 def terminals(): return {'data': hub_term.listing()}
+
+@app.get('/api/terminals/{sid}/screen')
+def terminal_screen(sid: str, lines: int = 32):
+    """Read-only live terminal preview. It never types into or resizes the PTY."""
+    out = hub_term.screen(sid, lines)
+    if not out: raise HTTPException(404, 'terminal not found')
+    return out
 
 @app.post('/api/terminals')
 def open_terminal(body: TermBody):

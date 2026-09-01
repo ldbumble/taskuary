@@ -41,6 +41,7 @@ import StateMark, { edgeOf } from "./StateMark.jsx";
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
+import { TerminalPreview } from "./TerminalView.jsx";
 
 // Each filter carries a muted hue for its selected state: attention amber for needs-me,
 // Outlook blue, Teams purple, quiet indigo for everything.
@@ -491,9 +492,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const dayRefs = useRef({});                        // day (YYYY-MM-DD) -> group element
   const dayLayout = useRef([]);                      // cached content offsets; scrolling must not force layout
   const dayLayoutDirty = useRef(true);
+  const dateJump = useRef("");                       // picker owns the label during its smooth glide
+  const dateJumpTimer = useRef(null);
   const [curDay, setCurDay] = useState("");
   const spy = useCallback(() => {
     const rail = railRef.current; if (!rail) return;
+    if (dateJump.current) { setCurDay(dateJump.current); return; }
     if (dayLayoutDirty.current) {
       // Measure once after the rows/layout change. Reading every group's bounding box on every
       // wheel frame made Chromium synchronously lay out the whole rail while it was scrolling.
@@ -521,6 +525,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
     onScroll();
     return () => { rail.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
   }, [spy]);
+  useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
   const [view, setView] = useState("");              // "" everything | "pending" needs me
@@ -776,8 +781,12 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const fetchDetail = (row) => {
     const hit = cache.current.get(row.MessageId);
     if (hit && Date.now() - hit.at < 60000) return hit.p;
+    // ...and a row with no task gets its whole CONVERSATION, not just itself. A chat is a
+    // conversation by nature: showing one line of it hid every reply the owner sent from Teams
+    // or Outlook, which is ingested as a `context` row and which the assistant has been reading
+    // all along. The panel was the only place the history looked incomplete.
     const p = (row.TaskId ? api.get(`/api/tasks/${row.TaskId}`).then((r) => r.data)
-      : api.get(`/api/messages/${row.MessageId}`).then((r) => ({ messages: [r.data] })))
+      : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => ({ messages: r.data.messages || [] })))
       .catch(() => ({ messages: [] }));                                  // panel falls back to the preview
     cache.current.set(row.MessageId, { at: Date.now(), p });
     return p;
@@ -895,6 +904,21 @@ export default function FeedView({ onOpenTask, onChanged }) {
     if (day) days[day] = [];
   }
   const dayEntries = Object.entries(days).sort(([a], [b]) => b.localeCompare(a));
+  const shownDay = dayEntries.some(([day]) => day === curDay) ? curDay : (dayEntries[0]?.[0] || "");
+  const jumpToDay = (day) => {
+    dateJump.current = day;
+    clearTimeout(dateJumpTimer.current);
+    setCurDay(day);
+    requestAnimationFrame(() => {
+      const rail = railRef.current, group = dayRefs.current[day];
+      if (!rail || !group) return;
+      const top = rail.scrollTop + group.getBoundingClientRect().top - rail.getBoundingClientRect().top;
+      rail.scrollTo({ top: Math.max(0, top - 4), behavior: "smooth" });
+    });
+    // Browser smooth scrolling is normally ~500ms. Keep the explicit choice authoritative
+    // through that motion; the next manual wheel/drag uses the regular day spy again.
+    dateJumpTimer.current = setTimeout(() => { dateJump.current = ""; }, 850);
+  };
   // the started meetings that belong between message i-1 and message i of a day (newest-first), or
   // after the oldest message of the day when i === items.length
   const meetingsAt = (day, items, i) => {
@@ -1068,10 +1092,21 @@ export default function FeedView({ onOpenTask, onChanged }) {
               {syncing || bgSync ? "Syncing" : "Sync now"}
             </Button>
           </Box>
-          <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
-            minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>
-            {fmtDay(curDay || dayEntries[0]?.[0] || "")}
-          </Typography>
+          {/* The heading is also navigation: choose any day already in this Timeline and the
+              rail glides to its first item. It stays typographically a date, not another pill. */}
+          <Select value={shownDay} onChange={(e) => jumpToDay(e.target.value)} variant="standard" disableUnderline
+            displayEmpty inputProps={{ "aria-label": "Timeline date" }}
+            IconComponent={(props) => <ChevronRightIcon {...props} sx={{ ...props.sx, fontSize: 14,
+              transform: "rotate(90deg)", color: `${FAINT} !important`, right: 1 }} />}
+            renderValue={(day) => fmtDay(day)}
+            sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
+              minWidth: 0, maxWidth: "100%", height: 22, textAlign: "center", cursor: "pointer",
+              "& .MuiSelect-select": { py: 0, pl: 2, pr: "22px !important", textAlign: "center" },
+              "&:hover": { color: ACCENT } }}>
+            {dayEntries.map(([day]) => (
+              <MenuItem key={day} value={day} sx={{ ...mono, fontSize: 11.5 }}>{fmtDay(day)}</MenuItem>
+            ))}
+          </Select>
         </Box>
 
         {/* ── the scroller ── */}
@@ -1341,6 +1376,27 @@ const PanelLabel = ({ children }) => (
   </Typography>
 );
 
+// Summary is the chronological front page for the four detailed views. Clicking a card keeps the
+// reader in this panel and opens that stage; opening the whole task remains an explicit action.
+const StoryStep = ({ number, title, status, onOpen, children }) => (
+  <Box sx={{ borderBottom: `1px solid ${BORDER}`, py: 1.25, "&:last-of-type": { borderBottom: 0 } }}>
+    <Box onClick={onOpen} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined}
+      onKeyDown={(e) => { if (onOpen && (e.key === "Enter" || e.key === " ")) onOpen(); }}
+      sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75,
+        cursor: onOpen ? "pointer" : "default", "&:hover .tqStoryTitle": { color: ACCENT } }}>
+      <Box sx={{ ...mono, width: 18, height: 18, borderRadius: "50%", bgcolor: PANEL2, color: ACCENT2,
+        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9.5, fontWeight: 700,
+        flexShrink: 0 }}>{number}</Box>
+      <Typography className="tqStoryTitle" sx={{ color: INK, fontWeight: 700, fontSize: 12.5,
+        transition: "color .15s" }}>{title}</Typography>
+      {status && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{status}</Typography>}
+      <Box sx={{ flex: 1 }} />
+      {onOpen && <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5 }}>open detail →</Typography>}
+    </Box>
+    {children}
+  </Box>
+);
+
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
 const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh,
@@ -1348,10 +1404,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
-  // you usually realise it is somebody else's job while reading it here, not after opening
-  // the Tasks tab - so the hand-off form opens in this panel too
-  const [handoff, setHandoff] = useState(false);
   const [more, setMore] = useState(false);        // the rest of the tray, folded away
+  const [tab, setTab] = useState("summary");      // overview first; four detailed stages remain one click away
   const [filing, setFiling] = useState("");       // "once" teaches nothing; "learn" writes one Memory verdict
   const [fileErr, setFileErr] = useState("");
   // a reply opened from THIS panel on a message with no pending review
@@ -1375,8 +1429,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     try { await api.post(`/api/tasks/${sel.TaskId}/answer`, { message_id: sel.MessageId }); setHanded(true); }
     catch { /* session gone between render and click: the row's hint still points at the task */ }
   };
-  useEffect(() => { setHandoff(false); setReshape(false); setOpened(null); setOpening(false); setHanded(false);
-    setMore(false); setFiling(""); setFileErr(""); }, [sel.MessageId]);
+  useEffect(() => { setReshape(false); setOpened(null); setOpening(false); setHanded(false);
+    setMore(false); setTab("summary"); setFiling(""); setFileErr(""); }, [sel.MessageId]);
   const fileMessage = async (learn) => {
     setFiling(learn ? "learn" : "once"); setFileErr("");
     try {
@@ -1394,7 +1448,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     setSkipped(data.affected || 0);
     setTimeout(() => onSkipped?.(), 1400);          // let the count land, then drop the rows
   };
-  const rep = [...(detail?.comments || [])].reverse().find((c) => c.Actor === "coder" && String(c.Body || "").startsWith("CODER REPORT"));
+  const rep = [...(detail?.comments || [])].reverse().find((c) => String(c.Body || "").trimStart().startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const pending = sel.ReviewId && sel.ReviewStatus === "pending";
   // is somebody already on this? a live pty session or a running headless run both count,
@@ -1422,25 +1476,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const st = stateOf(sel);
   const held = hasTag(sel, HOLD_TAG);
   const replyOpen = pending || !!opened;
-
-  // FOUR TABS, and the tray under them carries only what belongs to the one you are on. The
-  // panel used to be a single scroll holding all four - the message, the verdict, the agent's
-  // work, the draft - with one tray of eleven rows under the lot. On a busy task the reply you
-  // came to send was two screens down, and "what are my options" had a hunt in it.
-  const TABS = [
-    { key: "msg",   label: "Message" },
-    { key: "why",   label: "Triage" },
-    { key: "agent", label: "Agent", mark: onIt ? (onIt.waiting ? "👋" : <TaskuaryMark size={12} />) : null },
-    // PENDING and OPENED both used to wear the same envelope, which flattened the only
-    // difference that matters: a draft waiting on your approval is ON YOU, a composer you
-    // opened yourself is not. The tab says which - oxblood for the one that is asking.
-    { key: "reply", label: "Reply", mark: pending ? "✉️" : opened ? "✏️" : null,
-      tone: pending ? "alert" : null, hint: pending ? "a reply is drafted and waiting on you" : null },
+  const tabs = [
+    { key: "summary", label: "Summary" },
+    { key: "msg", label: "Message" },
+    { key: "why", label: "Triage" },
+    { key: "agent", label: "Agent", mark: onIt ? "live" : rep ? "done" : "" },
+    { key: "reply", label: "Reply", mark: pending ? "waiting" : opened ? "open" : "" },
   ];
-  // where you land: whatever is actually asking for you. A drafted reply beats a live agent
-  // beats the message, because that is the order in which they need a decision from you.
-  const [tab, setTab] = useState(replyOpen ? "reply" : onIt ? "agent" : "msg");
-  useEffect(() => { setTab(replyOpen ? "reply" : onIt ? "agent" : "msg"); }, [sel.MessageId]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const replyDraft = pending ? pendingDraft(detail || { runs: [] }, sel) : (opened?.draft || "");
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
   const [releasing, setReleasing] = useState(false);
@@ -1496,262 +1539,232 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
           </Box>
         )}
 
-        {/* the tabs */}
-        <Box sx={{ display: "flex", gap: 0.25, px: 2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-          {TABS.map((t) => (
-            <Box key={t.key} onClick={() => setTab(t.key)} role="tab" aria-selected={tab === t.key}
-              title={t.hint || undefined}
-              sx={{ display: "flex", alignItems: "center", gap: 0.7, px: 1.5, py: 1, cursor: "pointer",
-                fontSize: 12.5, fontWeight: t.tone === "alert" ? 700 : 600, whiteSpace: "nowrap", mb: "-1px",
-                color: t.tone === "alert" ? ALERT_INK : tab === t.key ? INK : FAINT,
-                borderBottom: `2px solid ${tab === t.key ? (t.tone === "alert" ? ALERT : ACCENT) : "transparent"}`,
-                transition: "color .15s", "&:hover": { color: t.tone === "alert" ? ALERT_INK : INK } }}>
-              {t.label}
-              {t.mark && <Box component="span" aria-hidden sx={{ fontSize: 12, lineHeight: 1 }}>{t.mark}</Box>}
-              {/* the word, not just a glyph: "Reply ✉ pending" is readable without knowing what
-                  an envelope on a tab is supposed to mean */}
-              {t.tone === "alert" && <Box component="span" sx={{ fontSize: 10, fontWeight: 700,
-                color: ALERT_INK, letterSpacing: .2 }}>pending</Box>}
+        {/* Summary is the fifth, default view. The original four stages remain full detail views. */}
+        <Box role="tablist" aria-label="Message workflow views"
+          sx={{ display: "flex", gap: 0.25, px: 2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+          {tabs.map((item) => (
+            <Box key={item.key} role="tab" aria-selected={tab === item.key} tabIndex={tab === item.key ? 0 : -1}
+              onClick={() => setTab(item.key)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setTab(item.key); }}
+              sx={{ display: "flex", alignItems: "center", gap: 0.55, px: 1.35, py: 1, mb: "-1px",
+                cursor: "pointer", color: tab === item.key ? INK : FAINT, fontSize: 12.5, fontWeight: 650,
+                whiteSpace: "nowrap", borderBottom: `2px solid ${tab === item.key ? ACCENT : "transparent"}`,
+                transition: "color .15s", "&:hover": { color: INK } }}>
+              {item.label}
+              {item.mark && (
+                <Box component="span" sx={{ ...mono, px: 0.55, py: 0.12, borderRadius: 2, bgcolor: PANEL2,
+                  color: item.key === "agent" && onIt ? ACCENT2 : FAINT, fontSize: 8.5, fontWeight: 700 }}>
+                  {item.mark}
+                </Box>
+              )}
             </Box>
           ))}
         </Box>
 
-        <Box sx={{ px: 2, py: 1.75, overflowY: "auto", flex: 1, minHeight: 0,
-          ...(tab === "agent" && onIt && !rep && !diffRun ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : {}) }}>
+        <Box sx={{ px: 2, py: 1.1, overflowY: "auto", flex: 1, minHeight: 0 }}>
           {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
             <>
-              {/* ── what arrived ── */}
+              {tab === "summary" && (
+                <Box aria-label="Workflow summary">
+                  <StoryStep number="1" title="Message"
+                    status={(detail?.messages || []).length > 1 ? `${detail.messages.length} in the thread` : "what arrived"}
+                    onOpen={() => setTab("msg")}>
+                    <Typography sx={{ color: INK, fontSize: 12.5, lineHeight: 1.55, display: "-webkit-box",
+                      WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                      {cleanText(sel.Preview || sel.Subject || "No message preview available.")}
+                    </Typography>
+                  </StoryStep>
+
+                  <StoryStep number="2" title="Triage" status={roadOf(sel) || "not routed"}
+                    onOpen={() => setTab("why")}>
+                    <TriageSummary sel={sel} detail={detail} />
+                  </StoryStep>
+
+                  <StoryStep number="3" title="Agent"
+                    status={onIt ? (onIt.waiting ? `${onIt.agent} waiting on you` : `${onIt.agent} working`) : rep ? "finished" : "not started"}
+                    onOpen={() => setTab("agent")}>
+                    {onIt && (
+                      <Typography sx={{ color: INK, fontSize: 12.5, lineHeight: 1.55 }}>
+                        {onIt.waiting ? `${onIt.agent} is paused in the live session and needs you.`
+                          : `${onIt.agent} is working in the live terminal now.`}
+                      </Typography>
+                    )}
+                    {rep && (
+                      <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
+                        <CoderReport body={rep.Body} />
+                      </Box>
+                    )}
+                    {!onIt && !rep && (
+                      <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
+                        {held ? "Nothing started; this is held until you release it."
+                          : codeless ? "Triage decided this needed a reply, not an agent."
+                          : sel.TaskId ? "No agent has started on this yet." : "No agent work was created."}
+                      </Typography>
+                    )}
+                  </StoryStep>
+
+                  <StoryStep number="4" title="Reply"
+                    status={pending ? "draft waiting on you" : opened ? "draft open" : "none yet"}
+                    onOpen={() => setTab("reply")}>
+                    <Typography sx={{ color: replyDraft ? INK : FAINT, fontSize: 12.5, lineHeight: 1.55,
+                      display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                      {replyDraft ? cleanText(replyDraft) : (["report", "assistant"].includes(sel.Channel)
+                        ? "There is nobody to reply to for this item." : "No reply has been drafted yet.")}
+                    </Typography>
+                  </StoryStep>
+                </Box>
+              )}
+
               {tab === "msg" && (
-                <>
+                <Box>
                   {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
                   {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayStrip />}
                   {sel.Channel !== "assistant" && (
-                    <>
-                      <PanelLabel>{(detail?.messages || []).length > 1 ? `The thread (${detail.messages.length} messages)` : "What arrived"}</PanelLabel>
-                      <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
-                    </>
+                    <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
                   )}
                   {history.length > 0 && (
                     <>
                       <PanelLabel>What happened to it</PanelLabel>
-                      <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 0.25 }}>
+                      <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
                         {history.map((h, i) => (
-                          <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.6,
-                            borderTop: i ? `1px solid ${BORDER}` : "none" }}>
-                            <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: h.c, flexShrink: 0 }} />
-                            <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flexShrink: 0 }}>{h.label}</Typography>
-                            {h.sub ? <Typography variant="caption" sx={{ color: DIM, flex: 1, minWidth: 0 }} noWrap>{h.sub}</Typography> : <Box sx={{ flex: 1 }} />}
-                            {h.n > 1 && <Chip size="small" label={`×${h.n}`} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL2, color: ACCENT }} />}
-                            {h.at && <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>{fmtDateTime(h.at)}</Typography>}
+                          <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.45 }}>
+                            <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: h.c }} />
+                            <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{h.label}{h.n > 1 ? ` ×${h.n}` : ""}</Typography>
                           </Box>
                         ))}
                       </Box>
                     </>
                   )}
-                </>
+                </Box>
               )}
 
-              {/* ── why it went where it went ── */}
               {tab === "why" && <TriagePane sel={sel} detail={detail} onRefresh={onRefresh} />}
 
-              {/* ── what the agent did about it ── */}
               {tab === "agent" && (
-                <>
+                <Box>
                   {onIt && (
                     <>
-                      <PanelLabel>{onIt.waiting ? `${onIt.agent} stopped and is waiting on you` : `${onIt.agent} is on it now`}</PanelLabel>
-                      {/* with nothing else to show yet, the session gets the whole pane rather than
-                          five lines over an empty screen - the tray below stays where it is */}
-                      <LiveConsole run={liveRow} agent={onIt.agent} lines={rep || diffRun ? 5 : 120}
-                        fill={!rep && !diffRun} onOpen={() => onOpenTask(sel.TaskId)} />
+                      <PanelLabel>{onIt.waiting ? `${onIt.agent} is waiting on you` : `${onIt.agent} is working now`}</PanelLabel>
+                      {ses?.sid
+                        ? <TerminalPreview sid={ses.sid} height={420} onOpen={() => onOpenTask(sel.TaskId)} />
+                        : <LiveConsole run={liveRow} agent={onIt.agent} lines={14} onOpen={() => onOpenTask(sel.TaskId)} />}
                     </>
                   )}
                   {rep && (
                     <>
-                      <PanelLabel>What it did</PanelLabel>
-                      <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 0.5 }}>
+                      <PanelLabel>Agent result</PanelLabel>
+                      <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
                         <CoderReport body={rep.Body} />
                       </Box>
                     </>
                   )}
-                  {/* the report above is the agent's CLAIM; this is the evidence - files git says
-                      moved, the tests the session ran, CI on the PR, and what is MISSING, said
-                      plainly, because a thin card must never read as a clean one */}
-                  {sel.TaskId && (rep || diffRun) && (
-                    <>
-                      <PanelLabel>Proof of work</PanelLabel>
-                      <ProofCard taskId={sel.TaskId} onOpenTask={onOpenTask} />
-                    </>
-                  )}
-                  {diffRun && (
-                    <>
-                      <PanelLabel>Code changes</PanelLabel>
-                      <DiffBlock text={diffRun.DiffText} />
-                    </>
-                  )}
+                  {diffRun && <Box sx={{ mt: 1 }}><DiffBlock text={diffRun.DiffText} /></Box>}
+                  {sel.TaskId && (rep || diffRun) && <Box sx={{ mt: 1 }}><ProofCard taskId={sel.TaskId} onOpenTask={onOpenTask} /></Box>}
                   {!onIt && !rep && !diffRun && (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
                       {held ? "Nothing is working this — it is held until you release it."
-                        : codeless ? "No agent was sent at this: triage read it as something a sentence settles, not work."
-                        : sel.TaskId ? "No agent has started on this yet. Send it to one from the tray below."
-                        : "Nothing was started — this is here to be read."}
+                        : codeless ? "No agent was sent: triage read this as something a reply settles."
+                        : sel.TaskId ? "No agent has started on this yet." : "No agent work was created for this item."}
                     </Typography>
                   )}
-                </>
+                </Box>
               )}
 
-              {/* ── the answer that goes back ── */}
               {tab === "reply" && (
-                <>
+                <Box>
                   {pending && (
-                    <>
-                      <PanelLabel>The agent wrote this — nothing has been sent</PanelLabel>
-                      <ReviewActions reviewId={sel.ReviewId} draft={pendingDraft(detail || { runs: [] }, sel)}
-                        editText={editText} setEditText={setEditText} decide={decide}
-                        sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
-                    </>
+                    <ReviewActions reviewId={sel.ReviewId} draft={replyDraft}
+                      editText={editText} setEditText={setEditText} decide={decide}
+                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
                   )}
                   {!pending && opened && (
-                    <>
-                      <PanelLabel>Draft reply — review, edit, approve</PanelLabel>
-                      <ReviewActions reviewId={opened.reviewId} draft={opened.draft}
-                        editText={editText} setEditText={setEditText} decide={decide}
-                        sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
-                    </>
+                    <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
+                      editText={editText} setEditText={setEditText} decide={decide}
+                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
                   )}
                   {!replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
-                      Nobody sent this, so there is nobody to answer. Findings from work off a report
-                      land on the Timeline — unless that report's card names somewhere to send them.
+                      Nobody sent this, so there is nobody to answer. Findings stay with the Timeline item.
                     </Typography>
                   ) : (
-                    <ChoiceRow tint={PANEL2} busy={opening} onClick={() => { openReply(); }}
+                    <ChoiceRow tint={PANEL2} busy={opening} onClick={openReply}
                       icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: ACCENT }} />}
                       label="Write a reply" first
-                      hint="the AI drafts it from the thread (and the coder's report, if one ran) — approving sends it" />
+                      hint="the AI drafts it from the thread and the agent result; approving sends it" />
                   ))}
-                </>
+                </Box>
               )}
             </>
           )}
         </Box>
 
-        {/* THE TRAY. Only what belongs to the tab above it. Assistant posts carry actions on each
-            individual idea, so the generic message tray does not belong there at all - applying
-            "Not our task" to a whole digest teaches the wrong sender and topic lesson. */}
+        {/* One compact action tray for the whole story. The tabbed version changed the available
+            buttons every time the reader changed sections, so the task appeared to have four
+            unrelated sets of controls. */}
         {!loading && sel.Channel !== "assistant" && (
           <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: "#fcfaf7", px: 2, py: 1.35 }}>
-            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-              {tab === "msg" && (
-                <Box sx={{ width: "100%" }}>
-                  <TrayGroupLabel note="does not change Memory">ACT ON THIS</TrayGroupLabel>
-                  <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
-                    {!onIt && !codeless && !held && (
-                      <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
-                    )}
-                    <TrayBtn tone={onIt || codeless || held ? "primary" : "plain"} onClick={() => setTab("reply")}
-                      icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}>Draft a reply</TrayBtn>
-                    {sel.TaskId
-                      ? <TrayBtn onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
-                          Open {ref(sel.TaskId)}</TrayBtn>
-                      : <TrayBtn disabled={!!mined} icon={<AssignmentIndIcon sx={{ fontSize: 15 }} />}
-                          title="adds a task with your name on it; no coding agent is dispatched"
-                          onClick={async () => {
-                            try { const { data } = await api.post(`/api/messages/${sel.MessageId}/mine`, {});
-                              setMined(data.ref); onRefresh?.(); } catch { /* the row keeps its state */ }
-                          }}>{mined || "Add to my tasks"}</TrayBtn>}
-                  </Box>
-                  <Box sx={{ mt: 1.35, pt: 1.15, borderTop: `1px solid ${BORDER}` }}>
-                    <TrayGroupLabel note="choose whether this should change future routing">CLEAR FROM TIMELINE</TrayGroupLabel>
-                    <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
-                      {/* These are two different server actions, not two labels for /file's old
-                          learn-by-default behavior. The payload makes that distinction explicit. */}
-                      <TrayBtn tone="quiet" disabled={!!filing} icon={<ArchiveOutlinedIcon sx={{ fontSize: 15 }} />}
-                        title="files this message only; nothing is added to Memory"
-                        onClick={() => fileMessage(false)}>
-                        {filing === "once" ? "Dismissing…" : "Dismiss once — no memory"}</TrayBtn>
-                      <TrayBtn tone="teach" teaches disabled={!!filing} icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
-                        title="files this message and adds one verdict to Memory for later triage"
-                        onClick={() => fileMessage(true)}>
-                        {filing === "learn" ? "Teaching triage…" : "Nothing to do — remember"}</TrayBtn>
-                    </Box>
-                    {fileErr && <Typography variant="caption" sx={{ display: "block", color: "#b42318",
-                      fontWeight: 600, mt: 0.75 }}>{fileErr} — nothing changed.</Typography>}
-                  </Box>
-                </Box>
+            <TrayGroupLabel note="opens the full record for anything deeper">ACT ON THIS</TrayGroupLabel>
+            <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
+              {sel.TaskId ? (
+                <TrayBtn tone="primary" onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
+                  {onIt ? "Open the live session" : `Open ${ref(sel.TaskId)}`}</TrayBtn>
+              ) : (
+                <TrayBtn disabled={!!mined} icon={<AssignmentIndIcon sx={{ fontSize: 15 }} />}
+                  title="adds a task with your name on it; no coding agent is dispatched"
+                  onClick={async () => {
+                    try { const { data } = await api.post(`/api/messages/${sel.MessageId}/mine`, {});
+                      setMined(data.ref); onRefresh?.(); } catch { /* the row keeps its state */ }
+                  }}>{mined || "Add to my tasks"}</TrayBtn>
               )}
-              {tab === "why" && (
-                <>
-                  {sel.TaskId && (
-                    <TrayBtn teaches onClick={async () => { await api.post(`/api/tasks/${sel.TaskId}/not-coding`); onRefresh?.(); }}
-                      title="keeps the task on your list, takes the agent off it, and remembers that for mail like this">
-                      It is mine, not an agent&rsquo;s</TrayBtn>
-                  )}
-                  {codeless && !onIt && <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />}
-                  {/* the fourth road's door. Triage could say "general" and the Timeline had no way
-                      to act on it - the only control here opened a CLI (see /api/messages/:id/chat) */}
-                  {!onIt && <TalkItThrough messageId={sel.MessageId} onOpenTask={onOpenTask} />}
-                  {sel.TaskId && (
-                    <TrayBtn onClick={() => setReshape(true)} icon={<CallSplitIcon sx={{ fontSize: 15 }} />}>
-                      Two jobs, or a duplicate</TrayBtn>
-                  )}
-                  <Box sx={{ flex: 1, minWidth: 8 }} />
-                  <NotMine messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
-                  {sel.Channel === "email" && sel.FromEmail && (
-                    <TrayBtn tone="teach" teaches disabled={skipped !== null} onClick={skipSender}
-                      icon={<VolumeOffIcon sx={{ fontSize: 15 }} />}
-                      title={`hide ${sel.FromEmail} and their past mail — undo in Settings`}>
-                      {skipped !== null ? `Skipped${skipped ? ` · ${skipped} hidden` : ""}` : "Skip this sender"}</TrayBtn>
-                  )}
-                </>
+              {onIt && sel.MessageId && (
+                <TrayBtn disabled={handed} onClick={handToAgent} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                  title="their message is typed into the live session, as if you relayed it">
+                  {handed ? "Typed into the session" : `Tell ${onIt.agent} this`}</TrayBtn>
               )}
-              {tab === "agent" && (
-                <>
-                  {sel.TaskId && (
-                    <TrayBtn onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
-                      {onIt ? "Open the session" : `Open ${ref(sel.TaskId)}`}</TrayBtn>
-                  )}
-                  {/* the agent asked, the person answered on the thread — one click puts the
-                      answer in front of the agent (Settings → answer_to_agent; auto skips it) */}
-                  {onIt && sel.MessageId && (
-                    <TrayBtn disabled={handed} onClick={handToAgent} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-                      title="their message is typed into the live session, as if you relayed it">
-                      {handed ? "Typed into the session" : `Tell ${onIt.agent} this`}</TrayBtn>
-                  )}
-                  {sel.TaskId && <TellAgentButton taskId={sel.TaskId} />}
-                  {!onIt && !codeless && !held && (
-                    <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
-                  )}
-                </>
+              {onIt && sel.TaskId && <TellAgentButton taskId={sel.TaskId} />}
+              {!onIt && !codeless && !held && (
+                <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
               )}
-              {tab === "reply" && (
-                <>
-                  {/* the Send button lives INSIDE ReviewActions with the text it sends — a Send
-                      button away from the box it sends is how you send an unread draft */}
-                  <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.6 }}>
-                    Nothing leaves until you press Send. The agent wrote it; you own it.
-                  </Typography>
-                  <Box sx={{ flex: 1, minWidth: 8 }} />
-                  {sel.TaskId && (
-                    <TrayBtn tone="quiet" onClick={() => setMore((m) => !m)}>
-                      {more ? "Fewer ways" : "Hand it to a person"}</TrayBtn>
-                  )}
-                </>
-              )}
+              <TrayBtn tone="quiet" onClick={() => setMore((m) => !m)}>{more ? "Fewer options" : "More options"}</TrayBtn>
             </Box>
 
-            {/* the extras that belong to a reply but are not the reply: hand it to a person, or
-                let the assistant re-say it. Folded, because the answer above is the point. */}
-            {tab === "reply" && more && sel.TaskId && (
-              <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${BORDER}` }}>
-                <PanelLabel>Hand this to a person instead</PanelLabel>
-                <Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} />
+            <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+              <TrayGroupLabel note="choose whether this should change future routing">CLEAR FROM TIMELINE</TrayGroupLabel>
+              <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
+                <TrayBtn tone="quiet" disabled={!!filing} icon={<ArchiveOutlinedIcon sx={{ fontSize: 15 }} />}
+                  title="files this message only; nothing is added to Memory" onClick={() => fileMessage(false)}>
+                  {filing === "once" ? "Dismissing…" : "Dismiss once — no memory"}</TrayBtn>
+                <TrayBtn tone="teach" teaches disabled={!!filing} icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
+                  title="files this message and adds one verdict to Memory for later triage" onClick={() => fileMessage(true)}>
+                  {filing === "learn" ? "Teaching triage…" : "Nothing to do — remember"}</TrayBtn>
+              </Box>
+              {fileErr && <Typography variant="caption" sx={{ display: "block", color: "#b42318",
+                fontWeight: 600, mt: 0.75 }}>{fileErr} — nothing changed.</Typography>}
+            </Box>
+
+            {more && (
+              <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 0.8,
+                flexWrap: "wrap", alignItems: "center" }}>
+                {sel.TaskId && <TrayBtn teaches onClick={async () => {
+                  await api.post(`/api/tasks/${sel.TaskId}/not-coding`); onRefresh?.();
+                }}>It is mine, not an agent&rsquo;s</TrayBtn>}
+                {!onIt && <TalkItThrough messageId={sel.MessageId} onOpenTask={onOpenTask} />}
+                {sel.TaskId && <TrayBtn onClick={() => setReshape(true)} icon={<CallSplitIcon sx={{ fontSize: 15 }} />}>
+                  Two jobs, or a duplicate</TrayBtn>}
+                <NotMine messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
+                {sel.Channel === "email" && sel.FromEmail && (
+                  <TrayBtn tone="teach" teaches disabled={skipped !== null} onClick={skipSender}
+                    icon={<VolumeOffIcon sx={{ fontSize: 15 }} />}
+                    title={`hide ${sel.FromEmail} and their past mail — undo in Settings`}>
+                    {skipped !== null ? `Skipped${skipped ? ` · ${skipped} hidden` : ""}` : "Skip this sender"}</TrayBtn>
+                )}
+                {sel.TaskId && <Box sx={{ width: "100%", mt: 0.5 }}><Handoff taskId={sel.TaskId} onSent={() => onRefresh?.()} /></Box>}
+                <SplitTask row={sel} onSplit={() => onRefresh?.()} />
               </Box>
             )}
-            {tab === "msg" && <VoiceNoteRow sel={sel}
+            <VoiceNoteRow sel={sel}
               body={voiceNoteBody(sel, (detail?.messages || []).find((m) => m.MessageId === sel.MessageId))}
-              onRefresh={onRefresh} onMessageChanged={onMessageChanged} />}
-            {tab === "why" && <SplitTask row={sel} onSplit={() => onRefresh?.()} />}
+              onRefresh={onRefresh} onMessageChanged={onMessageChanged} />
 
             <Drawer anchor="right" open={!!reshape && !!sel.TaskId} onClose={() => setReshape(false)}
               PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
@@ -1802,6 +1815,26 @@ const roadOf = (sel) => {
   if (sel.TaskKind === "note") return null;                 // you wrote it; nothing judged it
   if (sel.TaskKind === "task") return "task";               // a person has to do it in the world
   return sel.TaskId ? "general" : null;
+};
+
+const TriageSummary = ({ sel, detail }) => {
+  const road = roadOf(sel);
+  const meta = ROADS.find((r) => r.key === road);
+  const why = String(sel.RouteReason || "").replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0];
+  const watch = (detail?.task || {}).Kind === "note";
+  return (
+    <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.2, py: 0.85 }}>
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0 }}>
+        <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: INK, flexShrink: 0 }}>
+          {meta?.label || (watch ? "your note" : "not routed")}
+        </Typography>
+        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{meta?.hint || ""}</Typography>
+      </Box>
+      <Typography variant="body2" sx={{ color: DIM, fontSize: 12, lineHeight: 1.5, mt: 0.2 }}>
+        {why || (watch ? "You created this directly; triage did not judge it." : "Nothing classified this message.")}
+      </Typography>
+    </Box>
+  );
 };
 
 // "Talk it through" - the chat door for a Timeline row. Distinct from SendToAgent (a CLI in a

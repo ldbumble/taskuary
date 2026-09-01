@@ -139,6 +139,7 @@ class Term:
         self.subs = []                                    # (loop, asyncio.Queue)
         self.taps = []                                    # plain callables, for server-side readers
         self.failover = None                              # availability-only replacement installed by start_on_task
+        self._live_at = 0                                 # last run-tail emit; pty bursts fold into one
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
         from . import blackboard as _bb, witness as _w
@@ -171,6 +172,15 @@ class Term:
             if not data: break
             self._saw_output()
             self._append(data); self._emit(data)
+            if self.task_id:
+                now = time.time()
+                if now - self._live_at >= 0.2:
+                    self._live_at = now
+                    try:
+                        from . import live as live_bus
+                        live_bus.emit('run-tail', task_id=self.task_id)
+                    except Exception:
+                        pass
             for f in list(self.taps):
                 try: f(data)
                 except Exception as e: logger.debug(f'terminal tap failed: {e}')

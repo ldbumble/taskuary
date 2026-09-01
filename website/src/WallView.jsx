@@ -11,7 +11,7 @@ import DoneAllIcon from "@mui/icons-material/DoneAll";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
-import { pollWhileVisible } from "./visible.js";
+import { onLive } from "./live.js";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ROLES, mono } from "./theme.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 
@@ -64,12 +64,12 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
     setSessions((current) => holdWrappingSessions(fresh, current, wrappingRef.current));
     setTasks(Object.fromEntries((tk.data.data || []).map((t) => [t.TaskId, t])));
   }, []);
-  useEffect(() => { load(); return pollWhileVisible(load, 8000); }, [load]);
-  useEffect(() => { if (refresh) load(); }, [refresh, load]);   // the Board just started a session: show it now, not in 8s
-  useEffect(() => {   // the work line (tool in hand, its list) ticks fast, like the Board's
+  useEffect(() => { load(); return onLive("task-changed", load); }, [load]);
+  useEffect(() => { if (refresh) load(); }, [refresh, load]);   // the Board just started a session: show it now
+  useEffect(() => {   // the work line (tool in hand, its list) arrives as run-tail, like the Board's
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
-    tick(); return pollWhileVisible(tick, 4000);
+    tick(); return onLive("run-tail", tick);
   }, []);
 
   // keep `order` in step with what's alive: append new sids, drop the gone, honour drags

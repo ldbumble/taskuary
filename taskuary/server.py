@@ -759,7 +759,10 @@ def message_thread(mid: int, limit: int = 40):
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     msgs = store.thread_messages(m.get('ConversationId'), m.get('Subject'), limit)
-    return {'messages': msgs or [m], 'conversationId': m.get('ConversationId') or ''}
+    # ...and what was DECIDED about it. A row with no task has no task detail to read a
+    # history out of, and "not ours" is precisely the verdict that leaves it without one.
+    return {'messages': msgs or [m], 'conversationId': m.get('ConversationId') or '',
+            'routes': store.message_routes(mid)}
 
 @app.get('/api/messages/{mid}/attachments')
 def message_attachments(mid: int):

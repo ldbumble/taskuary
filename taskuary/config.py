@@ -12,11 +12,18 @@ try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
 from pathlib import Path
 
+_TEST_MARKS = ('pytest', 'unittest', 'fastapi.testclient', 'starlette.testclient')
+
+
 def _under_test() -> bool:
     """Are we inside a test run? sys.modules is the honest signal: pytest and unittest are both
     imported by the time anything of ours is."""
     import sys
-    return ('pytest' in sys.modules or 'unittest' in sys.modules) and not os.getenv('TASKUARY_ALLOW_TEST_HOME')
+    # fastapi's TestClient is the other one, and it is the one that got past this guard the very
+    # day it was written: a throwaway `python -c` driving the API to check a fix imports neither
+    # pytest nor unittest, and wrote a message, a task, two routes and a memory note into the
+    # owner's database. TestClient exists for nothing but testing, so its presence is proof.
+    return any(m in sys.modules for m in _TEST_MARKS) and not os.getenv('TASKUARY_ALLOW_TEST_HOME')
 
 
 def home() -> Path:

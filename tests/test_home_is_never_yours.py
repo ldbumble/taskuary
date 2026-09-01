@@ -28,6 +28,15 @@ class TheOwnersDataIsOffLimits(unittest.TestCase):
         """unittest or pytest being imported IS the signal - no cooperation required."""
         self.assertTrue(config._under_test())
 
+    def test_the_testclient_counts_too(self):
+        """The one that got past this guard the day it was written. A throwaway `python -c`
+        driving the API to check a fix imports neither pytest nor unittest - and wrote a message,
+        a task, two routes and a memory note into the owner's database. TestClient exists for
+        nothing but testing, so its presence is proof enough."""
+        import sys
+        self.assertIn('fastapi.testclient', config._TEST_MARKS)
+        self.assertIn('starlette.testclient', config._TEST_MARKS)
+
     def test_an_explicit_home_is_still_honoured(self):
         """The suite sets one; a developer pointing at a scratch dir must still get it."""
         keep = os.environ.get('TASKUARY_HOME')

@@ -582,7 +582,7 @@ def system_checks(store, source_ids=None, inline=None) -> str:
     return '\n\n'.join(blocks)
 
 
-def _verdicts_block(store, cands: list) -> str:
+def _verdicts_block(store, cands: list, source: str = "") -> str:
     """The owner's standing verdicts - the SAME memory triage reads before it classifies
     (ingest.relevant_notes / applicable_notes).
 
@@ -591,10 +591,17 @@ def _verdicts_block(store, cands: list) -> str:
     which went on raising the next refund thread as an idea worth acting on. A verdict the owner
     gives once should not have to be given again per surface.
 
-    Scoped by the candidates' OWN words, so a note about a topic nothing today touches costs
-    nothing; global notes always apply."""
+    Scoped by the words of the material this check is READING, so a note about a topic nothing
+    today touches costs nothing; global notes always apply.
+
+    `source` is what the model was handed - the threads and the sender/subject lines - and it
+    matters more here than the candidates do. A subject-scoped verdict is matched (ingest.topic_hit)
+    against the words it was learned from, "resident refund request approved"; a candidate's
+    `facts` is the MODEL'S PARAPHRASE of a thread, and "Barnes and Watson stall the same way"
+    carries not one of those four words. So the ruling missed and the brief went on raising a
+    subject the owner had closed. Match the source it summarised, not the summary."""
     from .ingest import relevant_notes
-    text = ' '.join(str(c.get('facts') or c.get('text') or '') for c in cands)[:4000]
+    text = ' '.join([source or '', *(str(c.get('facts') or c.get('text') or '') for c in cands)])[:8000]
     if not text.strip():
         return ''
     try:
@@ -619,16 +626,19 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
     away = ooo(store)
     from . import knowledge
     facts_text = ' '.join(str(c.get('facts') or '') for c in cands)[:4000]
+    # built once: the model reads them, and so does the verdict matcher, which needs the real
+    # subjects rather than the model's words about them
+    said, recent = _people(store), _recent(store)
     return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
             + knowledge.block(store, facts_text)
             + f"\n\nCONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):\n{system_checks(store, watch_source_ids, watch_sources)}"
-            + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first):\n{_people(store)}"
+            + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first):\n{said}"
             + '\n\nOUT OF OFFICE (from their auto-replies):\n' + ('\n'.join(f'- {k}: {v}' for k, v in away.items()) or '(nobody)')
             + f"\n\nCALENDAR (the next two days):\n{_calendar(store)}"
-            + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):\n{_recent(store)}"
+            + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):\n{recent}"
             + f"\n\nDONE THIS WEEK (my own work, with the agent's summary):\n{_week(store)}"
             + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}"
-            + _verdicts_block(store, cands)
+            + _verdicts_block(store, cands, f'{said}\n{recent}')
             + f"\n\n{_notes_block(store)}")
 
 

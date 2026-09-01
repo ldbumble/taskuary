@@ -1430,6 +1430,14 @@ class SQLiteStore:
                              FROM message WHERE ConversationId IS NOT NULL AND IFNULL(Channel,'')<>'email'
                              GROUP BY Channel, ConversationId ORDER BY Last DESC LIMIT ?""", (int(limit),))
 
+    def message_routes(self, mid: int) -> list:
+        """Every judgement ever made ABOUT THIS MESSAGE, oldest first.
+
+        list_routes is keyed on the TASK, and "not ours" deletes the task - so the one verdict the
+        owner most wants to see recorded took its own record away with it. Routes are keyed on the
+        message and outlive it."""
+        return self._rows('SELECT * FROM route WHERE MessageId=? ORDER BY RouteId', (mid,))
+
     def task_detail(self, task_id):
         t = self.get_task(task_id)
         if not t: return None

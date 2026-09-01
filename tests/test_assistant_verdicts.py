@@ -37,6 +37,26 @@ class VerdictsReachTheBrief(unittest.TestCase):
         self.assertIn('WHAT THE OWNER HAS ALREADY DECIDED', text)
         self.assertIn('not our problem', text)
 
+    def test_it_matches_the_SOURCE_not_the_models_paraphrase(self):
+        """The one that got through. A subject-scoped verdict is matched against the words it was
+        learned from - "resident refund request approved" - and a candidate's `facts` is the
+        model's summary of a thread: "Barnes and Watson stall the same way" carries none of them.
+        So the ruling missed and the brief raised a subject the owner had closed. The threads and
+        subject lines the model is handed are what the matcher reads now."""
+        s = _store()
+        s.add_message({'ExternalId': 'refund1', 'ConversationId': 'c-ref', 'Channel': 'email',
+                       'SourceName': ME, 'Subject': 'RE: Resident Refund Request - Watson, Lisa',
+                       'FromName': 'Rivka', 'FromEmail': RIVKA, 'SentAt': _ago(),
+                       'BodyText': 'still waiting for a response', 'Status': 'filed'})
+        s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
+                      'Note': 'resident refunds are not ours', 'Active': 1, 'CreatedBy': 'owner'})
+        paraphrase = [{'key': 'asked:c-ref', 'kind': 'asked',
+                       'facts': 'Barnes and Watson stall the same way: the BOM answers in-thread '
+                                'and Rivka threatens rejection.'}]
+        text = assistant.inputs(s, paraphrase)
+        self.assertIn('WHAT THE OWNER HAS ALREADY DECIDED', text)
+        self.assertIn('resident refunds are not ours', text)
+
     def test_a_global_verdict_always_applies(self):
         s = _store()
         s.add_memory({'Scope': 'global', 'Note': 'Never chase a vendor before Wednesday.',

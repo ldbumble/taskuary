@@ -787,7 +787,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
     // or Outlook, which is ingested as a `context` row and which the assistant has been reading
     // all along. The panel was the only place the history looked incomplete.
     const p = (row.TaskId ? api.get(`/api/tasks/${row.TaskId}`).then((r) => r.data)
-      : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => ({ messages: r.data.messages || [] })))
+      : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => ({ messages: r.data.messages || [],
+          routes: r.data.routes || [] })))
       .catch(() => ({ messages: [] }));                                  // panel falls back to the preview
     cache.current.set(row.MessageId, { at: Date.now(), p });
     return p;
@@ -1315,9 +1316,20 @@ const fmtDay = (d) => {
 const historyOf = (sel, detail) => {
   const ev = [];
   if (detail?.task) ev.push({ at: detail.task.CreatedAt, label: `Task ${detail.ref} opened`, sub: detail.task.Kind, c: "#55697a" });
-  (detail?.routes || []).forEach((r) => ev.push({ at: detail.task?.CreatedAt, c: "#6f8a6e",
-    label: r.Decision === "attach" ? "Routed — attached to this thread"
-      : r.Decision === "create" ? "Routed — new task created" : `Routed — ${r.Decision}` }));
+  // An `ignore` route is the OWNER overruling triage - "not ours" - and it is the judgement
+  // most worth reading back, because it is the one that taught the funnel something. It used to
+  // vanish from the panel entirely: the verdict deletes the task, the history was read off the
+  // task, so the record of the correction died with the thing it corrected.
+  (detail?.routes || []).forEach((r) => ev.push({
+    at: r.CreatedAt || detail?.task?.CreatedAt,
+    c: r.Decision === "ignore" ? "#8a3646" : "#6f8a6e",
+    label: r.Decision === "ignore" ? "You said: not ours"
+      : r.Decision === "attach" ? "Routed — attached to this thread"
+      : r.Decision === "create" ? "Routed — new task created" : `Routed — ${r.Decision}`,
+    sub: r.Decision === "ignore"
+      ? cleanText(String(r.Reason || "")).replace(/^not ours\s*[-—]\s*/i, "").slice(0, 70)
+      : undefined,
+  }));
   (detail?.runs || []).forEach((r) => ev.push({ at: r.StartedAt, label: `${r.AgentName} run`, sub: r.Status,
     c: r.Status === "error" ? "#6b2733" : "#6f8a6e" }));
   (detail?.comments || []).filter((c) => c.ActorType === "human").forEach((c) =>

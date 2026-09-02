@@ -90,23 +90,96 @@ def scope_of(cfg: dict, headers) -> str:
     return OWNER if tok == owner else ANON
 
 
+# ── WHO IS ON THE OTHER END OF THE SOCKET ──────────────────────────────────
+# A token proves the CALLER knows a secret. These two prove the caller is not a web page the
+# owner merely visited - which a token alone cannot, because a browser will happily attach
+# whatever it has to a request some other site asked it to make (audit 2026-09-02, F03).
+#
+#   host_ok    DNS rebinding needs a NAME the attacker controls and can re-point at 127.0.0.1.
+#              An IP literal cannot be rebound - a browser only ever sends back the name it
+#              looked up - so IP Hosts pass and names must be on the list. Without this a page
+#              on evil.example reads the whole mailbox through the loopback address.
+#   origin_ok  A cross-site fetch announces itself, in Sec-Fetch-Site or Origin. Neither header
+#              present means it is not a browser at all (curl, the CLI, a hook), and the token
+#              is what gates those.
+#
+# Both are cheap and neither is sufficient alone: rebinding produces a same-origin request, and
+# an origin check cannot see a Host that was never ours.
+
+def _is_ip4(h: str) -> bool:
+    parts = h.split('.')
+    return len(parts) == 4 and all(p.isdigit() and len(p) <= 3 for p in parts)
+
+
+def _authority(v: str) -> str:
+    """`http://host:port/path`, `host:port`, `host` -> `host:port`, lowercased."""
+    v = str(v or '').strip().lower()
+    if '://' in v: v = v.split('://', 1)[1]
+    return v.split('/', 1)[0]
+
+
+def _hostname(v: str) -> str:
+    """The authority without its port. IPv6 keeps its colons and loses its brackets."""
+    a = _authority(v)
+    if a.startswith('['): return a[1:].split(']', 1)[0]
+    return a.rsplit(':', 1)[0] if a.count(':') == 1 else a
+
+
+def allowed_hosts(server: dict) -> set:
+    """localhost, whatever the server was told to bind, this machine's own name, and anything the
+    owner added as `allowed_hosts` in config.toml (comma-separated) - for a self-hoster reaching
+    Taskuary by a real hostname, which is the one legitimate case this rule breaks."""
+    import socket
+    out = {'localhost', str(server.get('host') or '').lower()}
+    try: out |= {socket.gethostname().lower(), socket.gethostname().lower() + '.local'}
+    except Exception: pass
+    out |= {h.strip().lower() for h in str(server.get('allowed_hosts') or '').split(',')}
+    return {h for h in out if h}
+
+
+def host_ok(host: str, server: dict) -> bool:
+    h = _hostname(host)
+    if not h: return False                        # HTTP/1.1 requires a Host; a request without one is nobody
+    if _is_ip4(h) or ':' in h: return True       # an IP literal is not a name and cannot be re-pointed
+    return h in allowed_hosts(server)
+
+
+def origin_ok(headers) -> bool:
+    """Same-origin, or not a browser. `Origin: null` (a sandboxed frame, a data: URL) is neither."""
+    site = str(headers.get('sec-fetch-site') or '').lower()
+    if site and site not in ('same-origin', 'none'): return False
+    o = str(headers.get('origin') or '').strip()
+    if not o: return True
+    if o.lower() == 'null': return False
+    return _authority(o) == _authority(headers.get('host'))
+
+
 # ── the tokens ──────────────────────────────────────────────────────────────────────────
 def ensure_tokens(read, write, server: dict) -> dict:
-    """Give this install an agent token if it has none, and persist it. The OWNER token stays the
-    owner's choice - turning it on is a decision about the network, and forcing one would lock a
-    running browser out mid-session. The agent token is not a choice: without it there is no way
-    to tell a session's request from a person's, and the deny list has nothing to act on.
+    """Give this install both tokens if it has none, and persist them.
+
+    The agent token tells a session's request from a person's; without it the deny list has
+    nothing to act on. The OWNER token used to be the owner's choice, on the reasoning that
+    forcing one would lock a running browser out mid-session. That reasoning had it backwards:
+    with no owner token every local process IS the owner, so an agent defeats the whole deny
+    list by simply not sending its header - and any page the owner visits can drive the API,
+    because a browser attaches no proof of who asked (audit 2026-09-02, F03). It is minted now,
+    and the page the server itself hands out carries it (server._seed_token), so the only browser
+    that loses is one holding a tab from before the upgrade: it reloads and is fine.
 
     `read`/`write` are config's own reader and writer, passed in rather than imported - config
     calls this from inside load(), and importing it back would be a cycle."""
-    if server.get('agent_token'): return server
-    server['agent_token'] = _secrets.token_urlsafe(24)
+    fresh = {k: _secrets.token_urlsafe(24) for k in ('agent_token', 'token') if not server.get(k)}
+    if not fresh: return server
+    server.update(fresh)
     try:
         cur = read()
-        cur.setdefault('server', {})['agent_token'] = server['agent_token']
+        cur.setdefault('server', {}).update(fresh)
         write(cur)
-        logger.info('wrote an agent token to config.toml - sessions run with less authority than you do')
+        logger.info(f"wrote {' and '.join(sorted(fresh))} to config.toml"
+                    + (' - the page this server hands out carries the owner token' if 'token' in fresh else '')
+                    + (' - sessions run with less authority than you do' if 'agent_token' in fresh else ''))
     except Exception as e:
         # in memory only: still enforced for this run, just regenerated on the next start
-        logger.warning(f'could not persist the agent token ({e}) - it holds for this run only')
+        logger.warning(f'could not persist {sorted(fresh)} ({e}) - they hold for this run only')
     return server

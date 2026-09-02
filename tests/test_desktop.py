@@ -1,6 +1,13 @@
 """Desktop shell tests - the embedded server really boots and serves the UI + API."""
 import unittest, urllib.request
-from taskuary import desktop
+from taskuary import config, desktop
+
+
+def _get(url: str) -> str:
+    """The owner token is mandatory now. A browser gets it from the page the server hands out
+    (server._seed_token); a plain client sends the header, as the CLI and the hooks do."""
+    req = urllib.request.Request(url, headers={'X-Taskuary-Token': config.load()['server'].get('token') or ''})
+    return urllib.request.urlopen(req, timeout=10).read().decode()
 
 
 class DesktopTests(unittest.TestCase):
@@ -12,11 +19,12 @@ class DesktopTests(unittest.TestCase):
         server, url = desktop.start_server()
         try:
             self.assertTrue(server.started)
-            html = urllib.request.urlopen(f'{url}/', timeout=10).read().decode()
+            html = _get(f'{url}/')
             self.assertIn('Taskuary', html)
-            api = urllib.request.urlopen(f'{url}/api/report-types', timeout=10).read().decode()
+            self.assertIn('localStorage.setItem("taskuary_token"', html)   # ...and the page carries it
+            api = _get(f'{url}/api/report-types')
             self.assertIn('mssql', api)
-            conns = urllib.request.urlopen(f'{url}/api/connectors', timeout=10).read().decode()
+            conns = _get(f'{url}/api/connectors')
             self.assertIn('github', conns)
         finally:
             server.should_exit = True

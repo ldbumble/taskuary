@@ -427,8 +427,10 @@ class ApiTests(unittest.TestCase):
         except ImportError: import tomli as tomllib
         path = config.home() / 'config.toml'
         previous = path.read_text(encoding='utf-8') if path.exists() else None
-        stored = {'host': '127.0.0.1', 'port': 7787, 'token': 'stored-secret'}
-        path.write_text('[server]\nhost = "127.0.0.1"\nport = 7787\ntoken = "stored-secret"\n', encoding='utf-8')
+        stored = {'host': '127.0.0.1', 'port': 7787, 'token': 'stored-secret', 'allowed_hosts': 'testserver'}
+        # allowed_hosts rides along: rewriting [server] wholesale used to drop the name the test
+        # client calls this server by, and every later test in the process was refused at the Host
+        path.write_text('[server]\nhost = "127.0.0.1"\nport = 7787\ntoken = "stored-secret"\nallowed_hosts = "testserver"\n', encoding='utf-8')
         old_server = dict(server.cfg.get('server') or {})
         try:
             with mock.patch.dict('os.environ', {'TASKUARY_HOST': '0.0.0.0', 'TASKUARY_TOKEN': 'from-env'}):
@@ -1085,6 +1087,10 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn('ingest_status', {s['Name'] for s in c.get('/api/settings').json()['data']})
 
     def test_token_gate(self):
+        # put it BACK, do not pop it: an install with no owner token is not a state that exists any
+        # more (guard.ensure_tokens mints one), and popping it left every later test in the process
+        # running against a door that was standing open
+        was = server.cfg['server'].get('token')
         server.cfg['server']['token'] = 'secret'
         try:
             self.assertEqual(c.get('/api/settings').status_code, 401)
@@ -1093,7 +1099,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.get('/api/health').status_code, 200)
             self.assertEqual(c.get('/api/health').json(), {'ok': True})
         finally:
-            server.cfg['server'].pop('token')
+            server.cfg['server']['token'] = was
 
     def test_health_is_open_without_a_token(self):
         self.assertEqual(c.get('/api/health').json(), {'ok': True})

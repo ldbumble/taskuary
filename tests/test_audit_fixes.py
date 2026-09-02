@@ -8,7 +8,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import server, channels, clis, general, hooks, imapmail, proof, reports, terminal, triage, azure
+from taskuary import server, channels, clis, general, guard, hooks, imapmail, proof, reports, terminal, triage, azure
 from taskuary.store import SQLiteStore, MemoryStore
 from taskuary import terminal as term, witness
 
@@ -161,5 +161,60 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(reports.cron_prev('*/15 9-17 * * 1-5', datetime(2026, 9, 1, 9, 7)), datetime(2026, 9, 1, 9, 0))
         with self.assertRaises(ValueError): reports._cron_field('*/0', 0, 59)
 
+
+
+class DoorTests(unittest.TestCase):
+    """F03: a token proves a caller knows a secret; these prove the caller is not a page the owner
+    merely visited. F16: and the agent's own hooks still get through, which is what makes a
+    mandatory token affordable."""
+
+    def test_f03_the_owner_token_is_minted_not_offered(self):
+        srv = {}
+        guard.ensure_tokens(lambda: {}, lambda d: None, srv)
+        self.assertTrue(srv['token'] and srv['agent_token'] and srv['token'] != srv['agent_token'])
+        kept = {'token': 'mine', 'agent_token': 'theirs'}
+        guard.ensure_tokens(lambda: {}, lambda d: None, kept)
+        self.assertEqual(kept, {'token': 'mine', 'agent_token': 'theirs'})   # an owner who chose one keeps it
+
+    def test_f03_a_name_this_server_does_not_answer_to_is_refused(self):
+        srv = {'host': '127.0.0.1', 'allowed_hosts': 'taskuary.lan'}
+        for good in ('127.0.0.1:7787', 'localhost:7787', '[::1]:7787', '192.168.1.9:7787', 'taskuary.lan'):
+            self.assertTrue(guard.host_ok(good, srv), good)
+        for bad in ('evil.example', 'evil.example:7787', 'localhost.evil.example', ''):
+            self.assertFalse(guard.host_ok(bad, srv), bad)
+        # and it is enforced on the page itself, not just on /api: the page carries the token
+        self.assertEqual(c.get('/', headers={'host': 'evil.example'}).status_code, 403)
+        self.assertEqual(c.get('/api/feed', headers={'host': 'evil.example'}).status_code, 403)
+
+    def test_f03_another_sites_page_cannot_drive_the_api(self):
+        h = {'origin': 'http://evil.example', 'sec-fetch-site': 'cross-site'}
+        self.assertFalse(guard.origin_ok({**h, 'host': 'testserver'}))
+        self.assertFalse(guard.origin_ok({'origin': 'null', 'host': 'testserver'}))
+        self.assertTrue(guard.origin_ok({'origin': 'http://testserver', 'host': 'testserver'}))
+        self.assertTrue(guard.origin_ok({'host': 'testserver'}))              # curl / the CLI / a hook
+        self.assertTrue(guard.origin_ok({'sec-fetch-site': 'none', 'host': 'testserver'}))   # typed in the bar
+        self.assertEqual(c.post('/api/tasks/purge-dropped', headers=h).status_code, 403)
+        # the one cross-site arrival by design: Intuit redirects the browser to it
+        self.assertEqual(c.get('/api/quickbooks/callback', headers=h).status_code, 200)
+
+    def test_f03_no_token_is_no_longer_the_owner(self):
+        self.assertEqual(c.post('/api/tasks/purge-dropped', headers={'X-Taskuary-Token': ''}).status_code, 401)
+        self.assertEqual(c.post('/api/tasks/purge-dropped', headers={'X-Taskuary-Token': 'wrong'}).status_code, 401)
+        # ...which is also how an agent stops defeating the deny list by simply not sending its header
+        self.assertEqual(guard.scope_of({'token': 'o', 'agent_token': 'a'}, {}), guard.ANON)
+
+    def test_f03_the_page_the_server_hands_out_carries_the_token(self):
+        r = c.get('/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(server.cfg['server']['token'], r.text)
+        self.assertIn('localStorage.setItem("taskuary_token"', r.text)
+
+    def test_f16_a_hook_still_reaches_us_with_the_agents_token(self):
+        """The hook is a curl from inside the checkout: no Origin, and the agent token in a header."""
+        cmd = hooks.command('http://127.0.0.1:7787', 'agent-tok')
+        self.assertIn('-H "X-Taskuary-Token: agent-tok"', cmd)
+        r = c.post('/api/hooks/claude', json={'hook_event_name': 'Stop', 'session_id': 'nope'},
+                   headers={'X-Taskuary-Token': server.cfg['server']['agent_token']})
+        self.assertEqual(r.status_code, 200)
 
 if __name__ == '__main__': unittest.main()

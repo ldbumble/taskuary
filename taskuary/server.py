@@ -85,6 +85,21 @@ async def token_gate(request: Request, call_next):
     if demo.enabled():
         why = demo.refuse(request.method, request.url.path)
         if why: return JSONResponse({'detail': why, 'demo': True}, status_code=403)
+    elif not guard.host_ok(request.headers.get('host'), cfg['server']):
+        # EVERY path, not just /api: the page itself carries the owner token, so a name we do not
+        # answer to must not be able to load it either (guard.host_ok on DNS rebinding)
+        logger.warning(f'refused Host {request.headers.get("host")!r} - not a name this server answers to')
+        return JSONResponse({'detail': f'this server does not answer to the name {request.headers.get("host")!r}. '
+                                       'If you reach Taskuary by a hostname, add it to allowed_hosts under '
+                                       '[server] in config.toml.'}, status_code=403)
+    # ...and a request some OTHER page told the browser to make is not the owner asking, whatever
+    # token the browser had lying around. The Intuit callback is the one cross-site arrival by
+    # design - a redirect from their site, proving itself with the one-time state it was issued.
+    elif (request.url.path.startswith('/api') and request.url.path != '/api/quickbooks/callback'
+          and not guard.origin_ok(request.headers)):
+        logger.warning(f'refused {request.method} {request.url.path} from origin {request.headers.get("origin")!r}')
+        return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
+                                       'pages only.'}, status_code=403)
     tok = cfg['server'].get('token')
     if tok and request.url.path.startswith('/api') and request.headers.get('X-Taskuary-Token') not in (tok, cfg['server'].get('agent_token')):
         # an <img src> cannot carry a header, so attachment READS take the token in the query
@@ -166,7 +181,19 @@ def _index_response(index_file: Path):
 <body style="font:14px system-ui;margin:4rem;color:#4d4a43">Taskuary is updating&hellip;</body></html>'''
         return HTMLResponse(html, status_code=503, headers={
             'Cache-Control': 'no-store, must-revalidate', 'Retry-After': '1'})
-    return HTMLResponse(html, headers={'Cache-Control': 'no-store, must-revalidate'})
+    return HTMLResponse(_seed_token(html), headers={'Cache-Control': 'no-store, must-revalidate'})
+
+
+def _seed_token(html: str) -> str:
+    """The page the SERVER hands out carries the owner token. That is what makes a mandatory token
+    cost the owner nothing: no other site can read this HTML (it is same-origin, and a name we do
+    not answer to never gets it - token_gate checks Host first), and the app has its credential
+    before the bundle's first fetch. A tab opened before the upgrade 401s until it is reloaded,
+    which is the whole of the migration (audit 2026-09-02, F03)."""
+    tok = cfg['server'].get('token')
+    if not tok or '</head>' not in html: return html
+    seed = f'<script>try{{localStorage.setItem("taskuary_token",{json.dumps(tok)})}}catch(e){{}}</script>'
+    return html.replace('</head>', seed + '</head>', 1)
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -3077,13 +3104,26 @@ def close_terminal(sid: str):
     if not hub_term.close(sid): raise HTTPException(404, 'terminal not found')
     return {'ok': True}
 
+def _ws_ok(ws: WebSocket) -> bool:
+    """The HTTP middleware never runs for a websocket, so the same three questions are asked here.
+    A browser cannot put a header on a websocket, so the token rides on the query string - but a
+    caller that CAN set headers (the test client, a script) may send it that way. Origin matters
+    most of all here: a websocket is exempt from the same-origin policy, so any page may open one
+    to localhost, and this socket is a keyboard attached to a coding agent (audit 2026-09-02, F03).
+    """
+    if demo.enabled(): return True
+    if not guard.host_ok(ws.headers.get('host'), cfg['server']): return False
+    if not guard.origin_ok(ws.headers): return False
+    tok = cfg['server'].get('token')
+    return not tok or tok in (ws.query_params.get('token'), ws.headers.get('x-taskuary-token'))
+
+
 @app.websocket('/api/terminals/{sid}/ws')
 async def terminal_ws(ws: WebSocket, sid: str):
-    """Bytes out, keystrokes in. The HTTP token gate can't see websockets, so a configured
-    token rides on the query string."""
-    tok = cfg['server'].get('token')
+    """Bytes out, keystrokes in. The HTTP token gate can't see websockets, so _ws_ok asks the
+    same questions the middleware would have."""
     t = hub_term.get(sid)
-    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    if not _ws_ok(ws): return await ws.close(code=4401)
     if not t: return await ws.close(code=4404)
     await ws.accept()
     q = asyncio.Queue()
@@ -3305,10 +3345,9 @@ def terminal_browser_snapshot(sid: str, body: SnapBody):
 @app.websocket('/api/terminals/{sid}/browser/ws')
 async def terminal_browser_ws(ws: WebSocket, sid: str):
     """agent-browser's screencast, relayed: frames out, the owner's input back when they take over.
-    Same token rule as the terminal socket - it rides on the query string."""
+    Same rule as the terminal socket."""
     from . import browserview
-    tok = cfg['server'].get('token')
-    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    if not _ws_ok(ws): return await ws.close(code=4401)
     await browserview.relay(ws, sid)
 
 @app.get('/api/health')

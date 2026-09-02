@@ -717,6 +717,37 @@ const CARD_STATE = {
   planned: { border: BORDER, bg: PANEL, width: 1 },
 };
 
+// The result of a Test, and the one failure the owner can fix from here. "boto3 is not
+// installed - run: pip install boto3" is a true sentence that helps nobody at a desktop app: it
+// means find a terminal, work out which Python this is, come back. The server knows both, so a
+// missing package comes back structured (channels.test_connector) and this offers the button.
+const TestLine = ({ test, mt = 1 }) => {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState("");
+  if (!test) return null;
+  const ins = test.install;
+  return (
+    <Box sx={{ mt }}>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
+        {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}
+      </Typography>
+      {ins && !done && (ins.can === false
+        ? <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{ins.why}</Typography>
+        : <Button size="small" variant="outlined" disabled={busy} sx={{ mt: 0.75, fontSize: 11.5, textTransform: "none" }}
+            startIcon={busy ? <CircularProgress size={12} /> : null}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const { data } = await api.post("/api/deps/install", { package: ins.package });
+                setDone(`✓ ${data.name} installed — press Test again`);
+              } catch (e) { setDone(e?.response?.data?.detail || `could not install ${ins.name}`); }
+              setBusy(false);
+            }}>{busy ? `Installing ${ins.name}…` : `Install ${ins.name}`}</Button>)}
+      {done && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{done}</Typography>}
+    </Box>
+  );
+};
+
 const ConnCard = ({ c }) => (
   <Box onClick={c.planned ? undefined : c.go}
     sx={{ bgcolor: CARD_STATE[connState(c)].bg, border: `${CARD_STATE[connState(c)].width}px solid ${CARD_STATE[connState(c)].border}`, borderRadius: 2.5, p: 1.6,
@@ -817,7 +848,8 @@ const VoiceVocabulary = ({ onBack }) => {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Typography variant="caption" sx={{ color: terms.length > limit ? "error.main" : FAINT }}>{terms.length}/{limit}</Typography>
           <Box sx={{ flex: 1 }} />
-          <Button variant="outlined" onClick={generate} disabled={busy || genBusy || terms.length > limit}
+          <Button size="small" variant="outlined" onClick={generate} disabled={busy || genBusy || terms.length > limit}
+            sx={{ fontSize: 11.5, textTransform: "none" }}
             startIcon={genBusy ? <CircularProgress size={12} /> : null}
             title="Read the last three months of mail - who writes, about what - and add the names, systems and acronyms a recogniser would misspell. Your own lines stay.">
             {genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}
@@ -1239,8 +1271,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
               {opened === "full_disk_access" && " · Settings opened"}
               {openErr.full_disk_access && ` · ${openErr.full_disk_access}`}
             </Typography>
-            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
-              {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+            <TestLine test={test} mt={1} />
             {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
           </Card>
           <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>
@@ -1372,8 +1403,7 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Live probe — token / model / channel read, for real.</Typography>
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
           startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-        {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
-          {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+        <TestLine test={test} mt={1} />
         {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
       </Box>
     )},
@@ -1572,8 +1602,7 @@ function MssqlConnection({ conn, drivers, reload }) {
           <Typography variant="body2" sx={{ color: DIM, mb: 1, mt: 0.5 }}>Connects for real and reports the server version — every scheduled report inherits this connection.</Typography>
           <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
             startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-          {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
-            {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+          <TestLine test={test} mt={1} />
           {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </StepContent>
       </Step>
@@ -1628,8 +1657,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
-          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
-            {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+          <TestLine test={test} mt={0} />
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}
@@ -1937,8 +1965,7 @@ function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
           {meta.search && <KbSearch conn={conn} />}
-          {test && <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
-            {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}</Typography>}
+          <TestLine test={test} mt={0} />
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}

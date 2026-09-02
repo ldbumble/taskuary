@@ -15,8 +15,9 @@ def _boto3():
         # extra (an editable install pins its dist-info at install time): pip prints
         # "does not provide the extra 'aws'", says everything is already satisfied, and
         # installs nothing. Naming the package itself always works.
-        raise RuntimeError('boto3 is not installed - run: pip install boto3 '
-                           '(or re-run pip install -e .[aws] from the repo)')
+        from .deps import Missing
+        raise Missing('boto3', 'boto3 is not installed - the AWS card needs it. Install it from the '
+                               'card, or run: pip install boto3 (or re-run pip install -e .[aws] from the repo)')
     return boto3
 
 
@@ -49,9 +50,13 @@ def client(cfg: dict, service: str, region: str = None):
 
 def test(cfg: dict) -> dict:
     """STS caller identity - proves the keys (or the default chain) actually authenticate."""
+    from .deps import Missing
     try:
         who = client(cfg, 'sts').get_caller_identity()
         return {'ok': True, 'detail': f"authenticated · account {who['Account']} · {who['Arn']}"}
+    # a missing package is not a failed credential, and flattening it to a string here is what
+    # left the card printing a pip command instead of offering the button (deps.py)
+    except Missing: raise
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
 

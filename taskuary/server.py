@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, re, secrets, threading, time
+import asyncio, json, re, secrets, sys, threading, time
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -2013,6 +2013,29 @@ def connector_reset(cid: int):
     sync_connections(store, ACTOR)
     return {'ok': True}
 
+@app.get('/api/deps')
+def deps_list():
+    """What the cards can install, and whether this install can install anything at all."""
+    from . import deps
+    can, why = deps.can_install()
+    return {'can_install': can, 'why': why, 'python': sys.executable,
+            'packages': {k: {'name': deps.pip_name(k), 'installed': deps.installed(k)} for k in deps.OPTIONAL}}
+
+
+@app.post('/api/deps/install')
+def deps_install(body: dict):
+    """Install one optional package into the Python running Taskuary. The owner's button - it is
+    on guard.DENIED, because pip runs arbitrary setup code and an agent asking for that is an
+    agent asking to run anything."""
+    from . import deps
+    pkg = str((body or {}).get('package') or '')
+    try: out = deps.install(pkg)
+    except ValueError as e: raise HTTPException(422, str(e))
+    except Exception as e: raise HTTPException(400, str(e))
+    store.audit('connector', 0, 'dependency_installed', ACTOR, detail={'package': pkg})
+    return out
+
+
 @app.post('/api/connectors/{cid}/test')
 def connector_test(cid: int):
     from .channels import test_connector
@@ -2483,7 +2506,8 @@ def mssql_test(body: dict):
         from .mssql import test
         return test(resolve_cfg(store, {**body, 'type': 'mssql'}))
     except ImportError:
-        return {'ok': False, 'error': 'pyodbc is not installed - run: pip install pyodbc'}
+        return {'ok': False, 'error': 'pyodbc is not installed - the SQL Server card needs it',
+                'install': {'package': 'pyodbc', 'name': 'pyodbc'}}
 
 # Models each CLI can be pointed at. The agent profile's own `model` (Connections → AI CLI
 # agents) always wins as the default; these are the quick picks the run dialogs offer.

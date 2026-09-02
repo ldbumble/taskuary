@@ -312,6 +312,12 @@ def test_connector(store, cid: int) -> dict:
         # a failure the owner fixes in the OS (macOS privacy consent) carries the structured
         # half too - which pane, which host - so the card can offer the button, not a paragraph
         if getattr(e, 'setup', None): out['setup'] = e.setup
+        # ...and a failure that is only a missing package carries the package, so the card offers
+        # Install rather than a pip command the owner has to take somewhere else (deps.py)
+        if getattr(e, 'package', None):
+            from . import deps
+            can, why = deps.can_install()
+            out['install'] = {'package': e.package, 'name': deps.pip_name(e.package), 'can': can, 'why': why}
         return out
 
 

@@ -266,12 +266,14 @@ export default function DocsView() {
               is asked for, in seven questions, and written from the answers (interview.py). */}
           {docName === "soul" && (
             <Button size="small" variant="outlined" onClick={() => setInterview(true)}
+              sx={{ fontSize: 11.5, textTransform: "none" }}
               title="Seven short questions - who you are, what an agent may do alone, what must never happen without you - and the AI writes SOUL.md from your answers">
               Write it from a few questions
             </Button>
           )}
           {GEN[docName] && (
             <Button size="small" variant="outlined" disabled={genBusy} title={GEN[docName]}
+              sx={{ fontSize: 11.5, textTransform: "none" }}
               startIcon={genBusy ? <CircularProgress size={12} /> : null}
               onClick={async () => {
                 setGenBusy(true); setGenMsg(""); setGenEv(null); setGenWhat("starting…");

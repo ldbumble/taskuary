@@ -57,6 +57,7 @@ DENIED = (
     (r'POST|PUT|PATCH', r'^/api/settings', 'the settings decide what agents may do'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(policies|agents)', 'the rules and the agent profiles'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(docs?|playbooks)(/|$)', 'SOUL.md, the playbooks and the rest are the owner\'s word, not an agent\'s - propose, do not write'),
+    (r'POST', r'^/api/update$', 'replacing the program is the owner\'s decision'),
 )
 _DENIED = tuple((re.compile(f'^({m})$', re.I), re.compile(p), why) for m, p, why in DENIED)
 

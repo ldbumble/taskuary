@@ -42,3 +42,8 @@
   .tq-aui-role { padding-top: 0; }
   .tq-aui-footer { padding-left: 10px; padding-right: 10px; }
 }
+
+/* on a phone the recurring-report offer stacks: side by side the text squeezed into a one-word column */
+@media (max-width: 600px) {
+  .tq-aui-report-action { flex-direction: column; align-items: stretch; gap: 10px; }
+}

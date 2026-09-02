@@ -86,14 +86,14 @@ const Post = ({ p, onChanged, onOpenTask }) => {
             handed first (handbook.block ranks by it), and what it voted down is gone */}
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, flexShrink: 0 }}>
           <IconButton size="small" onClick={() => vote(true)} title="holds up — agents are handed this sooner"
-            sx={{ p: 0.25, color: mine > 0 ? ACCENT : FAINT, "&:hover": { color: ACCENT } }}>
-            <ArrowUpwardIcon sx={{ fontSize: 16 }} />
+            sx={{ p: { xs: 0.9, md: 0.25 }, color: mine > 0 ? ACCENT : FAINT, "&:hover": { color: ACCENT } }}>
+            <ArrowUpwardIcon sx={{ fontSize: { xs: 20, md: 16 } }} />
           </IconButton>
           <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 700, lineHeight: 1,
             color: score > 0 ? ACCENT : score < 0 ? ALERT_INK : FAINT }}>{score}</Typography>
           <IconButton size="small" onClick={() => vote(false)} title="wrong or stale — below zero it is removed"
-            sx={{ p: 0.25, color: mine < 0 ? ALERT_INK : FAINT, "&:hover": { color: ALERT_INK } }}>
-            <ArrowDownwardIcon sx={{ fontSize: 16 }} />
+            sx={{ p: { xs: 0.9, md: 0.25 }, color: mine < 0 ? ALERT_INK : FAINT, "&:hover": { color: ALERT_INK } }}>
+            <ArrowDownwardIcon sx={{ fontSize: { xs: 20, md: 16 } }} />
           </IconButton>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>

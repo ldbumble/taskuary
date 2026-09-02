@@ -1150,7 +1150,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
               startIcon={<SyncIcon data-tq-sync-icon sx={{ fontSize: 12,
                 color: syncing || bgSync ? ACCENT : "inherit",
                 ...(syncing || bgSync ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
-              sx={{ minWidth: 0, minHeight: 20, py: 0, px: 0.6, ml: 0.35, fontSize: 10.5,
+              sx={{ minWidth: 0, minHeight: { xs: 30, md: 20 }, py: 0, px: { xs: 1, md: 0.6 }, ml: 0.35, fontSize: 10.5,
                 lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
                 "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
                 "&.Mui-disabled": { color: DIM, opacity: 1 },

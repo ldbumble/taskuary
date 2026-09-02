@@ -197,6 +197,23 @@ _started = datetime.now().isoformat(sep=' ', timespec='seconds')
 @app.get('/api/version')
 def version(): return {'version': _ver, 'started': _started}
 
+# ── update in place (update.py): Settings → Updates ─────────────────────────────────────
+@app.get('/api/update')
+def update_check(force: int = 0):
+    from . import update
+    return update.check(force=bool(force))
+
+@app.post('/api/update')
+def update_apply():
+    """Fetch the latest release and swap it in. The answer goes out first; the process ends a
+    moment later so the new build can start. Owner-only: guard.py refuses an agent token."""
+    from . import update
+    try: out = update.apply()
+    except Exception as e: raise HTTPException(422, str(e))
+    store.audit('app', 0, 'update', ACTOR, detail={k: v for k, v in out.items() if k != 'pip'})
+    if out.get('restarting'): update.exit_soon()
+    return out
+
 def _can_send(channel, has_message=True, gh_ok=None) -> bool:
     """Can an approved reply actually LEAVE on this channel? One answer for the whole app -
     outbound.can_reply - so the Approve button, triage and the coder wrap-up cannot

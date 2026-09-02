@@ -417,7 +417,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       {/* 372, not 340: the header ran ~6px over - "done 30" lost its last digit, and a count
           you cannot read is worse than no count. The extra room buys the row titles a few
           characters too, which is where taskuary#18 [Containerization]... was being cut. */}
-      <Box sx={{ width: 372, flexShrink: 0 }}>
+      {/* On a phone the two panes take turns: the list until a task is picked, then the task, and
+          its Close (back to the list) button is the way back. Side by side they were 372px of list
+          and a detail pane pushed clean off the right edge - a selected task showed nothing. */}
+      <Box sx={{ width: { xs: "100%", md: 372 }, flexShrink: 0, display: { xs: selected ? "none" : "block", md: "block" } }}>
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
         <Box sx={{ ...card, p: 0, overflow: "hidden", display: "flex", flexDirection: "column",
           height: "calc(100vh - 118px)", minHeight: 420 }}>
@@ -487,7 +490,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       </Box>
 
       {/* ── detail ────────────────────────────────────────────────────── */}
-      <Box sx={{ ...frame, flex: 1, minWidth: 0, height: "calc(100vh - 118px)", minHeight: 420 }}>
+      <Box sx={{ ...frame, flex: 1, minWidth: 0, height: "calc(100vh - 118px)", minHeight: 420,
+        display: { xs: selected ? "block" : "none", md: "block" } }}>
         <Box sx={{ ...frameInner, height: "100%", display: "flex", flexDirection: "column" }}>
           {!t ? (
             <Box sx={{ height: "100%", display: "grid", placeItems: "center" }}>

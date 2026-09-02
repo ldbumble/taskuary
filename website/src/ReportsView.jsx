@@ -555,7 +555,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       onRemove={() => setWatchSrcs((cur) => cur.filter((_, k) => k !== i))} />
                   ))}
                   <Box onClick={() => setWatchSrcs((cur) => [...cur, { type: "mssql" }])}
-                    sx={{ ...card, width: 354, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
+                    sx={{ ...card, width: { xs: "100%", sm: 354 }, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
                       justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "#fff",
                       color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                     <AddIcon sx={{ fontSize: 20 }} />
@@ -601,7 +601,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   onRemove={() => setSrcs((cur) => cur.filter((_, k) => k !== i))} />
               ))}
               {!isAssistant && <Box onClick={() => setSrcs((cur) => [...cur, { type: "mssql" }])}
-                sx={{ ...card, width: 354, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
+                sx={{ ...card, width: { xs: "100%", sm: 354 }, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
                   justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed",
                   color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                 <AddIcon sx={{ fontSize: 20 }} />
@@ -981,6 +981,7 @@ function Composer({ onDraft }) {
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && ask.trim()) go(); }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.9 }}>
         <Button size="small" variant="contained" disableElevation disabled={busy || !ask.trim()}
+          sx={{ whiteSpace: "nowrap", flexShrink: 0 }}
           onClick={() => go()} startIcon={busy ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />}>
           {busy ? "Working it out…" : "Build it"}
         </Button>
@@ -1216,7 +1217,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
   return (
     <Box draggable={!!onDragStart} onDragStart={onDragStart} onDragEnd={onDragEnd}
       onDragOver={(e) => e.preventDefault()} onDrop={onDropHere}
-      sx={{ ...card, width: 354, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
+      sx={{ ...card, width: { xs: "100%", sm: 354 }, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
         opacity: dragging ? 0.45 : 1, ...(onDragStart ? { cursor: "grab", "&:active": { cursor: "grabbing" } } : {}) }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
         {onDragStart && <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />}

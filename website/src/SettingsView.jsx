@@ -20,6 +20,8 @@ import PsychologyIcon from "@mui/icons-material/Psychology";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import AboutYou from "./AboutYou.jsx";
+import UpdateCard from "./UpdateCard.jsx";
+import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, ConfirmDelete, Empty, FilterPills, TaskuaryMark } from "./ui.jsx";
@@ -199,6 +201,7 @@ const PAGES = {
   memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
   agents: { title: "Agents", icon: (props) => <TaskuaryMark size={22} sx={props?.sx} />, desc: "Bring your own AI CLI — cmd, args, resumable sessions, repo → checkout map." },
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
+  updates: { title: "Updates", icon: SystemUpdateAltIcon, desc: "Which build is running, which is the latest release, and one button that installs it and reopens — connections and settings untouched." },
 };
 
 function SettingsPages({ page, setPage, q, setQ }) {
@@ -354,7 +357,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
         {rows.map((s) => {
           const m = meta(s.Name);
           return (
-            <Box key={s.Name} sx={{ display: "flex", alignItems: "center", gap: 3, py: 2.5, borderBottom: `1px solid ${BORDER}`,
+            <Box key={s.Name} sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
+              gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`,
               opacity: s.Name === "phone_approvals" && (settings.find((x) => x.Name === "notify_level") || {}).Value === "off" ? 0.5 : 1 }}>
               <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
                 onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
@@ -500,6 +504,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
   }
 
   if (page === "about") return <AboutYou />;
+  if (page === "updates") return <UpdateCard />;
 
   if (page === "agents") {
     return <AgentsPage onBack={() => setPage(null)} />;
@@ -579,7 +584,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
 
 // One page, a rail, and a search box that is always reachable. The landing grid meant every
 // trip between two settings went section → back → section; these five are edited together.
-const NAV = ["about", "config", "policies", "memory", "agents", "audit"];
+const NAV = ["about", "config", "policies", "memory", "agents", "audit", "updates"];
 
 export default function SettingsView() {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you

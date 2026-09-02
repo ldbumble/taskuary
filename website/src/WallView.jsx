@@ -21,7 +21,10 @@ import { cliName } from "./BoardView.jsx";
 import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, wallPaneAtPoint, withoutWallSession } from "./wallLayout.js";
 
 const COLS = [1, 2, 3, 4];
-const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols")) || 2; } catch { return 2; } };
+// two columns by default - except on a phone, where two panes side by side leave each too narrow
+// for the terminal's own knobs (the A-/A+ row overflowed its pane) and for a readable line of code
+const defaultCols = () => (typeof window !== "undefined" && window.innerWidth < 700 ? 1 : 2);
+const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols")) || defaultCols(); } catch { return defaultCols(); } };
 // Pane height is yours to drag (the bar under each pane), and it sticks per browser PER column
 // count - the height that suits one pane across is not the one that suits four. 0 = never
 // dragged, use the formula below. The panes always share one height: a grid of ragged

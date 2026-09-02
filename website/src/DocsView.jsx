@@ -211,7 +211,7 @@ export default function DocsView() {
               "&:hover": { bgcolor: n === docName ? "#fff" : "#f4f1ec" } }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Box sx={{ display: "flex", opacity: n === docName ? 1 : .65 }}>{DOCS[n].icon}</Box>
-              <Typography sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1 }}>{DOCS[n].label}</Typography>
+              <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>{DOCS[n].label}</Typography>
               {n === docName && (
                 <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
                   borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
@@ -256,9 +256,10 @@ export default function DocsView() {
 
       <Box sx={{ minWidth: 0 }}>
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5 }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{meta.label}</Typography>
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5, flexWrap: { xs: "wrap", md: "nowrap" } }}>
+          {/* on a phone the title takes its own line; beside four buttons it was 45px wide */}
+          <Box sx={{ flex: 1, minWidth: 0, flexBasis: { xs: "100%", md: "auto" } }}>
+            <Typography noWrap sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{meta.label}</Typography>
             <Typography variant="body2" sx={{ color: FAINT, pt: 0.75 }}>{meta.blurb}</Typography>
           </Box>
           {/* SOUL.md cannot be distilled from a mailbox - it is what only the owner knows. So it

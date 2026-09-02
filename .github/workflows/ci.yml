@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           docker compose --profile regression run --rm desk
-          docker compose --profile regression up -d taskuary-reg
+          TASKUARY_TOKEN=regression-secret docker compose --profile regression up -d taskuary-reg
           for i in $(seq 1 40); do
             if curl -sf http://127.0.0.1:7787/api/health | grep -q '"ok": *true'; then break; fi
             if [ "$i" -eq 40 ]; then docker compose --profile regression logs; exit 1; fi
@@ -71,12 +71,15 @@ jobs:
           test -s /tmp/taskuary-asset.js
           python3 - <<'PY'
           import json, urllib.request
-          data = json.load(urllib.request.urlopen('http://127.0.0.1:7787/api/feed'))['data']
+          req = urllib.request.Request('http://127.0.0.1:7787/api/feed',
+                                       headers={'X-Taskuary-Token': 'regression-secret'})
+          data = json.load(urllib.request.urlopen(req))['data']
           assert data, 'desk left the Timeline empty'
           assert any(r.get('ReviewStatus') == 'pending' for r in data), 'pending_draft missing from the feed'
           print(len(data), 'feed rows after desk')
           PY
           tid=$(curl -sf -X POST http://127.0.0.1:7787/api/tasks \
+            -H 'X-Taskuary-Token: regression-secret' \
             -H 'content-type: application/json' -d '{"Title":"docker smoke"}' \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['taskId'])")
           docker compose --profile regression restart taskuary-reg
@@ -85,7 +88,8 @@ jobs:
             if [ "$i" -eq 40 ]; then docker compose --profile regression logs; exit 1; fi
             sleep 1
           done
-          curl -sf http://127.0.0.1:7787/api/tasks | grep -q "$tid"
+          curl -sf -H 'X-Taskuary-Token: regression-secret' \
+            http://127.0.0.1:7787/api/tasks | grep -q "$tid"
           test "$(docker compose --profile regression exec -T taskuary-reg id -u)" = 1000
           docker compose --profile regression down
           TASKUARY_TOKEN=s3cret docker compose up -d

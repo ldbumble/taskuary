@@ -164,12 +164,58 @@ def _launch_swap(script: Path, cwd: Path):
         return subprocess.Popen(argv, creationflags=base, **kw)
 
 
+# WHY THE UPDATE COULD NOT BE WRITTEN. "[Errno 13] Permission denied:
+# C:/Users/uri/Downloads/Taskuary.new.exe" is a true sentence that tells the owner nothing they
+# can act on, and it invites the two wrong answers - run it as administrator, install it as a
+# service - neither of which touches any of the three real causes (reported 2026-09-02).
+#
+# It is not about RIGHTS. The folder is inside the owner's own profile and they can already write
+# to it. Something is refusing this particular write, and which one it is decides what to do:
+#
+#   the file is already there   a previous attempt left it, and it is locked - still running, or
+#                               open by a virus scanner. Delete it and try again.
+#   the folder refuses too      Controlled Folder Access (Defender's ransomware protection) or an
+#                               antivirus is blocking a NEW .exe appearing here. Allow Taskuary,
+#                               or move the program out of a watched folder.
+#   neither                     something else holds it; the error itself is all we know.
+#
+# Downloads makes every one of these more likely - it is the most watched folder on a Windows box
+# and the one a single-file download lands in by default - so the message says so.
+def _why_refused(new: Path, exe: Path, err: OSError) -> str:
+    if new.exists():
+        return (f'{new.name} is already in {new.parent} from an earlier attempt and something still has '
+                f'it open - usually a virus scanner, or a copy that is still running. Delete '
+                f'{new} and press Update again.')
+    probe = new.with_name(f'.taskuary-write-test-{os.getpid()}')
+    try:
+        probe.write_bytes(b'x'); probe.unlink(missing_ok=True)
+        folder_ok = True
+    except OSError:
+        folder_ok = False
+    if folder_ok:
+        return (f'Windows allowed a normal file into {new.parent} but refused a new program there. That is '
+                'Controlled Folder Access (Windows Security → Virus & threat protection → Ransomware '
+                'protection) or your antivirus stopping a fresh .exe. Allow Taskuary through it, or move '
+                f'{exe.name} into a folder of its own and run it from there.')
+    return (f'Nothing can be written into {new.parent} at all. If that is your Downloads folder, Windows '
+            'Security or your antivirus is protecting it - allow Taskuary through, or move '
+            f'{exe.name} into a folder of its own. Running Taskuary as administrator does not help: '
+            'the block is on the program, not on your account.')
+
+
 def _apply_exe(url: str, progress=None) -> dict:
     exe = Path(sys.executable).resolve()
     new = exe.with_name('Taskuary.new.exe')
-    size = _download(url, new, progress)
-    script = exe.with_name('taskuary-update.cmd')
-    script.write_text(swap_script(exe, new, os.getpid(), sys.argv[1:]), encoding='utf-8')
+    try:
+        size = _download(url, new, progress)
+        script = exe.with_name('taskuary-update.cmd')
+        script.write_text(swap_script(exe, new, os.getpid(), sys.argv[1:]), encoding='utf-8')
+    except OSError as e:
+        if getattr(e, 'errno', None) != 13 and getattr(e, 'winerror', None) not in (5, 32):
+            raise
+        raise RuntimeError(f'the update could not be saved next to {exe.name}. '
+                           + _why_refused(new, exe, e)
+                           + f' (Windows said: {e})') from e
     # detached and, where Windows permits it, outside any parent Job: it must outlive us.
     _launch_swap(script, exe.parent)
     logger.info(f'update: {size:,} bytes downloaded to {new.name}; {script.name} takes over when this process exits')

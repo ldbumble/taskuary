@@ -260,9 +260,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 return {'status': 'filed', 'task_id': None, 'message_id': mid}
             else:
                 fail = {}
-                def _guarded(sys_, usr_):
+                # **kw, not two positional args: a message with a picture on it calls the brain
+                # as llm(system, user, images=[...]) - a screenshot of the error IS the request
+                # (triage.classify_intent) - and this wrapper refused the keyword it had never
+                # been told about. Every mail carrying an image had its verdict thrown away as
+                # unusable and was filed, which is the one outcome that looks like the model
+                # being stupid rather than like a TypeError three frames down
+                def _guarded(sys_, usr_, **kw):
                     try:
-                        return llm(sys_, usr_)
+                        return llm(sys_, usr_, **kw)
                     except Exception as e:
                         fail['err'] = str(e)[:200]
                         raise

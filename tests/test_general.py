@@ -7,7 +7,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import general, llm, server, terminal, waitroom
+from taskuary import general, handbook, llm, server, terminal, waitroom
 from taskuary.store import MemoryStore
 
 
@@ -24,6 +24,63 @@ def connect_openai(store):
 
 
 class SharedSessionTests(unittest.TestCase):
+    def test_assistant_reads_relevant_company_knowledge_from_social(self):
+        store = MemoryStore(); tid = general_task(store)
+        handbook.post(store, 'Customer launches need operations approval',
+                      'Ask the operations owner before fixing the date.', 'customer-launch',
+                      'decision', 'coder')
+        _system, user = general._prompt(store, tid)
+        self.assertIn('FROM SOCIAL', user)
+        self.assertIn('Customer launches need operations approval', user)
+        self.assertNotIn('taskuary --upvote', user)  # an API assistant has no shell for this
+
+    def test_cli_assistant_is_told_to_file_nontechnical_company_knowledge(self):
+        store = MemoryStore(); tid = general_task(store)
+        store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        seen = {}
+        def answer(system, user, **kwargs):
+            seen['system'] = system
+            return 'The launch plan is ready.'
+        with mock.patch.object(llm, 'build_llm', return_value=answer):
+            session = general.start_session(store, tid, pick='cli:my-codex')
+            session.send_prompt('Plan the launch')
+        self.assertIn('Social is company memory, not a technical log', seen['system'])
+        self.assertIn('business, its direction, customers, operations, people', seen['system'])
+        self.assertIn('taskuary --learned', seen['system'])
+
+    def test_ending_an_assistant_session_mines_the_conversation_for_social_once(self):
+        store = MemoryStore(); tid = general_task(store)
+        store.add_comment(tid, 'owner', general.USER_TYPE, 'Who approves customer launches?')
+        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE,
+                          'Operations approves every customer launch before a date is promised.')
+        session = general.GeneralSession(store, tid)
+        brain = mock.Mock(return_value=json.dumps({'entries': [{
+            'title': 'Operations approves customer launch dates',
+            'topic': 'customer-launch', 'kind': 'people',
+            'body': 'Ask operations before promising a date.',
+        }]}))
+        with mock.patch.object(llm, 'build_llm', return_value=brain) as build:
+            session.close()
+            session.close()
+        build.assert_called_once()
+        self.assertEqual(brain.call_count, 1)
+        prompt = brain.call_args.args[1]
+        self.assertIn('OWNER: Who approves customer launches?', prompt)
+        self.assertIn('ASSISTANT: Operations approves every customer launch', prompt)
+        posts = store.lore_posts()
+        self.assertEqual([(p['Title'], p['Author'], p['TaskId']) for p in posts],
+                         [('Operations approves customer launch dates', 'assistant', tid)])
+
+    def test_ending_an_assistant_session_respects_social_being_off(self):
+        store = MemoryStore(); tid = general_task(store)
+        store.add_comment(tid, 'owner', general.USER_TYPE, 'Remember this company fact.')
+        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The fact.')
+        session = general.GeneralSession(store, tid)
+        with mock.patch.object(handbook, 'enabled', return_value=False), \
+             mock.patch.object(handbook, 'learn_from_session') as learn:
+            session.close()
+        learn.assert_not_called()
+
     def test_configured_cli_login_is_a_first_class_assistant_provider(self):
         store = MemoryStore(); tid = general_task(store)
         store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex', 'model': 'gpt-test'}))

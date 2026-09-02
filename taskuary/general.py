@@ -123,6 +123,18 @@ def history(store, tid: int) -> list:
              'createdAt': c.get('CreatedAt')} for c in chat_rows(store, tid)]
 
 
+def conversation_text(store, tid: int) -> str:
+    """The durable assistant conversation as plain text, for end-of-session learning.
+
+    General work has no terminal transcript: its real record is the typed conversation in task
+    comments. Keeping this adapter here lets Social use the same conservative closeout question
+    as coding sessions without inventing a second definition of durable company knowledge.
+    """
+    return '\n\n'.join(
+        f"{'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'OWNER'}: {c.get('Body') or ''}"
+        for c in chat_rows(store, tid))
+
+
 def _cut(text, n):
     text = str(text or '')
     return text if len(text) <= n else text[:n] + f'\n[trimmed {len(text) - n:,} characters]'
@@ -135,6 +147,12 @@ POST_LINE = ('You can leave a line for the other agents and the owner: run '
              '`taskuary --note "..."` (add --kind working|note|blocked|ready|done) when you find '
              'something worth their time. One line. Only when it is genuinely worth someone else '
              'reading - a wall of chatter is a wall nobody reads.')
+SOCIAL_LINE = ('Social is company memory, not a technical log. When you establish something still '
+               'true next month about the business, its direction, customers, operations, people, '
+               'decisions, or systems, file it with `taskuary --learned "<lasting fact>" --topic '
+               '<company-area>`. Never post current activity or what you did; Tasks and Timeline '
+               'already hold that. Use the ids in FROM SOCIAL to upvote, correct, or comment before '
+               'posting the same fact again.')
 
 
 def _turn_only(store, tid: int, text: str) -> str:
@@ -172,6 +190,17 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     for c in chat_rows(store, tid)[-30:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
         turns.append(f"{role}: {_cut(c.get('Body'), 4_000)}")
+    # Social is company memory, not coding trivia. The general assistant needs the same relevant
+    # facts as a coding session: how the business works, decisions, ownership, people and traps.
+    # API-backed assistants cannot run taskuary's voting commands, so hand them the facts without
+    # advertising controls they do not have; CLI sessions receive the action line separately.
+    from . import handbook
+    social_query = ' '.join([
+        str(task.get('Title') or ''), str(task.get('Summary') or ''),
+        *[str(m.get('BodyText') or '') for m in (detail.get('messages') or [])[-12:]],
+        *[str(c.get('Body') or '') for c in chat_rows(store, tid)[-12:]],
+    ])
+    social = handbook.block(store, social_query[:8_000], actions=False) if handbook.enabled(store) else ''
     # the chat is an agent too, so it is on the wall - the HOUSE lane, the notes with no
     # checkout behind them, which is where it and the owner leave things for everybody
     from . import blackboard as bb, selfclose
@@ -183,6 +212,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     user = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
             f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n\n"
             + (wall + '\n\n' if wall else '')
+            + (social.strip() + '\n\n' if social else '')
             + ("SOURCE MATERIAL\n" + '\n\n'.join(sources) + '\n\n' if sources else '')
             + "CONVERSATION\n" + '\n\n'.join(turns)
             + "\n\nRespond to the last USER turn. Do not repeat the task context.")
@@ -426,7 +456,10 @@ class GeneralSession:
             system, user = _prompt(self.store, self.task_id)
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
-            if self.pick.startswith('cli:'): system = f'{system}\n\n{POST_LINE}'
+            if self.pick.startswith('cli:'):
+                system = f'{system}\n\n{POST_LINE}'
+                from . import handbook
+                if handbook.enabled(self.store): system = f'{system}\n\n{SOCIAL_LINE}'
             paths = list(attachments or []) + [m.group('path') for m in _IMAGE_PATH.finditer(text)]
             if paths and self.pick.startswith('cli:'):
                 user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
@@ -513,6 +546,20 @@ class GeneralSession:
         return True
 
     def close(self):
+        # Coding sessions already ask this at wrap. General sessions used to bypass that branch,
+        # so everything the assistant learned about the business disappeared with the chat even
+        # though Social explicitly holds more than technical facts. A session boundary is the
+        # conservative time to ask once; duplicate close calls are no-ops, and learning can never
+        # prevent the session itself from closing.
+        if self.alive:
+            from . import handbook
+            transcript = conversation_text(self.store, self.task_id)
+            if transcript and handbook.enabled(self.store):
+                try:
+                    brain = llm_mod.build_llm(self.store, pick=self.pick or None, model=self.model or None)
+                    handbook.learn_from_session(self.store, self.task_id, transcript, 'assistant', llm=brain)
+                except Exception as e:
+                    logger.debug(f'handbook: assistant conversation {self.task_id} learned nothing - {e}')
         self.alive, self.ended = False, time.time()
         self._emit('\r\n\x1b[2msession closed\x1b[0m\r\n')
         for loop, q in list(self.subs):

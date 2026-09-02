@@ -44,7 +44,7 @@ class OnByDefault(unittest.TestCase):
 
 
 class WrittenOnClose(unittest.TestCase):
-    """coder.wrap asks the transcript one question that is not about the task."""
+    """A session ending asks its record one question that is not about the task."""
 
     def _llm(self, payload):
         return lambda system, user, **kw: json.dumps(payload)

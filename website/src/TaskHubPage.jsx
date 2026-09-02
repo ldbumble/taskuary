@@ -44,6 +44,7 @@ const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Social", "Conn
 function Bell({ onGo }) {
   const [items, setItems] = useState([]);
   const [el, setEl] = useState(null);
+  const [busy, setBusy] = useState(null);
   const load = useCallback(async () => { try { setItems((await api.get("/api/problems")).data.data || []); } catch { /* the bell is optional */ } }, []);
   useEffect(() => pollWhileVisible(load, 30000), [load]);
   const n = items.length;
@@ -64,7 +65,7 @@ function Bell({ onGo }) {
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
         <Typography sx={{ fontWeight: 700, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
-        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Every connection polled clean, the triage brain answered, no report failed today.</Typography>}
+        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Every connection polled clean, the triage brain answered, no report failed today. Anything you dismissed comes back if it happens again.</Typography>}
         {items.map((p) => (
           <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -72,8 +73,19 @@ function Bell({ onGo }) {
               <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, wordBreak: "break-word" }}>{p.detail}</Typography>
               {p.since && <Typography variant="caption" sx={{ color: FAINT }}>last tried {p.since}</Typography>}
             </Box>
-            <Button size="small" variant="outlined" sx={{ flexShrink: 0, fontSize: 11, whiteSpace: "nowrap" }}
-              onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Fix"} →</Button>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "stretch", flexShrink: 0 }}>
+              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
+                onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Fix"} →</Button>
+              {/* Reading it, not fixing it. It comes back the moment the same thing fails again
+                  (problems.signature), so this quiets something you have decided to live with. */}
+              <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
+                title="I have read this. It returns if it happens again."
+                onClick={async () => {
+                  setBusy(p.key);
+                  try { await api.post(`/api/problems/${encodeURIComponent(p.key)}/dismiss`); } catch { /* it may have cleared itself */ }
+                  await load(); setBusy(null);
+                }}>{busy === p.key ? "…" : "Dismiss"}</Button>
+            </Box>
           </Box>
         ))}
       </Popover>

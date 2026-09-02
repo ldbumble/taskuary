@@ -1925,6 +1925,14 @@ def problems_now():
     from . import problems
     return {'data': problems.collect(store)}
 
+@app.post('/api/problems/{key:path}/dismiss')
+def problem_dismiss(key: str):
+    """"I have read this one." It comes back if the same thing fails again (problems.signature),
+    so this silences a failure you have decided to live with, never a system that keeps breaking."""
+    from . import problems
+    try: return problems.dismiss(store, key, ACTOR)
+    except ValueError as e: raise HTTPException(404, str(e))
+
 @app.get('/api/connectors')
 def connectors():
     """Channel connector cards (outlook / teams / github). Secrets are write-only.

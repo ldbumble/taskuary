@@ -12,7 +12,9 @@ try: pt_datas, pt_bins, pt_hidden = collect_all('wcwidth')
 except Exception: pt_datas, pt_bins, pt_hidden = [], [], []
 
 a = Analysis(['taskuary/desktop.py'],
-             datas=[('taskuary/web', 'taskuary/web'), *wp_datas, *pt_datas],
+             # templates/ too: the operator documents (SOUL.md, CODER.md, TRIAGE.md...) seed the store
+             # from here, and a build without them ran every prompt with no constitution (audit 2026-09-02)
+             datas=[('taskuary/web', 'taskuary/web'), ('taskuary/templates', 'taskuary/templates'), *wp_datas, *pt_datas],
              binaries=wp_bins + pt_bins,
              hiddenimports=['taskuary.server', 'pyodbc', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
                             'websockets', 'uvicorn.protocols.websockets.websockets_impl', 'pyte',

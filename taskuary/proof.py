@@ -16,8 +16,10 @@ from . import spawn
 # MENTIONS pytest is not a test result, and counting it as one would turn the card into a
 # rubber stamp. Each pattern captures the numbers the runner itself printed.
 TEST_LINES = [
-    # pytest: "12 passed, 1 failed in 3.2s" / "322 passed in 100.54s"
-    (r'(\d+) passed(?:, (\d+) failed)?(?:, \d+ \w+)* in [\d.]+s', 'pytest'),
+    # pytest: "1 failed, 12 passed in 3.2s" / "322 passed in 100.54s" - the counts come in ANY
+    # order (pytest puts failures first), read out below rather than by group position: a
+    # passed-first pattern read every red run as green (audit 2026-09-02)
+    (r'(?:\d+ (?:passed|failed|errors?|skipped|xfailed|xpassed|deselected|warnings?)(?:, )?)+ in [\d.]+s', 'pytest'),
     # jest/vitest: "Tests:  3 failed, 12 passed, 15 total"
     (r'Tests:\s+(?:(\d+) failed,\s+)?(\d+) passed', 'jest'),
     # go test
@@ -39,7 +41,8 @@ def tests_from(text: str) -> dict:
         g = [x for x in m.groups() if x is not None]
         nums = [int(x) for x in g if str(x).isdigit()]
         if runner == 'pytest':
-            passed, failed = nums[0], (nums[1] if len(nums) > 1 else 0)
+            counts = {k: int(n) for n, k in re.findall(r'(\d+) (passed|failed|errors?)', m.group(0))}
+            passed, failed = counts.get('passed', 0), counts.get('failed', 0) + counts.get('error', 0) + counts.get('errors', 0)
         elif runner == 'jest':
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, nums[0])
         elif runner == 'dotnet':

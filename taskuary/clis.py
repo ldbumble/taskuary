@@ -42,6 +42,27 @@ def tools() -> list:
     return [{**t, 'installed': bool(shutil.which(t['cmd'])), 'path': shutil.which(t['cmd']) or ''} for t in TOOLS]
 
 
+# The classifier is not the coder. When a CLI reads mail as the triage brain (llm.make_cli_llm) the
+# bypass flags come OFF and its tools with them: the message it reads IS the prompt, and a sentence
+# in it saying "run this" must find nothing to run (audit 2026-09-02). Per CLI: (flags to drop,
+# flags to add). Gemini's default approval mode refuses tool calls headlessly, so dropping suffices.
+READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '')),
+            'codex': (('--dangerously-bypass-approvals-and-sandbox', '--full-auto'), ('--sandbox', 'read-only')),
+            'gemini': (('--yolo',), ())}
+
+
+def _base(cmd: str) -> str:
+    import re
+    # both separators on purpose: a Windows path in config.toml is still a claude on a Linux host's CI
+    return re.split(r'[\\/]', str(cmd or ''))[-1].lower().rsplit('.', 1)[0]
+
+
+def readonly_args(cmd: str, args: list) -> list:
+    """`args` with the permission bypass removed and the CLI's own no-tools flags added."""
+    drop, add = READONLY.get(_base(cmd), ((), ()))
+    return [a for a in args if a not in drop] + list(add)
+
+
 def preset_args(cmd: str) -> list:
     """The known CLI's headless flags, for a profile that names a cmd and nothing else. A profile
     saved as just `cmd = "claude"` used to run bare `claude -p`: no permission flag, so a

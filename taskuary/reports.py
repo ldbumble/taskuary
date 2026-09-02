@@ -43,9 +43,28 @@ def rows_out(rows, limit, unit='rows', mine=True):
     return head.replace('rows', unit, 1), '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]
 
 
+def ro_sqlite(path: str):
+    """A report READS a database, so open it so that it can do nothing else: the query is whatever
+    the spec says, and DDL autocommits - a metric spec that said DROP TABLE dropped it (audit 2026-09-02)."""
+    from pathlib import Path
+    return sqlite3.connect(f'{Path(path).resolve().as_uri()}?mode=ro', uri=True)
+
+
+# What a request body may NOT override on a saved card: where the credentials go. resolve_cfg lets
+# the body win so a source can say which query/path/object - but base_url, account or server in an
+# agent's tool call sent the card's token to a host of the agent's choosing (audit 2026-09-02).
+CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server', 'host', 'database', 'username', 'password',
+                             'token', 'api_key', 'app_key', 'client_id', 'client_secret', 'tenant_id', 'subscription_id',
+                             'region', 'access_key', 'secret_key', 'sender_id', 'sender_password', 'company_id', 'user_id',
+                             'user_password', 'realm_id', 'connection_string', 'url', 'endpoint', 'bridge_url', 'connector_id'})
+def query_only(body: dict) -> dict:
+    """The body minus every connection field - what an agent may say about a tool call."""
+    return {k: v for k, v in (body or {}).items() if k not in CONNECTION_KEYS}
+
+
 def run_sqlite(cfg):
     """{"db": "path.db", "query": "SELECT ...", "max_rows": 200} - the local-first database report."""
-    cx = sqlite3.connect(cfg['db']); cx.row_factory = sqlite3.Row
+    cx = ro_sqlite(cfg['db']); cx.row_factory = sqlite3.Row
     lim, mine = row_limit(cfg)
     rows = [dict(r) for r in cx.execute(cfg['query']).fetchmany(lim + 1)]
     cx.close()
@@ -768,11 +787,14 @@ def _cron_field(spec: str, lo: int, hi: int) -> set:
     for part in str(spec).split(','):
         part, step = (part.split('/', 1) + ['1'])[:2]
         step = int(step)
+        if step < 1: raise ValueError(f'{spec}: step must be at least 1')
         if part.strip() in ('*', ''): rng = range(lo, hi + 1)
         elif '-' in part: a, b = part.split('-', 1); rng = range(int(a), int(b) + 1)
         else: v = int(part); rng = range(v, v + 1)
-        out.update(x for x in rng if lo <= x <= hi)
         if any(x < lo or x > hi for x in rng): raise ValueError(f'{spec}: out of range {lo}-{hi}')
+        # the step was parsed and never applied: */15 matched every minute, so a stepped report ran
+        # on every poll (audit 2026-09-02)
+        out.update(range(rng.start, rng.stop, step))
     return out
 
 

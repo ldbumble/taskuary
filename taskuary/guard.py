@@ -59,6 +59,15 @@ DENIED = (
     (r'POST|PUT|PATCH|DELETE', r'^/api/(policies|agents)', 'the rules and the agent profiles'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(docs?|playbooks)(/|$)', 'SOUL.md, the playbooks and the rest are the owner\'s word, not an agent\'s - propose, do not write'),
     (r'POST', r'^/api/update$', 'replacing the program is the owner\'s decision'),
+    # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very
+    # sender the hold exists for, landing work, running an executor or a query with a card's
+    # credentials, and rewriting the documents that govern the agent
+    (r'POST', r'^/api/tasks/\d+/(release|land|ci)$', 'releasing a held task or landing its work is the owner\'s decision'),
+    (r'POST', r'^/api/(soul|learn)(/|$)', 'SOUL.md and LEARNED.md are the owner\'s word - propose, do not write'),
+    (r'PUT|PATCH', r'^/api/(owner|whoami)$', 'who the owner is'),
+    (r'POST', r'^/api/(mcp|mssql)/', 'runs a command, or sends saved credentials to a host of the caller\'s choosing'),
+    (r'POST', r'^/api/reports/(preview|compose|compose-sources)$', 'the report composer runs any executor with a card\'s credentials'),
+    (r'POST|PUT|PATCH|DELETE', r'^/api/semantic(/|$)', 'a metric spec is SQL run against a database of its choosing'),
 )
 _DENIED = tuple((re.compile(f'^({m})$', re.I), re.compile(p), why) for m, p, why in DENIED)
 

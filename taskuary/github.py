@@ -108,7 +108,7 @@ def pr_review_comments(tok, repo, number, since=None):
             for c in r.json():
                 u = (c.get('user') or {})
                 if u.get('type') == 'Bot': continue
-                out.append({'id': c.get('id'), 'kind': kind, 'who': u.get('login'),
+                out.append({'id': c.get('id'), 'kind': kind, 'who': u.get('login'), 'assoc': c.get('author_association') or '',
                             'body': (c.get('body') or '')[:2000], 'path': c.get('path'),
                             'url': c.get('html_url'), 'at': c.get('created_at')})
         except requests.RequestException:

@@ -20,7 +20,7 @@ identify the integration (issued by Sage to whoever wrote the client), a user id
 identify the person, and a company id picks the tenant. The first pair is not a second factor on
 the second - they authorise different things, and the web login's password is NOT the API user's.
 """
-import time
+import json, time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
@@ -50,10 +50,12 @@ def _el(parent, tag, text=None, **attrs):
     return e
 
 
-def _control(root, cfg):
+def _control(root, cfg, controlid='taskuary', unique=False):
     c = _el(root, 'control')
     _el(c, 'senderid', cfg['sender_id']); _el(c, 'password', cfg['sender_password'])
-    _el(c, 'controlid', 'taskuary'); _el(c, 'uniqueid', 'false')
+    # uniqueid=true makes the gateway refuse a controlid it has already seen - the idempotency a
+    # WRITE needs when a timeout lands after the server committed (create); reads keep it off
+    _el(c, 'controlid', controlid); _el(c, 'uniqueid', 'true' if unique else 'false')
     _el(c, 'dtdversion', '3.0'); _el(c, 'includewhitespace', 'false')
     return c
 
@@ -112,8 +114,8 @@ def login(cfg, force=False):
     return sid, end
 
 
-def _envelope(cfg, sid):
-    root = ET.Element('request'); _control(root, cfg)
+def _envelope(cfg, sid, controlid='taskuary', unique=False):
+    root = ET.Element('request'); _control(root, cfg, controlid, unique)
     op = _el(root, 'operation')
     _el(_el(op, 'authentication'), 'sessionid', sid)
     return root, _el(_el(op, 'content'), 'function', controlid='q')
@@ -233,7 +235,11 @@ def create(cfg, obj, record):
     if not str(obj or '').strip(): raise IntacctError('no Intacct object to create')
     if not record: raise IntacctError(f'nothing to put in the new {obj} - give it fields')
     sid, end = login(cfg)
-    root, fn = _envelope(cfg, sid)
+    # the same record posted again is the same controlid, and uniqueid=true has the gateway refuse
+    # it instead of booking a second bill (audit 2026-09-02)
+    import hashlib
+    key = 'tq-' + hashlib.sha1(json.dumps({'obj': obj, 'record': record}, sort_keys=True, default=str).encode()).hexdigest()[:24]
+    root, fn = _envelope(cfg, sid, key, unique=True)
     _record_xml(_el(_el(fn, 'create'), obj), record)
     res = _post(end, root)
     _check(res)

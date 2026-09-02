@@ -423,15 +423,21 @@ def source_folders(s: dict) -> list:
     return [f for f in fs if f] or ['inbox']
 
 
-def _mail_msgs(tok, upn, since, folder='inbox'):
+def _mail_msgs(tok, upn, since, folder='inbox', cap=500):
     # folder-scoped - a bare /messages spans every folder including Sent Items, which made
-    # the owner's own replies come back through the funnel as inbound work
-    r = requests.get(f'{GRAPH}/users/{upn}/mailFolders/{folder}/messages',
-                     headers={'Authorization': f'Bearer {tok}'}, timeout=30,
-                     params={'$top': 25, '$orderby': 'receivedDateTime desc', '$select': MAIL_SELECT,
-                             '$filter': f'receivedDateTime gt {since}'})
-    r.raise_for_status()
-    return r.json().get('value', [])
+    # the owner's own replies come back through the funnel as inbound work.
+    # ...and PAGED: one page of the 25 newest, then a watermark stamped 'now', meant the
+    # 26th-newest mail in the window was never asked for again - a busy shared mailbox lost
+    # mail every poll with nothing in any log (audit 2026-09-02)
+    url = f'{GRAPH}/users/{upn}/mailFolders/{folder}/messages'
+    params, out = {'$top': 50, '$orderby': 'receivedDateTime desc', '$select': MAIL_SELECT,
+                   '$filter': f'receivedDateTime gt {since}'}, []
+    while url and len(out) < cap:
+        r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=30, params=params)
+        r.raise_for_status(); j = r.json()
+        out += j.get('value') or []
+        url, params = j.get('@odata.nextLink'), None       # the nextLink carries the filter itself
+    return out
 
 
 def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = False) -> int:
@@ -536,8 +542,12 @@ _HOSTED = re.compile(r'<img[^>]+src="([^"]*?/hostedContents/[^"]*?)"', re.I)
 
 def hosted_images(tok: str, html: str, cap: int = 4, where: str = '') -> list:
     out = []
+    from urllib.parse import urlparse
     for i, url in enumerate(dict.fromkeys(_HOSTED.findall(html or '')).keys()):
         if i >= cap: break
+        # the token goes to Graph and nowhere else: any chat participant can put an <img> with
+        # their own host in a message body, and the fetch used to hand them the bearer (audit 2026-09-02)
+        if (urlparse(unescape(url)).hostname or '').lower() != 'graph.microsoft.com': continue
         try:
             r = requests.get(unescape(url), headers={'Authorization': f'Bearer {tok}'}, timeout=30)
             r.raise_for_status()
@@ -925,9 +935,15 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
                     from . import devtools
                     n += devtools.poll_discord(store, full, s, since, llm, file_only)
                 elif c['Type'] == 'slack':
-                    hist = _slack(tok, 'conversations.history', channel=s['Address'],
-                                  oldest=since.timestamp(), limit=25)
-                    msgs = [m for m in reversed(hist.get('messages', [])) if not m.get('subtype')]
+                    # paged like mail: one page of 25 and a watermark at 'now' lost the rest (audit 2026-09-02)
+                    hist_all, cursor = [], None
+                    while len(hist_all) < 500:
+                        hist = _slack(tok, 'conversations.history', channel=s['Address'], oldest=since.timestamp(),
+                                      limit=100, **({'cursor': cursor} if cursor else {}))
+                        hist_all += hist.get('messages', [])
+                        cursor = (hist.get('response_metadata') or {}).get('next_cursor')
+                        if not cursor: break
+                    msgs = [m for m in reversed(hist_all) if not m.get('subtype')]
                     # the channel's read cursor is ONE timestamp - the newest line we took
                     if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))
                     for m in msgs:

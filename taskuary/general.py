@@ -226,14 +226,20 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
     if sources and selfclose.mode(store) != 'off': system = system + '\n\n' + selfclose.CHAT_LINE
-    user = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
+    head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
             f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n\n"
             + (wall + '\n\n' if wall else '')
-            + (social.strip() + '\n\n' if social else '')
-            + ("SOURCE MATERIAL\n" + '\n\n'.join(sources) + '\n\n' if sources else '')
-            + "CONVERSATION\n" + '\n\n'.join(turns)
-            + "\n\nRespond to the last USER turn. Do not repeat the task context.")
-    return system, _cut(user, MAX_CONTEXT)
+            + (social.strip() + '\n\n' if social else ''))
+    tail = "\n\nRespond to the last USER turn. Do not repeat the task context."
+    # The question sits at the END, so the end is what must survive the budget: the oldest turns go
+    # first, then the oldest source material. _cut(user) kept the head and dropped exactly the
+    # conversation and the instruction, so a task seeded from eight long mails answered the mails
+    # and not the owner (audit 2026-09-02).
+    while len(turns) > 1 and len(head) + len('\n\n'.join(turns)) + len(tail) > MAX_CONTEXT: turns.pop(0)
+    conv = "CONVERSATION\n" + '\n\n'.join(turns) + tail
+    src, room = '\n\n'.join(sources), MAX_CONTEXT - len(head) - len(conv) - 20
+    if len(src) > room: src = ('[older source material trimmed]\n\n' + src[-room:]) if room > 400 else ''
+    return system, head + (f"SOURCE MATERIAL\n{src}\n\n" if src else '') + conv
 
 
 def _fallback_report_draft(store, tid: int) -> dict:

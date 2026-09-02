@@ -61,6 +61,15 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     row = store.get_agent(agent_name)
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
+    if cwd: prof['cwd'] = cwd           # a scheduled skill that lives in a repo runs from that repo (reports.run_agent)
+    else:
+        # the classifier reads untrusted text with the coder's flags off: no permission bypass, no
+        # tools, and a scratch cwd so no checkout's CLAUDE.md rides along either. An agent the owner
+        # scheduled INTO a repo (cwd above) keeps its hands - that is the owner's call, not mail's
+        from .clis import preset_args, readonly_args
+        from . import config
+        prof['args'] = readonly_args(prof.get('cmd', 'claude'), list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']))
+        scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True); prof['cwd'] = str(scratch)
     light = str(prof.get('light_model') or '')
     if light.startswith('effort:'):
         # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -
@@ -74,7 +83,6 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         prof['model'] = m
         if eff: prof['args'] = list(prof.get('args') or []) + ['-c', f'model_reasoning_effort={eff}']
     if model: prof['model'] = model     # an explicit per-job model outranks the light gear
-    if cwd: prof['cwd'] = cwd           # a scheduled skill that lives in a repo runs from that repo (reports.run_agent)
     prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
     def llm(system, user, max_tokens=MAX_TOKENS, images=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says

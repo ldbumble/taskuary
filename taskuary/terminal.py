@@ -523,7 +523,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if agent and task_id:
         from . import hooks as _hooks
         try:
-            if _hooks.wanted(store, profile): _hooks.install(cwd)
+            # with the agent token: once [server].token is set the gate refuses a bare hook POST, and
+            # the Board went dark the moment the owner did the recommended thing (audit 2026-09-02)
+            if _hooks.wanted(store, profile): _hooks.install(cwd, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''))
         except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
@@ -1260,12 +1262,18 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:
     return True
 
 
+def clean_typed(text: str) -> str:
+    """One printable line. Control bytes go too, not just whitespace: ESC interrupts a TUI and ^C
+    kills it, and this text came from a message or a PR comment, not from the owner (audit 2026-09-02)."""
+    return ' '.join(re.sub(r'[\x00-\x1f\x7f]', ' ', str(text or '')).split())
+
+
 def type_into(t, text: str):
     """Type `text` into a live session the way seed() proved works: flattened to one line (a
     newline is Enter in a TUI), fed in frame-sized bites (a one-shot paste drops bytes
     mid-stream), then Enter until the box answers. Runs on its own thread; returns at once.
     Shared by say_to_task (an inbound answer) and waitroom.deliver (the owner's queued notes)."""
-    text = ' '.join(str(text or '').split())
+    text = clean_typed(text)
     def go():
         for i in range(0, len(text), SEED_CHUNK):
             t.write(text[i:i + SEED_CHUNK])

@@ -493,8 +493,9 @@ class ApiTests(unittest.TestCase):
         seeded with the tool role from first launch - Active is what 'I set this up' means."""
         REGISTRY['_tool'] = lambda cfg: (f"ran {cfg.get('q')}", 'rows here')
         try:
-            r = c.post('/api/tools/run', json={'type': '_tool', 'q': 'select 1'}).json()
-            self.assertEqual((r['ok'], r['headline'], r['output']), (True, 'ran select 1', 'rows here'))
+            # no card at all is nothing the owner ever switched on: it does not run (audit 2026-09-02)
+            r = c.post('/api/tools/run', json={'type': '_tool', 'q': 'select 1'})
+            self.assertEqual(r.status_code, 403); self.assertIn('no connection card', r.json()['detail'])
             self.assertEqual(c.post('/api/tools/run', json={'type': 'nope'}).status_code, 422)
             cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'winrm')
             # seeded: tool role, Active=0. Used to run anyway.

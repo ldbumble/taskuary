@@ -164,10 +164,11 @@ def tg_send(store, chat_id: str, body: str, connector_id=None) -> dict:
 
 # ── WhatsApp (via the Baileys bridge) ────────────────────────────────────────────────────
 def _wa(c, path, body=None):
-    url = (_cfg(c).get('bridge_url') or WA_URL).rstrip('/')
+    from .wabridge import token
+    url, hdr = (_cfg(c).get('bridge_url') or WA_URL).rstrip('/'), {'X-Bridge-Token': token()}
     try:
-        r = requests.post(f'{url}{path}', json=body, timeout=20) if body is not None \
-            else requests.get(f'{url}{path}', timeout=20)
+        r = requests.post(f'{url}{path}', json=body, timeout=20, headers=hdr) if body is not None \
+            else requests.get(f'{url}{path}', timeout=20, headers=hdr)
     except requests.ConnectionError:
         raise RuntimeError(f'the WhatsApp bridge is not running at {url} - start it: '
                            f'cd taskuary/whatsapp && npm install && node bridge.mjs')

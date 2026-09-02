@@ -123,7 +123,8 @@ class CoreTests(unittest.TestCase):
         texts = {'e1': ('importer crash', 'the importer throws an exception in jobs/import.py'),
                  'e2': ('invoice portal login', 'customers cannot log into the invoice portal since friday'),
                  'e3': ('nightly scheduler', 'the report scheduler silently skipped tuesday night'),
-                 'e4': ('ios signing', 'the mobile build fails at the code signing step on ci')}
+                 'e4': ('ios signing', 'the mobile build fails at the code signing step on ci'),
+                 'e2b': ('vendor portal timeout', 'the vendor portal times out uploading invoices over five megabytes')}
         mail = lambda **kw: self.msg(channel='email', source_name='dana@northwind.example', conversation_id=kw['external_id'],
                                      subject=texts[kw['external_id']][0], body=texts[kw['external_id']][1], **kw)
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False) as wt:
@@ -133,9 +134,16 @@ class CoreTests(unittest.TestCase):
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))                      # a task, on the Board, not worked
         self.assertTrue(any('not auto-started' in c['Body'] for c in s.list_comments(out['task_id'])))
         self.assertIn('this mailbox has never written to them', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
-        # the same stranger writes again: the table knows them now, no mailbox lookup, agent starts
-        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+        # the same stranger writes again: still a stranger. Their own first mail, held for the owner,
+        # used to make the second one 'known' and start the agent the hold exists to stop (audit 2026-09-02)
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False):
             self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=TASK_LLM)['status'], 'created')
+        spawn.assert_not_called()
+        # ...until the owner has dealt with them: their own words on one of the stranger's threads
+        s.add_message({'ExternalId': 'own-e2', 'Channel': 'email', 'ConversationId': 'e2', 'FromEmail': 'dana@northwind.example',
+                       'Status': 'context', 'BodyText': 'thanks - looking into it'})
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
+            self.assertEqual(ingest_message(s, mail(external_id='e2b', from_email='Stranger@evil.example'), llm=TASK_LLM)['status'], 'created')
         spawn.assert_called_once(); wt.assert_not_called()
         # your own domain: never a stranger
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
@@ -449,7 +457,8 @@ class CoreTests(unittest.TestCase):
         with mock.patch('taskuary.agents.run_cli', return_value=('{"intent": "task", "why": "x"}', None, None)) as rc:
             self.assertEqual(llm.build_llm(s)('sys', 'usr'), '{"intent": "task", "why": "x"}')
         prof = rc.call_args[0][0]
-        self.assertNotIn('cwd', prof)                               # triage is not about any checkout
+        self.assertNotIn('repo', prof['cwd'])                       # triage is not about any checkout: a scratch cwd,
+        self.assertNotIn('--dangerously-skip-permissions', prof['args'])   # and no hands (audit 2026-09-02)
         self.assertEqual(prof['timeout'], 300)                      # and never waits a coding-run timeout
         s.set_setting('triage_ai', 'cli:ghost', 'o')
         self.assertIsNone(llm.build_llm(s))                         # missing agent files instead of guessing

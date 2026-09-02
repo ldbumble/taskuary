@@ -23,6 +23,18 @@ def _git(cwd, *args):
         return ''
 
 
+def _git_rc(cwd, *args, timeout=30):
+    """(exit code, stdout+stderr) - for the git calls whose FAILURE is the information. _git()
+    answers '' for both 'nothing to say' and 'refused', which is how a rejected push was filed as
+    pushed (audit 2026-09-02); git also writes push output to stderr, which _git never read."""
+    try:
+        p = spawn.run(['git', '-C', cwd or os.getcwd(), *args], capture_output=True, text=True,
+                           encoding='utf-8', errors='replace', timeout=timeout)
+        return p.returncode, ((p.stdout or '') + (p.stderr or '')).strip()
+    except Exception as e:
+        return 1, str(e)
+
+
 def parse_cli_json(stdout: str):
     """Claude-style single JSON object -> (result, session_id); plain text falls through."""
     try:

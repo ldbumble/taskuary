@@ -356,6 +356,7 @@ class SQLiteStore:
         self.cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
         self.cx.row_factory = sqlite3.Row
         self.lock = threading.Lock()
+        self.idlock = threading.Lock()     # create_task: allocate-and-insert as one step (self.lock is per statement)
         if path != ':memory:':
             self.cx.execute('PRAGMA journal_mode=WAL')
             self.cx.execute('PRAGMA synchronous=NORMAL')
@@ -651,8 +652,12 @@ class SQLiteStore:
         # orphaned session, still holding task_id 34, showed up as the agent working a report
         # it had never been given. A TQ-ref is an identity: it goes in prompts, in transcripts,
         # in pull requests. It must never name two different pieces of work.
-        tid = self._insert('task', {**fields, 'TaskId': self._next_task_id()},
-                            TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
+        # ...and it must be issued ONCE: the allocation is three reads and a write, each taking the
+        # statement lock on its own, so a poll and a click creating tasks together computed the same
+        # id and one of them hit the primary key (audit 2026-09-02)
+        with self.idlock:
+            tid = self._insert('task', {**fields, 'TaskId': self._next_task_id()},
+                                TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
         self._bump_snapshots()
         return tid
 
@@ -1322,11 +1327,16 @@ class SQLiteStore:
                          "AND Subject NOT LIKE '%FAILED' AND COALESCE(Direction, '') <> 'out' ORDER BY SentAt DESC LIMIT 1",
                          (title, f'{title} —%'))
     def known_sender(self, email, exclude_mid=None):
-        """Has this address written before? exclude_mid: the message being judged, once it is
-        already landed - otherwise every sender is 'known' by their own first mail."""
+        """Has the OWNER dealt with this address? A row from them is not enough - a stranger's own
+        first mail, held for the owner, made their second one 'known' and started the agent the hold
+        existed to stop (audit 2026-09-02). Known is: the owner's words on one of their threads (a
+        'context' row or an outbound one), or a reply to them the owner approved or sent."""
         if not email: return False
-        return self._one('SELECT 1 x FROM message WHERE LOWER(FromEmail)=LOWER(?) AND MessageId<>? LIMIT 1',
-                         (email, exclude_mid or 0)) is not None
+        return self._one("""SELECT 1 x FROM message m WHERE LOWER(m.FromEmail)=LOWER(?) AND m.MessageId<>? AND (
+                               EXISTS (SELECT 1 FROM message o WHERE o.ConversationId=m.ConversationId AND o.ConversationId IS NOT NULL
+                                       AND o.MessageId<>m.MessageId AND (o.Status='context' OR o.Direction='out'))
+                            OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
+                            LIMIT 1""", (email, exclude_mid or 0)) is not None
     def add_memory(self, fields): return self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')

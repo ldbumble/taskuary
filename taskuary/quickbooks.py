@@ -203,7 +203,17 @@ def create_bill(cfg, vendor, amount, account, when=None, memo='', doc_number='',
             'TxnDate': str(when or date.today()), 'PrivateNote': str(memo or '')[:4000],
             'Line': [{'Amount': _money(amount), 'DetailType': 'AccountBasedExpenseLineDetail', 'Description': str(description or memo or '')[:4000],
                       'AccountBasedExpenseLineDetail': {'AccountRef': _ref(cfg, 'Account', 'Name', account, 'expense account')}}]}
-    if doc_number: body['DocNumber'] = str(doc_number)[:21]
+    if doc_number:
+        body['DocNumber'] = str(doc_number)[:21]
+        # the dedupe key has to dedupe: QuickBooks accepts a repeated DocNumber, so a timeout after
+        # the server had committed, then a re-approval, posted the bill twice (audit 2026-09-02)
+        prior = query(cfg, f"SELECT Id, DocNumber, TotalAmt, TxnDate, DueDate, VendorRef FROM Bill WHERE DocNumber = '{body['DocNumber'].replace(chr(39), '')}'", 1)
+        if prior:
+            b = prior[0]
+            logger.info(f"quickbooks: bill {b.get('DocNumber')} already exists as {b.get('Id')} - not posted again")
+            return {'id': b.get('Id'), 'doc_number': b.get('DocNumber'), 'total': b.get('TotalAmt'),
+                    'vendor': b.get('VendorRef'),      # query() flattens a Ref to its name
+                    'date': b.get('TxnDate'), 'due': b.get('DueDate'), 'existing': True}
     b = _call(cfg, 'POST', 'bill', data=json.dumps(body)).get('Bill') or {}
     logger.info(f"quickbooks: bill {b.get('Id')} {b.get('DocNumber') or ''} {b.get('TotalAmt')} to {vendor}")
     return {'id': b.get('Id'), 'doc_number': b.get('DocNumber'), 'total': b.get('TotalAmt'), 'vendor': (b.get('VendorRef') or {}).get('name'),

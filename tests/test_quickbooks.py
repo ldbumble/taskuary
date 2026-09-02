@@ -81,6 +81,7 @@ class ReadsAndWrites(unittest.TestCase):
             if 'FROM Vendor WHERE DisplayName = \'Nobody\'' in q: return _resp(200, {'QueryResponse': {}})
             if 'FROM Vendor WHERE DisplayName LIKE' in q: return _resp(200, {'QueryResponse': {'Vendor': [{'Id': '9', 'DisplayName': 'Nobody Inc'}]}})
             if 'FROM Account WHERE Name = \'Office Supplies\'' in q: return _resp(200, {'QueryResponse': {'Account': [{'Id': '80', 'Name': 'Office Supplies'}]}})
+            if 'FROM Bill WHERE DocNumber' in q: return _resp(200, {'QueryResponse': {}})
             if method == 'POST' and url.endswith('/bill'):
                 sent = json.loads(kw['data'])
                 self.assertEqual(sent['VendorRef']['value'], '55'); self.assertEqual(sent['Line'][0]['Amount'], 412.5)
@@ -93,6 +94,19 @@ class ReadsAndWrites(unittest.TestCase):
             with self.assertRaisesRegex(qb.QuickBooksError, 'not created for you.*Nobody Inc'):
                 qb.create_bill(self.cfg, 'Nobody', 10, 'Office Supplies')
         with self.assertRaisesRegex(qb.QuickBooksError, 'positive'): qb._money('-3')
+
+    def test_a_bill_already_posted_under_the_doc_number_is_not_posted_again(self):
+        """A timeout after Intuit committed, then a re-approval, used to book the bill twice (audit 2026-09-02)."""
+        def fake(method, url, **kw):
+            q = (kw.get('params') or {}).get('query', '')
+            if 'FROM Vendor WHERE DisplayName' in q: return _resp(200, {'QueryResponse': {'Vendor': [{'Id': '55', 'DisplayName': 'Acme Supply'}]}})
+            if 'FROM Account WHERE Name' in q: return _resp(200, {'QueryResponse': {'Account': [{'Id': '80', 'Name': 'Office Supplies'}]}})
+            if 'FROM Bill WHERE DocNumber = \'88213\'' in q:
+                return _resp(200, {'QueryResponse': {'Bill': [{'Id': '301', 'DocNumber': '88213', 'TotalAmt': 412.5, 'VendorRef': {'name': 'Acme Supply'}, 'TxnDate': '2026-09-01'}]}})
+            raise AssertionError(f'unexpected call {method} {url} {q}')     # in particular: no POST
+        with mock.patch.object(qb.requests, 'request', side_effect=fake):
+            out = qb.create_bill(self.cfg, 'Acme Supply', '412.50', 'Office Supplies', '2026-09-01', 'card txn 88213', '88213')
+        self.assertEqual((out['id'], out['existing']), ('301', True))
 
 
 class TheLadder(unittest.TestCase):

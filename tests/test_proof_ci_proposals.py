@@ -33,6 +33,10 @@ class ProofTests(unittest.TestCase):
         self.assertEqual(proof.tests_from('...\n322 passed in 100.54s\n')['passed'], 322)
         r = proof.tests_from('12 passed, 3 failed in 4.10s')
         self.assertEqual((r['passed'], r['failed'], r['runner']), (12, 3, 'pytest'))
+        # pytest's REAL order puts failures first - a passed-first pattern read every red run as green
+        r = proof.tests_from('=== 1 failed, 12 passed, 2 skipped in 3.20s ===')
+        self.assertEqual((r['passed'], r['failed']), (12, 1))
+        self.assertEqual(proof.tests_from('3 failed, 2 passed, 1 error in 1.0s')['failed'], 4)
         self.assertEqual(proof.tests_from('Tests:  2 failed, 9 passed')['failed'], 2)
         # the LAST run is the truth: a fixed suite must not report the earlier failure
         self.assertEqual(proof.tests_from('5 passed, 2 failed in 1s\n...\n7 passed in 2s')['failed'], 0)
@@ -150,10 +154,14 @@ class FakeSession:
 
 
 def git_says(**answers):
-    """Fake taskuary.agents._git: keyed on the first arg of the git command."""
-    def _g(cwd, *args):
-        return answers.get(args[0], '')
-    return mock.patch('taskuary.agents._git', _g)
+    """Fake taskuary.agents._git and _git_rc: keyed on the first arg of the git command. A push
+    answer that says 'rejected' comes back with git's non-zero exit, as the real one does."""
+    import contextlib
+    def _g(cwd, *args, **kw): return answers.get(args[0], '')
+    def _rc(cwd, *args, **kw): out = answers.get(args[0], ''); return (1 if 'rejected' in out else 0), out
+    stack = contextlib.ExitStack()
+    stack.enter_context(mock.patch('taskuary.agents._git', _g)); stack.enter_context(mock.patch('taskuary.agents._git_rc', _rc))
+    return stack
 
 
 class DirectPushTests(unittest.TestCase):
@@ -193,6 +201,18 @@ class DirectPushTests(unittest.TestCase):
              git_says(**{'status': '', 'rev-list': '0', 'fetch': ''}):
             with self.assertRaises(RuntimeError) as e: ci.push_direct(s, tid)
         self.assertIn('nothing to push', str(e.exception))
+
+    def test_a_silent_non_zero_exit_is_a_refusal_too(self):
+        """git writes push output to stderr and _git() returned '' for any failure - so a rejected
+        push used to be filed as 'Pushed' (audit 2026-09-02)."""
+        s, tid = self._armed()
+        with mock.patch.object(terminal, 'session_for', return_value=FakeSession()), \
+             mock.patch.object(terminal, 'guess_repo', return_value=('o/r', '')), \
+             git_says(**{'status': '', 'rev-list': '1', 'rev-parse': 'z', 'fetch': ''}), \
+             mock.patch('taskuary.agents._git_rc', lambda cwd, *a, **k: (128, '')):
+            with self.assertRaises(RuntimeError) as e: ci.push_direct(s, tid)
+        self.assertIn('git refused the push', str(e.exception))
+        self.assertIsNone(ci.landing_of(s, tid))
 
     def test_rejected_push_is_never_forced(self):
         s, tid = self._armed()

@@ -96,7 +96,7 @@ class AzureTests(unittest.TestCase):
                '<Content-Length>42</Content-Length></Properties></Blob></Blobs>')
         with mock.patch.object(azure, 'token', return_value='tok'), \
              mock.patch.object(azure, '_get', return_value=FakeResp(text=xml)):
-            head, body = azure.run_azure_blob({'account': 'a', 'container': 'c'})
+            head, body = azure.run_azure_blob({'account': 'acct', 'container': 'c'})
         self.assertEqual(head, '1 blobs'); self.assertIn('r/a.csv', body); self.assertIn('42', body)
 
 

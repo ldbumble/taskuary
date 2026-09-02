@@ -9,7 +9,7 @@ bridge. So the card has a button and the API has a verb: start() installs when n
 missing, spawns `node bridge.mjs` detached with its output in a log, and state() says which phase
 it is in. The bridge outlives the request and the browser tab; only the machine rebooting stops it.
 """
-import json, os, shutil, subprocess, threading, time
+import json, os, secrets, shutil, subprocess, threading, time
 from pathlib import Path
 from loguru import logger
 from . import spawn
@@ -92,7 +92,8 @@ def start(force_install: bool = False, wait: bool = False) -> dict:
             _set('starting', 'node bridge.mjs')
             log = open(LOG, 'ab')
             kw = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, 'DETACHED_PROCESS', 0)} if os.name == 'nt' else {'start_new_session': True}
-            p = subprocess.Popen([node(), 'bridge.mjs'], cwd=str(DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, **kw)
+            p = subprocess.Popen([node(), 'bridge.mjs'], cwd=str(DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                 env={**os.environ, 'WA_BRIDGE_TOKEN': token()}, **kw)
             time.sleep(2.5)
             if p.poll() is not None:
                 tail = LOG.read_bytes()[-400:].decode('utf-8', 'replace') if LOG.exists() else ''
@@ -109,6 +110,17 @@ def start(force_install: bool = False, wait: bool = False) -> dict:
 
 
 def port() -> int: return int(os.getenv('WA_BRIDGE_PORT') or 8977)
+
+
+def token() -> str:
+    """The shared secret between Taskuary and its bridge: minted once into the home, handed to the
+    bridge in its environment and sent in a header on every request (bridge.mjs refuses without
+    it). Before this, any local process - or any web page, via a cross-site POST to 127.0.0.1 -
+    could send WhatsApp as the owner (audit 2026-09-02)."""
+    from . import config
+    p = config.home() / 'wa-bridge.token'
+    if not p.exists(): p.write_text(secrets.token_urlsafe(24), encoding='utf-8')
+    return p.read_text(encoding='utf-8').strip()
 
 
 def pid_on_port(p: int = None) -> int:

@@ -187,7 +187,8 @@ def _db_rows(cfg, limit):
 
 def _sqlite_rows(cfg, limit):
     import sqlite3
-    cx = sqlite3.connect(cfg['db']); cx.row_factory = sqlite3.Row
+    from .reports import ro_sqlite
+    cx = ro_sqlite(cfg['db']); cx.row_factory = sqlite3.Row
     try: return [dict(r) for r in cx.execute(cfg['query']).fetchmany(limit)]
     finally: cx.close()
 

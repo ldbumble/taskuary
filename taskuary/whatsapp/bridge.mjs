@@ -20,6 +20,10 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMes
 const MEDIA_DIR = path.resolve("wa-media");
 
 const PORT = Number(process.env.WA_BRIDGE_PORT || 8977);
+// Taskuary mints this when it starts the bridge (wabridge.token) and sends it on every request.
+// Without it any process on the machine could POST /send; with an Origin header, any web PAGE
+// could - a cross-site POST to 127.0.0.1 is a "simple request" browsers let through.
+const TOKEN = process.env.WA_BRIDGE_TOKEN || "";
 const PHONE = (process.argv.includes("--phone") && process.argv[process.argv.indexOf("--phone") + 1]) || "";
 const MAX_KEPT = 500;
 
@@ -108,6 +112,8 @@ const json = (res, code, obj) => { res.writeHead(code, { "content-type": "applic
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   try {
+    if (req.headers.origin !== undefined) return json(res, 403, { error: "browsers may not call the bridge" });
+    if (TOKEN && req.headers["x-bridge-token"] !== TOKEN) return json(res, 401, { error: "bridge token missing or wrong" });
     if (req.method === "GET" && url.pathname === "/status")
       return json(res, 200, { connected, me, jid: meJid, qr, pairingCode, seq, kept: messages.length });
     if (req.method === "GET" && url.pathname === "/messages") {

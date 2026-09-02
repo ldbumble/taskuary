@@ -77,7 +77,11 @@ def receive(payload: dict) -> dict:
     if not mine: return {'bound': False}
     t = next((x for x in mine if getattr(x, 'ext_id', '') == sid), None)
     if not t:
-        free = [x for x in mine if not getattr(x, 'ext_id', '')] or mine
+        # an unbound hook may claim a session only while that session is itself unbound. The hooks
+        # file is per CHECKOUT, so the owner's own claude in the same folder used to be painted
+        # onto the agent's card - and its Stop judged against the agent's task (audit 2026-09-02)
+        free = [x for x in mine if not getattr(x, 'ext_id', '')]
+        if not free: return {'bound': False}
         t = max(free, key=lambda x: x.last); t.ext_id = sid
     for n in witness.claude_notes(payload): t.witness.note(n)
     # ...and the one hook that is not just an observation: Stop means the agent has finished

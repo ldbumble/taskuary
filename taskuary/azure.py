@@ -287,7 +287,14 @@ def run_azure(cfg: dict):
     array) comes back row-capped and honest; a single object comes back as JSON."""
     from .reports import row_limit, rows_out, BODY_CHARS
     from .aws import dot_path
-    url = cfg['path'] if str(cfg.get('path') or '').startswith('http') else ARM + cfg['path']
+    path = str(cfg.get('path') or '')
+    if path.startswith('http'):
+        # the header carries the app's management token, so a full URL may only point at ARM itself
+        # - one typed by an agent used to take the token anywhere (audit 2026-09-02)
+        from urllib.parse import urlparse
+        if (urlparse(path).hostname or '').lower() != urlparse(ARM).hostname: raise ValueError(f'path must be on {ARM}')
+        url = path
+    else: url = ARM + '/' + path.lstrip('/')
     params = dict(cfg.get('params') or {})
     params.setdefault('api-version', cfg.get('api_version') or '2022-12-01')
     data = _get(url, token(cfg, f'{ARM}/.default'), params=params).json()
@@ -303,6 +310,8 @@ def run_azure_blob(cfg: dict):
     """{"account", "container", "blob"} reads the blob (text head); {"account", "container",
     "prefix"} lists. Role: 'Storage Blob Data Reader' on the account (or container)."""
     from .reports import row_limit, rows_out, BODY_CHARS
+    if not re.fullmatch(r'[a-z0-9]{3,24}', str(cfg.get('account') or '')):   # a name, never 'evil.com/#' (it is the host)
+        raise ValueError('account must be a storage account name: 3-24 lowercase letters and digits')
     tok = token(cfg, 'https://storage.azure.com/.default')
     base = f"https://{cfg['account']}.blob.core.windows.net/{cfg['container']}"
     if cfg.get('blob'):

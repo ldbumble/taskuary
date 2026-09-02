@@ -116,10 +116,12 @@ class TimelineIndexTests(unittest.TestCase):
 
     def test_known_sender_uses_the_from_index(self):
         s, _ = _file_store()
-        s.add_message({'ExternalId': 's1', 'Channel': 'email', 'FromEmail': 'pat@corp.example', 'Status': 'filed'})
+        s.add_message({'ExternalId': 's1', 'Channel': 'email', 'ConversationId': 'c1', 'FromEmail': 'pat@corp.example', 'Status': 'filed'})
         plan = _plan(s, 'SELECT 1 x FROM message WHERE FromEmail=? LIMIT 1', ('pat@corp.example',))
         self.assertIn('idx_message_from', plan)
-        self.assertTrue(s.known_sender('pat@corp.example'))
+        self.assertFalse(s.known_sender('pat@corp.example'))        # wrote once, nobody answered: not known (audit 2026-09-02)
+        s.add_message({'ExternalId': 's2', 'Channel': 'email', 'ConversationId': 'c1', 'FromEmail': 'me@corp.example', 'Status': 'context'})
+        self.assertTrue(s.known_sender('pat@corp.example'))         # the owner's words on their thread
         self.assertFalse(s.known_sender('nobody@corp.example'))
         s.cx.close()
 

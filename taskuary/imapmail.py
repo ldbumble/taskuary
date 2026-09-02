@@ -44,7 +44,9 @@ def _login(c):
         raise RuntimeError('Microsoft mailboxes (Outlook.com, Hotmail, Microsoft 365) no longer accept IMAP passwords - '
                            'use the Outlook connector and Sign in with Microsoft')
     port = int(cfg.get('imap_port') or 993)
-    try: M = imaplib.IMAP4_SSL(imap_h, port)
+    # timeout: a half-open socket after a sleep or a Wi-Fi change hung the poll thread in recv
+    # forever, and every later poll skipped because the lock was held (audit 2026-09-02)
+    try: M = imaplib.IMAP4_SSL(imap_h, port, timeout=30)
     except OSError as e:
         if getattr(e, 'winerror', None) == 10013 or 'forbidden by its access permissions' in str(e):
             raise RuntimeError(f'this PC blocked the connection to {imap_h}:{port} - a firewall or security agent stops '
@@ -98,11 +100,19 @@ def _body_and_attachments(msg) -> tuple:
                          'name': _dec(fname) or f'part-{len(atts)}', 'contentType': ctype,
                          'size': len(payload), 'isInline': bool(part.get('Content-ID')),
                          'contentBytes': base64.b64encode(payload).decode()})
-        elif ctype == 'text/plain' and not text:
-            text = payload.decode(part.get_content_charset() or 'utf-8', 'replace')
-        elif ctype == 'text/html' and not html:
-            html = payload.decode(part.get_content_charset() or 'utf-8', 'replace')
+        elif ctype == 'text/plain' and not text: text = _decode(payload, part)
+        elif ctype == 'text/html' and not html: html = _decode(payload, part)
     return (text or _clean(html) or '').strip(), atts
+
+
+def _decode(payload: bytes, part) -> str:
+    """The declared charset when Python has a codec for it. 'replace' covers bad BYTES, not a codec
+    name Python does not know (iso-8859-8-i, x-unknown): that raised LookupError, and one such
+    mail wedged the whole mailbox (audit 2026-09-02). latin-1 at the end never fails."""
+    try: return payload.decode(part.get_content_charset() or 'utf-8', 'replace')
+    except LookupError: pass
+    try: return payload.decode('utf-8')            # strict, so real latin-1 bytes fall through to latin-1
+    except UnicodeDecodeError: return payload.decode('latin-1')
 
 
 # ── the Sent folder ─────────────────────────────────────────────────────────────────────
@@ -229,30 +239,36 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
         uids = [int(u) for u in (data[0] or b'').split()]
         new = [u for u in uids if u > last_uid][-BATCH:]
         for uid in new:
-            typ, parts = M.uid('fetch', str(uid), '(RFC822)')
-            if typ != 'OK' or not parts or parts[0] is None: continue
-            msg = email.message_from_bytes(parts[0][1])
-            frm_name, frm_addr = email.utils.parseaddr(_dec(msg.get('From')))
-            if frm_addr.lower() == user.lower(): continue           # my own mail is not inbound work
-            body, atts = _body_and_attachments(msg)
-            try: sent = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
-            except Exception: sent = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            out = ingest_message(store, file_only=file_only, msg={
-                'external_id': f'imap:{user}:{uid}', 'channel': 'email',
-                'subject': _dec(msg.get('Subject')), 'body': body[:20000],
-                'from_name': frm_name or frm_addr, 'from_email': frm_addr,
-                'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
-                # References threads replies the way Graph's conversationId does
-                'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
-                'sent_at': sent, 'source_name': user,
-                'images': images_for_triage(store, atts)}, llm=llm)
-            n += out['status'] != 'duplicate'
-            if atts and out.get('message_id') and out['status'] != 'duplicate':
-                try: save_attachments(store, out['message_id'], atts, f'imap:{user}:{uid}')
-                except Exception as e: logger.warning(f'imap attachments failed: {e}')
-            if read_it:
-                try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
-                except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
+            try:
+                typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+                if typ != 'OK' or not parts or parts[0] is None: continue
+                msg = email.message_from_bytes(parts[0][1])
+                frm_name, frm_addr = email.utils.parseaddr(_dec(msg.get('From')))
+                if frm_addr.lower() == user.lower(): continue           # my own mail is not inbound work
+                body, atts = _body_and_attachments(msg)
+                try: sent = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+                except Exception: sent = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                out = ingest_message(store, file_only=file_only, msg={
+                    'external_id': f'imap:{user}:{uid}', 'channel': 'email',
+                    'subject': _dec(msg.get('Subject')), 'body': body[:20000],
+                    'from_name': frm_name or frm_addr, 'from_email': frm_addr,
+                    'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
+                    # References threads replies the way Graph's conversationId does
+                    'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
+                    'sent_at': sent, 'source_name': user,
+                    'images': images_for_triage(store, atts)}, llm=llm)
+                n += out['status'] != 'duplicate'
+                if atts and out.get('message_id') and out['status'] != 'duplicate':
+                    try: save_attachments(store, out['message_id'], atts, f'imap:{user}:{uid}')
+                    except Exception as e: logger.warning(f'imap attachments failed: {e}')
+                if read_it:
+                    try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
+                    except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
+            except Exception as e:
+                # one bad message (a date the parser rejects, a part that will not decode) raised out of
+                # the loop and left the watermark behind it, so the same message failed every poll and
+                # nothing after it was ever read. Step over it, say so, and let the watermark move
+                logger.warning(f'imap {user} uid {uid} skipped: {e}')
         if new:
             store.set_connector_config(c['ConnectorId'], {**cfg, 'imap_uid': max(new)})
     finally:

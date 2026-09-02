@@ -42,6 +42,19 @@ class DenyListTests(unittest.TestCase):
                              ('POST', '/api/agent/done')):              # closing its own task
             self.assertFalse(guard.denied(method, path), f'{method} {path} must be allowed')
 
+    def test_the_doors_the_audit_found_open_are_shut(self):
+        """2026-09-02: releasing the held task of the sender the hold exists for, landing work, running
+        an executor or a query with a card's credentials, rewriting the governing documents."""
+        for method, path in (('POST', '/api/tasks/7/release'), ('POST', '/api/tasks/7/land'), ('POST', '/api/tasks/7/ci'),
+                             ('POST', '/api/soul/interview'), ('POST', '/api/learn/reflect'), ('POST', '/api/learn/adopt'),
+                             ('PUT', '/api/owner'), ('PATCH', '/api/whoami'),
+                             ('POST', '/api/mssql/test'), ('POST', '/api/mcp/tools'),
+                             ('POST', '/api/reports/preview'), ('POST', '/api/reports/compose'),
+                             ('POST', '/api/semantic/metrics'), ('DELETE', '/api/semantic/metrics/3'), ('POST', '/api/semantic/metrics/3/try')):
+            self.assertTrue(guard.denied(method, path), f'{method} {path} must be refused')
+        for method, path in (('GET', '/api/semantic/metrics'), ('GET', '/api/reports'), ('POST', '/api/tools/run')):
+            self.assertFalse(guard.denied(method, path), f'{method} {path} must be allowed')
+
     def test_the_list_is_not_configurable(self):
         """If this ever reads a setting, a document or the database, delete that and this test.
         A control an agent can reach is not a control."""

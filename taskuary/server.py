@@ -225,7 +225,8 @@ def _can_send(channel, has_message=True, gh_ok=None) -> bool:
 @app.get('/api/feed')
 def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None,
          request: Request = None):
-    days = int(store.get_settings().get('feed_days', 14))
+    try: days = int(store.get_settings().get('feed_days') or 14)
+    except (TypeError, ValueError): days = 14        # a blanked number field saves '' - the Timeline must not die of it
     tag = '"' + store.feed_tag(days, pending_only, channel, source) + '"'
     if request is not None and request.headers.get('if-none-match') == tag:
         return Response(status_code=304, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
@@ -2216,25 +2217,31 @@ def tool_run(body: dict):
     the executor needs - running PowerShell on a box is 'admin', reading a table is 'read'."""
     t = (body or {}).get('type')
     if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
-    from .reports import card_of
+    from .reports import card_of, query_only
     from . import scopes
     connector_id = (body or {}).get('connector_id')
     try: conn = store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type(card_of(t))
     except (TypeError, ValueError): raise HTTPException(422, 'connector_id must be a number')
     if conn and conn.get('Type') != card_of(t):
         raise HTTPException(422, f'connector {connector_id} is {conn.get("Type")}, not {card_of(t)}')
-    if conn:
-        if not conn.get('Active'):
-            raise HTTPException(403, f'the {t} connection is off - turn it on under Connections')
-        if 'tool' not in store_mod.roles_of(conn):
-            raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connections → {t} → Role)')
-        try:
-            scopes.require(conn, t)
-        except PermissionError as e:
-            store.audit('tool', conn['ConnectorId'], 'run_refused', ACTOR, detail={'type': t, 'scope': scopes.scope_of(conn)})
-            raise HTTPException(403, str(e))
+    if not conn:
+        # no card is not 'nothing to check' - it is nothing the owner ever switched on. Types with no
+        # card (sqlite, local_file, agent, rest) used to run for anyone holding the API: any file on
+        # disk, any database, another agent run (audit 2026-09-02)
+        raise HTTPException(403, f'{t} has no connection card an owner turned on - it is not an agent tool')
+    if not conn.get('Active'):
+        raise HTTPException(403, f'the {t} connection is off - turn it on under Connections')
+    if 'tool' not in store_mod.roles_of(conn):
+        raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connections → {t} → Role)')
     try:
-        head, out = REGISTRY[t](resolve_cfg(store, {**body, 'type': t}))
+        scopes.require(conn, t)
+    except PermissionError as e:
+        store.audit('tool', conn['ConnectorId'], 'run_refused', ACTOR, detail={'type': t, 'scope': scopes.scope_of(conn)})
+        raise HTTPException(403, str(e))
+    try:
+        # the body says WHAT to run, never WHERE: a base_url/account/server in it used to override the
+        # card's, sending the card's token to a host of the caller's choosing (reports.query_only)
+        head, out = REGISTRY[t](resolve_cfg(store, {**query_only(body), 'type': t}))
     except Exception as e:
         store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run_failed', ACTOR, detail={'type': t, 'error': str(e)[:300]})
         return {'ok': False, 'error': str(e)[:1000]}
@@ -2283,8 +2290,13 @@ def quickbooks_callback(code: str = None, state: str = '', realmId: str = None, 
     """Intuit sends the browser back here with the code and the company id. The exchange happens
     server-side and the refresh token never reaches the page; the tab just says it worked."""
     from . import quickbooks as qb
-    page = lambda msg, ok=True: f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">' \
-                                f'<p style="font-weight:700">{"Connected" if ok else "Not connected"}</p><p>{msg}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>'
+    # this page is outside the token gate (Intuit redirects to it), and it echoes what the query
+    # string said: escaped, and under a CSP, or a crafted link ran script on the origin that holds
+    # the API token (audit 2026-09-02)
+    from html import escape as _esc
+    csp = {'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'"}
+    page = lambda msg, ok=True: HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
+                                             f'<p style="font-weight:700">{"Connected" if ok else "Not connected"}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>', headers=csp)
     if error: return page(f'Intuit said: {error}', False)
     if not (code and state.startswith('tq-') and realmId): return page('the callback came back without a code or a company id', False)
     try: cid, nonce = int(state.split('-')[1]), state.split('-', 2)[2]
@@ -2359,6 +2371,16 @@ def report_compose_sources(body: dict):
 def report_preview(body: dict):
     """Dry-run a report config - executor plus the AI pass when ai_prompt is set -
     without filing a row. Exactly what a scheduled run would produce."""
+    # ...including the write, when the executor IS a write (intacct_create posts the bill): the
+    # card's switch and its scope apply to a dry run exactly as to a scheduled one (audit 2026-09-02)
+    from .reports import card_of
+    from . import scopes
+    t = (body or {}).get('type')
+    conn = store.get_connector_by_type(card_of(t)) if t in REGISTRY and card_of(t) else None
+    if conn:
+        if not conn.get('Active'): return {'ok': False, 'error': f'the {card_of(t)} connection is off - turn it on under Connections'}
+        try: scopes.require(conn, t)
+        except PermissionError as e: return {'ok': False, 'error': str(e)[:500]}
     try:
         head, summary = render_report(store, body, _llm() if body.get('ai_prompt') else None)
         # the chart is half of what a scheduled run hands back, so the dry run has to show it -

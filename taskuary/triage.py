@@ -109,10 +109,14 @@ def heuristic_intent(msg: dict, mine=()) -> dict:
 # triage, the seeded session, the reply drafts - spending context on boilerplate. The STORED
 # body stays whole (the panel shows the real mail); only what is fed to an AI is trimmed,
 # and always conservatively: when in doubt, keep.
+# the heading alternative is case-SENSITIVE (or title case with a colon): a footer shouts NOTICE;
+# "Notice the error at the top - can you fix it" is the ask, and a case-blind match threw it and
+# everything after it away before triage ever saw it (audit 2026-09-02)
 _LEGAL = _re.compile(r'^\s*(NOTICE|DISCLAIMER|CONFIDENTIALITY( NOTICE)?|LEGAL NOTICE)[:\s]'
-                     r'|this (e-?mail|message|communication)[^.]{0,120}(confidential|privileged|intended (solely|only))'
+                     r'|^\s*(Notice|Disclaimer|Confidentiality Notice|Legal Notice):'
+                     r'|(?i:this (e-?mail|message|communication)[^.]{0,120}(confidential|privileged|intended (solely|only))'
                      r'|if you (are not the intended|have received this[^.]{0,40}in error)'
-                     r'|unauthorized (use|review|disclosure|distribution)', _re.I)
+                     r'|unauthorized (use|review|disclosure|distribution))')
 _VALEDICTION = _re.compile(r'^\s*(thank(s| you)|best( regards| wishes)?|kind(est)? regards|regards|'
                            r'sincerely|respectfully|warm(ly| regards)?|cheers|v/?r)\s*[,!.]*\s*$', _re.I)
 _CONTACT = _re.compile(r'^\s*(phone|tel|mobile|cell|fax|office|direct|email|e-?mail|web|www\.|address)'

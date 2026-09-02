@@ -4,7 +4,7 @@ parse. The exe road cannot be run here (the running exe is locked), so the piece
 by one and the batch is read like a program.
 """
 import os, sys, tempfile, unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 from taskuary import update
@@ -65,7 +65,10 @@ class Checking(unittest.TestCase):
 
 class TheSwapScript(unittest.TestCase):
     def test_it_waits_swaps_relaunches_with_the_same_arguments_and_removes_itself(self):
-        s = update.swap_script(Path(r'C:\Apps\Taskuary.exe'), Path(r'C:\Apps\Taskuary.new.exe'), 4242,
+        # This function writes a Windows batch file even when the test suite runs on Linux/macOS;
+        # keep Windows path semantics instead of letting the host OS reinterpret the backslashes.
+        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'),
+                               PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242,
                                ['--port', '7787', '--debug'])
         self.assertIn('PID eq 4242', s)                                  # waits for THIS process to go
         self.assertIn('move /Y "C:\\Apps\\Taskuary.new.exe" "C:\\Apps\\Taskuary.exe"', s)

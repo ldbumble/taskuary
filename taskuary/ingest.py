@@ -102,6 +102,15 @@ def _from_row(r: dict, store=None) -> dict:
             'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r)}
 
 
+def _playbook_menu() -> str:
+    """What triage is shown of the owner's playbooks - '' when there are none, so no words are spent."""
+    try:
+        from . import playbooks
+        return playbooks.menu()
+    except Exception as e:
+        logger.debug(f'ingest: playbook menu skipped - {e}'); return ''
+
+
 def auto_code_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     """May this task start a coding session by ITSELF? (ok, why-not) - two gates, cheapest first.
 
@@ -269,7 +278,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                          system=store.doc('triage'), mine=me,
                                          # a scheduled report carries its own brief - what the owner
                                          # set it up to catch (reports.py: the card's watch_for)
-                                         watch=msg.get('watch_for'))
+                                         watch=msg.get('watch_for'),
+                                         # ...and the playbooks: a message that is an instance of one is
+                                         # tagged with it, and the agent is seeded from it (playbooks.py)
+                                         playbooks=_playbook_menu())
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic. The error is
                     # also kept as a setting so the Timeline's caption can say the brain is failing:
@@ -322,9 +334,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         f = draft_task_fields(msg, urgent=pol['action'] == 'escalate',
                               kind=intent.get('kind') or ('coding' if judged and intent['intent'] == 'task' else None))
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
+        from . import playbooks as _pb
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
-                                 'SourceRef': msg.get('source_link')}, actor)
+                                 'SourceRef': msg.get('source_link'),
+                                 **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         mid = _land(store, msg, tid, 'routed')
         # the agents actually pick work up here:
@@ -377,6 +391,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
                else 'auto-dispatch is off (Settings) - start the session from the task')
         reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
+                  + (f" · playbook {intent['playbook']}" if intent.get('playbook') else '')
                   + _notes_note()
                   + f" · {r['reason']} · {act}")
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor)

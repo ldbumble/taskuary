@@ -1093,6 +1093,43 @@ function ConnectorIdentity({ conn, reload, onCreated }) {
 }
 
 /* ── "Remove connection" on every detail page: wipes creds/config, turns sources off ── */
+/* The second door to a playbook (docs/beyond-code.md): the card is where you look for "what does
+   this thing do for us", so it lists every playbook whose `uses:` line names this connection, and
+   opens each on the Docs tab (#playbook=<slug>), where the words are edited. */
+function CardPlaybooks({ type }) {
+  const [books, setBooks] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get("/api/playbooks").then(({ data }) => { if (live) setBooks((data.data || []).filter((b) => (b.uses || []).includes(type))); })
+      .catch(() => { if (live) setBooks([]); });
+    return () => { live = false; };
+  }, [type]);
+  if (!books) return null;
+  const go = (slug) => { window.location.hash = `playbook=${slug}`; };
+  return (
+    <Box sx={{ mt: 3, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL }}>
+      <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.75 }}>
+        PLAYBOOKS — WHAT THIS CONNECTION DOES FOR US
+      </Typography>
+      {books.length === 0 && (
+        <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
+          No playbook names this connection yet. One is drafted for you the first time an agent finishes a job with it; approve it in Review and the next such job runs on it.
+        </Typography>
+      )}
+      {books.map((b) => (
+        <Box key={b.slug} onClick={() => go(b.slug)} sx={{ display: "flex", alignItems: "baseline", gap: 1, py: 0.5, cursor: "pointer",
+          "&:hover .pb-t": { textDecoration: "underline" } }}>
+          <Typography className="pb-t" variant="body2" sx={{ color: INK, fontWeight: 600, whiteSpace: "nowrap" }}>{b.title}</Typography>
+          <Typography variant="caption" sx={{ color: FAINT }} noWrap>when: {b.when}</Typography>
+        </Box>
+      ))}
+      <Button size="small" variant="text" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => go(`new:${type}`)} sx={{ mt: 0.5 }}>
+        New playbook for this connection
+      </Button>
+    </Box>
+  );
+}
+
 function RemoveConnection({ conn, reload, onBack }) {
   const [confirm, setConfirm] = useState(false);
   const remove = async () => {
@@ -1438,6 +1475,7 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
         </Stepper>
       )}
       {tab === "Guide" && <Steps steps={m.howto || []} />}
+      <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
@@ -1459,6 +1497,7 @@ function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
       {tab === "Agent" && <AgentTab steps={MSSQL_AGENT} />}
       {tab === "Connection" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
+      <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
@@ -1588,6 +1627,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </Box>
       )}
+      <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
@@ -1899,6 +1939,7 @@ function DataDetail({ conn, meta, sources, reload, onBack, onCreated, byType = {
       {tab === "Connection" && meta.discovers && (
         <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
+      <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );

@@ -37,12 +37,17 @@ ACTIONS = {
     'comment_issue': ('post a PUBLIC comment on the linked issue/PR', ('body',), 'github_reply'),
     'close_issue': ('close the linked GitHub issue', (), 'use_as_tracker'),
     'run_tool': ('run one query/script through a tool connection', ('type',), None),
+    # the on-close "did this session do a kind of job that will recur?" answer (playbooks.draft),
+    # and an agent that knows it did: a playbook is filed only past the owner's click
+    'write_playbook': ('file a new PLAYBOOK - how this kind of job is done here - for the next agent to follow',
+                       ('slug', 'text'), 'playbooks_enabled'),
 }
 
 
 def _switch_ok(store, name) -> bool:
     if not name: return True
     if name in ('agent_push_enabled',): return store.get_settings().get(name) == '1'
+    if name == 'playbooks_enabled': return store.get_settings().get(name, '1') == '1'
     import json as _j
     c = store.get_connector_by_type('github') or {}
     try: cfg = _j.loads(c.get('ConfigJson') or '{}')
@@ -77,28 +82,34 @@ def validate(store, p: dict) -> tuple:
 def collect(store, task_id: int, transcript: str, actor='coder') -> list:
     """Turn an agent's proposals into pending reviews. Returns what was queued; refusals are
     recorded on the task so a refused proposal is visible, not silently dropped."""
-    made = []
-    for p in parse(transcript):
-        ok, why = validate(store, p)
-        if not ok:
-            store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
-            store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
-            continue
-        rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending',
-                                'DraftText': json.dumps(p),
-                                'Reason': f'the agent proposes to {why}'
-                                          + (f" - {p['why'][:200]}" if p.get('why') else '')})
-        store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
-        made.append({'reviewId': rid, 'action': p['action']})
-        logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')
-    return made
+    return [m for p in parse(transcript) for m in [queue(store, task_id, p, actor)] if m]
 
 
-def execute(store, rv: dict, actor='owner') -> dict:
+def queue(store, task_id: int, p: dict, actor='coder') -> dict | None:
+    """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not."""
+    ok, why = validate(store, p)
+    if not ok:
+        store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
+        store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
+        return None
+    rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p),
+                            'Reason': f'the agent proposes to {why}' + (f" - {p['why'][:200]}" if p.get('why') else '')})
+    store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
+    logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')
+    return {'reviewId': rid, 'action': p['action']}
+
+
+def execute(store, rv: dict, actor='owner', final_text: str = None) -> dict:
     """Run an APPROVED proposal. Called from the verdict road, and it re-validates: the
     switch may have gone off between proposing and approving, and the approval does not
-    grant the permission."""
+    grant the permission.
+
+    `final_text` is what was in the Review box when the owner approved. For a proposed
+    playbook the box shows the page itself (not the JSON envelope), so an edited page is
+    what gets filed - the owner tightening an `alone:` line before the first run is the point."""
     p = json.loads(rv.get('DraftText') or '{}')
+    if p.get('action') == 'write_playbook' and str(final_text or '').strip() and not str(final_text).lstrip().startswith('{'):
+        p['text'] = final_text
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
@@ -123,6 +134,10 @@ def execute(store, rv: dict, actor='owner') -> dict:
         else:
             github.close_issue(c['Secret'], repo, num, p.get('body'))
             out = {'closed': f'{repo}#{num}'}
+    elif a == 'write_playbook':
+        from . import playbooks
+        slug = playbooks.write(p['slug'], p['text'])
+        out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         head, body = REGISTRY[p['type']](resolve_cfg(store, {k: v for k, v in p.items() if k != 'action'}))

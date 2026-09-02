@@ -33,14 +33,19 @@ import json, re, threading, time
 from loguru import logger
 
 SETTING = 'agent_self_close'      # '1' (default) auto, 'ask' explicit-only, '0' off
-# A task the owner opened to WORK IN, rather than to have worked FOR them. Set when they start a
-# coding session from + New with "leave it open" ticked (website/src/newTask.js), and never by the
-# router - a message that arrived has somebody waiting on an answer, so finishing it should close
+# A task the owner opened to WORK IN, rather than to have worked FOR them. Set by claim() the
+# moment the OWNER opens a session on a task - by ANY door: + New on the Timeline or the Board, a
+# new task on the Tasks tab, Start session, Continue with coder, the Wall - and never by the
+# router: a message that arrived has somebody waiting on an answer, so finishing it should close
 # it and draft the reply, which is the whole point of the funnel.
 #
-# deliberately NOT checked in blocked(): declare() calls that, and `taskuary --done` must still
-# close a stay-open task. The agent SAYING it is finished outranks the tag; only the JUDGE - which
-# guesses from a screen that has gone quiet - is refused.
+# It used to be a checkbox on one dialog (+ New, "leave it open"), and every other door left the
+# task unmarked: TQ-0285 (2026-09-02) was continued by hand from the task page, the agent ran
+# `taskuary --done`, and the session the owner was sitting in closed under them - the second time
+# on the same task. Who opened the session is a fact the server knows; it is not asked again.
+#
+# Once set it holds BOTH roads: the judge (a screen gone quiet) and the declaration (`--done`).
+# The agent's word is filed on the task and the session stays at its prompt; only the owner ends it.
 STAY_TAG = 'stay:open'
 MIN_AGE = 45.0                    # seconds a session must have lived before it may close itself
 MIN_CHARS = 400                   # ...and printed. A session that produced nothing did nothing.
@@ -122,6 +127,18 @@ def blocked(store, tid: int, term=None) -> str:
         if waitroom.looks_like_question(term.tail(waitroom.TAIL_LINES)):
             return 'the last lines read as a question for you'
     return ''
+
+
+def claim(store, tid: int, actor: str = 'owner') -> bool:
+    """The owner is opening a session on this task: mark it theirs to end. True when the mark was
+    just set. A router/agent opening leaves the task as it is - that is the funnel's own work."""
+    if actor != 'owner' or not tid or stays_open(store, tid): return False
+    t = store.get_task(tid)
+    if not t: return False
+    tags = [x.strip() for x in str(t.get('Tags') or '').replace(' ', ',').split(',') if x.strip()]
+    store.update_task(tid, {'Tags': ','.join(tags + [STAY_TAG])}, actor)
+    store.audit('task', tid, 'stay_open', actor, detail={'why': 'the owner opened a session on it'})
+    return True
 
 
 def stays_open(store, tid: int) -> bool:
@@ -230,6 +247,12 @@ def spawn_on_stop(store, term, said: str = '') -> None:
 # part that must survive a blanked document: the command, and what pressing it does.
 SEED_LINE = ('WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and '
              "drafts the sender's reply for the owner.")
+# ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
+# agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
+# reverse and an agent reading both without this line picks the one with a command in it.
+STAY_LINE = ('THE OWNER OPENED THIS SESSION AND IS SITTING IN IT - it is theirs to end, never yours. Do NOT '
+             'close it, wrap it up or run `taskuary --done`; when a piece of work is finished, say so in a '
+             'plain line and stay at the prompt for their next instruction.')
 
 
 # ── the general chat's version of the same thing ────────────────────────────────────────

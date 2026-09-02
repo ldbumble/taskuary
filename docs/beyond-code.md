@@ -85,9 +85,12 @@ the period was open. A thin card still says what is missing.
    the owner's Intuit app with Connect on the card, five tools: `quickbooks` (QBO's query
    language), `quickbooks_vendors` and `quickbooks_accounts` (read), `quickbooks_bill` and
    `quickbooks_expense` (write, proposal-gated below scope `write`).
-2. **Playbooks** - the folder, the Docs-tab shelf, the `when` matcher in triage, the seed section,
-   and the on-close "draft its playbook" question. Small: it is a fourth operator document with a
-   directory instead of a file.
+2. **Playbooks** - *built (taskuary/playbooks.py, 2026-09-02)*: the folder, the Docs-tab shelf and a
+   Playbooks section on every connector card (one file, two doors), the menu triage is shown (it
+   answers `"playbook": "<slug>"` and the task is tagged `playbook:<slug>`), the seed block that
+   outranks CODER.md's repository rules, the whole page in the context file, and the on-close
+   question whose answer is a `write_playbook` proposal in Review - editable there, filed only on
+   approval. An agent may propose one itself the same way.
 3. **A card feed in.** Two roads, cheapest first:
    - *Statement mail.* Card issuers already email statements and alerts; the mailbox connector
      already ingests them and their attachments. A playbook that reads the PDF/CSV needs no new

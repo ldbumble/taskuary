@@ -61,6 +61,13 @@ const replyContext = (review) => {
   return deliveryTo(review);
 };
 
+// A proposed PLAYBOOK is a page of markdown inside a JSON envelope: show the page, and let the owner
+// edit it before approving - the edited page is what gets filed (proposals.execute).
+const proposalText = (t) => {
+  try { const j = JSON.parse(t || ""); if (j?.action === "write_playbook" && j.text) return j.text; } catch { /* a plain draft */ }
+  return t || "";
+};
+
 export default function ReviewView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("pending");
@@ -154,8 +161,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     {replyContext(r)}
                   </Typography>
                 </Box>
-                <TextField fullWidth multiline minRows={2} maxRows={8}
-                  value={edits[r.ReviewId] ?? (r.DraftText || "")}
+                <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
+                  value={edits[r.ReviewId] ?? proposalText(r.DraftText)}
                   onChange={(e) => setEdits({ ...edits, [r.ReviewId]: e.target.value })}
                   placeholder={r.DraftText ? "" : "No draft yet — hit Draft with AI"}
                   inputProps={{ style: { fontSize: 12.5, lineHeight: 1.45 } }} />

@@ -41,7 +41,9 @@ class SharedSessionTests(unittest.TestCase):
         def answer(system, user, **kwargs):
             seen['system'] = system
             return 'The launch plan is ready.'
-        with mock.patch.object(llm, 'build_llm', return_value=answer):
+        # start_session REGISTERS the session in terminal.SESSIONS (process-wide) - left there, a live
+        # fake on task 1 made every later test that looks a session up by task id find this one
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=answer):
             session = general.start_session(store, tid, pick='cli:my-codex')
             session.send_prompt('Plan the launch')
         self.assertIn('Social is company memory, not a technical log', seen['system'])

@@ -222,6 +222,13 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     fin = {}
     if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
         fin = finish(store, tid, rep, None, agent) or {}
+    # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
+    # will recur, done here for the first time? The answer is a proposal in Review, never a file
+    # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's
+    # answer are what a close is for, and this call must never be the one the drafter's AI budget goes to.
+    from . import playbooks
+    pbd = playbooks.draft(store, tid, text, agent)
+    if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or found, 'close': close})
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(fin.get('drafting'))}

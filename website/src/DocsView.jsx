@@ -9,6 +9,8 @@ import PsychologyIcon from "@mui/icons-material/Psychology";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import LearnedView from "./LearnedView.jsx";
 import SoulInterview from "./SoulInterview.jsx";
@@ -32,6 +34,13 @@ const DOCS = {
     blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
 };
 const NAMES = Object.keys(DOCS);
+
+// Playbooks: the fourth document is a FOLDER - one file per kind of job, accreted the first time
+// each is done (docs/beyond-code.md). They sit under the six on the same shelf and open in the same
+// editor; a "pb:<slug>" docName is one of them, "pb:new" the blank one from the template.
+const isPb = (n) => n.startsWith("pb:");
+const pbSlug = (n) => n.slice(3);
+const PB_BLURB = "How THIS company does one kind of job, for the agent that will do it: when it starts, which connections it uses, the steps, what it may do alone, what to ask first, and what counts as done. Triage matches new messages against `when`; the connector cards list the playbooks that name them.";
 
 // Docs that can bootstrap themselves from the mailbox's own past: the button reads ~3
 // months of mail server-side and fills the doc's marked block - hand-written lines
@@ -96,6 +105,9 @@ export default function DocsView() {
   const [genEv, setGenEv] = useState(null);   // the receipts: what was read, line by line
   const [view, setView] = useState("text");    // LEARNED.md: text, or the picture of what drives what (#27)
   const [interview, setInterview] = useState(false);   // SOUL.md, asked for rather than guessed
+  const [books, setBooks] = useState([]);              // the playbooks on disk: slug, title, when, uses
+  const [tpl, setTpl] = useState("");                  // what a new one starts from
+  const [pbMsg, setPbMsg] = useState("");
   // the generation is inspectable, not a vibe: poll its status while it runs so the button
   // narrates ("reading you@... — 240 sent so far"), then show the exact evidence it judged
   useEffect(() => {
@@ -113,15 +125,72 @@ export default function DocsView() {
     try {
       const res = await Promise.all(NAMES.map((n) => api.get(`/api/doc/${n}`)));
       const d = Object.fromEntries(NAMES.map((n, i) => [n, res[i].data.content || ""]));
-      setDocs(d); setSaved(d); setLoaded(true);
+      setDocs((cur) => ({ ...cur, ...d })); setSaved((cur) => ({ ...cur, ...d })); setLoaded(true);
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load documents"); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const loadBooks = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/playbooks");
+      setBooks(data.data || []); setTpl(data.template || "");
+    } catch { /* an older server: the shelf simply stays empty */ }
+  }, []);
+  useEffect(() => { loadBooks(); }, [loadBooks]);
+
+  // open a playbook: its text is fetched on first open, not with the shelf (the shelf is titles)
+  const openPb = useCallback(async (slug, seedUses = "") => {
+    const key = `pb:${slug}`;
+    setGenMsg(""); setGenEv(null); setPbMsg(""); setDocName(key);
+    if (slug === "new") {
+      // a card's "new playbook for this connection" arrives as new:<type> - the uses line is prefilled
+      const t = (tpl || "").replace(/^uses:.*$/m, (l) => (seedUses ? `uses:      ${seedUses} (read)` : l));
+      setDocs((d) => ({ ...d, [key]: t })); setSaved((d) => ({ ...d, [key]: "" }));
+      return;
+    }
+    try {
+      const { data } = await api.get(`/api/playbooks/${slug}`);
+      setDocs((d) => ({ ...d, [key]: data.content || "" })); setSaved((d) => ({ ...d, [key]: data.content || "" }));
+    } catch (e) { setErr(e?.response?.data?.detail || `could not open playbook ${slug}`); }
+  }, [tpl]);
+
+  // #playbook=<slug> (a connector card's link) opens it; #playbook=new:<type> starts one for that card
+  useEffect(() => {
+    const fromHash = () => {
+      const m = /playbook=([\w:.-]+)/.exec(window.location.hash || "");
+      if (!m) return;
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      const [what, type] = m[1].split(":");
+      openPb(what, type || "");
+    };
+    fromHash(); window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, [openPb]);
+
   const save = async () => {
+    if (isPb(docName)) {
+      setPbMsg("");
+      try {
+        const { data } = await api.put(`/api/playbooks/${pbSlug(docName)}`, { content: docs[docName] });
+        const key = `pb:${data.slug}`;
+        setDocs((d) => ({ ...d, [key]: docs[docName] })); setSaved((d) => ({ ...d, [key]: docs[docName] }));
+        setDocName(key); await loadBooks();
+        setPbMsg("saved ✓ — triage now matches new messages against its when line");
+      } catch (e) { setPbMsg(e?.response?.data?.detail || "could not save"); }
+      return;
+    }
     await api.put(`/api/doc/${docName}`, { content: docs[docName] });
     setSaved({ ...saved, [docName]: docs[docName] });
   };
+  const removePb = async () => {
+    const slug = pbSlug(docName);
+    if (slug === "new") { setDocName(NAMES[0]); return; }
+    try { await api.delete(`/api/playbooks/${slug}`); } catch { /* already gone */ }
+    setDocName(NAMES[0]); await loadBooks();
+  };
+  const meta = isPb(docName)
+    ? { label: docName === "pb:new" ? "New playbook" : `${pbSlug(docName)}.md`, blurb: PB_BLURB }
+    : DOCS[docName];
 
   if (!loaded && !err) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
@@ -151,6 +220,37 @@ export default function DocsView() {
             <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{DOCS[n].blurb}</Typography>
           </Box>
         ))}
+        {/* the playbooks shelf: one line per kind of job the company has written down, plus the door to a new one */}
+        <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mt: 2.5, mb: 0.5 }}>Playbooks</Typography>
+        <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.25, lineHeight: 1.5 }}>
+          One per kind of job — how it is done here, and where the line is between "just do it" and "ask".
+          The first is drafted for you when an agent finishes a job for the first time; approve it in Review and the next one runs on it.
+        </Typography>
+        {books.map((b) => {
+          const key = `pb:${b.slug}`, on = key === docName;
+          return (
+            <Box key={key} onClick={() => openPb(b.slug)}
+              sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer", bgcolor: on ? "#fff" : "transparent",
+                border: `1px solid ${on ? "#d8cfbe" : "transparent"}`, boxShadow: on ? "0 1px 3px rgba(30,50,38,.06)" : "none",
+                "&:hover": { bgcolor: on ? "#fff" : "#f4f1ec" } }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ display: "flex", opacity: on ? 1 : .65 }}><MenuBookIcon sx={{ fontSize: 19, color: "#55697a" }} /></Box>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{b.title}</Typography>
+                {on && <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
+                  borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>}
+              </Box>
+              <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>when: {b.when}</Typography>
+              {b.uses?.length > 0 && <Typography noWrap sx={{ ...mono, fontSize: 10.5, color: FAINT, pt: 0.25 }}>uses {b.uses.join(" · ")}</Typography>}
+            </Box>
+          );
+        })}
+        <Box onClick={() => openPb("new")}
+          sx={{ p: 1.1, mb: 0.75, borderRadius: 2, cursor: "pointer", display: "flex", alignItems: "center", gap: 1,
+            border: `1px dashed ${docName === "pb:new" ? "#d8cfbe" : "#e1dcd5"}`, bgcolor: docName === "pb:new" ? "#fff" : "transparent",
+            "&:hover": { bgcolor: "#f4f1ec" } }}>
+          <AddIcon sx={{ fontSize: 17, color: "#55697a" }} />
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>{books.length ? "New playbook" : "Write the first playbook"}</Typography>
+        </Box>
         <Box sx={{ mt: 2 }}><OwnerCard /></Box>
       </Box>
 
@@ -158,8 +258,8 @@ export default function DocsView() {
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{DOCS[docName].label}</Typography>
-            <Typography variant="body2" sx={{ color: FAINT, pt: 0.75 }}>{DOCS[docName].blurb}</Typography>
+            <Typography sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{meta.label}</Typography>
+            <Typography variant="body2" sx={{ color: FAINT, pt: 0.75 }}>{meta.blurb}</Typography>
           </Box>
           {/* SOUL.md cannot be distilled from a mailbox - it is what only the owner knows. So it
               is asked for, in seven questions, and written from the answers (interview.py). */}
@@ -196,10 +296,19 @@ export default function DocsView() {
               try { await api.post("/api/learn/reflect"); await load(); } catch { /* no AI connected */ }
             }}>Reflect now</Button>
           )}
+          {isPb(docName) && (
+            <Button size="small" variant="outlined" color="error" onClick={removePb}
+              title={docName === "pb:new" ? "Discard this draft" : "Delete this playbook - triage stops matching it and the cards stop listing it"}>
+              {docName === "pb:new" ? "Discard" : "Delete"}
+            </Button>
+          )}
           <Button size="small" variant="contained" disableElevation disabled={docs[docName] === saved[docName]} onClick={save}>
             {docs[docName] === saved[docName] ? "Saved" : "Save"}
           </Button>
         </Box>
+        {pbMsg && isPb(docName) && (
+          <Typography variant="caption" sx={{ display: "block", mb: 1, color: pbMsg.startsWith("saved") ? "#47654a" : "#6b2733" }}>{pbMsg}</Typography>
+        )}
         {genMsg && GEN[docName] && (
           <Typography variant="caption" sx={{ display: "block", mb: 1,
             color: genMsg.startsWith("✓") ? "#47654a" : "#6b2733" }}>{genMsg}</Typography>
@@ -221,13 +330,14 @@ export default function DocsView() {
           </Box>
         )}
         {docName === "learned" && view === "viz" ? <LearnedView onChanged={load} /> : (
-        <TextField fullWidth multiline minRows={22} maxRows={40} value={docs[docName]}
+        <TextField fullWidth multiline minRows={22} maxRows={40} value={docs[docName] || ""}
           onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })} sx={{ bgcolor: "#fff" }}
           inputProps={{ style: { fontFamily: "'IBM Plex Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.6, color: INK } }} />
         )}
         <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1.25, lineHeight: 1.6 }}>
-          Editing this changes the funnel on the very next message. Nothing here is sent anywhere —
-          these files live beside your database.
+          {isPb(docName)
+            ? "Keep the six labelled lines - when is what triage matches, uses is which cards list it. Saved as a file under ~/.taskuary/playbooks, beside your database."
+            : "Editing this changes the funnel on the very next message. Nothing here is sent anywhere — these files live beside your database."}
         </Typography>
       </Box>
       <SoulInterview open={interview} onClose={() => setInterview(false)}

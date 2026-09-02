@@ -258,9 +258,9 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
   // how = does an agent start on it now, or does it just get filed. There is no third
   // option: work always happens in a session you can watch and talk to.
-  // stayOpen defaults ON: a session started from this box is one the owner means to sit in, and
-  // the self-close judge would otherwise end it the first time they looked away (selfclose.STAY_TAG)
-  const [nt, setNt] = useState({ Title: "", Summary: "", how: "live", repo: "", agent: "coder", model: "", browser: false, stayOpen: true });
+  // a session started from this box is one the owner means to sit in: the server marks the task as
+  // theirs to end the moment the terminal opens (selfclose.claim), so no judge and no --done ends it
+  const [nt, setNt] = useState({ Title: "", Summary: "", how: "live", repo: "", agent: "coder", model: "", browser: false });
   const shots = usePromptImages();      // screenshots on the new task's prompt, same as the Wall's queue box
 
   const load = useCallback(async () => {
@@ -298,7 +298,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
 
   // one reading of the repository box (newTask.js): who works it, and what the two fields
   // under it should say about that
-  const plan = planTask(nt.repo, nt.how, nt.browser, nt.stayOpen && nt.how === "terminal");
+  const plan = planTask(nt.repo, nt.how, nt.browser, nt.how === "terminal");
   const noRepo = !plan.repo;                    // which of the two "live" readings the box offers
   const create = async () => {
     const { repo, kind, chat, tags } = plan;
@@ -579,16 +579,8 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
                 It needs a browser — one opens with the session, watched beside it, and you type any password
               </Typography>
             </Box>
-            {/* the difference between a session that works FOR you and one you work IN. Only a
-                terminal can be sat in, so the switch is only true where it means anything. */}
-            {nt.how === "terminal" && (
-              <Box sx={{ display: "flex", alignItems: "center" }}>
-                <Switch size="small" checked={!!nt.stayOpen} onChange={(e) => setNt({ ...nt, stayOpen: e.target.checked })} />
-                <Typography variant="caption" sx={{ color: nt.stayOpen ? INK : DIM }}>
-                  Leave it open when it goes quiet — only you end it; off, it closes itself the moment it reads as finished
-                </Typography>
-              </Box>
-            )}
+            {/* A terminal you start here is yours to end: the server marks the task the moment it opens
+                (selfclose.claim) - no switch to forget. */}
           </Box>
         </DialogContent>
         <DialogActions>

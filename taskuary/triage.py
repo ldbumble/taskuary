@@ -161,7 +161,7 @@ def _agreement(notes) -> tuple:
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
-                    thread: dict = None, watch: str = None) -> dict:
+                    thread: dict = None, watch: str = None, playbooks: str = None) -> dict:
     """`notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
@@ -184,7 +184,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     `system` is TRIAGE.md, the owner-editable classifier instructions - HTML comments are
     stripped (the doc's own how-to-edit note is for the owner, not the model), and a blanked
     doc falls back to the shipped default. An edit that breaks the JSON contract degrades to
-    the keyword heuristics, never to a crash."""
+    the keyword heuristics, never to a crash.
+
+    `playbooks` is the menu of the owner's playbooks (playbooks.menu: slug, title and `when` each).
+    A message that is an instance of one is answered with its slug, and that slug is what seeds
+    the session with the playbook instead of a coder's repository rules. Matching is a judgement
+    about the message, so it is made here, by the model that read it - never by a keyword rule."""
     if llm:
         try:
             base = re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM
@@ -239,6 +244,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'names. Nothing matching is fyi, however interesting the rest of it is: a report that '
                            'becomes work every time it runs is a report nobody reads. A reply is never right here '
                            '- nobody sent this and there is nobody to answer.')
+            if playbooks:
+                system += ('\n\nPLAYBOOKS - the owner has written down how these kinds of job are done here, each with '
+                           'the arrival that starts it (when). If this message is plainly an instance of one, add '
+                           '"playbook": "<slug>" to your answer; it is then a task for the agent and it works it from that '
+                           'playbook. A message that only mentions the same systems is not an instance - the `when` line '
+                           'must fit. Otherwise leave the key out.\n' + str(playbooks)[:3000])
             how = addressed_to_you(msg, mine)
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
                                **({'addressed_to_you': how,
@@ -260,6 +271,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # definition, so its word wins when given, and the regex is only the fallback.
                 out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
                 if j['intent'] == 'task' and j.get('kind') in ('coding', 'general', 'task'): out['kind'] = j['kind']
+                # a playbook the menu actually offered: an agent works it, whatever kind said
+                pb = str(j.get('playbook') or '').strip().lower()
+                if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
+                    out['playbook'], out['kind'] = pb, 'coding'
                 return out
         except Exception:
             pass

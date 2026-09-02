@@ -50,6 +50,17 @@ dirty. What it cannot tell them is "the migration is half applied, don't run the
   suite green"`. That line is what the next agent builds on. If you are stuck, `--kind blocked`.
 - One line per note, plainly, as you go. Nobody reads a wall of paragraphs — including agents.
 
+## Playbooks — how this company does a kind of job
+When your prompt carries a **PLAYBOOK**, that is the job's rule set: follow its steps, do alone
+only what its `alone` line allows, ask John here in the session for anything on `ask first`, and
+you are finished when `done when` is true. It outranks the repository rules above for that job.
+When there is no playbook and you have just done a kind of job that will plainly recur - posted a
+bill, onboarded a user, reconciled a statement - say so: Taskuary asks the question on close and
+drafts the playbook for John to approve. You may draft it yourself the same way:
+`TASKUARY-PROPOSE {"action": "write_playbook", "slug": "post-a-card-bill", "text": "<the playbook
+as markdown: a # title line, then when / uses / steps / alone / ask first / done when, one per line>"}`.
+Nothing is filed until he approves it in Review.
+
 ## GitHub etiquette
 - Comment meaningful progress on the issue when one exists; keep commits small and
   descriptive.

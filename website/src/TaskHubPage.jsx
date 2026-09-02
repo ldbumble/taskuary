@@ -244,7 +244,11 @@ export default function TaskHubPage() {
   const [autostart, setAutostart] = useState(null);
   // #task=123 opens that task - the digest's links, a chat ping, a bookmark
   useEffect(() => {
-    const fromHash = () => { const m = /task=(\d+)/.exec(window.location.hash || ""); if (m) openTask(Number(m[1])); };
+    const fromHash = () => {
+      const m = /task=(\d+)/.exec(window.location.hash || ""); if (m) openTask(Number(m[1]));
+      // a connector card's playbook link: the words live on the Docs tab (DocsView reads the hash itself)
+      if (/playbook=/.test(window.location.hash || "")) go("Docs");
+    };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps

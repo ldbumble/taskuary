@@ -29,7 +29,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         from . import proposals
         if verb in ('approve', 'edit'):
             try:
-                out = proposals.execute(store, rv, actor)
+                out = proposals.execute(store, rv, actor, final)
             except Exception as e:
                 store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
                 return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}

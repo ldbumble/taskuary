@@ -22,7 +22,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .coder import PAUSE_MARKER, pause_note, reply_target as coder_reply_target, wrap as coder_wrap
-from . import aisetup, assistant, demo, learn, learnedgraph, outbound, rank, responder, waitroom
+from . import aisetup, assistant, demo, learn, learnedgraph, outbound, playbooks, rank, responder, waitroom
 
 cfg = config.load()
 store = SQLiteStore(config.db_path())
@@ -2395,6 +2395,35 @@ def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
+# ── playbooks: the fourth operator document, one file per kind of job (playbooks.py) ──────
+# Read by the Docs tab's Playbooks shelf and by every connector card (filtered by `uses`). Agents
+# may GET these; writing is the owner's (guard.py denies agent tokens) - an agent PROPOSES one.
+@app.get('/api/playbooks')
+def list_playbooks():
+    return {'data': [{k: v for k, v in b.items() if k != 'text'} for b in playbooks.list_all()],
+            'template': playbooks.template(), 'folder': str(playbooks.folder())}
+
+@app.get('/api/playbooks/{slug}')
+def get_playbook(slug: str):
+    text = playbooks.read(slug)
+    if text is None: raise HTTPException(404, f'no playbook {slug!r}')
+    pb = playbooks.parse(text)
+    return {'slug': playbooks.slugify(slug), 'content': text, 'title': pb['title'], 'uses': playbooks.uses_of(pb)}
+
+@app.put('/api/playbooks/{slug}')
+def put_playbook(slug: str, body: DocBody):
+    """'new' as the slug files it under its title."""
+    try: out = playbooks.write(slug, body.content)
+    except ValueError as e: raise HTTPException(400, str(e))
+    store.audit('playbook', 0, 'saved', ACTOR, detail={'slug': out})
+    return {'ok': True, 'slug': out}
+
+@app.delete('/api/playbooks/{slug}')
+def delete_playbook(slug: str):
+    if not playbooks.delete(slug): raise HTTPException(404, f'no playbook {slug!r}')
+    store.audit('playbook', 0, 'deleted', ACTOR, detail={'slug': playbooks.slugify(slug)})
+    return {'ok': True}
+
 @app.get('/api/learned/graph')
 def learned_graph():
     """LEARNED.md as a picture: lines, the verdicts that fed them, each line's score over time,
@@ -2803,6 +2832,10 @@ def open_terminal(body: TermBody):
     # an agent started here went back to the API for the mail: it had not been given it.
     seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, None, repo, cwd)[:8000])
                if body.seed and body.agent and tk else None)
+    # this is the owner's door (agents dispatch through terminal.start_on_task): a session opened
+    # here is one they sit in, so the task is theirs to end - whichever dialog or button it came from
+    from . import selfclose as _sc
+    if tk: _sc.claim(store, body.task_id, ACTOR)
     try:
         t = hub_term.open_session(store, body.agent, body.task_id, repo, body.cwd, body.rows, body.cols,
                                   ACTOR, body.model, seed_fn=seed_fn)

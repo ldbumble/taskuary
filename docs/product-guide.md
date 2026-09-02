@@ -218,8 +218,17 @@ Taskuary's behavior is governed by plain Markdown on the Docs tab:
 | `CODER.md` | How coding agents work and close out | Coding agents |
 | `LEARNED.md` | The profile learned from verdicts; always subordinate to `SOUL.md` | Triage, replies, coding agents |
 | `DIGEST.md` | The current morning brief — what slipped, today, what happened — written by the Morning digest report | You |
+| Playbooks (`~/.taskuary/playbooks/*.md`) | One per kind of job — when it starts, which connections it uses, the steps, what an agent may do alone, what to ask first, what counts as done | Triage (the `when` line), the agent working it |
 
 ![The seven operator documents and the parts of Taskuary they guide.](seven-docs.svg)
+
+Playbooks are the document that grows: `CODER.md` is the playbook for code, and every other kind
+of job — a card charge to post as a bill, a new hire to set up — gets its own page the first time
+an agent does it. On close Taskuary asks whether the session did a kind of job that will recur and,
+if so, drafts the playbook into Review; approve it (edit it first if you like) and the next such
+message is matched to it by triage and the agent is seeded from it instead of `CODER.md`'s
+repository rules. Each connector card lists the playbooks that name it, and the Docs tab is where
+the words are edited. See [Beyond code](beyond-code.md).
 
 Each coding session also receives a context file under `~/.taskuary/context/`. It contains
 the task thread, relevant sender and topic history, the learned profile, and reports from

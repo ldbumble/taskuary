@@ -858,6 +858,12 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {no_emails(soul)}')
     rules = rules_text(store)
     if rules: parts.append(f'RULES: {no_emails(rules)}')
+    # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
+    # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
+    # bill, so the playbook says so out loud; the closing-out and wall rules still stand
+    from . import playbooks as _pbk
+    pbk = _pbk.seed_block(t)
+    if pbk: parts.append(no_emails(pbk))
     # ...and the owner's own standing notes about THIS thread. agents.memory_block has built
     # this block since it was written and nothing ever called it, so every verdict the owner
     # gave - who to defer to, what is not ours, what never gets touched - reached the triage
@@ -895,7 +901,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # how this session ENDS. Without it the only ending is a person clicking Done, so a task
     # finished overnight produced no report and the sender got no answer (selfclose.py).
     from . import selfclose
-    if selfclose.mode(store) != 'off': parts.append(selfclose.SEED_LINE)
+    if selfclose.stays_open(store, tid): parts.append(selfclose.STAY_LINE)
+    elif selfclose.mode(store) != 'off': parts.append(selfclose.SEED_LINE)
     # what earlier agents worked out about this ground, and how to add to it (handbook.py). The
     # wall says what is happening in this checkout this hour; the handbook says what is still
     # true next month, and no agent could see it before.
@@ -1079,6 +1086,10 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     import json
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
+    # the owner opening a session makes the task theirs to end (selfclose.claim) - before the seed
+    # is built, so the prompt says "stay at the prompt" instead of "run --done"
+    from . import selfclose as _sc
+    _sc.claim(store, tid, actor)
     live = for_task(tid)
     if live:
         if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)

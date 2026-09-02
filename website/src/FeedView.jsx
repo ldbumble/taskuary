@@ -2422,11 +2422,18 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
   );
 };
 
+// An action proposal's DraftText is its JSON envelope. For most actions that IS the thing to read
+// (a bill: vendor, amount, account); a proposed playbook is a page of markdown, so show the page.
+const proposalText = (t) => {
+  try { const j = JSON.parse(t); if (j?.action === "write_playbook" && j.text) return j.text; } catch { /* a plain draft */ }
+  return t;
+};
+
 // The pending draft text for this message's review - stored on the review row; a
 // responder run's result is the fallback for drafts written before that column existed.
 const pendingDraft = (detail, open) => {
   const rv = (detail.reviews || []).find((r) => r.ReviewId === open.ReviewId);
-  if (rv?.DraftText) return rv.DraftText;
+  if (rv?.DraftText) return proposalText(rv.DraftText);
   const run = (detail.runs || []).find((r) => r.AgentName === "responder" && r.Status === "done");
   return run?.Result || "";
 };

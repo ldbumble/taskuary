@@ -92,7 +92,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
   const [how, setHow] = useState("terminal");
   // A session you open here is usually one you mean to sit in, so it does not end itself: the
   // judge that closes a router's task on a quiet screen would close this one while you read it.
-  const [stayOpen, setStayOpen] = useState(true);
   // note
   const [when, setWhen] = useState("");
 
@@ -124,7 +123,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
         // never disagree about what "no repository" means
         const chat = how === "chat";
-        const plan = planTask(chat ? NO_REPO : null, chat ? "live" : "terminal", false, !chat && stayOpen);
+        const plan = planTask(chat ? NO_REPO : null, chat ? "live" : "terminal", false, !chat);
         const { data } = await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: about,
           Kind: plan.kind, Tags: plan.tags });
         if (plan.chat) {
@@ -242,19 +241,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
                     It picks the checkout from what you write — name the system if there is any doubt.
                   </Typography>
                 </Box>
-                {/* the difference between a session that works FOR you and one you work IN */}
-                <FormControlLabel sx={{ mt: 0.5, ml: 0, alignItems: "flex-start" }}
-                  control={<Checkbox size="small" checked={stayOpen} sx={{ py: 0.25, mr: 0.5 }}
-                    onChange={(x) => setStayOpen(x.target.checked)} />}
-                  label={
-                    <Box sx={{ pt: 0.35 }}>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>Leave it open when it goes quiet</Typography>
-                      <Typography sx={{ fontSize: 11, color: FAINT, lineHeight: 1.5 }}>
-                        For a session you mean to sit in. Off, it closes itself the moment it reads
-                        as finished — which is right for work that arrived, and wrong while you are
-                        still typing. Even the agent's own `taskuary --done` only tells you it thinks it is finished.
-                      </Typography>
-                    </Box>} />
+                {/* A session you start is yours to end: the server marks the task the moment you open
+                    one (selfclose.claim), whichever door you came through - no checkbox to forget. */}
               </Box>
             )}
           </>

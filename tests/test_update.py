@@ -158,8 +158,13 @@ class Applying(unittest.TestCase):
              mock.patch.object(update, '_launch_swap') as launch:
             out = update.apply()
         self.assertEqual(out, {'how': 'exe', 'downloaded': 1234, 'restarting': True})
-        self.assertEqual(dl.call_args[0][1], d / 'Taskuary.new.exe')          # beside the old one
-        script = d / 'taskuary-update.cmd'
+        # NOT beside the old one any more: a fresh .exe appearing next to the program is what
+        # Controlled Folder Access and antivirus stop, and for a downloaded single file that
+        # folder is Downloads (update.staging)
+        stage = update.staging()
+        self.assertEqual(dl.call_args[0][1], stage / 'Taskuary.new.exe')
+        self.assertEqual(sorted(p.name for p in d.iterdir()), ['Taskuary.exe'])
+        script = stage / 'taskuary-update.cmd'
         self.assertTrue(script.is_file())
         body = script.read_text(encoding='utf-8')
         self.assertIn(f'PID eq {os.getpid()}', body); self.assertIn('"--port" "7787"', body)

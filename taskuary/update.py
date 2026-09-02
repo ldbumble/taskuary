@@ -96,13 +96,34 @@ def _download(url: str, dest: Path, progress=None) -> int:
     return got
 
 
+def staging() -> Path:
+    """Where the new build is assembled before it is put in place.
+
+    It used to be assembled beside the running program, which is wherever the owner happened to
+    launch it from - and for a single-file download that is the Downloads folder, the most watched
+    directory on a Windows box. Writing a brand-new .exe there is exactly what Controlled Folder
+    Access and every antivirus is built to stop, so the update failed before it began with
+    "[Errno 13] Permission denied" and nothing to act on (an owner's machine, 2026-09-02).
+
+    The data folder is the one directory this program is PROVEN able to write to: the database it
+    is serving from is open in it right now. So the download, the helper script and its log all
+    go here, and the only thing that ever touches the program's own folder is a single move.
+    """
+    from . import config
+    d = config.home() / 'update'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
     """The batch that finishes the job after this process has gone. Waits for the PID (the exe
     is locked while it runs), moves the new file over the old (retrying - antivirus likes to hold
     a fresh download for a second), starts the new build with the SAME arguments, removes itself."""
     q = lambda s: '"' + str(s).replace('"', '""') + '"'
     argstr = ' '.join(q(a) for a in args)
-    log = exe.with_name('taskuary-update.log')
+    # beside the DOWNLOAD, not beside the program: the whole point of staging is that the
+    # program's own folder is written to exactly once, by the move below
+    log = Path(new).with_name('taskuary-update.log')
     return '\r\n'.join([
         '@echo off',
         'setlocal',
@@ -164,28 +185,15 @@ def _launch_swap(script: Path, cwd: Path):
         return subprocess.Popen(argv, creationflags=base, **kw)
 
 
-# WHY THE UPDATE COULD NOT BE WRITTEN. "[Errno 13] Permission denied:
-# C:/Users/uri/Downloads/Taskuary.new.exe" is a true sentence that tells the owner nothing they
-# can act on, and it invites the two wrong answers - run it as administrator, install it as a
-# service - neither of which touches any of the three real causes (reported 2026-09-02).
-#
-# It is not about RIGHTS. The folder is inside the owner's own profile and they can already write
-# to it. Something is refusing this particular write, and which one it is decides what to do:
-#
-#   the file is already there   a previous attempt left it, and it is locked - still running, or
-#                               open by a virus scanner. Delete it and try again.
-#   the folder refuses too      Controlled Folder Access (Defender's ransomware protection) or an
-#                               antivirus is blocking a NEW .exe appearing here. Allow Taskuary,
-#                               or move the program out of a watched folder.
-#   neither                     something else holds it; the error itself is all we know.
-#
-# Downloads makes every one of these more likely - it is the most watched folder on a Windows box
-# and the one a single-file download lands in by default - so the message says so.
+# WHY THE UPDATE COULD NOT BE WRITTEN. "[Errno 13] Permission denied" and a path tells the owner
+# nothing they can act on, and it invites the two wrong answers - run it as administrator, install
+# it as a service - neither of which touches any real cause. It is not about RIGHTS: everything
+# here is inside the owner's own profile and they can already write to it. Something is refusing
+# this particular write, and which one it is decides what to do.
 def _why_refused(new: Path, exe: Path, err: OSError) -> str:
     if new.exists():
         return (f'{new.name} is already in {new.parent} from an earlier attempt and something still has '
-                f'it open - usually a virus scanner, or a copy that is still running. Delete '
-                f'{new} and press Update again.')
+                f'it open - usually a virus scanner. Delete {new} and press Update again.')
     probe = new.with_name(f'.taskuary-write-test-{os.getpid()}')
     try:
         probe.write_bytes(b'x'); probe.unlink(missing_ok=True)
@@ -193,27 +201,29 @@ def _why_refused(new: Path, exe: Path, err: OSError) -> str:
     except OSError:
         folder_ok = False
     if folder_ok:
-        return (f'Windows allowed a normal file into {new.parent} but refused a new program there. That is '
-                'Controlled Folder Access (Windows Security → Virus & threat protection → Ransomware '
-                'protection) or your antivirus stopping a fresh .exe. Allow Taskuary through it, or move '
-                f'{exe.name} into a folder of its own and run it from there.')
-    return (f'Nothing can be written into {new.parent} at all. If that is your Downloads folder, Windows '
-            'Security or your antivirus is protecting it - allow Taskuary through, or move '
-            f'{exe.name} into a folder of its own. Running Taskuary as administrator does not help: '
-            'the block is on the program, not on your account.')
+        return (f'Windows allowed an ordinary file into {new.parent} but refused a new program there. '
+                'That is Controlled Folder Access (Windows Security → Virus & threat protection → '
+                'Ransomware protection) or your antivirus stopping a fresh .exe from appearing. Allow '
+                'Taskuary through it and press Update again.')
+    return (f'Nothing can be written into {new.parent} at all - and that is the Taskuary data folder, '
+            'which it is otherwise using right now, so this is almost certainly antivirus or a security '
+            'policy blocking it. Allow Taskuary through and press Update again. Running as administrator '
+            'does not help: the block is on the program, not on your account.')
 
 
 def _apply_exe(url: str, progress=None) -> dict:
     exe = Path(sys.executable).resolve()
-    new = exe.with_name('Taskuary.new.exe')
+    stage = staging()
+    new = stage / 'Taskuary.new.exe'
+    new.unlink(missing_ok=True)          # a leftover from a run that never finished is not our copy
     try:
         size = _download(url, new, progress)
-        script = exe.with_name('taskuary-update.cmd')
+        script = stage / 'taskuary-update.cmd'
         script.write_text(swap_script(exe, new, os.getpid(), sys.argv[1:]), encoding='utf-8')
     except OSError as e:
         if getattr(e, 'errno', None) != 13 and getattr(e, 'winerror', None) not in (5, 32):
             raise
-        raise RuntimeError(f'the update could not be saved next to {exe.name}. '
+        raise RuntimeError('the new build could not be saved. '
                            + _why_refused(new, exe, e)
                            + f' (Windows said: {e})') from e
     # detached and, where Windows permits it, outside any parent Job: it must outlive us.

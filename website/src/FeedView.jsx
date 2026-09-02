@@ -1499,8 +1499,56 @@ const PanelLabel = ({ children }) => (
 
 // One quiet progress rail. Detail belongs in the four tabs, not repeated in a stack of cards.
 // The whole stop is clickable so the summary remains a fast way into any stage.
-const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state = "idle" }) => {
+// `children` turns a step from a signpost into the thing itself - which the Reply step needs and
+// Triage and Agent deliberately do not. Those two are whole workspaces (five roads and a verdict;
+// a live terminal, a diff, a report), and flattening them onto this list would bury the one line
+// that matters under two screens that do not. Reply is the opposite: a box and two buttons, and
+// the only thing on this panel the owner ACTS on, so travelling to it was travelling for nothing.
+//
+// A step with children cannot be a <button>: a button may not contain a textbox or another
+// button. So it becomes a row whose HEADER is the button and whose body is yours.
+const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state = "idle", children }) => {
   const dot = state === "current" ? "#c7a258" : state === "done" ? "#718f74" : "#cfc8bc";
+  const rail = (
+    <Box sx={{ alignSelf: "stretch", position: "relative" }}>
+      <Box sx={{ position: "absolute", left: 10.5, top: first ? 22 : 0, bottom: last ? "auto" : 0,
+        height: last ? 8 : "auto", width: "1px", bgcolor: "#d8d2c8" }} />
+      <Box sx={{ position: "absolute", zIndex: 1, top: 22, left: 6.5, transform: "translateY(-50%)",
+        width: 9, height: 9, borderRadius: "50%", bgcolor: dot, border: `2px solid ${PANEL}`,
+        boxShadow: `0 0 0 1px ${dot}` }} />
+    </Box>
+  );
+  const head = (
+    <Box component="button" type="button" onClick={onOpen} aria-label={`Open ${title} details`}
+      sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0, width: "100%", minWidth: 0,
+        display: "grid", gridTemplateColumns: "minmax(0, 1fr) 18px", alignItems: "center",
+        textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit", borderRadius: 1,
+        "&:hover .tq-story-title": { color: ACCENT },
+        "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+      <Box sx={{ minWidth: 0, py: 0.65, pr: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0, mb: 0.15 }}>
+          <Typography className="tq-story-title" sx={{ color: INK, fontWeight: 700, fontSize: 11.5,
+            transition: "color .15s", whiteSpace: "nowrap" }}>{title}</Typography>
+          <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
+            fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
+        </Box>
+        {summary && <Typography sx={{ color: DIM, fontSize: 11.5, lineHeight: 1.38, overflow: "hidden",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{summary}</Typography>}
+      </Box>
+      <Box sx={{ display: "grid", placeItems: "center" }}>
+        <ChevronRightIcon sx={{ color: FAINT, fontSize: 13 }} />
+      </Box>
+    </Box>
+  );
+  if (children) return (
+    <Box sx={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr)", alignItems: "stretch", minWidth: 0 }}>
+      {rail}
+      <Box sx={{ minWidth: 0, pr: 0.5, pb: 1 }}>
+        {head}
+        <Box sx={{ mt: 0.25 }}>{children}</Box>
+      </Box>
+    </Box>
+  );
   return (
     <Box component="button" type="button" onClick={onOpen} aria-label={`Open ${title} details`}
       sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0, width: "100%", minWidth: 0,
@@ -1661,6 +1709,35 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const replyDraft = pending
     ? (livePending?.DraftText || pendingDraft(detail || { runs: [] }, sel))
     : (opened?.draft || "");
+  // The reply's ACTIONS, in one place: the Reply tab shows them, and the Summary timeline inlines
+  // them under its Reply step. Written once so the two cannot drift into disagreeing about what
+  // you may do with a draft.
+  const replyControls = (
+    <>
+      {pending && (
+        <ReviewActions reviewId={pendingId} draft={replyDraft}
+          editText={editText} setEditText={setEditText} decide={decide}
+          sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
+          onChanged={onRefresh} />
+      )}
+      {!pending && opened && (
+        <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
+          editText={editText} setEditText={setEditText} decide={decide}
+          sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
+          onChanged={onRefresh} />
+      )}
+      {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
+          Nobody sent this, so there is nobody to answer. Findings stay with the Timeline item.
+        </Typography>
+      ) : (
+        <ChoiceRow tint={PANEL2} busy={opening} onClick={openReply}
+          icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: ACCENT }} />}
+          label="Write a reply" first
+          hint="the AI drafts it from the thread and the agent result; approving sends it" />
+      ))}
+    </>
+  );
   // the road, in words - the why sentence is one tab over, for when it is asked for
   const roadMeta = ROADS.find((r) => r.key === roadOf(sel));
   const failedTriage = triageFailed(sel);
@@ -1777,13 +1854,15 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                       : "No agent work has started."}
                     state={onIt ? "current" : (chatTask || rep || diffRun) ? "done" : "idle"}
                     onOpen={() => setTab("agent")} />
+                  {/* the draft is IN the step now, so repeating it as a two-line summary above the
+                      box it is already in was saying the same words twice */}
                   <StoryTimelineStep title="Reply" last
                     status={pending ? "waiting on you" : replied ? "sent from Taskuary" : answeredOutside ? "you replied" : opened ? "draft open" : "not drafted"}
-                    summary={pending ? cleanText(replyDraft) : replied ? cleanText(sentReply)
-                      : answeredOutside ? (cleanText(outsideReply) || `Answered in ${sel.Channel}.`)
-                      : replyDraft ? cleanText(replyDraft) : (["report", "assistant"].includes(sel.Channel)
-                      ? "This item has nobody to reply to." : "No reply has been drafted yet.")}
-                    state={replyOpen ? "current" : answered ? "done" : "idle"} onOpen={() => setTab("reply")} />
+                    summary={replied ? cleanText(sentReply)
+                      : answeredOutside ? (cleanText(outsideReply) || `Answered in ${sel.Channel}.`) : ""}
+                    state={replyOpen ? "current" : answered ? "done" : "idle"} onOpen={() => setTab("reply")}>
+                    {replyControls}
+                  </StoryTimelineStep>
                 </Box>
               )}
 
@@ -1918,28 +1997,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                       </Box>
                     </Box>
                   )}
-                  {pending && (
-                    <ReviewActions reviewId={pendingId} draft={replyDraft}
-                      editText={editText} setEditText={setEditText} decide={decide}
-                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
-                      onChanged={onRefresh} />
-                  )}
-                  {!pending && opened && (
-                    <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
-                      editText={editText} setEditText={setEditText} decide={decide}
-                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
-                      onChanged={onRefresh} />
-                  )}
-                  {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
-                    <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
-                      Nobody sent this, so there is nobody to answer. Findings stay with the Timeline item.
-                    </Typography>
-                  ) : (
-                    <ChoiceRow tint={PANEL2} busy={opening} onClick={openReply}
-                      icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: ACCENT }} />}
-                      label="Write a reply" first
-                      hint="the AI drafts it from the thread and the agent result; approving sends it" />
-                  ))}
+                  {replyControls}
                 </Box>
               )}
             </>
@@ -2253,6 +2311,29 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
   const [retrying, setRetrying] = useState(false);
   const [retryNote, setRetryNote] = useState("");
   const [retryError, setRetryError] = useState(false);
+  // Correcting the road. The panel has always PROMISED this ("correcting this teaches it") and
+  // offered nothing to click; a pill is now the click. It does the road's real action as well as
+  // recording the verdict - saying it without doing it would leave the funnel and the record
+  // disagreeing, which is the failure this panel exists to prevent.
+  const [fixing, setFixing] = useState("");
+  const [fixNote, setFixNote] = useState("");
+  const [fixError, setFixError] = useState(false);
+  const reclassify = async (key) => {
+    if (fixing || key === road) return;
+    setFixing(key); setFixNote(""); setFixError(false);
+    try {
+      const { data } = await api.post(`/api/messages/${sel.MessageId}/reclassify`, { road: key });
+      const meta = ROADS.find((r) => r.key === key);
+      setFixNote(data.changed
+        ? `Now ${meta?.label || key} — ${meta?.hint || ""}. Remembered for the next message like this one.`
+        : `It was already ${meta?.label || key}.`);
+      onRefresh?.();
+    } catch (e) {
+      setFixError(true);
+      setFixNote(e?.response?.data?.detail || "That did not work.");
+    }
+    setFixing("");
+  };
   const retryTriage = async () => {
     if (retrying) return;
     setRetrying(true); setRetryNote(""); setRetryError(false);
@@ -2289,15 +2370,26 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
     <>
       <PanelLabel>Which road it took</PanelLabel>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.65, flexWrap: "wrap", mb: 1.5 }}>
-        {ROADS.map((r) => (
-          <Box key={r.key} title={r.hint} aria-current={road === r.key ? "true" : undefined}
-            sx={{ display: "flex", alignItems: "center", gap: 0.55, border: `1px solid ${road === r.key ? "#aebcaf" : BORDER}`,
-              borderRadius: 10, px: 1.15, height: 30, bgcolor: road === r.key ? "#edf1eb" : "transparent" }}>
-            {road === r.key && <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: ACCENT2 }} />}
-            <Typography sx={{ fontSize: 11.5, fontWeight: road === r.key ? 700 : 500,
-              color: road === r.key ? INK : FAINT }}>{r.label}</Typography>
-          </Box>
-        ))}
+        {ROADS.map((r) => {
+          const on = road === r.key;
+          return (
+            <Box key={r.key} component="button" type="button" disabled={!!fixing || on}
+              onClick={() => reclassify(r.key)}
+              title={on ? r.hint : `Should have been ${r.label} — ${r.hint}. Sets it right and remembers it.`}
+              aria-current={on ? "true" : undefined}
+              sx={{ appearance: "none", font: "inherit", display: "flex", alignItems: "center", gap: 0.55,
+                border: `1px solid ${on ? "#aebcaf" : BORDER}`, borderRadius: 10, px: 1.15, height: 30,
+                bgcolor: on ? "#edf1eb" : "transparent", cursor: on ? "default" : "pointer",
+                opacity: fixing && fixing !== r.key ? 0.5 : 1,
+                "&:hover": on ? {} : { bgcolor: "#f7f4ef", borderColor: "#d8cfbe" },
+                "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+              {on && <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: ACCENT2 }} />}
+              <Typography sx={{ fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? INK : FAINT }}>
+                {fixing === r.key ? "…" : r.label}
+              </Typography>
+            </Box>
+          );
+        })}
         {road && <Typography variant="caption" sx={{ color: FAINT, ml: 0.35 }}>
           {ROADS.find((r) => r.key === road)?.hint}
         </Typography>}
@@ -2371,9 +2463,13 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
         </>
       )}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.25, lineHeight: 1.6 }}>
-        Correcting this teaches it: the verdict you give lands in TRIAGE.md and applies to the next
-        message like this one, not as a rule about this sender.
+        Pick another road to correct it: the message goes down that road for real, and the verdict
+        lands in memory for the next message like this one, not as a rule about this sender.
       </Typography>
+      {fixNote && (
+        <Typography variant="caption" sx={{ display: "block", mt: 0.5, lineHeight: 1.6,
+          color: fixError ? ALERT_INK : "#47654a" }}>{fixNote}</Typography>
+      )}
     </>
   );
 };

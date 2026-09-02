@@ -1097,6 +1097,87 @@ def _learn_promotion(m: dict, background):
                             'triage under-reached')
     return memid
 
+# WHICH ROAD IT SHOULD HAVE TAKEN. The Triage tab shows the five roads and says "correcting this
+# teaches it" - and there was nothing to click. A correction here is worth more than any other
+# signal the funnel gets: it is the owner looking at one real message and saying what should have
+# happened to it. So it does BOTH halves - it puts the message on the road it should have taken,
+# and it writes the verdict down where the next classification will read it.
+ROADS = {'fyi': 'nothing to do', 'reply': 'a sentence settles it', 'coding': 'an agent on a keyboard',
+         'general': 'talk it through with the assistant', 'task': 'yours - nothing works it'}
+ROAD_VERDICT = {'fyi': 'FILE IT: not work', 'reply': 'REPLY ONLY: answering it IS the work',
+                'coding': 'CODING TASK: an agent should work it', 'general': 'A CONVERSATION, not a project',
+                'task': "THE OWNER'S OWN TASK: real work, but not an agent's"}
+
+
+class ReclassifyBody(BaseModel):
+    road: str                       # fyi | reply | coding | general | task
+    agent: str | None = None        # coding only: which CLI, default the usual one
+
+
+def _teach_reclassify(m: dict, was: str, road: str, background) -> int:
+    """The correction as EVIDENCE, not as a rule. Keyed to the topic where there is one and to the
+    sender otherwise - never to the sender alone on a channel with no address, which is how one
+    verdict about one message becomes a policy about a person (see file_message)."""
+    em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
+    if not (em or topic): return 0
+    memid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
+                              'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                              'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or '')[:90]}\""
+                                      + (f' from {em}' if em else '') + (f' - the topic \"{topic}\"' if topic else '')
+                                      + f' - {ROAD_VERDICT[road]}'
+                                      + (f' (triage had called it {was})' if was else '')})
+    learn.note_verdicts(store)
+    ev = (f'mem{memid}: triage called \"{(m.get("Subject") or "")[:80]}\" from '
+          f'{m.get("FromEmail") or m.get("SourceName") or "?"} {was or "unclassified"}, and the owner '
+          f'reclassified it as {road} - {ROADS[road]}')
+    if background is not None: background.add_task(learn.learn_from, store, ev)
+    else: learn.learn_from(store, ev)
+    return memid
+
+
+def _road_now(m: dict) -> str:
+    """What the funnel decided, read the way the panel reads it (FeedView roadOf)."""
+    routes = store.message_routes(m['MessageId']) or []
+    reason = str((routes[-1] if routes else {}).get('Reason') or '')
+    if 'triage: fyi' in reason: return 'fyi'
+    if 'triage: reply_only' in reason: return 'reply'
+    kind = str((store.get_task(m['TaskId']) or {}).get('Kind') or '') if m.get('TaskId') else ''
+    if kind in ('coding', 'task'): return kind
+    return 'general' if m.get('TaskId') else ''
+
+
+@app.post('/api/messages/{mid}/reclassify')
+def reclassify_message(mid: int, body: ReclassifyBody, background: BackgroundTasks = None):
+    """Put this message on the road it should have taken, and remember that triage was wrong.
+
+    Not a relabel: each road is the same action its own button performs, so reclassifying to
+    coding really starts the agent and reclassifying to fyi really drops the task. Saying it
+    without doing it would leave the funnel and the record disagreeing, which is the failure this
+    whole panel exists to prevent."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    road = str(body.road or '').lower()
+    if road not in ROADS: raise HTTPException(422, f'unknown road: {body.road!r} - one of {", ".join(ROADS)}')
+    was = _road_now(m)
+    if was == road: return {'ok': True, 'road': road, 'changed': False, 'was': was}
+    memid = _teach_reclassify(m, was, road, background)
+    store.audit('message', mid, 'reclassified', ACTOR, detail={'from': was or None, 'to': road, 'memory': memid or None})
+    # the panel reads the road off the newest route row, so the correction has to be written where
+    # the verdict lives - otherwise the pill still shows what triage said
+    store.add_route(mid, m.get('TaskId'),
+                    {'fyi': 'file', 'reply': 'reply', 'coding': 'create', 'general': 'create', 'task': 'create'}[road],
+                    None, f'triage: {"reply_only" if road == "reply" else road} - you reclassified this'
+                          + (f' (triage called it {was})' if was else '') + ' - the verdict is in memory for next time',
+                    [], ACTOR)
+    out = {'ok': True, 'road': road, 'changed': True, 'was': was, 'memory': memid or None}
+    if road == 'fyi': file_message(mid, None, background)
+    elif road == 'reply': out['reply'] = open_reply(mid, None)
+    elif road == 'coding': out['agent'] = dispatch_message(mid, DispatchBody(agent=body.agent), background)
+    elif road == 'general': out['chat'] = chat_message(mid, background)
+    else: out['task'] = mine_message(mid, MineBody(kind='task'), background)
+    return out
+
+
 # ── the assistant on the Timeline (assistant.py): its post and its buttons ───────────────────
 @app.get('/api/assistant/ideas')
 def assistant_ideas(status: str = None, mid: int = None):

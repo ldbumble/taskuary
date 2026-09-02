@@ -4,6 +4,7 @@ on the timeline. Config: {"cmd": "npx", "args": [...], "tool": "query", "tool_ar
 SDK dependency - keeps the single-exe desktop build lean. Spec: modelcontextprotocol.io.
 """
 import json, os, subprocess, threading, queue
+from . import spawn
 
 PROTOCOL = '2025-06-18'
 
@@ -13,7 +14,7 @@ class MCPClient:
 
     def __init__(self, cmd, args=None, env=None, timeout=60):
         self.timeout, self._id = timeout, 0
-        self.p = subprocess.Popen([cmd] + list(args or []), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        self.p = spawn.popen([cmd] + list(args or []), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
                                   env={**os.environ, **(env or {})}, shell=False)
         self.q = queue.Queue()

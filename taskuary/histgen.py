@@ -26,6 +26,10 @@ def _status(state, what='', doc=None, evidence=None):
     if doc is not None: STATUS['doc'] = doc
     if evidence is not None: STATUS['evidence'] = evidence
 SENT_CAP, INBOX_CAP = 300, 500            # per mailbox; enough signal, bounded Graph bill
+# IMAP costs one round trip PER MESSAGE (Graph pages 50 at a time), so the same 300 would be a
+# minute of silence. STYLE_SAMPLES caps what reaches the model at 60 regardless, so a smaller
+# read loses nothing worth having.
+IMAP_SENT_CAP = 120
 STYLE_SAMPLES, TRIAGE_LINES = 60, 240
 TOPIC_MIN = 3            # a subject seen this often is routine work, not a one-off
 GUIDE_TOKENS = 1400
@@ -112,6 +116,31 @@ def _graph_mail(store, days):
     return sent, inbox, n
 
 
+def _imap_sent(store, days):
+    """The same history, for a mailbox connected over IMAP. Graph is not the only way mail gets
+    here, but every history reader assumed it was - so "Generate my reply style" on a working
+    IMAP card said "connect the Outlook card", which is advice the owner cannot act on."""
+    from . import imapmail
+    _status('running', 'reading your Sent folder over IMAP...')
+    try: rows = imapmail.sent_history(store, days, cap=IMAP_SENT_CAP, progress=_status)
+    except Exception as e:
+        logger.warning(f'history: no IMAP sent mail read - {e}')
+        return []
+    # shaped like a Graph message so one reader serves both
+    return [{'subject': m.get('subject'), 'receivedDateTime': (m.get('sent_at') or '').replace(' ', 'T'),
+             'conversationId': m.get('conversation_id'),
+             'body': {'contentType': 'text', 'content': m.get('body') or ''}} for m in rows]
+
+
+def sent_mail(store, days):
+    """(messages, mailboxes, where they came from). Graph first because it can also pair the
+    inbox; IMAP when Outlook is not the mailbox on this install."""
+    sent, inbox, n = _graph_mail(store, days)
+    if sent or inbox: return sent, inbox, n, 'Graph'
+    rows = _imap_sent(store, days)
+    return rows, [], (1 if rows else 0), 'IMAP'
+
+
 def _db_window(store, days):
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
     return [m for m in store.scan_messages() if str(m.get('SentAt') or '') >= since]
@@ -121,20 +150,21 @@ def gen_style(store, llm, days):
     """Sent mail -> how the owner writes. Graph sentitems first; Taskuary's own record
     (your context replies + drafts you approved) fills in or stands alone."""
     from .channels import _body
-    sent, _, n = _graph_mail(store, days)
+    sent, _inbox, n, how = sent_mail(store, days)
     samples = []
     for m in sent:
         t = cut_quoted(_body(m))
         if len(t) >= 30: samples.append(f"--- sent {str(m.get('receivedDateTime') or '')[:10]} · \"{(m.get('subject') or '')[:60]}\"\n{t[:800]}")
-    src = f'{len(samples)} sent mails from the last {days} days across {n} mailbox(es)'
+    src = f'{len(samples)} sent mails from the last {days} days across {n} mailbox(es), read over {how}'
     if not samples:
         msgs = [m for m in _db_window(store, days) if m.get('Status') == 'context']
         finals = [r for r in store.list_reviews() if r.get('FinalText') and r['Status'] in ('approved', 'edited')]
         samples = [f"--- your reply · \"{(m.get('Subject') or '')[:60]}\"\n{cut_quoted(str(m.get('BodyText') or ''))[:800]}" for m in msgs]
         samples += [f'--- approved draft\n{str(r["FinalText"])[:800]}' for r in finals]
-        src = f'no Graph mailbox history - used {len(samples)} replies Taskuary itself has seen'
+        src = f'no mailbox history to read - used {len(samples)} replies Taskuary itself has seen'
     if not samples:
-        raise RuntimeError('no sent mail to learn from - connect the Outlook card (or approve a few drafts) first')
+        raise RuntimeError('no sent mail to learn from - connect a mailbox (Outlook, Gmail or IMAP) and let one sync '
+                           'run, or approve a few drafts first')
     step = max(1, len(samples) // STYLE_SAMPLES)          # spread across the window, not just last week
     picked = samples[::step][:STYLE_SAMPLES]
     # receipts: which replies the model actually saw - each one is a vote on greeting,
@@ -153,21 +183,28 @@ def gen_triage(store, llm, days):
     """Inbox paired with sentitems by conversation: ANSWERED is the ground truth for what
     matters. Falls back to Taskuary's own outcomes (task/replied vs filed/ignored/skipped)."""
     lines, doms = [], {}
-    sent, inbox, n = _graph_mail(store, days)
+    sent, inbox, n, how = sent_mail(store, days)
     if inbox:
         answered = {m.get('conversationId') for m in sent if m.get('conversationId')}
         rows = [((((m.get('from') or {}).get('emailAddress') or {}).get('address') or '?').lower(),
                  str(m.get('receivedDateTime') or '')[:10], (m.get('subject') or '')[:70],
                  m.get('conversationId') in answered) for m in inbox]
-        src = f'{len(rows)} inbound + {len(sent)} sent from the last {days} days across {n} mailbox(es)'
+        src = f'{len(rows)} inbound + {len(sent)} sent from the last {days} days across {n} mailbox(es), read over {how}'
     else:
         msgs = _db_window(store, days)
+        # what the owner actually WROTE BACK beats "a task was made": the sent mail names the
+        # threads they answered, and answering is the ground truth this document is about
+        answered = {m.get('conversationId') for m in sent if m.get('conversationId')}
         rows = [((m.get('FromEmail') or '?').lower(), str(m.get('SentAt') or '')[:10], (m.get('Subject') or '')[:70],
-                 m['Status'] == 'routed' and bool(m.get('TaskId')))
+                 (m.get('ConversationId') in answered) if answered
+                 else (m['Status'] == 'routed' and bool(m.get('TaskId'))))
                 for m in msgs if m.get('Status') != 'context']
-        src = f'no Graph mailbox history - used {len(rows)} messages Taskuary itself has ingested'
+        src = (f'{len(rows)} messages Taskuary has ingested'
+               + (f', answered checked against {len(sent)} sent mails read over {how}' if answered
+                  else ' - no mailbox sent history, so "answered" is whether a task was made'))
     if not rows:
-        raise RuntimeError('no inbound history to learn from - connect the Outlook card (or let a few syncs run) first')
+        raise RuntimeError('no inbound history to learn from - connect a mailbox (Outlook, Gmail or IMAP) and let a '
+                           'few syncs run first')
     from .routing import subject_topic
     tops = {}
     for addr, _, subj, ans in rows:

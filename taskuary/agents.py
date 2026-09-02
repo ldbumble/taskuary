@@ -9,13 +9,14 @@ from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
+from . import spawn
 from .store import task_ref
 from .clis import preset_args
 
 
 def _git(cwd, *args):
     try:
-        p = subprocess.run(['git', '-C', cwd or os.getcwd(), *args], capture_output=True, text=True,
+        p = spawn.run(['git', '-C', cwd or os.getcwd(), *args], capture_output=True, text=True,
                            encoding='utf-8', errors='replace', timeout=30)
         return p.stdout.strip() if p.returncode == 0 else ''
     except Exception:
@@ -50,7 +51,7 @@ def _fresh_path() -> str:
 
 
 def _shim_target(path: str) -> list:
-    """What an npm .CMD shim actually runs. The shim is four lines of batch around one real
+    r"""What an npm .CMD shim actually runs. The shim is four lines of batch around one real
     program - claude.CMD ends with "%dp0%\node_modules\@anthropic-ai\claude-code\bin\claude.exe" %* -
     and going through cmd /c to reach it is what costs us the prompt: cmd.exe owns & | < > and
     stray quotes, so the first prompt cannot be passed as an ARGUMENT and has to be TYPED into
@@ -303,7 +304,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None):
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
     try:
-        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        p = spawn.popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False,
                              env=child_env())
     except PermissionError as e:

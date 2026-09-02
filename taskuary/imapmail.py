@@ -105,6 +105,109 @@ def _body_and_attachments(msg) -> tuple:
     return (text or _clean(html) or '').strip(), atts
 
 
+# ── the Sent folder ─────────────────────────────────────────────────────────────────────
+# Outlook has one name for it and Graph exposes it as `sentitems`; IMAP servers agree on nothing,
+# and Gmail hides it under a namespace. Without it an IMAP install has NO record of what the owner
+# writes, which is why "Generate my reply style" on a perfectly connected IMAP card answered "no
+# sent mail to learn from - connect the Outlook card" (owner, 2026-09-02). Ask the server instead
+# of guessing: RFC 6154 marks the folder with \Sent, and the familiar names are the fallback.
+SENT_NAMES = ('Sent', 'Sent Items', 'Sent Mail', 'INBOX.Sent', 'INBOX.Sent Items', '[Gmail]/Sent Mail')
+# (flags) "separator" name - the name may be quoted or bare, and may itself contain the separator
+_LIST_LINE = re.compile(r'^\((?P<flags>[^)]*)\)\s+(?:"(?P<sep>[^"]*)"|NIL)\s+(?P<name>.*)$')
+
+
+def _list_line(raw) -> tuple:
+    line = raw.decode('utf-8', 'replace') if isinstance(raw, (bytes, bytearray)) else str(raw)
+    m = _LIST_LINE.match(line.strip())
+    if not m: return '', ''
+    return m.group('flags') or '', (m.group('name') or '').strip().strip('"')
+
+
+def sent_folder(M) -> str:
+    """The mailbox's Sent folder, as this server spells it. '' when there is none to be found."""
+    try: typ, data = M.list()
+    except Exception: return ''
+    if typ != 'OK': return ''
+    named = []
+    for raw in data or []:
+        flags, name = _list_line(raw)
+        if not name: continue
+        if '\\Sent' in flags: return name            # the server said so: no guessing needed
+        named.append(name)
+    lower = {n.lower(): n for n in named}
+    return next((lower[w.lower()] for w in SENT_NAMES if w.lower() in lower), '')
+
+
+def sent_window(c, days: int, cap: int = 300, progress=None) -> list:
+    """What this mailbox has SENT in the last `days`, oldest first, each as
+    {subject, body, sent_at, to, conversation_id, external_id}. [] when there is no Sent folder.
+
+    Read-only by construction - the owner's own outbox is never modified, and nothing here is
+    triaged: sent mail is evidence about how they write, never work arriving."""
+    M, user = _login(c)
+    try:
+        box = sent_folder(M)
+        if not box: return []
+        typ, _d = M.select(_quoted(box), readonly=True)
+        if typ != 'OK': return []
+        since = (datetime.now() - timedelta(days=max(1, days))).strftime('%d-%b-%Y')
+        typ, data = M.uid('search', None, f'(SINCE {since})')
+        if typ != 'OK': return []
+        uids = [int(u) for u in (data[0] or b'').split()][-cap:]
+        out = []
+        for uid in uids:
+            # one fetch per message: say how far along, or the button sits silent for a minute
+            if progress and len(out) % 20 == 0:
+                progress('running', f'reading {user} - {len(out)} of {len(uids)} sent mails')
+            try:
+                typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+                if typ != 'OK' or not parts or parts[0] is None: continue
+                msg = email.message_from_bytes(parts[0][1])
+                body, _atts = _body_and_attachments(msg)
+                try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+                except Exception: when = ''
+                out.append({'external_id': f'imap-sent:{user}:{uid}', 'subject': _dec(msg.get('Subject')),
+                            'body': body[:20000], 'sent_at': when, 'to': _hdr_addrs(msg, 'To'),
+                            'from_email': user,
+                            'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None})
+            except Exception as e:
+                logger.debug(f'imap: sent uid {uid} skipped - {e}')
+        return out
+    finally:
+        try: M.logout()
+        except Exception: pass
+
+
+def _quoted(name: str) -> str:
+    """A folder with a space in it ('Sent Items', '[Gmail]/Sent Mail') must reach SELECT quoted."""
+    return f'"{name}"' if any(ch in name for ch in ' ()') else name
+
+
+def sent_history(store, days: int, cap: int = 300, progress=None) -> list:
+    """Every IMAP/Gmail card's Sent folder for the window. The card list is the point: an install
+    can have two mailboxes, and the owner writes the same way in both."""
+    out = []
+    for c in store.list_connectors():
+        if c['Type'] not in ('imap', 'gmail') or not c['Active']: continue
+        try: out += sent_window(store.get_connector(c['ConnectorId'], with_secret=True), days, cap, progress)
+        except Exception as e:
+            logger.warning(f"imap: could not read sent mail from {c.get('Name') or c['Type']} - {e}")
+    return sorted(out, key=lambda m: m.get('sent_at') or '')
+
+
+def ensure_source(store, c) -> bool:
+    """Give an IMAP/Gmail card the source row the poller reads it through, if it has none. True
+    when one was just made. The mailbox address IS the source name and it is already saved on the
+    card, so there is nothing to ask the owner and nothing to guess."""
+    user = (_cfg(c).get('address') or '').strip()
+    if not user: return False
+    if any(s['Channel'] == 'email' and (s.get('Address') or '').lower() == user.lower()
+           for s in store.list_sources(active_only=False)): return False
+    store.save_source({'Channel': 'email', 'Address': user, 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'self-heal')
+    logger.info(f'imap: {user} had no source row - added one so it is actually polled')
+    return True
+
+
 def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days: int = 0) -> int:
     """UIDs are IMAP's own cursor: strictly increasing per mailbox, so the watermark on the
     connector never re-ingests - and a backfill just lowers the SINCE date, with dedupe

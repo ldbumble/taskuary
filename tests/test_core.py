@@ -483,13 +483,13 @@ class CoreTests(unittest.TestCase):
         script = "import sys;sys.stdin.read();print('ok')"
         with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):
             seen = []
-            with mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+            with mock.patch('taskuary.spawn.popen', side_effect=RuntimeError('stop')) as pop:
                 try:
                     run_cli({'cmd': 'claude', 'args': ['-c', script], 'model': 'sonnet'}, 'hi', lambda *a: None)
                 except RuntimeError:
                     pass
             self.assertEqual(pop.call_args[0][0][-2:], ['--model', 'sonnet'])
-            with mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop2:
+            with mock.patch('taskuary.spawn.popen', side_effect=RuntimeError('stop')) as pop2:
                 try:
                     run_cli({'cmd': 'codex', 'args': ['exec'], 'model': 'gpt-5-codex', 'model_arg': '-m'}, 'hi', lambda *a: None)
                 except RuntimeError:
@@ -505,11 +505,11 @@ class CoreTests(unittest.TestCase):
         # non-interactive claude with no permission flag denied every tool call of a scheduled report
         for cmd in ('claude', r'C:\Users\me\AppData\Roaming\npm\claude.cmd', '/usr/local/bin/claude'):
             with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), \
-                 mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+                 mock.patch('taskuary.spawn.popen', side_effect=RuntimeError('stop')) as pop:
                 with self.assertRaises(RuntimeError): run_cli({'cmd': cmd}, 'hi', lambda *a: None)
             self.assertIn('--dangerously-skip-permissions', pop.call_args[0][0]); self.assertIn('-p', pop.call_args[0][0])
         self.assertEqual(preset_args('codex.exe')[0], 'exec'); self.assertEqual(preset_args('mycli'), [])
-        with mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+        with mock.patch('taskuary.spawn.popen', side_effect=RuntimeError('stop')) as pop:
             with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), self.assertRaises(RuntimeError):
                 run_cli({'cmd': 'mycli'}, 'hi', lambda *a: None)
         self.assertEqual(pop.call_args[0][0], ['X', '-p'])                       # an unknown CLI keeps the old bare pipe

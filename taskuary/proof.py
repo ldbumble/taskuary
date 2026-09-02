@@ -10,6 +10,7 @@ not.
 import re
 from datetime import datetime
 from loguru import logger
+from . import spawn
 
 # What a test run looks like on screen, per runner. Deliberately narrow: a line that only
 # MENTIONS pytest is not a test result, and counting it as one would turn the card into a
@@ -88,7 +89,7 @@ def _git(cwd, *args, ok=(0,)):
     the files DIFFER, which is the entire question we are asking it."""
     import subprocess
     try:
-        p = subprocess.run(['git', '-C', cwd, *args], capture_output=True, text=True,
+        p = spawn.run(['git', '-C', cwd, *args], capture_output=True, text=True,
                            encoding='utf-8', errors='replace', timeout=30)
         return p.stdout if p.returncode in ok else ''
     except Exception as e:

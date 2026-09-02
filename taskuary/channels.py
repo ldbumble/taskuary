@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import requests
 from loguru import logger
 
+from . import spawn
 from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message
 from .counsel import is_invite
@@ -272,7 +273,7 @@ def test_connector(store, cid: int) -> dict:
             import subprocess
             host = cfg.get('host')
             if not host: raise RuntimeError('no host set - enter the machine name (e.g. AZWEB01)')
-            p = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+            p = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
                                 f'Test-WSMan -ComputerName {host} -ErrorAction Stop | Out-Null; '
                                 f'Invoke-Command -ComputerName {host} -ScriptBlock {{ $env:COMPUTERNAME }}'],
                                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
@@ -795,6 +796,15 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
     try: llm = build_llm(store)
     except Exception: llm = None
     read_it = wants_read(store)   # asked once per run, not once per message
+    # a mailbox card whose source row was never created polls nothing at all, and looks connected
+    # the whole time it is doing so - so it heals itself here, before the source list is read
+    for c in store.list_connectors():
+        if c['Type'] in ('imap', 'gmail') and c['Active']:
+            try:
+                from . import imapmail
+                imapmail.ensure_source(store, store.get_connector(c['ConnectorId']))
+            except Exception as e:
+                logger.debug(f"imap: could not heal the source row for {c.get('Name')} - {e}")
     n = 0
     for c in store.list_connectors():
         if not c['Active'] or c['Type'] not in CH2SRC: continue

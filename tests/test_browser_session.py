@@ -53,7 +53,7 @@ class StartingItTests(unittest.TestCase):
         seen = {}
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
              mock.patch.object(bv, 'state', side_effect=[{'open': False}, {'open': True}]), \
-             mock.patch.object(bv.subprocess, 'Popen', side_effect=lambda cmd, **kw: seen.update(cmd=cmd)):
+             mock.patch.object(bv.spawn, 'popen', side_effect=lambda cmd, **kw: seen.update(cmd=cmd)):
             self.assertTrue(bv.start('abc123', 'https://portal.example'))
         self.assertEqual(seen['cmd'][:6], ['ab', '--session', 'tq-abc123', '--restore', bv.RESTORE_KEY, 'open'])
         self.assertEqual(seen['cmd'][6], 'https://portal.example')
@@ -61,7 +61,7 @@ class StartingItTests(unittest.TestCase):
     def test_a_browser_the_agent_already_opened_is_not_opened_twice(self):
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
              mock.patch.object(bv, 'state', return_value={'open': True}), \
-             mock.patch.object(bv.subprocess, 'Popen') as popen:
+             mock.patch.object(bv.spawn, 'popen') as popen:
             self.assertTrue(bv.start('abc123'))
         popen.assert_not_called()
 
@@ -72,7 +72,7 @@ class StartingItTests(unittest.TestCase):
     def test_a_browser_that_will_not_launch_is_a_warning_not_a_dead_session(self):
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
              mock.patch.object(bv, 'state', return_value={'open': False}), \
-             mock.patch.object(bv.subprocess, 'Popen', side_effect=OSError('no chrome')):
+             mock.patch.object(bv.spawn, 'popen', side_effect=OSError('no chrome')):
             self.assertFalse(bv.start('abc123'))
 
     def test_it_goes_with_the_session(self):
@@ -80,7 +80,7 @@ class StartingItTests(unittest.TestCase):
         what the close is for."""
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
              mock.patch.object(bv, '_read', return_value='9222'), \
-             mock.patch.object(bv.subprocess, 'run') as run:
+             mock.patch.object(bv.spawn, 'run') as run:
             bv.close('abc123')
         self.assertEqual(run.call_args[0][0], ['ab', '--session', 'tq-abc123', 'close'])
 

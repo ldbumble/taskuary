@@ -10,6 +10,7 @@ entry - PRs welcome.
 import io, json, re, sqlite3, time
 from datetime import datetime, timedelta
 from loguru import logger
+from . import spawn
 
 PLANNED = ['graphql', 'smb_file',
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
@@ -235,7 +236,7 @@ def run_winrm(cfg):
     it once (elevated)."""
     import subprocess
     host, script = cfg['host'], cfg['script']
-    p = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+    p = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
                         f'Invoke-Command -ComputerName {host} -ScriptBlock {{ {script} }}'],
                        capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
     if p.returncode != 0: raise RuntimeError((p.stderr or p.stdout or 'remote run failed')[:500])

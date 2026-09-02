@@ -42,7 +42,7 @@ class CatalogTests(unittest.TestCase):
         # and the main model pick on a run does the same
         from taskuary.agents import run_cli
         with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), \
-             mock.patch('taskuary.agents.subprocess.Popen', side_effect=RuntimeError('stop')) as pop:
+             mock.patch('taskuary.spawn.popen', side_effect=RuntimeError('stop')) as pop:
             with self.assertRaises(RuntimeError): run_cli({'cmd': 'codex', 'args': ['exec'], 'model': 'gpt-5.6-sol@xhigh'}, 'hi', lambda *a: None)
         argv = pop.call_args[0][0]
         self.assertEqual(argv[argv.index('--model') + 1], 'gpt-5.6-sol'); self.assertIn('model_reasoning_effort=xhigh', argv)

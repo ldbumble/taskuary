@@ -12,6 +12,7 @@ it is in. The bridge outlives the request and the browser tab; only the machine 
 import json, os, shutil, subprocess, threading, time
 from pathlib import Path
 from loguru import logger
+from . import spawn
 
 DIR = Path(__file__).resolve().parent / 'whatsapp'
 LOG = DIR / 'wa-bridge.log'
@@ -85,7 +86,7 @@ def start(force_install: bool = False, wait: bool = False) -> dict:
             if force_install or not (DIR / 'node_modules' / '@whiskeysockets').exists():
                 _set('installing', 'npm install - the bridge\'s dependency (Baileys) is a few minutes on a slow line')
                 npm = shutil.which('npm') or shutil.which('npm.cmd') or 'npm'
-                r = subprocess.run([npm, 'install', '--no-audit', '--no-fund'], cwd=str(DIR), capture_output=True, text=True, timeout=900, shell=False)
+                r = spawn.run([npm, 'install', '--no-audit', '--no-fund'], cwd=str(DIR), capture_output=True, text=True, timeout=900, shell=False)
                 if r.returncode != 0:
                     _set('failed', f'npm install failed: {(r.stderr or r.stdout)[-300:]}'); return
             _set('starting', 'node bridge.mjs')
@@ -116,7 +117,7 @@ def pid_on_port(p: int = None) -> int:
     p = p or port()
     try:
         if os.name == 'nt':
-            out = subprocess.run(['netstat', '-ano', '-p', 'tcp'], capture_output=True, text=True, timeout=10).stdout
+            out = spawn.run(['netstat', '-ano', '-p', 'tcp'], capture_output=True, text=True, timeout=10).stdout
             for l in out.splitlines():
                 cols = l.split()
                 if len(cols) >= 5 and cols[0] == 'TCP' and cols[1].endswith(f':{p}') and cols[3] == 'LISTENING': return int(cols[4])
@@ -131,7 +132,7 @@ def stop() -> dict:
     pid = _STATE.get('pid') or pid_on_port()
     if pid:
         try:
-            if os.name == 'nt': subprocess.run(['taskkill', '/PID', str(pid), '/T', '/F'], capture_output=True)
+            if os.name == 'nt': spawn.run(['taskkill', '/PID', str(pid), '/T', '/F'], capture_output=True)
             else: os.kill(pid, 15)
         except Exception as e: logger.warning(f'wa bridge stop: {e}')
     _set('idle', 'stopped')

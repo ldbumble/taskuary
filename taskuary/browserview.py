@@ -25,6 +25,7 @@ import base64, json, os, re, shutil, socket, subprocess, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
+from . import spawn
 
 MAX_FPS = 12                    # a watched page, not a game: 12 frames/s at ~50KB each is plenty and easy on a LAN tab
 MAX_FRAME = 8 * 1024 * 1024     # a 1280x720 jpeg is ~54KB; this is the ceiling for a huge viewport, not a target
@@ -140,7 +141,7 @@ def close(sid: str):
     headless Chrome per finished task sits idle for an hour each."""
     exe = shutil.which('agent-browser')
     if not exe or not _read(session_name(sid), 'stream'): return
-    try: subprocess.run([exe, '--session', session_name(sid), 'close'], timeout=20, capture_output=True)
+    try: spawn.run([exe, '--session', session_name(sid), 'close'], timeout=20, capture_output=True)
     except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
     _CACHE.pop(sid, None); LAST.pop(sid, None)
 
@@ -174,7 +175,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
     try:
         # detached: it outlives this request and answers on its own screencast port. Output is
         # dropped - the pane IS the output, and a full pipe would block the browser.
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        spawn.popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, close_fds=True)
     except (OSError, subprocess.SubprocessError) as e:
         logger.warning(f'could not start the browser for {sid}: {e}')

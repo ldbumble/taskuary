@@ -465,8 +465,14 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
             change
           </Typography>
         )}
-        {s.done && open && Form && <Box sx={{ width: "100%" }}><Form onDone={onDone} onGo={onGo} /></Box>}
       </Box>
+      {/* A reopened DONE step used to put its form inside the header row, as a flex sibling with
+          width:100% - so the form overflowed its track and sat on top of the step's own title and
+          reason (owner, 2026-09-02: "now it looks weird"). It belongs UNDER the row, indented to
+          line up with the text column, the same place the open-step form appears. */}
+      {s.done && open && Form && (
+        <Box sx={{ pl: 4.5, pt: 1 }}><Form onDone={onDone} onGo={onGo} /></Box>
+      )}
     </Box>
   );
 };

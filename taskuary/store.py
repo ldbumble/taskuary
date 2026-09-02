@@ -965,7 +965,11 @@ class SQLiteStore:
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""
-        return self._rows('SELECT MessageId, TaskId, FromEmail, Subject, Status, SentAt, substr(BodyText, 1, 2000) BodyText '
+        # ConversationId rides along so a history reader can pair inbound mail with what the owner
+        # SENT back (histgen: "answered" is the ground truth TRIAGE.md is distilled from, and on an
+        # IMAP install this store is the only place the inbound half lives)
+        return self._rows('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, '
+                          'substr(BodyText, 1, 2000) BodyText '
                           'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
     def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
     def update_message_body(self, mid, body): self._exec('UPDATE message SET BodyText=? WHERE MessageId=?', (body, mid))   # a voice note, transcribed later

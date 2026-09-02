@@ -14,3 +14,13 @@ export const loadedAsset = (doc = document) => {
 
 /** Is the served bundle a DIFFERENT one from the one running? Unknown answers are never stale. */
 export const isStale = (loaded, served) => !!loaded && !!served && loaded !== served;
+
+/** What the banner should say, if anything. A version bump on disk needs a RESTART (the server
+ *  process still reports the number it started with); a rebuilt bundle only needs a reload.
+ *  The restart case wins: after a pull both are usually true, and reloading alone fixes neither
+ *  the header's version nor the server's code. */
+export const staleWhat = (loaded, build) => {
+  if (!build) return "";
+  if (build.disk_version && build.version && build.disk_version !== build.version) return `v${build.disk_version} on disk — restart Taskuary`;
+  return isStale(loaded, build.asset) ? "update ready — reload" : "";
+};

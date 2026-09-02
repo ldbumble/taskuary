@@ -3032,12 +3032,16 @@ def build():
     a bug that was already fixed, and the owner has no way to tell the difference from inside
     the page. So the page asks, and says "reload" when the answer stops matching what it loaded.
     """
+    # `version` is the process; `disk_version` is pyproject.toml right now. They part company the
+    # moment a pull bumps the number under a running server - and until the owner restarts, the
+    # header pill, /api/version and the CLI banner all report the old one. The page says so.
+    from . import _version
     try:
         html = (_web_root / 'index.html').read_text(encoding='utf-8')
         return {'asset': (re.search(r'assets/(index-[A-Za-z0-9_-]+\.js)', html) or [None, ''])[1],
-                'version': _ver}
+                'version': _ver, 'disk_version': _version()}
     except OSError:
-        return {'asset': '', 'version': _ver}
+        return {'asset': '', 'version': _ver, 'disk_version': _version()}
 
 @app.get('/api/settings')
 def settings():

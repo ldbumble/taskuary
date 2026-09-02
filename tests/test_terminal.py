@@ -251,14 +251,17 @@ class TerminalTests(unittest.TestCase):
         try:
             def repaint(rows, cols):
                 sizes.append((rows, cols))
-                if len(sizes) == 2:
+                # the redraw answers THE resize the client sent - found by its size, not by its
+                # position in the list: whether the handshake resizes first depends on the pty
+                # backend, and on the Windows runner it did not, so "the second call" never came
+                if (rows, cols) == (30, 100) and sizes.count((30, 100)) == 1:
                     t._append('\x1b[Hlive codex screen')
                     t._emit('\x1b[Hlive codex screen')
             with mock.patch.object(t, 'resize', side_effect=repaint):
                 with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
                     ws.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
                     frames = []
-                    for _ in range(8):
+                    for _ in range(20):
                         frames.append(ws.receive_json())
                         if frames[-1]['type'] == 'ready': break
             kinds = [m['type'] for m in frames]

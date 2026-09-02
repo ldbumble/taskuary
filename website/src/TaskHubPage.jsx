@@ -21,7 +21,7 @@ import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
-import { isStale, loadedAsset } from "./staleBuild.js";
+import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark } from "./ui.jsx";
@@ -112,26 +112,28 @@ function DemoBadge({ demo }) {
 }
 
 function StaleBuild() {
-  const [stale, setStale] = useState(false);
+  const [stale, setStale] = useState("");
   useEffect(() => {
     // the static demo IS a recording: its /api/build is whatever the instance it was dumped
     // from was running, which is not a newer version of anything
     if (import.meta.env.VITE_DEMO === "1") return undefined;
     const mine = loadedAsset();
     const check = () => api.get("/api/build")
-      .then(({ data }) => setStale(isStale(mine, data.asset))).catch(() => {});
+      .then(({ data }) => setStale(staleWhat(mine, data))).catch(() => {});
     check();
     const t = setInterval(check, 60000);
     return () => clearInterval(t);
   }, []);
   if (!stale) return null;
+  const restart = /restart/.test(stale);
   return (
-    <Tooltip title="Taskuary has been updated on disk since this page was opened. Nothing is lost by reloading.">
-      <Box onClick={() => window.location.reload()}
-        sx={{ display: "flex", alignItems: "center", gap: 0.6, cursor: "pointer", px: 1, py: 0.3,
+    <Tooltip title={restart ? "pyproject.toml carries a newer version than this server started with - the header, the API and the CLI all report the old one until Taskuary is restarted. Nothing is lost by restarting."
+      : "Taskuary has been updated on disk since this page was opened. Nothing is lost by reloading."}>
+      <Box onClick={() => !restart && window.location.reload()}
+        sx={{ display: "flex", alignItems: "center", gap: 0.6, cursor: restart ? "default" : "pointer", px: 1, py: 0.3,
           borderRadius: 99, border: "1px solid #d8cfbe", bgcolor: "#f1ead9" }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#6f8a6e" }} />
-        <Typography variant="caption" sx={{ fontWeight: 700, color: "#55697a" }}>update ready — reload</Typography>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: "#55697a" }}>{stale}</Typography>
       </Box>
     </Tooltip>
   );

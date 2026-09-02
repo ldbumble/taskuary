@@ -14,7 +14,8 @@ Taskuary automates the ends and leaves you the middle:
    and triage tasks run in a conversational workspace; its assistant and terminal views share
    one session, and both can sit beside the session browser. Plain tasks wait on your list.
    See [The five roads](#the-five-roads) for what each verdict means.
-4. Results and replies return for review. Nothing sends, closes, or ships without approval.
+4. Results and replies return for review. Nothing sends or ships without approval. A triaged
+   coding task may close itself when its agent finishes; owner-controlled tasks never do.
 
 Nothing leaves the machine except calls to services you explicitly configure.
 
@@ -81,8 +82,11 @@ The rest of the workspace answers a specific question:
 - **Studio** renders agent capacity as a floor: one desk per slot, an occupied desk for a
   running task, and a raised hand for a session waiting on you.
 - **Wall** puts every live terminal side by side, with a prompt box under each session.
-- **Tasks** is the full interactive terminal for one task. Pause preserves a handoff; Done
-  reads the transcript, writes the report, and prepares the reply. When the agent opens a web
+- **Tasks** separates the durable task, one agent session, and communication with the sender.
+  You can stop or finish an agent run without completing the task, restart with a different
+  coding harness and a new prompt, reply without closing owner-controlled work, and explicitly
+  reopen or mark the task done. See [Tasks, agent sessions, and replies](task-lifecycle.md).
+  When the agent opens a web
   page (through the optional `agent-browser` tool), the page appears live beside the terminal:
   the browser takes the larger share, a handle between the two resizes it, and it folds away
   when the browser closes. **Take over** gives you the mouse and keyboard for a password or a

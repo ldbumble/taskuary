@@ -18,7 +18,7 @@ The latest version is the GitHub release the publish workflow cuts on every tag,
 the asset it attaches at a fixed URL (releases/latest/download/Taskuary.exe). No token, no extra
 service, and the same file a person would download by hand.
 """
-import os, re, sys, threading, time
+import os, re, subprocess, sys, threading, time
 from pathlib import Path
 
 import requests
@@ -102,12 +102,16 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
     a fresh download for a second), starts the new build with the SAME arguments, removes itself."""
     q = lambda s: '"' + str(s).replace('"', '""') + '"'
     argstr = ' '.join(q(a) for a in args)
+    log = exe.with_name('taskuary-update.log')
     return '\r\n'.join([
         '@echo off',
         'setlocal',
+        f'set "update_log={log}"',
+        '> "%update_log%" echo update helper started %date% %time%',
         ':wait',
         f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul',
         'if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)',
+        '>> "%update_log%" echo old process exited %date% %time%',
         'set /a tries=0',
         ':swap',
         f'move /Y {q(new)} {q(exe)} >nul 2>&1',
@@ -117,14 +121,47 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
         '  timeout /t 1 /nobreak >nul',
         '  goto swap',
         ')',
-        f'start "" {q(exe)} {argstr}'.rstrip(),
+        '>> "%update_log%" echo program swapped; launching new build %date% %time%',
+        f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
+        'if errorlevel 1 goto launchfail',
+        '>> "%update_log%" echo launch requested successfully %date% %time%',
         'del "%~f0"',
         'exit /b 0',
         ':giveup',
-        f'start "" {q(exe)} {argstr}'.rstrip(),
+        '>> "%update_log%" echo ERROR: could not replace the old program after 30 tries %date% %time%',
+        f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
         'del "%~f0"',
         'exit /b 1',
+        ':launchfail',
+        '>> "%update_log%" echo ERROR: Windows refused to launch the new program %date% %time%',
+        'exit /b 2',
     ]) + '\r\n'
+
+
+def _launch_swap(script: Path, cwd: Path):
+    """Start the updater outside the desktop app's lifetime.
+
+    Corporate launchers commonly put desktop programs in a Windows Job with "kill every child
+    when the parent exits" enabled. DETACHED_PROCESS removes the console, but it does *not* leave
+    that Job; the old app therefore disappeared and took its updater with it. Ask Windows to break
+    the helper out of the Job. Some locked-down Jobs refuse that flag, so retry without it rather
+    than refusing the update before it has begun.
+    """
+    cmd = os.environ.get('COMSPEC') or 'cmd.exe'
+    argv = [cmd, '/d', '/c', 'call', str(script)]
+    base = (getattr(subprocess, 'DETACHED_PROCESS', 0)
+            | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+            | getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    kw = dict(cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+              stderr=subprocess.DEVNULL, close_fds=True)
+    breakaway = getattr(subprocess, 'CREATE_BREAKAWAY_FROM_JOB', 0x01000000)
+    try:
+        return subprocess.Popen(argv, creationflags=base | breakaway, **kw)
+    except OSError as e:
+        if getattr(e, 'winerror', None) not in (5, 87):
+            raise
+        logger.warning(f'update: Windows refused job breakaway ({e}); retrying detached')
+        return subprocess.Popen(argv, creationflags=base, **kw)
 
 
 def _apply_exe(url: str, progress=None) -> dict:
@@ -133,11 +170,8 @@ def _apply_exe(url: str, progress=None) -> dict:
     size = _download(url, new, progress)
     script = exe.with_name('taskuary-update.cmd')
     script.write_text(swap_script(exe, new, os.getpid(), sys.argv[1:]), encoding='utf-8')
-    from . import spawn
-    import subprocess
-    # detached: it must outlive us, and it must not die when our (nonexistent) console does
-    spawn.popen(['cmd', '/c', str(script)], cwd=str(exe.parent), close_fds=True,
-                creationflags=getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
+    # detached and, where Windows permits it, outside any parent Job: it must outlive us.
+    _launch_swap(script, exe.parent)
     logger.info(f'update: {size:,} bytes downloaded to {new.name}; {script.name} takes over when this process exits')
     return {'how': 'exe', 'downloaded': size, 'restarting': True}
 

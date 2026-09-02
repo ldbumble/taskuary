@@ -69,14 +69,38 @@ class TheSwapScript(unittest.TestCase):
                                ['--port', '7787', '--debug'])
         self.assertIn('PID eq 4242', s)                                  # waits for THIS process to go
         self.assertIn('move /Y "C:\\Apps\\Taskuary.new.exe" "C:\\Apps\\Taskuary.exe"', s)
-        self.assertIn('start "" "C:\\Apps\\Taskuary.exe" "--port" "7787" "--debug"', s)   # same command line
+        self.assertIn('start "" /D "C:\\Apps" "C:\\Apps\\Taskuary.exe" "--port" "7787" "--debug"', s)
         self.assertIn('del "%~f0"', s)                                   # leaves nothing behind
         self.assertIn('geq 30 goto giveup', s)                          # a stuck swap still relaunches something
+        self.assertIn('taskuary-update.log', s)                         # the other machine leaves a verdict
         self.assertTrue(s.endswith('\r\n'))                              # batch wants CRLF
 
     def test_no_arguments_leaves_no_trailing_space(self):
         s = update.swap_script(Path('T.exe'), Path('T.new.exe'), 1, [])
-        self.assertIn('start "" "T.exe"\r\n', s)
+        self.assertIn('start "" /D "." "T.exe"\r\n', s)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows creation flags')
+    def test_the_helper_breaks_out_of_a_parent_job_and_has_no_inherited_handles(self):
+        with mock.patch.object(update.subprocess, 'Popen') as pop:
+            update._launch_swap(Path(r'C:\Apps\taskuary-update.cmd'), Path(r'C:\Apps'))
+        argv = pop.call_args.args[0]
+        kw = pop.call_args.kwargs
+        self.assertEqual(argv[1:4], ['/d', '/c', 'call'])
+        self.assertEqual(argv[4], r'C:\Apps\taskuary-update.cmd')
+        self.assertTrue(kw['creationflags'] & getattr(update.subprocess, 'CREATE_BREAKAWAY_FROM_JOB', 0x01000000))
+        self.assertIs(kw['stdin'], update.subprocess.DEVNULL)
+        self.assertIs(kw['stdout'], update.subprocess.DEVNULL)
+        self.assertIs(kw['stderr'], update.subprocess.DEVNULL)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows creation flags')
+    def test_a_locked_down_job_falls_back_to_an_ordinary_detached_helper(self):
+        denied = OSError('job does not allow breakaway'); denied.winerror = 5
+        with mock.patch.object(update.subprocess, 'Popen', side_effect=[denied, mock.Mock()]) as pop:
+            update._launch_swap(Path(r'C:\Apps\taskuary-update.cmd'), Path(r'C:\Apps'))
+        self.assertEqual(pop.call_count, 2)
+        first, second = (call.kwargs['creationflags'] for call in pop.call_args_list)
+        self.assertTrue(first & 0x01000000)
+        self.assertFalse(second & 0x01000000)
 
 
 class Downloading(unittest.TestCase):
@@ -128,7 +152,7 @@ class Applying(unittest.TestCase):
              mock.patch.object(update.sys, 'executable', str(fake_exe)), \
              mock.patch.object(update.sys, 'argv', ['Taskuary.exe', '--port', '7787']), \
              mock.patch.object(update, '_download', return_value=1234) as dl, \
-             mock.patch('taskuary.spawn.popen') as pop:
+             mock.patch.object(update, '_launch_swap') as launch:
             out = update.apply()
         self.assertEqual(out, {'how': 'exe', 'downloaded': 1234, 'restarting': True})
         self.assertEqual(dl.call_args[0][1], d / 'Taskuary.new.exe')          # beside the old one
@@ -136,8 +160,7 @@ class Applying(unittest.TestCase):
         self.assertTrue(script.is_file())
         body = script.read_text(encoding='utf-8')
         self.assertIn(f'PID eq {os.getpid()}', body); self.assertIn('"--port" "7787"', body)
-        argv = pop.call_args[0][0]
-        self.assertEqual(argv[:2], ['cmd', '/c']); self.assertEqual(Path(argv[2]), script)
+        launch.assert_called_once_with(script, fake_exe.parent)
 
     def test_the_pip_road_upgrades_then_relaunches_the_same_command_line(self):
         ok = mock.Mock(returncode=0, stdout='Successfully installed taskuary-9.9.9', stderr='')

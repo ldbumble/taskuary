@@ -250,9 +250,8 @@ SEED_LINE = ('WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes 
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
 # agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
 # reverse and an agent reading both without this line picks the one with a command in it.
-STAY_LINE = ('THE OWNER OPENED THIS SESSION AND IS SITTING IN IT - it is theirs to end, never yours. Do NOT '
-             'close it, wrap it up or run `taskuary --done`; when a piece of work is finished, say so in a '
-             'plain line and stay at the prompt for their next instruction.')
+STAY_LINE = ('THE OWNER OPENED THIS SESSION: only they end it. Never run `taskuary --done`; '
+             'summarize finished work and wait.')
 
 
 # ── the general chat's version of the same thing ────────────────────────────────────────

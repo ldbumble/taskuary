@@ -20,7 +20,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting, TaskuaryMark } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
@@ -41,7 +41,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 const GENERAL_CHUNK_RELOAD = "tq-general-chunk-reload";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { ASK_TAG } from "./newTask.js";
-import { continueCoding } from "./continueCoding.js";
+import { agentPhase, ownerControlsCompletion, replyPhase, taskPhase } from "./taskLifecycle.js";
 
 const loadGeneralWorkspace = () => import("./GeneralWorkspace.jsx").then((module) => {
   try { sessionStorage.removeItem(GENERAL_CHUNK_RELOAD); } catch { /* storage disabled */ }
@@ -132,10 +132,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [newOpen, setNewOpen] = useState(false);
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
+  // A finished run should lead with what it accomplished. Harness/model/prompt choices stay
+  // behind an explicit restart action instead of looking like the main thing to do next.
+  const [restartOpen, setRestartOpen] = useState(false);
   const [startingAgent, setStartingAgent] = useState("");
-  const [continueOpen, setContinueOpen] = useState(false);
-  const [continueText, setContinueText] = useState("");
-  const [continuing, setContinuing] = useState(false);
   const [comment, setComment] = useState("");
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [wait, setWait] = useState({ data: [], state: null });
@@ -150,6 +150,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [askSenderOpen, setAskSenderOpen] = useState(false);
   const [senderQuestion, setSenderQuestion] = useState("");
   const [askingSender, setAskingSender] = useState(false);
+  const [openingReply, setOpeningReply] = useState(false);
   const waitingN = (tasks || []).find((x) => x.TaskId === selected)?.Waiting || 0;   // prompts in this task's funnel
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
@@ -195,6 +196,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0] }));
   }, [agents, run.agent]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
+  useEffect(() => { setRestartOpen(false); }, [selected]);
   useEffect(() => {
     // a LIVE SESSION counts as much as a headless run here: the header chip is derived from
     // how long the pty has been quiet, so without re-asking it froze on whatever it said
@@ -236,15 +238,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
     setComment(""); loadDetail(selected);
   };
-  // "We're done": nothing is typed at the agent. The session closes, its transcript becomes the
-  // report (written by the main AI), the responder drafts the reply out of that report, and the
-  // result lands right here under where the terminal was.
+  // Finish the AGENT RUN, not the task. It files the durable result and closes this session;
+  // task completion and any reply remain explicit controls in their own sections.
   const wrapUp = async () => {
     if (!canWrap) return;
     const id = selected;
     setWrapping("wrap"); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: true });
+      const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: false });
       loadTasks(); onChanged?.();
       if (stale(id)) return;                    // moved on meanwhile: the report is on the task's history
       setWrapped({ report: data.report, drafting: data.drafting });
@@ -268,11 +269,23 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not pause the session"); }
     if (!stale(id)) setWrapping(false);
   };
+  const stopAgent = async () => {
+    if (!selected || wrapping) return;
+    const id = selected;
+    setWrapping("stop"); setErr("");
+    try {
+      await api.post(`/api/tasks/${id}/agent/stop`);
+      if (stale(id)) return;
+      setTerm(null);
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not stop the agent session"); }
+    if (!stale(id)) setWrapping(false);
+  };
   useEffect(() => {
     setWrapping(false); setWrapped(null);
-    setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false);
+    setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false); setOpeningReply(false);
   }, [selected]);
-  useEffect(() => { setContinueOpen(false); setContinueText(""); setContinuing(false); }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
   const [reshape, setReshape] = useState(false);
@@ -336,22 +349,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (/no local path/i.test(msg)) setRepoPick(true);
     }
   }, [loadDetail, loadTasks, onChanged]);
-  const continueWork = async () => {
-    if (!continueText.trim() || !selected || continuing) return;
-    const id = selected;
-    setContinuing(true); setErr("");
-    try {
-      const agent = detail?.transcript?.agent || report?.Actor || "coder";
-      const { data } = await continueCoding(api, id, continueText.trim(), agent);
-      if (stale(id)) return;
-      setTerm(data.session); setContinueOpen(false); setContinueText("");
-      loadDetail(id); loadTasks(); onChanged?.();
-    } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not continue the coding work");
-    } finally {
-      if (!stale(id)) setContinuing(false);
-    }
-  };
   const generalSession = useCallback((session) => setTerm(session), []);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one.
@@ -417,6 +414,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const liveCodingSession = !isGeneral && !!term?.alive;
   const agentWaiting = liveCodingSession && isWaiting(term);
   const pendingReview = (detail?.reviews || []).find((r) => r.Status === "pending");
+  const sentReview = (detail?.reviews || []).find((r) => ["approved", "edited", "sent"].includes(r.Status));
   // A successful Review send is the reply even before (or when) the external channel ingests an
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
   // message; otherwise completed tasks showed one inbound message and claimed that was the whole
@@ -454,15 +452,29 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not prepare the question for the sender");
     } finally { if (!stale(id)) setAskingSender(false); }
   };
+  const openReply = async (generate = false) => {
+    if (!sourceMessage?.MessageId || openingReply) return;
+    const id = selected;
+    setOpeningReply(generate ? "generate" : "write"); setErr("");
+    try {
+      await api.post(`/api/messages/${sourceMessage.MessageId}/reply`, { draft: generate });
+      if (stale(id)) return;
+      await loadDetail(id);
+      onChanged?.(); onGoReview?.();
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not open the reply"); }
+    if (!stale(id)) setOpeningReply(false);
+  };
   // The task itself leads when no coding terminal is open. Triage already distilled an inbound
   // item into Title + Summary; falling back to its newest inbound body keeps older/promoted rows
   // equally useful. This is the human TODO, not an agent-launch advertisement.
   const taskAsk = cleanText(t?.Summary || sourceMessage?.BodyText || "");
-  // A completed report is stronger evidence than an old in_progress value. This covers the few
-  // seconds while the reply is being drafted, and old rows left behind by that former race.
-  const effectiveStatus = t?.Status === "in_progress" && report && !liveCodingSession && !liveRun
-    ? (pendingReview ? "waiting" : "done") : t?.Status;
-  const displayTask = t ? { ...t, Status: effectiveStatus } : t;
+  const completionIsManual = ownerControlsCompletion(t);
+  const taskState = taskPhase(t?.Status);
+  const agentState = agentPhase({
+    session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
+    run: liveRun, transcript: detail?.transcript, report,
+  });
+  const replyState = replyPhase(detail?.reviews || []);
   const startCodingAgent = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
@@ -470,7 +482,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     try {
       if (t.Kind !== "coding") await api.patch(`/api/tasks/${id}`, { Kind: "coding" });
       if (!stale(id)) await openTerm({ agent: run.agent, model: run.model || null,
-        task_id: id, repo: repoOf(t), seed: true });
+        instruction: run.instruction.trim() || null, task_id: id, repo: repoOf(t),
+        cwd: detail?.transcript?.cwd || null, seed: true });
+      if (!stale(id)) {
+        setRun((current) => ({ ...current, instruction: "" }));
+        setRestartOpen(false);
+      }
     } catch (e) {
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the coding agent");
     } finally { if (!stale(id)) setStartingAgent(""); }
@@ -483,6 +500,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       const tags = String(t.Tags || "").split(/[\s,]+/).filter(Boolean);
       if (!tags.includes(ASK_TAG)) tags.push(ASK_TAG);
       await api.patch(`/api/tasks/${id}`, { Kind: "general", Tags: tags.join(",") });
+      if (!stale(id)) setRestartOpen(false);
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {
@@ -547,6 +565,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   "&:hover": { borderColor: selected === task.TaskId ? stateOf(task).c.fg : "#d8cfbe" } }}>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700 }}>{task.ref}</Typography>
+                  <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
                   <StateChip task={task} />
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
                   {String(task.Assignee || "").startsWith("agent:") && <TaskuaryMark size={13} />}
@@ -590,23 +609,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     minWidth: { xs: 110, sm: 200 }, letterSpacing: "-.01em" }} noWrap>
                     {t.Title}
                   </Typography>
-                  <StateChip task={{ ...displayTask, ReviewStatus: (detail.reviews || [])[0]?.Status,
-                    RunStatus: (detail.runs || [])[0]?.Status, Session: detail.session }} />
-                  {liveCodingSession && (
-                    <Tooltip title="Queue prompts for this task's agent - one or a whole list; they land one per stop, never mid-turn">
-                      <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
-                        sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, px: 1.25 }}>
-                        ✎ {agentWaiting ? "Answer agent" : "Feed agent"}{waitingN > 0 ? ` · ${waitingN} queued` : ""}
-                      </Button>
-                    </Tooltip>
-                  )}
-                  {sourceMessage && onGoReview && (
-                    <Tooltip title="Draft a reply or clarification to the original sender; nothing leaves until you approve it in Review">
-                      <Button size="small" variant="outlined" onClick={() => setAskSenderOpen(true)}>
-                        {agentWaiting ? "Ask sender" : "Reply to sender"}
-                      </Button>
-                    </Tooltip>
-                  )}
                   <Tooltip title="Hand off, split or merge, pick the repo, not a task…">
                     <IconButton size="small" onClick={(e) => setMenuEl(e.currentTarget)}>
                       <MoreHorizIcon sx={{ fontSize: 18 }} />
@@ -639,30 +641,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
                   </Tooltip>
                 </Box>
-                {/* the meta row carries the knobs. Kind is a CONTROL, not a caption: "this is not
-                    a coding task" is said here, and saying reply routes it to the Review queue */}
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1 }}>
-                  <Select value={t.Kind || "task"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
-                    renderValue={kindLabel}
-                    title="Assistant is the visual chat over your configured agent; coding is its repository terminal; reply creates a draft in Review">
-                    {(KINDS.includes(t.Kind || "task") ? KIND_OPTIONS
-                      : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
-                      <MenuItem key={o.key} value={o.key} sx={{ py: 0.6 }}>
-                        <ListItemText primary={o.label} secondary={o.hint}
-                          primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
-                      </MenuItem>)}
-                  </Select>
-                  <Select value={effectiveStatus} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
-                    renderValue={statusLabel} title="the raw status, if you need to move it by hand">
-                    {STATUSES.map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{statusLabel(s)}</MenuItem>)}
-                  </Select>
-                  <Select value={t.Priority} onChange={(e) => patch({ Priority: e.target.value })} sx={selSx}>
-                    {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
-                  </Select>
-                  <Typography variant="caption" sx={{ color: FAINT }}>
-                    from {t.Source} · assignee {t.Assignee || "—"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
-                  </Typography>
-                </Box>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+                  from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
+                </Typography>
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
@@ -674,22 +655,32 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     result of the work is the thing you are looking at */}
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
-                {!liveCodingSession && (
-                  <Box sx={{ ...card, mb: 1.25, p: 1.4, bgcolor: "#fff", flexShrink: 0 }}>
+                {term?.alive ? (
+                  <Box sx={{ ...card, mb: 0.75, px: 1.5, py: 0.9, bgcolor: "#fff", flexShrink: 0,
+                    borderLeft: "4px solid #55697a" }}>
+                    <WorkflowHeading number="1" title="Task" description={`${t.Title} · controls return when the agent stops.`}
+                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" />
+                  </Box>
+                ) : (
+                  <Box sx={{ ...card, mb: 1.25, p: 1.5, bgcolor: "#fff", flexShrink: 0,
+                    borderLeft: "4px solid #55697a" }}>
+                    <WorkflowHeading number="1" title="Task" description="The job itself — ownership and completion live here."
+                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" />
+                    <Divider sx={{ my: 1.2, borderColor: BORDER }} />
                     <Box sx={{ display: "flex", gap: 1.15, alignItems: "flex-start" }}>
-                      <Tooltip title={effectiveStatus === "done" ? "Completed" : "Mark this task done"}>
+                      <Tooltip title={t.Status === "done" ? "Completed" : "Mark this task done"}>
                         <span>
-                          <IconButton size="small" disabled={["done", "dropped"].includes(effectiveStatus)}
+                          <IconButton size="small" disabled={["done", "dropped"].includes(t.Status)}
                             onClick={() => patch({ Status: "done" })} sx={{ mt: -0.35, color: "#6f8a6e" }}>
-                            {effectiveStatus === "done"
+                            {t.Status === "done"
                               ? <CheckCircleOutlineIcon sx={{ fontSize: 22 }} />
                               : <RadioButtonUncheckedIcon sx={{ fontSize: 22 }} />}
                           </IconButton>
                         </span>
                       </Tooltip>
                       <Box sx={{ minWidth: 0, flex: 1 }}>
-                        <Typography variant="overline" sx={{ color: ACCENT2, fontSize: 9.5,
-                          fontWeight: 750, letterSpacing: 1.5, lineHeight: 1.2 }}>To do</Typography>
+                        <Typography variant="overline" sx={{ color: FAINT, fontSize: 9,
+                          fontWeight: 750, letterSpacing: 1.35, lineHeight: 1.2 }}>What needs doing</Typography>
                         <Typography sx={{ color: INK, fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
                           {t.Title}
                         </Typography>
@@ -710,31 +701,149 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </Box>
                       </Box>
                     </Box>
-                    {!["done", "dropped"].includes(effectiveStatus) && (
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap",
+                    {!["done", "dropped"].includes(t.Status) && (
+                      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.9, flexWrap: "wrap",
                         mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                        <Typography variant="caption" sx={{ color: FAINT, fontWeight: 650, mr: 0.25 }}>Work it with</Typography>
-                        <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
-                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
-                          onModel={(m) => setRun({ ...run, model: m })} size={26} />
-                        <Button size="small" variant="outlined" disabled={!!startingAgent}
-                          startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
-                          onClick={startCodingAgent} sx={{ fontSize: 11.5 }}>
-                          {startingAgent === "coding" ? "Starting…" : "Coding agent"}
-                        </Button>
-                        <Button size="small" variant={isGeneral ? "contained" : "outlined"}
-                          disabled={!!startingAgent || isGeneral}
-                          startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
-                          onClick={startGeneralAgent} sx={{ fontSize: 11.5 }}>
-                          {isGeneral ? "Non-coding agent active" : startingAgent === "general" ? "Starting…" : "Non-coding agent"}
-                        </Button>
-                        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 180 }}>
-                          Both receive this task's incoming messages and attachments.
-                        </Typography>
+                        <LabeledControl label="Type">
+                          <Select value={t.Kind || "task"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
+                            renderValue={kindLabel} title="What kind of work this task contains">
+                            {(KINDS.includes(t.Kind || "task") ? KIND_OPTIONS
+                              : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
+                              <MenuItem key={o.key} value={o.key} sx={{ py: 0.6 }}>
+                                <ListItemText primary={o.label} secondary={o.hint}
+                                  primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
+                              </MenuItem>)}
+                          </Select>
+                        </LabeledControl>
+                        <LabeledControl label="Task status">
+                          <Select value={t.Status || "open"} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
+                            renderValue={statusLabel} title="Task status — independent of its agent and reply">
+                            {STATUSES.filter((s) => !["done", "dropped"].includes(s) || s === t.Status)
+                              .map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{statusLabel(s)}</MenuItem>)}
+                          </Select>
+                        </LabeledControl>
+                        <LabeledControl label="Priority">
+                          <Select value={t.Priority || "normal"} onChange={(e) => patch({ Priority: e.target.value })} sx={selSx}>
+                            {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
+                          </Select>
+                        </LabeledControl>
+                        <LabeledControl label="Owner">
+                          <Select value={t.Assignee || ""} onChange={(e) => patch({ Assignee: e.target.value })} sx={selSx}
+                            displayEmpty renderValue={(value) => value ? (value === "owner" ? "you" : value) : "unassigned"}>
+                            <MenuItem value="" sx={{ fontSize: 12 }}>unassigned</MenuItem>
+                            <MenuItem value="owner" sx={{ fontSize: 12 }}>you</MenuItem>
+                            {t.Assignee && t.Assignee !== "owner" && <MenuItem value={t.Assignee} sx={{ fontSize: 12 }}>{t.Assignee}</MenuItem>}
+                          </Select>
+                        </LabeledControl>
+                        <Box sx={{ flex: 1 }} />
+                        <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                          onClick={() => patch({ Status: "done" })}>Mark task done</Button>
                       </Box>
                     )}
+                    {["done", "dropped"].includes(t.Status) && (
+                      <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                        <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+                          onClick={() => patch({ Status: "open" })}>Reopen task</Button>
+                      </Box>
+                    )}
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.65 }}>
+                      {completionIsManual
+                        ? "You control completion. Ending an agent run or sending a reply leaves this task open."
+                        : "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."}
+                    </Typography>
                   </Box>
                 )}
+                <Box sx={{ ...card, mb: 1.25, p: 1.5, bgcolor: "#fff", flexShrink: 0,
+                  borderLeft: "4px solid #6f8a6e" }}>
+                  <WorkflowHeading number="2" title="Agent work"
+                    description={term?.alive
+                      ? "Live workspace — this is the primary surface until the agent stops."
+                      : "Run, pause, stop, or restart an agent. None of these actions completes the task."}
+                    chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" />
+                  {liveCodingSession && (
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
+                      gap: 0.8, flexWrap: "wrap", mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
+                        sx={{ fontSize: 11.5, bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>
+                        {agentWaiting ? "Answer agent" : "Give new prompt"}{waitingN ? ` · ${waitingN} queued` : ""}
+                      </Button>
+                      <Button size="small" startIcon={<DifferenceIcon sx={{ fontSize: 15 }} />}
+                        onClick={() => setDiffOpen(true)}>Review changes</Button>
+                      <Button size="small" disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                        onClick={wrapUp}>Finish agent run</Button>
+                      <Button size="small" disabled={!!wrapping} startIcon={<PauseCircleIcon sx={{ fontSize: 15 }} />}
+                        onClick={pause}>Pause & save</Button>
+                      <Button size="small" color="error" disabled={!!wrapping}
+                        startIcon={<BlockIcon sx={{ fontSize: 14 }} />} onClick={stopAgent}>Stop session</Button>
+                    </Box>
+                  )}
+                  {report && !wrapped && !term?.alive && (
+                    <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
+                      <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35,
+                        fontSize: 9, fontWeight: 750 }}>Latest saved result</Typography>
+                      <Box sx={{ mt: 0.35, bgcolor: PANEL2, border: `1px solid ${BORDER}`,
+                        borderRadius: 1.5, overflow: "hidden" }}>
+                        <CoderReport body={report.Body} />
+                      </Box>
+                      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                        Finished by {report.Actor || "the coding agent"}{report.CreatedAt ? ` · ${fmtDateTime(report.CreatedAt)}` : ""}
+                      </Typography>
+                      {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
+                      {!liveCodingSession && <Button size="small" variant="outlined" sx={{ mt: 0.9 }}
+                        startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />} onClick={() => setHandoff(true)}>
+                        Send this result to someone
+                      </Button>}
+                    </Box>
+                  )}
+                  {!term?.alive && !isGeneral && !restartOpen && (report || detail?.transcript) && (
+                    <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}`,
+                      display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                      <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+                        onClick={() => setRestartOpen(true)}>Run another agent</Button>
+                      {!report && <Button size="small" variant="text" disabled={!!wrapping}
+                        startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
+                      <Typography variant="caption" sx={{ color: FAINT }}>
+                        Choose a different harness, model, or prompt on the next run.
+                      </Typography>
+                    </Box>
+                  )}
+                  {!term?.alive && !isGeneral && (restartOpen || (!report && !detail?.transcript)) && (
+                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 700, mb: 0.75 }}>
+                        {report || detail?.transcript ? "Configure the next run" : "Start an agent"}
+                      </Typography>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                        <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
+                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
+                          onModel={(m) => setRun({ ...run, model: m })} size={28} />
+                        <Typography variant="caption" sx={{ color: FAINT }}>
+                          This run receives the task, messages, attachments, and the latest saved result.
+                        </Typography>
+                      </Box>
+                      <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
+                        onChange={(e) => setRun({ ...run, instruction: e.target.value })}
+                        placeholder={detail?.transcript ? "What should this new agent do next?" : "Extra instructions for this session (optional)"}
+                        sx={{ mt: 0.85, bgcolor: "#fff" }} />
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
+                        <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                          startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
+                          onClick={startCodingAgent}>
+                          {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
+                        </Button>
+                        {detail?.transcript && !report && <Button size="small" variant="outlined" disabled={!!wrapping}
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
+                        <Button size="small" variant="outlined" disabled={!!startingAgent}
+                          startIcon={<TaskuaryMark size={13} />} onClick={startGeneralAgent}>Use non-coding agent</Button>
+                        {(report || detail?.transcript) && <Button size="small" variant="text"
+                          onClick={() => setRestartOpen(false)}>Cancel</Button>}
+                        {repoOf(t) && <Typography variant="caption" sx={{ ...mono, color: FAINT }}>repo · {repoOf(t)}</Typography>}
+                      </Box>
+                    </Box>
+                  )}
+                  {isGeneral && !term?.alive && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.8 }}>
+                    Send a message in the non-coding workspace below to start or restart its agent.
+                  </Typography>}
+                </Box>
                 {repoPick && (
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
@@ -758,13 +867,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <CircularProgress size={15} />
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
-                        {wrapping === "pause" ? "Saving what this session found…" : "Wrapping up this session…"}
+                        {wrapping === "pause" ? "Saving what this session found…" : wrapping === "stop" ? "Stopping this session…" : "Finishing this agent run…"}
                       </Typography>
                     </Box>
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>
                       {wrapping === "pause"
                         ? "Reading the transcript and writing the handover note for the next session. The agent is not asked anything."
-                        : "Reading the transcript, writing the report from it, then drafting the reply for your approval. The agent is not asked anything — this takes a few seconds."}
+                        : wrapping === "stop" ? "The session is ending. The task and reply are not changed."
+                        : "Reading the transcript and writing the agent result. The task and reply remain separate — this takes a few seconds."}
                     </Typography>
                     <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />
                   </Box>
@@ -783,9 +893,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>
                       {wrapped.note
                         ? "Nothing was sent and nothing closed — the task is still open. Start a session again and the agent is handed this note, so it carries on instead of starting over."
-                        : wrapped.drafting
-                        ? "The reply to whoever wrote in is drafted and waiting in Review — approving it sends it and closes this task."
-                        : "Nothing to reply to on this task, so it closed here."}
+                        : "The agent run ended and its result was saved. The task stays open until you mark it done; reply separately if someone is waiting."}
                     </Typography>
                     {/* the card used to name Review without offering a way to get there */}
                     {wrapped.drafting && onGoReview && (
@@ -810,26 +918,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         <Chip size="small" label="exited — its output is still here"
                           sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
                       )}
-                      {/* the look you take BEFORE wrapping up - it sits next to Done on purpose,
-                          because that is the moment the decision gets made */}
-                      <Button size="small" startIcon={<DifferenceIcon sx={{ fontSize: 15 }} />}
-                        sx={{ fontSize: 11, color: DIM }} onClick={() => setDiffOpen(true)}
-                        title="What has it actually changed in this checkout, per file — before anything is pushed">
-                        Review changes
-                      </Button>
-                      <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
-                        startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
-                          : <DoneAllIcon sx={{ fontSize: 15 }} />}
-                        sx={{ fontSize: 11.5, bgcolor: "#47654a", "&:hover": { bgcolor: "#3c5740" } }}
-                        onClick={wrapUp}>
-                        {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
-                      </Button>
-                      <Button size="small" disabled={!!wrapping} sx={{ fontSize: 11, color: DIM }}
-                        startIcon={wrapping === "pause" ? <CircularProgress size={11} /> : <PauseCircleIcon sx={{ fontSize: 15 }} />}
-                        title="Stop for now without losing what it worked out - the next session is handed its note"
-                        onClick={pause}>
-                        {wrapping === "pause" ? "saving what it found…" : term.alive ? "Pause — save what it found" : "Save what it found"}
-                      </Button>
                     </Box>
                     {/* A live coding session is the primary workspace, not a preview squeezed by
                         the report and history below it. Give it a terminal-sized viewport and let
@@ -851,108 +939,65 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                     )}
                   </>
-                ) : report ? null : pendingReview && onGoReview ? (
-                  <Box sx={{ ...card, p: 2, textAlign: "center", bgcolor: PANEL2 }}>
-                    <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 0.5 }}>
-                      {pendingReview.Kind === "action" ? "The agent is asking your permission for something" : "A reply is drafted and waiting on you"}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1.25 }}>
-                      {pendingReview.Kind === "action" ? "Approve it in Review and it runs; reject it and nothing happens."
-                        : "Read it in Review — approving sends it on the channel it arrived on, and closes this task."}
-                    </Typography>
-                    <Button size="small" variant="contained" disableElevation startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-                      onClick={onGoReview}>Open it in Review</Button>
-                    {!isGeneral && (
-                      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
-                        Something to look into first? <Box component="span" onClick={startCodingAgent}
-                          sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Start a session</Box> — the draft waits.
-                      </Typography>
-                    )}
-                  </Box>
-                ) : detail?.transcript ? (
-                  <Box sx={{ ...card, p: 1.25, bgcolor: PANEL2 }}>
-                    {/* An earlier session finished and its terminal is long gone, but the work it
-                        did is still un-closed-out. The transcript outlives the pty, so the two
-                        buttons that were only ever on the terminal strip belong here too. */}
-                      <Box>
-                        <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75 }}>
-                          A {detail.transcript.agent || "coder"} session ran this task on{" "}
-                          {fmtDateTime(detail.transcript.at)} and its terminal has since closed — what it
-                          did was kept, so you can still write it up.
-                        </Typography>
-                        <Box sx={{ display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap" }}>
-                          <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
-                            startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
-                              : <DoneAllIcon sx={{ fontSize: 15 }} />}
-                            sx={{ fontSize: 11.5, bgcolor: "#47654a", "&:hover": { bgcolor: "#3c5740" } }}
-                            onClick={wrapUp}>
-                            {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
-                          </Button>
-                          <Button size="small" disabled={!!wrapping} sx={{ fontSize: 11, color: DIM }}
-                            startIcon={wrapping === "pause" ? <CircularProgress size={11} /> : <PauseCircleIcon sx={{ fontSize: 15 }} />}
-                            onClick={pause}>
-                            {wrapping === "pause" ? "saving what it found…" : "Save what it found"}
-                          </Button>
-                        </Box>
-                      </Box>
-                  </Box>
                 ) : null}
 
-                {/* The completed outcome is the first permanent record below the session. Lead
-                    with Result; determination and actions are evidence, not the punchline. */}
-                {report && !wrapped && (
-                  <Block title="Agent result">
-                    <Box sx={{ bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
-                      <CoderReport body={report.Body} />
-                    </Box>
-                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                      Finished by {report.Actor || "the coding agent"}{report.CreatedAt ? ` · ${fmtDateTime(report.CreatedAt)}` : ""}
-                    </Typography>
-                    {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
-                    {!liveCodingSession && (continueOpen ? (
-                      <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${BORDER}` }}>
-                        <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.65 }}>
-                          Tell {detail?.transcript?.agent || report.Actor || "the coder"} what to change next. Taskuary opens a new
-                          live terminal in {detail?.transcript?.cwd || "the same repository"} with this saved result and task history.
-                        </Typography>
-                        <TextField fullWidth multiline minRows={2} maxRows={6} size="small" autoFocus
-                          value={continueText} onChange={(e) => setContinueText(e.target.value)}
-                          placeholder="What code changes should it make now?"
-                          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) continueWork(); }} />
-                        <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
-                          <Button size="small" variant="contained" disableElevation disabled={!continueText.trim() || continuing}
-                            startIcon={continuing ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <TerminalIcon sx={{ fontSize: 15 }} />}
-                            onClick={continueWork}>{continuing ? "opening terminal…" : "Continue coding"}</Button>
-                          <Button size="small" disabled={continuing} onClick={() => { setContinueOpen(false); setContinueText(""); }}>
-                            Cancel
-                          </Button>
+                <Box sx={{ ...card, mt: term?.alive ? 0.75 : 1.25, p: term?.alive ? 0.9 : 1.5,
+                  bgcolor: "#fff", flexShrink: 0,
+                  borderLeft: "4px solid #9a7444" }}>
+                  <WorkflowHeading number="3" title="Reply"
+                    description={term?.alive
+                      ? (sourceMessage ? "Reply controls return when the agent stops." : "No inbound sender is attached to this task.")
+                      : sourceMessage
+                        ? "What goes back to the sender. Sending and task completion are separate decisions."
+                        : "External communication, when this task has a sender."}
+                    chip={<LifecycleChip kind="reply" phase={sourceMessage ? replyState : "not available"} compact />}
+                    tone="#9a7444" />
+                  {!term?.alive && (sourceMessage ? (
+                    <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      {pendingReview?.DraftText && (
+                        <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
+                          px: 1.1, py: 0.85, mb: 0.9 }}>
+                          <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
+                            fontWeight: 750, letterSpacing: 1.25 }}>Current draft</Typography>
+                          <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap",
+                            overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
+                            WebkitBoxOrient: "vertical", overflow: "hidden" }}>{pendingReview.DraftText}</Typography>
                         </Box>
+                      )}
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                        {pendingReview && onGoReview ? (
+                          <Button size="small" variant="contained" disableElevation
+                            startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />} onClick={onGoReview}>Edit draft in Review</Button>
+                        ) : (
+                          <>
+                            <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
+                              startIcon={openingReply === "write" ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                              onClick={() => openReply(false)}>Write reply</Button>
+                            <Button size="small" variant="outlined" disabled={!!openingReply}
+                              startIcon={openingReply === "generate" ? <CircularProgress size={12} /> : <TaskuaryMark size={13} />}
+                              onClick={() => openReply(true)}>Generate reply</Button>
+                            <Button size="small" variant="text" onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
+                          </>
+                        )}
                       </Box>
-                    ) : (
-                      <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
-                        <Button size="small" variant="outlined" startIcon={<TerminalIcon sx={{ fontSize: 15 }} />}
-                          onClick={() => setContinueOpen(true)}>
-                          Continue with {detail?.transcript?.agent || report.Actor || "coder"}
-                        </Button>
-                        {/* the other thing you want when an agent has finished: TELL SOMEONE. It
-                            existed, in the overflow menu, phrased as "not ours to do" - which is
-                            a different act from sending on a result you are pleased with. */}
-                        <Button size="small" variant="outlined" startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-                          onClick={() => setHandoff(true)}>
-                          Send this to someone
-                        </Button>
-                      </Box>
-                    ))}
-                  </Block>
-                )}
+                      <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.65 }}>
+                        {pendingReview
+                          ? "Nothing is sent until you approve it in Review."
+                          : sentReview
+                          ? `Reply sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${completionIsManual ? "The task remains under your control." : "The automatic task can now be complete."}`
+                          : "A reply is optional. Starting or stopping an agent does not send one."}
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.9 }}>
+                      No inbound sender is attached to this task, so there is nothing to reply to.
+                    </Typography>
+                  ))}
+                </Box>
 
-                {t.Summary && (
-                  <Fold title="The ask">
-                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: DIM }}>{cleanText(t.Summary)}</Typography>
-                  </Fold>
-                )}
-
-                <Fold title={`Messages · ${taskMessages.length}`}>
+                <Fold title={`Context & history · ${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
+                  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
+                    fontSize: 9, fontWeight: 750, display: "block", mb: 0.65 }}>Messages</Typography>
                   {taskMessages.map((m) => {
                     const route = detail.routes.find((r) => r.MessageId === m.MessageId);
                     const mine = m.Status === "context" || m.Direction === "out";
@@ -980,11 +1025,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           )}
                         </Box>
                         <Typography variant="body2" sx={{ color: INK }}>{m.Subject}</Typography>
-                        <Box sx={{ maxHeight: 220, overflowY: "auto", "&::-webkit-scrollbar": { width: 8 },
-                          "&::-webkit-scrollbar-thumb": { background: "#d6dae2", borderRadius: 99 } }}>
+                        <Box sx={{ minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}>
                           {m.Channel === "report" && looksMd(m.BodyText)
                             ? <Md text={cleanText(m.BodyText)} />
-                            : <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{cleanText(m.BodyText)}</Typography>}
+                            : <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere",
+                              wordBreak: "break-word", color: DIM, display: "block" }}>{cleanText(m.BodyText)}</Typography>}
                         </Box>
                         {!m.ReviewSent && <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} dense />}
                       </Box>
@@ -992,6 +1037,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     );
                   })}
                   {!taskMessages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
+                  <Divider sx={{ my: 1.2, borderColor: BORDER }} />
+                  <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
+                    fontSize: 9, fontWeight: 750, display: "block", mb: 0.35 }}>Notes & activity</Typography>
+                  <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+                    <tbody>{detail.comments.map((c) => <CommentRow key={c.CommentId} c={c} />)}</tbody>
+                  </Box>
+                  {!detail.comments.length && <Typography variant="caption" sx={{ color: FAINT }}>No notes yet.</Typography>}
+                  <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
+                    <TextField fullWidth placeholder="Add a note (humans only)" value={comment}
+                      onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
+                    <Button size="small" onClick={post}>Post</Button>
+                  </Box>
                 </Fold>
 
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
@@ -1013,16 +1070,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Fold>
                 )}
 
-                <Fold title={`Notes & history · ${detail.comments.length}`}>
-                  <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-                    <tbody>{detail.comments.map((c) => <CommentRow key={c.CommentId} c={c} />)}</tbody>
-                  </Box>
-                  <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
-                    <TextField fullWidth placeholder="Add a note (humans only)" value={comment}
-                      onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
-                    <Button size="small" onClick={post}>Post</Button>
-                  </Box>
-                </Fold>
               </Box>
             </>
           )}
@@ -1115,10 +1162,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       </Dialog>
       <Dialog open={askSenderOpen} onClose={() => !askingSender && setAskSenderOpen(false)} fullWidth maxWidth="sm"
         PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle>{agentWaiting ? "Ask the sender" : "Reply to the sender"} · {detail?.ref}</DialogTitle>
+        <DialogTitle>Ask the sender · {detail?.ref}</DialogTitle>
         <DialogContent sx={{ pt: "8px !important" }}>
           <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-            Write the reply or the one fact the agent needs. This becomes a clarification draft in Review; it is not sent until you approve it.
+            Write the one fact the agent or task needs. This becomes a clarification draft in Review; it is not sent until you approve it.
             The task stays open while you wait for the sender's answer.
           </Typography>
           <TextField autoFocus fullWidth multiline minRows={3} label="Question for the sender"
@@ -1229,9 +1276,24 @@ const Fold = ({ title, children }) => (
   </Box>
 );
 
-const Block = ({ title, children }) => (
-  <Box sx={{ mt: 2 }}>
-    <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10 }}>{title}</Typography>
-    <Box sx={{ mt: 0.25 }}>{children}</Box>
+const WorkflowHeading = ({ number, title, description, chip, tone }) => (
+  <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+    <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: tone, color: "#fff",
+      display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 800 }}>
+      {number}
+    </Box>
+    <Box sx={{ minWidth: 0, flex: 1 }}>
+      <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 750, lineHeight: 1.25 }}>{title}</Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>
+    </Box>
+    {chip}
+  </Box>
+);
+
+const LabeledControl = ({ label, children }) => (
+  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.3 }}>
+    <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5, fontWeight: 700,
+      letterSpacing: 0.35, pl: 0.25 }}>{label}</Typography>
+    {children}
   </Box>
 );

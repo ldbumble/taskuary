@@ -32,12 +32,13 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, RefChip, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, LifecycleChip, RefChip, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 import { HOLD_TAG, hasTag, stateMeta, stateOf, subline } from "./timelineState.js";
+import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
@@ -1227,6 +1228,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
                     // a coloured pill on every row makes the whole column loud, which is the same
                     // as making none of it loud.
                     const st = stateOf(r);
+                    const phases = timelinePhases(r);
                     const fold = foldOf.get(r.MessageId);
                     const inFold = memberOf.get(r.MessageId);
                     // A member is never drawn HERE, open or shut - the fold draws its own, in one
@@ -1313,6 +1315,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
                                 <Typography variant="caption" title="Taskuary sent this"
                                   sx={{ ...mono, fontSize: 9.5, color: ACCENT, flexShrink: 0 }}>out</Typography>
                               )}
+                              {r.TaskId && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
                               <StateMark row={r} state={st} />
                             </Box>
                             {/* the second line, only on the row you are on: who has it and what

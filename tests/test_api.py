@@ -959,9 +959,9 @@ class ApiTests(unittest.TestCase):
         self.assertIn('mailbox not found', out['send_error'])
         self.assertTrue(any('NOT SENT' in cm['Body'] for cm in server.store.list_comments(tid)))
 
-    def test_sending_the_coders_reply_closes_the_task_it_was_waiting_on(self):
-        """A coding task the coder finished waits on one thing: you sending the answer. The
-        send is the last step, so it closes the task - it must not sit in 'waiting' forever."""
+    def test_sending_a_reply_does_not_close_an_owner_created_task(self):
+        """A message can be an update halfway through a manual task. Reply and completion are
+        independent; the task only closes automatically when triage created the work."""
         tid = c.post('/api/tasks', json={'Title': 'importer down', 'Kind': 'coding'}).json()['taskId']
         server.store.update_task(tid, {'Status': 'waiting'}, 'coder')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:BBB', 'Channel': 'email',
@@ -971,7 +971,8 @@ class ApiTests(unittest.TestCase):
                                        'DraftText': 'Running again - a bad date had stopped it.'})
         with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['ap@client.com']}):
             c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'})
-        self.assertEqual(server.store.get_task(tid)['Status'], 'done')
+        self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
+        self.assertIn('stay:open', server.store.get_task(tid)['Tags'])
 
     def test_mine_makes_a_task_for_the_owner_with_nobody_dispatched(self):
         """An ADP "approve this workflow" mail is real work and not an agent's. Filing it as
@@ -984,6 +985,7 @@ class ApiTests(unittest.TestCase):
         out = c.post(f'/api/messages/{mid}/mine', json={}).json()
         t = server.store.get_task(out['taskId'])
         self.assertEqual((t['Kind'], t['Status'], t['Assignee']), ('task', 'open', server.ACTOR))
+        self.assertIn('stay:open', t['Tags'])
         self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])   # off the filed pile
         self.assertEqual(server.store.list_runs(out['taskId']), [])                # nobody dispatched
         row = next(r for r in server.store.feed() if r['MessageId'] == mid)

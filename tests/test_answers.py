@@ -58,6 +58,24 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         close.assert_called_once_with('live-coder')
 
+    def test_sent_reply_leaves_owner_controlled_task_and_agent_open(self):
+        from taskuary import selfclose
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'long migration', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+        selfclose.claim(s, tid)
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'progress-answer', 'Channel': 'email',
+                             'Subject': 'Migration', 'BodyText': 'Any update?',
+                             'FromEmail': 'sender@work.example', 'Status': 'routed'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                            'DraftText': 'The first batch is complete; continuing tomorrow.'})
+        live = mock.Mock(sid='manual-coder', alive=True)
+        with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': []}), \
+             mock.patch.object(terminal, 'session_for', return_value=live), \
+             mock.patch.object(terminal, 'close', return_value=True) as close:
+            verdicts.decide(s, s.get_review(rid), 'approve')
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
+        close.assert_not_called()
+
     def test_sent_clarification_stops_agent_but_leaves_task_waiting(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'unclear dashboard', 'Kind': 'coding', 'Status': 'in_progress'}, 't')

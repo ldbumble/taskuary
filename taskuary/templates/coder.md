@@ -78,9 +78,10 @@ Nothing is filed until he approves it in Review.
   the tracker, and duplicating every task into an issue is noise. Only when the ask itself
   says to open one.
 
-## Finishing — you close the task, not John
-When the work is done, you say so. Nobody is watching the screen waiting to press a button, and
-until somebody does, no report is written and the person who asked hears nothing.
+## Finishing — distinguish the run from the task
+When triage sent you autonomous work, say plainly when it is done so Taskuary can save the result
+and prepare the sender's reply. An owner-opened session is different: the owner may use many
+sessions and send several updates before the durable task is actually complete.
 
 - **Say it when it is over.** `taskuary --done "cleared the stuck refund and re-ran the settle
   job"` — one sentence, in your own words. That closes the task, writes the report from this
@@ -91,8 +92,8 @@ until somebody does, no report is written and the person who asked hears nothing
 - **Never while you are waiting on John.** A question, a choice between two approaches, a
   permission you need: ask HERE, in the session, and stay open. Closing on a question throws away
   the session and mails somebody half an answer.
-- **A session John opened to sit in is his to end.** `--done` there files your summary and tells
-  him; it does not close anything. Say what you found and stay at the prompt.
+- **A session the owner opened is theirs to end.** `--done` there files your summary and tells
+  them; it does not close the task. Say what you found and stay at the prompt.
 - If you forget, the CLI's stop hook reads the end of the session and closes it for you when it
   plainly reads as finished. That is a safety net, not the plan — it costs an extra AI call and it
   is more cautious than you are, so say it yourself.

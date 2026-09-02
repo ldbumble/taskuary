@@ -359,6 +359,44 @@ class TerminalTests(unittest.TestCase):
         self.assertIn('found the missing mapper', seed)
         self.assertIn('implement the mapper and tests', seed)
 
+    def test_continue_can_switch_to_an_explicitly_selected_harness(self):
+        tid = c.post('/api/tasks', json={'Title': 'try another coder', 'Kind': 'coding'}).json()['taskId']
+        server.store.upsert_agent('old-coder', 'coding', 'cli', '{"cmd": "old"}')
+        server.store.upsert_agent('backup-coder', 'coding', 'cli', '{"cmd": "backup"}')
+        server.store.add_transcript(tid, 'old-session', 'rate limited', 'old-coder', os.getcwd())
+        opened = {'sid': 'backup-session', 'alive': True, 'agent': 'backup-coder'}
+        with mock.patch.object(terminal, 'start_on_task', return_value=opened) as start:
+            out = c.post(f'/api/tasks/{tid}/continue',
+                         json={'agent': 'backup-coder', 'instruction': 'pick up from the failed run'}).json()
+        self.assertEqual(out['agent'], 'backup-coder')
+        self.assertEqual(start.call_args.args[2], 'backup-coder')
+
+    def test_start_session_seeds_the_new_prompt(self):
+        tid = c.post('/api/tasks', json={'Title': 'repair imports', 'Kind': 'coding'}).json()['taskId']
+        captured = {}
+        class Fake:
+            cwd, sid, label = os.getcwd(), 'prompted-session', 'coder'
+            def info(self): return {'sid': self.sid, 'cwd': self.cwd, 'alive': True}
+        def opened(*args, **kwargs):
+            captured['seed'] = kwargs['seed_fn'](os.getcwd())
+            return Fake()
+        with mock.patch.object(server.hub_term, 'open_session', side_effect=opened):
+            r = c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid, 'seed': True,
+                                                'instruction': 'Only repair the CSV retry path.'})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('Only repair the CSV retry path.', captured['seed'])
+
+    def test_stop_agent_leaves_task_status_unchanged(self):
+        tid = c.post('/api/tasks', json={'Title': 'keep this task', 'Kind': 'coding'}).json()['taskId']
+        server.store.update_task(tid, {'Status': 'waiting'}, 'test')
+        live = mock.Mock(sid='only-the-session', alive=True, label='Codex', agent='coder')
+        with mock.patch.object(server.hub_term, 'session_for', return_value=live), \
+             mock.patch.object(server.hub_term, 'close', return_value=True) as close:
+            out = c.post(f'/api/tasks/{tid}/agent/stop').json()
+        self.assertEqual(out, {'stopped': True, 'taskStatus': 'waiting'})
+        self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
+        close.assert_called_once_with('only-the-session')
+
     def test_continue_does_not_silently_replace_a_removed_coder(self):
         tid = c.post('/api/tasks', json={'Title': 'continue it', 'Kind': 'coding'}).json()['taskId']
         server.store.add_transcript(tid, 'gone-session', 'work', 'removed-coder', os.getcwd())

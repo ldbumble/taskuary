@@ -6,6 +6,7 @@ actions wait for human approval.
 
 - [Getting started](getting-started.md)—installation, first-run setup, Docker, and data
 - [Product guide](product-guide.md)—the workflow, the five roads a message can take, learning loop, agents, and operator documents
+- [Task lifecycle](task-lifecycle.md)—separate task, agent-session, and reply states; restart and completion rules
 - [Integrations](integrations.md)—channels, AI providers, work systems, and report sources
 - [Reports and the Assistant](reports-and-assistant.md)—the report pipeline, letting the AI write the source cards, and what the Assistant watches
 - [Status and roadmap](roadmap.md)—what works today and what is next

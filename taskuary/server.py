@@ -129,6 +129,7 @@ async def token_gate(request: Request, call_next):
 class TaskBody(BaseModel):
     Title: str | None = None; Summary: str | None = None; Kind: str | None = None
     Priority: str | None = None; Status: str | None = None; Tags: str | None = None
+    Assignee: str | None = None
 class MsgBody(BaseModel):
     external_id: str | None = None; channel: str = 'api'; subject: str | None = None
     body: str | None = None; from_name: str | None = None; from_email: str | None = None
@@ -287,6 +288,10 @@ def tasks(status: str = None, active: bool = False):
 def create_task(body: TaskBody):
     if not body.Title: raise HTTPException(422, 'Title is required')
     tid = store.create_task({k: v for k, v in body.dict().items() if v is not None}, ACTOR)
+    # A task created by the owner is their durable TODO. Agent runs may come and go without
+    # silently completing it; only routed/triaged work is eligible for automatic completion.
+    from . import selfclose
+    selfclose.claim(store, tid, ACTOR)
     store.audit('task', tid, 'create', ACTOR)
     return {'taskId': tid, 'ref': task_ref(tid)}
 
@@ -480,6 +485,11 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
             wants_chat = general.handles({'Kind': next_kind})
             if is_chat != wants_chat or next_kind == 'task': hub_term.close(live.sid)
     store.update_task(task_id, fields, ACTOR)
+    if t.get('Status') in ('done', 'dropped') and fields.get('Status') in ('open', 'in_progress', 'waiting'):
+        # A self-close is remembered in-process to prevent duplicate hooks. Reopening is a new
+        # lifecycle, so a later automated run must be allowed to settle again.
+        from . import selfclose
+        selfclose.forget(task_id)
     # "Mark done - I took care of it" means the agent's job is over too: a live session left
     # running on a finished task is an agent nobody is coming back for. close() files the
     # transcript first, so the record survives the pty as always.
@@ -537,7 +547,9 @@ def continue_task(task_id: int, body: CodeBody):
     previous = store.last_transcript(task_id) or {}
     if hub_term.for_task(task_id): raise HTTPException(409, 'this task already has a live coding session')
     from . import agents as hub_agents
-    agent = str(previous.get('Agent') or body.agent or hub_agents.default_agent(store)).strip()
+    # An explicit picker choice means "restart with this harness". Falling back to the previous
+    # transcript preserves the convenient same-agent continue path.
+    agent = str(body.agent or previous.get('Agent') or hub_agents.default_agent(store)).strip()
     if not store.get_agent(agent):
         raise HTTPException(422, f'the previous coder "{agent}" is no longer configured; choose a coder from Start session')
     try:
@@ -1137,6 +1149,8 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'task', ACTOR)
+    from . import selfclose
+    selfclose.claim(store, tid, ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
     if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
@@ -1156,6 +1170,8 @@ def chat_message(mid: int, background: BackgroundTasks = None):
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, 'general', ACTOR)
+    from . import selfclose
+    selfclose.claim(store, tid, ACTOR)
     t = store.get_task(tid) or {}
     if (t.get('Kind') or '') != 'general': store.update_task(tid, {'Kind': 'general'}, ACTOR)
     # the ask tag is what GeneralWorkspace reads to open with the question instead of an empty
@@ -1173,6 +1189,8 @@ def split_msg(mid: int, body: SplitBody = None):
     conversation but two jobs, and an agent sent at the task only ever gets the first."""
     if not store.get_message(mid): raise HTTPException(404, 'message not found')
     tid = split_message(store, mid, ACTOR, (body.kind if body else None))
+    from . import selfclose
+    selfclose.claim(store, tid, ACTOR)
     return {'taskId': tid, 'ref': task_ref(tid)}
 
 class HandoffBody(BaseModel):
@@ -3024,7 +3042,7 @@ def ingest_status():
 class TermBody(BaseModel):
     agent: str | None = None; task_id: int | None = None; repo: str | None = None
     cwd: str | None = None; rows: int = 32; cols: int = 110; seed: bool = False
-    model: str | None = None
+    model: str | None = None; instruction: str | None = None
 
 @app.get('/api/terminals')
 def terminals(): return {'data': hub_term.listing()}
@@ -3050,7 +3068,7 @@ def open_terminal(body: TermBody):
     # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text.
     # This used to build its own thin prompt (title + summary, no message), which is exactly why
     # an agent started here went back to the API for the mail: it had not been given it.
-    seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, None, repo, cwd)[:8000])
+    seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, body.instruction, repo, cwd)[:8000])
                if body.seed and body.agent and tk else None)
     # this is the owner's door (agents dispatch through terminal.start_on_task): a session opened
     # here is one they sit in, so the task is theirs to end - whichever dialog or button it came from
@@ -3127,6 +3145,25 @@ def pause_terminal(sid: str, body: WrapBody):
 def close_terminal(sid: str):
     if not hub_term.close(sid): raise HTTPException(404, 'terminal not found')
     return {'ok': True}
+
+@app.post('/api/tasks/{task_id}/agent/stop')
+def stop_task_agent(task_id: int):
+    """End only the current worker. The task and reply are separate state machines."""
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    live = hub_term.session_for(task_id)
+    if not live or not getattr(live, 'alive', False):
+        return {'stopped': False, 'taskStatus': task.get('Status')}
+    sid = live.sid
+    label = getattr(live, 'label', None) or getattr(live, 'agent', None) or 'agent'
+    stopped = bool(hub_term.close(sid))
+    if stopped:
+        store.add_comment(task_id, ACTOR, 'human',
+                          f'Stopped the {label} session. The task remains {task.get("Status")}.')
+        store.audit('terminal', task_id, 'stop', ACTOR,
+                    detail={'sid': sid, 'agent': getattr(live, 'agent', None),
+                            'taskStatus': task.get('Status')})
+    return {'stopped': stopped, 'taskStatus': task.get('Status')}
 
 def _ws_ok(ws: WebSocket) -> bool:
     """The HTTP middleware never runs for a websocket, so the same three questions are asked here.

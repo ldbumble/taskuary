@@ -27,13 +27,12 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     if not was_sent and kind in ('clarification', 'draft') and task.get('Kind') != 'reply':
         return
 
-    from . import terminal
-    session = terminal.session_for(task_id)
-    stopped = bool(session and getattr(session, 'alive', False) and terminal.close(session.sid))
-
     # A clarification is not completion: stop the blocked session and keep the task visibly
     # waiting for the person who has the missing fact.
     if kind == 'clarification':
+        from . import terminal
+        session = terminal.session_for(task_id)
+        stopped = bool(session and getattr(session, 'alive', False) and terminal.close(session.sid))
         if task.get('Status') not in ('done', 'dropped'):
             store.update_task(task_id, {'Status': 'waiting'}, actor)
         if stopped:
@@ -41,9 +40,21 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
                               'Stopped the agent after sending the clarification; waiting for the sender.')
         return
 
+    # Sending a message is not the same as completing an owner-controlled task. It may be an
+    # update halfway through a long task, and its agent session may still be useful. Routed work
+    # keeps the automatic "answer sent = complete" behavior.
+    from . import selfclose
+    if selfclose.stays_open(store, task_id):
+        store.add_comment(task_id, actor, 'human',
+                          'Reply sent. This owner-controlled task remains open.')
+        return
+
     # A normal reviewed reply is the answer to this task. It cannot coexist with an agent
     # still working the same task after the channel confirms the send.
     if task.get('Kind') == 'reply' or kind in ('draft', 'draft_reply'):
+        from . import terminal
+        session = terminal.session_for(task_id)
+        stopped = bool(session and getattr(session, 'alive', False) and terminal.close(session.sid))
         if task.get('Status') not in ('done', 'dropped'):
             store.update_task(task_id, {'Status': 'done'}, actor)
         if stopped:
@@ -120,7 +131,10 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             # error, the approved text becomes the draft, approving again retries the send
             store.update_review_draft(rid, final, rv.get('RunId'))
             store.unhold_review(rid, f'approved, but sending FAILED: {send_err} - fix the channel and approve again')
-    if verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
+    if verb == 'no_reply' and rv.get('TaskId'):
+        from . import selfclose
+        if not selfclose.stays_open(store, rv['TaskId']):
+            store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
     # Sending is the lifecycle boundary. A final/manual answer closes the task and its live
     # terminal; a clarification stops the blocked terminal but deliberately leaves it waiting.
     if verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:

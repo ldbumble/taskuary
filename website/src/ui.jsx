@@ -864,6 +864,32 @@ export const TaskStatusChip = ({ status }) => (
     color: TASK_STATUS_COLORS[status] || "#a9a294", height: 19, fontSize: 10.5 }} />
 );
 
+const LC = {
+  neutral: { bg: "#f4f1ec", fg: "#55697a", bd: "#d8cfbe" },
+  working: { bg: "#e3e6e1", fg: "#526b55", bd: "#cbd5c9" },
+  you: { bg: "#f3e7e9", fg: "#8a3646", bd: "#dfc7cc" },
+  done: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" },
+  reply: { bg: "#f1ead9", fg: "#765f38", bd: "#ded0ad" },
+};
+
+const lifecycleColor = (kind, phase) => {
+  const value = String(phase || "");
+  if (value === "needs you" || value === "draft ready" || value === "approval needed" || value === "ready") return LC.you;
+  if (value === "working" || value === "in progress") return LC.working;
+  if (value === "done" || value === "sent" || value === "result ready") return LC.done;
+  if (kind === "reply") return LC.reply;
+  return LC.neutral;
+};
+
+// Always name the state machine. A naked "done" beside an active terminal was the original
+// ambiguity: the task can be done while an agent is stopped and a reply is still unsent.
+export const LifecycleChip = ({ kind, phase, compact = false, sx = {} }) => {
+  const c = lifecycleColor(kind, phase);
+  return <Chip size="small" label={`${kind} · ${phase}`}
+    sx={{ bgcolor: c.bg, color: c.fg, border: `1px solid ${c.bd}`, height: compact ? 17 : 20,
+      fontSize: compact ? 9.5 : 10.5, fontWeight: 700, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
+};
+
 export const timeAgo = (s) => {
   if (!s) return "";
   const mins = Math.max(0, (Date.now() - asUtc(String(s))) / 60000);

@@ -9,7 +9,7 @@ the same triage, with the same attachment pipeline, and replies go back over SMT
 
 Stdlib only (imaplib, smtplib, email) - nothing new frozen into the exe.
 """
-import base64, email, email.utils, imaplib, json, re, smtplib, ssl
+import base64, email, email.utils, hashlib, imaplib, json, re, smtplib, socket, ssl
 from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from email.mime.text import MIMEText
@@ -20,6 +20,91 @@ HOSTS = {'gmail': ('imap.gmail.com', 'smtp.gmail.com')}
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
+
+
+# ── WHOSE CERTIFICATE IS THAT ───────────────────────────────────────────────────────────
+# Shared hosting is the common case this exists for: you connect to smtp.yourdomain.com and the
+# server presents a certificate issued for the HOST's own name (mail.provider.net). The traffic is
+# encrypted and the server is the right one - the name on the certificate just is not yours.
+# Outlook shows a dialog, you dismiss it, and it works forever after; `tls_accept` on the mailbox
+# card is how you say the same thing here, and it is deliberately not a global switch.
+#
+#   unset       every certificate is checked, name included. Where every mailbox should start.
+#   <sha256>    accept exactly THIS certificate, whatever name it carries. The name check is off
+#               and the pin replaces it: swap the certificate and sending stops, which is the
+#               part "just turn verification off" throws away.
+#   any         no checking at all - for a self-signed server, when there is nothing to pin to.
+#
+# The fingerprint to paste is in the error you get when it refuses, so accepting one is: read the
+# message, copy the line it gives you. There is no dialog because there is nobody at the screen
+# when a scheduled reply goes out at 6am.
+TLS_HELP = ('the mailbox card can accept it: put the fingerprint above in tls_accept (Connections '
+            "→ the mailbox → TLS certificate), or 'any' to stop checking certificates for this "
+            'mailbox altogether')
+
+
+def ssl_ctx(cfg: dict):
+    """Strict, unless this mailbox says otherwise. A pin does its own checking after the
+    handshake (verify_ok), so the context stops at 'encrypt it'."""
+    ctx = ssl.create_default_context()
+    if str(cfg.get('tls_accept') or '').strip():
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def fingerprint(sock) -> str:
+    return hashlib.sha256(sock.getpeercert(True) or b'').hexdigest()
+
+
+def verify_pin(sock, cfg: dict, host: str):
+    """The half of the check the context skipped. Nothing to do when tls_accept is unset (the
+    context already verified) or 'any' (the owner asked for no checking)."""
+    want = str(cfg.get('tls_accept') or '').strip().lower()
+    if not want or want == 'any': return
+    got = fingerprint(sock)
+    if got != want.replace(':', ''):
+        raise RuntimeError(f'{host} presented a different certificate than the one this mailbox '
+                           f'accepted.\n  now:      sha256:{got}\n  accepted: sha256:{want}\n'
+                           'If the mail host renewed its certificate this is expected - put the new '
+                           'fingerprint in tls_accept. If it did not, something is between you and '
+                           'the mail server: do not accept it.')
+
+
+def peer_cert(host: str, port: int, starttls: bool) -> tuple:
+    """(names the certificate IS valid for, its sha256) - for the error text, so the owner can see
+    whose certificate it is before deciding to accept it. Read on a second connection that verifies
+    the chain but not the name; a self-signed server falls through to the fingerprint alone."""
+    def read(ctx):
+        if starttls:
+            with smtplib.SMTP(host, port, timeout=15) as S:
+                S.starttls(context=ctx)
+                return (S.sock.getpeercert() or {}), fingerprint(S.sock)
+        with socket.create_connection((host, port), timeout=15) as s:
+            with ctx.wrap_socket(s, server_hostname=host) as w:
+                return (w.getpeercert() or {}), fingerprint(w)
+    for verify in (True, False):
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        if not verify: ctx.verify_mode = ssl.CERT_NONE
+        try: cert, fp = read(ctx)
+        except Exception: continue
+        names = [v for k, v in (cert.get('subjectAltName') or ()) if k == 'DNS']
+        if not names:
+            names = [v for pair in (cert.get('subject') or ()) for k, v in pair if k == 'commonName']
+        return names, fp
+    return [], ''
+
+
+def tls_error(e: Exception, host: str, port: int, starttls: bool) -> RuntimeError:
+    """Python says 'certificate is not valid for smtp.yours.com' and stops. Say whose certificate
+    it actually is and what to do about it - that is the whole difference between this being a
+    dead end and being one setting."""
+    names, fp = peer_cert(host, port, starttls)
+    whose = f" It is valid for {', '.join(names[:6])}." if names else ''
+    pin = f'\n  sha256:{fp}\n' if fp else '\n'
+    return RuntimeError(f'{host}:{port} refused the TLS check: {e}.{whose} The certificate it '
+                        f'presents is:{pin}{TLS_HELP}')
 
 
 def _hosts(c) -> tuple:
@@ -46,12 +131,15 @@ def _login(c):
     port = int(cfg.get('imap_port') or 993)
     # timeout: a half-open socket after a sleep or a Wi-Fi change hung the poll thread in recv
     # forever, and every later poll skipped because the lock was held (audit 2026-09-02)
-    try: M = imaplib.IMAP4_SSL(imap_h, port, timeout=30)
+    try: M = imaplib.IMAP4_SSL(imap_h, port, timeout=30, ssl_context=ssl_ctx(cfg))
+    except ssl.SSLCertVerificationError as e:
+        raise tls_error(e, imap_h, port, False) from e
     except OSError as e:
         if getattr(e, 'winerror', None) == 10013 or 'forbidden by its access permissions' in str(e):
             raise RuntimeError(f'this PC blocked the connection to {imap_h}:{port} - a firewall or security agent stops '
                                'Taskuary from reaching the mail server; ask IT to allow it (or allow port 993)') from e
         raise
+    verify_pin(M.sock, cfg, imap_h)
     M.login(user, c['Secret'])
     return M, user
 
@@ -287,7 +375,9 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
         m['References'] = in_reply_to
     port = int(cfg.get('smtp_port') or 587)
     with smtplib.SMTP(smtp_h, port, timeout=30) as S:
-        S.starttls(context=ssl.create_default_context())
+        try: S.starttls(context=ssl_ctx(cfg))
+        except ssl.SSLCertVerificationError as e: raise tls_error(e, smtp_h, port, True) from e
+        verify_pin(S.sock, cfg, smtp_h)
         S.login(user, c['Secret'])
         S.sendmail(user, to, m.as_string())
     return {'channel': 'email', 'to': to, 'mailbox': user, 'threaded': bool(in_reply_to)}

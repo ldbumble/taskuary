@@ -3,7 +3,7 @@ UID watermarks that never re-ingest, bodies and attachments parsed off real MIME
 threaded and sent from the arriving address, and the outlook poller keeping its hands off
 sources that belong to an IMAP connector.
 """
-import email.message, json, unittest
+import email.message, hashlib, json, ssl, unittest
 from unittest import mock
 from taskuary import imapmail, outbound
 from taskuary.store import MemoryStore
@@ -21,7 +21,10 @@ def _mime(frm='Rita Vole <rita@partner.example>', subj='the export is broken', b
 
 
 class FakeImap:
-    def __init__(self, msgs): self.msgs, self.readonly, self.flagged = msgs, None, []
+    def __init__(self, msgs):
+        self.msgs, self.readonly, self.flagged = msgs, None, []
+        # imaplib.IMAP4_SSL keeps the TLS socket here, and _login reads the certificate off it
+        self.sock = mock.Mock(getpeercert=mock.Mock(return_value=b'the mail host certificate'))
     def login(self, u, p): return 'OK', []
     def select(self, box, readonly=False):
         self.readonly = readonly
@@ -108,7 +111,9 @@ class ImapTests(unittest.TestCase):
         s, _ = self._store()
         sent = {}
         class FakeSmtp:
-            def __init__(self, host, port, timeout=None): sent['host'], sent['port'] = host, port
+            def __init__(self, host, port, timeout=None):
+                sent['host'], sent['port'] = host, port
+                self.sock = mock.Mock(getpeercert=mock.Mock(return_value=b'the mail host certificate'))
             def __enter__(self): return self
             def __exit__(self, *a): pass
             def starttls(self, context=None): pass
@@ -155,6 +160,70 @@ class SourceOwnershipTests(unittest.TestCase):
         self.assertEqual(row['ConnectorId'], b.get_connector_by_type('outlook')['ConnectorId'])
         self.assertIsNone(b._one("SELECT * FROM source WHERE Address='Census'")['ConnectorId'])
 
+
+
+class CertificateTests(unittest.TestCase):
+    """Shared hosting: you connect to smtp.yourdomain.com and the certificate names the host's own
+    server. Outlook lets you dismiss that; tls_accept is how the same mailbox says it here."""
+
+    def _sock(self, der):
+        return mock.Mock(getpeercert=mock.Mock(return_value=der))
+
+    def test_the_default_is_still_strict(self):
+        ctx = imapmail.ssl_ctx({})
+        self.assertTrue(ctx.check_hostname)
+        self.assertEqual(ctx.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_an_accepted_certificate_turns_the_name_check_off(self):
+        for accept in ('any', 'a' * 64):
+            ctx = imapmail.ssl_ctx({'tls_accept': accept})
+            self.assertFalse(ctx.check_hostname, accept)
+            self.assertEqual(ctx.verify_mode, ssl.CERT_NONE, accept)
+
+    def test_a_pin_accepts_that_certificate_and_only_that_one(self):
+        der = b'the certificate this mailbox was set up against'
+        fp = hashlib.sha256(der).hexdigest()
+        imapmail.verify_pin(self._sock(der), {'tls_accept': fp}, 'smtp.mine.example')
+        imapmail.verify_pin(self._sock(der), {'tls_accept': f'{fp.upper()}'}, 'smtp.mine.example')
+        # ...which is the half that "just turn verification off" throws away
+        with self.assertRaisesRegex(RuntimeError, 'different certificate'):
+            imapmail.verify_pin(self._sock(b'somebody else'), {'tls_accept': fp}, 'smtp.mine.example')
+
+    def test_nothing_to_check_when_the_owner_asked_for_no_checking(self):
+        imapmail.verify_pin(self._sock(b'whatever'), {'tls_accept': 'any'}, 'h')
+        imapmail.verify_pin(self._sock(b'whatever'), {}, 'h')          # the context already verified
+
+    def test_the_refusal_says_whose_certificate_it_is_and_what_to_do(self):
+        err = ssl.SSLCertVerificationError("certificate is not valid for 'smtp.mine.example'")
+        with mock.patch.object(imapmail, 'peer_cert', return_value=(['mail.bighost.net', '*.bighost.net'], 'ab' * 32)):
+            msg = str(imapmail.tls_error(err, 'smtp.mine.example', 587, True))
+        self.assertIn('mail.bighost.net', msg)          # whose it is, so the owner can judge it
+        self.assertIn('sha256:' + 'ab' * 32, msg)       # the value to paste
+        self.assertIn('tls_accept', msg)                # and where to paste it
+
+    def test_the_send_path_uses_the_mailbox_context_and_checks_the_pin(self):
+        der = b'shared host certificate'
+        c = {'Type': 'imap', 'Secret': 'pw', 'ConfigJson': json.dumps(
+            {'address': 'me@mine.example', 'imap_host': 'imap.mine.example', 'tls_accept': hashlib.sha256(der).hexdigest()})}
+        S = mock.MagicMock()
+        S.__enter__.return_value = S
+        S.sock = self._sock(der)
+        with mock.patch.object(imapmail.smtplib, 'SMTP', return_value=S):
+            out = imapmail.send_smtp(MemoryStore(), c, ['them@partner.example'], 'hello', 'body')
+        self.assertEqual(out['to'], ['them@partner.example'])
+        self.assertFalse(S.starttls.call_args.kwargs['context'].check_hostname)   # accepted, so not by name
+        S.login.assert_called_once(); S.sendmail.assert_called_once()
+
+    def test_a_swapped_certificate_stops_the_send(self):
+        c = {'Type': 'imap', 'Secret': 'pw', 'ConfigJson': json.dumps(
+            {'address': 'me@mine.example', 'imap_host': 'imap.mine.example', 'tls_accept': 'cd' * 32})}
+        S = mock.MagicMock()
+        S.__enter__.return_value = S
+        S.sock = self._sock(b'not the one that was accepted')
+        with mock.patch.object(imapmail.smtplib, 'SMTP', return_value=S):
+            with self.assertRaisesRegex(RuntimeError, 'different certificate'):
+                imapmail.send_smtp(MemoryStore(), c, ['them@partner.example'], 'hello', 'body')
+        S.sendmail.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

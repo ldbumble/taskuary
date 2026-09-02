@@ -7,6 +7,7 @@ import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { pollWhileVisible } from "./visible.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import api from "./api";
 import { track } from "./demoTrack";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
@@ -38,6 +39,7 @@ import FloatingAssistant from "./FloatingAssistant.jsx";
 // Kind 'action') carries no MessageId, so it has no Timeline row to live on. Drop this tab and an
 // agent asking permission has nowhere to ask.
 const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Social", "Connections", "Docs", "Settings"];
+const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
 // report that failed today - each with the way to where it is fixed. The setup chip beside it says
@@ -364,6 +366,12 @@ export default function TaskHubPage() {
               yields to nothing - the banner sat on top of "Timeline". */}
           <StaleBuild />
           {!DEMO && !demo && <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />}
+          <Tooltip title="Support — report a problem or attach screenshots on GitHub">
+            <IconButton component="a" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"
+              size="small" aria-label="Taskuary support and issue reporting">
+              <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
+            </IconButton>
+          </Tooltip>
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connections"); }} />
           <Tooltip title="Refresh">

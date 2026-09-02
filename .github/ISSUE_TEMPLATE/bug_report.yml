@@ -6,7 +6,7 @@ body:
     id: what
     attributes:
       label: What happened
-      description: What you did, what you expected, what you got. Screenshots welcome.
+      description: What you did, what you expected, and what you got. Paste or drag screenshots and images directly into this box.
     validations:
       required: true
   - type: textarea

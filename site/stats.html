@@ -93,7 +93,9 @@ $('go').onclick = function(){
   try { localStorage.setItem('tq_stats_token', tok); } catch(e){}
   $('out').innerHTML = '<div class="msg">Reading…</div>';
   fetch('/api/ev?token=' + encodeURIComponent(tok) + '&days=' + days).then(function(r){
-    if (!r.ok) throw new Error(r.status === 404 ? 'That is not the token set on the Pages project.' : 'HTTP ' + r.status);
+    if (!r.ok) throw new Error(r.status === 404 ? 'That value does not match the production analytics token.'
+      : r.status === 503 ? 'ANALYTICS_TOKEN is missing from the Production runtime variables (build variables do not count).'
+      : 'HTTP ' + r.status);
     return r.json();
   }).then(function(d){
     if (d.note) { $('out').innerHTML = '<div class="msg">' + esc(d.note) + ' — see site/README.md for the two wrangler commands.</div>'; return; }

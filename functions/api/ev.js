@@ -38,8 +38,16 @@ export async function onRequestPost({ request, env }) {
 // A page that can only be reached with the token, so the numbers are not themselves public.
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
-  if (!env.ANALYTICS_TOKEN || url.searchParams.get("token") !== env.ANALYTICS_TOKEN)
-    return new Response("no", { status: 404 });
+  // Cloudflare's editor makes surrounding whitespace nearly impossible to see. The browser
+  // already trims what the owner pastes, so normalize the runtime value the same way. More
+  // importantly, distinguish a missing Production runtime binding from a genuinely different
+  // token: both used to be the same 404, sending the owner in circles checking a correct value.
+  const configured = typeof env.ANALYTICS_TOKEN === "string" ? env.ANALYTICS_TOKEN.trim() : "";
+  const headers = { "Cache-Control": "no-store" };
+  if (!configured)
+    return new Response("ANALYTICS_TOKEN is not configured in the production runtime", { status: 503, headers });
+  if ((url.searchParams.get("token") || "").trim() !== configured)
+    return new Response("no", { status: 404, headers });
   if (!env.DEMO_EVENTS) return Response.json({ visits: 0, note: "no D1 binding" });
   const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 14));
   const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -54,5 +62,5 @@ export async function onRequestGet({ request, env }) {
               COUNT(*) sessions FROM (SELECT Sid, COUNT(*) c FROM ev WHERE At>=? GROUP BY Sid)
        GROUP BY bucket ORDER BY sessions DESC`),
   ]);
-  return Response.json({ days, visits, kinds, what, depth });
+  return Response.json({ days, visits, kinds, what, depth }, { headers });
 }

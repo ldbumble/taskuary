@@ -1581,7 +1581,10 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   };
   const rep = [...(detail?.comments || [])].reverse().find((c) => String(c.Body || "").trimStart().startsWith("CODER REPORT"));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
-  const pending = sel.ReviewId && sel.ReviewStatus === "pending";
+  // an ACTION is a proposal, not a reply - it has its own card and must never fill this tab
+  const livePending = (detail?.reviews || []).find((r) => r.Status === "pending" && r.Kind !== "action");
+  const pending = detail ? !!livePending : !!(sel.ReviewId && sel.ReviewStatus === "pending");
+  const pendingId = livePending?.ReviewId || sel.ReviewId;
   // is somebody already on this? a live pty session or a running headless run both count,
   // and a session gone quiet is a question waiting for an answer, not work in progress
   const ses = detail?.session;
@@ -1623,7 +1626,23 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     { key: "agent", label: "Agent", mark: onIt ? "live" : chatTask ? "chat" : rep ? "done" : "" },
     { key: "reply", label: "Reply", mark: replied ? "replied" : pending ? "waiting" : opened ? "open" : "" },
   ];
-  const replyDraft = pending ? pendingDraft(detail || { runs: [] }, sel) : (opened?.draft || "");
+  // The drawer just read the live session list; the row's chip is whatever the last feed poll
+  // saw. When they disagree the drawer is the newer fact, so ask the list to refresh rather than
+  // leaving "agent working" on a task nothing is working. Once per message: the refreshed row
+  // clears Working, so this cannot chase itself.
+  const correctedRef = useRef(null);
+  useEffect(() => {
+    if (!detail || !sel?.MessageId) return;
+    const staleAgent = sel.Working && !detail.session;
+    const staleReply = (sel.ReviewStatus === "pending") !== !!livePending;
+    if (!staleAgent && !staleReply) return;
+    if (correctedRef.current === sel.MessageId) return;
+    correctedRef.current = sel.MessageId;
+    onRefresh?.();
+  }, [detail, sel?.MessageId, sel?.Working, sel?.ReviewStatus, livePending, onRefresh]);
+  const replyDraft = pending
+    ? (livePending?.DraftText || pendingDraft(detail || { runs: [] }, sel))
+    : (opened?.draft || "");
   // the road, in words - the why sentence is one tab over, for when it is asked for
   const roadMeta = ROADS.find((r) => r.key === roadOf(sel));
   const roadLine = roadMeta ? `${roadMeta.label} — ${roadMeta.hint}` : (sel.RouteReason ? "Routed; open for the verdict." : "Not routed.");
@@ -1815,7 +1834,23 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   )}
                   {diffRun && <Box sx={{ mt: 1 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                   {sel.TaskId && (rep || diffRun) && <Box sx={{ mt: 1 }}><ProofCard taskId={sel.TaskId} onOpenTask={onOpenTask} /></Box>}
-                  {!chatTask && !onIt && !rep && !diffRun && (
+                  {/* a session RAN and is gone: say that, rather than that none ever started */}
+                  {!chatTask && !onIt && !rep && !diffRun && detail?.transcript && (
+                    <>
+                      <PanelLabel>The session that was working this has ended</PanelLabel>
+                      <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
+                        {detail.transcript.agent || "an agent"} worked here
+                        {detail.transcript.cwd ? ` in ${detail.transcript.cwd}` : ""}
+                        {detail.transcript.at ? ` · ${fmtDateTime(detail.transcript.at)}` : ""}, and its terminal is gone.
+                        Nothing is working it now — the transcript it left is what closes it out.
+                      </Typography>
+                      <Typography variant="caption" onClick={() => onOpenTask(sel.TaskId)}
+                        sx={{ color: "#55697a", display: "block", mt: 0.75, cursor: "pointer", fontWeight: 600 }}>
+                        open the task page to close it out ↗
+                      </Typography>
+                    </>
+                  )}
+                  {!chatTask && !onIt && !rep && !diffRun && !detail?.transcript && (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
                       {held ? "Nothing is working this — it is held until you release it."
                         : codeless ? "No agent was sent: triage read this as something a reply settles."
@@ -1853,7 +1888,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     </Box>
                   )}
                   {pending && (
-                    <ReviewActions reviewId={sel.ReviewId} draft={replyDraft}
+                    <ReviewActions reviewId={pendingId} draft={replyDraft}
                       editText={editText} setEditText={setEditText} decide={decide}
                       sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
                   )}

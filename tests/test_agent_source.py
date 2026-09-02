@@ -33,8 +33,8 @@ class AgentSourceTests(unittest.TestCase):
         calls = []
         with mock.patch('taskuary.llm.make_cli_llm', self._fake_cli(calls)):
             head, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {
-                'type': 'agent', 'skill': '/weekly-user-review', 'prompt': 'focus on admin roles', 'cwd': 'C:/work/fanapp', 'model': 'opus'}))
-        self.assertEqual(calls, [{'name': 'coder', 'model': 'opus', 'cwd': 'C:/work/fanapp'}])
+                'type': 'agent', 'skill': '/weekly-user-review', 'prompt': 'focus on admin roles', 'cwd': 'C:/work/census', 'model': 'opus'}))
+        self.assertEqual(calls, [{'name': 'coder', 'model': 'opus', 'cwd': 'C:/work/census'}])
         self.assertIn('ASKED[/weekly-user-review focus on admin roles]', body)
         self.assertIn('coder ran /weekly-user-review', head)
         self.assertIn('3 lines', head)
@@ -96,9 +96,9 @@ class AgentSourceTests(unittest.TestCase):
         seen = {}
         def run_cli(prof, prompt, trace, resume=None): seen.update(prof=prof, prompt=prompt); return 'ok', None, None
         with mock.patch('taskuary.agents.run_cli', run_cli):
-            f = llm_mod.make_cli_llm(self.s, 'coder', cwd='C:/work/fanapp')
+            f = llm_mod.make_cli_llm(self.s, 'coder', cwd='C:/work/census')
             f('SYS', 'USER')
-        self.assertEqual(seen['prof']['cwd'], 'C:/work/fanapp')
+        self.assertEqual(seen['prof']['cwd'], 'C:/work/census')
         self.assertTrue(seen['prompt'].startswith('SYS'))
 
 

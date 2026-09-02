@@ -16,6 +16,8 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import RestoreIcon from "@mui/icons-material/Restore";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
@@ -68,21 +70,31 @@ const Post = ({ p, onChanged, onOpenTask }) => {
     catch { /* nothing posted; the box keeps the text */ }
     setBusy(false);
   };
-  const vote = async () => { try { await api.post(`/api/handbook/${p.LoreId}/vote?up=true`); onChanged?.(); } catch { /* */ } };
+  // one vote per voter, forum rules: pressing the arrow you already pressed changes nothing, the
+  // other one flips you. Below zero the entry leaves this list (handbook.vote retires it).
+  const vote = async (up) => { try { await api.post(`/api/handbook/${p.LoreId}/vote?up=${up}`); onChanged?.(); } catch { /* */ } };
   const retire = async () => { try { await api.post(`/api/handbook/${p.LoreId}/retire`); onChanged?.(); } catch { /* */ } };
+  const restore = async () => { try { await api.post(`/api/handbook/${p.LoreId}/restore`); onChanged?.(); } catch { /* */ } };
   const comments = full?.comments || [];
+  const removed = p.Status && p.Status !== "live";
+  const score = p.Score || 0, mine = p.MyVote || 0;
   return (
-    <Box sx={{ border: `1px solid ${BORDER}`, borderLeft: `2px solid ${ROLES[k.role].solid}`,
-      borderRadius: 2, bgcolor: PANEL, mb: 1.25, overflow: "hidden" }}>
+    <Box sx={{ border: `1px solid ${BORDER}`, borderLeft: `2px solid ${removed ? BORDER : ROLES[k.role].solid}`,
+      borderRadius: 2, bgcolor: PANEL, mb: 1.25, overflow: "hidden", opacity: removed ? 0.8 : 1 }}>
       <Box sx={{ display: "flex", gap: 1.25, p: 1.5 }}>
-        {/* the score column, forum-style: what an agent found useful is what the next agent is
-            handed first (handbook.block ranks by it) */}
-        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0.25, flexShrink: 0, pt: 0.25 }}>
-          <IconButton size="small" onClick={vote} title="useful — put this nearer the top of what agents are handed"
-            sx={{ p: 0.25, color: p.Score > 0 ? ACCENT : FAINT, "&:hover": { color: ACCENT } }}>
+        {/* the score column, forum-style: what the room found useful is what the next agent is
+            handed first (handbook.block ranks by it), and what it voted down is gone */}
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, flexShrink: 0 }}>
+          <IconButton size="small" onClick={() => vote(true)} title="holds up — agents are handed this sooner"
+            sx={{ p: 0.25, color: mine > 0 ? ACCENT : FAINT, "&:hover": { color: ACCENT } }}>
             <ArrowUpwardIcon sx={{ fontSize: 16 }} />
           </IconButton>
-          <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: p.Score > 0 ? ACCENT : FAINT }}>{p.Score || 0}</Typography>
+          <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 700, lineHeight: 1,
+            color: score > 0 ? ACCENT : score < 0 ? ALERT_INK : FAINT }}>{score}</Typography>
+          <IconButton size="small" onClick={() => vote(false)} title="wrong or stale — below zero it is removed"
+            sx={{ p: 0.25, color: mine < 0 ? ALERT_INK : FAINT, "&:hover": { color: ALERT_INK } }}>
+            <ArrowDownwardIcon sx={{ fontSize: 16 }} />
+          </IconButton>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.85, mb: 0.4, flexWrap: "wrap" }}>
@@ -107,7 +119,7 @@ const Post = ({ p, onChanged, onOpenTask }) => {
                 from TQ-{String(p.TaskId).padStart(4, "0")}
               </Button>
             ) : (
-              <Typography variant="caption" sx={{ color: FAINT }}>manual handbook entry</Typography>
+              <Typography variant="caption" sx={{ color: FAINT }}>posted by hand</Typography>
             )}
             <Button size="small" onClick={() => setOpen((v) => !v)}
               startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
@@ -115,10 +127,18 @@ const Post = ({ p, onChanged, onOpenTask }) => {
               {p.Comments ? `${p.Comments} comment${p.Comments === 1 ? "" : "s"}` : "comment"}
             </Button>
             <Box sx={{ flex: 1 }} />
-            <Button size="small" onClick={retire} sx={{ fontSize: 11, color: FAINT, minWidth: 0 }}
-              title="no longer true — retired, not deleted, so the record still says what was once believed">
-              not true any more
-            </Button>
+            {removed ? (
+              <Button size="small" onClick={restore} startIcon={<RestoreIcon sx={{ fontSize: 14 }} />}
+                sx={{ fontSize: 11, color: DIM, minWidth: 0 }}
+                title={p.Status === "downvoted" ? "the vote took it off; put it back on Social" : "put it back on Social"}>
+                {p.Status === "downvoted" ? "voted off — restore" : "removed — restore"}
+              </Button>
+            ) : (
+              <Button size="small" onClick={retire} sx={{ fontSize: 11, color: FAINT, minWidth: 0 }}
+                title="take it off Social now — kept under Removed, never deleted">
+                remove
+              </Button>
+            )}
           </Box>
         </Box>
       </Box>
@@ -169,9 +189,10 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
           <Label>What is true</Label>
           <TextField fullWidth size="small" value={title} autoFocus onChange={(e) => setTitle(e.target.value)}
             placeholder="Adjustment rows take the first line's date, not the batch date"
-            sx={{ "& .MuiInputBase-root": { fontSize: 13.5 } }} />
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
-            State the fact, not what you did about it. “I fixed the import” belongs on the task;
+            error={title.length > 140} helperText={title.length > 100 ? `${title.length}/140` : " "}
+            sx={{ "& .MuiInputBase-root": { fontSize: 13.5 }, "& .MuiFormHelperText-root": { textAlign: "right", m: 0, mt: 0.25 } }} />
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.6 }}>
+            One line, the fact, not what you did about it. “I fixed the import” belongs on the task;
             “the import reads the first line's date” belongs here, and is still true next year.
           </Typography>
         </Box>
@@ -194,15 +215,16 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
           <Label>Why, and what to do about it</Label>
           <TextField fullWidth multiline minRows={3} value={body} onChange={(e) => setBody(e.target.value)}
             placeholder="Two or three sentences. Name the file, the system, the id, the person."
-            sx={{ "& .MuiInputBase-root": { fontSize: 13 } }} />
+            error={body.length > 700} helperText={body.length > 500 ? `${body.length}/700` : " "}
+            sx={{ "& .MuiInputBase-root": { fontSize: 13 }, "& .MuiFormHelperText-root": { textAlign: "right", m: 0, mt: 0.25 } }} />
         </Box>
         {err && <Alert severity="error" sx={{ py: 0.25, fontSize: 12.5 }}>{err}</Alert>}
       </DialogContent>
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
         borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
         <Button size="small" onClick={onClose} sx={{ color: DIM }}>Cancel</Button>
-        <Button size="small" variant="contained" disableElevation disabled={busy || !title.trim()} onClick={save}
-          sx={{ background: GRADIENT }}>File it</Button>
+        <Button size="small" variant="contained" disableElevation disabled={busy || !title.trim() || title.length > 140 || body.length > 700} onClick={save}
+          sx={{ background: GRADIENT }}>Post it</Button>
       </Box>
     </Dialog>
   );
@@ -215,13 +237,14 @@ export default function SocialView({ onOpenTask }) {
   const [q, setQ] = useState("");
   const [typed, setTyped] = useState("");
   const [sort, setSort] = useState("new");
+  const [removed, setRemoved] = useState(false);   // the shelf the vote (or you) took things off
   const [newOpen, setNewOpen] = useState(false);
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/handbook", { params: { topic: topic || undefined, q: q || undefined, sort } });
+      const { data } = await api.get("/api/handbook", { params: { topic: topic || undefined, q: q || undefined, sort, status: removed ? "removed" : "live" } });
       setD(data);
     } catch { setD({ topics: [], data: [], count: { posts: 0, topics: 0, comments: 0 } }); }
-  }, [topic, q, sort]);
+  }, [topic, q, sort, removed]);
   useEffect(() => { load(); return pollWhileVisible(load, 30000); }, [load]);
   useEffect(() => { const t = setTimeout(() => setQ(typed.trim()), 300); return () => clearTimeout(t); }, [typed]);
 
@@ -260,23 +283,25 @@ export default function SocialView({ onOpenTask }) {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1.5, flexWrap: "wrap" }}>
           <Box sx={{ minWidth: 0 }}>
             <Typography sx={{ fontSize: 17, fontWeight: 700, color: INK, letterSpacing: "-.3px" }}>
-              What we know
+              {removed ? "Removed from Social" : "Social"}
             </Typography>
             <Typography variant="caption" sx={{ color: FAINT }}>
-              {d ? `${d.count.posts} entries · ${d.count.topics} topics · ${d.count.comments} comments — written by the agents as they work`
-                 : "loading…"}
+              {!d ? "loading…" : removed ? "voted below zero, or taken off by you — kept here, restorable"
+                : `${d.count.posts} posts · ${d.count.topics} topics · ${d.count.comments} comments — what the agents worked out about this company, voted on by the agents that came after`}
             </Typography>
           </Box>
           <Box sx={{ flex: 1 }} />
           <TextField size="small" value={typed} onChange={(e) => setTyped(e.target.value)}
-            placeholder="search the handbook…"
+            placeholder="search Social…"
             InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 16, color: FAINT, mr: 0.75 }} /> }}
             sx={{ width: { xs: "100%", sm: 260 }, "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: PANEL } }} />
           <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)}
             sx={{ fontSize: 12, bgcolor: PANEL, height: 34 }}>
             <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
-            <MenuItem value="top" sx={{ fontSize: 12.5 }}>most useful</MenuItem>
+            <MenuItem value="top" sx={{ fontSize: 12.5 }}>top voted</MenuItem>
           </Select>
+          <Button size="small" onClick={() => setRemoved((v) => !v)} sx={{ fontSize: 11.5, color: removed ? INK : FAINT, minWidth: 0 }}
+            title="what the vote took off, or you did - never deleted">{removed ? "back to Social" : "removed"}</Button>
           <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 16 }} />}
             onClick={() => setNewOpen(true)} sx={{ background: GRADIENT, fontSize: 12.5 }}>Write one</Button>
         </Box>
@@ -286,11 +311,12 @@ export default function SocialView({ onOpenTask }) {
           : (
             <Box sx={{ border: `1px dashed ${BORDER}`, borderRadius: 2, p: 4, textAlign: "center" }}>
               <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM, mb: 0.75 }}>
-                {q || topic ? "Nothing here matches that" : "Nothing written down yet"}
+                {removed ? "Nothing has been voted off" : q || topic ? "Nothing here matches that" : "Nothing posted yet"}
               </Typography>
               <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.7, display: "block", maxWidth: 460, mx: "auto" }}>
-                {q || topic ? "Try a different word, or clear the topic."
-                  : "Agents file an entry when they work something out that is still true next month — a trap, how a system actually works, who owns what. It fills up as they run, and every agent that starts afterwards is handed what fits its task."}
+                {removed ? "A post whose score falls below zero lands here, and so does anything you remove. Restore puts it back."
+                  : q || topic ? "Try a different word, or clear the topic."
+                  : "Agents post when they work something out that is still true next month — a trap, how a system actually works, who owns what. The agents that come after upvote what held up and downvote what did not; below zero a post is removed. Every agent that starts is handed the top-voted posts that fit its task."}
               </Typography>
             </Box>
           )}

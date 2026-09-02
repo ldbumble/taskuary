@@ -63,7 +63,7 @@ class FileTests(unittest.TestCase):
         m1 = _mail(s, DANA, 'Payroll import wrong again', 'It is doing it again for May.', days=1, tid=tid, conv='c2')
         s.add_message({'TaskId': tid, 'ExternalId': 'mine', 'ConversationId': 'c2', 'Channel': 'email', 'SourceName': ME, 'Subject': 'Re: Payroll import wrong again',
                        'FromName': 'You', 'FromEmail': ME, 'SentAt': _ago(0), 'BodyText': 'Looking now.', 'Status': 'context'})
-        path = context.write(s, tid, repo='northwind/FanApp')
+        path = context.write(s, tid, repo='northwind/Census')
         self.assertTrue(path and Path(path).exists())
         self.assertEqual(Path(path).parent.name, 'context')
         self.assertTrue(Path(path).is_relative_to(Path(os.environ['TASKUARY_HOME'])))     # Taskuary's home, never a checkout
@@ -71,7 +71,7 @@ class FileTests(unittest.TestCase):
         for want in ('## What the hub knows', 'March file landed in April',
                      '## Past work', 'reads the payroll date', '## The whole thread', 'THE OWNER', 'Looking now.'):
             self.assertIn(want, text)
-        seed = terminal.seed_text(s, tid, None, 'northwind/FanApp', 'C:/src/FanApp')
+        seed = terminal.seed_text(s, tid, None, 'northwind/Census', 'C:/src/Census')
         self.assertIn(f'CONTEXT FILE: {path}', seed)
         self.assertIn('and in the context file', seed)
         self.assertNotIn('\n', seed)

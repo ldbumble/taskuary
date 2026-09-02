@@ -96,7 +96,7 @@ class SettledEvidenceTests(unittest.TestCase):
         self.assertEqual(triage._agreement(notes), ('NOT OURS', 2))
         self.assertEqual(triage._agreement(notes[:1]), ())                                # one is not a pattern
         self.assertEqual(triage._agreement(notes + ['2026-08-27: "x" - NOT A TASK: filed']), ())   # they disagree
-        self.assertEqual(triage._agreement(['Mindy handles AR stuff.']), ())                # free text is advice
+        self.assertEqual(triage._agreement(['Priya handles AR stuff.']), ())                # free text is advice
 
     def test_the_prompt_says_settled(self):
         seen = {}

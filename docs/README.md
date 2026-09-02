@@ -9,6 +9,7 @@ actions wait for human approval.
 - [Integrations](integrations.md)—channels, AI providers, work systems, and report sources
 - [Reports and the Assistant](reports-and-assistant.md)—the report pipeline, letting the AI write the source cards, and what the Assistant watches
 - [Status and roadmap](roadmap.md)—what works today and what is next
+- [Beyond code](beyond-code.md)—how one funnel handles any kind of task: playbooks, gated tools, receipts (design note)
 - [Contributing](../CONTRIBUTING.md)—development setup and contribution guide
 
 The API is also browsable at `/api/docs` while Taskuary is running.

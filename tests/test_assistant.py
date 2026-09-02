@@ -316,15 +316,15 @@ class ButtonTests(unittest.TestCase):
 
     def test_talking_back_answers_with_the_thread_and_attachments_and_is_remembered(self):
         s = _store()
-        mid = _mail(s, 'mindy@ours.com', 'Teams chat with Mindy', 'Please fill out the review.',
-                    days=0, conv='mindy', name='Mindy')
-        _mine(s, 'Teams chat with Mindy', 'I sent it to you here in the chat.', days=0, conv='mindy')
+        mid = _mail(s, 'priya@ours.com', 'Teams chat with Priya', 'Please fill out the review.',
+                    days=0, conv='priya', name='Priya')
+        _mine(s, 'Teams chat with Priya', 'I sent it to you here in the chat.', days=0, conv='priya')
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'sent-review.png'; path.write_bytes(b'\x89PNG\r\n\x1a\nproof')
-            s.add_attachment({'MessageId': mid, 'ExternalId': 'mindy-proof', 'Name': 'sent-review.png',
+            s.add_attachment({'MessageId': mid, 'ExternalId': 'priya-proof', 'Name': 'sent-review.png',
                               'ContentType': 'image/png', 'Path': str(path)})
-            idea = s.upsert_idea({'key': 'idea:mindy', 'kind': 'idea', 'text': 'You still owe Mindy the review.',
-                                  'action': {'type': 'task', 'mid': mid, 'why': 'Mindy asked Friday.'}}, _ago())
+            idea = s.upsert_idea({'key': 'idea:priya', 'kind': 'idea', 'text': 'You still owe Priya the review.',
+                                  'action': {'type': 'task', 'mid': mid, 'why': 'Priya asked Friday.'}}, _ago())
             seen = {}
             def llm(system, user, **kwargs):
                 seen.update(system=system, user=user, **kwargs)
@@ -336,7 +336,7 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual(len(seen['images']), 1)
         self.assertIn('That is wrong', assistant._said(s))
         # A later check may rewrite the suggestion, but it cannot erase the correction.
-        s.upsert_idea({'key': 'idea:mindy', 'kind': 'idea', 'text': 'Updated thought.',
+        s.upsert_idea({'key': 'idea:priya', 'kind': 'idea', 'text': 'Updated thought.',
                        'action': {'type': 'note', 'why': 'new facts'}}, _ago())
         self.assertEqual(len(assistant._public(s.get_idea(idea['IdeaId']))['action']['chat']), 2)
 
@@ -497,15 +497,15 @@ class WhatItReadsTests(unittest.TestCase):
 
     def test_what_people_said_carries_the_words_and_marks_yours(self):
         s = _store()
-        self._chat(s, 'Mindy Gorelick', 'Yittie said the server was updating? Did she understand wrong?', hours=5)
-        self._chat(s, 'Mindy Gorelick', 'Also, can you please fill out the performance review? It is almost my hire date.', hours=4)
-        self._chat(s, 'Mindy Gorelick', 'Looking now - the review goes out today.', hours=3, mine=True)
-        self._chat(s, 'Mindy Gorelick', 'She said that every day from 4 - 5:00 it does not work', hours=2)
+        self._chat(s, 'Priya Shah', 'Rina said the server was updating? Did she understand wrong?', hours=5)
+        self._chat(s, 'Priya Shah', 'Also, can you please fill out the performance review? It is almost my hire date.', hours=4)
+        self._chat(s, 'Priya Shah', 'Looking now - the review goes out today.', hours=3, mine=True)
+        self._chat(s, 'Priya Shah', 'She said that every day from 4 - 5:00 it does not work', hours=2)
         _mail(s, 'noreply@robots.com', 'Vendor Create', 'This is an automated message. A vendor was created.', days=0, conv='r1')
         s.add_message({'ExternalId': 'rep:1', 'ConversationId': 'rep', 'Channel': 'report', 'SourceName': 'Morning digest', 'Subject': 'Morning digest — today',
                        'FromName': 'Morning digest', 'SentAt': _ago(0, 1), 'BodyText': 'By the tags...', 'Status': 'feed'})
         txt = assistant._people(s)
-        self.assertIn('- Mindy Gorelick [teams] re "Teams chat with Mindy Gorelick" - 3 new, last word THEIRS', txt)
+        self.assertIn('- Priya Shah [teams] re "Teams chat with Priya Shah" - 3 new, last word THEIRS', txt)
         self.assertIn('"Also, can you please fill out the performance review?', txt)
         self.assertIn('    you ', txt); self.assertIn('the review goes out today', txt)   # the owner's own line, marked
         self.assertNotIn('Vendor Create', txt); self.assertNotIn('Morning digest', txt)  # robots and reports are not people
@@ -560,8 +560,8 @@ class WhatItReadsTests(unittest.TestCase):
 
     def test_the_rows_line_is_cut_at_a_word_and_the_post_counts_the_threads_it_read(self):
         s = _store()
-        self._chat(s, 'Mindy Gorelick', 'can you please fill out the performance review?', hours=4)
-        long = "I would go into Monday's Target Meeting with Mindy's note that exporting freezes the app every afternoon at four"
+        self._chat(s, 'Priya Shah', 'can you please fill out the performance review?', hours=4)
+        long = "I would go into Monday's Target Meeting with Priya's note that exporting freezes the app every afternoon at four"
         out = assistant.run(s, llm=lambda *a, **k: json.dumps({'say': [{'key': 'idea:a', 'text': long, 'mid': None}, {'key': 'idea:b', 'text': 'Second.', 'mid': None}]}), force=True)
         row = s.get_message(out['message_id'])
         self.assertEqual(row['Subject'], long[:90].rsplit(' ', 1)[0] + '… (+1 more)')

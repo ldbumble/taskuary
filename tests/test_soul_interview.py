@@ -17,7 +17,7 @@ from taskuary.store import MemoryStore
 
 HEADINGS = ('## What counts as a task', '## How we respond', '## Escalate (a human decides) when',
             '## Systems and repositories', '## People')
-ANSWERS = {'who': 'Uri Nussbaum, IT director at a nursing-home group',
+ANSWERS = {'who': 'Dana Whitfield, IT director at a nursing-home group',
            'never': 'nothing that touches payroll or resident data, ever',
            'systems': 'Sage Intacct, our Entra tenant'}
 
@@ -52,7 +52,7 @@ class WithNoAiTests(unittest.TestCase):
     def test_the_answers_are_laid_into_the_template_shape(self):
         body = interview.draft(MemoryStore(), ANSWERS, llm=None)
         for h in HEADINGS: self.assertIn(h, body)
-        self.assertIn('Uri Nussbaum', body)
+        self.assertIn('Dana Whitfield', body)
         self.assertIn('payroll', body)
 
     def test_the_standing_promise_survives_even_the_plain_one(self):
@@ -89,7 +89,7 @@ class WithAnAiTests(unittest.TestCase):
 
     def test_a_model_that_answers_with_nothing_falls_back_to_the_owners_own_words(self):
         body = interview.draft(MemoryStore(), ANSWERS, llm=lambda *a, **k: '   ')
-        self.assertIn('Uri Nussbaum', body)
+        self.assertIn('Dana Whitfield', body)
         self.assertIn('## People', body)
 
 
@@ -97,7 +97,7 @@ class WritingItTests(unittest.TestCase):
     def test_it_saves_the_document_and_leaves_a_receipt(self):
         s = MemoryStore()
         interview.write(s, ANSWERS, 'owner', llm=None)
-        self.assertIn('Uri Nussbaum', s.get_doc('soul') or '')
+        self.assertIn('Dana Whitfield', s.get_doc('soul') or '')
         self.assertTrue(any(a['Action'] == 'soul_interview' for a in s.list_audit('doc', 0)))
 
     def test_it_replaces_the_stranger_the_template_ships_with(self):

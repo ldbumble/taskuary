@@ -499,6 +499,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the knowledge base: documents indexed in this store (knowledge.py) - searched, and refreshed on a schedule
             'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),
             'handbook_search': _lazy('handbook', 'run_handbook_search'), 'handbook_write': _lazy('handbook', 'run_handbook_write'),
+            'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
             **{n: _planned(n) for n in PLANNED}}
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
@@ -507,7 +508,7 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
-           'handbook_search': 'handbook', 'handbook_write': 'handbook'}
+           'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook'}
 
 def card_of(t): return CARD_OF.get(t, t)
 

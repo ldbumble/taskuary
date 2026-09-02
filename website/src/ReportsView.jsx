@@ -103,7 +103,7 @@ const FIELDS = {
   agent: [["skill — the slash command the agent should run (optional)", "skill", "text", "/weekly-user-review"],
     ["prompt — what to do, or what the skill needs to know", "prompt", "multiline", "Review this week's user-management changes and list anything unusual."],
     ["agent (blank = coder)", "agent", "text", "coder · codex · gemini"],
-    ["repository folder — for a skill that lives in a repo (optional)", "cwd", "text", "C:/work/fanapp"],
+    ["repository folder — for a skill that lives in a repo (optional)", "cwd", "text", "C:/work/census"],
     ["model (optional — the agent's default otherwise)", "model", "text", ""], AI_FIELD],
   rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
   rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],

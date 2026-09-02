@@ -21,9 +21,9 @@ from taskuary.store import MemoryStore
 class AskingForOneTests(unittest.TestCase):
     def test_the_tag_is_read_exactly(self):
         self.assertTrue(bv.wanted({'Tags': bv.WANTS}))
-        self.assertTrue(bv.wanted({'Tags': f'repo:acme/fanapp,{bv.WANTS}'}))
+        self.assertTrue(bv.wanted({'Tags': f'repo:acme/census,{bv.WANTS}'}))
         self.assertFalse(bv.wanted({'Tags': 'needs:browsers'}))       # not a prefix match
-        self.assertFalse(bv.wanted({'Tags': 'repo:acme/fanapp'}))
+        self.assertFalse(bv.wanted({'Tags': 'repo:acme/census'}))
         self.assertFalse(bv.wanted({}))
         self.assertFalse(bv.wanted(None))
 

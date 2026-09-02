@@ -186,6 +186,7 @@ CREATE INDEX IF NOT EXISTS idx_lore_topic ON lore(Topic, LoreId);
 CREATE TABLE IF NOT EXISTS lore_comment (CommentId INTEGER PRIMARY KEY, LoreId INTEGER, Body TEXT,
   Author TEXT, CreatedAt TEXT);
 CREATE INDEX IF NOT EXISTS idx_lore_comment ON lore_comment(LoreId, CommentId);
+CREATE TABLE IF NOT EXISTS lore_vote (LoreId INTEGER, Actor TEXT, Delta INTEGER, At TEXT, PRIMARY KEY (LoreId, Actor));
 """
 # the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
 # built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
@@ -1556,7 +1557,7 @@ class SQLiteStore:
                  'was', 'will', 'has', 'but', 'all', 'our', 'your', 'their', 'its', 'any', 'out',
                  'can', 'when', 'what', 'how', 'why', 'who', 'does', 'did', 'about', 're'}
 
-    def lore_posts(self, topic=None, q=None, limit=50, sort='new') -> list:
+    def lore_posts(self, topic=None, q=None, limit=50, sort='new', status='live') -> list:
         """Ranked by HOW MANY of the query's distinctive words a post carries, not by whether it
         carries all of them. Requiring all is right for a person typing three words and wrong for
         handbook.block, which hands a whole task's text in - that found nothing at all, because no
@@ -1572,17 +1573,30 @@ class SQLiteStore:
         # params bind in TEXTUAL order across the whole statement: the score expression in SELECT,
         # then the topic in WHERE, then the score expression again in WHERE. ORDER BY uses the
         # alias, which is why it costs no third copy.
-        w = ["l.Status='live'"] + (['l.Topic=?'] if topic else []) + ([f'({score}) > 0'] if terms else [])
+        w = (["l.Status='live'"] if status == 'live' else ["l.Status<>'live'"]) + (['l.Topic=?'] if topic else []) + ([f'({score}) > 0'] if terms else [])
         p = [*like] + ([topic] if topic else []) + [*like]
         order = ('Hits DESC, ' if terms else '') + ('l.Score DESC, l.UpdatedAt DESC' if sort == 'top' or terms else 'l.UpdatedAt DESC')
         return self._rows(f'SELECT l.*, ({score}) Hits, (SELECT COUNT(*) FROM lore_comment WHERE LoreId=l.LoreId) Comments '
                           f'FROM lore l WHERE {" AND ".join(w)} ORDER BY {order} LIMIT ?', (*p, int(limit)))
-    def lore_vote(self, lid, delta: int):
-        self._exec('UPDATE lore SET Score=IFNULL(Score,0)+?, UpdatedAt=UpdatedAt WHERE LoreId=?', (int(delta), lid))
-    def lore_retire(self, lid, actor='owner'):
+    def lore_vote(self, lid, delta: int, actor: str = 'owner') -> int:
+        """One vote per voter, forum-style: voting again REPLACES your vote rather than stacking it,
+        so an agent that meets the same entry in ten sessions moves it one step, not ten. The Score
+        column is the sum, kept denormalised because lore_posts ranks on it. Returns the new score."""
+        with self.lock:
+            self.cx.execute('INSERT OR REPLACE INTO lore_vote (LoreId, Actor, Delta, At) VALUES (?,?,?,?)',
+                            (lid, str(actor or 'owner'), int(delta), _now()))
+            self.cx.execute('UPDATE lore SET Score=(SELECT IFNULL(SUM(Delta),0) FROM lore_vote WHERE LoreId=?) WHERE LoreId=?', (lid, lid))
+            self.cx.commit(); self._writes += 1
+        return int((self.lore_get(lid) or {}).get('Score') or 0)
+    def lore_votes(self, lid) -> list:
+        return self._rows('SELECT Actor, Delta, At FROM lore_vote WHERE LoreId=? ORDER BY At', (lid,))
+    def lore_retire(self, lid, actor='owner', status='retired'):
         """Wrong, or no longer true. Retired rather than deleted: the post is how somebody once
-        understood this, and a handbook that silently loses entries cannot be trusted either."""
-        self._exec("UPDATE lore SET Status='retired', UpdatedAt=? WHERE LoreId=?", (_now(), lid))
+        understood this, and a handbook that silently loses entries cannot be trusted either.
+        `status` says why: 'retired' by hand, 'downvoted' by the vote falling below zero."""
+        self._exec("UPDATE lore SET Status=?, UpdatedAt=? WHERE LoreId=?", (status, _now(), lid))
+    def lore_restore(self, lid):
+        self._exec("UPDATE lore SET Status='live', UpdatedAt=? WHERE LoreId=?", (_now(), lid))
     def lore_comments(self, lid) -> list:
         return self._rows('SELECT * FROM lore_comment WHERE LoreId=? ORDER BY CommentId', (lid,))
     def lore_comment(self, lid, body, author='owner') -> int:

@@ -12,7 +12,7 @@ c_api = TestClient(server.app)
 class ProfileTests(unittest.TestCase):
     def test_identities_come_with_where_they_were_learned(self):
         s = MemoryStore()
-        s.set_setting('owner_name', 'Dana Whitfield', 't'); s.set_setting('owner_email', 'uri@northwind.example', 't')
+        s.set_setting('owner_name', 'Dana Whitfield', 't'); s.set_setting('owner_email', 'dana@northwind.example', 't')
         o = s.get_connector_by_type('outlook')
         s.save_connector({'ConnectorId': o['ConnectorId'], 'Active': 1, 'Secret': 'RT',
                           'ConfigJson': json.dumps({'auth': 'user', 'account': 'dana@other.example', 'name': 'Dana W'})}, 't')
@@ -23,7 +23,7 @@ class ProfileTests(unittest.TestCase):
         s.set_setting('owner_phone', '+1 555 0100', 't')
         p = whoami.profile(s)
         by = {(i['channel'], i['kind']): i for i in p['identities']}
-        self.assertEqual(by[('email', 'address')]['value'], 'uri@northwind.example'); self.assertTrue(by[('email', 'address')]['primary'])
+        self.assertEqual(by[('email', 'address')]['value'], 'dana@northwind.example'); self.assertTrue(by[('email', 'address')]['primary'])
         self.assertEqual((by[('email', 'Microsoft account')]['value'], by[('email', 'Microsoft account')]['name']), ('dana@other.example', 'Dana W'))
         self.assertIn('Sign in with Microsoft', by[('email', 'Microsoft account')]['source'])
         self.assertEqual(by[('teams', 'UPN')]['value'], 'dana@northwind.example')

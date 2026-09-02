@@ -68,7 +68,7 @@ PROMPT = (
     '1. WHAT PEOPLE SAID - the actual words, by thread. The ask buried in a chat ("can you fill out the form?") that got a '
     'reply but not the thing itself; the colleague mentioning in passing that a system fails "every day 4-5"; the person '
     'answering a question nobody asked me; the thread where the last word is theirs and it wants something from me. Say who, '
-    'what, and what I would do - "Mindy asked for X on Thursday; I would send it before her Monday 1pm".\n'
+    'what, and what I would do - "Marcus asked for X on Thursday; I would send it before his Monday 1pm".\n'
     '2. What I am waiting on and have not chased (CANDIDATES followup) - but check OUT OF OFFICE first: a chase to someone '
     'who is away is worse than silence; say when they are back instead.\n'
     '3. What I promised and have not done (promise): the date I gave, and whether it has passed.\n'
@@ -371,7 +371,7 @@ def _recent(store, days: int = 2) -> str:
 def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
     """WHAT PEOPLE SAID: the human threads of the last two days with the words in them - newest
     first, the last few lines of each, the owner's own lines marked. The subject line said
-    "Teams chat with Mindy"; the words said "can you fill out the performance review?" - the
+    "Teams chat with Marcus"; the words said "can you fill out the performance review?" - the
     ask, the pattern and the promise all live here, and a model handed only subjects wrote
     'no content given' in its notes."""
     from .categories import sender_class, team_domains_of

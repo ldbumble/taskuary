@@ -1148,7 +1148,7 @@ def handoff(task_id: int, body: HandoffBody):
         else:
             # ...and everywhere else this install can send. Handing work to a person was email or
             # the task's own Teams chat and nothing else, while the app has been able to send on
-            # WhatsApp, Slack and Telegram for months - so "hand this to Gabi" meant opening
+            # WhatsApp, Slack and Telegram for months - so "hand this to a colleague" meant opening
             # WhatsApp yourself, which is the app this one exists to keep you out of. send_out is
             # the same road a report's delivery takes: same senders, same credentials, and a
             # channel switched off for replies is off for this too.
@@ -1271,17 +1271,20 @@ class LoreBody(BaseModel):
 class LoreCommentBody(BaseModel): body: str
 
 @app.get('/api/handbook')
-def handbook_list(topic: str = None, q: str = None, sort: str = 'new', limit: int = 60):
+def handbook_list(topic: str = None, q: str = None, sort: str = 'new', limit: int = 60, status: str = 'live'):
     """The Social tab. Topics down the side, posts in the middle - the company's own know-how,
-    written by whichever agent worked it out, and correctable by whoever knows better."""
-    posts = store.lore_posts(topic or None, q or None, min(limit, 200), sort)
+    written by whichever agent worked it out, and correctable by whoever knows better.
+    status=removed lists what the vote or the owner took off - readable, restorable."""
+    posts = store.lore_posts(topic or None, q or None, min(limit, 200), sort, 'live' if status == 'live' else 'removed')
+    # the owner's own vote rides on each row so the arrow can show which way they leaned
+    for p in posts: p['MyVote'] = next((v['Delta'] for v in store.lore_votes(p['LoreId']) if v['Actor'] == ACTOR), 0)
     return {'topics': store.lore_topics(), 'data': posts, 'count': store.lore_count()}
 
 @app.get('/api/handbook/{lid}')
 def handbook_one(lid: int):
     p = store.lore_get(lid)
     if not p: raise HTTPException(404, 'no such entry')
-    return {**p, 'comments': store.lore_comments(lid)}
+    return {**p, 'comments': store.lore_comments(lid), 'votes': store.lore_votes(lid)}
 
 @app.post('/api/handbook')
 def handbook_post(body: LoreBody, request: Request):
@@ -1306,6 +1309,13 @@ def handbook_post(body: LoreBody, request: Request):
     try: return handbook.post(store, body.title, body.body, body.topic, body.kind, body.author or ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
+@app.post('/api/handbook/{lid}/restore')
+def handbook_restore(lid: int):
+    """Back on Social - a removed entry that turned out to be right after all."""
+    if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
+    store.lore_restore(lid); store.audit('lore', lid, 'restore', ACTOR)
+    return dict(store.lore_get(lid))
+
 @app.post('/api/handbook/{lid}/comment')
 def handbook_comment(lid: int, body: LoreCommentBody):
     """A comment is how a post gets corrected without being erased. An agent that finds an entry
@@ -1317,12 +1327,13 @@ def handbook_comment(lid: int, body: LoreCommentBody):
     return {'commentId': cid, 'comments': store.lore_comments(lid)}
 
 @app.post('/api/handbook/{lid}/vote')
-def handbook_vote(lid: int, up: bool = True):
-    """Useful, or not. The score is what `handbook.block` ranks by, so voting is how the entries
-    an agent is handed before it starts become the ones that actually helped."""
-    if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
-    store.lore_vote(lid, 1 if up else -1)
-    return dict(store.lore_get(lid))
+def handbook_vote(lid: int, up: bool = True, by: str = None):
+    """Up or down, one vote per voter - forum rules. The score ranks what `handbook.block` hands
+    an agent, and an entry voted below zero is removed from Social (restorable). `by` names an
+    agent voting through the API; the owner's own votes are ACTOR."""
+    from . import handbook
+    try: return handbook.vote(store, lid, 1 if up else -1, (by or ACTOR)[:60])
+    except ValueError as e: raise HTTPException(404, str(e))
 
 @app.post('/api/handbook/{lid}/retire')
 def handbook_retire(lid: int):

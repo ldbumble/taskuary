@@ -118,13 +118,13 @@ class CoreTests(unittest.TestCase):
         from taskuary import senders
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 't')
-        s.set_setting('owner_email', 'uri@northwind.example', 't')
+        s.set_setting('owner_email', 'dana@northwind.example', 't')
         # distinct subjects and bodies: a look-alike would ATTACH to the first task and never reach the create path
         texts = {'e1': ('importer crash', 'the importer throws an exception in jobs/import.py'),
                  'e2': ('invoice portal login', 'customers cannot log into the invoice portal since friday'),
                  'e3': ('nightly scheduler', 'the report scheduler silently skipped tuesday night'),
                  'e4': ('ios signing', 'the mobile build fails at the code signing step on ci')}
-        mail = lambda **kw: self.msg(channel='email', source_name='uri@northwind.example', conversation_id=kw['external_id'],
+        mail = lambda **kw: self.msg(channel='email', source_name='dana@northwind.example', conversation_id=kw['external_id'],
                                      subject=texts[kw['external_id']][0], body=texts[kw['external_id']][1], **kw)
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False) as wt:
             out = ingest_message(s, mail(external_id='e1', from_email='stranger@evil.example'), llm=TASK_LLM)
@@ -806,7 +806,7 @@ class CoreTests(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'PTO import failing', 'Summary': 'Please fix the PTO import mapping.\n'
                              'Also we need the 112 active employees added to the roster.', 'Kind': 'coding',
-                             'Priority': 'high', 'Source': 'email', 'Tags': 'repo:northwind/FanApp'}, 'owner')
+                             'Priority': 'high', 'Source': 'email', 'Tags': 'repo:northwind/Census'}, 'owner')
         mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'PTO import failing',
                              'FromEmail': 'rita@example.com', 'SentAt': '2026-08-19 09:00',
                              'BodyText': 'Please fix the PTO import mapping.\nAlso add the 112 active employees.'})
@@ -818,7 +818,7 @@ class CoreTests(unittest.TestCase):
                                  {'title': 'Fix the PTO import mapping'}, [mid])
         self.assertEqual(s.get_task(tid)['Title'], 'Fix the PTO import mapping')      # the ref stays put
         t2 = s.get_task(new)
-        self.assertEqual((t2['Kind'], t2['Priority'], t2['Tags']), ('coding', 'high', 'repo:northwind/FanApp'))
+        self.assertEqual((t2['Kind'], t2['Priority'], t2['Tags']), ('coding', 'high', 'repo:northwind/Census'))
         self.assertEqual(s.get_message(mid)['TaskId'], new)                            # moved, with a route
         self.assertEqual([r['Decision'] for r in s.list_routes(new)], ['split'])
         self.assertIn(task_ref(new), s.list_comments(tid)[-1]['Body'])                 # each side says where

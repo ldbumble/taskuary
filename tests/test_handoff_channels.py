@@ -1,7 +1,7 @@
 """Handing a task to a person works on any channel this install can send on.
 
 It was email, or posting back into the task's own Teams chat, and nothing else - while the app has
-been able to send on WhatsApp, Slack and Telegram for months. So "just send this to Gabi" meant
+been able to send on WhatsApp, Slack and Telegram for months. So "just send this to Sam" meant
 opening WhatsApp yourself, which is the app Taskuary exists to keep you out of.
 
 The Teams-with-no-address case stays exactly as it was: that one posts into the conversation the

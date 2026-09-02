@@ -85,5 +85,12 @@ for (const s of (out["/api/terminals"]?.data || out["/api/terminals"] || [])) {
   if (r && r.ok) out["/api/terminals/scrollback"][s.sid] = await r.json();
 }
 
-writeFileSync(OUT, JSON.stringify(out, null, 1));
+// The recording is made on somebody's machine, and /api/cli/detect and the setup panel read that
+// machine: its user folder, its CLI paths. The demo's owner is Dana Whitfield, so the paths are
+// hers - a real user name on an invented page is the one thing the demo must never carry.
+let text = JSON.stringify(out, null, 1);
+// inside JSON every backslash is doubled, so the Windows pattern matches the escaped form
+text = text.replace(/C:\\\\Users\\\\[^\\"]+\\\\/g, "C:\\\\Users\\\\dana\\\\");
+text = text.replace(/\/home\/[^/"]+\//g, "/home/dana/").replace(/\/Users\/[^/"]+\//g, "/Users/dana/");
+writeFileSync(OUT, text);
 console.error(`wrote ${OUT}: ${Object.keys(out).length} recordings, ${(JSON.stringify(out).length / 1024).toFixed(0)}KB`);

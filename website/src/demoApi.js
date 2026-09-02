@@ -43,9 +43,22 @@ const read = (url) => {
   m = p.match(/^\/api\/terminals\/([a-z0-9]+)$/);
   if (m) return clone(state["/api/terminals/scrollback"]?.[m[1]]) || clone(demoTerminalRecording(m[1], state));
   if (p.startsWith("/api/feed")) return clone(state["/api/feed"]);
+  // Social: the recorded shelf, filtered and sorted the way the tab asks, plus what the visitor voted off
+  if (p === "/api/handbook") {
+    const qs = Object.fromEntries(new URLSearchParams(query(url)));
+    const all = socialRows(qs.status === "removed");
+    let rows = all.filter((r) => (!qs.topic || r.Topic === qs.topic) && (!qs.q || `${r.Title} ${r.Body}`.toLowerCase().includes(qs.q.toLowerCase())));
+    if (qs.sort === "top") rows = [...rows].sort((a, b) => (b.Score || 0) - (a.Score || 0));
+    return clone({ ...state["/api/handbook"], data: rows });
+  }
+  m = p.match(/^\/api\/handbook\/(\d+)$/);
+  if (m) { const r = [...socialRows(false), ...socialRows(true)].find((x) => String(x.LoreId) === m[1]); return clone(r ? { ...r, comments: r.comments || [], votes: [] } : null); }
   if (p.startsWith("/api/tasks")) return clone(state["/api/tasks"]);
   return { data: [] };                 // an unrecorded list reads as empty, never as a crash
 };
+
+// Social's two shelves: what is live, and what the vote (or the visitor) took off
+const socialRows = (removed) => { const box = (state["/api/handbook"] ||= { topics: [], data: [], count: { posts: 0, topics: 0, comments: 0 } }); return removed ? (box.removed ||= []) : (box.data ||= []); };
 
 // ── the writes a visitor is invited to make ──────────────────────────────────────────────
 const REPLIES = [
@@ -169,6 +182,40 @@ const write = (method, url, body) => {
       return { reply: said, ...box };
     }
     return { ...box };
+  }
+
+  // Social: vote, comment, post, remove, restore - all on the recording, none of it kept
+  if ((m = p.match(/^\/api\/handbook\/(\d+)\/(vote|comment|retire|restore)$/))) {
+    const live = socialRows(false), gone = socialRows(true);
+    const i = live.findIndex((r) => String(r.LoreId) === m[1]), j = gone.findIndex((r) => String(r.LoreId) === m[1]);
+    const row = i >= 0 ? live[i] : gone[j];
+    if (!row) throw new Error("no such entry");
+    if (m[2] === "vote") {
+      const up = !/up=false/.test(query(url));
+      const was = row.MyVote || 0, now = up ? 1 : -1;
+      row.Score = (row.Score || 0) - was + now; row.MyVote = now;
+      if (row.Score < 0 && i >= 0) { row.Status = "downvoted"; live.splice(i, 1); gone.unshift(row); }
+      else if (row.Score >= 0 && j >= 0 && row.Status === "downvoted") { row.Status = "live"; gone.splice(j, 1); live.unshift(row); }
+      return clone(row);
+    }
+    if (m[2] === "comment") {
+      (row.comments ||= []).push({ CommentId: ++nextId, LoreId: row.LoreId, Body: body?.body || "", Author: "you",
+        CreatedAt: new Date().toISOString().slice(0, 19).replace("T", " ") });
+      row.Comments = row.comments.length;
+      return { commentId: nextId, comments: clone(row.comments) };
+    }
+    if (m[2] === "retire" && i >= 0) { row.Status = "retired"; live.splice(i, 1); gone.unshift(row); return { retired: true }; }
+    if (m[2] === "restore" && j >= 0) { row.Status = "live"; gone.splice(j, 1); live.unshift(row); }
+    return clone(row);
+  }
+  if (method === "post" && p === "/api/handbook") {
+    const row = { LoreId: ++nextId, Topic: (body?.topic || "general").toLowerCase().replace(/[^a-z0-9]+/g, "-"), Title: body?.title || "",
+      Body: body?.body || "", Author: "you", Kind: body?.kind || "howto", TaskId: null, Score: 0, MyVote: 0, Status: "live", Comments: 0,
+      CreatedAt: new Date().toISOString().slice(0, 19).replace("T", " "), UpdatedAt: new Date().toISOString().slice(0, 19).replace("T", " ") };
+    socialRows(false).unshift(row);
+    const box = state["/api/handbook"]; box.count = { ...box.count, posts: (box.count?.posts || 0) + 1 };
+    if (!(box.topics || []).some((t) => t.Topic === row.Topic)) (box.topics ||= []).push({ Topic: row.Topic, n: 1 });
+    return clone(row);
   }
 
   if (method === "post" && p === "/api/board/notes") {

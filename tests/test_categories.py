@@ -26,7 +26,7 @@ class SenderTests(unittest.TestCase):
         self.assertEqual(sender_class({'Channel': 'teams', 'FromEmail': 'noreply@x.com', 'Preview': 'unsubscribe'}, TEAM), 'person')
 
     def test_an_unknown_human_sender_is_a_person(self):
-        self.assertEqual(sender_class({'FromEmail': 'mindy@partnerfirm.com', 'Preview': 'Re: PCC - WHT, see attached'}, TEAM), 'person')
+        self.assertEqual(sender_class({'FromEmail': 'priya@partnerfirm.com', 'Preview': 'Re: PCC - WHT, see attached'}, TEAM), 'person')
 
 
 class CategoryTests(unittest.TestCase):
@@ -49,7 +49,7 @@ class CategoryTests(unittest.TestCase):
             with self.subTest(want=want): self.assertEqual(category_of(row, TEAM), want)
 
     def test_the_feed_carries_the_category(self):
-        s = MemoryStore(); s.set_setting('owner_email', 'uri@northwind.example', 't')
+        s = MemoryStore(); s.set_setting('owner_email', 'dana@northwind.example', 't')
         mid = s.add_message({'Channel': 'email', 'Subject': 'RE: Stampli Approvers', 'FromEmail': 'teammate@northwind.example',
                              'BodyText': 'It can be looked up by gl expense.', 'Status': 'filed'})
         s.add_route(mid, None, 'file', None, 'triage: fyi - Sender provided informational clarification', [], 'triage')
@@ -60,7 +60,7 @@ class CategoryTests(unittest.TestCase):
         self.assertEqual(cats, {'RE: Stampli Approvers': 'info', 'Two new ways to browse the web': 'promo'})
 
     def test_team_domains_come_from_the_owner_and_the_setting(self):
-        self.assertEqual(team_domains_of({'owner_email': 'uri@northwind.example', 'team_domains': 'Northwind-corp.example, northwind.org'}),
+        self.assertEqual(team_domains_of({'owner_email': 'dana@northwind.example', 'team_domains': 'Northwind-corp.example, northwind.org'}),
                          {'northwind.example', 'northwind-corp.example', 'northwind.org'})
 
 

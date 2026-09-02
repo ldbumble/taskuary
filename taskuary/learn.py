@@ -252,7 +252,7 @@ def auto_adopt(store, actor: str = 'owner-verdicts') -> list:
     that would revoke it. A hide-rule the owner has already SAID - two or more of their own explicit
     verdicts (a "Not our task" pressed on the topic, a note they typed) among its evidence - is not
     an inference, and waiting for a click on it is the owner confirming themselves. Those go live
-    as soon as the reflection proposes them (Uri, 2026-08-27: "anything written in absolute rules
+    as soon as the reflection proposes them (the owner, 2026-08-27: "anything written in absolute rules
     should not be in proposed"). Returns the adopted lines' texts."""
     from . import learnedgraph
     said = {f"mem{m['MemoryId']}" for m in store.list_memories(active_only=False)

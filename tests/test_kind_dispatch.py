@@ -28,14 +28,14 @@ def llm_says(kind):
 def mail(**kw):
     base = {'external_id': 'x1', 'channel': 'email', 'subject': 'Outstanding Assignment', 'body': NOTICE,
             'from_email': 'hoots@cyberhoot.com', 'from_name': 'CyberHoot', 'conversation_id': None,
-            'sent_at': '2026-08-30 09:00', 'source_link': None, 'source_name': 'uri@northwind.example'}
+            'sent_at': '2026-08-30 09:00', 'source_link': None, 'source_name': 'dana@northwind.example'}
     return {**base, **kw}
 
 
 def store():
     s = MemoryStore()
     s.set_setting('coder_auto_enabled', '1', 't')
-    s.set_setting('owner_email', 'uri@northwind.example', 't')
+    s.set_setting('owner_email', 'dana@northwind.example', 't')
     return s
 
 

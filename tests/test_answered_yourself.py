@@ -12,7 +12,7 @@ import unittest
 
 from taskuary.store import MemoryStore
 
-CONV = 'teams:19:mindy'
+CONV = 'teams:19:priya'
 
 
 def _store():
@@ -21,7 +21,7 @@ def _store():
 
 def _line(s, who, body, at, status='filed', conv=CONV, ext=None):
     return s.add_message({'ExternalId': ext or f'{who}:{at}', 'ConversationId': conv, 'Channel': 'teams',
-                          'SourceName': 'me@ours.com', 'Subject': 'Teams chat with Mindy',
+                          'SourceName': 'me@ours.com', 'Subject': 'Teams chat with Priya',
                           'FromName': who, 'SentAt': at, 'BodyText': body, 'Status': status})
 
 
@@ -32,7 +32,7 @@ def _row(s, mid):
 class AnsweringItYourself(unittest.TestCase):
     def setUp(self):
         self.s = _store()
-        self.mid = _line(self.s, 'Mindy', 'did you send it?', '2026-08-31 12:41:00')
+        self.mid = _line(self.s, 'Priya', 'did you send it?', '2026-08-31 12:41:00')
         tid = self.s.create_task({'Title': 'did you send it?', 'Kind': 'task', 'Status': 'open'}, 'o')
         self.s.attach_message(self.mid, tid)
 
@@ -70,8 +70,8 @@ class AnsweringItYourself(unittest.TestCase):
         self.assertEqual(_row(self.s, self.mid)['NeedsYou'], 1)
 
     def test_an_inbound_reply_from_them_is_not_you_answering(self):
-        """Only the owner's own lines are `context`. Mindy writing again is not an answer."""
-        _line(self.s, 'Mindy', 'anyone?', '2026-08-31 13:10:00')
+        """Only the owner's own lines are `context`. Priya writing again is not an answer."""
+        _line(self.s, 'Priya', 'anyone?', '2026-08-31 13:10:00')
         r = _row(self.s, self.mid)
         self.assertIsNone(r['AnsweredAt'])
         self.assertEqual(r['NeedsYou'], 1)

@@ -17,7 +17,7 @@ from unittest import mock
 from taskuary import blackboard as bb, terminal
 from taskuary.store import MemoryStore
 
-CWD = os.path.normcase(os.path.normpath('C:/work/fanapp' if os.name == 'nt' else '/work/fanapp'))
+CWD = os.path.normcase(os.path.normpath('C:/work/census' if os.name == 'nt' else '/work/census'))
 
 
 class PostingTests(unittest.TestCase):

@@ -36,10 +36,16 @@ dirty. What it cannot tell them is "the migration is half applied, don't run the
   an hour rediscovering — a flaky test, a build step, a dead end — is one line:
   `taskuary --note "the mssql tests need pyodbc"`. The wall composts nightly; this is for today.
 - **Say what is still true next month.** A trap, how something actually works, who owns what:
-  `taskuary --learned "<lasting fact>" --topic <repo-or-system>` puts one line in the company
-  handbook, which every later agent reads before it starts. Never what you *did* — that is the
-  task's record, and it is stale the moment the task closes. Most sessions learn nothing lasting,
-  and "nothing" is the right answer when it is the true one.
+  `taskuary --learned "<lasting fact>" --topic <repo-or-system>` puts one line on Social, which
+  every later agent reads before it starts. One line under 140 characters saying what is TRUE,
+  `--body` for the why in two or three sentences. Never what you *did* — that is the task's
+  record, and it is stale the moment the task closes. Most sessions learn nothing lasting, and
+  "nothing" is the right answer when it is the true one.
+- **Vote before you post.** Your prompt's FROM SOCIAL block carries the entries that fit this
+  task, each with an id. One that held up: `taskuary --upvote <id>`. One that is wrong or stale:
+  `taskuary --downvote <id> --body "why"` — below zero it is removed. Something to add to one:
+  `taskuary --comment <id> --body "..."`. Saying again what is already there is an upvote, not a
+  post; `--learned` does that for you when it recognises the entry.
 - **Say when it is safe.** Before you push: `taskuary --note --kind ready "auth refactor pushed,
   suite green"`. That line is what the next agent builds on. If you are stuck, `--kind blocked`.
 - One line per note, plainly, as you go. Nobody reads a wall of paragraphs — including agents.

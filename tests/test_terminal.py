@@ -452,9 +452,9 @@ class TerminalTests(unittest.TestCase):
                                   'FromName': 'Dana Reyes', 'FromEmail': 'dreyes@northwind.example',
                                   'Subject': 'Payroll File Imports', 'SentAt': '2026-08-19 15:03',
                                   'BodyText': 'files with adjustments import in the wrong month'})
-        seed = terminal.seed_text(server.store, tid, 'use the payroll date', 'northwind/FanApp', 'C:/src/FanApp')
+        seed = terminal.seed_text(server.store, tid, 'use the payroll date', 'northwind/Census', 'C:/src/Census')
         for s in ['payroll import month is wrong', 'Dana Reyes', 'wrong month', 'use the payroll date',
-                  'REPO: northwind/FanApp', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
+                  'REPO: northwind/Census', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
                   'Do NOT create GitHub issues']:
             self.assertIn(s, seed)
         self.assertIn('RULES:', seed)                                   # CODER.md rides along
@@ -462,13 +462,13 @@ class TerminalTests(unittest.TestCase):
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
 
     def test_repo_is_guessed_from_the_soul_map_when_the_task_has_no_tag(self):
-        prof = {'cwd_map': {'northwind/FanApp': 'C:/src/FanApp', 'northwind/Reports': 'C:/src/Reports'}}
+        prof = {'cwd_map': {'northwind/Census': 'C:/src/Census', 'northwind/Reports': 'C:/src/Reports'}}
         server.store.save_doc('soul', '## Repository map\n'
-                              '- **northwind/FanApp**: employee portal - PTO, payroll imports, timesheets\n'
+                              '- **northwind/Census**: employee portal - PTO, payroll imports, timesheets\n'
                               '- **northwind/Reports**: nightly financial reporting pipeline\n', 'test')
         pto = c.post('/api/tasks', json={'Title': 'PTO import maps the wrong month',
                                          'Summary': 'the payroll timesheet import is off'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, pto, prof)[0], 'northwind/FanApp')
+        self.assertEqual(terminal.guess_repo(server.store, pto, prof)[0], 'northwind/Census')
         named = c.post('/api/tasks', json={'Title': 'Reports is failing at 2am'}).json()['taskId']
         self.assertEqual(terminal.guess_repo(server.store, named, prof), ('northwind/Reports', 'named in the ask'))
         tagged = c.post('/api/tasks', json={'Title': 'anything', 'Tags': 'repo:northwind/Reports'}).json()['taskId']
@@ -545,7 +545,7 @@ class TerminalTests(unittest.TestCase):
         """TQ-0013: 27 minutes of real work, and the report said "the content is heavily
         corrupted". The tail was taken off the RAW stream - and in a busy TUI the last 48k chars
         are spinner frames and cursor moves, not words. Render first, then take the tail."""
-        work = ('Root-caused and fixed (FanApp master b4275ce9). ACH rows in bankFeed carry nothing in '
+        work = ('Root-caused and fixed (Census master b4275ce9). ACH rows in bankFeed carry nothing in '
                 'Cust. Ref, so the doc-number rules can never fire for an EFT and only amount+date is '
                 'left. CFG settled Shady Grove over two deposits, which is why they show uncleared.\r\n')
         spam = ''.join(f'\r\x1b[2K\x1b[36m✻\x1b[0m Levitating… ({i}s · esc to interrupt · {i * 431} tokens)'
@@ -853,14 +853,14 @@ class RepoRoutingTests(unittest.TestCase):
     "the only repo this agent has a path for" won without the ask ever being read."""
 
     SOUL = ('## Repository map\n'
-            '- **northwind/FanApp**: Python enterprise integration services, payroll imports, timesheets\n'
+            '- **northwind/Census**: Python enterprise integration services, payroll imports, timesheets\n'
             '- **northwind/TopE**: a travel and expense reimbursement platform with AI receipt validation\n')
 
     def setUp(self):
         server.store.save_doc('soul', self.SOUL, 'test')
         server.store.upsert_agent('coder', 'coding', 'cli',
                                   json.dumps({'cmd': 'claude', 'cwd': os.getcwd(),
-                                              'cwd_map': {'northwind/FanApp': os.getcwd()}}))
+                                              'cwd_map': {'northwind/Census': os.getcwd()}}))
 
     def _task(self, title, summary=''):
         return c.post('/api/tasks', json={'Title': title, 'Summary': summary, 'Kind': 'coding'}).json()['taskId']
@@ -876,7 +876,7 @@ class RepoRoutingTests(unittest.TestCase):
         self.assertFalse(ranked[0][2])                   # ...and we know we have no path for it
         # a payroll task still goes to the integrations repo
         pay = self._task('payroll import posts to the wrong month', 'the timesheets import is off')
-        self.assertEqual(terminal.guess_repo(server.store, pay, prof)[0], 'northwind/FanApp')
+        self.assertEqual(terminal.guess_repo(server.store, pay, prof)[0], 'northwind/Census')
 
     def test_a_repo_with_no_path_refuses_instead_of_opening_the_wrong_folder(self):
         # find_checkout scans the REAL disk now, so the refusal only fires on a genuine miss -
@@ -895,7 +895,7 @@ class RepoRoutingTests(unittest.TestCase):
         self.assertEqual(out['picked'], 'northwind/TopE')
         by = {r['repo']: r for r in out['data']}
         self.assertFalse(by['northwind/TopE']['has_path'])
-        self.assertTrue(by['northwind/FanApp']['has_path'])
+        self.assertTrue(by['northwind/Census']['has_path'])
         self.assertIn('reimbursement', by['northwind/TopE']['what'])
 
     def test_pinning_a_repo_overrides_the_guess_and_takes_the_path_with_it(self):

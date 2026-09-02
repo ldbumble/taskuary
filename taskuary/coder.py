@@ -95,7 +95,7 @@ def reply_target(store, task_id: int):
 # Almost everything a keyboard can do goes to the coding agent (the owner's rule), and the
 # whole bargain is that an agent with nothing to do says "nothing to do here" and stops CHEAPLY.
 # It did not stop cheaply: finish() drafted a reply whatever the session found, so a CyberHoot
-# training reminder came back as mail to hoots@cyberhoot.com reading "Done. This was just a
+# training reminder came back as mail to the vendor's training bot reading "Done. This was just a
 # CyberHoot training reminder, not an engineering or repo issue, so I closed it as FYI with no
 # further action" - our own internal wrap-up, in our own internal words, posted to the robot that
 # sent the notice (TQ-0252). Nothing about that was a reply to the sender.

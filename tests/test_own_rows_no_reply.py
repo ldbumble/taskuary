@@ -1,7 +1,7 @@
 """A row Taskuary wrote itself has nobody to answer.
 
 Meeting prep closed and put a draft in Review - "I finished the prep review… Sincerely, Uri
-Nussbaum" - addressed to no one. The prep row is on channel `own` (ownwork.py: work that began
+Whitfield" - addressed to no one. The prep row is on channel `own` (ownwork.py: work that began
 inside Taskuary rather than arriving from outside), and can_reply treats an unrecognised channel
 as replyable on purpose: silently refusing to answer a channel a future connector added is the
 worse failure. But `own` is not unrecognised - it is ours, and there is no correspondent behind

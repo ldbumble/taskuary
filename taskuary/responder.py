@@ -17,8 +17,8 @@ from loguru import logger
 
 SYSTEM = (
     # "You write {owner}'s replies" made the model {owner}'s ASSISTANT, and it wrote like one:
-    # "I can't suggest times by email alone; Uri will need to handle scheduling directly." -
-    # signed Uri. Third person about the sender, first person about a tool's limitations, over
+    # "I can't suggest times by email alone; the owner will need to handle scheduling directly." -
+    # signed by the owner. Third person about the sender, first person about a tool's limitations, over
     # the owner's own name. The identity has to be stated as identity, not as a job.
     'You ARE {owner}. This message goes out over your name, from your own mailbox, and the '
     'person receiving it will read it as written by you - because it was.\n'

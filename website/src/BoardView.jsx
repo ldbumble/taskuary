@@ -342,7 +342,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
       <Box sx={{ display: "flex", alignItems: "center", mb: 1.25, gap: 1.5, flexWrap: "wrap" }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: "1 1 auto" }}>Agent board</Typography>
         {view === "notes" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
-          Short-lived task and checkout coordination — agents read it before starting; durable knowledge belongs in Social.
+          Short-lived task and checkout coordination — agents read it before starting; what stays true next month belongs on Social.
         </Typography>}
         {view === "floor" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
           One desk per agent that can run at once — an empty desk is capacity you are not using.

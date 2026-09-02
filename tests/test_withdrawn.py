@@ -16,8 +16,8 @@ from taskuary.store import MemoryStore
 def _store():
     s = MemoryStore()
     mid = s.add_message({'ExternalId': 'teams:c1:m1', 'ConversationId': 'teams:c1', 'Channel': 'teams',
-                         'SourceName': 'me@ours.com', 'Subject': 'Teams chat with Mindy',
-                         'FromName': 'Mindy', 'SentAt': '2026-08-31 12:00:00',
+                         'SourceName': 'me@ours.com', 'Subject': 'Teams chat with Priya',
+                         'FromName': 'Priya', 'SentAt': '2026-08-31 12:00:00',
                          'BodyText': 'ignore that, wrong person', 'Status': 'filed'})
     tid = s.create_task({'Title': 'wrong person', 'Kind': 'task', 'Status': 'open'}, 'o')
     s.attach_message(mid, tid)

@@ -76,6 +76,11 @@ def main():
     ap.add_argument('--body', default='', metavar='TEXT',
                     help='with --learned: the two or three sentences under the title - the fact, why it '
                          'is so, and what to do about it')
+    # ...and how agents keep it honest: agree, disagree, add. One vote per agent per entry, and an
+    # entry the room votes below zero leaves Social and every later seed prompt.
+    ap.add_argument('--upvote', type=int, metavar='ID', help='this Social entry held up - agree with it (ids are in the FROM SOCIAL block of your prompt)')
+    ap.add_argument('--downvote', type=int, metavar='ID', help='this Social entry is wrong or stale - say why with --body')
+    ap.add_argument('--comment', type=int, metavar='ID', help='add to a Social entry without re-posting it: the text goes in --body')
     ap.add_argument('--done', metavar='SUMMARY', nargs='?', const='',
                     help='finish the task this session is working: close it, file the report from '
                          'this transcript, and draft the reply the sender gets (you are not '
@@ -118,7 +123,7 @@ def main():
         else:
             print(f"not closed: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
-    if args.board or args.note or args.learned:
+    if args.board or args.note or args.learned or args.upvote or args.downvote or args.comment:
         import os, sys
         from . import blackboard as bb
         from .store import SQLiteStore, task_ref
@@ -128,12 +133,26 @@ def main():
         cwd = os.environ.get('TASKUARY_CWD') or os.getcwd()
         who = os.environ.get('TASKUARY_AGENT') or 'agent'
         tid = os.environ.get('TASKUARY_TASK')
+        if args.upvote or args.downvote or args.comment:
+            from . import handbook
+            lid = args.upvote or args.downvote or args.comment
+            try:
+                if args.comment:
+                    if not args.body.strip(): print('nothing to add - put the text in --body'); return
+                    store.lore_comment(lid, args.body.strip()[:handbook.BODY_MAX], who)
+                    print(f'added to #{lid}'); return
+                p = handbook.vote(store, lid, 1 if args.upvote else -1, who)
+                if args.downvote and args.body.strip(): store.lore_comment(lid, args.body.strip()[:handbook.BODY_MAX], who)
+            except ValueError as e: print(str(e)); return
+            print(f"#{lid} is now {p['Score']:+d}" + (' - removed from Social' if p['Status'] == 'downvoted' else ''))
+            return
         if args.learned:
             from . import handbook
             try: p = handbook.post(store, args.learned, args.body, args.topic, args.kind if args.kind in handbook.KINDS else 'howto',
                                    who, int(tid) if str(tid).isdigit() else None, cwd)
             except ValueError as e: print(f'not filed: {e}'); return
-            print(f"filed in the handbook under {p['Topic']}: {p['Title']}")
+            if p.get('merged'): print(f"Social already says this - #{p['LoreId']} upvoted, now {p['Score']:+d}: {p['Title']}")
+            else: print(f"filed on Social under {p['Topic']} as #{p['LoreId']}: {p['Title']}")
             return
         if args.note:
             try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None)

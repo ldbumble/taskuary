@@ -118,3 +118,56 @@ class WhoMayWrite(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class VotedOn(unittest.TestCase):
+    """Social is a forum: one vote per voter, the score ranks what agents are handed, and below
+    zero a post is off the shelf - kept, restorable, never deleted (the owner, 2026-09-01)."""
+
+    def test_one_vote_per_voter_and_the_second_press_does_not_stack(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'The census lives in the old view', 'not the new one', 'census', 'gotcha', 'coder')
+        handbook.vote(s, p['LoreId'], 1, 'coder'); handbook.vote(s, p['LoreId'], 1, 'coder')
+        self.assertEqual(s.lore_get(p['LoreId'])['Score'], 1)
+        handbook.vote(s, p['LoreId'], 1, 'codex')
+        self.assertEqual(s.lore_get(p['LoreId'])['Score'], 2)
+        handbook.vote(s, p['LoreId'], -1, 'codex')                      # flipped, not added
+        self.assertEqual(s.lore_get(p['LoreId'])['Score'], 0)
+
+    def test_below_zero_it_leaves_social_and_the_seed_prompt_and_an_upvote_brings_it_back(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'The nightly export runs at 2am', '', 'census', 'system', 'coder')
+        self.assertIn('nightly export', handbook.block(s, 'when does the nightly export run'))
+        out = handbook.vote(s, p['LoreId'], -1, 'owner')
+        self.assertEqual(out['Status'], 'downvoted')
+        self.assertEqual(handbook.block(s, 'when does the nightly export run'), '')
+        self.assertEqual([r['LoreId'] for r in s.lore_posts(status='removed')], [p['LoreId']])
+        handbook.vote(s, p['LoreId'], 1, 'codex')                       # the room disagrees: back to zero
+        self.assertEqual(s.lore_get(p['LoreId'])['Status'], 'live')
+
+    def test_saying_what_is_already_there_is_an_upvote_not_a_second_post(self):
+        s = MemoryStore()
+        first = handbook.post(s, 'Adjustment rows take the first line date, not the batch date', 'so they post to the wrong month', 'payroll', 'gotcha', 'coder')
+        again = handbook.post(s, 'Adjustment rows take the first line date rather than the batch date', 'check the batch header', 'payroll', 'gotcha', 'codex')
+        self.assertTrue(again['merged'])
+        self.assertEqual(again['LoreId'], first['LoreId'])
+        self.assertEqual(again['Score'], 1)
+        self.assertEqual(s.lore_count()['posts'], 1)
+        self.assertEqual([c['Body'] for c in s.lore_comments(first['LoreId'])], ['check the batch header'])
+        # a different fact on the same shelf is its own post
+        other = handbook.post(s, 'Payroll closes on the first Wednesday', '', 'payroll', 'decision', 'coder')
+        self.assertFalse(other['merged'])
+
+    def test_a_post_is_a_line_not_a_report(self):
+        s = MemoryStore()
+        with self.assertRaises(ValueError): handbook.post(s, 'x' * 141, '', 'payroll')
+        with self.assertRaises(ValueError): handbook.post(s, 'short', 'y' * 701, 'payroll')
+        clipped = handbook.post(s, 'x' * 141, 'y' * 701, 'payroll', clip=True)   # the on-close road shortens instead
+        self.assertEqual((len(clipped['Title']), len(clipped['Body'])), (140, 700))
+
+    def test_the_seed_block_names_each_entry_so_an_agent_can_vote_on_it(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'The AP importer needs pyodbc before its tests mean anything', '', 'importers', 'gotcha', 'coder')
+        blk = handbook.block(s, 'run the AP importer tests')
+        self.assertIn(f"#{p['LoreId']} [importers] (+0)", blk)
+        self.assertIn('--upvote <id>', blk)

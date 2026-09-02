@@ -45,14 +45,14 @@ def _poll(s, c, msg, **kw):
 class APhotoArrivesTests(unittest.TestCase):
     def test_a_photo_with_no_caption_is_no_longer_dropped(self):
         s, c = _store()
-        n = _poll(s, c, {'id': 'p1', 'name': 'Gabi', 'text': '', 'image': _photo(mkdtemp()), 'imageMime': 'image/png'})
+        n = _poll(s, c, {'id': 'p1', 'name': 'Sam', 'text': '', 'image': _photo(mkdtemp()), 'imageMime': 'image/png'})
         rows = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")
         self.assertEqual((n, len(rows)), (1, 1))
         self.assertEqual(rows[0]['BodyText'], '(no text - see the attachment)')
 
     def test_the_picture_is_attached_to_the_message(self):
         s, c = _store()
-        _poll(s, c, {'id': 'p2', 'name': 'Gabi', 'text': 'words look weird',
+        _poll(s, c, {'id': 'p2', 'name': 'Sam', 'text': 'words look weird',
                      'image': _photo(mkdtemp()), 'imageMime': 'image/png'})
         mid = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]['MessageId']
         atts = s.list_attachments(mid)
@@ -65,7 +65,7 @@ class APhotoArrivesTests(unittest.TestCase):
         seen = {}
         with mock.patch('taskuary.ingest.ingest_message', side_effect=lambda store, msg, **kw: (
                 seen.update(msg), {'status': 'created', 'message_id': None})[1]) as ing:
-            _poll(s, c, {'id': 'p3', 'name': 'Gabi', 'text': 'words look weird',
+            _poll(s, c, {'id': 'p3', 'name': 'Sam', 'text': 'words look weird',
                          'image': _photo(mkdtemp()), 'imageMime': 'image/png'})
         self.assertTrue(ing.called)
         self.assertEqual(len(seen['images']), 1)
@@ -73,14 +73,14 @@ class APhotoArrivesTests(unittest.TestCase):
 
     def test_a_caption_is_still_the_body(self):
         s, c = _store()
-        _poll(s, c, {'id': 'p4', 'name': 'Gabi', 'text': 'words look weird',
+        _poll(s, c, {'id': 'p4', 'name': 'Sam', 'text': 'words look weird',
                      'image': _photo(mkdtemp()), 'imageMime': 'image/png'})
         self.assertEqual(s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]['BodyText'],
                          'words look weird')
 
     def test_a_picture_the_bridge_could_not_write_does_not_lose_the_message(self):
         s, c = _store()
-        n = _poll(s, c, {'id': 'p5', 'name': 'Gabi', 'text': 'look at this', 'image': 'C:/gone/nope.png'})
+        n = _poll(s, c, {'id': 'p5', 'name': 'Sam', 'text': 'look at this', 'image': 'C:/gone/nope.png'})
         rows = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")
         self.assertEqual((n, rows[0]['BodyText']), (1, 'look at this'))
         self.assertEqual(s.list_attachments(rows[0]['MessageId']), [])
@@ -90,13 +90,13 @@ class APhotoArrivesTests(unittest.TestCase):
         picture away."""
         s, c = _store()
         s.set_setting('vision_enabled', '0', 'o')
-        _poll(s, c, {'id': 'p6', 'name': 'Gabi', 'text': 'look', 'image': _photo(mkdtemp()), 'imageMime': 'image/png'})
+        _poll(s, c, {'id': 'p6', 'name': 'Sam', 'text': 'look', 'image': _photo(mkdtemp()), 'imageMime': 'image/png'})
         mid = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]['MessageId']
         self.assertEqual(len(s.list_attachments(mid)), 1)
 
     def test_a_message_with_neither_words_nor_media_is_still_nothing(self):
         s, c = _store()
-        self.assertEqual(_poll(s, c, {'id': 'p7', 'name': 'Gabi', 'text': ''}), 0)
+        self.assertEqual(_poll(s, c, {'id': 'p7', 'name': 'Sam', 'text': ''}), 0)
 
 
 class TheBridgeTests(unittest.TestCase):

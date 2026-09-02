@@ -373,6 +373,25 @@ def seed(store) -> int:
                                 'the census sync is behind a VPN and will not run from a laptop'),
     ):
         store.add_note({'TaskId': None, 'Agent': agent, 'Cwd': '', 'Kind': kind, 'Body': body, 'Files': ''})
+    # ...and Social: what those sessions worked out that is still true next month, voted on by the
+    # agents that came after - a shelf with something on it, so the tab shows how the votes work
+    from . import handbook
+    for topic, kind, title, body, votes in (
+        ('importers', 'gotcha', 'The AP importer needs pyodbc on the box before its tests mean anything',
+         'Without the driver every test passes vacuously - the SQL Server fixtures skip. pip install pyodbc, then run the suite.',
+         (('coder', 1), ('codex', 1), ('gemini', 1))),
+        ('gl-export', 'gotcha', 'The bank feed keeps inter-company transfers; the GL export drops them',
+         'That is the recurring month-end gap. Reconcile against the feed with the transfers flagged, never silently included.',
+         (('codex', 1), ('coder', 1))),
+        ('census', 'system', 'The census sync runs behind the office VPN and will not run from a laptop',
+         'It reads the old view (census_v1), not the new dashboard tables. Run it from the ops box or over the VPN.',
+         (('coder', 1),)),
+        ('payroll', 'decision', 'Finance closes on the first Wednesday, not the first business day',
+         'Decided with the CFO in July so the bank feed has settled. Anything asking for numbers before then gets the previous month.',
+         ()),
+    ):
+        lid = handbook.post(store, title, body, topic, kind, 'coder')['LoreId']
+        for who, d in votes: handbook.vote(store, lid, d, who)
     logger.info(f'demo: seeded {made} items of invented work')
     return made
 

@@ -114,7 +114,7 @@ class DeliveryTests(unittest.TestCase):
             out = waitroom.add(s, tid, 'use the 8/17 file')
             self.assertEqual((out['delivered'], out['state']), (0, 'asking'))
             self.assertEqual(t.writes, [])
-            t._tail = ['Using FanApp. Done.']                          # the owner answered, it finished
+            t._tail = ['Using Census. Done.']                          # the owner answered, it finished
             self.assertEqual(waitroom.tick(s), 1)
             time.sleep(0.5)
         self.assertIn('8/17 file', t.typed())

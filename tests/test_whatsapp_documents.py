@@ -45,7 +45,7 @@ DOC_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.docum
 class ADocumentArrives(unittest.TestCase):
     def test_a_document_with_no_caption_is_no_longer_dropped(self):
         s, c = _store()
-        n = _poll(s, c, {'id': 'd1', 'name': 'Gabi', 'text': '', 'doc': _file(),
+        n = _poll(s, c, {'id': 'd1', 'name': 'Sam', 'text': '', 'doc': _file(),
                          'docMime': DOC_MIME, 'docName': 'Taskuary Homepage Copy.docx'})
         rows = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")
         self.assertEqual((n, len(rows)), (1, 1))
@@ -54,7 +54,7 @@ class ADocumentArrives(unittest.TestCase):
     def test_the_file_is_attached_under_the_name_the_sender_gave_it(self):
         """'Taskuary Homepage Copy.docx' is what the owner will look for - not the id we cached."""
         s, c = _store()
-        _poll(s, c, {'id': 'd2', 'name': 'Gabi', 'text': 'the new copy',
+        _poll(s, c, {'id': 'd2', 'name': 'Sam', 'text': 'the new copy',
                      'doc': _file('cached-id.docx'), 'docMime': DOC_MIME,
                      'docName': 'Taskuary Homepage Copy.docx'})
         mid = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]['MessageId']
@@ -65,7 +65,7 @@ class ADocumentArrives(unittest.TestCase):
 
     def test_a_caption_is_kept_as_the_body(self):
         s, c = _store()
-        _poll(s, c, {'id': 'd3', 'name': 'Gabi', 'text': 'here is the rewrite', 'doc': _file(),
+        _poll(s, c, {'id': 'd3', 'name': 'Sam', 'text': 'here is the rewrite', 'doc': _file(),
                      'docMime': DOC_MIME, 'docName': 'x.docx'})
         self.assertEqual(s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]['BodyText'],
                          'here is the rewrite')
@@ -73,7 +73,7 @@ class ADocumentArrives(unittest.TestCase):
     def test_a_file_that_cannot_be_read_does_not_lose_the_message(self):
         """The row still arrives; only the attachment is missing. Losing both is the old bug."""
         s, c = _store()
-        n = _poll(s, c, {'id': 'd4', 'name': 'Gabi', 'text': 'sending it over',
+        n = _poll(s, c, {'id': 'd4', 'name': 'Sam', 'text': 'sending it over',
                          'doc': '/no/such/file.docx', 'docMime': DOC_MIME, 'docName': 'f.docx'})
         self.assertEqual(n, 1)
         self.assertEqual(len(s._rows("SELECT * FROM message WHERE Channel='whatsapp'")), 1)
@@ -81,7 +81,7 @@ class ADocumentArrives(unittest.TestCase):
     def test_a_message_with_nothing_in_it_at_all_is_still_skipped(self):
         """The guard must still hold: no text, no audio, no image, no file is not a message."""
         s, c = _store()
-        n = _poll(s, c, {'id': 'd5', 'name': 'Gabi', 'text': ''})
+        n = _poll(s, c, {'id': 'd5', 'name': 'Sam', 'text': ''})
         self.assertEqual((n, len(s._rows("SELECT * FROM message WHERE Channel='whatsapp'"))), (0, 0))
 
 

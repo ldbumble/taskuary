@@ -1,6 +1,6 @@
 """Sage Intacct: the XML gateway, as a read connection.
 
-Ported from the working client in the owner's FanApp repo. What came across is the PROTOCOL -
+Ported from a working client the owner already had. What came across is the PROTOCOL -
 session login, readByQuery with paging, and the object lookup - not the twenty-six per-object
 wrapper classes, whose whole content was a hardcoded field list each. Those lists are the thing
 that goes stale when Intacct adds a field, and `lookup` already asks the server for the real

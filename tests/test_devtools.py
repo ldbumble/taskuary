@@ -69,7 +69,7 @@ class AzdoTests(unittest.TestCase):
     def test_test_and_poll(self):
         s = MemoryStore(); c = conn(s, 'azdo', {'org_url': 'https://dev.azure.com/northwind'})
         wi = {'id': 88, 'fields': {'System.Title': 'Fix PTO rounding', 'System.State': 'Active',
-                                   'System.WorkItemType': 'Bug', 'System.TeamProject': 'FanApp',
+                                   'System.WorkItemType': 'Bug', 'System.TeamProject': 'Census',
                                    'System.Description': 'cents off', 'System.ChangedDate': '2026-08-21T09:00:00Z',
                                    'System.CreatedBy': {'displayName': 'Chana'}}}
         with wired({'/_apis/projects': {'count': 3}, '/_apis/wit/wiql': {'workItems': [{'id': 88}]},
@@ -77,7 +77,7 @@ class AzdoTests(unittest.TestCase):
             self.assertIn('3 project', devtools.test(s, c))
             self.assertEqual(devtools.poll(s, c, SINCE), 1)
         row = next(r for r in s.feed() if r['Channel'] == 'azdo')
-        self.assertIn('#88', row['Subject']); self.assertIn('FanApp', row['SourceName'])
+        self.assertIn('#88', row['Subject']); self.assertIn('Census', row['SourceName'])
 
     def test_no_org_is_loud(self):
         s = MemoryStore(); c = conn(s, 'azdo')
@@ -153,7 +153,7 @@ class SentryTests(unittest.TestCase):
         issue = {'id': '77', 'shortId': 'WEBAPP-3F', 'title': 'KeyError: employee_id',
                  'culprit': 'imports/pto.py', 'count': '41', 'userCount': 3, 'level': 'error',
                  'permalink': 'https://sentry.io/x/77', 'lastSeen': '2026-08-22T05:00:00Z',
-                 'project': {'slug': 'fanapp'}}
+                 'project': {'slug': 'census'}}
         with wired({'/api/0/organizations/northwind/issues': [issue],
                     '/api/0/organizations/northwind/': {'slug': 'northwind', 'name': 'Northwind'}}):
             self.assertIn('Northwind', devtools.test(s, c))

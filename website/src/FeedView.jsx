@@ -46,16 +46,26 @@ import { TerminalPreview } from "./TerminalView.jsx";
 
 const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.GeneralWorkspace })));
 
-// Each filter carries a muted hue for its selected state: attention amber for needs-me,
-// Outlook blue, Teams purple, quiet indigo for everything.
-// Two different dimensions, two controls: WHAT STATE it's in (everything vs needs me)
-// and WHICH CHANNEL it came from - they combine (e.g. "needs me" + "email").
-// STATE dimension, so these do get semantic colour - "needs me" is the one filter on this
-// screen that names something being on you.
-const VIEW_FILTERS = [
-  { key: "", label: "everything", c: PILL_COLORS.pick },
-  { key: "pending", label: "needs me", c: PILL_COLORS.you },
-];
+// Two different dimensions, two controls: WHAT STATE it's in (needs me, or not filtered) and
+// WHICH KIND / SOURCE it came from - they combine (e.g. "needs me" + "email").
+// "needs me" is ONE toggle, not a two-way segmented control. The segmented version's other half
+// said "everything" next to a kind picker that also said "everything", and on a phone the
+// housing scrolled so only "everythin" showed (the owner, 2026-09-01: "weird"). One pill that
+// names the only filter worth a name, with its count on it, and it is off when it is off.
+const NeedsMe = ({ on, n, onClick }) => (
+  <Box onClick={onClick} role="switch" aria-checked={on} title={on ? "showing only what is waiting on you — click for everything" : "show only what is waiting on you"}
+    sx={{ display: "inline-flex", alignItems: "center", gap: 0.65, height: 34, px: 1.35, borderRadius: 2, cursor: "pointer",
+      fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", userSelect: "none", transition: "all .15s",
+      bgcolor: on ? PILL_COLORS.you.bg : PANEL2, color: on ? PILL_COLORS.you.fg : DIM,
+      border: `1px solid ${on ? PILL_COLORS.you.bd : BORDER}`,
+      "&:hover": { color: on ? PILL_COLORS.you.fg : INK, borderColor: on ? PILL_COLORS.you.bd : "#d8cfbe" } }}>
+    needs me
+    {n > 0 && (
+      <Box component="span" sx={{ px: 0.6, py: 0.05, borderRadius: 99, fontSize: 10, fontWeight: 700, lineHeight: 1.5,
+        fontVariantNumeric: "tabular-nums", bgcolor: on ? "rgba(255,255,255,.7)" : ALERT, color: on ? PILL_COLORS.you.fg : "#fffdfb" }}>{n}</Box>
+    )}
+  </Box>
+);
 // The pill row is a fixed set of CATEGORIES - it must not grow as connections do (a
 // pill per mailbox, repo, channel and report would be unreadable by connection five).
 // Everything narrower lives in one grouped picker: category -> channel -> connection.
@@ -967,7 +977,6 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const todayMeetings = timelineMeetings.filter((e) => localDay(e.start) === today).length;
   const stats = [{ label: "in today", n: todays.length + todayMeetings, f: "" }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
-    { label: "needs me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true },
     { label: "info", n: todays.filter((r) => r.Category === "info").length, f: "" },
     { label: "promo", n: todays.filter((r) => r.Category === "promo").length, f: "" },
     { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
@@ -1000,13 +1009,17 @@ export default function FeedView({ onOpenTask, onChanged }) {
 
           {/* filters: one segmented control for STATE, one quiet picker for WHERE FROM. Two
               rows of loose pills of two different kinds read as a settings panel, not a filter. */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-            <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
+          {/* wraps: on a phone the pickers and New drop to a second row as one group, under the
+              pill, instead of the whole row scrolling sideways */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: "wrap" }}>
+            <NeedsMe on={view === "pending"} n={(rows || []).filter(needsYou).length}
+              onClick={() => setView(view === "pending" ? "" : "pending")} />
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: "auto", minWidth: 0 }}>
             <Select size="small" value={cat} displayEmpty onChange={(e) => setCat(e.target.value)}
               inputProps={{ "aria-label": "Timeline category" }}
               renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "all kinds"}
               sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
-                color: cat ? INK : DIM, flexShrink: 0, ml: "auto",
+                color: cat ? INK : DIM, flexShrink: 0,
                 "& .MuiSelect-select": { py: 0.25, px: 1.15 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
               {CATEGORIES.map((o) => <MenuItem key={o.key} value={o.key} sx={{ fontSize: 12 }}>{o.label}</MenuItem>)}
@@ -1064,6 +1077,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
               startIcon={<AddIcon sx={{ fontSize: 15 }} />}
               sx={{ flexShrink: 0, height: 34, minWidth: 68, py: 0.25, px: 1.1, borderRadius: 2,
                 fontSize: 11.5, background: GRADIENT }}>New</Button>
+            </Box>
           </Box>
 
           {/* The counts describe what is in the rail. The date and sync clock belong together
@@ -2036,7 +2050,7 @@ const TalkItThrough = ({ messageId, onOpenTask }) => {
   );
 };
 
-// A conversation, folded. Nine rows reading "Teams chat with Mindy Gorelick" is not a day you can
+// A conversation, folded. Nine rows reading "Teams chat with Priya Shah" is not a day you can
 // read - so the rail carries ONE line for the thread, with the count, the span it covers and the
 // loudest thing inside it. Expanding reveals the real rows, unchanged, underneath.
 //
@@ -2289,7 +2303,7 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
   const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
   // The strip is for PICKING a message. It drew one chip per message in the thread, which was
   // fine while a task-less row fetched only itself - then /thread started handing over the whole
-  // conversation and a WhatsApp group chat filled six rows with a month of "Gabi · 08-30". The
+  // conversation and a WhatsApp group chat filled six rows with a month of "Sam · 08-30". The
   // recent ones, and a way back to the rest.
   const CHIPS = 10;
   const [allChips, setAllChips] = useState(false);

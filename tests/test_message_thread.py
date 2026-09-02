@@ -1,6 +1,6 @@
 """A row that never became a task still has a history, and your own replies are in it.
 
-Nine Timeline rows all reading "Teams chat with Mindy Gorelick", and opening any one of them
+Nine Timeline rows all reading "Teams chat with Priya Shah", and opening any one of them
 showed a single inbound line. The replies sent from Teams were not missing - channels.py ingests
 the owner's own lines as `context` rows, and the assistant reads them when it writes the brief -
 they were simply never asked for by the panel, which fetched the one message and wrapped it in a
@@ -19,7 +19,7 @@ CONV = 'teams:19:test-thread-abc'
 def _line(who, body, at, status='filed', ext=None):
     return server.store.add_message({
         'ExternalId': ext or f'thr:{who}:{at}', 'ConversationId': CONV, 'Channel': 'teams',
-        'SourceName': 'me@ours.com', 'Subject': 'Teams chat with Mindy Gorelick',
+        'SourceName': 'me@ours.com', 'Subject': 'Teams chat with Priya Shah',
         'FromName': who, 'FromEmail': f'{who.lower()}@x.example', 'SentAt': at,
         'BodyText': body, 'Status': status})
 
@@ -27,10 +27,10 @@ def _line(who, body, at, status='filed', ext=None):
 class TheWholeConversation(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.first = _line('Mindy', 'Did you send the document to Devora?', '2026-08-31 12:41:00')
+        cls.first = _line('Priya', 'Did you send the document to Devora?', '2026-08-31 12:41:00')
         # the reply the owner typed in TEAMS, not here: ingested, but kept out of the feed
         cls.mine = _line('You', 'Sent it this morning.', '2026-08-31 12:44:00', status='context')
-        cls.last = _line('Mindy', 'Ok, how does it work?', '2026-08-31 12:47:00')
+        cls.last = _line('Priya', 'Ok, how does it work?', '2026-08-31 12:47:00')
 
     def test_it_returns_the_thread_not_the_one_line(self):
         d = c.get(f'/api/messages/{self.last}/thread').json()
@@ -44,7 +44,7 @@ class TheWholeConversation(unittest.TestCase):
 
     def test_it_reads_oldest_last(self):
         msgs = c.get(f'/api/messages/{self.first}/thread').json()['messages']
-        self.assertEqual([m['FromName'] for m in msgs], ['Mindy', 'You', 'Mindy'])
+        self.assertEqual([m['FromName'] for m in msgs], ['Priya', 'You', 'Priya'])
 
     def test_any_row_on_the_thread_gives_the_same_history(self):
         a = [m['MessageId'] for m in c.get(f'/api/messages/{self.first}/thread').json()['messages']]

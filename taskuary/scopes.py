@@ -35,6 +35,10 @@ ACTIONS = {
     # run_tool) and the owner approves it in Review. Raising the card to 'write' is the owner's call.
     'quickbooks': 'read', 'quickbooks_vendors': 'read', 'quickbooks_accounts': 'read',
     'quickbooks_bill': 'write', 'quickbooks_expense': 'write',
+    # Intacct writes the same way it reads - generically, by object - so ONE pair covers posting a
+    # bill, adding a vendor and correcting a memo. The card ships at 'read' like QuickBooks', which
+    # is what makes a bill an agent's PROPOSAL rather than an agent's decision.
+    'intacct_create': 'write', 'intacct_update': 'write',
     'teller_accounts': 'read', 'teller_transactions': 'read', 'teller_balances': 'read',    # a feed cannot move money
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -

@@ -2989,13 +2989,12 @@ async def terminal_ws(ws: WebSocket, sid: str):
             await asyncio.to_thread(t.write, ''.join(chunks))
     input_pump = asyncio.create_task(to_pty())
     try:
-        # scrubbed: a replayed scrollback that still contains the TUI's terminal queries makes
-        # xterm answer them AGAIN, and the answers land in the CLI as typed junk - see terminal.py
-        # flagged as a REPLAY so the browser can hold the curtain over it: writing a long
-        # scrollback runs the viewport from the top of the session down to the bottom, and
-        # watching a week of coding scroll past every time you reopen a task is not a feature
+        # RENDERED, not raw (terminal.replay_text): the raw bytes of a full-screen TUI replay as
+        # debris in a fresh xterm, and the live repaint then appends to that debris. Flagged as a
+        # REPLAY so the browser holds the curtain over it until the live screen is up.
         if t.scrollback():
-            await send_frame({'type': 'out', 'replay': True, 'data': hub_term.scrub_queries(t.scrollback())})
+            snap = hub_term.replay_text(t)
+            if snap: await send_frame({'type': 'out', 'replay': True, 'data': snap})
         first_resize = True
         while True:
             m = await ws.receive_json()

@@ -759,6 +759,51 @@ class ShimResolutionTests(unittest.TestCase):
         self.assertEqual(terminal.seed_argv({'cmd': 'claude'}, 'the ask'), ['the ask'])
 
 
+class ReplaySeedTests(unittest.TestCase):
+    """What a reopened pane is seeded with. The raw scrollback of a full-screen TUI is a stream of
+    ABSOLUTE cursor moves; replayed into a fresh xterm that has none of that history it smears into
+    debris, and the live repaint then lands on top of the debris instead of replacing it - the
+    screenshot the owner sent on 2026-09-02, and the scrolling that came with it."""
+
+    ESC = chr(27)
+
+    class Fake:
+        cols, rows = 80, 12
+        def __init__(self, raw): self.raw = raw
+        def scrollback(self): return self.raw
+
+    def _seed(self, raw, **kw):
+        return terminal.replay_text(self.Fake(raw), **kw)
+
+    def test_the_seed_is_what_the_terminal_would_show_not_the_bytes(self):
+        E = self.ESC
+        raw = (E + '[?1049h' + E + '[2J' + E + '[3;5Hhello there'
+               + E + '[1;1Hcodex is working' + E + '[6n')
+        out = self._seed(raw)
+        self.assertTrue(out.startswith(terminal.REPLAY_RESET))
+        body = out[len(terminal.REPLAY_RESET):]
+        self.assertNotIn(E, body)                       # nothing left for xterm to mis-position
+        self.assertIn('codex is working', body)
+        self.assertIn('hello there', body)              # the absolute move was OBEYED, not deleted
+        self.assertIn(terminal.CRLF, body)              # xterm needs CR before LF
+
+    def test_a_cursor_query_cannot_survive_it(self):
+        """A replayed query makes xterm answer it AGAIN and the answer lands in the CLI as typed
+        junk. A render cannot emit one, which retires that whole class of bug."""
+        self.assertNotIn('[6n', self._seed(self.ESC + '[6nhello'))
+
+    def test_an_empty_session_seeds_nothing(self):
+        self.assertEqual(self._seed('   ' + chr(10) + '  '), '')
+        self.assertEqual(self._seed(''), '')
+
+    def test_the_seed_is_capped_to_the_tail(self):
+        raw = chr(10).join('line %d' % n for n in range(1200))
+        out = self._seed(raw, lines=50)
+        self.assertEqual(out.count(terminal.CRLF), 49)
+        self.assertIn('line 1199', out)
+        self.assertNotIn('line 900', out)
+
+
 if __name__ == '__main__':
     unittest.main()
 

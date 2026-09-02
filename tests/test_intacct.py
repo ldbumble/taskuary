@@ -249,5 +249,96 @@ class ReportExecutorTests(unittest.TestCase):
         self.assertNotIn('trigger', DEFAULT_ROLES['intacct'])
 
 
+CREATED = (b"""<response><operation><result><status>success</status>
+<function>create</function><key>1042</key>
+<data listtype="objects" count="1"><apbill><RECORDNO>1042</RECORDNO>
+<DOCNUMBER>AP-1042</DOCNUMBER><TOTALENTERED>412.50</TOTALENTERED></apbill></data>
+</result></operation></response>""")
+
+REFUSED = (b"""<response><operation><result><status>failure</status>
+<errormessage><error><description2>Currency BILL is not valid</description2></error></errormessage>
+</result></operation></response>""")
+
+
+class WriteTests(unittest.TestCase):
+    """Posting to the books goes through the same gateway as reading, generically by object -
+    and the same 200-with-failure trap has to be caught here, where the cost of missing it is a
+    proposal the owner approved that silently did nothing."""
+
+    def setUp(self): intacct._sessions.clear()
+
+    BILL = {'VENDORID': 'V100', 'WHENCREATED': '09/01/2026',
+            'APBILLITEMS': [{'ACCOUNTNO': '6120', 'AMOUNT': '412.50'},
+                            {'ACCOUNTNO': '6130', 'AMOUNT': '18.00'}]}
+
+    def test_a_bill_is_built_as_the_gateway_wants_it(self):
+        sent, fake = _posts(LOGIN_OK, CREATED)
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            out = intacct.create(dict(CFG), 'APBILL', self.BILL)
+        doc = sent[1][1]
+        self.assertEqual(doc.findtext('.//create/APBILL/VENDORID'), 'V100')
+        # a list becomes REPEATED children named by dropping one trailing S - APBILLITEM under APBILLITEMS
+        lines = doc.findall('.//create/APBILL/APBILLITEMS/APBILLITEM')
+        self.assertEqual([l.findtext('AMOUNT') for l in lines], ['412.50', '18.00'])
+        # the receipt names the document, not "success"
+        self.assertEqual((out['verb'], out['object'], out['key']), ('create', 'APBILL', '1042'))
+        self.assertEqual(out['record']['DOCNUMBER'], 'AP-1042')
+
+    def test_a_nested_dict_stays_nested(self):
+        sent, fake = _posts(LOGIN_OK, CREATED)
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            intacct.create(dict(CFG), 'VENDOR', {'NAME': 'Acme', 'MAILADDRESS': {'ADDRESS1': '1 Main St'}})
+        self.assertEqual(sent[1][1].findtext('.//create/VENDOR/MAILADDRESS/ADDRESS1'), '1 Main St')
+
+    def test_a_refusal_is_raised_with_the_reason_not_swallowed(self):
+        sent, fake = _posts(LOGIN_OK, REFUSED)
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            with self.assertRaises(intacct.IntacctError) as e:
+                intacct.create(dict(CFG), 'APBILL', self.BILL)
+        self.assertIn('Currency BILL is not valid', str(e.exception))
+
+    def test_an_update_must_say_which_record_it_changes(self):
+        with self.assertRaises(intacct.IntacctError) as e:
+            intacct.update(dict(CFG), 'APBILL', {'DESCRIPTION': 'corrected'})
+        self.assertIn('RECORDNO', str(e.exception))
+        sent, fake = _posts(LOGIN_OK, CREATED)
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            out = intacct.update(dict(CFG), 'APBILL', {'RECORDNO': '1042', 'DESCRIPTION': 'corrected'})
+        self.assertEqual(sent[1][1].findtext('.//update/APBILL/RECORDNO'), '1042')
+        self.assertEqual(out['verb'], 'update')
+
+    def test_nothing_to_write_is_refused_before_a_login(self):
+        for bad in ({}, None):
+            with self.assertRaises(intacct.IntacctError):
+                intacct.create(dict(CFG), 'APBILL', bad)
+        with self.assertRaises(intacct.IntacctError):
+            intacct.create(dict(CFG), '', {'X': 1})
+
+
+class TheWriteIsGatedTests(unittest.TestCase):
+    """What actually keeps a bill from posting on an agent's say-so is the SCOPE ladder, not
+    intacct.py: the card ships at read, so /api/tools/run refuses the write and the only road
+    left is a proposal the owner approves."""
+
+    def test_the_card_ships_read_and_the_writes_need_write(self):
+        from taskuary import scopes
+        from taskuary.reports import CARD_OF, CONNECTION_OF, REGISTRY
+        self.assertEqual(scopes.default_scope('intacct'), 'read')
+        for t in ('intacct_create', 'intacct_update'):
+            self.assertIn(t, REGISTRY)
+            self.assertEqual(scopes.needs(t), 'write')
+            self.assertEqual(CARD_OF[t], 'intacct')       # it runs on the Intacct card's five credentials
+            self.assertIn(t, CONNECTION_OF)
+        self.assertEqual(scopes.needs('intacct'), 'read')
+
+    def test_a_read_scoped_card_refuses_the_write(self):
+        from taskuary import scopes
+        card = {'Type': 'intacct', 'Scope': 'read', 'Active': 1}
+        with self.assertRaises(Exception):
+            scopes.require(card, 'intacct_create')
+        scopes.require(card, 'intacct')                    # the reads still run
+        scopes.require({**card, 'Scope': 'write'}, 'intacct_create')
+
+
 if __name__ == '__main__':
     unittest.main()

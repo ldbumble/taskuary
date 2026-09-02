@@ -231,7 +231,11 @@ export default function TaskHubPage() {
   // back rebuilt the pane and redrew the CLI's screen from the top of its scrollback. Hidden
   // is enough - fit() reads a display:none pane as NaN and skips, then refits on the way back.
   const [everTasks, setEverTasks] = useState(false);
+  const [everTimeline, setEverTimeline] = useState(true);   // the landing tab: mounted from the first paint
+  const [everBoard, setEverBoard] = useState(false);
   useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
+  // ...and the two views that can hold a live session: mounted once opened, hidden after
+  useEffect(() => { if (tab === "Timeline") setEverTimeline(true); if (tab === "Board") setEverBoard(true); }, [tab]);
 
   const refreshPending = useCallback(async () => {
     try { setPending(((await api.get("/api/reviews", { params: { status: "pending" } })).data.data || []).length); }
@@ -363,9 +367,20 @@ export default function TaskHubPage() {
         {/* tighter side padding than top/bottom: the horizontal margin is dead space on a wide
             window, and every tab inside already caps its own content width where it wants to */}
         <Box sx={{ px: { xs: 1.5, md: 1.75 }, py: { xs: 1.5, md: 2.25 } }}>
-          {tab === "Timeline" && <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
-          {tab === "Board" && <BoardView key={`b${tick}`} onOpenTask={openTask}
-            onOpenReports={(sid) => { window.location.hash = `report=${sid}`; go("Reports"); }} />}
+          {/* Timeline and Board stay MOUNTED behind another tab, like Tasks: each can hold a live
+              pty session, and unmounting closed its websocket - so coming back replayed the whole
+              scrollback and ran the pane top to bottom. Their polling is gated on `active`. */}
+          {(everTimeline || tab === "Timeline") && (
+            <Box sx={{ display: tab === "Timeline" ? "block" : "none" }}>
+              <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} active={tab === "Timeline"} />
+            </Box>
+          )}
+          {(everBoard || tab === "Board") && (
+            <Box sx={{ display: tab === "Board" ? "block" : "none" }}>
+              <BoardView key={`b${tick}`} onOpenTask={openTask}
+              onOpenReports={(sid) => { window.location.hash = `report=${sid}`; go("Reports"); }} active={tab === "Board"} />
+            </Box>
+          )}
           {everTasks && (
             <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
               <TasksView key={`t${tick}`} selected={selectedTask} onSelect={selectTask} active={tab === "Tasks"}

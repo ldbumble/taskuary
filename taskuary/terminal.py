@@ -617,6 +617,32 @@ def render(raw: str, cols: int = 110, rows: int = 32) -> str:
         return plain(raw)
 
 
+REPLAY_LINES = 400          # what a reopened pane is seeded with, in lines
+ESC = chr(27)
+# leave the alternate screen, home the cursor, clear: a known state to seed into
+REPLAY_RESET = f'{ESC}[?1049l{ESC}[H{ESC}[2J'
+CRLF = chr(13) + chr(10)
+
+def replay_text(t, lines: int = REPLAY_LINES) -> str:
+    """What a reopened pane is seeded with: the session as a terminal WOULD SHOW it, never the
+    bytes that got it there.
+
+    A full-screen TUI paints with ABSOLUTE cursor moves, so replaying its raw scrollback into a
+    fresh xterm - which starts at row one with none of that history - smears it into the debris
+    the owner photographed on 2026-09-02, and the live repaint then lands ON TOP of the debris
+    instead of replacing it, which is the scrolling. pyte already resolves those moves for the
+    wrap-up (render); the same render is the honest seed here, and it costs the replay its colour
+    to buy a pane that is legible every single time.
+
+    The reset prefix leaves the alternate screen and clears, so the pane starts from a known
+    state whatever the old bytes left behind - and a terminal QUERY cannot survive a render, so
+    the replay can no longer make xterm answer one into the CLI as typed junk."""
+    text = render(t.scrollback(), getattr(t, 'cols', 110), getattr(t, 'rows', 32))
+    tail = text.splitlines()[-max(1, lines):]
+    while tail and not tail[0].strip(): tail.pop(0)
+    return (REPLAY_RESET + CRLF.join(tail)) if tail else ''
+
+
 # What a TUI paints over and over and none of it is what the agent SAID: spinner frames, the
 # hint bar, the token counter, rules, the statusline tip. It all landed in the wrap-up - and in
 # the transcript we hand the AI to write from.

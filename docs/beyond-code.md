@@ -66,7 +66,8 @@ files it. The second transaction matches it. That is the accretion: every kind o
 hand once, by the agent with the owner watching, and never twice.
 
 **The money gate is the one that already exists.** Writes to a financial system never happen
-directly. The agent emits `TASKUARY-PROPOSE {"action": "run_tool", "type": "quickbooks_bill", ...}`
+directly - not in QuickBooks, and not in Sage Intacct, whose `intacct_create` / `intacct_update`
+take the same road (2026-09-02). The agent emits `TASKUARY-PROPOSE {"action": "run_tool", "type": "quickbooks_bill", ...}`
 (proposals.py) and the proposal is a Review card: vendor, amount, account, period, the receipt
 image beside it. The playbook's `alone:` line is a **routing policy** (Settings → Routing
 policies), the deterministic gate the AI cannot override: *auto-approve quickbooks_bill when vendor

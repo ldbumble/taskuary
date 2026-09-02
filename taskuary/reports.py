@@ -85,6 +85,26 @@ def run_intacct_fields(cfg):
     return rows_out(fields_of(cfg, obj), lim, unit='fields', mine=mine)
 
 
+def run_intacct_create(cfg):
+    """{"object": "APBILL", "record": {"VENDORID": "V100", "WHENCREATED": "09/01/2026",
+    "APBILLITEMS": [{"ACCOUNTNO": "6120", "AMOUNT": "412.50"}]}} - create one record.
+
+    A WRITE. The Intacct card ships at scope `read`, so an agent cannot run this directly: it
+    PROPOSES it (TASKUARY-PROPOSE run_tool) and the owner approves it in Review."""
+    from .intacct import create
+    out = create(cfg, (cfg.get('object') or '').strip(), cfg.get('record') or cfg.get('fields'))
+    return f"{out['object']} created — key {out['key'] or '(none returned)'}", json.dumps(out, indent=1, default=str)
+
+
+def run_intacct_update(cfg):
+    """{"object": "APBILL", "record": {"RECORDNO": "1042", "DESCRIPTION": "corrected memo"}} -
+    change one existing record. The record must name itself (RECORDNO, or the object's own id).
+    A WRITE, gated exactly like run_intacct_create."""
+    from .intacct import update
+    out = update(cfg, (cfg.get('object') or '').strip(), cfg.get('record') or cfg.get('fields'))
+    return f"{out['object']} {out['key'] or ''} updated".replace('  ', ' '), json.dumps(out, indent=1, default=str)
+
+
 def run_metric(cfg):
     """{"name": "<metric>", "scope": "<what names one row>", "period": "2026-07"} - ONE certified number.
 
@@ -488,6 +508,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
             'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
+            # ...and the two WRITES: generic by object, like the reads. Gated by the card's scope
+            # (it ships at read), so an agent proposes them and the owner approves.
+            'intacct_create': run_intacct_create, 'intacct_update': run_intacct_update,
             # QuickBooks Online: three reads, and the first two WRITES a Corporate system has here -
             # a bill and a paid expense, gated by the card's scope (proposals below write)
             'quickbooks': _lazy('quickbooks', 'run_quickbooks'), 'quickbooks_vendors': _lazy('quickbooks', 'run_quickbooks_vendors'),
@@ -514,7 +537,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
-           'intacct_fields': 'intacct', 'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
+           'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',
+           'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
@@ -628,6 +652,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'entra_signins': azure_connection, 'entra_licenses': azure_connection,
                  'prometheus': prometheus_connection, 'datadog': datadog_connection,
                  'intacct': intacct_connection, 'intacct_fields': intacct_connection,
+                 'intacct_create': intacct_connection, 'intacct_update': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
                  **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances')},
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client

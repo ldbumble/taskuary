@@ -189,6 +189,75 @@ def fields_of(cfg, obj):
             for f in res.iter('Field')]
 
 
+# ── writing ─────────────────────────────────────────────────────────────────────────────
+# The gateway writes the same way it reads: generically, by object. So there is no create_bill,
+# create_vendor, create_journal_entry here for the same reason there are no per-object read
+# wrappers - each would be a hardcoded field list that goes stale, and `fields_of` already asks
+# the company's own schema. One create, one update, any object.
+#
+# What keeps this safe is NOT this module: the Intacct card ships at scope `read` (scopes.py), so
+# an agent calling these through /api/tools/run is refused. It reaches them only by PROPOSING
+# (proposals.py, run_tool), and the owner approves the proposal in Review. That is the same road
+# a QuickBooks bill takes, and it is deliberate: nothing posts to the books on an agent's say-so.
+
+def _record_xml(parent, fields):
+    """A record as the gateway wants it. A scalar becomes an element; a dict becomes a nested
+    element (`{'VENDORID': 'V1'}`); a list becomes REPEATED children named by dropping one
+    trailing S from the key, which is how Intacct spells line items - APBILLITEMS holds
+    APBILLITEM. Nest a dict explicitly when an object does not follow that rule."""
+    for k, v in (fields or {}).items():
+        if isinstance(v, dict):
+            _record_xml(_el(parent, k), v)
+        elif isinstance(v, (list, tuple)):
+            holder = _el(parent, k)
+            child = k[:-1] if k.upper().endswith('S') else k
+            for item in v:
+                if isinstance(item, dict): _record_xml(_el(holder, child), item)
+                else: _el(holder, child, item)
+        else:
+            _el(parent, k, '' if v is None else v)
+
+
+def _written(res, obj, verb):
+    """What came back: the key Intacct assigned and the record it echoed, so the owner's receipt
+    names a real document number rather than 'success'."""
+    rows = _rows(res)
+    rec = rows[0] if rows else {}
+    key = res.findtext('.//result/key') or rec.get('RECORDNO') or rec.get('RECORDKEY') or ''
+    return {'verb': verb, 'object': obj, 'key': str(key), 'record': rec}
+
+
+def create(cfg, obj, record):
+    """Create ONE record of `obj` (APBILL, VENDOR, GLBATCH…) from a field dict. Returns the key
+    Intacct assigned. Raises IntacctError on the usual 200-with-failure."""
+    if not str(obj or '').strip(): raise IntacctError('no Intacct object to create')
+    if not record: raise IntacctError(f'nothing to put in the new {obj} - give it fields')
+    sid, end = login(cfg)
+    root, fn = _envelope(cfg, sid)
+    _record_xml(_el(_el(fn, 'create'), obj), record)
+    res = _post(end, root)
+    _check(res)
+    logger.info(f"intacct: created {obj} in company {cfg['company_id']}")
+    return _written(res, obj, 'create')
+
+
+def update(cfg, obj, record):
+    """Change ONE existing record. The record MUST carry the key Intacct knows it by (RECORDNO,
+    or the object's own id field such as VENDORID) - without one the gateway would have to guess
+    which row is meant, and a write that guesses is the one thing this must never do."""
+    if not str(obj or '').strip(): raise IntacctError('no Intacct object to update')
+    keys = [k for k in (record or {}) if k.upper() in ('RECORDNO', 'RECORDKEY', 'KEY', f'{obj.upper()}ID')]
+    if not keys:
+        raise IntacctError(f'an update to {obj} needs the record it is changing - include RECORDNO or {obj.upper()}ID')
+    sid, end = login(cfg)
+    root, fn = _envelope(cfg, sid)
+    _record_xml(_el(_el(fn, 'update'), obj), record)
+    res = _post(end, root)
+    _check(res)
+    logger.info(f"intacct: updated {obj} {record.get(keys[0])} in company {cfg['company_id']}")
+    return _written(res, obj, 'update')
+
+
 def probe(cfg):
     """One real call for the Test button: log in, then read the company's own record. A green
     card that only proves the password was accepted hides the usual failure, which is an API

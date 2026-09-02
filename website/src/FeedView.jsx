@@ -492,7 +492,7 @@ const TodayStrip = () => {
   );
 };
 
-export default function FeedView({ onOpenTask, onChanged }) {
+export default function FeedView({ onOpenTask, onChanged, active = true }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
@@ -658,9 +658,13 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [fade, setFade] = useState("normal");        // Settings > Display; height of the viewport's bottom fade
   const bottomFade = fadeBand(fade);
   const [tick, setTick] = useState(0);
-  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
+  useEffect(() => { if (!active) return undefined; const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, [active]);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
   useEffect(() => {
+    // gated on `active`: this loop re-reads the whole list when a sync lands, and the Timeline
+    // now stays MOUNTED behind another tab (so a live session keeps its socket) - ungated it
+    // would poll and refetch for a screen nobody is looking at. Coming back re-asks at once.
+    if (!active) return undefined;
     let alive = true, timer = null, completionTimer = null, wasRunning = false, seenPollAt = null;
     const ask = async () => {
       if (!alive) return;
@@ -700,7 +704,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
     ask();
     return () => { alive = false; clearTimeout(timer); clearTimeout(completionTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [active]);
   useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
   const syncNow = useCallback(async (silent) => {
     if (!silent) setSyncing(true);
@@ -765,8 +769,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
     // died the moment you opened another tab, and restarted its ten minutes every time a
     // filter changed this effect's dependencies - so "auto-syncs every 10 min" was a promise
     // kept only by someone sitting on the Timeline, and never when the window was closed.
-    return pollWhileVisible(() => load(rowsLen.current), 30000);
-  }, [load]);
+    return active ? pollWhileVisible(() => load(rowsLen.current), 30000) : undefined;
+  }, [load, active]);
   useEffect(() => {
     // root: the RAIL. A viewport-rooted observer never fires for a sentinel inside a scroll
     // container that is already fully on screen - the list would simply stop at 100 rows.

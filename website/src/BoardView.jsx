@@ -237,7 +237,7 @@ const COLS = [
   { key: "done", title: "Done", dot: "#47654a", status: "done" },
 ];
 
-export default function BoardView({ onOpenTask, onOpenReports }) {
+export default function BoardView({ onOpenTask, onOpenReports, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
   const [view, setView] = useState("columns");   // columns | studio | wall - three looks at one board
@@ -267,14 +267,14 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
     try { setTasks(((await api.get("/api/tasks", { params: { active: 1 } })).data.data || []).filter((t) => t.Status !== "dropped")); }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load the board"); }
   }, []);
-  useEffect(() => { load(); return pollWhileVisible(load, 15000); }, [load]);
+  useEffect(() => { load(); return active ? pollWhileVisible(load, 15000) : undefined; }, [load, active]);
   // live tails poll fast (the cards are a status wall you watch); the task page has the full trace
   useEffect(() => {
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
     tick();
-    return pollWhileVisible(tick, 4000);
-  }, []);
+    return active ? pollWhileVisible(tick, 4000) : undefined;
+  }, [active]);
   useEffect(() => {
     if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0] }));
   }, [agents, nt.agent]);

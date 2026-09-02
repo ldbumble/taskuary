@@ -187,8 +187,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'queued', 'task_id': None, 'message_id': mid}
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
-    # ...and on a chat, the room it shares with the task is not a reason to join it (chat_continues)
-    if r['decision'] == 'attach' and is_chat(msg):
+    # ...and on a chat, the room it shares with the task is not a reason to join it
+    # (chat_continues). Off with triage: an owner who has switched the classifier off has said
+    # they do not want the brain reading their messages, and this is the brain reading them.
+    if r['decision'] == 'attach' and is_chat(msg) and cfg.get('intent_classify_enabled', '1') == '1':
         cont = chat_continues(store, msg, r['task_id'], llm)
         if not cont['same']:
             logger.info(f"ingest: a separate ask in the same chat - not joining {task_ref(r['task_id'])}")

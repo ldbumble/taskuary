@@ -113,6 +113,14 @@ class OneRoomManyJobs(unittest.TestCase):
         self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id']))
         self.assertEqual(seen, [])
 
+    def test_triage_switched_off_means_nothing_is_read(self):
+        """Switching the classifier off is a statement about the brain reading your messages."""
+        self.s.set_setting('intent_classify_enabled', '0', 'owner')
+        seen = []
+        out = line(self.s, 'Also, a completely different thing', '2026-09-02 17:20:00', brain(same=False, seen=seen))
+        self.assertEqual(out['task_id'], self.first['task_id'])
+        self.assertEqual(seen, [])
+
     def test_with_no_brain_the_conversation_is_kept_whole(self):
         """Undecidable falls to attaching: the owner splits it in one click, and the opposite
         mistake - a task per line - is one nobody can undo."""

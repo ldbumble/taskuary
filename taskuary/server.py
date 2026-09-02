@@ -1236,7 +1236,8 @@ def task_work(tid: int, diff: bool = True):
     if not t: raise HTTPException(404, 'task not found')
     from . import proof
     sess = hub_term.session_for(tid)
-    work = sess.witness.snapshot(sess.files(), sess.cwd, (sess.tail(1) or [''])[-1]) if sess else None
+    wit = getattr(sess, 'witness', None)             # a demo replay has none
+    work = wit.snapshot(sess.files(), sess.cwd, (sess.tail(1) or [''])[-1]) if wit else None
     rev = {}
     if diff:
         try: rev = proof.review(store, tid) or {}
@@ -1893,6 +1894,8 @@ def wa_status(cid: int):
     from . import wabridge
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
+    from . import demo
+    if demo.enabled(): return {'connected': False, 'bridge': False, 'node': False, 'manager': {}, 'detail': 'the demo has no bridge - nothing real is reachable from here'}
     # node: the one thing the card cannot install for the owner - step 1 of the pairing box turns on it
     try: return {**_status(c), 'bridge': True, 'node': True, 'manager': wabridge.state()}
     except RuntimeError as e: return {'connected': False, 'bridge': False, 'node': bool(wabridge.node()), 'detail': str(e), 'manager': wabridge.state()}   # bridge down is a state, not a 500

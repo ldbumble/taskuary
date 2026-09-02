@@ -429,6 +429,9 @@ export default function StudioView({ onOpenTask, refresh = 0 }) {
               <Typography noWrap sx={{ fontSize: 12.5, color: DIM, pt: 0.2 }}>{t.Title}</Typography>
             </Box>
           ))}
+          {queue.length > 6 && (
+            <Typography sx={{ px: 1.75, py: 0.9, fontSize: 11, color: FAINT }}>+{queue.length - 6} more waiting — the Columns view lists them all</Typography>
+          )}
         </Box>
         {/* the desk count IS the Agents-at-once setting, so this writes it. Move the slider and
             the room widens; open Settings and you find the same number. */}

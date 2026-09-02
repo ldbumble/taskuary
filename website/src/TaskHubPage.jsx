@@ -102,7 +102,7 @@ function DemoBadge({ demo }) {
   if (!demo) return null;
   return (
     <Tooltip title={`Everything here is invented${demo.owner ? ` - you are ${demo.owner}, who does not exist` : ""}: the people, the mail, the agents. Nothing sends, nothing connects, and no real system is reachable from this page.`}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.9, py: 0.3, borderRadius: 99,
+      <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 0.5, px: 0.9, py: 0.3, borderRadius: 99,
         flexShrink: 0, border: "1px solid #d8cfbe", bgcolor: "#f1ead9" }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#8a7a5c" }} />
         <Typography variant="caption" noWrap sx={{ fontWeight: 700, color: "#6b5f45" }}>demo data</Typography>
@@ -191,10 +191,10 @@ export default function TaskHubPage() {
   // a first run opens it once, unprompted: somebody who has just installed this should not have
   // to find the checklist. Once put away (or once required steps are done) it never opens itself.
   useEffect(() => {
-    if (DEMO || greeted || !setup || setup.ready || setup.dismissed) return;
+    if (DEMO || demo || greeted || !setup || setup.ready || setup.dismissed) return;
     if (setup.done === 0) setSetupOpen(true);
     setGreeted(true);
-  }, [setup, greeted]);
+  }, [setup, greeted, demo]);
   const dismissSetup = async (d) => {
     await api.post("/api/setup/dismiss", { dismissed: d });
     reloadSetup();
@@ -257,10 +257,12 @@ export default function TaskHubPage() {
       <CssBaseline />
       {/* textAlign left kills the CRA-default .App { text-align: center } leaking in */}
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
+        {/* bottom-right, not under the top bar: up there it covered the row every tab keeps its
+            actions on (the Board's buttons, a task's Mark done) for twelve seconds per hand raised */}
         <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised} autoHideDuration={12000}
           onClose={() => setRaisedQueue(dismissHandRaise)}
-          anchorOrigin={{ vertical: "top", horizontal: "right" }}
-          sx={{ mt: 5.5 }}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          sx={{ mb: 1 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
           action={raised && <Button size="small" sx={{ color: "#a6e3a1" }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
@@ -338,7 +340,7 @@ export default function TaskHubPage() {
               until it slid UNDER the tab strip, which is absolutely centred on the window and so
               yields to nothing - the banner sat on top of "Timeline". */}
           <StaleBuild />
-          {!DEMO && <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />}
+          {!DEMO && !demo && <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />}
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connections"); }} />
           <Tooltip title="Refresh">
@@ -346,7 +348,7 @@ export default function TaskHubPage() {
           </Tooltip>
         </Box>
 
-        {!DEMO && (
+        {!DEMO && !demo && (
           <SetupPanel open={setupOpen} state={setup} onClose={() => { setSetupOpen(false); reloadSetup(); }}
             onDismiss={dismissSetup} onRefresh={reloadSetup}
             onGo={(where) => { setSetupOpen(false); go(where); }} />

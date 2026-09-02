@@ -18,7 +18,7 @@ import api from "./api";
 import AgentWall from "./AgentWall.jsx";
 import { NO_REPO, planTask } from "./newTask.js";
 import { pollWhileVisible } from "./visible.js";
-import { ALERT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, card, hoverable, mono } from "./theme.jsx";
+import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark } from "./ui.jsx";
 
 // Not every ask is about a codebase - "what does this policy mean", "draft me a note", "prepare
@@ -39,7 +39,7 @@ const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] |
 // WHICH agent is on the card, said out loud: a small legend sitting ON the border with the
 // CLI's name, in a hue from the app's own palette - subtle but distinct, never brand colors
 // that fight the theme. Live or running only; a finished run's card goes back to house style.
-const AGENT_HUES = { claude: "#7d9a7c", codex: "#6f8a6e", gemini: "#2563eb",
+const AGENT_HUES = { claude: "#7d9a7c", codex: "#6f8a6e", gemini: "#55697a",
                      cursor: "#6f8a6e", copilot: "#8a8276" };
 // 'coder' says nothing about which model family answers - resolve every display through
 // the profile's actual command, so the board speaks CLI names (claude, codex, gemini)
@@ -112,8 +112,8 @@ const NoteChip = ({ onOpen }) => (
     <Box onClick={(e) => { e.stopPropagation(); onOpen(); }}
       sx={{ display: "inline-flex", alignItems: "center", gap: 0.3, px: 0.6, height: 16,
         borderRadius: 0.75, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", cursor: "pointer",
-        "&:hover": { bgcolor: "#ede9fe" } }}>
-      <Typography sx={{ color: "#6b21a8", fontWeight: 800, fontSize: 8.5, letterSpacing: ".05em" }}>
+        "&:hover": { bgcolor: "#d2d6cf" } }}>
+      <Typography sx={{ color: ROLES.working.ink, fontWeight: 800, fontSize: 8.5, letterSpacing: ".05em" }}>
         ✎ NOTE
       </Typography>
     </Box>
@@ -174,7 +174,7 @@ const NoteDialog = ({ open, task, onClose }) => {
         {/* the note is the agent's account of itself; this is git's */}
         {files.length > 0 && (
           <Box sx={{ mt: 1.5 }}>
-            <Typography variant="caption" sx={{ color: "#6b21a8", fontWeight: 800, fontSize: 9.5,
+            <Typography variant="caption" sx={{ color: ROLES.working.ink, fontWeight: 800, fontSize: 9.5,
               letterSpacing: ".08em", display: "block", mb: 0.5 }}>
               ✎ FILES IT TOUCHED — {files.length}, per git
             </Typography>
@@ -349,7 +349,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
         </Typography>}
         {/* the same board, two ways to look at it - columns to move work, the floor to see how
             much of your capacity is actually busy */}
-        <Box sx={{ display: "flex", gap: 0.25, bgcolor: "#e7eae2", borderRadius: 2, p: "3px" }}>
+        <Box sx={{ display: "flex", gap: 0.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, p: "3px" }}>
           {[{ k: "columns", label: "Columns", icon: <ViewKanbanIcon sx={{ fontSize: 14 }} /> },
             { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> },
             { k: "wall", label: "Wall", icon: <GridViewIcon sx={{ fontSize: 14 }} /> },
@@ -367,7 +367,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
         <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
           sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>✎ Feed the agent</Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => setNewOpen(true)}>New task for the agent</Button>
+          onClick={() => setNewOpen(true)} sx={{ background: GRADIENT }}>New task for the agent</Button>
       </Box>
       <Dialog open={feedOpen} onClose={() => setFeedOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>Feed the agent
@@ -469,14 +469,14 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
                   {/* a held-back dispatch says so ON the card - who it waits for and why, readable
                       without hovering anything */}
                   {t.Queued && (
-                    <Box sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: "#eef2ff", border: "1px solid #dfe3fb",
-                      borderLeft: "3px solid #7d9a7c", borderRadius: 1.25 }}>
+                    <Box sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: ROLES.working.tint, border: `1px solid ${ROLES.working.bd}`,
+                      borderLeft: `3px solid ${ROLES.working.solid}`, borderRadius: 1.25 }}>
                       <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, display: "block",
                         fontSize: 10, lineHeight: 1.4 }}>
                         ⏳ {t.Queued.behind ? `Waiting on ${t.Queued.behind}` : "Waiting for a free agent slot"}
                         {t.Queued.behindTitle ? ` — “${t.Queued.behindTitle}”` : ""}
                       </Typography>
-                      <Typography variant="caption" sx={{ color: "#5b5f97", display: "block", fontSize: 9.5,
+                      <Typography variant="caption" sx={{ color: ROLES.working.ink, display: "block", fontSize: 9.5,
                         lineHeight: 1.45, mt: 0.2 }}>
                         {t.Queued.why ? `${t.Queued.why} · ` : t.Queued.reason ? `${t.Queued.reason} · ` : ""}starts by itself when it can
                       </Typography>
@@ -559,7 +559,9 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
               How it gets worked — one agent, one way
             </Typography>
-            <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}>
+            <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}
+              renderValue={(v) => v === "file" ? "Just file it" : v === "terminal" ? `Start ${nt.agent} in a terminal`
+                : noRepo ? "Ask the assistant" : `Start ${nt.agent} on it`}>
               <MenuItem value="live" sx={{ fontSize: 12.5 }}>{noRepo
                 ? "Ask the assistant — opens the chat on the Tasks tab with your prompt as the first message"
                 : `Start ${nt.agent} on it — stays on the board with the prompt typed in`}</MenuItem>

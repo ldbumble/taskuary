@@ -1106,8 +1106,9 @@ class SQLiteStore:
     def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def list_reviews(self, status=None):
-        q = f'''SELECT rv.*, t.Title, m.Subject, m.FromName, m.FromEmail,
-                       m.Channel, m.SourceName, m.ConversationId {_REVIEW_FROM}
+        # the inbound text rides along: the queue shows what they wrote above what we would say back
+        q = f'''SELECT rv.*, t.Title, m.Subject, m.FromName, m.FromEmail, m.SentAt,
+                       m.Channel, m.SourceName, m.ConversationId, substr(m.BodyText, 1, 1500) Preview {_REVIEW_FROM}
                 WHERE {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'''
         return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
     def decide_review(self, rid, status, final, by, note=None):
@@ -1406,6 +1407,9 @@ class SQLiteStore:
                 r['Working'] = live[r['TaskId']]
                 r['AgentWaiting'] = r['TaskId'] in parked
                 if r.get('ReviewStatus') != 'pending': r['NeedsYou'] = 1 if r['TaskId'] in parked else 0
+        # the SQL filter matched before live sessions were known; a row a working agent just took off
+        # you must not sit in "needs me" wearing a chip that says otherwise
+        if pending_only: rows = [r for r in rows if r.get('NeedsYou')]
         return rows
 
     def feed_tag(self, days=14, pending_only=False, channel=None, source=None):

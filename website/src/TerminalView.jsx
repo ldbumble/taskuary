@@ -334,6 +334,9 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false }) => {
       <Box sx={{ ...(height === "100%" ? { flex: 1, minHeight: 0 } : { height }), p: 1, boxSizing: "border-box" }}>
       <Box ref={host} onMouseDown={() => !readOnly && requestAnimationFrame(() => termRef.current?.focus())}
         sx={{ width: "100%", height: "100%", minHeight: 0, "& .xterm": { height: "100%" },
+        // the rows never fill the slot exactly, and xterm paints the remainder #000 whatever the
+        // theme says - a black band under a Catppuccin pane. The pane behind it wears the theme.
+        "& .xterm-viewport": { backgroundColor: "transparent !important" },
         "& .xterm-scrollable-element > .scrollbar.vertical": {
           // pinned visible ONLY while scrollback exists (--sbar, set from the buffer state):
           // an alternate-screen TUI scrolls itself, and a dead full-height slider is a lie

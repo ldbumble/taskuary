@@ -6,5 +6,6 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   build: { outDir: "../taskuary/web", emptyOutDir: true },
-  server: { proxy: { "/api": "http://127.0.0.1:7787" } },
+  // TASKUARY_API points the dev server at another backend (a --demo instance, a blank home) without touching the one you run
+  server: { proxy: { "/api": { target: process.env.TASKUARY_API || "http://127.0.0.1:7787", ws: true } } },
 });

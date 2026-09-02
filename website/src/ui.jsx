@@ -299,7 +299,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
 
 export const StatusDot = ({ ok, warn }) => (
   <Box component="span" sx={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", mr: 1,
-    bgcolor: ok ? "#22c55e" : warn ? "#55697a" : "#cfc9bf" }} />
+    bgcolor: ok ? ROLES.done.solid : warn ? ROLES.working.solid : "#cfc9bf" }} />
 );
 
 // Expandable "prompt sent to agent" block inside a run trace - collapsed by default.
@@ -741,7 +741,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
           disabled={busy || !note.trim() || (scope === "subject" && !topic.trim())} onClick={save}
           sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not ours — remember this"}</Button>
       </Box>
-      {err && <Typography variant="caption" sx={{ color: "#b42318", fontWeight: 600, display: "block", mt: 0.75 }}>
+      {err && <Typography variant="caption" sx={{ color: ROLES.bad.ink, fontWeight: 600, display: "block", mt: 0.75 }}>
         {err} — your note is still here.
       </Typography>}
     </Box>
@@ -815,7 +815,7 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
         <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>cancel</Button>
         <Button size="small" variant="contained" disableElevation disabled={busy} onClick={send}
           startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
-          sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#6b1fb0" } }}>
+          sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
           {busy ? "sending…" : "Send"}
         </Button>
       </Box>
@@ -860,7 +860,7 @@ export const StateChip = ({ task }) => {
 };
 
 export const TaskStatusChip = ({ status }) => (
-  <Chip size="small" label={status} sx={{ bgcolor: "transparent", border: `1px solid ${TASK_STATUS_COLORS[status] || "#a9a294"}55`,
+  <Chip size="small" label={String(status || "").replace(/_/g, " ")} sx={{ bgcolor: "transparent", border: `1px solid ${TASK_STATUS_COLORS[status] || "#a9a294"}55`,
     color: TASK_STATUS_COLORS[status] || "#a9a294", height: 19, fontSize: 10.5 }} />
 );
 
@@ -1248,7 +1248,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
 export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) => {
   const [open, setOpen] = React.useState(false);
   const show = (e) => { e.stopPropagation(); setOpen(true); };
-  const label = count ? `${count} waiting` : "tell the agent";
+  const label = count ? `${count} waiting` : "Tell the agent";
   return (
     <>
       {small ? (
@@ -1442,7 +1442,10 @@ export const WorkStrip = ({ taskId, live, session, provenance }) => {
   const checks = (w?.flags || []).filter((f) => f.level === "check").length;
   const summary = `said ${todos.length ? `${w.n_done}/${w.n_todos}` : "—"} · touched ${(d.files || []).length}`;
   return (
-    <Box sx={{ mb: 0.75, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden" }}>
+    // flexShrink 0: the task page stacks this over a terminal with a fixed height in a flex column,
+    // and a shrinkable overflow:hidden box in that column collapsed to nothing - the strip was in
+    // the DOM and never on screen
+    <Box sx={{ mb: 0.75, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden", flexShrink: 0 }}>
       <Box onClick={toggle} title={open ? "Fold the detail away" : "Open: the agent's list beside the files it wrote"}
         sx={{ px: 1.5, py: 0.5, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", cursor: "pointer", borderBottom: open ? `1px solid ${BORDER}` : 0, "&:hover": { bgcolor: "#faf8f5" } }}>
         <Typography component="span" sx={{ ...mono, fontSize: 10, color: FAINT, width: 12 }}>{open ? "▾" : "▸"}</Typography>

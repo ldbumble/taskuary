@@ -178,7 +178,7 @@ const CliPicker = ({ asBrain, onDone }) => {
             <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
               {cli.label}{cli.profile && cli.profile !== cli.label ? <Typography component="span" variant="caption" sx={{ color: FAINT, ml: 0.75 }}>profile “{cli.profile}”</Typography> : null}
             </Typography>
-            <Typography variant="caption" sx={{ color: cli.configured && !cli.installed ? "#8a3646" : FAINT, wordBreak: "break-all" }}>
+            <Typography variant="caption" sx={{ color: cli.configured && !cli.installed ? "#8a3646" : FAINT, overflowWrap: "anywhere" }}>
               {cli.path ? cli.path
                 : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — install it, or fix the command in Connections → AI CLI agents`
                 : cli.cmd}
@@ -532,7 +532,8 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
                   ? `${guideLeft} recommended ${guideLeft === 1 ? "step" : "steps"} left to personalize Taskuary. They use your answers or your own history, and remain editable.`
                 : `${guideDone} of ${guideTotal} done${guideLeft ? ` — ${guideLeft} to go` : ""}. `
                   + `The first ${state.total} are what make the funnel work at all: without them the `
-                  + "Timeline stays empty and looks like a quiet day."}
+                  + "Timeline stays empty and looks like a quiet day."
+                  + (steps.length > guideTotal ? ` The ${steps.length - guideTotal === 1 ? "last one is" : "rest are"} optional.` : "")}
             </Typography>
           </Box>
           <CloseIcon onClick={onClose} sx={{ fontSize: 18, color: FAINT, cursor: "pointer", mt: 0.5 }} />

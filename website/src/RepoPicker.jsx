@@ -8,7 +8,7 @@ import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import CheckIcon from "@mui/icons-material/Check";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 // Not every task is about a codebase. "None" is a real answer here, not a blank one: unpinning
 // lets Taskuary guess again (and it will pick something), where this says there is nothing to pick.
@@ -43,7 +43,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
   if (rows === null) return <CircularProgress size={14} />;
   const general = why === "a general question - no repository";
   const noRepoRow = (
-    <Box sx={{ border: `1px solid ${general ? "#c7d2fe" : BORDER}`, borderRadius: 1.5,
+    <Box sx={{ border: `1px solid ${general ? ACCENT : BORDER}`, borderRadius: 1.5,
       bgcolor: general ? "#eae4d8" : PANEL, px: 1.1, py: 0.7, mb: 0.6 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
         <AccountTreeIcon sx={{ fontSize: 14, color: general ? "#55697a" : FAINT }} />
@@ -78,7 +78,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
       {rows.map((r) => {
         const on = r.repo === picked;
         return (
-          <Box key={r.repo} sx={{ border: `1px solid ${on ? "#c7d2fe" : BORDER}`, borderRadius: 1.5,
+          <Box key={r.repo} sx={{ border: `1px solid ${on ? ACCENT : BORDER}`, borderRadius: 1.5,
             bgcolor: on ? "#eae4d8" : PANEL, px: 1.1, py: 0.7, mb: 0.6 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               <AccountTreeIcon sx={{ fontSize: 14, color: on ? "#55697a" : FAINT }} />

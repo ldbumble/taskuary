@@ -5,7 +5,34 @@ import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } fro
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
-import { ChannelIcon, RefChip, timeAgo, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, RefChip, timeAgo, Empty, FilterPills, cleanText, splitQuoted } from "./ui.jsx";
+
+// What they wrote, above what we would say back. The queue used to show only the draft: you
+// approved an answer without the question in front of you, or opened the task to find it. Four
+// lines of the inbound message, the rest one click away.
+const Inbound = ({ r }) => {
+  const [full, setFull] = useState(false);
+  const { latest } = splitQuoted(cleanText(r.Preview || ""));
+  if (!latest) return null;
+  const long = latest.length > 360 || latest.split("\n").length > 4;
+  return (
+    <Box sx={{ mb: 1, px: 1.25, py: 0.85, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, borderLeft: "3px solid #6f8a6e" }}>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.25 }}>
+        {r.FromName || r.FromEmail || "they"} wrote{r.SentAt ? ` · ${timeAgo(r.SentAt)}` : ""}
+      </Typography>
+      <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", lineHeight: 1.5,
+        ...(full || !long ? {} : { display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
+        {latest}
+      </Typography>
+      {long && (
+        <Typography variant="caption" onClick={() => setFull((f) => !f)}
+          sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", display: "block", mt: 0.35, "&:hover": { textDecoration: "underline" } }}>
+          {full ? "less ↑" : "the whole message ↓"}
+        </Typography>
+      )}
+    </Box>
+  );
+};
 
 const FILTERS = [
   { key: "pending", label: "pending", c: PILL_COLORS.you },
@@ -113,10 +140,13 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             <Chip size="small" label={r.Status} sx={{ height: 19, fontSize: 10, bgcolor: PANEL, border: `1px solid ${BORDER}`, color: DIM }} />
           </Box>
           <Box sx={{ px: 1.5, py: 1.25 }}>
-            {r.Reason && <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
+            {r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
+              <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
+            )}
 
             {r.Status === "pending" && (
               <Box sx={{ mt: 0.5 }}>
+                <Inbound r={r} />
                 <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
                   <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800,
                     letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>

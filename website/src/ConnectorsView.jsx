@@ -968,7 +968,7 @@ export default function ConnectorsView() {
 
   return (
     <SideRail title="Connections" q={q} setQ={setQ}
-      placeholder="Search connectors — Slack, SQL Server…"
+      placeholder="Search connectors…"
       items={groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null }))}
       value={group} onChange={setGroup}
       note="Keys and connection settings are stored locally, in the same SQLite file as your tasks.">
@@ -1399,7 +1399,7 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
         <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
           {steps.map((s, i) => (
             <Step key={s.label} completed={s.done}>
-              <StepButton onClick={() => setStep(i)}>{s.label}{s.done ? " ✓" : ""}</StepButton>
+              <StepButton onClick={() => setStep(i)}>{s.label}</StepButton>
               <StepContent>{s.body}</StepContent>
             </Step>
           ))}

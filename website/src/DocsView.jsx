@@ -75,9 +75,9 @@ const OwnerCard = () => {
         </Typography>
       </Box>
       <TextField size="small" label="Your name" value={name} onChange={(e) => setName(e.target.value)}
-        sx={{ bgcolor: "#fff", width: 200 }} />
+        sx={{ bgcolor: "#fff", flex: "1 1 200px", minWidth: 0 }} />
       <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)}
-        sx={{ bgcolor: "#fff", width: 230 }} />
+        sx={{ bgcolor: "#fff", flex: "1 1 200px", minWidth: 0 }} />
       <Button size="small" variant="contained" disableElevation disabled={!name.trim()} onClick={save}>Save</Button>
       {msg && <Typography variant="caption" sx={{ color: msg.startsWith("saved") ? "#47654a" : "#6b2733" }}>{msg}</Typography>}
     </Box>

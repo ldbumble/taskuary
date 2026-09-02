@@ -4,7 +4,7 @@
 // itself every 30s so new mail animates in while the tab is open.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Select, TextField, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Select, TextField, Typography, useMediaQuery,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -32,7 +32,7 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, RefChip, ChoiceRow, CoderReport, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, RefChip, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -60,7 +60,7 @@ const VIEW_FILTERS = [
 // pill per mailbox, repo, channel and report would be unreadable by connection five).
 // Everything narrower lives in one grouped picker: category -> channel -> connection.
 const CATEGORIES = [
-  { key: "", label: "everything", c: PILL_COLORS.pick },
+  { key: "", label: "all kinds", c: PILL_COLORS.pick },
   { key: "email", label: "email", c: PILL_COLORS.pick },
   { key: "messages", label: "messages", c: PILL_COLORS.pick },
   { key: "code", label: "code", c: PILL_COLORS.pick },
@@ -69,7 +69,7 @@ const CATEGORIES = [
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
   telegram: "Telegram chats", whatsapp: "WhatsApp chats", imessage: "Apple Messages chats", discord: "Discord channels",
-  github: "Repositories", gitlab: "GitLab instances", report: "Reports", assistant: "Assistant",
+  github: "Repositories", gitlab: "GitLab instances", report: "Reports", assistant: "Assistant posts", own: "Your own notes",
   jira: "Jira issues", asana: "Asana tasks", monday: "Monday items", linear: "Linear issues",
   clickup: "ClickUp tasks", todoist: "Todoist tasks",
   trello: "Trello cards", notion: "Notion pages", azdo: "Azure DevOps items",
@@ -154,14 +154,14 @@ const FunnelBar = ({ onOpenTask }) => {
           In the funnel {f.working.length}/{f.width}
         </Typography>
         <Box sx={{ width: "1px", height: 14, bgcolor: BORDER }} />
-        <Typography variant="caption" sx={{ fontWeight: 700, color: "#5b5f97", fontSize: 11 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: ROLES.working.ink, fontSize: 11 }}>
           Next up {f.queued.length} {open ? "▾" : "▸"}
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
           {f.working.slice(0, 4).map((w) => (
             <Box key={w.tid} sx={{ display: "inline-flex", alignItems: "center", gap: 0.4 }}>
-              <Typography variant="caption" onClick={() => onOpenTask && onOpenTask(w.tid)} sx={{ ...{ fontFamily: "ui-monospace, monospace" }, color: "#47654a", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }} title={w.title}>{w.ref}</Typography>
+              <Typography variant="caption" onClick={() => onOpenTask && onOpenTask(w.tid)} sx={{ ...mono, color: "#47654a", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }} title={w.title}>{w.ref}</Typography>
               <TellAgentButton taskId={w.tid} taskRef={w.ref} small />
             </Box>
           ))}
@@ -172,7 +172,7 @@ const FunnelBar = ({ onOpenTask }) => {
           {f.queued.length === 0 && <Typography variant="caption" sx={{ color: FAINT, display: "block", py: 1 }}>Nothing waiting — every task from a rank-mode connector is being worked.</Typography>}
           {f.queued.map((q, i) => (
             <Box key={q.tid} sx={{ display: "flex", alignItems: "center", gap: 1.25, py: 0.6, borderTop: i ? `1px solid ${BORDER}` : "none" }}>
-              <Typography variant="caption" sx={{ ...{ fontFamily: "ui-monospace, monospace" }, color: "#5b5f97", fontWeight: 700, width: 18, fontSize: 11 }}>{i + 1}</Typography>
+              <Typography variant="caption" sx={{ ...mono, color: ROLES.working.ink, fontWeight: 700, width: 18, fontSize: 11 }}>{i + 1}</Typography>
               <Typography variant="body2" onClick={() => onOpenTask && onOpenTask(q.tid)} sx={{ fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                 flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={q.title}>{q.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, fontSize: 10.5, whiteSpace: "nowrap", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }}
@@ -477,6 +477,9 @@ const TodayStrip = () => {
 };
 
 export default function FeedView({ onOpenTask, onChanged }) {
+  // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
+  // tap on a row is never a tap that did nothing
+  const narrow = useMediaQuery("(max-width:899.95px)");
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const calEvents = useCalToday();
   // The filter dock is a fixed flex sibling of the scroller. Rows never fade at its top edge;
@@ -1001,7 +1004,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
             <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />
             <Select size="small" value={cat} displayEmpty onChange={(e) => setCat(e.target.value)}
               inputProps={{ "aria-label": "Timeline category" }}
-              renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "everything"}
+              renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "all kinds"}
               sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
                 color: cat ? INK : DIM, flexShrink: 0, ml: "auto",
                 "& .MuiSelect-select": { py: 0.25, px: 1.15 },
@@ -1102,7 +1105,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
               {syncing || bgSync ? (syncWhat || "syncing…")
                 : !every ? "background sync off"
                 : `synced ${lastSync ? lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}`
-                  + (nextIn != null ? ` · next ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}` : "")}
+                  + (nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`)}
             </Typography>
             <Button size="small" variant="text" disabled={syncing || bgSync} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
@@ -1343,6 +1346,22 @@ export default function FeedView({ onOpenTask, onChanged }) {
           )}
       </Box>
 
+      {/* the same stage, over the rail, on a phone */}
+      {narrow && (
+        <Drawer anchor="right" open={!!(sel || calSel)} data-tq-keep
+          onClose={() => { setPinned(false); setSel(null); setCalSel(null); }}
+          PaperProps={{ sx: { width: "100%", p: 1, bgcolor: BG, borderRadius: 0 } }}>
+          {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} onOpenTask={onOpenTask} />
+            : sel ? (
+              <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
+                decide={decide} onOpenTask={onOpenTask} onClose={() => { setPinned(false); setSel(null); }}
+                onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
+                onMessageChanged={messageBodyChanged}
+                sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
+            ) : null}
+        </Drawer>
+      )}
+
       <NewSheet open={newOpen} onClose={() => setNewOpen(false)} onOpenTask={onOpenTask}
         onDone={() => { load(); onChanged?.(); }} />
     </Box>
@@ -1475,6 +1494,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
+  const [skipConfirm, setSkipConfirm] = useState(false);
   const [tab, setTab] = useState("summary");      // overview first; four detailed stages remain one click away
   const [filing, setFiling] = useState("");       // "once" teaches nothing; "learn" writes one Memory verdict
   const [fileErr, setFileErr] = useState("");
@@ -1503,7 +1523,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     catch { /* session gone between render and click: the row's hint still points at the task */ }
   };
   useEffect(() => { setReshape(false); setHandoff(false); setOpened(null); setOpening(false); setHanded(false);
-    setTab("summary"); setFiling(""); setFileErr(""); }, [sel.MessageId]);
+    setTab("summary"); setFiling(""); setFileErr(""); setNotCoding(false); setRouteErr(""); setSkipConfirm(false); }, [sel.MessageId]);
   const fileMessage = async (learn) => {
     setFiling(learn ? "learn" : "once"); setFileErr("");
     try {
@@ -1576,6 +1596,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     ? "fyi" : (roadOf(sel) || "not routed");
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
+  const [notCoding, setNotCoding] = useState(false); // "Mine, not agent" landed - the button says so
+  const [routeErr, setRouteErr] = useState("");      // ...or was refused, and the reason is shown here
   const [closed, setClosed] = useState(null);        // ...and closing one from the panel
   const [releasing, setReleasing] = useState(false);
   const release = async () => {
@@ -1602,7 +1624,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {sel.Subject || `${sel.FromName || sel.FromEmail} in ${sel.SourceName || "chat"}`}
             </Typography>
             <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
-              {sel.FromName || sel.FromEmail}{sel.SourceName ? ` · ${sel.SourceName}` : ""} · {fmtDateTime(sel.SentAt)}
+              {sel.FromName || sel.FromEmail}{sel.SourceName && String(sel.SourceName).toLowerCase() !== String(sel.FromName || "").toLowerCase() ? ` · ${sel.SourceName}` : ""} · {fmtDateTime(sel.SentAt)}
             </Typography>
           </Box>
           <RefChip taskId={sel.TaskId} onClick={() => onOpenTask(sel.TaskId)} />
@@ -1632,7 +1654,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
 
         {/* Summary is the fifth, default view. The original four stages remain full detail views. */}
         <Box role="tablist" aria-label="Message workflow views"
-          sx={{ display: "flex", gap: 0.25, px: 2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+          sx={{ display: "flex", gap: 0.25, px: 2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0,
+            overflowX: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
           {tabs.map((item) => (
             <Box key={item.key} role="tab" aria-selected={tab === item.key} tabIndex={tab === item.key ? 0 : -1}
               onClick={() => setTab(item.key)}
@@ -1860,7 +1883,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   title="files this message and adds one verdict to Memory for later triage" onClick={() => fileMessage(true)}>
                   {filing === "learn" ? "Teaching triage…" : "Nothing to do"}</TrayBtn>
               </Box>
-              {fileErr && <Typography variant="caption" sx={{ display: "block", color: "#b42318",
+              {fileErr && <Typography variant="caption" sx={{ display: "block", color: ROLES.bad.ink,
                 fontWeight: 600, mt: 0.75 }}>{fileErr} — nothing changed.</Typography>}
             </Box>
 
@@ -1868,11 +1891,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               <TrayGroupLabel note="correct who owns it; MEMORY choices teach future triage">ROUTING</TrayGroupLabel>
               <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
                 {sel.TaskId && (
-                  <TrayBtn tone="teach" teaches icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
+                  <TrayBtn tone="teach" teaches disabled={notCoding} icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
                     title="make this your task instead of agent work, and remember that choice"
                     onClick={async () => {
-                      await api.post(`/api/tasks/${sel.TaskId}/not-coding`); onRefresh?.();
-                    }}>Mine, not agent</TrayBtn>
+                      setRouteErr("");
+                      try { await api.post(`/api/tasks/${sel.TaskId}/not-coding`); setNotCoding(true); onRefresh?.(); }
+                      catch (e) { setRouteErr(e?.response?.data?.detail || "that did not work"); }
+                    }}>{notCoding ? "Now yours" : "Mine, not agent"}</TrayBtn>
                 )}
                 {sel.TaskId && (
                   <TrayBtn icon={<CallSplitIcon sx={{ fontSize: 15 }} />}
@@ -1882,14 +1907,20 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 <NotMine compact messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
                 <SplitTask compact row={sel} onSplit={() => onRefresh?.()} />
               </Box>
+              {routeErr && <Typography variant="caption" sx={{ display: "block", color: ROLES.bad.ink, fontWeight: 600, mt: 0.75 }}>{routeErr} — nothing changed.</Typography>}
 
               {sel.Channel === "email" && sel.FromEmail && (
                 <Box sx={{ mt: 1.1 }}>
                   <TrayGroupLabel note="hide this address now and remember that rule">SENDER RULES</TrayGroupLabel>
-                  <TrayBtn tone="teach" teaches disabled={skipped !== null} onClick={skipSender}
+                  <TrayBtn tone="teach" teaches disabled={skipped !== null} onClick={() => setSkipConfirm(true)}
                     icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
                     title={`hide ${sel.FromEmail} and their past mail — undo in Settings`}>
                     {skipped !== null ? `Skipped${skipped ? ` · ${skipped} hidden` : ""}` : "Skip sender"}</TrayBtn>
+                  <Confirm open={skipConfirm} onClose={() => setSkipConfirm(false)} confirmLabel="Skip this sender"
+                    title={`Skip everything from ${sel.FromEmail}?`}
+                    text={"Their mail leaves the Timeline now - what they already sent, and everything after it. "
+                      + "It is still received and kept; it just never shows here again. The rule lives under Settings → Routing policies, where it can be switched off."}
+                    onConfirm={skipSender} />
                 </Box>
               )}
             </Box>
@@ -2243,6 +2274,7 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
   const text = cut >= 0 ? whole.slice(0, cut).trimEnd() : whole;
   const raw = cut >= 0 ? whole.slice(cut + RAW.length).trim() : "";
   const you = cur?.Status === "context";
+  const own = !you && cur?.Channel === "own";        // a note you left yourself: nothing arrived
   // an excerpt first. A PR body or a forwarded chain ran the panel into its own scrollbar
   // and pushed the choices under the fold; the first screen of a message is what the
   // decision needs, and the rest is one click, not a scroll, away
@@ -2299,10 +2331,10 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
         {/* who / which way / when - so "new inbound" is never confused with "your reply" */}
         {cur && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6, flexWrap: "wrap" }}>
-            <Chip size="small" label={you ? "↩ your reply" : "inbound"}
+            <Chip size="small" label={you ? "↩ your reply" : own ? "your note" : "inbound"}
               sx={{ height: 17, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3,
-                bgcolor: you ? ROLES.working.tint : ROLES.muted.tint,
-                color: you ? ROLES.working.ink : ROLES.muted.ink }} />
+                bgcolor: you || own ? ROLES.working.tint : ROLES.muted.tint,
+                color: you || own ? ROLES.working.ink : ROLES.muted.ink }} />
             <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
               {you ? "you" : cur.FromName || cur.FromEmail || "unknown"}
             </Typography>
@@ -2311,6 +2343,8 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
           </Box>
         )}
         {cur?.Channel === "report" ? (looksMd(text) ? <Md text={text} /> : <SectionedText text={text} />)
+          : own && (!text.trim() || text === "…")
+            ? <Typography variant="body2" sx={{ color: FAINT, fontStyle: "italic" }}>You started this yourself — there is no incoming message behind it.</Typography>
           : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
               {shown}
             </Typography>}

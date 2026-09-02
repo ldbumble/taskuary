@@ -7,7 +7,7 @@ import { Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, TextField,
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import MergeIcon from "@mui/icons-material/MergeType";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const msgOf = (e, fallback) => (e?.response?.status === 404
   ? "This needs the new server — restart Taskuary and try again."
@@ -170,7 +170,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone }) => {
                 <Chip key={k} size="small" label={label} onClick={() => setKeep(k)}
                   sx={{ height: 20, fontSize: 10.5, cursor: "pointer",
                     bgcolor: keep === k ? "#eae4d8" : PANEL2, color: keep === k ? "#55697a" : DIM,
-                    border: `1px solid ${keep === k ? "#c7d2fe" : BORDER}`, fontWeight: keep === k ? 700 : 400 }} />
+                    border: `1px solid ${keep === k ? ACCENT : BORDER}`, fontWeight: keep === k ? 700 : 400 }} />
               ))}
             </Box>
           )}

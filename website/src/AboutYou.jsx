@@ -45,10 +45,10 @@ export default function AboutYou() {
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
           <Box component="img" alt="your avatar" src={svgUri(preview ? preview.svg : p.avatar)}
             sx={{ width: 128, height: 128, borderRadius: 4, boxShadow: "0 6px 18px rgba(40,30,20,.14)" }} />
-          <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", justifyContent: "center", maxWidth: 170 }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, width: 128 }}>
             {p.styles.map((s) => (
               <Box key={s} onClick={() => shuffle(s)}
-                sx={{ px: 0.9, py: 0.25, borderRadius: 99, cursor: "pointer", fontSize: 10.5, fontWeight: 600, userSelect: "none",
+                sx={{ px: 0.9, py: 0.25, borderRadius: 99, cursor: "pointer", fontSize: 10.5, fontWeight: 600, userSelect: "none", textAlign: "center",
                   bgcolor: (preview?.style || f.owner_avatar_style || "monogram") === s ? "#eae4d8" : "#fff",
                   border: `1px solid ${BORDER}`, color: "#55697a" }}>{s}</Box>
             ))}

@@ -59,6 +59,7 @@ const GeneralWorkspace = React.lazy(loadGeneralWorkspace);
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
 const STATUSES = ["open", "in_progress", "waiting", "done", "dropped"];
+const statusLabel = (s) => String(s || "").replace(/_/g, " ");
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
 // CATEGORY is where a task is; the chip on the row says what it needs. Filtering by "needs
@@ -451,7 +452,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
               ledger, selection said with the border alone. Scandinavian: fewer lines, calmer. */}
           <Box sx={{ overflowY: "auto", flex: 1, bgcolor: "#f1ede7", px: 1, py: 1 }}>
             {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length && !nOlder
-              ? <Empty>{search ? `No tasks match “${search}”.` : "No tasks here."}</Empty> : shown.map((task) => (
+              ? <Empty>{search ? `No tasks match “${search}”.`
+                : !tasks.length ? "No tasks yet — they arrive from the Timeline as work comes in, or start one with New."
+                : "Nothing here."}</Empty> : shown.map((task) => (
               // the selected row is outlined in its STATE's colour - a working task in the same sage as
               // its chip - not in the brand slate, which read as a fourth state nobody could name
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
@@ -486,7 +489,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       {/* ── detail ────────────────────────────────────────────────────── */}
       <Box sx={{ ...frame, flex: 1, minWidth: 0, height: "calc(100vh - 118px)", minHeight: 420 }}>
         <Box sx={{ ...frameInner, height: "100%", display: "flex", flexDirection: "column" }}>
-          {!t ? (selected ? <CircularProgress size={20} sx={{ m: 2 }} /> : <Empty>Select a task to see its full story.</Empty>) : (
+          {!t ? (
+            <Box sx={{ height: "100%", display: "grid", placeItems: "center" }}>
+              {selected ? <CircularProgress size={20} /> : <Empty>{tasks?.length ? "Select a task to see its full story." : "The task you open will show here — its messages, its session, its history."}</Empty>}
+            </Box>
+          ) : (
             <>
               {/* header strip: identity + controls. Calm on purpose - white ground, one quiet
                   outlined action, ghost icons: the loud green block + boxed dots read as three
@@ -510,7 +517,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Button>
                     </Tooltip>
                   )}
-                  {effectiveStatus !== "done" && (
+                  {effectiveStatus !== "done" && !liveCodingSession && (
                     <Tooltip title="I took care of it — close the task and wrap anything running">
                       <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
                         sx={{ color: "#47654a", borderColor: "#47654a66", px: 1.25,
@@ -535,11 +542,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <ListItemText primary="Two jobs in here, or a duplicate?"
                         secondary="break it in two, or fold it into the task it repeats" />
                     </MenuItem>
-                    <MenuItem onClick={() => { setMenuEl(null); setRepoPick(true); }}>
+                    {!isGeneral && <MenuItem onClick={() => { setMenuEl(null); setRepoPick(true); }}>
                       <ListItemIcon><AccountTreeIcon sx={{ fontSize: 17, color: "#55697a" }} /></ListItemIcon>
                       <ListItemText primary={repoOf(t) ? `Repo: ${repoOf(t)}` : "Pick the repository"}
                         secondary="which checkout the session works in" />
-                    </MenuItem>
+                    </MenuItem>}
                     <Divider />
                     <MenuItem onClick={() => { setMenuEl(null); setConfirmNAT(true); }} sx={{ color: "#6b2733" }}>
                       <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#6b2733" }} /></ListItemIcon>
@@ -564,8 +571,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </MenuItem>)}
                   </Select>
                   <Select value={effectiveStatus} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
-                    title="the raw status, if you need to move it by hand">
-                    {STATUSES.map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{s}</MenuItem>)}
+                    renderValue={statusLabel} title="the raw status, if you need to move it by hand">
+                    {STATUSES.map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{statusLabel(s)}</MenuItem>)}
                   </Select>
                   <Select value={t.Priority} onChange={(e) => patch({ Priority: e.target.value })} sx={selSx}>
                     {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
@@ -670,7 +677,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
                         startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
                           : <DoneAllIcon sx={{ fontSize: 15 }} />}
-                        sx={{ fontSize: 11.5, bgcolor: "#47654a", "&:hover": { bgcolor: "#166534" } }}
+                        sx={{ fontSize: 11.5, bgcolor: "#47654a", "&:hover": { bgcolor: "#3c5740" } }}
                         onClick={wrapUp}>
                         {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
                       </Button>
@@ -684,8 +691,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     {/* A live coding session is the primary workspace, not a preview squeezed by
                         the report and history below it. Give it a terminal-sized viewport and let
                         the surrounding task page scroll to the evidence after the session. */}
-                    <Box sx={{ height: { xs: "56vh", md: "clamp(500px, 64vh, 760px)" },
-                      minHeight: { xs: 360, md: 500 }, flexShrink: 0,
+                    {/* it takes what is left between the strip above and the waiting room below, and
+                        never less than a readable terminal - a fixed 64vh pushed the waiting room under
+                        the fold the moment the strip above it had anything to say */}
+                    <Box sx={{ flex: "1 1 auto", minHeight: { xs: 360, md: 460 }, maxHeight: 760,
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
                     </Box>
@@ -699,7 +708,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                     )}
                   </>
-                ) : report ? null : (
+                ) : report ? null : pendingReview && onGoReview ? (
+                  <Box sx={{ ...card, p: 2, textAlign: "center", bgcolor: PANEL2 }}>
+                    <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 0.5 }}>
+                      {pendingReview.Kind === "action" ? "The agent is asking your permission for something" : "A reply is drafted and waiting on you"}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1.25 }}>
+                      {pendingReview.Kind === "action" ? "Approve it in Review and it runs; reject it and nothing happens."
+                        : "Read it in Review — approving sends it on the channel it arrived on, and closes this task."}
+                    </Typography>
+                    <Button size="small" variant="contained" disableElevation startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                      onClick={onGoReview}>Open it in Review</Button>
+                    {!isGeneral && (
+                      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
+                        Something to look into first? <Box component="span" onClick={() => openTerm({ agent: run.agent, model: run.model || null, task_id: selected, repo: repoOf(t), seed: true })}
+                          sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Start a session</Box> — the draft waits.
+                      </Typography>
+                    )}
+                  </Box>
+                ) : (
                   <Box sx={{ ...card, p: 2, textAlign: "center", bgcolor: PANEL2 }}>
                     <Typography variant="body2" sx={{ color: DIM, mb: 1.25 }}>
                       Start your CLI on this task — a real session in {repoOf(t) || "the agent's folder"}: its own
@@ -737,7 +764,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           <Button size="small" variant="contained" disableElevation disabled={!!wrapping}
                             startIcon={wrapping === "wrap" ? <CircularProgress size={11} sx={{ color: "#fff" }} />
                               : <DoneAllIcon sx={{ fontSize: 15 }} />}
-                            sx={{ fontSize: 11.5, bgcolor: "#47654a", "&:hover": { bgcolor: "#166534" } }}
+                            sx={{ fontSize: 11.5, bgcolor: "#47654a", "&:hover": { bgcolor: "#3c5740" } }}
                             onClick={wrapUp}>
                             {wrapping === "wrap" ? "wrapping up…" : "Done — wrap it up"}
                           </Button>
@@ -1044,9 +1071,9 @@ const CommentRow = ({ c }) => {
 
 // Reference material about the task: present, but never competing with the session.
 const Fold = ({ title, children }) => (
-  <Box component="details" sx={{ mt: 1.5 }}>
+  <Box component="details" sx={{ mt: 1 }}>
     <Box component="summary" sx={{ cursor: "pointer", color: ACCENT2, fontSize: 10.5, letterSpacing: 1.5,
-      textTransform: "uppercase", fontWeight: 700 }}>{title}</Box>
+      textTransform: "uppercase", fontWeight: 700, py: 0.6, "&:hover": { color: INK } }}>{title}</Box>
     <Box sx={{ mt: 0.5 }}>{children}</Box>
   </Box>
 );

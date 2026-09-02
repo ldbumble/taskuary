@@ -21,7 +21,7 @@ QUESTIONS = [
     {'key': 'who', 'q': 'Who are you, and what is your job?',
      'why': 'Every reply is signed by you and every agent works on your behalf. A name and a role '
             'is the difference between "the owner" and somebody the agent can act for.',
-     'placeholder': 'Uri Nussbaum, IT director at a nursing-home group - I own the systems, the vendors and the data'},
+     'placeholder': 'Dana Whitfield, IT director at a facilities group - I own the systems, the vendors and the data'},
     {'key': 'work', 'q': 'What kind of work actually reaches you in a day?',
      'why': 'Triage decides what becomes a task. It needs to know what your day is made of before '
             'it can tell a real request from noise.',
@@ -48,7 +48,7 @@ QUESTIONS = [
     {'key': 'voice', 'q': 'How do you want it to sound when it writes as you?',
      'why': 'STYLE.md learns this from your sent mail later; until then, your own description of '
             'your voice is better than the shipped default.',
-     'placeholder': 'short, plain, warm but not chatty; no exclamation marks; sign "Uri"'},
+     'placeholder': 'short, plain, warm but not chatty; no exclamation marks; sign "Dana"'},
 ]
 
 SYSTEM = (

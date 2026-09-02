@@ -19,7 +19,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { NL, SOURCE_KEYS, addField, showValue, toShape, toSources } from "./sourceShape.js";
-import { ASSISTANT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
+import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -121,6 +121,27 @@ const FIELDS = {
   firecrawl: [["page to read", "url", "text", "https://example.com/pricing"], AI_FIELD],
   reader: [["page to read", "url", "text", "https://example.com/pricing"], AI_FIELD],
 };
+// A cron line, said in words when it is one of the shapes people actually write; the raw
+// expression stays for anything cleverer, because a wrong paraphrase is worse than none.
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const cronText = (expr) => {
+  const f = String(expr || "").trim().split(/\s+/);
+  if (f.length !== 5) return `cron ${expr}`;
+  const [mi, h, dom, mon, dow] = f;
+  const hhmm = /^\d+$/.test(mi) && /^\d+$/.test(h) ? `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}` : null;
+  const every = (x, unit) => { const m = /^\*\/(\d+)$/.exec(x); return m ? `every ${m[1]}${unit}` : null; };
+  if (h === "*" && dom === "*" && mon === "*" && dow === "*") return every(mi, "m") || (mi === "*" ? "every minute" : `cron ${expr}`);
+  if (mi !== "*" && dom === "*" && mon === "*" && dow === "*") return every(h, "h") ? `${every(h, "h")} at :${String(mi).padStart(2, "0")}` : hhmm ? `daily ${hhmm}` : `cron ${expr}`;
+  if (hhmm && dom === "*" && mon === "*") {
+    if (dow === "1-5") return `weekdays ${hhmm}`;
+    if (dow === "0,6" || dow === "6,0") return `weekends ${hhmm}`;
+    const days = dow.split(",").map((d) => DOW[Number(d) % 7]).filter(Boolean);
+    if (days.length && days.length === dow.split(",").length) return `${days.join(", ")} ${hhmm}`;
+  }
+  if (hhmm && mon === "*" && dow === "*" && /^\d+$/.test(dom)) return `the ${dom}${["th", "st", "nd", "rd"][(dom % 10 > 3 || [11, 12, 13].includes(dom % 100)) ? 0 : dom % 10]} of the month ${hhmm}`;
+  return `cron ${expr}`;
+};
+
 const TYPE_LABELS = {
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
@@ -267,7 +288,7 @@ export default function ReportsView() {
           {syncing ? "Running…" : "Run due now"}
         </Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => { setQ(""); setBucket("new"); }}>New report</Button>
+          onClick={() => { setQ(""); setBucket("new"); }} sx={{ background: GRADIENT }}>New report</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       <Composer onDraft={(config, meta) => {
@@ -281,7 +302,7 @@ export default function ReportsView() {
       {list.map((s) => {
         const c = parse(s.ConfigJson);
         // both halves, not the first one: "on startup" alone hid the Monday cron behind it
-        const sched = [c.on_startup && "on startup", c.cron && `cron ${c.cron}`,
+        const sched = [c.on_startup && "on startup", c.cron && cronText(c.cron),
           c.every_minutes && `every ${c.every_minutes}m`, c.daily_at && `daily ${c.daily_at}`]
           .filter(Boolean).join(" + ") || "daily";
         return (
@@ -480,7 +501,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Reports" onBack={onBack} title={cur ? (parse(cur.ConfigJson).title || "Edit report") : "New report"} />
       <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
-        <Step completed={srcs.some((x) => x.type)}>
+        <Step completed={!!String(cfg.title || "").trim() && srcs.some((x) => x.type)}>
           <StepButton onClick={() => setStep(0)}>Pipeline</StepButton>
           <StepContent>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5 }}>
@@ -488,7 +509,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved — then tell it what deserves your attention across all of them."
                 : "Sources at the top feed one prompt at the bottom. Add as many as you want — the same connection twice with different queries is fine, and every source's rows reach the summary together."}
             </Typography>
-            <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 560, mb: 2 }}
+            <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
               fullWidth onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
 
             {isAssistant && (
@@ -523,7 +544,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       onRemove={() => setWatchSrcs((cur) => cur.filter((_, k) => k !== i))} />
                   ))}
                   <Box onClick={() => setWatchSrcs((cur) => [...cur, { type: "mssql" }])}
-                    sx={{ ...card, width: 300, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
+                    sx={{ ...card, width: 354, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
                       justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "#fff",
                       color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                     <AddIcon sx={{ fontSize: 20 }} />
@@ -552,7 +573,9 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             )}
 
             {/* ── the funnel: source cards, draggable, converging on the prompt ── */}
-            <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch" }}>
+            {/* two cards and a gap make exactly the 720 the prompt and the two cards below it are, so
+                the column has one right edge instead of three */}
+            <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch", maxWidth: 720 }}>
               {srcs.map((src, i) => (
                 <SourceCard key={i} src={src} index={i} count={srcs.length}
                   typeOptions={typeOptions} connectors={connectors}
@@ -567,7 +590,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   onRemove={() => setSrcs((cur) => cur.filter((_, k) => k !== i))} />
               ))}
               {!isAssistant && <Box onClick={() => setSrcs((cur) => [...cur, { type: "mssql" }])}
-                sx={{ ...card, width: 300, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
+                sx={{ ...card, width: 354, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
                   justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed",
                   color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                 <AddIcon sx={{ fontSize: 20 }} />
@@ -639,7 +662,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             {/* WHERE IT GOES. A report has always landed on the Timeline and stopped there; this
                 is the same run turning around. Off by default: a report that quietly emailed
                 somebody the first time you saved it would be the worst kind of surprise. */}
-            <Box sx={{ mt: 2, ...card, p: 1.5 }}>
+            <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
                   SEND IT SOMEWHERE (OPTIONAL)
@@ -678,7 +701,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             {/* The opposite of "send it somewhere": say NOTHING unless the result trips a rule.
                 A message that arrives whether or not anything is wrong is one you stop reading,
                 so silence is the normal outcome here and an alert means go and look. */}
-            <Box sx={{ mt: 2, ...card, p: 1.5 }}>
+            <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
                   TELL ME WHEN IT LOOKS WRONG (OPTIONAL)
@@ -773,7 +796,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 onChange={(e) => setCfg({ ...cfg, every_minutes: e.target.value, daily_at: "", cron: "", on_startup: false })} />
               <TextField label="daily at HH:MM" value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 140 }}
                 onChange={(e) => setCfg({ ...cfg, daily_at: e.target.value, every_minutes: "", cron: "", on_startup: false })} />
-              <TextField label="cron (min hr dom mon dow)" value={cfg.cron || ""} sx={{ bgcolor: "#fff", width: 190 }}
+              <TextField label="cron" value={cfg.cron || ""} sx={{ bgcolor: "#fff", width: 190 }}
+                helperText={cfg.cron ? cronText(cfg.cron) : ""}
                 placeholder="0 8 * * 1-5"
                 title="Standard 5-field cron. A slot missed while the app was closed fires once on reopen."
                 onChange={(e) => setCfg({ ...cfg, cron: e.target.value, every_minutes: "", daily_at: "", on_startup: false })} />
@@ -1181,7 +1205,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
   return (
     <Box draggable={!!onDragStart} onDragStart={onDragStart} onDragEnd={onDragEnd}
       onDragOver={(e) => e.preventDefault()} onDrop={onDropHere}
-      sx={{ ...card, width: 300, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
+      sx={{ ...card, width: 354, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
         opacity: dragging ? 0.45 : 1, ...(onDragStart ? { cursor: "grab", "&:active": { cursor: "grabbing" } } : {}) }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
         {onDragStart && <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />}

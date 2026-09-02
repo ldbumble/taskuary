@@ -267,6 +267,7 @@ def seed(store) -> int:
     from .testing import Factory
     if store.list_tasks(): return 0
     f = Factory(store)
+    f.actor = 'triage'                     # not the test factory's 't': it is printed on every task
     made = 0
     for i, (channel, who, subject, body, verdict, why) in enumerate(SEEDS):
         name, email = PEOPLE[who]

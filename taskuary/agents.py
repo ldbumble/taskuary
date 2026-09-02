@@ -228,6 +228,46 @@ def signed_out_msg(name: str, why: str) -> str:
 # "Access is denied." - which reads as an account or billing problem with the AI provider and is
 # nothing of the kind: the CLI never ran. Reported on another owner's machine (2026-08-31) as
 # `codex exit 1: Access is denied.` with no other output.
+# A USAGE LIMIT is not a fault, and the CLI does not say so in words: it emits a rate_limit_event
+# and exits 1, so the whole JSON blob landed in the error - "Report error: claude exit 1:
+# {"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1788364200,...}}" -
+# on the Failing-right-now bell, all day, for something that had already reset (reported 2026-09-02).
+# Nothing is broken and there is nothing to fix; there is a time to come back.
+_LIMIT_WINDOW = {'five_hour': 'five-hour', 'seven_day': 'seven-day', 'opus': 'Opus'}
+
+
+def rate_limited(raw) -> dict:
+    """The rate_limit_info from a CLI's own event stream, if it refused for that reason."""
+    for line in (raw if isinstance(raw, (list, tuple)) else str(raw or '').splitlines()):
+        line = str(line).strip()
+        if 'rate_limit' not in line: continue
+        try: j = json.loads(line)
+        except ValueError: continue
+        info = (j or {}).get('rate_limit_info') or ((j or {}).get('rate_limit_info') if isinstance(j, dict) else None)
+        if isinstance(info, dict) and str(info.get('status') or '').lower() in ('rejected', 'blocked', 'exceeded'):
+            return info
+    return {}
+
+
+def rate_limit_msg(name: str, info: dict) -> str:
+    """What the owner needs: which allowance, when it comes back, and that nothing is broken."""
+    window = _LIMIT_WINDOW.get(str(info.get('rateLimitType') or ''), str(info.get('rateLimitType') or '')).strip()
+    when = info.get('resetsAt') or ((info.get('unifiedWindows') or {}).get(info.get('rateLimitType')) or {}).get('resetsAt')
+    at = ''
+    try:
+        t = datetime.fromtimestamp(int(when))
+        day = '' if t.date() == datetime.now().date() else (' tomorrow' if (t.date() - datetime.now().date()).days == 1
+                                                            else t.strftime(' on %a %d %b'))
+        at = f" It comes back at {t.strftime('%I:%M %p').lstrip('0')}{day}."   # %-I is not portable
+    except (TypeError, ValueError, OSError, OverflowError):
+        pass
+    allowance = f'its {window} usage limit' if window else 'its usage limit'
+    extra = ('' if str(info.get('overageStatus') or '').lower() not in ('rejected', 'disabled')
+             else ' Usage beyond the plan is turned off for this account, so it waits rather than costing more.')
+    return (f'{name} has reached {allowance}, so it did not run.{at} Nothing is wrong with this '
+            f'report or its setup - it will run normally once the allowance resets.{extra}')
+
+
 _DENIED = re.compile(r'access is denied|winerror 5|permission denied|operation not permitted', re.I)
 _NO_HOME = re.compile(r'could not find home directory|finding codex home|HOME.{0,20}not set', re.I)
 
@@ -427,6 +467,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None):
         if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')
         why = f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else \
             ((err_buf[0] if err_buf else '') or '\n'.join(raw[-5:]) or 'no output')[:500]
+        limit = rate_limited(raw) or rate_limited(why)
+        if limit: raise RuntimeError(rate_limit_msg(name, limit))
         if _SIGNED_OUT.search(why): raise RuntimeError(signed_out_msg(name, why))
         # a refusal to START, not a failed run: the CLI produced no output of its own and the
         # only thing on stderr is the refusal

@@ -73,7 +73,12 @@ export function stateOf(row) {
   return "fyi";
 }
 
-export const stateMeta = (key) => STATES[key] || STATES.fyi;
+// The one state whose word depends on the row: a pending review with nothing written in it is a
+// question waiting on you, not a reply waiting to be sent. Same state, same colour, honest word.
+const undrafted = (row) => row?.ReviewStatus === "pending" && row?.HasDraft === 0;
+export const stateMeta = (key, row) => (key === "reply" && undrafted(row)
+  ? { ...STATES.reply, word: "reply needed", hint: "they asked and nothing is drafted yet — open it and write the answer, or have it drafted" }
+  : STATES[key] || STATES.fyi);
 
 // The second line, shown only on the row you are actually looking at: who is on it and what it
 // is waiting for. Never guessed — every clause comes from a field the server sent.
@@ -84,7 +89,7 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
   switch (stateOf(row)) {
     case "waving":  bits.push(row.Working ? `${row.Working} asked you something` : "waiting on you — nothing is moving it"); break;
     case "working": bits.push(row.Working ? `${row.Working} has this open` : "an agent has this"); break;
-    case "reply":   bits.push("a reply is drafted — read it and send"); break;
+    case "reply":   bits.push(undrafted(row) ? "waiting for your answer — nothing drafted yet" : "a reply is drafted — read it and send"); break;
     case "held":    bits.push("first message from this address — nothing started"); break;
     case "mine":    bits.push("your own note — nothing is working it"); break;
     case "todo":    bits.push("nobody is on this yet"); break;

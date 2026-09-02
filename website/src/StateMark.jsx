@@ -18,7 +18,7 @@ export const edgeOf = (key) => {
 
 export const StateMark = ({ row, state, size = "sm", showWord = true }) => {
   const key = state || stateOf(row);
-  const s = stateMeta(key);
+  const s = stateMeta(key, row);
   const ink = s.role ? ROLES[s.role].ink : ROLES.muted.ink;
   const big = size === "md";
   return (

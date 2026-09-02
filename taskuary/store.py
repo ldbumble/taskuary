@@ -1349,7 +1349,7 @@ class SQLiteStore:
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,
-                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind,
+                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind, rv.HasDraft,
                        IFNULL(att.n, 0) Attachments,
                        {self.ANSWERED_AT} AnsweredAt
                 FROM message m
@@ -1359,7 +1359,7 @@ class SQLiteStore:
                     WHERE RouteId IN (SELECT MAX(RouteId) FROM route GROUP BY MessageId)
                 ) rt ON rt.MessageId=m.MessageId
                 LEFT JOIN (
-                    SELECT MessageId, ReviewId, Status, Kind FROM review
+                    SELECT MessageId, ReviewId, Status, Kind, CASE WHEN IFNULL(DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft FROM review
                     WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)
                 ) rv ON rv.MessageId=m.MessageId
                 LEFT JOIN (

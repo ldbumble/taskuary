@@ -37,7 +37,7 @@ import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
-import { HOLD_TAG, hasTag, stateOf, subline } from "./timelineState.js";
+import { HOLD_TAG, hasTag, stateMeta, stateOf, subline } from "./timelineState.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
@@ -46,12 +46,16 @@ import { TerminalPreview } from "./TerminalView.jsx";
 
 const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.GeneralWorkspace })));
 
-// Two different dimensions, two controls: WHAT STATE it's in (needs me, or not filtered) and
-// WHICH KIND / SOURCE it came from - they combine (e.g. "needs me" + "email").
-// "needs me" is ONE toggle, not a two-way segmented control. The segmented version's other half
-// said "everything" next to a kind picker that also said "everything", and on a phone the
-// housing scrolled so only "everythin" showed (the owner, 2026-09-01: "weird"). One pill that
-// names the only filter worth a name, with its count on it, and it is off when it is off.
+// Two different dimensions, two controls: WHAT STATE it's in (everything vs needs me) and WHICH
+// KIND / SOURCE it came from - they combine (e.g. "needs me" + "email"). STATE gets semantic
+// colour: "needs me" is the one filter on this screen that names something being on you.
+const VIEW_FILTERS = [
+  { key: "", label: "everything", c: PILL_COLORS.pick },
+  { key: "pending", label: "needs me", c: PILL_COLORS.you },
+];
+// ...and on a PHONE the segmented control becomes one toggle pill with its count: the housing
+// scrolled there so only "everythin" showed, and the row had no room for two words twice (the
+// owner, 2026-09-01). The desktop keeps the segmented control exactly as it was.
 const NeedsMe = ({ on, n, onClick }) => (
   <Box onClick={onClick} role="switch" aria-checked={on} title={on ? "showing only what is waiting on you — click for everything" : "show only what is waiting on you"}
     sx={{ display: "inline-flex", alignItems: "center", gap: 0.65, height: 34, px: 1.35, borderRadius: 2, cursor: "pointer",
@@ -515,27 +519,31 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const dayRefs = useRef({});                        // day (YYYY-MM-DD) -> group element
   const dayLayout = useRef([]);                      // cached content offsets; scrolling must not force layout
   const dayLayoutDirty = useRef(true);
+  const dayLayoutAt = useRef(0);                     // the rail's scrollHeight when last measured
   const dateJump = useRef("");                       // picker owns the label during its smooth glide
   const dateJumpTimer = useRef(null);
   const [curDay, setCurDay] = useState("");
   const spy = useCallback(() => {
     const rail = railRef.current; if (!rail) return;
     if (dateJump.current) { setCurDay(dateJump.current); return; }
-    if (dayLayoutDirty.current) {
+    // ...and re-measure whenever the rail has grown since the last look: rows arriving after the
+    // first measurement left every group at top 0, and the last of those ties is the wrong day
+    if (dayLayoutDirty.current || rail.scrollHeight !== dayLayoutAt.current) {
       // Measure once after the rows/layout change. Reading every group's bounding box on every
       // wheel frame made Chromium synchronously lay out the whole rail while it was scrolling.
       const railTop = rail.getBoundingClientRect().top;
       dayLayout.current = Object.entries(dayRefs.current).flatMap(([day, el]) => el
         ? [{ day, top: el.getBoundingClientRect().top - railTop + rail.scrollTop }]
         : []).sort((a, b) => a.top - b.top);
-      dayLayoutDirty.current = false;
+      dayLayoutDirty.current = false; dayLayoutAt.current = rail.scrollHeight;
     }
     const edge = rail.scrollTop + 1;
     // the current day is the last group whose cached content edge has crossed the dock
-    let cur = "";
+    let cur = "", lastTop = -1;
     for (const entry of dayLayout.current) {
       if (entry.top > edge) break;
-      cur = entry.day;
+      if (entry.top === lastTop) continue;             // two groups at one top: nothing is laid out yet
+      cur = entry.day; lastTop = entry.top;
     }
     setCurDay((was) => cur || was);
   }, []);
@@ -822,6 +830,8 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [pinnedOn, setPinnedOn] = useState(false);
   const setPinned = (v) => { pinned.current = v; setPinnedOn(v); };
   const drill = async (row, quiet = false) => {
+    if (quiet && pinned.current && sel?.MessageId === row.MessageId) return;   // pinned outranks hover
+    if (!quiet) clearTimeout(hoverTimer.current);
     setCalSel(null);   // a message row takes the panel back from an opened meeting
     want.current = row.MessageId; setPinned(!quiet);
     const p = fetchDetail(row);
@@ -847,7 +857,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const disarmClose = () => clearTimeout(leaveTimer.current);
   const armClose = () => {
     clearTimeout(leaveTimer.current);
-    if (pinned.current) return;
+    if (pinned.current || narrow) return;
     leaveTimer.current = setTimeout(() => {
       if (!pinned.current && !panelLock && !(editText ?? "").trim()) { clearTimeout(hoverTimer.current); setSel(null); }
     }, 400);
@@ -859,6 +869,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const [panelLock, setPanelLock] = useState(false);
   const hoverSelect = (row) => {
     clearTimeout(hoverTimer.current);
+    if (narrow) return;                                 // a phone taps; the drawer opens on the tap
     if (!hoverArmed.current) return;
     if (sel?.MessageId === row.MessageId) return;
     if (sel && ((editText ?? "").trim() || panelLock)) return;   // don't yank an OPEN panel mid-edit
@@ -977,6 +988,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
   const todayMeetings = timelineMeetings.filter((e) => localDay(e.start) === today).length;
   const stats = [{ label: "in today", n: todays.length + todayMeetings, f: "" }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
+    ...(narrow ? [] : [{ label: "needs me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true }]),
     { label: "info", n: todays.filter((r) => r.Category === "info").length, f: "" },
     { label: "promo", n: todays.filter((r) => r.Category === "promo").length, f: "" },
     { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
@@ -1012,9 +1024,15 @@ export default function FeedView({ onOpenTask, onChanged }) {
           {/* wraps: on a phone the pickers and New drop to a second row as one group, under the
               pill, instead of the whole row scrolling sideways */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: "wrap" }}>
-            <NeedsMe on={view === "pending"} n={(rows || []).filter(needsYou).length}
-              onClick={() => setView(view === "pending" ? "" : "pending")} />
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: "auto", minWidth: 0 }}>
+            {narrow
+              ? <NeedsMe on={view === "pending"} n={(rows || []).filter(needsYou).length}
+                  onClick={() => setView(view === "pending" ? "" : "pending")} />
+              : <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />}
+            {/* on a phone the pickers take a full second line and New sits beside the pill; from md
+                up the three share one line, right-aligned */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: { md: "auto" }, minWidth: 0,
+              order: { xs: 3, md: 2 }, flex: { xs: "1 1 100%", md: "0 0 auto" },
+              "& > .MuiInputBase-root": { flex: { xs: 1, md: "0 0 auto" } } }}>
             <Select size="small" value={cat} displayEmpty onChange={(e) => setCat(e.target.value)}
               inputProps={{ "aria-label": "Timeline category" }}
               renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "all kinds"}
@@ -1032,7 +1050,7 @@ export default function FeedView({ onOpenTask, onChanged }) {
                 : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
                   : String(v.split(":").slice(2).join(":")).split("@")[0])}
               sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
-                color: pick ? INK : DIM, flex: "0 0 104px", width: 104, minWidth: 104, maxWidth: 104,
+                color: pick ? INK : DIM, flex: { xs: 1, md: "0 0 104px" }, width: { md: 104 }, minWidth: 104, maxWidth: { md: 104 },
                 "& .MuiSelect-select": { py: 0.25, px: 1.15 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
               {/* 96 discovered buckets turned this into a page-long wall. It is a bounded,
@@ -1073,11 +1091,11 @@ export default function FeedView({ onOpenTask, onChanged }) {
             </Select>
             {/* New starts work, so it stays visually distinct, but it belongs on this toolbar —
                 not alone on a wasteful row above it. */}
+            </Box>
             <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
               startIcon={<AddIcon sx={{ fontSize: 15 }} />}
               sx={{ flexShrink: 0, height: 34, minWidth: 68, py: 0.25, px: 1.1, borderRadius: 2,
-                fontSize: 11.5, background: GRADIENT }}>New</Button>
-            </Box>
+                fontSize: 11.5, background: GRADIENT, order: { xs: 2, md: 3 }, ml: { xs: "auto", md: 0 } }}>New</Button>
           </Box>
 
           {/* The counts describe what is in the rail. The date and sync clock belong together
@@ -2087,7 +2105,7 @@ const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
               strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4" /></svg>
           </Box>
           <Box sx={{ display: "flex", flexShrink: 0 }}><ChannelIcon channel={head.Channel} sx={{ fontSize: 16 }} /></Box>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12, flexShrink: 0, maxWidth: 150 }}>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12, flexShrink: 1, minWidth: 56, maxWidth: 150 }}>
             {who.slice(0, 2).join(", ")}{who.length > 2 ? ` +${who.length - 2}` : ""}
           </Typography>
           <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
@@ -2123,7 +2141,7 @@ const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
             <Typography noWrap sx={{ fontSize: 11, color: FAINT, flex: 1, minWidth: 0 }}>
               {cleanText(String(m.Preview || m.Subject || ""))}
             </Typography>
-            <StateMark row={m} showWord={false} />
+            <StateMark row={m} showWord={stateMeta(st).loud && stateOf(m) === st} />
           </Box>
         ))}
       </Box>

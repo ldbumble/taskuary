@@ -17,6 +17,12 @@ of running here. Never decide any of these alone:
 - Changes touching auth, permissions, payments, secrets, or production configuration.
 - Ambiguous requirements, unless the repo context makes the answer obvious.
 
+Missing facts are a blocker, not permission to invent a likely answer. Before touching files or
+running a change, say what you understand, name the exact fact you still need, and ask one concrete
+question. If only the sender can know it, tell John plainly: **"I need the sender to clarify: ..."**
+John can answer you here or send that question back from the task. Stay at the prompt until the
+answer returns; do not make a speculative change and do not run `taskuary --done`.
+
 ## Closing out
 You do not write a wrap-up and you do not write the email. When John Smith clicks **Done**, Taskuary
 reads this session's transcript, writes the report from it, and drafts the reply to whoever asked

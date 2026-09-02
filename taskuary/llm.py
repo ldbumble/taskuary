@@ -104,21 +104,56 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
-    their OWN brain and model per job instead of riding the triage tier."""
-    pick = (pick if pick is not None else store.get_settings().get('triage_ai') or '').strip()
-    if pick.startswith('cli:'): return make_cli_llm(store, pick[4:], model, trace=trace, cancel=cancel, resume=resume)
-    want = pick[10:] if pick.startswith('connector:') else None
-    want_id = int(want) if want and want.isdigit() else None
-    for c in store.list_connectors():
-        # a local model server (ollama) is the one brain that needs no key to be real
-        ready = c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')
-        selected = not want or (c['ConnectorId'] == want_id if want_id is not None else c['Type'] == want)
-        if c['Type'] in AI_TYPES and ready and selected:
-            full = store.get_connector(c['ConnectorId'], with_secret=True)
-            cfg = json.loads(full.get('ConfigJson') or '{}')
-            if model: cfg = {**cfg, 'model': model}
-            return make_llm(full['Type'], cfg, full.get('Secret'))
-    return None
+    their OWN brain and model per job instead of riding the triage tier. The owner's ordered
+    backup-brain setting applies to both cases, but a fallback uses its own model and starts a
+    fresh conversation - provider-specific model/session identifiers never cross that line."""
+    settings = store.get_settings()
+    primary = str(pick if pick is not None else settings.get('triage_ai') or '').strip()
+    backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
+    picks = []
+    for candidate in [primary, *backups]:
+        if candidate not in picks: picks.append(candidate)
+
+    def one(candidate, first=False):
+        chosen_model, chosen_resume = (model, resume) if first else (None, None)
+        if candidate.startswith('cli:'):
+            return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
+                                resume=chosen_resume)
+        want = candidate[10:] if candidate.startswith('connector:') else None
+        want_id = int(want) if want and want.isdigit() else None
+        for c in store.list_connectors():
+            # a local model server (ollama) is the one brain that needs no key to be real
+            ready = c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')
+            selected = not want or (c['ConnectorId'] == want_id if want_id is not None else c['Type'] == want)
+            if c['Type'] in AI_TYPES and ready and selected:
+                full = store.get_connector(c['ConnectorId'], with_secret=True)
+                config = json.loads(full.get('ConfigJson') or '{}')
+                if chosen_model: config = {**config, 'model': chosen_model}
+                return make_llm(full['Type'], config, full.get('Secret'))
+        return None
+
+    brains = [(candidate, one(candidate, i == 0)) for i, candidate in enumerate(picks)]
+    brains = [(candidate, brain) for candidate, brain in brains if brain]
+    if not brains: return None
+    if len(brains) == 1: return brains[0][1]
+
+    def failover(system, user, **kwargs):
+        from .agents import availability_failure
+        last = None
+        for i, (candidate, brain) in enumerate(brains):
+            try:
+                out = brain(system, user, **kwargs)
+                failover.last_pick = candidate
+                failover.session_id = getattr(brain, 'session_id', None)
+                return out
+            except Exception as e:
+                last = e
+                if i == len(brains) - 1 or not availability_failure(e): raise
+                if trace: trace('progress', 'fallback',
+                                f'{candidate or "automatic AI"} is unavailable; trying {brains[i + 1][0]}')
+        raise last
+    failover.last_pick, failover.session_id = primary, resume
+    return failover
 
 
 def make_llm(t, cfg: dict, key: str):

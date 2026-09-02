@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { feedHeaders, feedOk, takeFeed } from "../src/feedLoad.js";
+import { feedHeaders, feedOk, takeFeed, threadDetail } from "../src/feedLoad.js";
 
 test("a first load sends no If-None-Match", () => {
   assert.deepEqual(feedHeaders(""), {});
@@ -24,4 +24,11 @@ test("axios must treat 304 as success or it would throw and dim the Timeline", (
   assert.equal(feedOk(200), true);
   assert.equal(feedOk(304), true);
   assert.equal(feedOk(500), false);
+});
+
+test("a taskless FYI reopens with its persisted reply draft", () => {
+  const review = { ReviewId: 9, Status: "pending", DraftText: "Feel better." };
+  assert.deepEqual(threadDetail({ messages: [{ MessageId: 3 }], reviews: [review] }), {
+    messages: [{ MessageId: 3 }], routes: [], reviews: [review],
+  });
 });

@@ -131,6 +131,11 @@ def _gist(body, n=180) -> str:
     from .triage import strip_boilerplate
     return _short(strip_boilerplate(_BANNER.sub('', str(body or ''))), n)
 
+
+def _reply_text(review: dict | None) -> str:
+    """The words that left through Review, never an unsent draft."""
+    return str((review or {}).get('FinalText') or (review or {}).get('DraftText') or '').strip()
+
 _OOO = re.compile(r'^(automatic reply|auto(matic)?[ -]?reply|out of (the )?office)', re.I)
 _UNTIL = re.compile(r'\b(until|through|returning( on)?|back (on|in the office on))\s+([A-Z][a-z]+day,?\s+)?([A-Z][a-z]+ \d{1,2}(st|nd|rd|th)?|\d{1,2}/\d{1,2}(/\d{2,4})?)', re.I)
 def ooo(store, days: int = 14) -> dict:
@@ -394,7 +399,26 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         who = next((c.get('FromName') or c.get('FromEmail') for c in reversed(chain) if not mine(c)), rs[0].get('FromName') or '?')
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None
-        head = (f"- {who} [{rs[0].get('Channel')}] re \"{_short(rs[0].get('Subject'), 60)}\" - {len(rs)} new, last word {'YOURS' if mine(last) else 'THEIRS'} {_when(last['SentAt'])}"
+        # A reply sent from Review has a durable send receipt there, but many channels do not
+        # ingest that outbound line back into `message` immediately. Without this virtual final
+        # message, the Assistant saw the finished task and the inbound ask, then confidently
+        # claimed "nobody told them" minutes after the owner had approved and sent the reply.
+        sent = store.sent_reply(task_id=tid) if tid else None
+        if not sent:
+            for c in reversed(chain):
+                sent = store.sent_reply(message_id=c['MessageId'])
+                if sent: break
+        sent_text = _reply_text(sent)
+        sent_at = (sent or {}).get('DecidedAt') or (sent or {}).get('CreatedAt')
+        # Do not print it twice once the channel has ingested the same outbound line as context.
+        sent_norm = ' '.join(sent_text.split()).casefold()
+        own_after = any(mine(c) and (
+            ' '.join(str(c.get('BodyText') or '').split()).casefold() == sent_norm
+            or (sent_at and _ts(c.get('SentAt')) >= _ts(sent_at))) for c in chain)
+        virtual_reply = bool(sent_text and not own_after)
+        last_mine = virtual_reply or mine(last)
+        last_at = sent_at if virtual_reply else last.get('SentAt')
+        head = (f"- {who} [{rs[0].get('Channel')}] re \"{_short(rs[0].get('Subject'), 60)}\" - {len(rs)} new, last word {'YOURS' if last_mine else 'THEIRS'} {_when(last_at)}"
                 + (f", {task_ref(tid)} {t.get('Kind')} {t.get('Status')}" if t else '') + f" (latest mid {rs[0]['MessageId']})")
         first = lambda c: ((c.get('FromName') or c.get('FromEmail') or '?').split(',')[0].split() or ['?'])[0]
         def quote(c):
@@ -404,6 +428,8 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
             return (f"    {'you' if mine(c) else first(c)} {_when(c['SentAt'])[:6]}: \"{_gist(c.get('BodyText'), 150)}\""
                     + (f" [attachments: {files}]" if files else ''))
         quotes = [quote(c) for c in chain]
+        if virtual_reply:
+            quotes.append(f"    you {_when(sent_at)[:6]}: \"{_gist(sent_text, 150)}\" [reply sent from Review]")
         block = '\n'.join([head] + [q for q in quotes if not q.endswith(': ""')])
         if used + len(block) > PEOPLE_CHARS: break
         out.append(block); used += len(block); mids += [c['MessageId'] for c in chain]
@@ -508,6 +534,34 @@ def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
         seen.add(key)
         if len(out) >= max_lines: break
     return out
+
+
+_UNANSWERED_CLAIM = re.compile(
+    r"\b(no (?:reply|response|answer)|nobody (?:told|replied|answered)|"
+    r"has(?:n['’]?t| not) (?:been )?(?:told|answered)|"
+    r"(?:i['’]?d|would) (?:reply|answer)|ask (?:him|her|them) to retry)\b", re.I)
+
+
+def sent_reply_for(store, line: dict) -> dict | None:
+    """Find the successful send behind an idea, including another message in its task thread."""
+    action = line.get('action') or {}
+    mid, tid = action.get('mid'), action.get('tid')
+    reply = store.sent_reply(message_id=mid) if mid else None
+    if not tid and mid:
+        message = store.get_message(mid)
+        tid = (message or {}).get('TaskId')
+    return reply or (store.sent_reply(task_id=tid) if tid else None)
+
+
+def contradicts_sent_reply(store, line: dict) -> bool:
+    """Reject a model idea whose premise is disproved by an actual send receipt.
+
+    The full reply is also put into the model's people context. This is the final factual gate:
+    a model may overlook context, but Taskuary must not publish "nobody replied" when its own
+    Review table records the exact response and the successful decision.
+    """
+    if not _UNANSWERED_CLAIM.search(str(line.get('text') or '')): return False
+    return bool(sent_reply_for(store, line))
 
 
 def _ids(raw) -> list[int]:
@@ -896,7 +950,8 @@ def _run(store, llm, instruction) -> dict:
     # the state is read AGAIN here: another process may have posted while the model was thinking, and a
     # model echoing a dismissed key changes nothing
     state = {i['Key']: i for i in store.list_ideas()}
-    say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say if fresh(state, s, now)]
+    say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say
+           if fresh(state, s, now) and not contradicts_sent_reply(store, s)]
     rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {'notes': note}
     if not say: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': read}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')

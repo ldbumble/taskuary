@@ -71,6 +71,25 @@ class TheEnvironmentAChildGetsTests(unittest.TestCase):
 
 
 class WhichAgentWorkTests(unittest.TestCase):
+    def test_default_backup_chain_uses_every_other_configured_agent(self):
+        s = MemoryStore()
+        _agent(s, 'coder', 'claude')
+        _agent(s, 'codex', 'codex')
+        _agent(s, 'gemini', 'gemini')
+        s.set_setting('default_agent', 'coder', 'o')
+        self.assertEqual(agents.agent_chain(s), ['coder', 'codex', 'gemini'])
+
+    def test_explicit_backup_chain_keeps_the_owners_order(self):
+        s = MemoryStore()
+        for name in ('coder', 'codex', 'gemini'): _agent(s, name, name)
+        s.set_setting('backup_agents', 'gemini,codex', 'o')
+        self.assertEqual(agents.agent_chain(s, 'coder'), ['coder', 'gemini', 'codex'])
+
+    def test_session_and_usage_limits_are_availability_failures(self):
+        self.assertTrue(agents.availability_failure(RuntimeError("You've hit your session limit; resets 11:50am")))
+        self.assertTrue(agents.availability_failure(RuntimeError('rate limit exceeded')))
+        self.assertFalse(agents.availability_failure(RuntimeError('tests failed after editing three files')))
+
     def test_the_owners_default_wins_when_its_cli_is_here(self):
         s = MemoryStore()
         _agent(s, 'coder', 'claude')

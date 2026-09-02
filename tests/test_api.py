@@ -259,6 +259,25 @@ class ApiTests(unittest.TestCase):
         js = r.text.split('assets/')[1].split('"')[0]
         self.assertEqual(c.get(f'/assets/{js}').status_code, 200)
 
+    def test_failed_triage_can_retry_once_without_duplicate_tasks(self):
+        mid = server.store.add_message({'ExternalId': 'retry-triage-unique-93f2', 'Channel': 'email',
+                                        'ConversationId': 'retry-triage-conversation-93f2',
+                                        'Subject': 'zz-retriage-unique-93f2',
+                                        'BodyText': 'Please perform zz-retriage-unique-93f2.',
+                                        'FromEmail': 'retry@work.example', 'Status': 'filed'})
+        server.store.add_route(mid, None, 'file', None,
+                               'AI triage returned an answer it could not read as a verdict - filed rather than assumed to be work',
+                               [], 'triage', raw_output='maybe a task', parse_error='JSONDecodeError')
+        verdict = lambda *args, **kwargs: '{"intent":"task","kind":"task","why":"the owner must do it"}'
+        with mock.patch.object(server, '_llm', return_value=verdict):
+            first = c.post(f'/api/messages/{mid}/retriage')
+            second = c.post(f'/api/messages/{mid}/retriage')
+        self.assertEqual(first.status_code, 200)
+        tid = first.json()['task_id']
+        self.assertIsNotNone(tid)
+        self.assertEqual((server.store.get_message(mid)['TaskId'], server.store.get_task(tid)['Kind']), (tid, 'task'))
+        self.assertEqual(second.status_code, 409)
+
     def test_task_crud_and_board(self):
         tid = c.post('/api/tasks', json={'Title': 'do the thing'}).json()['taskId']
         self.assertTrue(any(t['TaskId'] == tid for t in c.get('/api/tasks').json()['data']))
@@ -812,6 +831,34 @@ class ApiTests(unittest.TestCase):
                     if r['MessageId'] == push2['message_id'])
         self.assertTrue(row2['CanSend'])                       # email always has a road
 
+    def test_a_waiting_agent_can_ask_the_sender_and_leave_the_task_waiting(self):
+        """Clarification is a separate reviewed reply, not the coder's final response. Sending
+        it must leave the coding task open and any other pending review alone."""
+        tid = server.store.create_task({'Title': 'Dashboard', 'Kind': 'coding', 'Status': 'in_progress'}, 'test')
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'clarify1', 'Channel': 'email',
+                                        'Subject': 'Dashboard', 'BodyText': 'Can you add the distribution spreadsheet?',
+                                        'FromEmail': 'rachel@work.example', 'Status': 'routed'})
+        # Keep another review on the task: the clarification must not overwrite/reuse it.
+        other_id = server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'action',
+                                            'Status': 'pending', 'DraftText': 'TASKUARY-PROPOSE {}'})
+        q = 'Which distribution spreadsheet and which dashboard should I use?'
+        out = c.post(f'/api/tasks/{tid}/clarify', json={'body': q, 'message_id': mid})
+        self.assertEqual(out.status_code, 200)
+        rid = out.json()['reviewId']
+        self.assertNotEqual(rid, other_id)
+        rv = server.store.get_review(rid)
+        self.assertEqual((rv['Kind'], rv['DraftText'], rv['MessageId']), ('clarification', q, mid))
+        with mock.patch.object(server.outbound, 'reply_to_message',
+                               return_value={'channel': 'email', 'to': ['rachel@work.example']}):
+            sent = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': q}).json()
+        self.assertEqual(sent['status'], 'approved')
+        self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
+
+    def test_a_sender_question_needs_a_real_message_and_nonblank_text(self):
+        tid = c.post('/api/tasks', json={'Title': 'local task', 'Kind': 'coding'}).json()['taskId']
+        self.assertEqual(c.post(f'/api/tasks/{tid}/clarify', json={'body': 'Who owns this?'}).status_code, 422)
+        self.assertEqual(c.post(f'/api/tasks/{tid}/clarify', json={'body': '   '}).status_code, 422)
+
     def test_a_failed_send_returns_the_review_to_the_queue(self):
         """The Image-#5 bug: a Teams send died on permissions but the card read 'approved' and
         the task closed - an answer that never left the machine, dressed as finished. Now the
@@ -940,6 +987,47 @@ class ApiTests(unittest.TestCase):
         self.assertEqual((row['NeedsYou'], row['TaskId']), (1, out['taskId']))
         # clicking it twice must not spawn a second task
         self.assertEqual(c.post(f'/api/messages/{mid}/mine', json={}).json()['taskId'], out['taskId'])
+
+    def test_promoting_a_filed_fyi_writes_visible_memory_evidence(self):
+        """The promotion always fed the AI learning pass, but Settings -> Memory stayed empty.
+        The MEMORY badge on the button must describe a concrete, immediately readable record."""
+        mid = server.store.add_message({'ExternalId': 'promoted-fyi-memory', 'Channel': 'email',
+                                        'Subject': 'Avid import failed', 'FromEmail': 'tova@vendor.example',
+                                        'SentAt': '2026-09-02 11:41', 'BodyText': 'The bank import errored.',
+                                        'Status': 'filed'})
+        before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
+        with mock.patch.object(server.learn, 'learn_from') as distilled:
+            out = c.post(f'/api/messages/{mid}/mine', json={}).json()
+        made = [m for m in server.store.list_memories(active_only=False) if m['MemoryId'] not in before]
+        self.assertEqual(len(made), 1)
+        self.assertEqual((made[0]['Source'], made[0]['Scope']), ('verdict', 'subject'))
+        self.assertIn('MADE A TASK', made[0]['Note'])
+        self.assertIn(f"mem{made[0]['MemoryId']}", server.store.get_doc('learned'))
+        self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])
+        distilled.assert_called_once()
+
+    def test_a_taskless_fyi_reply_and_manual_edits_survive_reopening(self):
+        mid = server.store.add_message({'ExternalId': 'teams:fyi-reply', 'Channel': 'teams',
+                                        'ConversationId': 'chat-fyi', 'Subject': 'Team update',
+                                        'FromName': 'Mindy', 'BodyText': 'Taking today off.', 'Status': 'filed'})
+        opened = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()
+        rid = opened['reviewId']
+        self.assertEqual(opened['draft'], '')
+        self.assertEqual(c.patch(f'/api/reviews/{rid}', json={'body': 'Feel better. Talk tomorrow.'}).status_code, 200)
+        detail = c.get(f'/api/messages/{mid}/thread').json()
+        self.assertEqual(detail['reviews'][0]['ReviewId'], rid)
+        self.assertEqual(detail['reviews'][0]['DraftText'], 'Feel better. Talk tomorrow.')
+        self.assertEqual(server.store.feed()[0]['HasDraft'], 1)
+
+    def test_generate_with_ai_works_for_a_taskless_fyi_reply(self):
+        mid = server.store.add_message({'ExternalId': 'teams:fyi-generate', 'Channel': 'teams',
+                                        'ConversationId': 'chat-fyi-ai', 'Subject': 'Team update',
+                                        'FromName': 'Mindy', 'BodyText': 'Taking today off.', 'Status': 'filed'})
+        rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
+        with mock.patch.object(server.responder, 'draft_for_message', return_value='Feel better soon.') as draft:
+            out = c.post(f'/api/reviews/{rid}/draft').json()
+        self.assertEqual(out['draft'], 'Feel better soon.')
+        self.assertEqual(draft.call_args.args[2], rid)
 
     def test_handoff_drafts_then_sends(self):
         tid = c.post('/api/tasks', json={'Title': 'AD account for Christina'}).json()['taskId']

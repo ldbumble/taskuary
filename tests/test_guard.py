@@ -21,7 +21,8 @@ class DenyListTests(unittest.TestCase):
         for method, path in (('POST', '/api/reviews/12/decide'),        # approving IS sending
                              ('POST', '/api/tasks/7/handoff'),          # forwards to a person
                              ('POST', '/api/outbox'),                   # starts an outbound message
-                             ('POST', '/api/messages/3/reply')):        # opens one
+                             ('POST', '/api/messages/3/reply'),         # opens one
+                             ('POST', '/api/tasks/7/clarify')):         # opens a sender clarification
             self.assertTrue(guard.denied(method, path), f'{method} {path} must be refused')
 
     def test_widening_its_own_reach_is_refused_too(self):

@@ -26,38 +26,50 @@ def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
 
 def profile(store) -> dict:
     st, own = store.get_settings(), store.owner()
-    conns = {c['Type']: c for c in store.list_connectors()}
+    # A connector type is not an identity. People commonly have work + personal GitHub cards
+    # (and can have multiple mailboxes or bots); keying this by Type silently kept only the last
+    # row returned by SQLite. Keep every card and name it in the provenance so equal-looking
+    # identities are still understandable on the About You page.
+    conns = {}
+    for c in store.list_connectors():
+        conns.setdefault(c['Type'], []).append(c)
+    cards = lambda typ: conns.get(typ, [])
+    card_name = lambda c, label: f'{label} card "{c.get("Name") or c.get("ConnectorId")}"'
     srcs = store.list_sources(active_only=False)
     ids = []
     add = lambda channel, kind, value, source, **kw: value and ids.append({'channel': channel, 'kind': kind, 'value': str(value), 'source': source, **kw})
     add('email', 'address', own.get('owner_email'), 'your owner address (Docs / here)', primary=True)
-    o = conns.get('outlook')
-    if o and o.get('Active') and _cfg(o).get('auth') == 'user':
-        oc = _cfg(o); add('email', 'Microsoft account', oc.get('account'), 'Sign in with Microsoft on the Outlook card', name=oc.get('name'))
+    for o in cards('outlook'):
+        if o.get('Active') and _cfg(o).get('auth') == 'user':
+            oc = _cfg(o); add('email', 'Microsoft account', oc.get('account'),
+                              f'Sign in with Microsoft on the {card_name(o, "Outlook")}', name=oc.get('name'))
     for s in srcs:
         ch, a = s.get('Channel'), (s.get('Address') or '').strip()
         if not a or a == '*': continue
         if ch == 'email': add('email', 'mailbox', a, 'a mailbox under Sources' + ('' if s.get('Active') else ' (off)'))
         elif ch == 'teams': add('teams', 'UPN' if '@' in a else 'chat id', a, 'the Teams card, under Sources')
     for t, kind in (('telegram', 'your chat id'), ('whatsapp', 'your chat (JID)'), ('teams', 'notify chat id')):
-        c = conns.get(t)
-        if c and _cfg(c).get('notify_chat'): add(t, kind, _cfg(c)['notify_chat'], f'notify chat on the {t} card - where pings and your verdicts go')
+        for c in cards(t):
+            if _cfg(c).get('notify_chat'):
+                add(t, kind, _cfg(c)['notify_chat'], f'notify chat on the {card_name(c, t)} - where pings and your verdicts go')
     # the paired WhatsApp account IS a phone number - read live off the bridge, best effort
-    wa = conns.get('whatsapp')
-    if wa and wa.get('Active'):
-        try:
-            from .messengers import wa_status
-            ws = wa_status(store.get_connector(wa['ConnectorId'], with_secret=True))
-            if ws.get('connected') and (ws.get('phone') or ws.get('jid')): add('whatsapp', 'your number', ws.get('phone') or ws.get('jid'), 'the WhatsApp account paired to the bridge', name=ws.get('me'))
-            # a bridge started before bridge.mjs learned to report the jid answers without one - say so instead of nothing
-            elif ws.get('connected'): add('whatsapp', 'your number', f"paired as {ws.get('me') or 'you'} - restart the bridge (WhatsApp card) to read the number", 'the bridge is running older code than the one on disk')
-        except Exception: pass                                   # bridge down: the row is simply absent
-    tg = conns.get('telegram')
-    if tg and tg.get('Active') and not _cfg(tg).get('bot_username'): _learn_telegram(store, tg)
-    if tg and _cfg(tg).get('bot_username'): add('telegram', 'your bot', '@' + _cfg(tg)['bot_username'], 'the Telegram card (getMe)')
-    gh = conns.get('github')
-    if gh and gh.get('Active') and not _cfg(gh).get('login'): _learn_github(store, gh)
-    if gh and _cfg(gh).get('login'): add('github', 'login', _cfg(gh)['login'], 'the GitHub card - who the PAT authenticates as')
+    for wa in cards('whatsapp'):
+        if wa.get('Active'):
+            try:
+                from .messengers import wa_status
+                ws = wa_status(store.get_connector(wa['ConnectorId'], with_secret=True))
+                if ws.get('connected') and (ws.get('phone') or ws.get('jid')): add('whatsapp', 'your number', ws.get('phone') or ws.get('jid'), f'the WhatsApp account paired through {card_name(wa, "WhatsApp")}', name=ws.get('me'))
+                # a bridge started before bridge.mjs learned to report the jid answers without one - say so instead of nothing
+                elif ws.get('connected'): add('whatsapp', 'your number', f"paired as {ws.get('me') or 'you'} - restart the bridge (WhatsApp card) to read the number", 'the bridge is running older code than the one on disk')
+            except Exception: pass                               # bridge down: the row is simply absent
+    for tg in cards('telegram'):
+        if tg.get('Active') and not _cfg(tg).get('bot_username'): _learn_telegram(store, tg)
+        if _cfg(tg).get('bot_username'):
+            add('telegram', 'your bot', '@' + _cfg(tg)['bot_username'], f'{card_name(tg, "Telegram")} (getMe)')
+    for gh in cards('github'):
+        if gh.get('Active') and not _cfg(gh).get('login'): _learn_github(store, gh)
+        if _cfg(gh).get('login'):
+            add('github', 'login', _cfg(gh)['login'], f'{card_name(gh, "GitHub")} - who its PAT authenticates as')
     add('telegram', 'handle', st.get('owner_telegram'), 'you typed it here')
     add('whatsapp', 'phone', st.get('owner_phone'), 'you typed it here')
     add('slack', 'handle', st.get('owner_slack'), 'you typed it here')

@@ -41,6 +41,40 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['Status'], 'pending')      # back in the queue
         self.assertNotEqual(s.get_task(tid)['Status'], 'done')
 
+    def test_sent_manual_reply_closes_coding_task_and_stops_its_agent(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'bank transfer', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'manual-answer', 'Channel': 'email',
+                             'Subject': 'Bank transfer', 'BodyText': 'Can you automate this?',
+                             'FromEmail': 'sender@work.example', 'Status': 'routed'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                            'DraftText': 'We do not have that bank yet.'})
+        live = mock.Mock(sid='live-coder', alive=True)
+        with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': []}), \
+             mock.patch.object(terminal, 'session_for', return_value=live), \
+             mock.patch.object(terminal, 'close', return_value=True) as close:
+            out = verdicts.decide(s, s.get_review(rid), 'approve')
+        self.assertEqual(out['status'], 'approved')
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        close.assert_called_once_with('live-coder')
+
+    def test_sent_clarification_stops_agent_but_leaves_task_waiting(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'unclear dashboard', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'clarify-answer', 'Channel': 'email',
+                             'Subject': 'Dashboard', 'BodyText': 'Add the spreadsheet.',
+                             'FromEmail': 'sender@work.example', 'Status': 'routed'})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'clarification', 'Status': 'pending',
+                            'DraftText': 'Which spreadsheet and dashboard?'})
+        live = mock.Mock(sid='blocked-coder', alive=True)
+        with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': []}), \
+             mock.patch.object(terminal, 'session_for', return_value=live), \
+             mock.patch.object(terminal, 'close', return_value=True) as close:
+            out = verdicts.decide(s, s.get_review(rid), 'approve')
+        self.assertEqual(out['status'], 'approved')
+        self.assertEqual(s.get_task(tid)['Status'], 'waiting')
+        close.assert_called_once_with('blocked-coder')
+
 
 def arm_phone(s):
     s.set_setting('phone_approvals', '1', 't')

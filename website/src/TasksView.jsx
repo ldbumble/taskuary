@@ -20,7 +20,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting, TaskuaryMark } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
@@ -29,6 +29,9 @@ import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import { Divider, ListItemIcon, ListItemText, Menu } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 
@@ -87,6 +90,7 @@ const PRIORITIES = ["low", "normal", "high", "urgent"];
 // gets the responder and the Review queue, general gets the visual conversation. Keep the
 // explicit non-coding label: calling this only "assistant" hid the option the owner asked for.
 const KIND_OPTIONS = [
+  { key: "task", label: "to do", hint: "a task on your list; start an agent only when you choose to" },
   { key: "general", label: "general / non-coding", hint: "research, writing, analysis, planning, and other assistant work" },
   { key: "coding", label: "coding", hint: "the configured CLI in a repository terminal" },
   { key: "reply", label: "reply", hint: "draft an answer for approval in Review" },
@@ -126,8 +130,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const { agents, models } = useAgents();
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
-  const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
+  const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
+  const [startingAgent, setStartingAgent] = useState("");
   const [continueOpen, setContinueOpen] = useState(false);
   const [continueText, setContinueText] = useState("");
   const [continuing, setContinuing] = useState(false);
@@ -142,6 +147,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const sessionSettleUntil = useRef(0);
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
   const [feedOpen, setFeedOpen] = useState(false);   // Feed the agent, for THIS task
+  const [askSenderOpen, setAskSenderOpen] = useState(false);
+  const [senderQuestion, setSenderQuestion] = useState("");
+  const [askingSender, setAskingSender] = useState(false);
   const waitingN = (tasks || []).find((x) => x.TaskId === selected)?.Waiting || 0;   // prompts in this task's funnel
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
@@ -210,7 +218,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const { repo, ...fields } = nt;
     const tags = [repo && nt.Kind === "coding" ? `repo:${repo}` : "", ask ? ASK_TAG : ""].filter(Boolean);
     const { data } = await api.post("/api/tasks", { ...fields, ...(tags.length ? { Tags: tags.join(",") } : {}) });
-    setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "general", Priority: "normal" });
+    setNewOpen(false); setNt({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
     setFilter("live"); loadTasks(); onSelect(data.taskId);
   };
   const queueNote = async () => {
@@ -260,7 +268,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not pause the session"); }
     if (!stale(id)) setWrapping(false);
   };
-  useEffect(() => { setWrapping(false); setWrapped(null); }, [selected]);
+  useEffect(() => {
+    setWrapping(false); setWrapped(null);
+    setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false);
+  }, [selected]);
   useEffect(() => { setContinueOpen(false); setContinueText(""); setContinuing(false); }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
@@ -404,12 +415,80 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
   const liveCodingSession = !isGeneral && !!term?.alive;
+  const agentWaiting = liveCodingSession && isWaiting(term);
   const pendingReview = (detail?.reviews || []).find((r) => r.Status === "pending");
+  // A successful Review send is the reply even before (or when) the external channel ingests an
+  // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
+  // message; otherwise completed tasks showed one inbound message and claimed that was the whole
+  // exchange while Notes separately said "Sent by email".
+  const storedMessages = detail?.messages || [];
+  const ownBodies = new Set(storedMessages
+    .filter((m) => m.Status === "context" || m.Direction === "out")
+    .map((m) => cleanText(m.BodyText)));
+  const reviewMessages = (detail?.reviews || [])
+    .filter((r) => ["approved", "edited", "sent"].includes(r.Status) && r.Kind !== "action")
+    .map((r) => ({
+      MessageId: `review:${r.ReviewId}`, ReviewSent: true, Direction: "out", Status: "context",
+      Channel: storedMessages.find((m) => m.MessageId === r.MessageId)?.Channel || t?.Source || "email",
+      FromName: "You", SentAt: r.DecidedAt || r.CreatedAt,
+      Subject: storedMessages.find((m) => m.MessageId === r.MessageId)?.Subject || "Reply",
+      BodyText: r.FinalText || r.DraftText || "",
+    }))
+    .filter((m) => cleanText(m.BodyText) && !ownBodies.has(cleanText(m.BodyText)));
+  const taskMessages = [...storedMessages, ...reviewMessages]
+    .sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt));
+  const sourceMessage = [...storedMessages].reverse()
+    .find((m) => m.Status !== "context" && m.Direction !== "out");
+  const askSender = async () => {
+    const text = senderQuestion.trim();
+    if (!selected || !sourceMessage?.MessageId || !text || askingSender) return;
+    const id = selected;
+    setAskingSender(true); setErr("");
+    try {
+      await api.post(`/api/tasks/${id}/clarify`, { body: text, message_id: sourceMessage.MessageId });
+      if (stale(id)) return;
+      setAskSenderOpen(false); setSenderQuestion("");
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.(); onGoReview?.();
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not prepare the question for the sender");
+    } finally { if (!stale(id)) setAskingSender(false); }
+  };
+  // The task itself leads when no coding terminal is open. Triage already distilled an inbound
+  // item into Title + Summary; falling back to its newest inbound body keeps older/promoted rows
+  // equally useful. This is the human TODO, not an agent-launch advertisement.
+  const taskAsk = cleanText(t?.Summary || sourceMessage?.BodyText || "");
   // A completed report is stronger evidence than an old in_progress value. This covers the few
   // seconds while the reply is being drafted, and old rows left behind by that former race.
   const effectiveStatus = t?.Status === "in_progress" && report && !liveCodingSession && !liveRun
     ? (pendingReview ? "waiting" : "done") : t?.Status;
   const displayTask = t ? { ...t, Status: effectiveStatus } : t;
+  const startCodingAgent = async () => {
+    if (!selected || startingAgent) return;
+    const id = selected;
+    setStartingAgent("coding"); setErr("");
+    try {
+      if (t.Kind !== "coding") await api.patch(`/api/tasks/${id}`, { Kind: "coding" });
+      if (!stale(id)) await openTerm({ agent: run.agent, model: run.model || null,
+        task_id: id, repo: repoOf(t), seed: true });
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the coding agent");
+    } finally { if (!stale(id)) setStartingAgent(""); }
+  };
+  const startGeneralAgent = async () => {
+    if (!selected || startingAgent || isGeneral) return;
+    const id = selected;
+    setStartingAgent("general"); setErr("");
+    try {
+      const tags = String(t.Tags || "").split(/[\s,]+/).filter(Boolean);
+      if (!tags.includes(ASK_TAG)) tags.push(ASK_TAG);
+      await api.patch(`/api/tasks/${id}`, { Kind: "general", Tags: tags.join(",") });
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the non-coding agent");
+    } finally { if (!stale(id)) setStartingAgent(""); }
+  };
   useEffect(() => { if (!liveCodingSession) setFeedOpen(false); }, [liveCodingSession]);
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
@@ -517,16 +596,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Tooltip title="Queue prompts for this task's agent - one or a whole list; they land one per stop, never mid-turn">
                       <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
                         sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" }, px: 1.25 }}>
-                        ✎ Feed the agent{waitingN > 0 ? ` · ${waitingN} queued` : ""}
+                        ✎ {agentWaiting ? "Answer agent" : "Feed agent"}{waitingN > 0 ? ` · ${waitingN} queued` : ""}
                       </Button>
                     </Tooltip>
                   )}
-                  {effectiveStatus !== "done" && !liveCodingSession && (
-                    <Tooltip title="I took care of it — close the task and wrap anything running">
-                      <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
-                        sx={{ color: "#47654a", borderColor: "#47654a66", px: 1.25,
-                          "&:hover": { borderColor: "#47654a", bgcolor: "#f0faf4" } }}
-                        onClick={() => patch({ Status: "done" })}>Mark done</Button>
+                  {sourceMessage && onGoReview && (
+                    <Tooltip title="Draft a reply or clarification to the original sender; nothing leaves until you approve it in Review">
+                      <Button size="small" variant="outlined" onClick={() => setAskSenderOpen(true)}>
+                        {agentWaiting ? "Ask sender" : "Reply to sender"}
+                      </Button>
                     </Tooltip>
                   )}
                   <Tooltip title="Hand off, split or merge, pick the repo, not a task…">
@@ -564,10 +642,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* the meta row carries the knobs. Kind is a CONTROL, not a caption: "this is not
                     a coding task" is said here, and saying reply routes it to the Review queue */}
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1 }}>
-                  <Select value={t.Kind || "general"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
+                  <Select value={t.Kind || "task"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
                     renderValue={kindLabel}
                     title="Assistant is the visual chat over your configured agent; coding is its repository terminal; reply creates a draft in Review">
-                    {(KINDS.includes(t.Kind || "general") ? KIND_OPTIONS
+                    {(KINDS.includes(t.Kind || "task") ? KIND_OPTIONS
                       : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
                       <MenuItem key={o.key} value={o.key} sx={{ py: 0.6 }}>
                         <ListItemText primary={o.label} secondary={o.hint}
@@ -596,6 +674,67 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     result of the work is the thing you are looking at */}
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
+                {!liveCodingSession && (
+                  <Box sx={{ ...card, mb: 1.25, p: 1.4, bgcolor: "#fff", flexShrink: 0 }}>
+                    <Box sx={{ display: "flex", gap: 1.15, alignItems: "flex-start" }}>
+                      <Tooltip title={effectiveStatus === "done" ? "Completed" : "Mark this task done"}>
+                        <span>
+                          <IconButton size="small" disabled={["done", "dropped"].includes(effectiveStatus)}
+                            onClick={() => patch({ Status: "done" })} sx={{ mt: -0.35, color: "#6f8a6e" }}>
+                            {effectiveStatus === "done"
+                              ? <CheckCircleOutlineIcon sx={{ fontSize: 22 }} />
+                              : <RadioButtonUncheckedIcon sx={{ fontSize: 22 }} />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="overline" sx={{ color: ACCENT2, fontSize: 9.5,
+                          fontWeight: 750, letterSpacing: 1.5, lineHeight: 1.2 }}>To do</Typography>
+                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
+                          {t.Title}
+                        </Typography>
+                        {taskAsk && (
+                          <Typography variant="body2" sx={{ color: DIM, mt: 0.45, lineHeight: 1.55,
+                            whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: 900,
+                            display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                            {taskAsk}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap", mt: 0.7 }}>
+                          {sourceMessage && <Typography variant="caption" sx={{ color: FAINT }}>
+                            from {sourceMessage.FromName || sourceMessage.FromEmail || sourceMessage.Channel}
+                          </Typography>}
+                          {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
+                            label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
+                            sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
+                        </Box>
+                      </Box>
+                    </Box>
+                    {!["done", "dropped"].includes(effectiveStatus) && (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap",
+                        mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                        <Typography variant="caption" sx={{ color: FAINT, fontWeight: 650, mr: 0.25 }}>Work it with</Typography>
+                        <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
+                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
+                          onModel={(m) => setRun({ ...run, model: m })} size={26} />
+                        <Button size="small" variant="outlined" disabled={!!startingAgent}
+                          startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
+                          onClick={startCodingAgent} sx={{ fontSize: 11.5 }}>
+                          {startingAgent === "coding" ? "Starting…" : "Coding agent"}
+                        </Button>
+                        <Button size="small" variant={isGeneral ? "contained" : "outlined"}
+                          disabled={!!startingAgent || isGeneral}
+                          startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
+                          onClick={startGeneralAgent} sx={{ fontSize: 11.5 }}>
+                          {isGeneral ? "Non-coding agent active" : startingAgent === "general" ? "Starting…" : "Non-coding agent"}
+                        </Button>
+                        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 180 }}>
+                          Both receive this task's incoming messages and attachments.
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                )}
                 {repoPick && (
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
@@ -725,40 +864,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       onClick={onGoReview}>Open it in Review</Button>
                     {!isGeneral && (
                       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
-                        Something to look into first? <Box component="span" onClick={() => openTerm({ agent: run.agent, model: run.model || null, task_id: selected, repo: repoOf(t), seed: true })}
+                        Something to look into first? <Box component="span" onClick={startCodingAgent}
                           sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Start a session</Box> — the draft waits.
                       </Typography>
                     )}
                   </Box>
-                ) : (
-                  <Box sx={{ ...card, p: 2, textAlign: "center", bgcolor: PANEL2 }}>
-                    <Typography variant="body2" sx={{ color: DIM, mb: 1.25 }}>
-                      Start your CLI on this task — a real session in {repoOf(t) || "the agent's folder"}: its own
-                      prompts, its questions, your keystrokes.
-                    </Typography>
-                    {liveRun && (
-                      <Typography variant="caption" sx={{ color: "#55697a", display: "block", mb: 1.25 }}>
-                        {liveRun.AgentName} has a run going on this task (run {liveRun.RunId}) — watch it under Earlier
-                        runs below. Starting a session here puts a second agent on the same task.
-                      </Typography>
-                    )}
-                    <Box sx={{ display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap" }}>
-                      <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
-                        onAgent={(a) => setRun({ ...run, agent: a, model: "" })} onModel={(m) => setRun({ ...run, model: m })} />
-                      <Button variant="contained" size="small" disableElevation startIcon={<TerminalIcon sx={{ fontSize: 15 }} />}
-                        onClick={() => openTerm({ agent: run.agent, model: run.model || null, task_id: selected,
-                          repo: repoOf(t), seed: true })}>
-                        Start session
-                      </Button>
-                    </Box>
-                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-                      Everything the agent does happens here, in the open — you can read it, interrupt it and answer it.
-                    </Typography>
+                ) : detail?.transcript ? (
+                  <Box sx={{ ...card, p: 1.25, bgcolor: PANEL2 }}>
                     {/* An earlier session finished and its terminal is long gone, but the work it
                         did is still un-closed-out. The transcript outlives the pty, so the two
                         buttons that were only ever on the terminal strip belong here too. */}
-                    {detail?.transcript && (
-                      <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px dashed ${BORDER}` }}>
+                      <Box>
                         <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75 }}>
                           A {detail.transcript.agent || "coder"} session ran this task on{" "}
                           {fmtDateTime(detail.transcript.at)} and its terminal has since closed — what it
@@ -779,9 +895,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           </Button>
                         </Box>
                       </Box>
-                    )}
                   </Box>
-                )}
+                ) : null}
 
                 {/* The completed outcome is the first permanent record below the session. Lead
                     with Result; determination and actions are evidence, not the punchline. */}
@@ -837,14 +952,23 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Fold>
                 )}
 
-                <Fold title={`Messages · ${detail.messages.length}`}>
-                  {detail.messages.map((m) => {
+                <Fold title={`Messages · ${taskMessages.length}`}>
+                  {taskMessages.map((m) => {
                     const route = detail.routes.find((r) => r.MessageId === m.MessageId);
+                    const mine = m.Status === "context" || m.Direction === "out";
                     return (
-                      <Box key={m.MessageId} sx={{ mb: 0.75, p: 1, bgcolor: PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
+                      <Box key={m.MessageId} sx={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", mb: 0.85 }}>
+                      <Box sx={{ width: "fit-content", maxWidth: { xs: "96%", md: "84%" }, p: 1.15,
+                        bgcolor: mine ? "#e9e3d8" : "#fff",
+                        borderRadius: mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                        border: `1px solid ${mine ? "#d8d0c4" : BORDER}`,
+                        borderLeft: `3px solid ${mine ? "#8a7a5c" : "#6f8a6e"}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
                           <ChannelIcon channel={m.Channel} sx={{ color: FAINT }} />
-                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{m.FromName || m.FromEmail}</Typography>
+                          <Chip size="small" label={m.ReviewSent ? "sent reply" : mine ? "your reply" : "inbound"}
+                            sx={{ height: 17, fontSize: 9.5, fontWeight: 700,
+                              bgcolor: mine ? "#f1ead9" : "#edf3ea", color: mine ? "#6b5f45" : "#47654a" }} />
+                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{mine ? "you" : m.FromName || m.FromEmail}</Typography>
                           {m.SourceName && <Typography variant="caption" sx={{ color: FAINT }}>· {m.SourceName}</Typography>}
                           <Typography variant="caption" sx={{ color: FAINT }}>· {fmtDateTime(m.SentAt)}</Typography>
                           {m.SourceLink && <Link href={m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>source</Link>}
@@ -862,11 +986,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             ? <Md text={cleanText(m.BodyText)} />
                             : <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{cleanText(m.BodyText)}</Typography>}
                         </Box>
-                        <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} dense />
+                        {!m.ReviewSent && <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} dense />}
+                      </Box>
                       </Box>
                     );
                   })}
-                  {!detail.messages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
+                  {!taskMessages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
                 </Fold>
 
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
@@ -977,14 +1102,36 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
       {/* ── new task dialog ───────────────────────────────────────────── */}
       <Dialog open={feedOpen} onClose={() => setFeedOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle sx={{ pb: 0.5 }}>Feed the agent · {detail?.ref}
+        <DialogTitle sx={{ pb: 0.5 }}>{agentWaiting ? "Answer the agent" : "Feed the agent"} · {detail?.ref}
           <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
-            Queue prompts for this task's agent - one, or a whole list. They land one per stop, in order, never mid-turn.
+            {agentWaiting
+              ? "Answer the question here. It reaches this task's waiting session without starting over."
+              : "Queue prompts for this task's agent - one, or a whole list. They land one per stop, in order, never mid-turn."}
           </Typography>
         </DialogTitle>
         <DialogContent>
           {selected && liveCodingSession && <TellAgent taskId={selected} taskRef={detail?.ref} onQueued={() => loadDetail(selected)} />}
         </DialogContent>
+      </Dialog>
+      <Dialog open={askSenderOpen} onClose={() => !askingSender && setAskSenderOpen(false)} fullWidth maxWidth="sm"
+        PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle>{agentWaiting ? "Ask the sender" : "Reply to the sender"} · {detail?.ref}</DialogTitle>
+        <DialogContent sx={{ pt: "8px !important" }}>
+          <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
+            Write the reply or the one fact the agent needs. This becomes a clarification draft in Review; it is not sent until you approve it.
+            The task stays open while you wait for the sender's answer.
+          </Typography>
+          <TextField autoFocus fullWidth multiline minRows={3} label="Question for the sender"
+            value={senderQuestion} onChange={(e) => setSenderQuestion(e.target.value)}
+            placeholder="Which distribution spreadsheet and which dashboard should I use?" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAskSenderOpen(false)} disabled={askingSender}>Cancel</Button>
+          <Button variant="contained" disableElevation onClick={askSender}
+            disabled={askingSender || !senderQuestion.trim()}>
+            {askingSender ? <CircularProgress size={15} /> : "Put in Review"}
+          </Button>
+        </DialogActions>
       </Dialog>
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>New task</DialogTitle>
@@ -1017,7 +1164,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             </Box>
           )}
           <Typography variant="caption" sx={{ color: DIM }}>
-            General / non-coding opens the visual assistant without a repository. Coding opens the agent's repository terminal. Reply creates a draft in Review.
+            To do stays on your list. General / non-coding opens the visual assistant. Coding opens the agent's repository terminal. Reply creates a draft in Review.
           </Typography>
         </DialogContent>
         <DialogActions>

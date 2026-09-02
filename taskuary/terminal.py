@@ -138,6 +138,7 @@ class Term:
         self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
         self.taps = []                                    # plain callables, for server-side readers
+        self.failover = None                              # availability-only replacement installed by start_on_task
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
         from . import blackboard as _bb, witness as _w
@@ -178,6 +179,17 @@ class Term:
         self._emit(None)
         from . import browserview as _bv
         _bv.close(self.sid)                               # its browser goes with it, not into an hour of idling
+        # A plan/session limit is known only after an interactive CLI paints the refusal and
+        # exits. start_on_task installs the replacement callback; ordinary agent/task errors
+        # never take this road, because changing authors after work began would be unsafe.
+        if self.failover and time.time() - self.started_ts < 180:
+            from .agents import availability_failure
+            reason = plain(self.scrollback())[-5000:]
+            if availability_failure(RuntimeError(reason)):
+                def replace():
+                    try: self.failover(self, reason)
+                    except Exception as e: logger.warning(f'agent fallback for {self.sid} failed: {e}')
+                threading.Thread(target=replace, daemon=True).start()
         if self.store and self.task_id:                   # whoever queued behind this session gets its turn
             from . import blackboard, waitroom
             blackboard.drain_later(self.store)
@@ -923,7 +935,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                     'Taskuary IS the tracker and this task is the record. ')
                  + ('You may push and deploy as the work needs. ' if push_ok else
                     'Do NOT push, deploy, publish or release - commit locally and stop; the owner reviews and pushes. ')
-                 + 'Ask the owner here in the session if something is genuinely missing.')
+                 + 'Missing required detail? Change nothing: ask one concrete question here, say if the sender must '
+                   'answer, and wait.')
     # how this session ENDS. Without it the only ending is a person clicking Done, so a task
     # finished overnight produced no report and the sender got no answer (selfclose.py).
     from . import selfclose
@@ -1106,7 +1119,7 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
 
 
 def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
-                  actor: str = 'owner', cwd: str = None) -> dict:
+                  actor: str = 'owner', cwd: str = None, _chain: list = None) -> dict:
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
     agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
     import json
@@ -1120,25 +1133,57 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     if live:
         if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
         return {**live, 'existing': True}
-    row = store.get_agent(agent or '')
-    if not row: raise ValueError(f'unknown agent: {agent}')
-    repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
-    # A continuation names the exact checkout from the saved transcript. Use it when it still
-    # exists; a moved/deleted checkout falls back through the normal guarded repo resolution.
-    continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
-    term = open_session(store, agent, tid, repo, continued_cwd, 32, 110, actor, model,
-                        seed_fn=lambda cwd: seed_text(store, tid, instruction, repo, cwd))
+    from . import agents as hub_agents
+    chain = list(_chain or hub_agents.agent_chain(store, agent))
+    if not chain: chain = [agent]
+    term = repo = why = None
+    chosen = None
+    last_error = None
+    for i, candidate in enumerate(chain):
+        row = store.get_agent(candidate or '')
+        if not row:
+            last_error = ValueError(f'unknown agent: {candidate}')
+            if i + 1 < len(chain): continue
+            raise last_error
+        repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
+        # A continuation names the exact checkout from the saved transcript. Use it when it still
+        # exists; a moved/deleted checkout falls back through the normal guarded repo resolution.
+        continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
+        try:
+            term = open_session(store, candidate, tid, repo, continued_cwd, 32, 110, actor,
+                                model if i == 0 else None,
+                                seed_fn=lambda here, r=repo: seed_text(store, tid, instruction, r, here))
+            chosen = candidate
+            chain = chain[i:]
+            break
+        except Exception as e:
+            last_error = e
+            if i + 1 >= len(chain) or not hub_agents.availability_failure(e): raise
+            store.add_comment(tid, 'router', 'agent',
+                              f'{candidate} was unavailable before the session opened; trying {chain[i + 1]}.')
+    if not term: raise last_error or RuntimeError('no coding agent could start')
+    remaining = chain[1:]
+    if remaining:
+        def replace(dead, reason):
+            # Drop only this dead pane. The task, held review, source mail and attachments remain
+            # untouched; start_on_task rebuilds the same seed for the replacement CLI.
+            SESSIONS.pop(dead.sid, None)
+            nxt = remaining[0]
+            store.add_comment(tid, 'router', 'agent',
+                              f'{chosen} became unavailable; continuing with backup {nxt}.')
+            start_on_task(store, tid, nxt, None, instruction, actor, cwd, _chain=remaining)
+        term.failover = replace
     store.clear_dispatch(tid)          # started (by whatever road): it is no longer waiting
     if repo and why != 'tagged on the task':
         store.add_comment(tid, actor, 'human', f'Session opened in {repo} - {why}.')
     store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',
-                      f'{agent} started on this task in a live session ({term.cwd}).')
+                      f'{chosen} started on this task in a live session ({term.cwd}).')
     if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
     # A task started from the Board or the Tasks tab has no message behind it, so it had no
     # Timeline row - and an agent could work it for forty minutes while the page that is
     # supposed to be the record of the day said nothing. Stamped at the session's own start.
     from . import ownwork
-    ownwork.ensure(store, tid, term.started, f'{agent} started here', actor)
+    ownwork.ensure(store, tid, term.started, f'{chosen} started here', actor)
     return {**term.info(), 'existing': False}
 
 

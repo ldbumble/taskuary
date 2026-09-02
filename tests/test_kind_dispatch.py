@@ -188,7 +188,7 @@ class SettledVerdictTests(unittest.TestCase):
 
     def test_not_a_coding_task_settles_as_work_you_keep(self):
         s = self._system_for(self._notes('NOT A CODING TASK'))
-        self.assertIn('Answer task with kind general', s)
+        self.assertIn('Answer task with kind task', s)
         self.assertIn('never fyi', s)
 
     def test_the_other_two_still_settle_as_fyi(self):

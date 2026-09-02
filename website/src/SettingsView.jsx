@@ -50,6 +50,9 @@ const KNOB_META = {
   triage_ai: { group: "Triage & routing", label: "Triage brain", type: "brain",
     desc: "Which AI reads and classifies inbound messages.",
     help: "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Connections → AI CLI agents → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way." },
+  triage_backup_ai: { group: "Triage & routing", label: "Backup brains", type: "brains",
+    desc: "Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.",
+    help: "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant." },
   default_action: { group: "Triage & routing", label: "When no rule matches", type: "select", options: ["draft", "task_only", "escalate"],
     desc: "The fallback when no routing policy claims a message.",
     help: "draft = reply-only questions get an AI draft waiting in Review; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.\n\nThis is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless." },
@@ -96,6 +99,9 @@ const KNOB_META = {
   default_agent: { group: "Coder agent", label: "Default agent", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
     help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Connections → AI CLI agents, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
+  backup_agents: { group: "Coder agent", label: "Backup coding agents", type: "agents",
+    desc: "If the first CLI is out of sessions, signed out, unavailable, or cannot start, continue the same task with another configured agent.",
+    help: "Automatic (the default) tries every other configured CLI in roster order. Or select one or more explicit backups to control the chain. The task, incoming messages, attachments, repository, and seed prompt all travel to the replacement.\n\nA normal agent error does not silently switch authors halfway through work. Failover is for availability failures: session/usage/rate limits, quota or capacity, expired login, a missing executable, or a CLI that cannot start." },
   answer_to_agent: { group: "Coder agent", label: "Hand answers to the working agent", type: "select",
     options: ["ask", "auto", "off"],
     desc: "When someone answers a question on a task an agent is sitting on, their answer can go straight into the live session.",
@@ -261,6 +267,21 @@ function SettingsPages({ page, setPage, q, setQ }) {
         {!agentNames.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no agents yet — add one under Connections</MenuItem>}
       </Select>
     );
+    if (m.type === "agents") {
+      const values = s.Value === "*" ? ["*"] : String(s.Value || "").split(",").filter((v) => agentNames.includes(v));
+      return (
+        <Select size="small" multiple displayEmpty value={values}
+          renderValue={(picked) => picked.includes("*") ? "automatic — any other agent"
+            : picked.length ? picked.join(" → ") : "none"}
+          onChange={(e) => {
+            const picked = typeof e.target.value === "string" ? e.target.value.split(",") : e.target.value;
+            saveSetting(s.Name, picked.includes("*") ? "*" : picked.join(","));
+          }} sx={{ minWidth: 250, maxWidth: 380, fontSize: 12.5, bgcolor: "#fff" }}>
+          <MenuItem value="*" sx={{ fontSize: 12.5 }}>automatic — any other configured agent</MenuItem>
+          {agentNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{n}</MenuItem>)}
+        </Select>
+      );
+    }
     // the brains list is dynamic: AI connectors that actually hold a key + your CLI agents
     if (m.type === "brain") return (
       <Select size="small" displayEmpty value={brains.some((b) => b.value === s.Value) ? s.Value : ""}
@@ -273,6 +294,22 @@ function SettingsPages({ page, setPage, q, setQ }) {
         ))}
       </Select>
     );
+    if (m.type === "brains") {
+      const options = brains.filter((b) => b.value);
+      const values = String(s.Value || "").split(",").filter((v) => options.some((b) => b.value === v));
+      return (
+        <Select size="small" multiple displayEmpty value={values}
+          renderValue={(picked) => picked.length
+            ? picked.map((v) => options.find((b) => b.value === v)?.label || v).join(" → ") : "none"}
+          onChange={(e) => saveSetting(s.Name, (typeof e.target.value === "string"
+            ? e.target.value.split(",") : e.target.value).join(","))}
+          sx={{ minWidth: 250, maxWidth: 420, fontSize: 12.5, bgcolor: "#fff" }}>
+          {options.map((b) => <MenuItem key={b.value} value={b.value} disabled={!b.ready} sx={{ fontSize: 12.5 }}>
+            {b.label}{b.ready ? "" : " — unavailable"}
+          </MenuItem>)}
+        </Select>
+      );
+    }
     // a csv of channels: chips you toggle, which is what "which of these" actually is -
     // a comma-separated text field asked the owner to spell channel names correctly
     if (m.type === "channels") {

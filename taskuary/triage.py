@@ -9,7 +9,8 @@ import re as _re
 # real agent in a real repo; a reply is one cheap draft the owner approves. Defaulting to
 # "task" turned questions into background work nobody asked for.
 # `kind` costs something too, and this is the ONE place that decides it: coding starts a
-# session, general leaves the job on the owner's list. Nothing downstream re-reads the mail
+# session, general opens a non-coding conversation, and task leaves the job on the owner's list.
+# Nothing downstream re-reads the mail
 # to second-guess it - no keyword, sender or category rule anywhere else (owner, 2026-08-30,
 # after a training reminder got a coder run: the exception is "clearly not a coding job",
 # and it is judged here, in a document that can be argued with).
@@ -190,6 +191,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     A message that is an instance of one is answered with its slug, and that slug is what seeds
     the session with the playbook instead of a coder's repository rules. Matching is a judgement
     about the message, so it is made here, by the model that read it - never by a keyword rule."""
+    raw_answer, parse_error = None, None
     if llm:
         try:
             base = re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM
@@ -210,7 +212,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     # WHICH verdict was settled decides what it settles TO. "Not a coding task" is
                     # the owner keeping the work and taking the agent off it - answering fyi there
                     # drops a job they had just claimed.
-                    settled = ('Answer task with kind general - no exceptions, and never fyi. The owner has '
+                    settled = ('Answer task with kind task - no exceptions, and never fyi. The owner has '
                                'already ruled that work like this is theirs and that no agent works it; what is '
                                'settled is WHO does it, not whether it needs doing.'
                                if SETTLED_INTENT.get(agree[0]) == 'task' else
@@ -260,7 +262,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '
                            'screenshot of the error IS the request. Read them before deciding.')
             out = llm(system, user, images=images) if images else llm(system, user)
-            j = json.loads(re.sub(r'^```(json)?|```$', '', out.strip(), flags=re.M))
+            raw_answer = str(out or '')
+            j = json.loads(re.sub(r'^```(json)?|```$', '', raw_answer.strip(), flags=re.M))
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
                 # `kind` is the model's SECOND verdict and it ROUTES the task to one of three
                 # places: coding starts an agent, general opens the assistant's chat, task goes on
@@ -276,12 +279,21 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
                     out['playbook'], out['kind'] = pb, 'coding'
                 return out
-        except Exception:
-            pass
+            parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
+        except Exception as e:
+            parse_error = f'{type(e).__name__}: {e}'
     # An LLM was supplied, answered, and the answer was not usable (bad JSON, an intent outside
     # the contract). That is NOT "no AI configured": heuristic_intent's last branch assumes real
     # work and reads none of the owner's standing notes, so a garbled answer opened a task the
     # owner had already refused - repeatedly, since every retry garbled the same way. Say the
     # verdict is degraded and let the caller file instead of guessing.
     out = heuristic_intent(msg, mine)
-    return {**out, 'degraded': True} if llm else out
+    if not llm:
+        return out
+    # A CLI can emit a whole transcript if an output flag changes. Preserve enough to diagnose
+    # the contract failure without letting one response overwhelm SQLite or the Triage tab.
+    raw = raw_answer or ''
+    if len(raw) > 8000:
+        raw = raw[:8000] + '\n… [triage output truncated at 8,000 characters]'
+    return {**out, 'degraded': True, 'raw_output': raw,
+            'parse_error': (parse_error or 'the response was not a usable verdict')[:1000]}

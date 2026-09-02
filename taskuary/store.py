@@ -122,7 +122,8 @@ CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, Message
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
   Agent TEXT, Cwd TEXT, Text TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER,
-  Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT);
+  Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT,
+  RawOutput TEXT, ParseError TEXT);
 CREATE TABLE IF NOT EXISTS comment (CommentId INTEGER PRIMARY KEY, TaskId INTEGER, Actor TEXT,
   ActorType TEXT, Body TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS audit (Id INTEGER PRIMARY KEY, EntityType TEXT, EntityId INTEGER,
@@ -254,6 +255,14 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
                     'default_agent': 'coder',
+                    # ordered CSV of alternate CLI profiles; * means every other configured
+                    # agent in roster order. A quota/login outage should move the same task to
+                    # another CLI instead of leaving a dead terminal as its only outcome.
+                    'backup_agents': '*',
+                    # ordered alternate brains for triage, drafts, summaries and assistant chat.
+                    # Blank is deliberately opt-in: a cloud-to-CLI fallback may change cost and
+                    # privacy, so the owner names the alternatives explicitly in Settings.
+                    'triage_backup_ai': '',
                     # may agents open GitHub issues/tracker items for the work itself? Off by
                     # default: Taskuary is the tracker, and one issue per task is noise.
                     'agent_issues_enabled': '0',
@@ -373,6 +382,13 @@ class SQLiteStore:
             # against them - "was this cc'd mail really mine?" had no evidence left (evalset.py)
             if 'RecipientsJson' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN RecipientsJson TEXT')
+            # Keep the evidence when triage answers but breaks its JSON contract. Without the
+            # raw answer another machine could only report "could not read it", not why.
+            routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
+            if 'RawOutput' not in routecols:
+                self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
+            if 'ParseError' not in routecols:
+                self.cx.execute('ALTER TABLE route ADD COLUMN ParseError TEXT')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -979,6 +995,17 @@ class SQLiteStore:
         self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
         if task_id is not None:
             self._bump_snapshots()
+    def claim_retriage(self, mid: int) -> bool:
+        """Atomically move one failed, taskless row back into triage.
+
+        The endpoint checks the prior verdict for a useful error message; this compare-and-set is
+        the concurrency guard. Two clicks (or browser retries) must never create two tasks.
+        """
+        with self.lock:
+            cur = self.cx.execute("""UPDATE message SET Status='triaging'
+                                   WHERE MessageId=? AND TaskId IS NULL AND Status='filed'""", (mid,))
+            self.cx.commit(); self._writes += 1
+            return cur.rowcount == 1
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
@@ -1005,9 +1032,13 @@ class SQLiteStore:
     def last_transcript(self, task_id):
         return self._one('SELECT * FROM transcript WHERE TaskId=? ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
 
-    def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router'):
-        return self._exec('INSERT INTO route (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt) VALUES (?,?,?,?,?,?,?,?)',
-                          (mid, tid, decision, score, reason, json.dumps(candidates), routed_by, _now()))
+    def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router',
+                  raw_output=None, parse_error=None):
+        return self._exec('''INSERT INTO route
+            (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError)
+            VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                          (mid, tid, decision, score, reason, json.dumps(candidates), routed_by, _now(),
+                           raw_output, parse_error))
     def list_routes(self, task_id): return self._rows('SELECT * FROM route WHERE TaskId=? ORDER BY RouteId', (task_id,))
     def add_comment(self, task_id, actor, actor_type, body):
         return self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
@@ -1115,6 +1146,14 @@ class SQLiteStore:
     # reviews (orphans - reviews whose task is gone - never surface)
     def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
+    def reviews_for_message(self, mid):
+        """Every review on a taskless message as well as reviews attached to a task.
+
+        Timeline detail for an FYI has no task_detail() to carry these. Without this query the
+        feed chip could truthfully say reply ready while reopening the item produced an empty
+        Reply tab.
+        """
+        return self._rows('SELECT * FROM review WHERE MessageId=? ORDER BY ReviewId DESC', (mid,))
     def list_reviews(self, status=None):
         # the inbound text rides along: the queue shows what they wrote above what we would say back
         q = f'''SELECT rv.*, t.Title, m.Subject, m.FromName, m.FromEmail, m.SentAt,
@@ -1132,6 +1171,23 @@ class SQLiteStore:
         if kind:      q += ' AND rv.Kind=?'
         if live_only: q += f' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'
         return self._one(q + ' ORDER BY rv.ReviewId DESC LIMIT 1', (task_id, kind) if kind else (task_id,))
+    def sent_reply(self, message_id=None, task_id=None):
+        """The newest reply that actually passed the send gate for this message/task.
+
+        A successful review is the durable receipt for replies sent by Taskuary. Those replies
+        are not necessarily ingested back from the external channel before the Assistant's next
+        check, so message history alone can briefly (and falsely) look unanswered.
+        """
+        where, values = ["rv.Status IN ('approved','edited','sent')", "rv.Kind<>'action'",
+                         "COALESCE(NULLIF(rv.FinalText,''), rv.DraftText, '')<>''"], []
+        if message_id is not None:
+            where.append('rv.MessageId=?'); values.append(message_id)
+        elif task_id is not None:
+            where.append('rv.TaskId=?'); values.append(task_id)
+        else:
+            return None
+        return self._one('SELECT rv.* FROM review rv WHERE ' + ' AND '.join(where)
+                         + ' ORDER BY IFNULL(rv.DecidedAt, rv.CreatedAt) DESC, rv.ReviewId DESC LIMIT 1', values)
     def hold_reviews(self, task_id, reason=None):
         """Park this task's pending reply drafts while an agent works it. A draft written from the
         mail alone promises what the session has not found yet - and it sat in Review as if it
@@ -1152,6 +1208,9 @@ class SQLiteStore:
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
     def update_review_draft(self, rid, draft, run_id):
         self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
+    def save_review_draft(self, rid, draft):
+        """Persist the owner's editor without erasing which agent run originally produced it."""
+        self._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (draft, rid))
 
     # policies / sources / settings / memory / docs
     def delete_policy(self, pid): self._exec('DELETE FROM policy WHERE PolicyId=?', (pid,))

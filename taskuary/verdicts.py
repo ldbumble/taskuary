@@ -10,6 +10,47 @@ from loguru import logger
 VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
 
 
+def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
+    """Reconcile task/agent state after its reviewed reply really left the machine."""
+    task_id = rv.get('TaskId')
+    if not task_id:
+        return
+    task = store.get_task(task_id)
+    if not task:
+        return
+
+    kind = rv.get('Kind')
+    if kind not in ('clarification', 'draft', 'draft_reply') and task.get('Kind') != 'reply':
+        return
+    # A free-standing draft can be reviewed for learning/editing without having a channel
+    # destination. Only a confirmed channel send gets to finish a normal task.
+    if not was_sent and kind in ('clarification', 'draft') and task.get('Kind') != 'reply':
+        return
+
+    from . import terminal
+    session = terminal.session_for(task_id)
+    stopped = bool(session and getattr(session, 'alive', False) and terminal.close(session.sid))
+
+    # A clarification is not completion: stop the blocked session and keep the task visibly
+    # waiting for the person who has the missing fact.
+    if kind == 'clarification':
+        if task.get('Status') not in ('done', 'dropped'):
+            store.update_task(task_id, {'Status': 'waiting'}, actor)
+        if stopped:
+            store.add_comment(task_id, actor, 'human',
+                              'Stopped the agent after sending the clarification; waiting for the sender.')
+        return
+
+    # A normal reviewed reply is the answer to this task. It cannot coexist with an agent
+    # still working the same task after the channel confirms the send.
+    if task.get('Kind') == 'reply' or kind in ('draft', 'draft_reply'):
+        if task.get('Status') not in ('done', 'dropped'):
+            store.update_task(task_id, {'Status': 'done'}, actor)
+        if stopped:
+            store.add_comment(task_id, actor, 'human',
+                              'Stopped the agent because the task reply was sent.')
+
+
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
            actor: str = 'owner', learn_async=None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
@@ -80,11 +121,10 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             store.update_review_draft(rid, final, rv.get('RunId'))
             store.unhold_review(rid, f'approved, but sending FAILED: {send_err} - fix the channel and approve again')
     if verb == 'no_reply' and rv.get('TaskId'): store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
-    # reply-only items are not real tasks: answering them IS the work, so close on decision
+    # Sending is the lifecycle boundary. A final/manual answer closes the task and its live
+    # terminal; a clarification stops the blocked terminal but deliberately leaves it waiting.
     if verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:
-        t = store.get_task(rv['TaskId'])
-        if ((t or {}).get('Kind') == 'reply' or rv.get('Kind') == 'draft_reply') and t.get('Status') not in ('done', 'dropped'):
-            store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
+        _settle_task_after_sent_reply(store, rv, actor, sent is not None)
     store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
     if verb in ('edit', 'reject', 'no_reply'):
         m = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}

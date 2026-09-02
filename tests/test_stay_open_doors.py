@@ -48,6 +48,31 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
             else:
                 self.assertIn('taskuary --done', seeds[0]); self.assertNotIn('THE OWNER OPENED', seeds[0])
 
+    def test_a_session_limit_hands_the_same_task_to_the_backup_agent(self):
+        s = MemoryStore(); tid = _task(s)
+        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s.upsert_agent('codex', 'coding', 'cli', '{}')
+        s.set_setting('backup_agents', 'codex', 'owner')
+        opened = []
+
+        def fake_open(store, agent, task_id, *args, **kwargs):
+            term = Fake(task_id)
+            term.sid, term.label, term.agent = f'{agent}-session', agent, agent
+            term.failover = None
+            opened.append((agent, term))
+            return term
+
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(terminal, 'open_session', side_effect=fake_open), \
+             mock.patch.object(terminal, 'guess_repo', return_value=(None, None)), \
+             mock.patch('taskuary.ownwork.ensure'):
+            terminal.start_on_task(s, tid, 'coder', actor='owner')
+            self.assertTrue(callable(opened[0][1].failover))
+            opened[0][1].failover(opened[0][1], "You've hit your session limit")
+
+        self.assertEqual([agent for agent, _term in opened], ['coder', 'codex'])
+        self.assertIn('continuing with backup codex', '\n'.join(x['Body'] for x in s.list_comments(tid)))
+
     def test_the_terminals_route_marks_it_too(self):
         from fastapi.testclient import TestClient
         from taskuary import server

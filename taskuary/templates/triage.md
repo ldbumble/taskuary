@@ -17,6 +17,8 @@ task = someone must DO something beyond writing back: change a system, fix or bu
 
 coding is the default and the bar for general is high. The test is not "is there a repository in this" - most of what the agent does is not code. A system to change, an account to unlock, a database to query, a file or a report to produce, a document to draft, a vendor to chase by writing to them, something to look up: all `coding`, because an agent can make a start on every one of them, and if it turns out it cannot it says "nothing to do here" and stops, which costs almost nothing.
 
+Do not downgrade an under-specified system request. "Add the distribution spreadsheet to my dashboard" is still a coding task even when it omits which spreadsheet or dashboard. The coding agent must stop and ask for the missing fact rather than guess; missing detail changes what happens inside the task, not whether the task exists or where it is routed.
+
 Say `general` when there is nothing to type at a system, but thinking, reading or research would help: weigh an option, make sense of a thread, work out what to ask, get ready for something. It opens a **conversation with the assistant** - no agent touches a system, but the work is not left to the owner alone either.
 
 Say `task` when a person has to do it in the world and no amount of typing or thinking does it: a course to sit through, a form to physically sign, a meeting to attend, a box to move, a phone call somebody has to make, a decision only the owner can take. A vendor's training assignment falling due is the plain example - it is a real task, it is on the owner's plate, and no agent can sit the course. Say `task` too when the owner's past verdicts (the evidence below) say this kind of work is not for an agent.

@@ -51,6 +51,7 @@ DENIED = (
     (r'POST', r'^/api/tasks/\d+/handoff$', 'handing work to a person sends them a message'),
     (r'POST', r'^/api/outbox$', 'starting an outbound message is the owner\'s door, not an agent\'s'),
     (r'POST', r'^/api/messages/\d+/reply$', 'opening a reply is the first half of sending one'),
+    (r'POST', r'^/api/tasks/\d+/clarify$', 'opening a clarification is the first half of sending one'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(connectors|sources)', 'credentials and where mail goes'),
     (r'GET', r'^/api/send-targets$', 'the address book of everywhere this install can send'),
     # ...and anything that would let it widen its own reach

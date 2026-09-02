@@ -26,7 +26,7 @@ import { splitTimelineMeetings } from "./timelineMeetings.js";
 import { groupThreads, loudest, spanText } from "./threadGroups.js";
 import EventIcon from "@mui/icons-material/Event";
 import { pollWhileVisible } from "./visible.js";
-import { feedHeaders, feedOk, takeFeed } from "./feedLoad.js";
+import { feedHeaders, feedOk, takeFeed, threadDetail } from "./feedLoad.js";
 import { ALERT, ALERT_BD, ALERT_INK, ASSISTANT, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, GRADIENT, card, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
@@ -102,6 +102,9 @@ const actionOf = (r) => (r.Channel === "report" ? "report"
         : r.ReviewKind === "auto" ? "auto"
           : r.ReviewId ? "draft" : "task_only");
 
+const triageFailed = (r) => /(?:AI )?triage (?:failed|returned an answer it could not read)/i
+  .test(String(r?.RouteReason || ""));
+
 // NeedsYou comes from the server and means one thing: nobody else is moving this. It
 // outranks the verdict chip, because "what happened to it" matters less than "is it mine".
 const needsYou = (r) => !!r.NeedsYou && r.TaskStatus !== "done";
@@ -114,6 +117,7 @@ const blurb = (r) => {
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
   if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
   if (r.MsgStatus === "triaging") return "On the timeline first — triage is deciding what it is";
+  if (triageFailed(r)) return "Triage could not classify this — filed safely; choose what it is";
   // WHAT happened, never the classifier's sentence about why: that lives on the Triage tab, where
   // it is asked for (owner, 2026-09-02: "hate the why - just tell me what")
   if (r.MsgStatus === "ignored") return "Ignored by policy — no task created";
@@ -824,8 +828,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
     // or Outlook, which is ingested as a `context` row and which the assistant has been reading
     // all along. The panel was the only place the history looked incomplete.
     const p = (row.TaskId ? api.get(`/api/tasks/${row.TaskId}`).then((r) => r.data)
-      : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => ({ messages: r.data.messages || [],
-          routes: r.data.routes || [] })))
+      : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => threadDetail(r.data)))
       .catch(() => ({ messages: [] }));                                  // panel falls back to the preview
     cache.current.set(row.MessageId, { at: Date.now(), p });
     return p;
@@ -1360,7 +1363,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
           : sel ? (
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
               decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
-              onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
+              onSkipped={() => { setSel(null); load(); onChanged?.(); }}
+              onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
               onMessageChanged={messageBodyChanged}
               sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
           ) : (
@@ -1393,7 +1397,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
             : sel ? (
               <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
                 decide={decide} onOpenTask={onOpenTask} onClose={() => { setPinned(false); setSel(null); }}
-                onSkipped={() => { setSel(null); load(); onChanged?.(); }} onRefresh={() => load()}
+                onSkipped={() => { setSel(null); load(); onChanged?.(); }}
+                onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
                 onMessageChanged={messageBodyChanged}
                 sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
             ) : null}
@@ -1542,7 +1547,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const openReply = async () => {
     setOpening(true);
     try {
-      const { data } = await api.post(`/api/messages/${sel.MessageId}/reply`, {});
+      // Open the editor first. Writing by hand is a first-class path; AI generation is the
+      // adjacent button, not a gate the owner must pass before a text box exists.
+      const { data } = await api.post(`/api/messages/${sel.MessageId}/reply`, { draft: false });
       setOpened({ reviewId: data.reviewId, draft: data.draft || "" });
       onRefresh?.();
     } catch (e) { /* the row's hint stays; nothing sent */ }
@@ -1616,6 +1623,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     String(r.FinalText || r.DraftText || "").trim());
   const sentReply = String(sentReview?.FinalText || sentReview?.DraftText || "").trim();
   const replied = !!sentReply;
+  // A reply written in Outlook/Teams/iMessage is a context/outbound message, not a Taskuary
+  // review. The thread is still proof that this was answered; calling it "not drafted" beside
+  // the visible reply made the summary contradict the Message tab.
+  const threadReply = [...(detail?.messages || [])].reverse().find((m) =>
+    isOwnMessage(m) && tsMs(m.SentAt) > tsMs(sel.SentAt));
+  const outsideReply = String(threadReply?.BodyText || "").trim();
+  const answeredOutside = !replied && (!!sel.AnsweredAt || !!threadReply);
+  const answered = replied || answeredOutside;
   const replyOpen = pending || !!opened;
   const chatTask = !!sel.TaskId && ["general", "research", "marketing", "triage", "assistant"]
     .includes(String(detail?.task?.Kind || sel.TaskKind || "").toLowerCase());
@@ -1624,7 +1639,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     { key: "msg", label: "Message" },
     { key: "why", label: "Triage" },
     { key: "agent", label: "Agent", mark: onIt ? "live" : chatTask ? "chat" : rep ? "done" : "" },
-    { key: "reply", label: "Reply", mark: replied ? "replied" : pending ? "waiting" : opened ? "open" : "" },
+    { key: "reply", label: "Reply", mark: pending ? "waiting" : answered ? "replied" : opened ? "open" : "" },
   ];
   // The drawer just read the live session list; the row's chip is whatever the last feed poll
   // saw. When they disagree the drawer is the newer fact, so ask the list to refresh rather than
@@ -1645,13 +1660,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     : (opened?.draft || "");
   // the road, in words - the why sentence is one tab over, for when it is asked for
   const roadMeta = ROADS.find((r) => r.key === roadOf(sel));
-  const roadLine = roadMeta ? `${roadMeta.label} — ${roadMeta.hint}` : (sel.RouteReason ? "Routed; open for the verdict." : "Not routed.");
+  const failedTriage = triageFailed(sel);
+  const roadLine = roadMeta ? `${roadMeta.label} — ${roadMeta.hint}`
+    : failedTriage ? "Triage could not classify it, so no task was created. Choose what should happen below."
+    : (sel.RouteReason ? "No classification — choose what should happen below." : "Not routed.");
   const reportText = String(rep?.Body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/i, "").trim();
   const reportResult = ((/(?:^|\n)Summary:[ \t]*([^\n]+)/im.exec(reportText) ||
     /(?:^|\n)Result:[ \t]*([^\n]+)/im.exec(reportText) || [])[1] || cleanText(reportText)).trim();
   const messageSummary = cleanText(sel.Preview || sel.Subject || "No message preview available.");
   const triageStatus = ["assistant", "report", "calendar"].includes(sel.Channel)
-    ? "fyi" : (roadOf(sel) || "not routed");
+    ? "fyi" : failedTriage ? "needs your choice" : (roadOf(sel) || "not routed");
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
   const [notCoding, setNotCoding] = useState(false); // "Mine, not agent" landed - the button says so
@@ -1744,7 +1762,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     summary={messageSummary}
                     onOpen={() => setTab("msg")} />
                   <StoryTimelineStep title="Triage" status={triageStatus} summary={roadLine}
-                    state={triageStatus !== "not routed" ? "done" : "idle"} onOpen={() => setTab("why")} />
+                    state={failedTriage ? "current" : triageStatus !== "not routed" ? "done" : "idle"}
+                    onOpen={() => setTab("why")} />
                   <StoryTimelineStep title="Agent"
                     status={onIt ? (onIt.waiting ? "waiting" : "working") : chatTask ? "assistant chat" : rep ? "finished" : "not started"}
                     summary={onIt ? (onIt.waiting ? `${onIt.agent} needs your answer.` : `${onIt.agent} is working in the live terminal.`)
@@ -1756,10 +1775,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     state={onIt ? "current" : (chatTask || rep || diffRun) ? "done" : "idle"}
                     onOpen={() => setTab("agent")} />
                   <StoryTimelineStep title="Reply" last
-                    status={replied ? "replied" : pending ? "waiting on you" : opened ? "draft open" : "not drafted"}
-                    summary={replied ? cleanText(sentReply) : replyDraft ? cleanText(replyDraft) : (["report", "assistant"].includes(sel.Channel)
+                    status={pending ? "waiting on you" : replied ? "sent from Taskuary" : answeredOutside ? "you replied" : opened ? "draft open" : "not drafted"}
+                    summary={pending ? cleanText(replyDraft) : replied ? cleanText(sentReply)
+                      : answeredOutside ? (cleanText(outsideReply) || `Answered in ${sel.Channel}.`)
+                      : replyDraft ? cleanText(replyDraft) : (["report", "assistant"].includes(sel.Channel)
                       ? "This item has nobody to reply to." : "No reply has been drafted yet.")}
-                    state={replied ? "done" : replyOpen ? "current" : "idle"} onOpen={() => setTab("reply")} />
+                    state={replyOpen ? "current" : answered ? "done" : "idle"} onOpen={() => setTab("reply")} />
                 </Box>
               )}
 
@@ -1866,13 +1887,20 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                       means Taskuary drafted it and something here sent it - and the panel said
                       that about both, so a message handled in Teams read as one we had answered
                       for you. The reply itself is on the Message tab, in the thread. */}
-                  {sel.AnsweredAt && !replied && !pending && (
+                  {answeredOutside && !pending && (
                     <Box sx={{ mb: 1.25 }}>
                       <PanelLabel>You answered this</PanelLabel>
                       <Typography variant="caption" sx={{ color: DIM, display: "block" }}>
-                        in {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt)}
+                        in {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt || threadReply?.SentAt)}
                         {" "}— nothing here sent it, and nothing is waiting on you.
                       </Typography>
+                      {outsideReply && (
+                        <Box sx={{ mt: 0.65, ml: "auto", maxWidth: "88%", bgcolor: "#e9e3d8",
+                          border: "1px solid #d8d0c4", borderRadius: "14px 14px 4px 14px",
+                          px: 1.25, py: 0.9, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                          {cleanText(outsideReply)}
+                        </Box>
+                      )}
                     </Box>
                   )}
                   {replied && (
@@ -1890,14 +1918,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   {pending && (
                     <ReviewActions reviewId={pendingId} draft={replyDraft}
                       editText={editText} setEditText={setEditText} decide={decide}
-                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
+                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
+                      onChanged={onRefresh} />
                   )}
                   {!pending && opened && (
                     <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
                       editText={editText} setEditText={setEditText} decide={decide}
-                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend} />
+                      sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
+                      onChanged={onRefresh} />
                   )}
-                  {!replied && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
+                  {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
                       Nobody sent this, so there is nobody to answer. Findings stay with the Timeline item.
                     </Typography>
@@ -1923,8 +1953,11 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 <TrayBtn tone="primary" onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
                   {onIt ? "Open the live session" : `Open ${ref(sel.TaskId)}`}</TrayBtn>
               ) : (
-                <TrayBtn disabled={!!mined} icon={<AssignmentIndIcon sx={{ fontSize: 15 }} />}
-                  title="adds a task with your name on it; no coding agent is dispatched"
+                <TrayBtn tone={sel.MsgStatus === "filed" ? "teach" : "plain"}
+                  teaches={sel.MsgStatus === "filed"} disabled={!!mined} icon={<AssignmentIndIcon sx={{ fontSize: 15 }} />}
+                  title={sel.MsgStatus === "filed"
+                    ? "adds a task with your name on it and teaches triage that filing it was a miss"
+                    : "adds a task with your name on it; no coding agent is dispatched"}
                   onClick={async () => {
                     try { const { data } = await api.post(`/api/messages/${sel.MessageId}/mine`, {});
                       setMined(data.ref); onRefresh?.(); } catch { /* the row keeps its state */ }
@@ -1952,7 +1985,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               {!onIt && !codeless && !held && (
                 <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
               )}
-              {!onIt && <TalkItThrough messageId={sel.MessageId} onOpenTask={onOpenTask} />}
+              {!onIt && <TalkItThrough messageId={sel.MessageId} onOpenTask={onOpenTask}
+                teaches={!sel.TaskId && sel.MsgStatus === "filed"} />}
               {sel.TaskId && (
                 <TrayBtn onClick={() => setHandoff(true)} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
                   title="send the full task and its context to another person">
@@ -2082,15 +2116,18 @@ const roadOf = (sel) => {
 const TriageSummary = ({ sel, detail }) => {
   const road = roadOf(sel);
   const meta = ROADS.find((r) => r.key === road);
+  const failed = triageFailed(sel);
   const why = String(sel.RouteReason || "").replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0];
   const watch = (detail?.task || {}).Kind === "note";
   return (
     <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.2, py: 0.85 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0 }}>
         <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: INK, flexShrink: 0 }}>
-          {meta?.label || (watch ? "your note" : "not routed")}
+          {meta?.label || (watch ? "your note" : failed ? "needs your choice" : "not routed")}
         </Typography>
-        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{meta?.hint || ""}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
+          {meta?.hint || (failed ? "the AI answer was not a usable verdict" : "")}
+        </Typography>
       </Box>
       <Typography variant="body2" sx={{ color: DIM, fontSize: 12, lineHeight: 1.5, mt: 0.2 }}>
         {why || (watch ? "You created this directly; triage did not judge it." : "Nothing classified this message.")}
@@ -2102,7 +2139,7 @@ const TriageSummary = ({ sel, detail }) => {
 // "Talk it through" - the chat door for a Timeline row. Distinct from SendToAgent (a CLI in a
 // checkout) and from "this one is mine" (a plain task nothing works): this one opens the
 // assistant's own thread with the message as the question.
-const TalkItThrough = ({ messageId, onOpenTask }) => {
+const TalkItThrough = ({ messageId, onOpenTask, teaches = false }) => {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const go = async () => {
@@ -2115,8 +2152,11 @@ const TalkItThrough = ({ messageId, onOpenTask }) => {
   };
   return (
     <>
-      <TrayBtn disabled={busy} onClick={go} icon={<ForumOutlinedIcon sx={{ fontSize: 15 }} />}
-        title="opens the assistant's chat on this, with the message as the question">
+      <TrayBtn tone={teaches ? "teach" : "plain"} teaches={teaches} disabled={busy} onClick={go}
+        icon={<ForumOutlinedIcon sx={{ fontSize: 15 }} />}
+        title={teaches
+          ? "opens the assistant's chat and teaches triage that filing this was a miss"
+          : "opens the assistant's chat on this, with the message as the question"}>
         {busy ? "Opening…" : "Talk it through"}</TrayBtn>
       {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
     </>
@@ -2206,6 +2246,25 @@ const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
 
 const TriagePane = ({ sel, detail, onRefresh }) => {
   const road = roadOf(sel);
+  const failed = triageFailed(sel);
+  const [retrying, setRetrying] = useState(false);
+  const [retryNote, setRetryNote] = useState("");
+  const [retryError, setRetryError] = useState(false);
+  const retryTriage = async () => {
+    if (retrying) return;
+    setRetrying(true); setRetryNote(""); setRetryError(false);
+    try {
+      const { data } = await api.post(`/api/messages/${sel.MessageId}/retriage`, {});
+      setRetryNote(data.ref ? `Routed to ${data.ref}.` : data.status === "filed"
+        ? "Triage still could not classify it. The new response is shown above."
+        : "Triage completed.");
+      onRefresh?.();
+    } catch (e) {
+      setRetryError(true);
+      setRetryNote(e?.response?.data?.detail || "Triage retry failed.");
+    }
+    setRetrying(false);
+  };
   // every judgement made about this message, oldest first. "And why" below is only the LATEST
   // one, which is why a correction was invisible here: the owner clicks "not ours", the verdict
   // changes, and the panel showed the new sentence with no sign that anyone had overruled
@@ -2213,6 +2272,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
   // ...about THIS message. On a task row detail.routes covers every message on the task, and a
   // thread's other rows were judged separately - their reasons are not this row's history.
   const trail = (detail?.routes || []).filter((r) => !r.MessageId || r.MessageId === sel.MessageId);
+  const diagnostic = [...trail].reverse().find((r) => r.RawOutput != null || r.ParseError);
   // the sentence the classifier wrote, without the routing bookkeeping after it
   const why = String(sel.RouteReason || "").replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0];
   const rest = String(sel.RouteReason || "").split(" · ").slice(1);
@@ -2248,6 +2308,38 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
           </Typography>
         )}
       </Box>
+      {diagnostic && (
+        <>
+          <PanelLabel>What the triage AI returned</PanelLabel>
+          <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.5, py: 1.25,
+            bgcolor: "#f7f5f1", maxHeight: 300, overflowY: "auto", overflowX: "hidden" }}>
+            {diagnostic.ParseError && (
+              <Typography variant="caption" sx={{ color: ALERT_INK, display: "block", mb: 0.75,
+                overflowWrap: "anywhere" }}>
+                Parser: {diagnostic.ParseError}
+              </Typography>
+            )}
+            <Typography component="pre" sx={{ m: 0, ...mono, color: DIM, fontSize: 11,
+              lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere", wordBreak: "break-word" }}>
+              {diagnostic.RawOutput || "(No response was returned.)"}
+            </Typography>
+          </Box>
+        </>
+      )}
+      {failed && !sel.TaskId && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1.25 }}>
+          <Button size="small" variant="outlined" disabled={retrying} onClick={retryTriage}
+            startIcon={retrying ? <CircularProgress size={13} /> : <SyncIcon sx={{ fontSize: 16 }} />}>
+            {retrying ? "Retrying triage…" : "Retry triage"}
+          </Button>
+          {retryNote && (
+            <Typography variant="caption" sx={{ color: retryError ? ALERT_INK : DIM,
+              overflowWrap: "anywhere" }}>
+              {retryNote}
+            </Typography>
+          )}
+        </Box>
+      )}
       {trail.length > 1 && (
         <>
           <PanelLabel>How it got here</PanelLabel>
@@ -2345,6 +2437,8 @@ const VoiceNoteRow = ({ sel, body, onRefresh, onMessageChanged }) => {
 // A chain can hold several emails (the inbound thread + your replies). One clean strip
 // of pills above the body flips between them - the clicked timeline row is preselected,
 // "↩ you" marks your own replies. Keyed by focusId so a new selection resets the pick.
+const isOwnMessage = (m) => m?.Status === "context" || m?.Direction === "out";
+
 const MessageBlock = ({ messages, focusId, fallback }) => {
   const msgs = messages || [];
   const [mid, setMid] = useState(null);
@@ -2360,7 +2454,7 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
   const cut = whole.indexOf(RAW);
   const text = cut >= 0 ? whole.slice(0, cut).trimEnd() : whole;
   const raw = cut >= 0 ? whole.slice(cut + RAW.length).trim() : "";
-  const you = cur?.Status === "context";
+  const you = isOwnMessage(cur);
   const own = !you && cur?.Channel === "own";        // a note you left yourself: nothing arrived
   // an excerpt first. A PR body or a forwarded chain ran the panel into its own scrollbar
   // and pushed the choices under the fold; the first screen of a message is what the
@@ -2400,7 +2494,7 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
           )}
           {chips.map((m) => {
             const on = cur && m.MessageId === cur.MessageId;
-            const you = m.Status === "context";
+            const you = isOwnMessage(m);
             return (
               <Box key={m.MessageId} onClick={() => setMid(m.MessageId)}
                 sx={{ px: 1.1, py: 0.35, borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 600,
@@ -2413,8 +2507,10 @@ const MessageBlock = ({ messages, focusId, fallback }) => {
           })}
         </Box>
       )}
-      <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25,
-        borderLeft: `3px solid ${you ? "#d8cfbe" : "#6f8a6e"}` }}>
+      <Box sx={{ bgcolor: you || own ? "#e9e3d8" : PANEL2, border: `1px solid ${you || own ? "#d8d0c4" : BORDER}`,
+        borderRadius: you || own ? "14px 14px 4px 14px" : "14px 14px 14px 4px", p: 1.25,
+        borderLeft: `3px solid ${you ? "#8a7a5c" : "#6f8a6e"}`,
+        maxWidth: you || own ? "88%" : "100%", ml: you || own ? "auto" : 0 }}>
         {/* who / which way / when - so "new inbound" is never confused with "your reply" */}
         {cur && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6, flexWrap: "wrap" }}>
@@ -2508,26 +2604,9 @@ const briefOf = (b) => { if (!b) return null; if (typeof b === "object") return 
 // idea of its own). Nothing is pinned above the feed - the owner (2026-08-30): "don't like the
 // 2 open tab on top of the timeline and ask now button". What is open, in flight and waiting on
 // you is the Morning digest's job, on its own clock (Reports tab).
-// The why, folded: the line says WHAT; the facts it rests on open on a click (owner, 2026-09-02:
-// "hate the why - hide it unless it's asked for").
-const Why = ({ text }) => {
-  const [open, setOpen] = useState(false);
-  if (!text) return null;
-  return open ? (
-    <Typography variant="caption" onClick={() => setOpen(false)}
-      sx={{ display: "block", color: DIM, mt: 0.35, whiteSpace: "pre-wrap", lineHeight: 1.4, cursor: "pointer" }}>
-      <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>why · </Box>{text}
-    </Typography>
-  ) : (
-    <Typography variant="caption" onClick={() => setOpen(true)}
-      sx={{ display: "inline-block", color: FAINT, mt: 0.3, cursor: "pointer", "&:hover": { color: INK } }}>why?</Typography>
-  );
-};
-
-// One post, opened: each line with its buttons AND its why - the facts it rests on (the mail, the
-// date, the silence; the model's own reason for an idea) - and under them what the post was built
-// from: candidates by kind, the ones it looked at and let go, how much of the day it read (the
-// owner, 2026-08-30: "we need more context like what it reviewed, why it brings up something").
+// One post, opened: each line keeps its actions and conversation. The supporting facts remain in
+// report run history for auditing, but the Timeline card does not put a little "why?" under every
+// sentence; that label turned a readable brief into a stack of footnotes.
 // State comes from the server (a line acted on from another tab shows as done here too); the
 // buttons are the ones the line's action allows.
 const IDEA_KIND = { followup: "follow up", prep: "prep", cold: "gone quiet", ahead: "coming up", idea: "idea" };
@@ -2625,14 +2704,23 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
     "&:hover": { borderColor: ASSISTANT.solid, bgcolor: "#f7f8f4" } };
   // ONE renderer for a line, called from inside whichever section it belongs to.
   const line = (i) => {
-        const a = i.action || {}, open = i.status === "open", ev = a.event;
+        const a = i.action || {}, answered = i.answered, open = i.status === "open" && !answered, ev = a.event;
         return (
           <Box key={i.id} sx={{ px: 1.25, py: 0.85, mb: 0.6, borderRadius: 1.5, border: `1px solid ${ASSISTANT.bd}`, bgcolor: open ? ASSISTANT.tint : "#f4f3ef", opacity: open ? 1 : 0.72 }}>
             <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
-              <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 700, flexShrink: 0 }}>{IDEA_KIND[i.kind] || i.kind}</Typography>
-              <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>{i.text}</Typography>
+              <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 700, flexShrink: 0 }}>{answered ? "answered" : IDEA_KIND[i.kind] || i.kind}</Typography>
+              <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>
+                {answered ? "You had already replied to this." : i.text}
+              </Typography>
             </Box>
-            <Why text={i.why} />
+            {answered?.text && (
+              <Box sx={{ mt: 0.55, ml: "auto", maxWidth: "88%", px: 1, py: 0.65,
+                bgcolor: "#e9e3d8", border: "1px solid #d8d0c4", borderRadius: "12px 12px 4px 12px" }}>
+                <Typography variant="caption" sx={{ color: INK, display: "block", whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
+                  {cleanText(answered.text)}
+                </Typography>
+              </Box>
+            )}
             {ev && (
               <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.3 }}>
                 {ev.who?.length ? `with ${ev.who.join(", ")}` : ""}{ev.where ? ` · ${ev.where}` : ""}{ev.about ? ` · ${ev.about}` : ""}
@@ -2674,7 +2762,8 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
               </>
             ) : (
               <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.4 }}>
-                {notes[i.id] || (i.status === "done" ? "done" : i.status === "dismissed" ? "not this — noted" : i.status === "snoozed" ? "snoozed" : i.status)}
+                {answered ? `reply sent${answered.at ? ` · ${fmtDateTime(answered.at)}` : ""}`
+                  : notes[i.id] || (i.status === "done" ? "done" : i.status === "dismissed" ? "not this — noted" : i.status === "snoozed" ? "snoozed" : i.status)}
               </Typography>
             )}
           </Box>
@@ -2793,11 +2882,27 @@ const SplitTask = ({ row, onSplit, compact = false }) => {
   );
 };
 
-const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend }) => (
+const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend, onChanged }) => {
+  const [generating, setGenerating] = useState(false);
+  const [draftErr, setDraftErr] = useState("");
+  const text = editText ?? draft ?? "";
+  const save = async (value = text) => {
+    try { await api.patch(`/api/reviews/${reviewId}`, { body: value }); onChanged?.(); }
+    catch (e) { setDraftErr(e?.response?.data?.detail || "Could not save this draft"); }
+  };
+  const generate = async () => {
+    setGenerating(true); setDraftErr("");
+    try {
+      const { data } = await api.post(`/api/reviews/${reviewId}/draft`);
+      setEditText(data.draft || ""); onChanged?.();
+    } catch (e) { setDraftErr(e?.response?.data?.detail || "Could not generate a draft"); }
+    setGenerating(false);
+  };
+  return (
   <Box>
-    <TextField fullWidth multiline minRows={3} size="small" placeholder="Edit the draft (or approve as-is)"
-      value={editText ?? draft ?? ""} onChange={(e) => setEditText(e.target.value)} sx={{ mb: 1 }} />
-    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+    <TextField fullWidth multiline minRows={3} size="small" placeholder="Type your reply, or generate a draft with AI"
+      value={text} onChange={(e) => setEditText(e.target.value)} onBlur={(e) => save(e.target.value)} sx={{ mb: 1 }} />
+    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
       {/* ONE approve: it sends what is in the box, edited or not - two buttons asked you to
           declare something the text already shows. A channel that cannot CARRY the reply
           (github with replies off) offers closing instead of a send that bounces. */}
@@ -2808,14 +2913,19 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
           onClick={() => decide(reviewId, "no_reply")}>No response required</Button>
       ) : (
         <>
-          <Button size="small" variant="contained" disabled={!(editText ?? draft ?? "").trim()}
-            onClick={() => decide(reviewId, "approve", editText ?? draft)}
+          <Button size="small" variant="contained" disabled={!text.trim()}
+            onClick={() => decide(reviewId, "approve", text)}
             title="Sends the text above on the channel it arrived on">Approve &amp; send</Button>
           <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
         </>
       )}
       <Button size="small" color="error" onClick={() => decide(reviewId, "reject")}>Reject</Button>
+      <Box sx={{ flex: 1 }} />
+      <Button size="small" variant="outlined" disabled={generating} onClick={generate}>
+        {generating ? <CircularProgress size={12} /> : text.trim() ? "Regenerate with AI" : "Generate with AI"}
+      </Button>
     </Box>
+    {draftErr && <Alert severity="error" sx={{ mt: 1 }} onClose={() => setDraftErr("")}>{draftErr}</Alert>}
     {sendErr && (
       <Alert severity="error" sx={{ mt: 1 }} onClose={clearSendErr}>
         <b>Approved, but it did not send.</b> {sendErr}
@@ -2826,4 +2936,5 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
       </Alert>
     )}
   </Box>
-);
+  );
+};

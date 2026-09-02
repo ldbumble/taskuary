@@ -119,9 +119,9 @@ class NotCodingTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'session_for', return_value=fake), \
              mock.patch.object(terminal, 'close', side_effect=lambda sid: closed.append(sid)):
             out = TestClient(server.app).post(f'/api/tasks/{tid}/not-coding').json()
-        self.assertEqual((out['ok'], out['kind']), (True, 'general'))
+        self.assertEqual((out['ok'], out['kind']), (True, 'task'))
         self.assertEqual(closed, ['s1'])
-        self.assertEqual(s.get_task(tid)['Kind'], 'general'); self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
+        self.assertEqual(s.get_task(tid)['Kind'], 'task'); self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
         note = next(m for m in s.list_memories() if 'NOT A CODING TASK' in m['Note'])
         self.assertIn('Badges for the new hires', note['Note']); self.assertEqual(note['Scope'], 'subject')
 

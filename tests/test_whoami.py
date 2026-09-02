@@ -66,6 +66,21 @@ class ProfileTests(unittest.TestCase):
         with mock.patch('requests.get', side_effect=AssertionError('must not be called again')):
             self.assertEqual({(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}[('github', 'login')]['value'], 'ldbumble')
 
+    def test_every_github_card_keeps_its_own_identity(self):
+        """Two GitHub connections used to collapse into one because profile() keyed cards by
+        Type. About You should show both accounts and say which card supplied each one."""
+        s = MemoryStore()
+        first = s.get_connector_by_type('github')
+        s.save_connector({'ConnectorId': first['ConnectorId'], 'Name': 'Work GitHub', 'Active': 1,
+                          'ConfigJson': json.dumps({'login': 'work-uri'})}, 't')
+        s.save_connector({'Type': 'github', 'Name': 'Personal GitHub', 'Active': 1,
+                          'ConfigJson': json.dumps({'login': 'personal-uri'})}, 't')
+        rows = [i for i in whoami.profile(s)['identities']
+                if i['channel'] == 'github' and i['kind'] == 'login' and i['source'] != 'you typed it here']
+        self.assertEqual([r['value'] for r in rows], ['work-uri', 'personal-uri'])
+        self.assertIn('Work GitHub', rows[0]['source'])
+        self.assertIn('Personal GitHub', rows[1]['source'])
+
     def test_a_bridge_running_old_code_says_so_instead_of_showing_nothing(self):
         s = MemoryStore()
         wa = s.get_connector_by_type('whatsapp'); s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 't')

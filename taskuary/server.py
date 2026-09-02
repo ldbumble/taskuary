@@ -133,7 +133,7 @@ class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
     SourceId: int | None = None; ConnectorId: int | None = None; Channel: str | None = None
     Address: str | None = None; ConfigJson: str | None = None; Active: bool | None = None
-class DispatchBody(BaseModel): agent: str = 'coder'; instruction: str | None = None; model: str | None = None
+class DispatchBody(BaseModel): agent: str | None = None; instruction: str | None = None; model: str | None = None
 class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
@@ -439,6 +439,18 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
     fields = {k: v for k, v in body.dict().items() if v is not None}
+    # One task has one worker mode. Switching the kind from the assistant chat to coding (or
+    # back to a human TODO) must close that live assistant session before the coding terminal
+    # opens; otherwise both stayed registered on the task and the UI could attach to the wrong
+    # one. The same rule lets the kind control move a live coding task into non-coding work.
+    next_kind = fields.get('Kind')
+    if next_kind and next_kind != t.get('Kind'):
+        from . import general
+        live = hub_term.session_for(task_id)
+        if live and live.alive:
+            is_chat = getattr(live, 'mode', '') == 'assistant'
+            wants_chat = general.handles({'Kind': next_kind})
+            if is_chat != wants_chat or next_kind == 'task': hub_term.close(live.sid)
     store.update_task(task_id, fields, ACTOR)
     # "Mark done - I took care of it" means the agent's job is over too: a live session left
     # running on a finished task is an agent nobody is coming back for. close() files the
@@ -477,7 +489,7 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     used to be the headless path (pipes, no window, a report you read afterwards); nothing starts
     where you cannot watch it, interrupt it or answer it, so it is now the same as /dispatch."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    agent = (body.agent if body else None) or 'coder'
+    agent = (body.agent if body else None) or hub_agents.default_agent(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
     ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None))
     return {'coder': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
@@ -517,8 +529,9 @@ def comment(task_id: int, body: TextBody):
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    ses = start_session(store, task_id, body.agent, body.model, body.instruction)
-    return {'dispatch': 'session', 'agent': body.agent, 'model': body.model, 'session': ses}
+    agent = body.agent or hub_agents.default_agent(store)
+    ses = start_session(store, task_id, agent, body.model, body.instruction)
+    return {'dispatch': 'session', 'agent': agent, 'model': body.model, 'session': ses}
 
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again
@@ -622,7 +635,7 @@ def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     if not t: raise HTTPException(404, 'task not found')
     live = hub_term.session_for(task_id)
     if live and live.alive: hub_term.close(live.sid)
-    store.update_task(task_id, {'Kind': 'general'}, ACTOR)
+    store.update_task(task_id, {'Kind': 'task'}, ACTOR)
     store.clear_dispatch(task_id)
     msgs = store.list_messages(task_id)
     learned = None
@@ -641,7 +654,7 @@ def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTa
                                 'real work, but not for the coding agent')
     store.add_comment(task_id, ACTOR, 'human', 'Not a coding task - kept on your list; the agent is off it.')
     store.audit('task', task_id, 'not_coding', ACTOR, detail={'memory_id': learned})
-    return {'ok': True, 'kind': 'general', 'memoryId': learned}
+    return {'ok': True, 'kind': 'task', 'memoryId': learned}
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
@@ -790,7 +803,7 @@ def message_thread(mid: int, limit: int = 40):
     # ...and what was DECIDED about it. A row with no task has no task detail to read a
     # history out of, and "not ours" is precisely the verdict that leaves it without one.
     return {'messages': msgs or [m], 'conversationId': m.get('ConversationId') or '',
-            'routes': store.message_routes(mid)}
+            'routes': store.message_routes(mid), 'reviews': store.reviews_for_message(mid)}
 
 @app.get('/api/messages/{mid}/attachments')
 def message_attachments(mid: int):
@@ -998,7 +1011,7 @@ def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
 
 def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
     try:
-        return hub_term.start_on_task(store_, tid, agent or 'coder', model, instruction, ACTOR)
+        return hub_term.start_on_task(store_, tid, agent or hub_agents.default_agent(store_), model, instruction, ACTOR)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
 
@@ -1009,27 +1022,54 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     full context (subject, sender, body, thread) the agent needs."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    if not store.get_agent(body.agent): raise HTTPException(422, f'unknown agent: {body.agent}')
+    agent = body.agent or hub_agents.default_agent(store)
+    if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
     _learn_promotion(m, background)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR)
-    ses = start_session(store, tid, body.agent, body.model, body.instruction)
-    return {'dispatch': 'session', 'agent': body.agent, 'taskId': tid, 'ref': task_ref(tid), 'session': ses}
+    ses = start_session(store, tid, agent, body.model, body.instruction)
+    return {'dispatch': 'session', 'agent': agent, 'taskId': tid, 'ref': task_ref(tid), 'session': ses}
 
 def _learn_promotion(m: dict, background):
     """A FILED message the owner promotes by hand is a triage miss in the other direction -
-    fyi was the wrong call. The under-reach lessons matter as much as the over-reach ones."""
-    if background is not None and not m.get('TaskId') and m.get('Status') == 'filed':
+    fyi was the wrong call. The under-reach lessons matter as much as the over-reach ones.
+
+    Promotion used to go only to the AI distillation pass. That made the button claim less than
+    it did, while Settings -> Memory showed no evidence that the click had been learned. Save the
+    concrete, scoped verdict first; LEARNED.md can then distill its general shape like every other
+    owner correction. A positive verdict is evidence, never a hard rule that every similar message
+    must become work.
+    """
+    if m.get('TaskId') or m.get('Status') != 'filed': return None
+    em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
+    if not (em or topic): return None
+    memid = store.add_memory({'Scope': 'subject' if topic else 'sender', 'ScopeKey': topic or em,
+                              'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                              'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or '')[:90]}\""
+                                      + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
+                                      + ' - MADE A TASK: triage filed it, but the owner promoted it as real work'})
+    learn.note_verdicts(store)
+    if background is not None:
         background.add_task(learn.learn_from, store,
-                            f"msg{m['MessageId']}: triage filed \"{(m.get('Subject') or '')[:80]}\" from "
+                            f"mem{memid}: triage filed \"{(m.get('Subject') or '')[:80]}\" from "
                             f"{m.get('FromEmail') or m.get('SourceName') or '?'} as fyi, but the owner made it a task - "
                             'triage under-reached')
+    return memid
 
 # ── the assistant on the Timeline (assistant.py): its post and its buttons ───────────────────
 @app.get('/api/assistant/ideas')
 def assistant_ideas(status: str = None, mid: int = None):
     """What the assistant has said, with what became of each line - by state, or the lines of one post."""
-    return {'data': [assistant._public(i) | {'firstSeen': i.get('FirstSeen'), 'lastSaid': i.get('LastSaid'), 'messageId': i.get('MessageId')}
-                     for i in store.list_ideas(status or None, mid)]}
+    def row(i):
+        out = assistant._public(i) | {'firstSeen': i.get('FirstSeen'), 'lastSaid': i.get('LastSaid'), 'messageId': i.get('MessageId')}
+        # Preserve the historical words, but do not keep presenting a disproved "nobody replied"
+        # suggestion as open. The successful Review receipt supplies the accurate ending even if
+        # the external channel has not ingested our outbound copy as a message.
+        if assistant.contradicts_sent_reply(store, out):
+            reply = assistant.sent_reply_for(store, out)
+            out['answered'] = {'at': reply.get('DecidedAt') or reply.get('CreatedAt'),
+                               'text': reply.get('FinalText') or reply.get('DraftText') or ''}
+        return out
+    return {'data': [row(i) for i in store.list_ideas(status or None, mid)]}
 
 class IdeaBody(BaseModel): days: int = 1
 
@@ -1068,7 +1108,7 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
-    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'general', ACTOR)
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'task', ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
     if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
@@ -1460,6 +1500,43 @@ def task_ci(tid: int):
     from . import ci
     return ci.check_task(store, tid)
 
+class ClarifyBody(BaseModel):
+    body: str
+    message_id: int | None = None
+
+@app.post('/api/tasks/{tid}/clarify')
+def clarify_with_sender(tid: int, body: ClarifyBody):
+    """Prepare, but never send, the question an agent needs answered.
+
+    This is deliberately its own review kind instead of reusing open_reply(): a task can have
+    an action proposal or a final-answer draft already parked in Review, and a clarification
+    must not overwrite either. Approval sends the question through the normal human gate while
+    stopping the blocked terminal and leaving the coding task waiting for the answer.
+    """
+    t = store.get_task(tid)
+    if not t: raise HTTPException(404, 'task not found')
+    text = (body.body or '').strip()
+    if not text: raise HTTPException(422, 'write the question to ask')
+    messages = store.list_messages(tid)
+    if body.message_id:
+        m = store.get_message(body.message_id)
+        if not m or m.get('TaskId') != tid: raise HTTPException(404, 'that message is not on this task')
+    else:
+        m = next((x for x in reversed(messages)
+                  if x.get('Status') != 'context' and x.get('Direction') != 'out'), None)
+    if not m: raise HTTPException(422, 'this task has no incoming message to answer')
+    rv = store.pending_review(tid, 'clarification')
+    if rv:
+        rid = rv['ReviewId']
+        store.save_review_draft(rid, text)
+    else:
+        rid = store.add_review({'TaskId': tid, 'MessageId': m['MessageId'], 'Kind': 'clarification',
+                                'Status': 'pending', 'DraftText': text,
+                                'Reason': 'the agent needs missing information from the sender'})
+    store.add_comment(tid, ACTOR, 'human', 'Clarification drafted for the sender; waiting for your approval in Review.')
+    store.audit('review', rid, 'clarification_drafted', ACTOR, detail={'message_id': m['MessageId']})
+    return {'reviewId': rid, 'taskId': tid, 'draft': text}
+
 @app.post('/api/tasks/{tid}/answer')
 def answer_to_agent(tid: int, body: dict):
     """Type an attached message's text into the task's live agent session - the person
@@ -1638,11 +1715,28 @@ def draft_review(rid: int):
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     try:
-        draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
+        if rv.get('TaskId'):
+            draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
+        else:
+            message = store.get_message(rv.get('MessageId'))
+            if not message: raise RuntimeError('the message behind this reply no longer exists')
+            draft = responder.draft_for_message(store, message, rid)
     except Exception as e:
         raise HTTPException(422, str(e)[:300])
     store.audit('review', rid, 'redraft', ACTOR)
     return {'ok': True, 'draft': draft}
+
+@app.patch('/api/reviews/{rid}')
+def save_review_text(rid: int, body: TextBody):
+    """Save what is in the reply box without deciding or sending it."""
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'review not found')
+    if rv.get('Status') not in ('pending', 'held'):
+        raise HTTPException(409, 'this reply has already been decided')
+    text = str(body.body or '')[:50_000]
+    store.save_review_draft(rid, text)
+    store.audit('review', rid, 'edit_draft', ACTOR, detail={'characters': len(text)})
+    return {'ok': True, 'draft': text}
 
 def _llm():
     try:
@@ -1657,6 +1751,42 @@ def push(body: MsgBody):
     m['external_id'] = m.get('external_id') or f'api:{datetime.now().isoformat()}'
     m['sent_at'] = m.get('sent_at') or datetime.now().isoformat(sep=' ', timespec='seconds')
     out = ingest_message(store, m, llm=_llm())
+    return {**out, 'ref': task_ref(out['task_id']) if out.get('task_id') else None}
+
+@app.post('/api/messages/{mid}/retriage')
+def retriage_message(mid: int):
+    """Run a safely-filed triage failure through the current brain again.
+
+    It reuses the stored message row, so no connector fetch and no duplicate message are involved.
+    claim_retriage is the compare-and-set that prevents a double click creating two tasks.
+    """
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    if m.get('TaskId') is not None:
+        raise HTTPException(409, 'this message already belongs to a task')
+    routes = store.message_routes(mid)
+    last = routes[-1] if routes else {}
+    if not re.search(r'\btriage\b.*(?:failed|could not read)', str(last.get('Reason') or ''), re.I):
+        raise HTTPException(409, 'retry is only available after triage failed')
+    brain = _llm()
+    if not brain:
+        raise HTTPException(422, 'no triage AI is available - check Connections and Settings')
+    if not store.claim_retriage(mid):
+        raise HTTPException(409, 'triage is already retrying this message')
+    from . import ingest as ingest_mod
+    try:
+        out = ingest_message(store, {**ingest_mod._from_row(m, store), '_mid': mid},
+                             actor=ACTOR, llm=brain)
+    except Exception as e:
+        # Most AI failures are deliberately filed by ingest_message. This catches only an
+        # unexpected pipeline failure so Retry never leaves the row spinning forever.
+        now = store.get_message(mid) or {}
+        if now.get('TaskId') is None:
+            store.place_message(mid, None, 'filed')
+            store.add_route(mid, None, 'file', None,
+                            f'triage retry failed ({str(e)[:200]}) - filed safely', [], 'triage',
+                            parse_error=str(e)[:1000])
+        raise HTTPException(422, str(e)[:300])
     return {**out, 'ref': task_ref(out['task_id']) if out.get('task_id') else None}
 
 @app.post('/api/reports/run')

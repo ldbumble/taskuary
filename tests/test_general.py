@@ -3,6 +3,8 @@ import json
 import threading
 import time
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -114,6 +116,30 @@ class SharedSessionTests(unittest.TestCase):
         self.assertEqual((info['mode'], info['connector_id'], info['model']), ('assistant', cid, 'gpt-test'))
         self.assertTrue(all(hasattr(session, name) for name in ('write', 'scrollback', 'waiting', 'subscribe', 'files')))
 
+    def test_source_message_and_its_attachment_ride_into_the_general_agent(self):
+        store = MemoryStore(); tid = general_task(store)
+        mid = store.add_message({'ExternalId': 'attached-email', 'Channel': 'email',
+                                 'Subject': 'Complete the form', 'FromName': 'Mindy',
+                                 'BodyText': 'Please fill out the attached PAM form.'})
+        store.attach_message(mid, tid)
+        store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        seen = {}
+        with TemporaryDirectory() as tmp:
+            image = Path(tmp) / 'pam.png'; image.write_bytes(b'\x89PNG\r\n\x1a\nproof')
+            store.add_attachment({'MessageId': mid, 'Name': 'pam.png', 'Path': str(image),
+                                  'ContentType': 'image/png', 'Size': image.stat().st_size})
+            def answer(system, user, **kwargs):
+                seen.update(user=user, kwargs=kwargs)
+                return 'I have the email and its form.'
+            with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+                 mock.patch.object(llm, 'build_llm', return_value=answer):
+                session = general.start_session(store, tid, pick='cli:my-codex')
+                session.send_prompt('Take this task', pick='cli:my-codex')
+        self.assertIn('Please fill out the attached PAM form.', seen['user'])
+        self.assertIn('pam.png', seen['user'])
+        self.assertIn(str(image.resolve()), seen['user'])
+        self.assertEqual(len(seen['kwargs']['images']), 1)
+
     def test_terminal_input_adds_to_the_same_conversation(self):
         store = MemoryStore(); tid = general_task(store); connect_openai(store)
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
@@ -180,6 +206,18 @@ class SharedSessionTests(unittest.TestCase):
 
 
 class GeneralApiTests(unittest.TestCase):
+    def test_switching_agent_modes_closes_the_existing_general_session(self):
+        store = MemoryStore(); tid = general_task(store)
+        session = general.GeneralSession(store, tid)
+        with mock.patch.object(server, 'store', store), \
+             mock.patch.dict(terminal.SESSIONS, {session.sid: session}, clear=True), \
+             mock.patch.object(handbook, 'enabled', return_value=False):
+            response = TestClient(server.app).patch(f'/api/tasks/{tid}', json={'Kind': 'coding'})
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(session.alive)
+            self.assertNotIn(session.sid, terminal.SESSIONS)
+        self.assertEqual(store.get_task(tid)['Kind'], 'coding')
+
     def test_one_click_turns_the_discussion_into_a_daily_agent_prompt(self):
         store = MemoryStore(); tid = general_task(store)
         store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))

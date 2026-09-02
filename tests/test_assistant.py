@@ -228,6 +228,33 @@ class PostTests(unittest.TestCase):
         out = assistant.run(s, llm=lambda *a, **k: json.dumps({'say': say}), force=True)
         self.assertEqual(out['said'], 2)
 
+    def test_a_reply_sent_from_review_is_a_message_in_the_preview_and_blocks_a_false_nag(self):
+        """The channel may not ingest our outbound copy before the next Assistant check.
+
+        Review's successful send receipt still proves both that the message was answered and
+        exactly what the owner said. The model gets that as the final message, and a claim that
+        nobody replied is rejected even if the model overlooks it.
+        """
+        s = _store()
+        tid = s.create_task({'Title': 'Give JD access', 'Kind': 'coding', 'Status': 'done'}, 't')
+        mid = _mail(s, 'jd@ours.com', 'Access', 'Am I missing a permission?', days=0,
+                    hours=2, conv='access-1', tid=tid, status='routed', name='JD')
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply',
+                            'DraftText': 'Your access is fixed. Please retry.', 'Status': 'pending'})
+        s.decide_review(rid, 'approved', 'Your access is fixed. Please retry.', 'owner')
+        seen = {}
+        def llm(system, user, **kwargs):
+            seen['user'] = user
+            return json.dumps({'say': [{'key': 'idea:reply-jd',
+                                        'text': "Nobody told JD it was fixed. I'd reply and ask him to retry.",
+                                        'why': 'the task is closed', 'mid': mid}]})
+        out = assistant.run(s, llm=llm, force=True)
+        self.assertIn('you ', seen['user'])
+        self.assertIn('Your access is fixed. Please retry.', seen['user'])
+        self.assertIn('[reply sent from Review]', seen['user'])
+        self.assertEqual(out['said'], 0)
+        self.assertEqual(s.list_ideas('open'), [])
+
     def test_a_promise_you_made_is_your_own_open_item_not_a_chase(self):
         s = _store()
         _mail(s, DANA, 'Contract', 'Can you send the signed copy?', days=4, conv='p1')
@@ -342,6 +369,24 @@ class ButtonTests(unittest.TestCase):
 
 
 class ApiTests(unittest.TestCase):
+    def test_a_historical_false_reply_nag_is_returned_as_answered(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = _store()
+        tid = s.create_task({'Title': 'Fix access', 'Kind': 'coding', 'Status': 'done'}, 't')
+        mid = _mail(s, 'jd@ours.com', 'Access', 'Can I try again?', days=0,
+                    conv='api-access', tid=tid, status='routed', name='JD')
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply',
+                            'DraftText': 'Fixed — please try again.', 'Status': 'pending'})
+        s.decide_review(rid, 'approved', 'Fixed — please try again.', 'owner')
+        s.upsert_idea({'key': 'idea:false-reply-nag', 'kind': 'idea',
+                       'text': "Nobody replied to JD. I'd answer now.",
+                       'action': {'type': 'message', 'mid': mid}}, _ago())
+        with mock.patch.object(server, 'store', s):
+            row = TestClient(server.app).get('/api/assistant/ideas?status=open').json()['data'][0]
+        self.assertEqual(row['answered']['text'], 'Fixed — please try again.')
+        self.assertTrue(row['answered']['at'])
+
     def test_the_endpoints_round_trip(self):
         from fastapi.testclient import TestClient
         from taskuary import server

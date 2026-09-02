@@ -93,6 +93,9 @@ class DeferredIngestTests(unittest.TestCase):
         self.assertEqual(self.s.get_message(bad)['Status'], 'filed')
         row = next(r for r in self.s.feed(limit=10) if r['MessageId'] == bad)
         self.assertIn('AI triage failed', row['RouteReason'])
+        route = self.s.message_routes(bad)[-1]
+        self.assertEqual(route['ParseError'], 'model down')
+        self.assertIsNone(route['RawOutput'])
         self.assertEqual(self.s.get_message(good)['Status'], 'routed')
 
     def test_outside_deferred_nothing_changes(self):

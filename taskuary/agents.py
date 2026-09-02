@@ -200,6 +200,12 @@ def _live_line(j):
 # the CLI's own login has lapsed - nothing in Taskuary can renew it, only the user at a terminal can
 _SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logged in|Not logged in|please (?:run )?[`\']?(?:claude )?/?login|codex login|401 Unauthorized', re.I)
 _LOGIN_HOW = {'claude': "run `claude`, type `/login` and finish the sign-in", 'codex': "run `codex login` and finish the sign-in"}
+# Provider/plan exhaustion is different from an agent failing the work. Only this availability
+# class is safe to hand to another configured agent automatically: a compile error should remain
+# with the agent that owns it, while "session limit; resets at 11:50" should not strand the task.
+_UNAVAILABLE = re.compile(
+    r'session limit|usage limit|rate limit|quota|capacity|temporarily unavailable|service unavailable|'
+    r'too many requests|resource exhausted|try again (?:at|after|later)|resets? (?:at|in)', re.I)
 
 def signed_out_msg(name: str, why: str) -> str:
     how = _LOGIN_HOW.get(name, f"run `{name}` and sign in again")
@@ -256,6 +262,13 @@ def runs_here(profile: dict) -> bool:
     except (FileNotFoundError, OSError): return False
 
 
+def availability_failure(error) -> bool:
+    """Can the same untouched work safely be retried on a backup provider?"""
+    text = str(error or '')
+    return isinstance(error, (FileNotFoundError, PermissionError)) or bool(
+        _UNAVAILABLE.search(text) or _SIGNED_OUT.search(text) or _DENIED.search(text) or _NO_HOME.search(text))
+
+
 def profiles(store) -> dict:
     out = {}
     for a in store.list_agents():
@@ -275,6 +288,23 @@ def default_agent(store) -> str:
     profs = profiles(store)
     if want not in profs or runs_here(profs[want]): return want
     return next((n for n, prof in profs.items() if runs_here(prof)), want)
+
+
+def agent_chain(store, primary: str = None) -> list[str]:
+    """Primary plus ordered configured fallbacks, once each.
+
+    `backup_agents=*` is the out-of-box resilient choice: every other roster entry, in the
+    stable order the owner sees. Naming a CSV narrows and orders the chain explicitly.
+    """
+    names = [str(a.get('Name') or '').strip() for a in store.list_agents() if a.get('Name')]
+    head = str(primary or default_agent(store) or '').strip()
+    if head and head not in names: return [head]
+    setting = str(store.get_settings().get('backup_agents') or '').strip()
+    backups = names if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]
+    out = []
+    for name in [head, *backups]:
+        if name and name not in out and name in names: out.append(name)
+    return out
 
 
 def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None):

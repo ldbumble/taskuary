@@ -454,6 +454,26 @@ class CoreTests(unittest.TestCase):
         s.set_setting('triage_ai', 'cli:ghost', 'o')
         self.assertIsNone(llm.build_llm(s))                         # missing agent files instead of guessing
 
+    def test_background_ai_falls_back_in_order_when_the_primary_hits_its_session_limit(self):
+        from unittest import mock
+        from taskuary import llm
+        s = MemoryStore()
+        s.upsert_agent('claude', 'coding', 'cli', '{"cmd":"claude"}')
+        s.upsert_agent('codex', 'coding', 'cli', '{"cmd":"codex"}')
+        s.set_setting('triage_ai', 'cli:claude', 'o')
+        s.set_setting('triage_backup_ai', 'cli:codex', 'o')
+        called = []
+        def made(store, name, *args, **kwargs):
+            def answer(system, user, **call_kwargs):
+                called.append(name)
+                if name == 'claude': raise RuntimeError("You've hit your session limit; resets at noon")
+                return '{"intent":"fyi","why":"backup answered"}'
+            return answer
+        with mock.patch.object(llm, 'make_cli_llm', side_effect=made):
+            out = llm.build_llm(s)('system', 'message')
+        self.assertIn('backup answered', out)
+        self.assertEqual(called, ['claude', 'codex'])
+
     def test_skip_policy_hides_the_senders_history_and_gives_it_back(self):
         from taskuary.ingest import ingest_message
         from taskuary.policy import apply_retroactively

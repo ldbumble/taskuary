@@ -12,3 +12,12 @@ export function takeFeed(res, etagRef) {
 }
 
 export const feedOk = (s) => (s >= 200 && s < 300) || s === 304;
+
+// A task carries detail through /tasks/:id; a filed FYI gets the smaller thread contract.
+// Reviews are part of that contract: omitting them made a persisted draft disappear only in
+// the browser while the Timeline row still (correctly) said "reply ready".
+export const threadDetail = (data = {}) => ({
+  messages: data.messages || [],
+  routes: data.routes || [],
+  reviews: data.reviews || [],
+});

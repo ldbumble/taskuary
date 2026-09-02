@@ -140,6 +140,19 @@ def _cut(text, n):
     return text if len(text) <= n else text[:n] + f'\n[trimmed {len(text) - n:,} characters]'
 
 
+def _task_files(store, tid: int) -> list[dict]:
+    """Files that arrived with the task's source messages, once each, in message order."""
+    detail = store.task_detail(tid) or {}
+    out, seen = [], set()
+    for message in detail.get('messages') or []:
+        for attachment in store.list_attachments(message['MessageId']):
+            path = str(attachment.get('Path') or '').strip()
+            key = path or f"attachment:{attachment.get('AttachmentId')}"
+            if key in seen: continue
+            seen.add(key); out.append(attachment)
+    return out
+
+
 # The chat is on the wall too (blackboard.py). It has no checkout, so it reads and writes the
 # HOUSE lane - the notes with no repository behind them - and it can only write when a CLI is
 # doing the thinking, because an API provider has no shell to run the command in.
@@ -185,7 +198,11 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     sources = []
     for m in (detail.get('messages') or [])[-12:]:
         who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
-        sources.append(f"FROM {who} ({m.get('SentAt') or ''})\n{_cut(m.get('BodyText'), 3_000)}")
+        files = store.list_attachments(m['MessageId'])
+        file_line = ('\nATTACHMENTS: ' + '; '.join(
+            str(a.get('Name') or 'file') + (f" ({a.get('Path')})" if a.get('Path') else '')
+            for a in files[:8])) if files else ''
+        sources.append(f"FROM {who} ({m.get('SentAt') or ''})\n{_cut(m.get('BodyText'), 3_000)}{file_line}")
     turns = []
     for c in chat_rows(store, tid)[-30:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
@@ -460,9 +477,9 @@ class GeneralSession:
                 system = f'{system}\n\n{POST_LINE}'
                 from . import handbook
                 if handbook.enabled(self.store): system = f'{system}\n\n{SOCIAL_LINE}'
-            paths = list(attachments or []) + [m.group('path') for m in _IMAGE_PATH.finditer(text)]
-            if paths and self.pick.startswith('cli:'):
-                user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
+            source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
+            paths = list(dict.fromkeys(source_paths + list(attachments or [])
+                                       + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
             def visible(kind, name, detail):
                 self._remember_trace(kind, name, detail)
                 if trace: trace(kind, name, detail)
@@ -480,6 +497,11 @@ class GeneralSession:
                                       trace=visible, cancel=cancel, resume=self.cli_sid or None)
             if not brain: raise RuntimeError('the selected AI connector is unavailable')
             if self.cli_sid: user = _turn_only(self.store, self.task_id, text)
+            # Paths are harmless context to an API brain and essential if its CLI backup takes
+            # over after a quota failure. The source message already names its files too; this
+            # line also carries images attached directly in the composer.
+            if paths:
+                user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
             try:
                 reply = str(brain(system, user, max_tokens=MAX_REPLY_TOKENS, images=_images(paths)) or '').strip()
             except Exception:
@@ -493,6 +515,12 @@ class GeneralSession:
                                           trace=visible, cancel=cancel)
                 reply = str(brain(system, user, max_tokens=MAX_REPLY_TOKENS, images=_images(paths)) or '').strip()
             self.cli_sid = getattr(brain, 'session_id', '') or self.cli_sid
+            actual = getattr(brain, 'last_pick', '')
+            if actual and actual != self.pick:
+                choice = next((o for o in provider_options(self.store) if o['pick'] == actual), None)
+                self.pick = actual
+                if choice:
+                    self.provider, self.model = choice['label'], choice.get('model') or ''
             if not reply: raise RuntimeError('the model returned an empty response')
             # the assistant's own "and that's the job done" (selfclose.CHAT_LINE). The marker is a
             # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and

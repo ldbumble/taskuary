@@ -151,6 +151,10 @@ export const cronText = (expr) => {
   return `cron ${expr}`;
 };
 
+const reportSchedule = (c) => [c.on_startup && "on app startup", c.cron && cronText(c.cron),
+  c.every_minutes && `every ${c.every_minutes} minutes`, c.daily_at && `daily at ${c.daily_at}`]
+  .filter(Boolean).join(" + ") || "once a day while Taskuary is open";
+
 const TYPE_LABELS = {
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
@@ -404,6 +408,44 @@ function Destination({ dest, onChange, targets }) {
         </Select>
       )}
     </>
+  );
+}
+
+// The receipt at the bottom of a saved report. The form above answers one field at a time; this
+// answers the operational question in one glance: what is enabled, what it reads, when it runs,
+// and what the result is allowed to do.
+function SavedReportSummary({ source }) {
+  if (!source) return null;
+  const c = parse(source.ConfigJson);
+  const sourceList = Array.isArray(c.sources) && c.sources.length ? c.sources : [c];
+  const labels = sourceList.map((s) => s.label || TYPE_LABELS[s.type] || s.type).filter(Boolean);
+  const watched = (Array.isArray(c.watch_sources) ? c.watch_sources.length : 0)
+    + (Array.isArray(c.watch_source_ids) ? c.watch_source_ids.length : 0);
+  const reads = c.type === "assistant"
+    ? `Assistant context${watched ? ` plus ${watched} selected data view${watched === 1 ? "" : "s"}` : " — messages, tasks, calendar, and its configured checks"}`
+    : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
+  const destinations = ["the Timeline"];
+  if (c.deliver?.to) destinations.push(`a draft to ${c.deliver.to} on ${c.deliver.channel || "email"}`);
+  if (c.alert?.to) destinations.push(`an alert to ${c.alert.to} when ${String(c.alert.when || "the rule matches").replaceAll("_", " ")}`);
+  return (
+    <Box sx={{ ...card, ml: { xs: 0, sm: 4 }, mt: 2, p: 1.5, maxWidth: 720,
+      bgcolor: source.Active ? "#f2f7f1" : PANEL2, borderColor: source.Active ? "#cfdcc9" : BORDER }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.65 }}>
+        <StatusDot ok={!!source.Active} />
+        <Typography sx={{ color: INK, fontWeight: 750, fontSize: 13.5 }}>
+          {source.Active ? "Enabled report" : "Disabled report"}
+        </Typography>
+      </Box>
+      <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, fontSize: 12.5 }}>
+        Reads {reads}. Runs {reportSchedule(c)}. Each result goes to {destinations.join(" and ")}.
+      </Typography>
+      <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.45, lineHeight: 1.5 }}>
+        {c.ai_prompt ? "AI writes the summary. " : "Uses the source result as-is. "}
+        {c.triage
+          ? `Triage may turn a matching result into work${c.watch_for ? ` — watching for: ${c.watch_for}` : ""}.`
+          : "Informational only — it cannot become a task."}
+      </Typography>
+    </Box>
   );
 }
 
@@ -876,6 +918,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           </StepContent>
         </Step>
       </Stepper>
+      <SavedReportSummary source={cur} />
       <ConfirmDelete open={confirmDel} what={`the report "${cfg.title || cur?.Address || "untitled"}"`}
         consequence="It stops running on its schedule and disappears from the Reports tab. Briefs it already filed stay on the Timeline."
         onClose={() => setConfirmDel(false)}

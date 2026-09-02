@@ -264,10 +264,14 @@ class DegradedTriageTests(unittest.TestCase):
 
     def test_an_unusable_answer_files_instead_of_assuming_work(self):
         s = MemoryStore()
-        out = ingest.ingest_message(s, dict(self.MSG), llm=lambda *a, **k: 'I think this is a task, honestly')
+        raw = 'I think this is a task, honestly'
+        out = ingest.ingest_message(s, dict(self.MSG), llm=lambda *a, **k: raw)
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         self.assertIn('could not read as a verdict', next(
             r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])['RouteReason'])
+        route = s.message_routes(out['message_id'])[-1]
+        self.assertEqual(route['RawOutput'], raw)
+        self.assertIn('JSONDecodeError', route['ParseError'])
 
     def test_the_cheap_fyi_short_circuit_still_runs_without_a_model(self):
         """That branch is a keyword rule that only ever FILES, which is the safe direction -

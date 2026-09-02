@@ -289,7 +289,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     # and the only sign was rows that stayed on "triaging…"
                     mid = _land(store, msg, None, 'filed')
                     store.add_route(mid, None, 'file', None,
-                                    f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail", [], 'triage')
+                                    f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail",
+                                    [], 'triage', parse_error=fail['err'])
                     store.set_setting('triage_last_error', fail['err'][:200], 'system')
                     logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
                     return {'status': 'filed', 'task_id': None, 'message_id': mid}
@@ -301,7 +302,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     mid = _land(store, msg, None, 'filed')
                     store.add_route(mid, None, 'file', None,
                                     'AI triage returned an answer it could not read as a verdict - filed rather than '
-                                    'assumed to be work' + _notes_note(), [], 'triage')
+                                    'assumed to be work' + _notes_note(), [], 'triage',
+                                    raw_output=intent.get('raw_output'), parse_error=intent.get('parse_error'))
                     logger.warning(f"ingest: unusable AI verdict, filed - {msg.get('subject') or ''}")
                     return {'status': 'filed', 'task_id': None, 'message_id': mid}
         else:
@@ -326,8 +328,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # 'escalate' was declared in the policy precedence and then read by nobody. It IS
         # the urgency rule: the owner names the senders whose mail jumps the queue, and that
         # is the only thing that marks a task urgent.
-        # `kind` ROUTES the work: coding = an agent on a checkout, general = the owner's own list,
-        # reply = the responder and Review. It is triage's judgement, made against TRIAGE.md, and
+        # `kind` ROUTES the work: coding = an agent on a checkout, general = a non-coding agent
+        # conversation, task = the owner's own list, reply = the responder and Review. It is
+        # triage's judgement, made against TRIAGE.md, and
         # the keyword scan in draft_task_fields is only the fallback for a brain that did not say
         # (or triage switched off). Nothing downstream second-guesses it - see auto_code_ok.
         judged = cfg.get('intent_classify_enabled', '1') == '1'       # a brain (or a by-construction rule) said 'task'

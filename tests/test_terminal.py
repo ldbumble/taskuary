@@ -1065,3 +1065,5 @@ class SeedCompletenessTests(unittest.TestCase):
         seed = terminal.seed_text(s, tid)
         self.assertIn('the importer fails on Tuesdays', seed)
         self.assertNotIn('truncated here', seed)
+        self.assertIn('Missing required detail? Change nothing', seed)
+        self.assertIn('if the sender must answer', seed)

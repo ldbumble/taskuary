@@ -249,6 +249,9 @@ def test_connector(store, cid: int) -> dict:
             from .intacct import probe
             from .reports import intacct_connection
             detail = probe(intacct_connection(store))
+        elif c['Type'] == 'quickbooks':
+            from .quickbooks import probe, connection
+            detail = probe(connection(store, cid))
         elif c['Type'] == 'prometheus':
             from .reports import run_prometheus, prometheus_connection
             head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})

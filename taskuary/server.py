@@ -89,7 +89,9 @@ async def token_gate(request: Request, call_next):
     if tok and request.url.path.startswith('/api') and request.headers.get('X-Taskuary-Token') not in (tok, cfg['server'].get('agent_token')):
         # an <img src> cannot carry a header, so attachment READS take the token in the query
         # string - the same concession websockets already needed
-        if not (request.url.path.startswith('/api/attachments/') and request.query_params.get('token') == tok):
+        # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
+        # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
+        if not (request.url.path.startswith('/api/attachments/') and request.query_params.get('token') == tok)                 and request.url.path != '/api/quickbooks/callback':
             return HTMLResponse('unauthorized', status_code=401)
     # WHAT AN AGENT MAY NOT DO, before a handler exists to be talked round (guard.py). A session
     # runs with the agent token in its environment, and the routes that SEND - approve a reply,
@@ -2104,6 +2106,53 @@ def report_compose(body: dict):
                                                            'type': out['config'].get('type'),
                                                            'confidence': out.get('confidence')})
     return out
+
+# ── QuickBooks Online (quickbooks.py): OAuth against Intuit, with a redirect back to this server ──
+@app.get('/api/connectors/{cid}/quickbooks/status')
+def quickbooks_status(cid: int):
+    """What the card needs to draw its Connect box: the redirect URI the Intuit app must carry,
+    whether a token is on the card, and which company it is for."""
+    from . import quickbooks as qb
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'quickbooks': raise HTTPException(404, 'not a QuickBooks connector')
+    conf = json.loads(c.get('ConfigJson') or '{}')
+    return {'redirect_uri': qb.redirect_uri(cfg['server']), 'connected': bool(c.get('Secret')),
+            'realm_id': conf.get('realm_id') or '', 'env': conf.get('env') or 'production', 'has_app': bool(conf.get('client_id') and conf.get('client_secret'))}
+
+@app.get('/api/connectors/{cid}/quickbooks/authorize')
+def quickbooks_authorize(cid: int):
+    """Where the browser goes to say yes. The state carries the connector id back."""
+    from . import quickbooks as qb
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'quickbooks': raise HTTPException(404, 'not a QuickBooks connector')
+    nonce = secrets.token_urlsafe(16); _QB_STATES[cid] = (nonce, time.time())
+    try: return {'url': qb.authorize_url(json.loads(c.get('ConfigJson') or '{}'), qb.redirect_uri(cfg['server']), f'tq-{cid}-{nonce}')}
+    except qb.QuickBooksError as e: raise HTTPException(409, str(e))
+
+_QB_STATES = {}      # connector id -> (nonce, issued at): a callback must answer a Connect we actually started
+
+@app.get('/api/quickbooks/callback', response_class=HTMLResponse)
+def quickbooks_callback(code: str = None, state: str = '', realmId: str = None, error: str = None):
+    """Intuit sends the browser back here with the code and the company id. The exchange happens
+    server-side and the refresh token never reaches the page; the tab just says it worked."""
+    from . import quickbooks as qb
+    page = lambda msg, ok=True: f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">' \
+                                f'<p style="font-weight:700">{"Connected" if ok else "Not connected"}</p><p>{msg}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>'
+    if error: return page(f'Intuit said: {error}', False)
+    if not (code and state.startswith('tq-') and realmId): return page('the callback came back without a code or a company id', False)
+    try: cid, nonce = int(state.split('-')[1]), state.split('-', 2)[2]
+    except (ValueError, IndexError): return page('bad state', False)
+    issued = _QB_STATES.pop(cid, None)
+    if not issued or issued[0] != nonce or time.time() - issued[1] > 900: return page('this Connect link is not one Taskuary issued in the last 15 minutes - press Connect on the card again', False)
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'quickbooks': return page('no such QuickBooks card', False)
+    try:
+        conf = qb.connection(store, cid)
+        qb.exchange_code(conf, code, qb.redirect_uri(cfg['server']), realmId)
+        store.save_connector({'ConnectorId': cid, 'Active': True}, ACTOR)
+        store.audit('connector', cid, 'quickbooks_connected', ACTOR, detail={'realm_id': realmId})
+    except Exception as e: return page(str(e)[:300], False)
+    return page(f'QuickBooks company {realmId} is connected to the {c["Name"]} card. Press Test there to read the company name.')
 
 @app.get('/api/intacct/fields')
 def intacct_object_fields(obj: str, connector_id: int = None):

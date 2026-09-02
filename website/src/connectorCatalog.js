@@ -77,7 +77,6 @@ export const PLANNED_CONNECTORS = Object.freeze({
   ],
   "Corporate systems": [
     { type: "netsuite", title: "NetSuite", desc: "ERP records, saved searches and reports" },
-    { type: "quickbooks", title: "QuickBooks", desc: "Accounting, invoices and expenses" },
     { type: "sap", title: "SAP", desc: "ERP data and business workflows" },
     { type: "salesforce", title: "Salesforce", desc: "CRM records, cases and opportunities" },
     { type: "hubspot", title: "HubSpot", desc: "CRM contacts, deals and tickets" },

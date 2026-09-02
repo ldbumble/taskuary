@@ -67,9 +67,15 @@ def sync_connections(store, actor='system'):
                      # intacct was reachable all along (the card carries the tool role by default) and
                      # was the one system this list never named, so the only road an agent could SEE
                      # to the ERP was "get a report pipeline saved first"
-                     'intacct|intacct_fields", ...} — '
+                     'intacct|intacct_fields|quickbooks|quickbooks_vendors|quickbooks_accounts", ...} — '
                      'saved credentials are filled in for you; if several cards have that type, pass '
-                     '"connector_id": <the id named above>; the raw output comes back.'.replace('{auth}', auth))
+                     '"connector_id": <the id named above>; the raw output comes back. '
+                     # the writes exist and are named, and the road to them is the proposal - an agent
+                     # that finds no way to post a bill invents one
+                     'WRITES to the books (quickbooks_bill, quickbooks_expense) are never yours to run directly: '
+                     'propose one - TASKUARY-PROPOSE {"action": "run_tool", "type": "quickbooks_bill", "vendor": ..., '
+                     '"amount": ..., "account": ..., "date": ..., "memo": ..., "doc_number": ...} in your session - '
+                     'and the owner approves it in Review.'.replace('{auth}', auth))
     block = '\n'.join(lines) or '_(no connections yet — add them in the Connections tab)_'
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)

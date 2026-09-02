@@ -91,6 +91,10 @@ const FIELDS = {
     ["filters, one per line: FIELD op value", "filters", "filter_lines",
       "WHENDUE <= 08/31/2026\nSTATE = Posted"], AI_FIELD],
   intacct_fields: [["object", "object", "text", "APBILL \u2014 what does this object actually carry?"], AI_FIELD],
+  // QuickBooks Online: QBO's own query language, one entity per query; the two lists people scan
+  quickbooks: [["query (QBO SQL — one entity per query)", "query", "multiline", "SELECT * FROM Bill WHERE TxnDate >= '2026-08-01' ORDERBY TxnDate DESC"], AI_FIELD],
+  quickbooks_vendors: [["vendor name contains (blank = every active vendor)", "name", "text", "amex"], AI_FIELD],
+  quickbooks_accounts: [["account type (blank = every active account)", "type", "text", "Expense · Bank · Credit Card · Accounts Payable"], AI_FIELD],
   // the semantic layer (Assistant \u2192 Numbers): a number that was PROVED against numbers the owner
   // already knew, and the scheduled check that demotes it the day it stops reconciling
   metric: [["metric name", "name", "text", "the certified metric to read"],
@@ -150,6 +154,7 @@ const TYPE_LABELS = {
   entra_signins: "Entra ID — sign-ins", entra_licenses: "Entra ID — licence seats",
   prometheus: "Prometheus", datadog: "Datadog monitors",
   intacct: "Sage Intacct", intacct_fields: "Intacct \u2014 what fields exist",
+  quickbooks: "QuickBooks Online", quickbooks_vendors: "QuickBooks \u2014 vendors", quickbooks_accounts: "QuickBooks \u2014 chart of accounts",
   metric: "A certified number (Assistant \u2192 Numbers)", metric_check: "Re-prove the certified numbers",
   digest: "Taskuary digest", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline (its voice: COUNSEL.md, Docs tab)",
   agent: "AI agent — run a skill or a prompt",
@@ -192,7 +197,7 @@ const TYPE_GROUPS = [
   ["Azure", ["azure", "azure_blob", "azure_logs"]],
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
-  ["Corporate systems", ["intacct", "intacct_fields", "metric", "metric_check"]],
+  ["Corporate systems", ["intacct", "intacct_fields", "quickbooks", "quickbooks_vendors", "quickbooks_accounts", "metric", "metric_check"]],
   ["The AI itself", ["agent"]],
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],

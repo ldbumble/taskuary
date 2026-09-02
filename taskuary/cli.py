@@ -201,6 +201,9 @@ def main():
         url = public_url(host, port)
         print(f'port {old} is in use by something else - using {port} instead')
     print(f'Taskuary {__version__} - {url}  (data: {config.db_path()})')
+    # the port actually bound, for anything in the server that has to name its own address (the
+    # QuickBooks redirect URI): server.py reads config, and config reads this
+    import os; os.environ['TASKUARY_PORT'] = str(port)
     if not args.no_browser:
         threading.Thread(target=lambda: (time.sleep(1.2), webbrowser.open(url)), daemon=True).start()
     uvicorn.run('taskuary.server:app', host=host, port=port, log_level='warning')

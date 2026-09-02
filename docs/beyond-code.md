@@ -1,6 +1,6 @@
 # Beyond code: how one funnel handles a million kinds of task
 
-*A design note, 2026-09-01. Nothing here is built yet; it is the shape the owner and the agents
+*A design note, 2026-09-01. Step 1 is built; the rest is the shape the owner and the agents
 agreed to build toward. The question that prompted it: "a credit-card transaction arrives; it should
 become an AP bill in QuickBooks. The task can be anything. How do we handle the million assorted
 tasks, not just development?"*
@@ -33,7 +33,11 @@ You do not enumerate a million tasks. You let the company's playbooks accrete, o
 job**, the first time each is done - the way Social accretes facts.
 
 **A playbook** is a markdown file under `~/.taskuary/playbooks/<slug>.md` (beside the operator
-documents, versioned like them, editable on the Docs tab), with five parts:
+documents, versioned like them). It has two doors: a *Playbooks* shelf on the Docs tab, where they
+are read and edited like SOUL.md, and a *Playbooks* section on each connector card listing the
+ones whose `uses:` line names that connection - the QuickBooks card shows every job that posts to
+the books. One file, two doors; the connector is where you look for "what does this thing do for
+us", the Docs tab is where you edit the words. Five parts:
 
 ```
 # Post a card transaction as an AP bill
@@ -62,7 +66,7 @@ files it. The second transaction matches it. That is the accretion: every kind o
 hand once, by the agent with the owner watching, and never twice.
 
 **The money gate is the one that already exists.** Writes to a financial system never happen
-directly. The agent emits `TASKUARY-PROPOSE {"action": "tool", "type": "quickbooks_bill", ...}`
+directly. The agent emits `TASKUARY-PROPOSE {"action": "run_tool", "type": "quickbooks_bill", ...}`
 (proposals.py) and the proposal is a Review card: vendor, amount, account, period, the receipt
 image beside it. The playbook's `alone:` line is a **routing policy** (Settings → Routing
 policies), the deterministic gate the AI cannot override: *auto-approve quickbooks_bill when vendor
@@ -77,10 +81,10 @@ the period was open. A thin card still says what is missing.
 
 ## What to build, in order
 
-1. **QuickBooks Online connector** - the write side, where the value lands. OAuth2 (Intuit's
-   developer app, one-time), the standard `connectors` card with test, and four tools:
-   `quickbooks_vendors` (read), `quickbooks_accounts` (read), `quickbooks_bill` (write, proposal-
-   gated), `quickbooks_expense` (write, gated). The catalog already lists it as planned.
+1. **QuickBooks Online connector** - *built (taskuary/quickbooks.py, 2026-09-01)*. OAuth2 against
+   the owner's Intuit app with Connect on the card, five tools: `quickbooks` (QBO's query
+   language), `quickbooks_vendors` and `quickbooks_accounts` (read), `quickbooks_bill` and
+   `quickbooks_expense` (write, proposal-gated below scope `write`).
 2. **Playbooks** - the folder, the Docs-tab shelf, the `when` matcher in triage, the seed section,
    and the on-close "draft its playbook" question. Small: it is a fourth operator document with a
    directory instead of a file.

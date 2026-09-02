@@ -55,6 +55,7 @@ Nothing is polled without an enabled role.
 | Microsoft Entra ID | Available | People, transitive group membership, sign-in activity, and license usage when the connected app has permission |
 | Prometheus and Datadog | Available | PromQL instant queries and Datadog monitor states |
 | Sage Intacct | Available | Read-only XML gateway access for GL detail, AP bills, vendors, budgets, statistical accounts, and schema discovery. A source card can list the fields an object carries in your company, and the composer reads that list before writing a query |
+| QuickBooks Online | Available | OAuth sign-in from the card. Bills, purchases, vendors and the chart of accounts as reports and agent tools (QBO's own query language), and the first system here an agent can post to: an AP bill or a paid expense. The card ships read-only, so a write is a proposal the owner approves in Review; raising the card to `write` lets a routing policy pass small, known bills through |
 | WinRM | Available | Runs PowerShell on a remote Windows machine and returns output to the Timeline |
 | MCP | Available | Uses an MCP server tool as a scheduled report source |
 | SQLite, REST, RSS | Available | Scheduled reports with optional AI summaries |

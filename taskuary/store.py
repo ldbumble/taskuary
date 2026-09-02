@@ -309,6 +309,9 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # the books are read-only here: report and tool, never trigger. Intacct does
                  # not push, and an agent that can WRITE a journal entry is a different product
                  'intacct': 'report,tool',
+                 # QuickBooks is the first Corporate system that can WRITE (a bill, an expense) -
+                 # still report and tool, never trigger; the writes are gated by scope, not by role
+                 'quickbooks': 'report,tool',
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
                  'firecrawl': 'report,tool', 'reader': 'report,tool',
@@ -443,7 +446,7 @@ class SQLiteStore:
                          ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
-                         ('intacct', 'Sage Intacct'),
+                         ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),

@@ -13,7 +13,7 @@ and replies wait for your approval. Nothing sends or ships without you.
 
 ![The Taskuary Studio: work arrives, triage decides what needs action, and agents take seats to work it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
 
-Taskuary is early—currently **v0.3.2.5**—and moving fast. The funnel, review queue,
+Taskuary is early—currently **v0.3.2.6**—and moving fast. The funnel, review queue,
 agent sessions, and reports pipeline are in daily use; breaking changes are still possible
 before 1.0.
 

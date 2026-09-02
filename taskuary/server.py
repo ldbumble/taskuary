@@ -140,7 +140,9 @@ class AssistantSessionBody(BaseModel):
     connector_id: int | None = None; pick: str | None = None; model: str | None = None
 class AssistantMessageBody(AssistantSessionBody):
     text: str; attachments: list[str] = []
-class DecideBody(BaseModel): verb: str; final_text: str | None = None; note: str | None = None
+class DecideBody(BaseModel):
+    verb: str; final_text: str | None = None; note: str | None = None
+    cc: list[str] | None = None      # loop somebody in on this answer (email only)
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -1321,7 +1323,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     from .verdicts import VERB2STATUS, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
-                learn_async=(background.add_task if background is not None else None))
+                learn_async=(background.add_task if background is not None else None), cc=body.cc)
 
 @app.get('/api/tasks/{tid}/proof')
 def task_proof(tid: int):

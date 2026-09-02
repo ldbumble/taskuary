@@ -175,8 +175,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       setDetail(data);
       try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) setWait(w); }
       catch { if (!stale(id)) setWait({ data: [], state: null }); }
-    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Failed to load task"); }
-  }, []);
+    } catch (e) {
+      if (stale(id)) return;
+      // A task can vanish under an open pane: "not mine" on its message deletes the task and
+      // closes its session. The detail poll then asked for a dead id every three seconds and
+      // repainted "task not found" each time, which reads as the app being broken rather than
+      // as the thing you just did. Let go of it, and say it once.
+      if (e?.response?.status === 404) {
+        setDetail(null); onSelect(null);
+        setErr("That task is gone - it was deleted.");
+        return;
+      }
+      setErr(e?.response?.data?.detail || "Failed to load task");
+    }
+  }, [onSelect]);
   // the tab always lands on what is still in progress - whatever it was left on last time
   useEffect(() => { if (active) { setFilter("live"); setOlder(false); } }, [active]);
   useEffect(() => { setOlder(false); }, [filter]);
@@ -395,6 +407,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const next = filterForSelectedState(filter, key);
     if (next !== filter) { setFilter(next); setOlder(false); }
   }, [active, selected, tasks, search, filter]);
+
+  // ...except when the owner ENDS it. The effect above exists so a task that moves state under
+  // you stays on screen, and for done it did exactly the wrong thing: click Mark task done and
+  // the view followed the task into the Done list and sat there on the row you had just
+  // finished with. Closing a task is a statement that you are finished looking at it, so let go
+  // of it and stay where the work is.
+  const finish = async (status) => {
+    await api.patch(`/api/tasks/${selected}`, { Status: status });
+    seenState.current = { id: null, key: null };     // nothing for the follow effect to chase
+    setFilter("live"); setOlder(false); onSelect(null);
+    loadTasks(); onChanged?.();
+  };
   // The desktop page is a master/detail workspace. Opening it with a populated list but no
   // detail selected leaves most of the screen as a dead blank panel and makes the first click
   // compulsory. Follow the visible list to its first task on arrival (and after removing the
@@ -671,7 +695,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Tooltip title={t.Status === "done" ? "Completed" : "Mark this task done"}>
                         <span>
                           <IconButton size="small" disabled={["done", "dropped"].includes(t.Status)}
-                            onClick={() => patch({ Status: "done" })} sx={{ mt: -0.35, color: "#6f8a6e" }}>
+                            onClick={() => finish("done")} sx={{ mt: -0.35, color: "#6f8a6e" }}>
                             {t.Status === "done"
                               ? <CheckCircleOutlineIcon sx={{ fontSize: 22 }} />
                               : <RadioButtonUncheckedIcon sx={{ fontSize: 22 }} />}
@@ -737,7 +761,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </LabeledControl>
                         <Box sx={{ flex: 1 }} />
                         <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
-                          onClick={() => patch({ Status: "done" })}>Mark task done</Button>
+                          onClick={() => finish("done")}>Mark task done</Button>
                       </Box>
                     )}
                     {["done", "dropped"].includes(t.Status) && (

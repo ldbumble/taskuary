@@ -63,9 +63,13 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
 
 
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
-           actor: str = 'owner', learn_async=None) -> dict:
+           actor: str = 'owner', learn_async=None, cc: list = None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
-    call (the API hands FastAPI's background task runner in); None runs it inline."""
+    call (the API hands FastAPI's background task runner in); None runs it inline.
+
+    `cc` loops somebody in on this answer. It is passed at the moment of approval and nowhere
+    else: the copy list you can SEE on the card is the one that goes, and a reloaded page starts
+    empty rather than sending to somebody you have forgotten you added."""
     from . import learn, outbound
     rid = rv['ReviewId']
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
@@ -103,7 +107,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if final and deliver:
         try:
             sent = outbound.send_out(store, deliver.get('channel'), deliver.get('to'),
-                                     deliver.get('subject'), final)
+                                     deliver.get('subject'), final, cc=cc)
             if rv.get('MessageId'):
                 store.set_message_status(rv['MessageId'], 'sent')
         except Exception as e:
@@ -118,10 +122,11 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if final and rv.get('MessageId'):
         msg = store.get_message(rv['MessageId'])
         try:
-            sent = outbound.reply_to_message(store, msg, final)
+            sent = outbound.reply_to_message(store, msg, final, cc=cc)
             if rv.get('TaskId'):
+                copied = f", copied {', '.join(sent.get('cc') or [])}" if sent.get('cc') else ''
                 store.add_comment(rv['TaskId'], actor, 'human',
-                                  f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}.")
+                                  f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}{copied}.")
         except Exception as e:
             send_err = str(e)[:300]
             logger.warning(f'reply send failed for review {rid}: {send_err}')

@@ -118,7 +118,7 @@ class PhoneTests(unittest.TestCase):
         _, _, rid = seed_review(s)
         phone.ping_tail(s, rid)
         sent = {}
-        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, t: sent.update(t=t) or {'channel': 'email', 'to': []}), \
+        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, t, to=None, cc=None: sent.update(t=t) or {'channel': 'email', 'to': []}), \
              mock.patch('taskuary.messengers.tg_send'):
             self.assertTrue(phone.intercept(s, 'telegram', '777', 'Tell her Thursday works.'))
         self.assertEqual(sent['t'], 'Tell her Thursday works.')

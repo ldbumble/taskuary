@@ -41,14 +41,27 @@ def _mailbox(store, msg=None):
     return src['Address']
 
 
+def addrs(xs) -> list:
+    """The addresses in a list, deduplicated, order kept. Anything without an @ is not one."""
+    seen, out = set(), []
+    for x in xs or []:
+        a = str(x or '').strip()
+        if '@' in a and a.lower() not in seen: seen.add(a.lower()); out.append(a)
+    return out
+
+
 def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str = None, mailbox: str = None,
-               connector_id=None) -> dict:
+               connector_id=None, cc: list = None) -> dict:
     """Reply in thread when we know the Graph message id, otherwise a new mail. Plain text:
-    these are answers from a person, not marketing."""
+    these are answers from a person, not marketing.
+
+    `cc` is looping somebody in - the owner adding a colleague to their own answer, in the open
+    where the sender can see it. It rides the same approval and the same audit line as the reply
+    itself, because it IS the reply: one send, one record of who received it."""
     box = mailbox or _mailbox(store)
     connector_id = connector_id or _source_connector_id(store, 'email', box)
     tok = _graph_token(store, connector_id=connector_id)
-    to = [t for t in (to or []) if t and '@' in t]
+    to, cc = addrs(to), addrs(cc)
     if not to and not reply_to_graph_id: raise RuntimeError('no recipient')
     hdr = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
     if reply_to_graph_id:
@@ -56,18 +69,23 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
         # line - greeting, body and signature all jammed together. Escape and give the breaks back.
         import html as _html
         comment = _html.escape(body).replace(chr(10), '<br>')
+        # a reply with NO message object keeps Graph's own recipients; the moment we send one it
+        # replaces them, so `to` has to go back in whenever there is a cc to add
+        m = {}
+        if to: m['toRecipients'] = [{'emailAddress': {'address': a}} for a in to]
+        if cc: m['ccRecipients'] = [{'emailAddress': {'address': a}} for a in cc]
         r = requests.post(f'{GRAPH}/users/{box}/messages/{reply_to_graph_id}/reply', headers=hdr, timeout=30,
-                          data=json.dumps({'message': {'toRecipients': [{'emailAddress': {'address': a}} for a in to]}
-                                           if to else {}, 'comment': comment}))
+                          data=json.dumps({'message': m, 'comment': comment}))
     else:
         r = requests.post(f'{GRAPH}/users/{box}/sendMail', headers=hdr, timeout=30,
                           data=json.dumps({'message': {'subject': subject or '(no subject)',
                                                        'body': {'contentType': 'Text', 'content': body},
-                                                       'toRecipients': [{'emailAddress': {'address': a}} for a in to]},
+                                                       'toRecipients': [{'emailAddress': {'address': a}} for a in to],
+                                                       **({'ccRecipients': [{'emailAddress': {'address': a}} for a in cc]} if cc else {})},
                                            'saveToSentItems': True}))
     if r.status_code >= 300:
         raise RuntimeError(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
-    return {'channel': 'email', 'to': to, 'mailbox': box, 'threaded': bool(reply_to_graph_id)}
+    return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': box, 'threaded': bool(reply_to_graph_id)}
 
 
 def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
@@ -135,7 +153,7 @@ def can_reply(store, channel) -> bool:
     return True
 
 
-def send_out(store, channel: str, to, subject: str, body: str) -> dict:
+def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.
 
     reply_to_message answers a message - it reads the mailbox, thread id and chat id off the row
@@ -145,7 +163,9 @@ def send_out(store, channel: str, to, subject: str, body: str) -> dict:
     not two.
     """
     to = [t.strip() for t in (to if isinstance(to, (list, tuple)) else str(to or '').split(',')) if str(t).strip()]
-    ch = (channel or 'email').lower()
+    ch, cc = (channel or 'email').lower(), addrs(cc)
+    if cc and ch != 'email':
+        raise RuntimeError(f'{ch} has no cc - only mail can copy somebody in')
     if not can_reply(store, ch):
         raise RuntimeError(f'sending on {ch} is off - Settings → Replies decides which channels '
                            'Taskuary may write to, and it governs outbound reports too')
@@ -154,12 +174,12 @@ def send_out(store, channel: str, to, subject: str, body: str) -> dict:
         # Graph when the Outlook card is connected, otherwise the IMAP mailbox's own SMTP
         c = store.get_connector_by_type('outlook')
         if c and c.get('Active'):
-            return send_email(store, to, subject or '(no subject)', body)
+            return send_email(store, to, subject or '(no subject)', body, cc=cc)
         from .imapmail import send_smtp
         box = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
                     if x['Type'] in ('gmail', 'imap') and x['Active']), None)
         if not box: raise RuntimeError('no mailbox is connected to send from')
-        return send_smtp(store, box, to, subject or '(no subject)', body)
+        return send_smtp(store, box, to, subject or '(no subject)', body, cc=cc)
     if ch == 'teams':
         if not to: raise RuntimeError('no chat id - a Teams message needs one to land in')
         return send_teams(store, to[0], f'**{subject}**\n\n{body}' if subject else body)
@@ -237,10 +257,16 @@ def send_targets(store) -> list:
     return [{'channel': ch, 'to': list(tos.values())} for ch, tos in seen.items()]
 
 
-def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
+def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""
     ch, ext = msg.get('Channel'), str(msg.get('ExternalId') or '')
+    cc = addrs(cc)
+    # cc is a mail idea. A chat has members, not recipients, and quietly dropping the person the
+    # owner meant to loop in is the one outcome worth refusing over
+    if cc and ch != 'email':
+        raise RuntimeError(f'a {ch} message has no cc - answer by email to copy somebody, '
+                           'or add them to the chat itself')
     if ch == 'email' and ext.startswith('imap:'):
         # mail that arrived over IMAP goes back over the provider's own SMTP, in-thread
         from .imapmail import send_smtp
@@ -250,11 +276,11 @@ def reply_to_message(store, msg: dict, body: str, to: list = None) -> dict:
                   and json.loads(x.get('ConfigJson') or '{}').get('address', '').lower() == box.lower()), None)
         if not c: raise RuntimeError(f'no IMAP connection is set up for {box}')
         return send_smtp(store, c, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
-                         body, in_reply_to=msg.get('ConversationId'))
+                         body, in_reply_to=msg.get('ConversationId'), cc=cc)
     if ch == 'email':
         return send_email(store, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
                           body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'),
-                          _source_connector_id(store, 'email', msg.get('SourceName')))
+                          _source_connector_id(store, 'email', msg.get('SourceName')), cc=cc)
     if ch == 'teams':
         chat = (msg.get('ConversationId') or '')[6:]        # 'teams:19:...'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')

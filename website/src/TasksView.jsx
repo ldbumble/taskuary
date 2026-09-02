@@ -807,7 +807,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         fontSize: 9, fontWeight: 750 }}>Latest saved result</Typography>
                       <Box sx={{ mt: 0.35, bgcolor: PANEL2, border: `1px solid ${BORDER}`,
                         borderRadius: 1.5, overflow: "hidden" }}>
-                        <CoderReport body={report.Body} />
+                        <CoderReport body={report.Body} artifacts={detail?.artifacts || []} />
                       </Box>
                       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
                         Finished by {report.Actor || "the coding agent"}{report.CreatedAt ? ` · ${fmtDateTime(report.CreatedAt)}` : ""}
@@ -913,7 +913,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                       <Button size="small" sx={{ fontSize: 11 }} onClick={() => setWrapped(null)}>dismiss</Button>
                     </Box>
-                    <CoderReport body={wrapped.report || wrapped.note} />
+                    <CoderReport body={wrapped.report || wrapped.note} artifacts={wrapped.artifacts || []} />
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>
                       {wrapped.note
                         ? "Nothing was sent and nothing closed — the task is still open. Start a session again and the agent is handed this note, so it carries on instead of starting over."

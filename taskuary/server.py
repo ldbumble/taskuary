@@ -106,7 +106,9 @@ async def token_gate(request: Request, call_next):
         # string - the same concession websockets already needed
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
-        if not (request.url.path.startswith('/api/attachments/') and request.query_params.get('token') == tok)                 and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback'):
+        file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/'))
+        if not (file_read and request.query_params.get('token') == tok) \
+                and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback'):
             return HTMLResponse('unauthorized', status_code=401)
     # WHAT AN AGENT MAY NOT DO, before a handler exists to be talked round (guard.py). A session
     # runs with the agent token in its environment, and the routes that SEND - approve a reply,
@@ -316,7 +318,8 @@ def task_detail(task_id: int):
     # a session that has ended still leaves work to close out, so the page has to know one
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
-    return {**d, 'session': hub_term.for_task(task_id, tail=3),
+    return {**d, 'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
+            'session': hub_term.for_task(task_id, tail=3),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
 
@@ -347,6 +350,11 @@ def assistant_session(task_id: int, body: AssistantSessionBody = None):
     t = store.get_task(task_id) or {}
     if t.get('Status') in ('done', 'dropped') and not general.session_for(task_id):
         return _assistant_payload(task_id)
+    # The dock and WhatsApp are two views of one assistant. Choosing its provider here is a
+    # configuration change, not a tab-local preference that vanishes on restart.
+    if general.is_dock(t) and body.pick:
+        store.set_setting('assistant_ai', str(body.pick), ACTOR)
+        store.set_setting('assistant_model', str(body.model or ''), ACTOR)
     try: session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
     except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
     return _assistant_payload(task_id, session)
@@ -413,6 +421,7 @@ def assistant_create_report(task_id: int, body: AssistantSessionBody = None):
     store.add_comment(task_id, ACTOR, 'human',
                       f'Created daily recurring report "{report_cfg["title"]}" from this discussion ({mode}; report source {sid}).')
     return {'sourceId': sid, 'title': report_cfg['title'], 'config': report_cfg, 'created': True, 'mode': mode}
+
 
 @app.post('/api/tasks/{task_id}/assistant/stream')
 async def assistant_stream(task_id: int, body: AssistantMessageBody):
@@ -813,6 +822,14 @@ def _att_row(a: dict) -> dict:
             'is_audio': str(a['ContentType'] or '').startswith('audio/'),
             'url': f"/api/attachments/{a['AttachmentId']}" if a['Path'] else None}
 
+
+def _artifact_row(a: dict) -> dict:
+    return {'id': a['ArtifactId'], 'name': a.get('Name') or 'session artifact.md',
+            'content_type': a.get('ContentType') or 'text/markdown', 'size': a.get('Size') or 0,
+            'kind': a.get('Kind') or 'session', 'created_by': a.get('CreatedBy') or '',
+            'created_at': a.get('CreatedAt'),
+            'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None}
+
 # SVG/HTML as a navigable document on this origin runs script as Taskuary. PNG/JPEG
 # stay `inline` so the panel <img> can draw them; SVG still displays in <img> with
 # Content-Disposition: attachment (the tab-open case is what this blocks).
@@ -882,6 +899,21 @@ def attachment(aid: int, download: bool = False):
                         content_disposition_type='inline' if inline else 'attachment')
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     return resp
+
+
+@app.get('/api/task-artifacts/{aid}')
+def task_artifact(aid: int, download: bool = False):
+    """Open or download a session artifact without exposing arbitrary local files."""
+    from . import session_artifacts
+    artifact = store.get_task_artifact(aid)
+    if not artifact: raise HTTPException(404, 'artifact not found')
+    path = session_artifacts.confined(artifact.get('Path'))
+    if not path: raise HTTPException(404, 'this artifact is no longer on disk')
+    response = FileResponse(path, media_type='text/markdown; charset=utf-8',
+                            filename=_att_filename(artifact.get('Name')),
+                            content_disposition_type='attachment' if download else 'inline')
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 @app.post('/api/messages/{mid}/attachments/fetch')
 def fetch_attachments(mid: int):

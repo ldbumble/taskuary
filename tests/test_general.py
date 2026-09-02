@@ -26,6 +26,14 @@ def connect_openai(store):
 
 
 class SharedSessionTests(unittest.TestCase):
+    def test_native_api_is_the_fast_default_when_assistant_choice_is_blank(self):
+        store = MemoryStore()
+        store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        cid = connect_openai(store)
+        store.set_setting('assistant_ai', '', 'owner')
+        pick, _label, model = general._selected(store)
+        self.assertEqual((pick, model), (f'connector:{cid}', 'gpt-test'))
+
     def test_assistant_reads_relevant_company_knowledge_from_social(self):
         store = MemoryStore(); tid = general_task(store)
         handbook.post(store, 'Customer launches need operations approval',

@@ -526,7 +526,14 @@ export const ChoiceList = ({ children }) => (
   <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden" }}>{children}</Box>
 );
 
-export const CoderReport = ({ body }) => {
+const artifactUrl = (artifact, download = false) => {
+  const token = localStorage.getItem("taskuary_token");
+  const query = [download ? "download=true" : "", token ? `token=${encodeURIComponent(token)}` : ""]
+    .filter(Boolean).join("&");
+  return `${artifact?.url || ""}${query ? `?${query}` : ""}`;
+};
+
+export const CoderReport = ({ body, artifacts = [] }) => {
   const text = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim();
   // ^ anchored per line, and the label eats spaces but NOT the newline - letting \s* run on
   // swallowed the separator, so an all-empty report rendered "TRIAGE -> Determination:"
@@ -552,7 +559,7 @@ export const CoderReport = ({ body }) => {
             whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{result.text}</Typography>
         </Box>
       )}
-      {!!detailRows.length && (
+      {!!(detailRows.length || artifacts.length) && (
         <Box component="details" sx={{ borderTop: result ? `1px solid ${BORDER}` : "none",
           "&[open] > summary": { borderBottom: `1px solid ${BORDER}` } }}>
           <Box component="summary" sx={{ px: 1.35, py: 0.7, cursor: "pointer", color: DIM,
@@ -571,6 +578,19 @@ export const CoderReport = ({ body }) => {
                   overflowWrap: "anywhere" }}>{r.text}</Typography>
               </Box>
             ))}
+            {!!artifacts.length && (
+              <Box sx={{ mt: detailRows.length ? 1.15 : 0 }}>
+                <Typography sx={{ ...mono, color: FAINT, fontWeight: 700, fontSize: 9.5,
+                  letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>Full artifact</Typography>
+                {artifacts.slice(0, 3).map((artifact) => (
+                  <Button key={artifact.id} component="a" href={artifactUrl(artifact)} target="_blank"
+                    rel="noopener" size="small" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
+                    sx={{ mr: 0.75, mb: 0.4, px: 0, justifyContent: "flex-start", textTransform: "none" }}>
+                    Open full agent output
+                  </Button>
+                ))}
+              </Box>
+            )}
           </Box>
         </Box>
       )}

@@ -25,6 +25,7 @@ DOCK_TAG = 'assistant:dock'
 SCROLLBACK = 200_000
 MAX_CONTEXT = 24_000
 MAX_REPLY_TOKENS = 2_000
+DOCK_REPLY_TOKENS = 1_000       # a one-item walkthrough should answer quickly, not write an essay
 WAIT_TURN = 240.0        # how long a new question waits behind the one being answered
 REPORT_DRAFT_TOKENS = 1_200
 REPORT_SKILL_CHARS = 2_400
@@ -102,15 +103,23 @@ def provider_options(store) -> list:
 
 def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str, str]:
     options = provider_options(store)
+    explicit = bool(pick or connector_id is not None or model)
     wanted = str(pick or (f'connector:{connector_id}' if connector_id else '')
                  or store.get_settings().get('assistant_ai') or '')
     if wanted and ':' not in wanted and wanted.isdigit(): wanted = f'connector:{wanted}'
     if not wanted:
-        from . import agents as hub_agents
-        wanted = f'cli:{hub_agents.default_agent(store)}'
+        # API/local connectors answer in-process and are dramatically quicker than launching a
+        # coding CLI. Prefer that native path for chat; the owner can persist a CLI choice when
+        # they need its tools.
+        native = next((o for o in options if o.get('type') != 'cli'), None)
+        if native: wanted = native['pick']
+        else:
+            from . import agents as hub_agents
+            wanted = f'cli:{hub_agents.default_agent(store)}'
     choice = next((o for o in options if o['pick'] == wanted), None) or (options[0] if options else None)
     if not choice: return '', '', model or ''
-    return choice['pick'], choice['label'], model or choice['model']
+    saved_model = store.get_settings().get('assistant_model') if not explicit else ''
+    return choice['pick'], choice['label'], model or saved_model or choice['model']
 
 
 def chat_rows(store, tid: int) -> list:
@@ -290,7 +299,15 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             "what agents produced, and what to do next. Prioritize; do not merely recite every row. "
             "When you mention a task, link it as [TQ-0001](#task=1), using its real id. The buttons above "
             "the chat open Timeline, Tasks, and Review. You may explain or perform actions only through "
-            "tools you actually have; approval and sending remain the owner's actions."
+            "tools you actually have; approval and sending remain the owner's actions.\n\n"
+            "WALKTHROUGH MODE\nWhen the owner asks to walk through everything, needs-attention work, "
+            "email, tasks, reviews, or agent output, run a turn-by-turn review. On each response: "
+            "cover exactly ONE unresolved item; give the concrete context and your recommended action; "
+            "then ask the single question needed to decide or advance it and STOP. Wait for the owner's "
+            "next message before moving to another item. Treat their answer as applying to the item you "
+            "just asked about. Briefly acknowledge it, use available tools when they explicitly authorize "
+            "a safe action, then present the next unresolved item. Do not dump a list upfront. Say clearly "
+            "when the walkthrough is complete."
         )
     sources = []
     for m in (detail.get('messages') or [])[-12:]:
@@ -616,7 +633,8 @@ class GeneralSession:
             if paths:
                 user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
             try:
-                reply = str(brain(system, user, max_tokens=MAX_REPLY_TOKENS, images=_images(paths)) or '').strip()
+                limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
+                reply = str(brain(system, user, max_tokens=limit, images=_images(paths)) or '').strip()
             except Exception:
                 # the CLI could not pick that conversation back up (it was restarted, its history
                 # was cleared, the id aged out). Start a fresh one and say the whole thing, once.
@@ -626,7 +644,8 @@ class GeneralSession:
                 system, user = _prompt(self.store, self.task_id)
                 brain = llm_mod.build_llm(self.store, pick=self.pick, model=self.model or None,
                                           trace=visible, cancel=cancel)
-                reply = str(brain(system, user, max_tokens=MAX_REPLY_TOKENS, images=_images(paths)) or '').strip()
+                limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
+                reply = str(brain(system, user, max_tokens=limit, images=_images(paths)) or '').strip()
             self.cli_sid = getattr(brain, 'session_id', '') or self.cli_sid
             actual = getattr(brain, 'last_pick', '')
             if actual and actual != self.pick:

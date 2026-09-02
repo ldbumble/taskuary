@@ -39,6 +39,11 @@ Harness, model, and prompt controls stay collapsed until **Run another agent** i
 keeps the outcome prominent while still allowing a different harness or a new instruction for
 the next attempt.
 
+The saved result is intentionally short. Every finished coding session also writes a full Markdown
+artifact containing that result and the complete transcript; open it under **Work details -> Full
+artifact** on the task page. This belongs to the task's **Agent work** record; it is separate from
+the floating assistant conversation.
+
 - **Start coding session** starts the selected harness and model. It receives the task summary,
   incoming messages, attachments, saved result and optional new prompt.
 - **Start new coding session** can select a different harness after an earlier run stopped or

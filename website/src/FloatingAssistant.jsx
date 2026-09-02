@@ -9,6 +9,7 @@ import { ASSISTANT, BORDER, DIM, GRADIENT, INK, PANEL, PANEL2 } from "./theme.js
 const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.GeneralWorkspace })));
 
 const STARTERS = [
+  ["Walk through all", "Walk me through everything that is open and needs attention. Cover exactly one item at a time: explain the context and recommendation, ask me the one question needed for that item, then stop and wait for my answer before continuing."],
   ["Important now", "Walk me through what needs my attention right now. Start with the most consequential item, explain why it matters, and tell me the next action."],
   ["Important emails", "Walk me through the important recent emails and messages. Separate what needs a reply or decision from what is only useful context."],
   ["Outstanding tasks", "Review my outstanding tasks. Call out what is waiting, stuck, or has gone quiet, then recommend the order I should handle them."],

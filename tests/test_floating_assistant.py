@@ -4,7 +4,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import general, server
+from taskuary import general, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -52,6 +52,8 @@ class FloatingAssistantTests(unittest.TestCase):
         work = store.create_task({'Title': 'Review launch plan', 'Kind': 'general', 'Status': 'open'}, 'owner')
         system, user = general._prompt(store, tid)
         self.assertIn('HOVERING GUIDE', system)
+        self.assertIn('WALKTHROUGH MODE', system)
+        self.assertIn('exactly ONE unresolved item', system)
         self.assertIn('[TQ-0001](#task=1)', system)
         self.assertIn('WORKSPACE SNAPSHOT', user)
         self.assertIn(f'TQ-{work:04d}', user)
@@ -68,6 +70,21 @@ class FloatingAssistantTests(unittest.TestCase):
             self.assertEqual(client.get('/api/runs/live').json()['data'], [])
             self.assertEqual(store.list_messages(tid), [])
             self.assertEqual(store.feed(), [])
+
+    def test_dock_ai_choice_is_visible_configuration_shared_with_whatsapp(self):
+        store = MemoryStore()
+        connector = store.get_connector_by_type('openai')
+        store.save_connector({'ConnectorId': connector['ConnectorId'], 'Active': 1, 'Secret': 'test-key',
+                              'Name': 'Fast assistant', 'ConfigJson': '{"model":"gpt-fast"}'}, 'owner')
+        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+            client = TestClient(server.app)
+            task = client.post('/api/assistant/dock').json()['task']
+            response = client.post(f"/api/tasks/{task['TaskId']}/assistant/session",
+                                   json={'pick': f"connector:{connector['ConnectorId']}", 'model': 'gpt-fast-2'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(store.get_settings()['assistant_ai'], f"connector:{connector['ConnectorId']}")
+        self.assertEqual(store.get_settings()['assistant_model'], 'gpt-fast-2')
+        self.assertEqual(response.json()['session']['model'], 'gpt-fast-2')
 
 
 if __name__ == '__main__':

@@ -172,6 +172,12 @@ fresh snapshot of needs-me email and messages, open tasks, pending Review items,
 activity, and filed coding or other agent output on every turn. It can prioritize that state and
 walk through it with you; it is not a second scheduled report.
 
+The AI strip in the floating panel shows exactly which provider and model answer the guide. The
+choice is saved and shared with WhatsApp. A configured API or local-model connector is the fast,
+in-process default; a CLI agent remains selectable when the conversation needs its tools. Use
+**Walk through all** for a turn-by-turn review: the guide presents one unresolved item, asks one
+question, and waits for the answer before advancing.
+
 The same conversation can travel over WhatsApp:
 
 1. Pair the WhatsApp connector and send a message to WhatsApp's private **Message yourself** chat.

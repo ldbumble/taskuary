@@ -405,6 +405,22 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           title="Certified numbers: the figures this assistant is allowed to state as fact about your own systems, because each was proved against numbers you already knew. Teach it one by asking for a figure it does not have yet."
           onClick={() => chooseView("numbers")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Numbers</Button>
       </Box>}
+      {dock && <Box sx={{ px: 1, py: 0.55, display: "flex", alignItems: "center", gap: 0.65,
+        flexWrap: "wrap", bgcolor: PANEL, borderBottom: `1px solid ${BORDER}` }}>
+        <Typography sx={{ ...mono, color: FAINT, fontSize: 9.5, textTransform: "uppercase" }}>AI</Typography>
+        <Select size="small" value={connectorId} displayEmpty onChange={(e) => {
+          const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
+          updateProvider(e.target.value, provider?.model || "");
+        }} sx={{ height: 26, minWidth: 155, maxWidth: 225, flex: 1, fontSize: 10.5, bgcolor: PANEL2 }}>
+          {!data?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
+          {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>
+            {p.label}{p.type === "cli" ? " · tool-capable" : " · fast"}
+          </MenuItem>)}
+        </Select>
+        <TextField size="small" value={model} placeholder="default model" onChange={(e) => setModel(e.target.value)}
+          onBlur={() => connectorId && updateProvider(connectorId, model)}
+          sx={{ width: 118, "& input": { py: 0.5, fontSize: 10.5 } }} />
+      </Box>}
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
       {notice && <Alert severity="success" onClose={() => setNotice("")} sx={{ borderRadius: 0, py: 0 }}>{notice}</Alert>}
       {busy && (

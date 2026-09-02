@@ -16,6 +16,7 @@ POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Acti
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
+ARTIFACT_COLS = ('TaskId', 'Name', 'ContentType', 'Size', 'Path', 'Kind', 'CreatedBy')
 
 # ── is this review live? one answer, two queries ─────────────────────────────────────────
 # LEFT JOIN: a reply opened on a FILED message carries no task at all - the inner join made
@@ -121,6 +122,8 @@ CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, Message
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
   Agent TEXT, Cwd TEXT, Text TEXT, CreatedAt TEXT);
+CREATE TABLE IF NOT EXISTS task_artifact (ArtifactId INTEGER PRIMARY KEY, TaskId INTEGER, Name TEXT,
+  ContentType TEXT, Size INTEGER, Path TEXT, Kind TEXT, CreatedBy TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER,
   Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT,
   RawOutput TEXT, ParseError TEXT);
@@ -223,6 +226,7 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_review_task ON review(TaskId, Status)',
     'CREATE INDEX IF NOT EXISTS idx_run_task ON run(TaskId, Status)',
     'CREATE INDEX IF NOT EXISTS idx_attachment_message ON attachment(MessageId)',
+    'CREATE INDEX IF NOT EXISTS idx_task_artifact_task ON task_artifact(TaskId, ArtifactId)',
     'CREATE INDEX IF NOT EXISTS idx_comment_task ON comment(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit(EntityType, EntityId)',
     'CREATE INDEX IF NOT EXISTS idx_dispatchq_task ON dispatchq(TaskId)',
@@ -263,6 +267,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'assistant_followup_hours': '24',
                     'assistant_cold_days': '3', 'assistant_producers': 'followup,promise,prep,cold,idea',
                     'assistant_max_lines': '5',
+                    # the conversational assistant has its own saved brain. API connectors are
+                    # the fast/native path; a CLI remains available for tool-heavy work.
+                    'assistant_ai': '', 'assistant_model': '',
                     # the coder's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'coder_context_file': '1',
@@ -772,7 +779,8 @@ class SQLiteStore:
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',
-                  'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task WHERE TaskId=?'):
+                  'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task_artifact WHERE TaskId=?',
+                  'DELETE FROM task WHERE TaskId=?'):
             self._exec(q, (task_id,))
         self._bump_snapshots()
     @contextlib.contextmanager
@@ -1053,6 +1061,15 @@ class SQLiteStore:
     def get_attachment(self, aid): return self._one('SELECT * FROM attachment WHERE AttachmentId=?', (aid,))
     def attachment_exists(self, external_id):
         return self._one('SELECT 1 x FROM attachment WHERE ExternalId=?', (external_id,)) is not None
+    # A session artifact is the long-form record the compact Agent work result points to. It is
+    # task-owned rather than message-owned: hand-created research and coding sessions may have no
+    # inbound message at all.
+    def add_task_artifact(self, fields):
+        return self._insert('task_artifact', fields, ARTIFACT_COLS, {'CreatedAt': _now()})
+    def list_task_artifacts(self, task_id):
+        return self._rows('SELECT * FROM task_artifact WHERE TaskId=? ORDER BY ArtifactId DESC', (task_id,))
+    def get_task_artifact(self, aid):
+        return self._one('SELECT * FROM task_artifact WHERE ArtifactId=?', (aid,))
     # A pty is not storage: the session's readable transcript is written here when it ends, so
     # "Done - wrap it up" still works an hour later, on a task whose CLI has long since exited.
     def add_transcript(self, task_id, sid, text, agent=None, cwd=None):
@@ -1619,6 +1636,7 @@ class SQLiteStore:
         msgs = self.list_messages(task_id)
         return {'task': t, 'ref': task_ref(task_id), 'messages': msgs,
                 'attachments': [a for m in msgs for a in self.list_attachments(m['MessageId'])],
+                'artifacts': self.list_task_artifacts(task_id),
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
                 'reviews': self._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC', (task_id,))}

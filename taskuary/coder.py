@@ -203,6 +203,13 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     report = resolution_text(rep)
     store.add_comment(tid, actor, 'human', 'Closed the session - wrapped up from what was on screen.')
     store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}')
+    # The compact result stays deliberately scannable. The transcript does not disappear behind
+    # that compression: preserve it as a Markdown artifact and link it from the same Agent work card.
+    artifact = None
+    try:
+        from . import session_artifacts
+        artifact = session_artifacts.coding(store, tid, report, text, agent or actor)
+    except Exception as e: logger.warning(f'coding artifact failed for task {tid}: {e}')
     # anything the agent PROPOSED becomes a pending review here, at the one moment its whole
     # transcript is in hand - and refusals are recorded rather than dropped (proposals.py)
     proposed = []
@@ -231,7 +238,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or found, 'close': close})
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
-            'drafting': bool(fin.get('drafting'))}
+            'drafting': bool(fin.get('drafting')), 'artifacts': [artifact] if artifact else []}
 
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:

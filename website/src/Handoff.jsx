@@ -4,9 +4,10 @@
 // header bar, and the Timeline panel you get by hovering a row - same form, wherever you
 // happened to notice the task.
 import React, { useEffect, useState } from "react";
-import { Autocomplete, Box, Button, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import api from "./api";
+import { ContactPicker } from "./ui.jsx";
 import { FAINT, selSx } from "./theme.jsx";
 
 const msgOf = (e, fallback) => (e?.response?.status === 404
@@ -57,14 +58,8 @@ export const Handoff = ({ taskId, onSent }) => {
             <MenuItem key={x} value={x} sx={{ fontSize: 12.5 }}>{x}</MenuItem>
           ))}
         </Select>
-        <Autocomplete freeSolo size="small" sx={{ flex: 1, minWidth: 220 }} options={people.map((p) => p.Email)}
-          value={to} onInputChange={(_e, v) => setTo(v || "")}
-          getOptionLabel={(o) => String(o)}
-          renderOption={(props, o) => {
-            const p = people.find((x) => x.Email === o);
-            return <li {...props} style={{ fontSize: 12.5 }}>{p?.Name || o}<span style={{ color: FAINT }}>&nbsp;· {o}</span></li>;
-          }}
-          renderInput={(params) => <TextField {...params} placeholder="who should own this — email address" />} />
+        <ContactPicker people={people} value={to} onChange={setTo} onPick={setTo}
+          placeholder="who should own this — name or email" sx={{ flex: 1, minWidth: 220 }} />
         <Button size="small" onClick={draft} disabled={!!busy}>
           {busy === "draft" ? <CircularProgress size={12} /> : text ? "Rewrite" : "Draft with AI"}
         </Button>

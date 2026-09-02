@@ -131,5 +131,36 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(seen['cc'], ['mindy@corp.example'])
 
 
+
+class AddressBookTests(unittest.TestCase):
+    """Every place a person is picked reads one list (ui.ContactPicker): looping somebody in on a
+    reply, handing a task over."""
+
+    def test_it_returns_a_book_worth_searching_and_will_not_be_talked_into_more(self):
+        r = c.get('/api/people')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsInstance(r.json()['data'], list)
+        # 60 was enough for a recency list you scroll; a box you SEARCH wants the whole book
+        with mock.patch.object(server.store, 'people', return_value=[]) as book:
+            c.get('/api/people')
+            self.assertEqual(book.call_args[0][0], 300)
+            c.get('/api/people', params={'limit': 5000})
+            self.assertEqual(book.call_args[0][0], 1000)      # clamped: not an invitation to read the table
+            c.get('/api/people', params={'limit': 0})
+            self.assertEqual(book.call_args[0][0], 1)
+
+    def test_a_name_and_an_address_come_back_for_each(self):
+        """The picker searches the NAME as well as the address - nobody remembers how a
+        colleague's mailbox is spelled."""
+        s = server.store
+        s.add_message({'ExternalId': 'ab1', 'Channel': 'email', 'SourceName': 'me@corp.example',
+                       'FromEmail': 'nechama@hrtgcs.example', 'FromName': 'Nechama Ozur, CPA',
+                       'Subject': 'monthly close', 'BodyText': '?', 'Status': 'filed',
+                       'SentAt': '2026-09-02 15:00:00'})
+        got = c.get('/api/people').json()['data']
+        row = next((p for p in got if p['Email'] == 'nechama@hrtgcs.example'), None)
+        self.assertIsNotNone(row)
+        self.assertEqual(row['Name'], 'Nechama Ozur, CPA')
+
 if __name__ == '__main__':
     unittest.main()

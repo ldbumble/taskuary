@@ -1388,7 +1388,11 @@ def board_read(note_id: int, who: str = ''):
     return {'ok': True}
 
 @app.get('/api/people')
-def people(): return {'data': store.people()}
+def people(limit: int = 300):
+    """The address book behind every place a person is picked - looping somebody in on a reply,
+    handing a task over. 60 was enough for a recency list you scroll; a box you SEARCH wants the
+    whole book, so the pickers filter a wider set client-side (ui.ContactPicker)."""
+    return {'data': store.people(max(1, min(int(limit), 1000)))}
 
 @app.get('/api/send-targets')
 def send_targets():

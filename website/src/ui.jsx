@@ -1,6 +1,6 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import React, { useEffect, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
@@ -1630,3 +1630,96 @@ export const FilterPills = ({ options, value, onChange }) => (
     })}
   </Box>
 );
+
+// ── PICKING A PERSON ────────────────────────────────────────────────────────────────────
+// Everyone Taskuary has seen (/api/people), searched by name OR address, with the option row
+// laid out so it survives a long name beside a long address. It used to be a bare Autocomplete
+// whose <li> had no width control at all, so "Nechama Ozur, CPA · NOzur@hrtgcs.com" wrapped over
+// the row beneath it and the list read as broken (owner, 2026-09-02). One component now, because
+// there is no reason for looping someone in and handing work over to disagree about how a person
+// is chosen.
+//
+// freeSolo on purpose: the right recipient is often somebody who has never written to you.
+export const useContacts = () => {
+  const [people, setPeople] = useState([]);
+  useEffect(() => { api.get("/api/people").then(({ data }) => setPeople(data.data || [])).catch(() => {}); }, []);
+  return people;
+};
+
+export const ContactPicker = ({ value, onChange, onPick, placeholder = "name or email address",
+                               people, autoFocus, size = "small", sx, onKeyDown, clearOnPick }) => {
+  const rows = people || [];
+  const byEmail = (e) => rows.find((p) => String(p.Email || "").toLowerCase() === String(e || "").toLowerCase());
+  return (
+    <Autocomplete freeSolo autoHighlight size={size} sx={sx}
+      options={rows.map((p) => p.Email).filter(Boolean)}
+      inputValue={value ?? ""}
+      onInputChange={(_e, v) => onChange?.(v || "")}
+      onChange={(_e, v) => { if (v) { onPick?.(String(v)); if (clearOnPick) onChange?.(""); } }}
+      getOptionLabel={(o) => String(o)}
+      // search the NAME as well as the address: nobody remembers how a colleague's mailbox is spelled
+      filterOptions={(opts, { inputValue }) => {
+        const q = String(inputValue || "").trim().toLowerCase();
+        if (!q) return opts.slice(0, 50);
+        return opts.filter((o) => `${byEmail(o)?.Name || ""} ${o}`.toLowerCase().includes(q)).slice(0, 50);
+      }}
+      renderOption={(props, o) => {
+        const p = byEmail(o);
+        return (
+          <li {...props} key={o} style={{ display: "block", padding: "4px 10px", minWidth: 0 }}>
+            {p?.Name && (
+              <div style={{ fontSize: 12.5, color: INK, fontWeight: 600, overflow: "hidden",
+                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.Name}</div>
+            )}
+            <div style={{ fontSize: 11.5, color: FAINT, overflow: "hidden",
+              textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o}</div>
+          </li>
+        );
+      }}
+      renderInput={(params) => (
+        <TextField {...params} autoFocus={autoFocus} placeholder={placeholder} onKeyDown={onKeyDown}
+          inputProps={{ ...params.inputProps, style: { ...(params.inputProps || {}).style, fontSize: 12.5 } }} />
+      )} />
+  );
+};
+
+// Who else gets this answer. Held by the caller and passed on the send, never stored: the copy
+// list you can SEE is the one that goes, and a reloaded page starts empty rather than quietly
+// copying somebody you added an hour ago (verdicts.decide).
+export const CcRow = ({ cc, setCc, channel }) => {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const people = useContacts();
+  if (String(channel || "").toLowerCase() !== "email") return null;   // a chat has members, not recipients
+  const add = (a) => {
+    const v = String(a || "").trim();
+    if (!v.includes("@")) return;
+    setCc([...(cc || []).filter((x) => x.toLowerCase() !== v.toLowerCase()), v]);
+    setText(""); setOpen(false);
+  };
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
+      <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
+      {(cc || []).map((a) => (
+        <Box key={a} sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.8, py: 0.15,
+          borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
+          <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
+          <Box component="span" onClick={() => setCc((cc || []).filter((x) => x !== a))}
+            sx={{ cursor: "pointer", color: FAINT, fontSize: 12, lineHeight: 1, "&:hover": { color: "#6b2733" } }}>✕</Box>
+        </Box>
+      ))}
+      {open ? (
+        <ContactPicker people={people} value={text} onChange={setText} onPick={add} autoFocus
+          placeholder="name or email address" sx={{ width: 260 }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(text); }
+                              if (e.key === "Escape") setOpen(false); }} />
+      ) : (
+        <Typography onClick={() => setOpen(true)}
+          sx={{ fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
+                "&:hover": { textDecoration: "underline" } }}>
+          {(cc || []).length ? "+ someone else" : "+ loop someone in"}
+        </Typography>
+      )}
+    </Box>
+  );
+};

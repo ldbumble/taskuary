@@ -32,7 +32,7 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, LifecycleChip, RefChip, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, LifecycleChip, RefChip, CcRow, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -929,8 +929,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
 
   // Approving IS sending, so a refusal has to land in front of you now - not as a NOT SENT line
   // in the task history that you find tomorrow. The panel stays open when the send failed.
-  const decide = async (reviewId, verb, finalText) => {
-    const { data } = await api.post(`/api/reviews/${reviewId}/decide`, { verb, final_text: finalText || null });
+  const decide = async (reviewId, verb, finalText, cc) => {
+    // cc only on the send: rejecting or "no reply needed" copies nobody on nothing
+    const { data } = await api.post(`/api/reviews/${reviewId}/decide`,
+      { verb, final_text: finalText || null, cc: verb === "approve" ? (cc || []) : null });
     if (data?.send_error) { setSendErr(data.send_error); load(); onChanged?.(); return; }
     setSendErr(""); setSel(null); setEditText(null);   // stale edits must never block hover
     load(); onChanged?.();
@@ -1773,13 +1775,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
         <ReviewActions reviewId={pendingId} draft={replyDraft}
           editText={editText} setEditText={setEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
-          onChanged={onRefresh} />
+          onChanged={onRefresh} channel={sel.Channel} />
       )}
       {!pending && opened && (
         <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
           editText={editText} setEditText={setEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
-          onChanged={onRefresh} />
+          onChanged={onRefresh} channel={sel.Channel} />
       )}
       {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
@@ -3021,9 +3023,10 @@ const SplitTask = ({ row, onSplit, compact = false }) => {
   );
 };
 
-const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend, onChanged }) => {
+const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend, onChanged, channel }) => {
   const [generating, setGenerating] = useState(false);
   const [draftErr, setDraftErr] = useState("");
+  const [cc, setCc] = useState([]);
   const text = editText ?? draft ?? "";
   const save = async (value = text) => {
     try { await api.patch(`/api/reviews/${reviewId}`, { body: value }); onChanged?.(); }
@@ -3039,6 +3042,7 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
   };
   return (
   <Box>
+    <CcRow cc={cc} setCc={setCc} channel={channel} />
     <TextField fullWidth multiline minRows={3} size="small" placeholder="Type your reply, or generate a draft with AI"
       value={text} onChange={(e) => setEditText(e.target.value)} onBlur={(e) => save(e.target.value)} sx={{ mb: 1 }} />
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
@@ -3053,8 +3057,9 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
       ) : (
         <>
           <Button size="small" variant="contained" disabled={!text.trim()}
-            onClick={() => decide(reviewId, "approve", text)}
-            title="Sends the text above on the channel it arrived on">Approve &amp; send</Button>
+            onClick={() => decide(reviewId, "approve", text, cc)}
+            title="Sends the text above on the channel it arrived on">
+            {cc.length ? `Approve & send, copying ${cc.length}` : "Approve & send"}</Button>
           <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
         </>
       )}

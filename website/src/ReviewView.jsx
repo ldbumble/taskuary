@@ -5,7 +5,7 @@ import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } fro
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
-import { ChannelIcon, RefChip, timeAgo, Empty, FilterPills, cleanText, splitQuoted } from "./ui.jsx";
+import { CcRow, ChannelIcon, RefChip, timeAgo, Empty, FilterPills, cleanText, splitQuoted } from "./ui.jsx";
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
 // approved an answer without the question in front of you, or opened the task to find it. Four
@@ -87,15 +87,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
   // Who else gets this answer. Held here and nowhere else: the copy list you can SEE on the card
   // is the one that sends, and a reloaded page starts empty rather than quietly copying somebody
   // you added an hour ago and forgot.
-  const [cc, setCc] = useState({});
-  const [ccOpen, setCcOpen] = useState({});
-  const [ccText, setCcText] = useState({});
-  const addCc = (id) => {
-    const a = String(ccText[id] || "").trim();
-    if (!a.includes("@")) return;
-    setCc((c) => ({ ...c, [id]: [...(c[id] || []).filter((x) => x.toLowerCase() !== a.toLowerCase()), a] }));
-    setCcText((t) => ({ ...t, [id]: "" }));
-  };
+  const [cc, setCc] = useState({});      // per review; the row itself is ui.jsx's CcRow
 
   // Approving IS sending, so a send that failed has to say so HERE, the moment you click - it
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
@@ -188,37 +180,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     {replyContext(r)}
                   </Typography>
                 </Box>
-                {/* Looping somebody in: openly, on the answer itself, so the sender sees who else
-                    read it. Mail only - a chat has members, not recipients (outbound.reply_to_message). */}
-                {String(r.Channel || "").toLowerCase() === "email" && deliveryMeta(r).kind !== "zoho_invoice" && (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
-                    <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800,
-                      letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
-                    {(cc[r.ReviewId] || []).map((a) => (
-                      <Box key={a} sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.8, py: 0.15,
-                        borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
-                        <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
-                        <Box component="span" onClick={() => setCc((c) => ({ ...c, [r.ReviewId]: (c[r.ReviewId] || []).filter((x) => x !== a) }))}
-                          sx={{ cursor: "pointer", color: FAINT, fontSize: 12, lineHeight: 1, "&:hover": { color: "#6b2733" } }}>✕</Box>
-                      </Box>
-                    ))}
-                    {ccOpen[r.ReviewId] ? (
-                      <TextField size="small" autoFocus placeholder="name@company.com"
-                        value={ccText[r.ReviewId] || ""}
-                        onChange={(e) => setCcText({ ...ccText, [r.ReviewId]: e.target.value })}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCc(r.ReviewId); }
-                                            if (e.key === "Escape") setCcOpen({ ...ccOpen, [r.ReviewId]: false }); }}
-                        onBlur={() => { addCc(r.ReviewId); setCcOpen({ ...ccOpen, [r.ReviewId]: false }); }}
-                        inputProps={{ style: { fontSize: 11.5, padding: "2px 6px" } }} sx={{ width: 210 }} />
-                    ) : (
-                      <Typography onClick={() => setCcOpen({ ...ccOpen, [r.ReviewId]: true })}
-                        sx={{ fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
-                              "&:hover": { textDecoration: "underline" } }}>
-                        {(cc[r.ReviewId] || []).length ? "+ someone else" : "+ loop someone in"}
-                      </Typography>
-                    )}
-                  </Box>
-                )}
+                <CcRow cc={cc[r.ReviewId] || []} setCc={(v) => setCc({ ...cc, [r.ReviewId]: v })}
+                  channel={r.Channel} />
                 <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
                   value={edits[r.ReviewId] ?? proposalText(r.DraftText)}
                   onChange={(e) => setEdits({ ...edits, [r.ReviewId]: e.target.value })}

@@ -492,6 +492,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // item into Title + Summary; falling back to its newest inbound body keeps older/promoted rows
   // equally useful. This is the human TODO, not an agent-launch advertisement.
   const taskAsk = cleanText(t?.Summary || sourceMessage?.BodyText || "");
+  // WHAT THEY ACTUALLY SAID. A task opens on one message and then keeps collecting the rest of
+  // the conversation - three WhatsApp voice notes seconds apart are one thought, and ingest
+  // attaches the later ones to the same task. The panel showed the FIRST and nothing else, so a
+  // task whose answer arrived in message three read as an unanswered question (owner, 2026-09-02).
+  const inbound = storedMessages.filter((m) => m.Status !== "context" && m.Direction !== "out");
+  const alsoSaid = inbound.filter((m) => m.MessageId !== inbound[0]?.MessageId
+                                      && cleanText(m.BodyText) && cleanText(m.BodyText) !== taskAsk);
   const completionIsManual = ownerControlsCompletion(t);
   const taskState = taskPhase(t?.Status);
   const agentState = agentPhase({
@@ -715,9 +722,27 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             {taskAsk}
                           </Typography>
                         )}
+                        {/* the rest of what they said, in order - indented so it reads as the same
+                            person continuing rather than as separate business */}
+                        {alsoSaid.map((m) => (
+                          <Box key={m.MessageId} sx={{ mt: 0.6, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
+                            <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
+                              {m.FromName || m.FromEmail || m.Channel}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                              overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4,
+                              WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {cleanText(m.BodyText)}
+                            </Typography>
+                          </Box>
+                        ))}
                         <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap", mt: 0.7 }}>
+                          {/* "from whatsapp, created by router" named the machinery, not the thing.
+                              Who said it, where, and how many times they said it. */}
                           {sourceMessage && <Typography variant="caption" sx={{ color: FAINT }}>
                             from {sourceMessage.FromName || sourceMessage.FromEmail || sourceMessage.Channel}
+                            {sourceMessage.Channel ? ` on ${sourceMessage.Channel}` : ""}
+                            {inbound.length > 1 ? ` · ${inbound.length} messages` : ""}
                           </Typography>}
                           {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}

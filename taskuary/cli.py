@@ -120,6 +120,9 @@ def main():
             print('task closed. Report filed from this session.'
                   + (' A reply to the sender is drafted and waiting on the owner.' if out.get('drafting')
                      else ' No reply was needed.'))
+        elif out.get('held'):
+            print('noted, not closed: the owner opened this session to work in, so they end it. Your summary is on '
+                  'the task and they have been told; stay at the prompt in case they have more.')
         else:
             print(f"not closed: {out.get('why') or out.get('detail') or r.text[:200]}")
         return

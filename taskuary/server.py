@@ -2154,6 +2154,31 @@ def quickbooks_callback(code: str = None, state: str = '', realmId: str = None, 
     except Exception as e: return page(str(e)[:300], False)
     return page(f'QuickBooks company {realmId} is connected to the {c["Name"]} card. Press Test there to read the company name.')
 
+# ── Teller (teller.py): the card runs Teller Connect in the browser; the token it hands back lands here ──
+class TellerEnrollBody(BaseModel): access_token: str; enrollment_id: str | None = None; institution: str | None = None
+
+@app.get('/api/connectors/{cid}/teller/status')
+def teller_status(cid: int):
+    from .teller import CONNECT_JS
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'teller': raise HTTPException(404, 'not a Teller connector')
+    conf = json.loads(c.get('ConfigJson') or '{}')
+    return {'has_app': bool(conf.get('application_id')), 'connected': bool(c.get('Secret')), 'environment': conf.get('environment') or 'sandbox',
+            'institution': conf.get('institution') or '', 'application_id': conf.get('application_id') or '', 'connect_js': CONNECT_JS}
+
+@app.post('/api/connectors/{cid}/teller/enroll')
+def teller_enroll(cid: int, body: TellerEnrollBody):
+    """Teller Connect finished in the owner's browser: keep the access token (write-only) and name the
+    bank on the card. The token never shows again; Test proves it works."""
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'teller': raise HTTPException(404, 'not a Teller connector')
+    if not body.access_token.strip(): raise HTTPException(422, 'no access token in the enrolment')
+    conf = json.loads(c.get('ConfigJson') or '{}')
+    conf.update({k: v for k, v in (('enrollment_id', body.enrollment_id), ('institution', body.institution)) if v})
+    store.save_connector({'ConnectorId': cid, 'Secret': body.access_token.strip(), 'ConfigJson': json.dumps(conf), 'Active': True}, ACTOR)
+    store.audit('connector', cid, 'teller_enrolled', ACTOR, detail={'institution': body.institution or ''})
+    return {'ok': True}
+
 @app.get('/api/intacct/fields')
 def intacct_object_fields(obj: str, connector_id: int = None):
     """What this company's copy of an Intacct object actually carries, custom fields and all.
@@ -2336,14 +2361,37 @@ def delete_agent(name: str):
     store.audit('agent', 0, 'delete', ACTOR, detail=name)
     return {'ok': True}
 
+def _template_text(name: str) -> str:
+    try: return (Path(__file__).parent / 'templates' / f'{name}.md').read_text(encoding='utf-8')
+    except OSError: return ''
+
+def _heal_blank_doc(name: str) -> str:
+    """An EMPTY operator document is never what anyone meant: it switches off the rules every prompt
+    is stacked on (CODER.md blank = a coder with no rules) and it says nothing an owner wrote. The
+    templates have always said "blank the document entirely and the shipped default is used again",
+    so that is what happens - here, the moment it is read, not at the next restart."""
+    cur = store.get_doc(name)
+    if cur is not None and not str(cur).strip():
+        t = _template_text(name)
+        if t.strip():
+            store.save_doc(name, t, 'template'); store.audit('doc', 0, 'restored_blank', 'system', detail={'doc': name})
+            logger.warning(f'{name}.md was empty - the shipped default is back in place')
+            return t
+    return cur or ''
+
 @app.get('/api/doc/{name}')
 def get_doc(name: str):
     """Raw for the editor, rendered so you can see what an agent will actually read."""
-    return {'name': name, 'content': store.get_doc(name) or '', 'rendered': store.doc(name) or '',
+    content = _heal_blank_doc(name)
+    return {'name': name, 'content': content, 'rendered': store.doc(name) or '',
             'owner': store.owner()}
 
 @app.put('/api/doc/{name}')
 def put_doc(name: str, body: DocBody):
+    # blank = "give me the shipped default back", as the templates' own comments promise
+    if not str(body.content or '').strip() and _template_text(name).strip():
+        store.save_doc(name, _template_text(name), 'template')
+        return {'ok': True, 'restored': True}
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 

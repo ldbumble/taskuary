@@ -86,6 +86,7 @@ export const LOGOS = {
   ),
   netsuite: (p) => <T p={p} bg="#125580" text="NS" size={9.5} />,
   quickbooks: (p) => <T p={p} bg="#2CA01C" text="qb" size={10.5} />,
+  teller: (p) => <T p={p} bg="#1a1a1a" text="T" size={12} />,
   sap: (p) => <T p={p} bg="#0FAAFF" text="SAP" size={8.5} />,
   workday: (p) => <T p={p} bg="#F38B00" text="W" size={12} />,
   adp: (p) => <T p={p} bg="#D0271D" text="ADP" size={8} />,

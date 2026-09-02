@@ -92,14 +92,12 @@ the period was open. A thin card still says what is missing.
    - *Statement mail.* Card issuers already email statements and alerts; the mailbox connector
      already ingests them and their attachments. A playbook that reads the PDF/CSV needs no new
      connector. This is where to start - it exercises the whole loop with zero new plumbing.
-   - *A bank-data aggregator* as a connector type `bank_feed`, when statement mail is too slow or
-     too coarse. **Plaid** (Transactions product; free sandbox, production needs Plaid's approval
-     and runs ~$0.30/connected account/month; Link is a hosted OAuth flow the card renders in the
-     browser pane). Alternatives worth a look before committing: **Teller** (simpler, certificate
-     auth, US only, strong on cards) and going direct to the issuer where an API exists (Ramp, Brex
-     and Mercury all hand out plain API keys - if the company's card is one of those, skip the
-     aggregator entirely). Whichever it is, it is a *report source* polling for new transactions
-     and a *trigger* that files each as a message - the same two roles every connector has.
+   - *A bank-data aggregator* - **Teller, built (taskuary/teller.py, 2026-09-01)**: the owner
+     enrols each bank login themselves in the card (Teller Connect), development tier free to 100
+     logins, certificate auth outside sandbox. Chosen over Plaid because this is a local install
+     and the owner does the enrolment - no hosted approval flow, no per-account fee at this size.
+     Its transactions report with "can become work" on is the trigger: each new transaction is a
+     message triage judges.
 4. **Proof for non-code.** Teach `proof.py` to read a playbook's `done when` and check it.
 
 ## What this is not

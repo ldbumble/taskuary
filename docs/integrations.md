@@ -56,6 +56,7 @@ Nothing is polled without an enabled role.
 | Prometheus and Datadog | Available | PromQL instant queries and Datadog monitor states |
 | Sage Intacct | Available | Read-only XML gateway access for GL detail, AP bills, vendors, budgets, statistical accounts, and schema discovery. A source card can list the fields an object carries in your company, and the composer reads that list before writing a query |
 | QuickBooks Online | Available | OAuth sign-in from the card. Bills, purchases, vendors and the chart of accounts as reports and agent tools (QBO's own query language), and the first system here an agent can post to: an AP bill or a paid expense. The card ships read-only, so a write is a proposal the owner approves in Review; raising the card to `write` lets a routing policy pass small, known bills through |
+| Bank & card feed (Teller) | Available | One card per bank login, enrolled in the browser with Teller Connect; accounts, transactions (newest first, with spend/inflow direction) and balances as reports and tools. Read-only by construction. Schedule the transactions with 'can become work' and each new one is a message triage judges — the front door of the card-to-books playbook. Development tier is free to 100 logins; development and production present Teller's client certificate |
 | WinRM | Available | Runs PowerShell on a remote Windows machine and returns output to the Timeline |
 | MCP | Available | Uses an MCP server tool as a scheduled report source |
 | SQLite, REST, RSS | Available | Scheduled reports with optional AI summaries |

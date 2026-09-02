@@ -252,7 +252,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
                       <Typography sx={{ fontSize: 11, color: FAINT, lineHeight: 1.5 }}>
                         For a session you mean to sit in. Off, it closes itself the moment it reads
                         as finished — which is right for work that arrived, and wrong while you are
-                        still typing. `taskuary --done` still ends it either way.
+                        still typing. Even the agent's own `taskuary --done` only tells you it thinks it is finished.
                       </Typography>
                     </Box>} />
               </Box>

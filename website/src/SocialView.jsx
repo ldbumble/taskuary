@@ -282,7 +282,7 @@ export default function SocialView({ onOpenTask }) {
       <Box sx={{ minWidth: 0 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1.5, flexWrap: "wrap" }}>
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 17, fontWeight: 700, color: INK, letterSpacing: "-.3px" }}>
+            <Typography sx={{ fontSize: 15, fontWeight: 800, color: INK }}>
               {removed ? "Removed from Social" : "Social"}
             </Typography>
             <Typography variant="caption" sx={{ color: FAINT }}>

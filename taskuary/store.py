@@ -312,6 +312,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # QuickBooks is the first Corporate system that can WRITE (a bill, an expense) -
                  # still report and tool, never trigger; the writes are gated by scope, not by role
                  'quickbooks': 'report,tool',
+                 'teller': 'report,tool',          # the bank feed: transactions as a report (and "can become work"), balances as a tool
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
                  'firecrawl': 'report,tool', 'reader': 'report,tool',
@@ -446,7 +447,7 @@ class SQLiteStore:
                          ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
-                         ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'),
+                         ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
@@ -508,10 +509,11 @@ class SQLiteStore:
                     # boundaries forever because edited docs correctly stop following templates.
                     # Empty carries no owner intent to preserve: restore the complete default, and
                     # let the interview replace it only after the owner actually answers.
-                    if name == 'soul':
-                        self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? "
-                                        "WHERE Name='soul' AND TRIM(IFNULL(Content,''))=''",
-                                        (txt, _now()))
+                    # ...and not only SOUL: CODER.md went blank on a live install (2026-09-01) and
+                    # every coder session ran with no rules until somebody looked. Empty is empty.
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? "
+                                    "WHERE Name=? AND TRIM(IFNULL(Content,''))=''",
+                                    (txt, _now(), name))
                     # a doc NOBODY ever touched keeps tracking the shipped template, so template
                     # improvements reach existing installs - the first edit (owner or machine)
                     # changes UpdatedBy and makes the document theirs, never overwritten again

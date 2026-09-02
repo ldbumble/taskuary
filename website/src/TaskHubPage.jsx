@@ -9,7 +9,7 @@ import { ThemeProvider, CssBaseline } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
 import { track } from "./demoTrack";
-import { theme, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
+import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
 import FeedView from "./FeedView.jsx";
 import BoardView from "./BoardView.jsx";
 const SocialView = React.lazy(() => import("./SocialView.jsx"));
@@ -266,7 +266,7 @@ export default function TaskHubPage() {
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           sx={{ mb: 1 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
-          action={raised && <Button size="small" sx={{ color: "#a6e3a1" }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
+          action={raised && <Button size="small" sx={{ color: ACCENT, fontWeight: 700 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
         {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to

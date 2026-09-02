@@ -504,6 +504,21 @@ const DATA_META = {
     agent: ["GET {base}/api/connectors/{cid}/quickbooks/status{hdr}: has_app says whether the Intuit keys are saved; connected says whether a token is. Neither is yours to make - the owner creates the app at developer.intuit.com and presses Connect (a browser sign-in). Ask for the client id and secret, save them in ConfigJson, tell them the redirect URI from status to register, then ask them to press Connect on the card.",
       "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 401 in the detail means the refresh token expired (100 days unused) - the owner presses Connect again.",
       "Never post a bill or an expense yourself: propose it (TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"quickbooks_bill\", \"vendor\": ..., \"amount\": ..., \"account\": ..., \"doc_number\": ...}) and say in the session what it is for. Turn the card on, SETUP DONE."] },
+  teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances"],
+    fields: [["Teller application id (teller.io → your application)", "application_id"],
+      ["environment — sandbox, development (free, real banks, 100 logins) or production", "environment", "sandbox"],
+      ["client certificate path (.pem) — development and production only", "cert_path", "C:/taskuary/teller/certificate.pem"],
+      ["private key path (.pem) — development and production only", "key_path", "C:/taskuary/teller/private_key.pem"]],
+    secretLabel: "access token (write-only) — Connect a bank fills it in",
+    desc: "What left the bank and the cards, as rows: every account under one bank login, its transactions newest first, its balances. Read-only by construction — a feed cannot move money. Schedule the transactions with 'can become work' and each new one is a message triage judges.",
+    connect: { widget: "teller", label: "Connect a bank", status: (cid) => `/api/connectors/${cid}/teller/status`, enroll: (cid) => `/api/connectors/${cid}/teller/enroll`,
+      text: "Opens the bank's own sign-in (Teller Connect). The token for that login lands on this card; the browser never keeps it." },
+    howto: ["teller.io → sign up → create an application. The dashboard hands you an application id and, for development and production, a certificate.pem and private_key.pem — save both somewhere on this machine and put their paths on the card. Sandbox needs no certificate and accepts any login at its fake banks, which is how to try the loop first.",
+      "Paste the application id, pick the environment, Save, then Connect a bank: the bank's sign-in opens in a modal, you sign in, and the access token for that login lands on this card. One card is one bank login - Add another for a second bank.",
+      "Test lists the accounts under the login. Build the reports on the REPORTS tab: 'Bank & card — transactions' for one account (its last four digits) or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message - the front door of the card-to-books playbook (docs/beyond-code.md).",
+      "The development environment is free up to 100 bank logins; production is the same code with production keys and Teller's pricing."],
+    agent: ["GET {base}/api/connectors/{cid}/teller/status{hdr}: has_app says whether the application id is saved, connected whether a token is. Neither is yours to make - the owner signs up at teller.io and signs in at their bank through Connect a bank on the card. Ask for the application id and the certificate paths, save them in ConfigJson, then ask them to press Connect a bank.",
+      "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the certificate does not match the application or the token belongs to another environment. Turn the card on, SETUP DONE."] },
   prometheus: { title: "Prometheus", types: ["prometheus"],
     fields: [["base URL", "base_url", "http://prometheus.yourcompany.local:9090"]],
     secretLabel: "bearer token (optional — most Prometheus servers need none)",
@@ -968,7 +983,7 @@ export default function ConnectorsView() {
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
-      ...dataCards(["intacct", "quickbooks"]),
+      ...dataCards(["intacct", "quickbooks", "teller"]),
       ...catalogCards("Corporate systems"),
     ]},
     { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...catalogCards("Observability")] },
@@ -1740,10 +1755,32 @@ function OAuthConnect({ conn, meta, reload }) {
   // "connected" without a refresh
   useEffect(() => { if (!busy) return undefined; const id = setInterval(load, 3000); const stop = setTimeout(() => setBusy(false), 180000); return () => { clearInterval(id); clearTimeout(stop); }; }, [busy, load]);
   useEffect(() => { if (st?.connected) setBusy(false); }, [st?.connected]);
+  // Teller Connect is a script on THIS page, not a redirect: it opens the bank's sign-in in a
+  // modal and calls back with the token, which goes straight to the server and nowhere else
+  const teller = async () => {
+    if (!window.TellerConnect) {
+      await new Promise((ok, no) => { const s = document.createElement("script"); s.src = st.connect_js; s.onload = ok; s.onerror = () => no(new Error("Teller Connect did not load - is cdn.teller.io reachable from here?")); document.head.appendChild(s); });
+    }
+    setBusy(true);
+    const tc = window.TellerConnect.setup({
+      applicationId: st.application_id, environment: st.environment, products: ["transactions", "balance"],
+      onSuccess: async (enr) => {
+        try {
+          await api.post(meta.connect.enroll(conn.ConnectorId), { access_token: enr.accessToken, enrollment_id: enr.enrollment?.id, institution: enr.enrollment?.institution?.name });
+          await load(); reload();
+        } catch (e) { setErr(e?.response?.data?.detail || "the token did not save"); }
+        setBusy(false);
+      },
+      onExit: () => setBusy(false),
+    });
+    tc.open();
+  };
   const go = async () => {
     setErr("");
-    try { const { data } = await api.get(meta.connect.start(conn.ConnectorId)); window.open(data.url, "_blank", "noopener"); setBusy(true); }
-    catch (e) { setErr(e?.response?.data?.detail || "could not start the sign-in"); }
+    try {
+      if (meta.connect.widget === "teller") return await teller();
+      const { data } = await api.get(meta.connect.start(conn.ConnectorId)); window.open(data.url, "_blank", "noopener"); setBusy(true);
+    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "could not start the sign-in"); }
   };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
@@ -1753,8 +1790,8 @@ function OAuthConnect({ conn, meta, reload }) {
           {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> waiting for the sign-in…</> : st?.connected ? "Reconnect" : meta.connect.label}
         </Button>
         {st?.connected
-          ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.env === "sandbox" ? " · sandbox" : ""}</Typography>
-          : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the Intuit app's keys below and Save first"}</Typography>}
+          ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}</Typography>
+          : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below and Save first"}</Typography>}
       </Box>
       {st?.redirect_uri && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>

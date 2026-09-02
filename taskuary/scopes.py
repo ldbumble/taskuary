@@ -35,6 +35,7 @@ ACTIONS = {
     # run_tool) and the owner approves it in Review. Raising the card to 'write' is the owner's call.
     'quickbooks': 'read', 'quickbooks_vendors': 'read', 'quickbooks_accounts': 'read',
     'quickbooks_bill': 'write', 'quickbooks_expense': 'write',
+    'teller_accounts': 'read', 'teller_transactions': 'read', 'teller_balances': 'read',    # a feed cannot move money
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -
     # but every one of those writes lands in Taskuary's own store, never upstream, which is what
@@ -76,7 +77,7 @@ DEFAULT_SCOPE = {
     'telegram': 'write', 'whatsapp': 'write', 'imessage': 'write', 'discord': 'write',
     'gmail': 'write', 'imap': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
-    'intacct': 'read', 'quickbooks': 'read',
+    'intacct': 'read', 'quickbooks': 'read', 'teller': 'read',
     'aws': 'read', 'azure': 'read',
     'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',
     'linear': 'read', 'trello': 'read', 'notion': 'read', 'sentry': 'read', 'pagerduty': 'read',

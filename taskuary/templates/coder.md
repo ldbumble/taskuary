@@ -74,6 +74,8 @@ until somebody does, no report is written and the person who asked hears nothing
 - **Never while you are waiting on John.** A question, a choice between two approaches, a
   permission you need: ask HERE, in the session, and stay open. Closing on a question throws away
   the session and mails somebody half an answer.
+- **A session John opened to sit in is his to end.** `--done` there files your summary and tells
+  him; it does not close anything. Say what you found and stay at the prompt.
 - If you forget, the CLI's stop hook reads the end of the session and closes it for you when it
   plainly reads as finished. That is a safety net, not the plan — it costs an extra AI call and it
   is more cautious than you are, so say it yourself.

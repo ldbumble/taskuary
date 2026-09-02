@@ -364,8 +364,8 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
             ))}
         </Box>
         {/* the funnel's front door, as big as the task button: pick the agent, paste the prompts */}
-        <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
-          sx={{ bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>✎ Feed the agent</Button>
+        <Button size="small" variant="outlined" disableElevation onClick={() => setFeedOpen(true)}
+          sx={{ color: "#6b5f45", borderColor: "#d8cfbe", bgcolor: "#f1ead9", "&:hover": { borderColor: "#8a7a5c", bgcolor: "#e9dfc5" } }}>✎ Feed the agent</Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
           onClick={() => setNewOpen(true)} sx={{ background: GRADIENT }}>New task for the agent</Button>
       </Box>
@@ -585,7 +585,7 @@ export default function BoardView({ onOpenTask, onOpenReports }) {
               <Box sx={{ display: "flex", alignItems: "center" }}>
                 <Switch size="small" checked={!!nt.stayOpen} onChange={(e) => setNt({ ...nt, stayOpen: e.target.checked })} />
                 <Typography variant="caption" sx={{ color: nt.stayOpen ? INK : DIM }}>
-                  Leave it open when it goes quiet — off, it closes itself the moment it reads as finished
+                  Leave it open when it goes quiet — only you end it; off, it closes itself the moment it reads as finished
                 </Typography>
               </Box>
             )}

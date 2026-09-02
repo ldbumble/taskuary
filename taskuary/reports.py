@@ -493,6 +493,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'quickbooks': _lazy('quickbooks', 'run_quickbooks'), 'quickbooks_vendors': _lazy('quickbooks', 'run_quickbooks_vendors'),
             'quickbooks_accounts': _lazy('quickbooks', 'run_quickbooks_accounts'),
             'quickbooks_bill': _lazy('quickbooks', 'run_quickbooks_bill'), 'quickbooks_expense': _lazy('quickbooks', 'run_quickbooks_expense'),
+            # the bank and card feed (teller.py): where a transaction comes from before it becomes a bill
+            'teller_accounts': _lazy('teller', 'run_teller_accounts'), 'teller_transactions': _lazy('teller', 'run_teller_transactions'),
+            'teller_balances': _lazy('teller', 'run_teller_balances'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
             'metric': run_metric, 'metric_check': run_metric_check,
             'rss': run_rss, 'digest': run_digest, 'automate': run_automate, 'assistant': run_assistant,
@@ -513,6 +516,7 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
+           'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook'}
 
@@ -580,6 +584,11 @@ def intacct_connection(store, connector_id=None) -> dict:
     return _card(store, 'intacct', 'user_password', connector_id)
 
 
+def _teller_connection(store, connector_id=None) -> dict:
+    from .teller import connection
+    return connection(store, connector_id)
+
+
 def _quickbooks_connection(store, connector_id=None) -> dict:
     from .quickbooks import connection
     return connection(store, connector_id)
@@ -620,6 +629,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'prometheus': prometheus_connection, 'datadog': datadog_connection,
                  'intacct': intacct_connection, 'intacct_fields': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
+                 **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances')},
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
                  'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
                  'google_sheets': _sheets_connection}

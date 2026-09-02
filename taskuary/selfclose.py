@@ -158,8 +158,17 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
     why = blocked(store, tid, term.session_for(tid))
     # an explicit declaration outranks "it looks like a question": the agent just said otherwise
     if why and 'question' not in why: return {'closed': False, 'why': why}
-    if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     line = ' '.join(str(summary or '').split())[:1200]
+    # A session the owner opened to SIT IN is theirs to end. `--done` used to close it anyway -
+    # "either way", the box said - and TQ-0297 (2026-09-01) closed under the owner mid-review
+    # because the agent decided it was finished. The agent's verdict is filed where the owner
+    # reads it; the session stays at its prompt, which raises its hand; the owner presses Done.
+    if stays_open(store, tid):
+        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
+        store.audit('task', tid, 'agent_done_held', agent, detail={'why': 'opened to work in'})
+        return {'closed': False, 'held': True,
+                'why': 'the owner opened this session to work in, so only they end it - your summary is on the task; stay at the prompt'}
+    if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     store.add_comment(tid, agent, 'agent',
                       f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
     return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''))

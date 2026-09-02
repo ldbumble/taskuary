@@ -119,3 +119,26 @@ class EveryScopeIsHonouredTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BlankDocsHeal(unittest.TestCase):
+    """CODER.md went blank on a live install and every session ran with no rules. An empty operator
+    document carries no intent worth keeping: reading it, saving it blank, or restarting all put
+    the shipped default back."""
+
+    def test_a_blank_document_is_the_template_again_on_read(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        c = TestClient(server.app)
+        server.store.save_doc('coder', '   ', 'owner')
+        r = c.get('/api/doc/coder')
+        self.assertIn('CODER.md', r.json()['content'])
+        self.assertEqual(server.store.doc_owner('coder'), 'template')
+
+    def test_saving_blank_means_give_me_the_default_back(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        c = TestClient(server.app)
+        r = c.put('/api/doc/coder', json={'content': ''})
+        self.assertTrue(r.json().get('restored'))
+        self.assertIn('CODER.md', server.store.get_doc('coder'))

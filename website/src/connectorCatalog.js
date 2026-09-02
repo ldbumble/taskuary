@@ -124,7 +124,6 @@ export const PLANNED_CONNECTORS = Object.freeze({
     { type: "shopify", title: "Shopify", desc: "Orders, products and customers" },
     { type: "square", title: "Square", desc: "Payments, orders and locations" },
     { type: "paypal", title: "PayPal", desc: "Payments, disputes and transactions" },
-    { type: "plaid", title: "Plaid", desc: "Bank connections and transaction data" },
     { type: "twilio", title: "Twilio", desc: "SMS, calls and delivery events" },
     { type: "docusign", title: "DocuSign", desc: "Envelopes, signatures and status changes" },
     { type: "zoom", title: "Zoom", desc: "Meetings, recordings and transcripts" },

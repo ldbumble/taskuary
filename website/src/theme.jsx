@@ -170,6 +170,10 @@ export const theme = createTheme({
     },
     MuiMenu: { styleOverrides: { paper: { borderRadius: 10, border: `1px solid ${BORDER}`, boxShadow: "0 8px 24px rgba(30,50,38,.12)" } } },
     MuiSwitch: { defaultProps: { size: "small" } },
+    // the hand-raise toast: MUI's default is a black bar, the one thing on the screen not from
+    // this palette. Paper, ink, a hairline and a soft shadow - a note left on the desk, not a siren
+    MuiSnackbarContent: { styleOverrides: { root: { backgroundColor: PANEL, color: INK, border: `1px solid ${BORDER}`,
+      boxShadow: "0 10px 28px rgba(30,50,38,.14)", borderRadius: 10, fontSize: 12.5, fontWeight: 500, maxWidth: 520 } } },
   },
 });
 

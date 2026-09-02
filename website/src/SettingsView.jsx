@@ -378,9 +378,9 @@ function SettingsPages({ page, setPage, q, setQ }) {
       <Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <Typography variant="body2" sx={{ color: DIM }}>
-            Deterministic gates the AI can never override.
+            {/* the page title above already says what these are; this line is the door to the rules of the rules */}
             <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
-              sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              sx={{ color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
               How precedence works →
             </Typography>
           </Typography>
@@ -610,6 +610,15 @@ export default function SettingsView() {
         </Typography>
       </Box>
       <Box sx={{ minWidth: 0 }}>
+        {/* the other rails (Reports, Connections, Docs) open every section under its title; this
+            one dropped you straight into the knobs, and the config page's sub-tabs read as the
+            heading. Same title style the Board and Reports use. */}
+        {!q && ["config", "policies", "memory", "audit"].includes(page) && (
+          <Box sx={{ mb: 2 }}>
+            <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>{PAGES[page].title}</Typography>
+            <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{PAGES[page].desc}</Typography>
+          </Box>
+        )}
         <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} />
       </Box>
     </Box>

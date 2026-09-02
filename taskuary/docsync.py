@@ -67,7 +67,7 @@ def sync_connections(store, actor='system'):
                      # intacct was reachable all along (the card carries the tool role by default) and
                      # was the one system this list never named, so the only road an agent could SEE
                      # to the ERP was "get a report pipeline saved first"
-                     'intacct|intacct_fields|quickbooks|quickbooks_vendors|quickbooks_accounts", ...} — '
+                     'intacct|intacct_fields|quickbooks|quickbooks_vendors|quickbooks_accounts|teller_accounts|teller_transactions|teller_balances", ...} — '
                      'saved credentials are filled in for you; if several cards have that type, pass '
                      '"connector_id": <the id named above>; the raw output comes back. '
                      # the writes exist and are named, and the road to them is the proposal - an agent

@@ -252,6 +252,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'quickbooks':
             from .quickbooks import probe, connection
             detail = probe(connection(store, cid))
+        elif c['Type'] == 'teller':
+            from .teller import probe, connection
+            detail = probe(connection(store, cid))
         elif c['Type'] == 'prometheus':
             from .reports import run_prometheus, prometheus_connection
             head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})

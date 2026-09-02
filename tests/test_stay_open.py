@@ -80,14 +80,18 @@ class TheJudgeIsRefusedButNotTheAgent(unittest.TestCase):
         self.assertTrue(out['closed'])
         w.assert_called_once()
 
-    def test_taskuary_done_still_closes_a_stay_open_session(self):
-        """It SAID it was finished. That outranks a guess about who the session was for."""
+    def test_taskuary_done_files_but_does_not_close_a_stay_open_session(self):
+        """The old rule was "it SAID it was finished, so it is". TQ-0297 (2026-09-01) closed under the
+        owner mid-review that way. A session the owner opened to sit in is theirs to end: the agent's
+        verdict lands on the task, the session stays at its prompt, nothing wraps."""
         s = MemoryStore()
         tid = _task(s, selfclose.STAY_TAG)
         with mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w:
             out = selfclose.declare(s, tid, 'fixed the export', 'coder')
-        self.assertTrue(out['closed'])
-        w.assert_called_once()
+        self.assertFalse(out['closed']); self.assertTrue(out['held'])
+        w.assert_not_called()
+        self.assertIn('The agent says it is finished: fixed the export', [c['Body'] for c in s.list_comments(tid)])
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')      # untouched: still theirs
 
     def test_the_reason_is_reported_rather_than_silently_swallowed(self):
         s = MemoryStore()

@@ -50,6 +50,8 @@ class DenyListTests(unittest.TestCase):
                              ('PUT', '/api/owner'), ('PATCH', '/api/whoami'),
                              ('POST', '/api/mssql/test'), ('POST', '/api/mcp/tools'),
                              ('POST', '/api/reports/preview'), ('POST', '/api/reports/compose'),
+                             ('POST', '/api/reports/3/invoice-batches'), ('PATCH', '/api/invoice-batches/2/items/8'),
+                             ('POST', '/api/invoice-batches/2/prepare'),
                              ('POST', '/api/semantic/metrics'), ('DELETE', '/api/semantic/metrics/3'), ('POST', '/api/semantic/metrics/3/try')):
             self.assertTrue(guard.denied(method, path), f'{method} {path} must be refused')
         for method, path in (('GET', '/api/semantic/metrics'), ('GET', '/api/reports'), ('POST', '/api/tools/run')):

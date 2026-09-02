@@ -59,6 +59,8 @@ DENIED = (
     (r'POST|PUT|PATCH|DELETE', r'^/api/(policies|agents)', 'the rules and the agent profiles'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(docs?|playbooks)(/|$)', 'SOUL.md, the playbooks and the rest are the owner\'s word, not an agent\'s - propose, do not write'),
     (r'POST', r'^/api/update$', 'replacing the program is the owner\'s decision'),
+    (r'POST|PUT|PATCH|DELETE', r'^/api/(invoice-batches|reports/\d+/invoice-batches)(/|$)',
+     'preparing or changing an invoice batch is the owner\'s decision'),
     (r'POST', r'^/api/deps/', 'installing software on this machine is the owner\'s decision'),
     (r'POST', r'^/api/problems/', 'what is failing is the owner\'s to read - an agent does not get to clear the bell'),
     # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very

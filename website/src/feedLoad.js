@@ -21,3 +21,9 @@ export const threadDetail = (data = {}) => ({
   routes: data.routes || [],
   reviews: data.reviews || [],
 });
+
+// A message exists before triage has decided whether to create a task. The detail request still
+// has to load in that taskless interval; using TaskId as the loading flag made the panel render
+// an incomplete workflow and look blank precisely while the funnel was busiest.
+export const detailPhase = (row, detail) => !detail ? "loading"
+  : row?.MsgStatus === "triaging" ? "triaging" : "ready";

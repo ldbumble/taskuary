@@ -536,6 +536,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'quickbooks': _lazy('quickbooks', 'run_quickbooks'), 'quickbooks_vendors': _lazy('quickbooks', 'run_quickbooks_vendors'),
             'quickbooks_accounts': _lazy('quickbooks', 'run_quickbooks_accounts'),
             'quickbooks_bill': _lazy('quickbooks', 'run_quickbooks_bill'), 'quickbooks_expense': _lazy('quickbooks', 'run_quickbooks_expense'),
+            # A stateful report: the scheduler opens a batch, the page confirms amounts, and
+            # Review sends. The special run path below owns the state transitions.
+            'zoho_monthly_invoices': lambda cfg: ('monthly invoice workflow', 'A monthly batch will be opened; no invoice is created or sent by Preview.'),
             # the bank and card feed (teller.py): where a transaction comes from before it becomes a bill
             'teller_accounts': _lazy('teller', 'run_teller_accounts'), 'teller_transactions': _lazy('teller', 'run_teller_transactions'),
             'teller_balances': _lazy('teller', 'run_teller_balances'),
@@ -560,6 +563,7 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',
            'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
+           'zoho_monthly_invoices': 'zoho_invoice',
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook'}
@@ -941,6 +945,9 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None) -> dict:
     Errors file visibly too."""
     title = cfg.get('title') or src['Address']
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
+    if cfg.get('type') == 'zoho_monthly_invoices':
+        from .invoice_workflow import run_report
+        return run_report(store, src, cfg)
     if cfg.get('type') == 'assistant':
         # not a report row: the assistant posts its own kind of row (ideas with buttons and state),
         # on this report's schedule and with this report's prompt as its instruction

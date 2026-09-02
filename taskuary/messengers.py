@@ -251,14 +251,24 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     want = {s['Address'] for s in srcs if s['Address'] != '*'}
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n, took = 0, []
-    from . import phone
+    from . import phone, remote_assistant
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
         if not jid: continue
+        # This id was sent through the bridge's localhost /send endpoint. It is Taskuary's
+        # output, never an owner verdict or question; discard it before either interceptor.
+        if m.get('taskuary'): continue
         # the WhatsApp bridge is the owner's OWN account, so a verdict they type in the
         # notify chat arrives as fromMe - intercept runs before that filter (phone.py also
         # recognizes and swallows our own pings echoing back through the bridge)
         if (m.get('text') or '').strip() and phone.intercept(store, 'whatsapp', jid, m['text'], m.get('quoted')):
+            continue
+        # A natural message the owner types in their designated private chat goes to the SAME
+        # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed
+        # here too, so a notification or answer can never loop back as a fresh question.
+        if (m.get('text') or '').strip() and remote_assistant.intercept(
+                store, jid, m['text'], from_me=bool(m.get('fromMe')),
+                connector=c):
             continue
         if m.get('fromMe'): continue
         if m.get('group') or jid.endswith('@g.us'):

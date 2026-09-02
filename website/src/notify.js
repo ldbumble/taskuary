@@ -11,23 +11,29 @@ export const hasNotifyRole = (c) => String(c.Roles || "").split(",").includes("n
 // missing. Pure, because the awkward cases are exactly the ones worth testing - a role with
 // no chat, a named chat on a connector that is switched OFF, and a stale role left behind on
 // a channel that cannot send (the card no longer offers the switch, so it cannot be cleared).
-export function notifyState(connectors, level = "needs_me", phoneApprovals = false) {
+export function notifyState(connectors, level = "needs_me", phoneApprovals = false, phoneAssistant = false) {
   const all = (connectors || []).filter(hasNotifyRole);
   const able = all.filter((c) => CAN_NOTIFY.has(c.Type));
   const named = able.filter((c) => c.Active && notifyChat(c));
   const phoneNamed = named.filter((c) => c.Type === "telegram" || c.Type === "whatsapp");
+  const guideNamed = named.filter((c) => c.Type === "whatsapp");
   const asleep = able.filter((c) => !c.Active && notifyChat(c));
   const unnamed = able.filter((c) => !notifyChat(c));
   const stale = all.filter((c) => !CAN_NOTIFY.has(c.Type));
   const names = (cs) => cs.map((c) => c.Name).join(", ");
   const note = stale.length ? ` ${names(stale)} still carries the role but cannot send — clear it on its card.` : "";
   const one = (cs) => cs.length === 1;
+  if (level === "off" && phoneAssistant && guideNamed.length) return { kind: "pinging", targets: guideNamed, stale,
+    text: `Push alerts are off; the WhatsApp guide is listening in ${guideNamed.map((c) => `${c.Name} · ${notifyChat(c)}`).join(" · ")}.` + note };
   if (level === "off") return { kind: "off", targets: [], stale,
-    text: "Pushes are off — nothing is sent, even if a chat is named." + note };
+    text: "Pushes are off — nothing is sent, even if a chat is named."
+      + (phoneAssistant ? " The WhatsApp guide still needs an active, named WhatsApp notify chat." : "") + note };
   if (named.length) return { kind: "pinging", targets: named, stale,
     text: `Pinging ${named.map((c) => `${c.Name} · ${notifyChat(c)}`).join(" · ")}`
       + (phoneApprovals && phoneNamed.length ? " — reply there to answer agents or approve drafts" : "")
-      + (phoneApprovals && !phoneNamed.length ? " — phone replies need a Telegram or WhatsApp notify chat" : "") + note };
+      + (phoneApprovals && !phoneNamed.length ? " — phone replies need a Telegram or WhatsApp notify chat" : "")
+      + (phoneAssistant && guideNamed.length ? " — ask the Taskuary guide from that WhatsApp chat" : "")
+      + (phoneAssistant && !guideNamed.length ? " — assistant chat needs a WhatsApp notify chat" : "") + note };
   if (asleep.length) return { kind: "inactive", targets: asleep, stale,
     text: `${names(asleep)} ${one(asleep) ? "names a chat but is" : "name chats but are"} switched off`
       + ` — enable ${one(asleep) ? "it" : "them"} on the connector card.` + note };

@@ -7,6 +7,13 @@ test("a question from the agent outranks everything the message once was", () =>
   assert.equal(stateOf({ TaskId: 7, Category: "coding", Working: "claude" }), "working");
 });
 
+test("a newly arrived message has an explicit triaging state", () => {
+  const row = { MessageId: 4, MsgStatus: "triaging", RouteReason: "" };
+  assert.equal(stateOf(row), "triaging");
+  assert.equal(STATES.triaging.mark, "spinner");
+  assert.match(subline(row), /triage is deciding/);
+});
+
 test("a drafted reply is the headline even after the task closed", () => {
   assert.equal(stateOf({ TaskId: 7, TaskStatus: "done", ReviewStatus: "pending" }), "reply");
   assert.equal(stateOf({ TaskId: 7, TaskStatus: "done", ReviewStatus: "sent" }), "done");

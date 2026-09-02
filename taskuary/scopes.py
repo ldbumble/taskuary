@@ -35,6 +35,8 @@ ACTIONS = {
     # run_tool) and the owner approves it in Review. Raising the card to 'write' is the owner's call.
     'quickbooks': 'read', 'quickbooks_vendors': 'read', 'quickbooks_accounts': 'read',
     'quickbooks_bill': 'write', 'quickbooks_expense': 'write',
+    'zoho_monthly_invoices': 'read', 'zoho_customers': 'read', 'zoho_invoices': 'read',
+    'zoho_invoice_draft': 'write', 'zoho_invoice_send': 'write',
     # Intacct writes the same way it reads - generically, by object - so ONE pair covers posting a
     # bill, adding a vendor and correcting a memo. The card ships at 'read' like QuickBooks', which
     # is what makes a bill an agent's PROPOSAL rather than an agent's decision.
@@ -82,6 +84,7 @@ DEFAULT_SCOPE = {
     'gmail': 'write', 'imap': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
     'intacct': 'read', 'quickbooks': 'read', 'teller': 'read',
+    'zoho_invoice': 'write',
     'aws': 'read', 'azure': 'read',
     'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',
     'linear': 'read', 'trello': 'read', 'notion': 'read', 'sentry': 'read', 'pagerduty': 'read',

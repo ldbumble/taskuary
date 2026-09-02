@@ -165,6 +165,19 @@ CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Ki
   DecidedBy TEXT, DecidedAt TEXT);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
+-- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
+-- advances independently from amount -> Zoho draft -> Review -> sent.  The unique keys are
+-- the duplicate barrier: restarting Taskuary or pressing Run again cannot create another batch
+-- or a second customer row for the same month.
+CREATE TABLE IF NOT EXISTS invoice_batch (BatchId INTEGER PRIMARY KEY, SourceId INTEGER NOT NULL,
+  Period TEXT NOT NULL, Status TEXT DEFAULT 'needs_amounts', MessageId INTEGER,
+  CreatedAt TEXT, UpdatedAt TEXT, UNIQUE(SourceId, Period));
+CREATE TABLE IF NOT EXISTS invoice_item (ItemId INTEGER PRIMARY KEY, BatchId INTEGER NOT NULL,
+  ConnectorId INTEGER, CustomerId TEXT NOT NULL, CustomerName TEXT, Recipient TEXT,
+  Currency TEXT DEFAULT 'USD', PreviousAmount REAL, Amount REAL, Description TEXT,
+  Status TEXT DEFAULT 'needs_amount', Reference TEXT, TemplateInvoiceId TEXT, InvoiceId TEXT, InvoiceNumber TEXT,
+  ReviewId INTEGER, Subject TEXT, Body TEXT, Error TEXT, CreatedAt TEXT, UpdatedAt TEXT,
+  UNIQUE(BatchId, CustomerId));
 CREATE TABLE IF NOT EXISTS kb_doc (DocId INTEGER PRIMARY KEY, ConnectorId INTEGER, Source TEXT, Path TEXT, Name TEXT, Modified TEXT,
   Size INTEGER, Chars INTEGER, IndexedAt TEXT);
 CREATE TABLE IF NOT EXISTS kb_chunk (ChunkId INTEGER PRIMARY KEY, DocId INTEGER, Seq INTEGER, Text TEXT);
@@ -216,6 +229,9 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_waitroom_task ON waitroom(TaskId, DeliveredAt)',
     'CREATE INDEX IF NOT EXISTS idx_idea_status ON idea(Status, MessageId)',
     'CREATE INDEX IF NOT EXISTS idx_connector_type ON connector(Type, ConnectorId)',
+    'CREATE INDEX IF NOT EXISTS idx_invoice_batch_source ON invoice_batch(SourceId, Period)',
+    'CREATE INDEX IF NOT EXISTS idx_invoice_item_batch ON invoice_item(BatchId, Status)',
+    'CREATE INDEX IF NOT EXISTS idx_invoice_item_review ON invoice_item(ReviewId)',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -276,6 +292,9 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'answer_to_agent': 'ask',
                     # replies in the notify chat decide pinged reviews (approve/reject/your text)
                     'phone_approvals': '0',
+                    # the owner's messages in one private WhatsApp notify chat open the same
+                    # durable guide conversation as the floating desktop assistant
+                    'phone_assistant': '0',
                     # which channels Taskuary drafts and sends replies on (csv). github also
                     # needs its card's 'Reply to issue/PR authors'; the read-only trackers
                     # can never carry one - see outbound.can_reply
@@ -321,6 +340,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # QuickBooks is the first Corporate system that can WRITE (a bill, an expense) -
                  # still report and tool, never trigger; the writes are gated by scope, not by role
                  'quickbooks': 'report,tool',
+                 'zoho_invoice': 'report,tool',
                  'teller': 'report,tool',          # the bank feed: transactions as a report (and "can become work"), balances as a tool
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
@@ -399,6 +419,9 @@ class SQLiteStore:
             rcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'Deliver' not in rcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN Deliver TEXT')
+            icols = {r[1] for r in self.cx.execute('PRAGMA table_info(invoice_item)')}
+            if 'TemplateInvoiceId' not in icols:
+                self.cx.execute('ALTER TABLE invoice_item ADD COLUMN TemplateInvoiceId TEXT')
             # the wall composts: a day's notes are summarised into one and marked with the day
             # they were rolled up, so the live wall stays short without anything being deleted
             ncols = {r[1] for r in self.cx.execute('PRAGMA table_info(boardnote)')}
@@ -465,6 +488,7 @@ class SQLiteStore:
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
+                         ('zoho_invoice', 'Zoho Invoice'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
@@ -732,6 +756,10 @@ class SQLiteStore:
                    FROM message GROUP BY TaskId
                ) ms ON ms.TaskId=t.TaskId'''
         where, p = [], []
+        # The hovering guide persists its conversation in a task-shaped record so it can reuse
+        # the assistant session machinery, but it is application chrome, not work. Keep it out
+        # of every task consumer (Board, digests, cold-task checks, setup statistics).
+        where.append("IFNULL(t.SourceRef,'') <> 'assistant:dock'")
         if status:
             where.append('t.Status=?'); p.append(status)
         if active_only:
@@ -834,6 +862,8 @@ class SQLiteStore:
             self._bump_snapshots()
         return mid
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
+    def message_by_external(self, external_id):
+        return self._one('SELECT * FROM message WHERE ExternalId=? ORDER BY MessageId DESC LIMIT 1', (external_id,))
     # ── what the hub knows about a sender / a topic (counsel.dossier, responder) ─────────────
     def messages_from(self, email, since, limit=8):
         return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','skipped') AND SentAt>=? "
@@ -1283,6 +1313,59 @@ class SQLiteStore:
     def get_source(self, sid): return self._one('SELECT * FROM source WHERE SourceId=?', (sid,))
     def delete_source(self, sid): self._exec('DELETE FROM source WHERE SourceId=?', (sid,))
     def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))
+
+    # Monthly invoice workflow. These methods deliberately expose dicts like the rest of the
+    # store; Zoho-specific decisions stay in invoice_workflow.py.
+    def invoice_batch(self, batch_id):
+        return self._one('SELECT * FROM invoice_batch WHERE BatchId=?', (batch_id,))
+    def invoice_batch_for(self, source_id, period):
+        return self._one('SELECT * FROM invoice_batch WHERE SourceId=? AND Period=?', (source_id, period))
+    def list_invoice_batches(self, source_id, limit=24):
+        return self._rows('SELECT * FROM invoice_batch WHERE SourceId=? ORDER BY Period DESC, BatchId DESC LIMIT ?',
+                          (source_id, int(limit)))
+    def create_invoice_batch(self, source_id, period):
+        found = self.invoice_batch_for(source_id, period)
+        if found: return found['BatchId']
+        try:
+            return self._insert('invoice_batch', {'SourceId': source_id, 'Period': period,
+                                'Status': 'needs_amounts', 'CreatedAt': _now(), 'UpdatedAt': _now()},
+                                ('SourceId', 'Period', 'Status', 'CreatedAt', 'UpdatedAt'))
+        except sqlite3.IntegrityError:   # another scheduler thread won the same unique key
+            return self.invoice_batch_for(source_id, period)['BatchId']
+    def invoice_items(self, batch_id):
+        return self._rows('SELECT * FROM invoice_item WHERE BatchId=? ORDER BY CustomerName, ItemId', (batch_id,))
+    def invoice_item(self, item_id): return self._one('SELECT * FROM invoice_item WHERE ItemId=?', (item_id,))
+    def add_invoice_item(self, fields):
+        cols = ('BatchId','ConnectorId','CustomerId','CustomerName','Recipient','Currency','PreviousAmount',
+                'Amount','Description','Status','Reference','TemplateInvoiceId','InvoiceId','InvoiceNumber','ReviewId','Subject',
+                'Body','Error','CreatedAt','UpdatedAt')
+        body = {**fields, 'CreatedAt': fields.get('CreatedAt') or _now(), 'UpdatedAt': _now()}
+        try: return self._insert('invoice_item', body, cols)
+        except sqlite3.IntegrityError:
+            row = self._one('SELECT ItemId FROM invoice_item WHERE BatchId=? AND CustomerId=?',
+                            (fields['BatchId'], fields['CustomerId']))
+            return row['ItemId']
+    def update_invoice_item(self, item_id, fields):
+        allowed = {'Recipient','Currency','PreviousAmount','Amount','Description','Status','Reference',
+                   'TemplateInvoiceId','InvoiceId','InvoiceNumber','ReviewId','Subject','Body','Error'}
+        cols = [k for k in fields if k in allowed]
+        if cols:
+            self._exec(f"UPDATE invoice_item SET {','.join(f'{k}=?' for k in cols)}, UpdatedAt=? WHERE ItemId=?",
+                       [fields[k] for k in cols] + [_now(), item_id])
+        return self.invoice_item(item_id)
+    def update_invoice_batch(self, batch_id, fields):
+        cols = [k for k in fields if k in {'Status','MessageId'}]
+        if cols:
+            self._exec(f"UPDATE invoice_batch SET {','.join(f'{k}=?' for k in cols)}, UpdatedAt=? WHERE BatchId=?",
+                       [fields[k] for k in cols] + [_now(), batch_id])
+        return self.invoice_batch(batch_id)
+    def invoice_item_by_review(self, review_id):
+        return self._one('SELECT * FROM invoice_item WHERE ReviewId=?', (review_id,))
+    def last_sent_invoice_item(self, source_id, customer_id, before_period):
+        return self._one('''SELECT i.*, b.Period FROM invoice_item i JOIN invoice_batch b ON b.BatchId=i.BatchId
+                            WHERE b.SourceId=? AND i.CustomerId=? AND b.Period<? AND i.Status='sent'
+                            ORDER BY b.Period DESC, i.ItemId DESC LIMIT 1''',
+                         (source_id, customer_id, before_period))
 
     # channel connectors (secrets are write-only: list/get never return them)
     _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, (Secret IS NOT NULL AND Secret != '') HasSecret"

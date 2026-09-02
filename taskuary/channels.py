@@ -253,6 +253,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'quickbooks':
             from .quickbooks import probe, connection
             detail = probe(connection(store, cid))
+        elif c['Type'] == 'zoho_invoice':
+            from .zoho import probe, connection
+            detail = probe(connection(store, cid))
         elif c['Type'] == 'teller':
             from .teller import probe, connection
             detail = probe(connection(store, cid))
@@ -830,7 +833,11 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
         # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two
         # switches where one reads as enough was a trap (a repo set to "PRs: tasks" on a
         # tool-only card, a Sync that pulled nothing, and no error anywhere).
-        if (not roles & {'trigger', 'feed'} and not (c['Type'] == 'github' and _gh_explicit(store))
+        phone_guide = (c['Type'] == 'whatsapp'
+                       and store.get_settings().get('phone_assistant') == '1'
+                       and 'notify' in roles)
+        if (not roles & {'trigger', 'feed'} and not phone_guide
+                and not (c['Type'] == 'github' and _gh_explicit(store))
                 and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue
         file_only = 'trigger' not in roles
         # said as it happens, not at the end: the timeline is refreshing while this runs, so

@@ -80,6 +80,41 @@ const assistantBox = (taskId) => {
   return box;
 };
 
+const dockTask = () => {
+  const old = Object.values(state["/api/tasks/detail"] || {}).map((d) => d?.task)
+    .find((t) => t?.SourceRef === "assistant:dock");
+  if (old) return old;
+  const id = ++nextId;
+  const row = { TaskId: id, ref: `TQ-${String(id).padStart(4, "0")}`, Title: "Taskuary guide",
+    Summary: "An always-available walkthrough of the Timeline, outstanding work, reviews, and agent output.",
+    Kind: "general", Status: "open", Priority: "normal", Source: "assistant", SourceRef: "assistant:dock",
+    CreatedAt: new Date().toISOString().slice(0, 19).replace("T", " ") };
+  state["/api/tasks/detail"][id] = { task: row, ref: row.ref, messages: [], attachments: [], routes: [], comments: [], runs: [], audit: [], reviews: [], session: null };
+  state["/api/tasks/detail"][`${id}:assistant`] = { messages: [], session: null,
+    providers: state["/api/tasks/detail"]?.["1:assistant"]?.providers || [] };
+  return row;
+};
+
+const demoReply = (taskId, asked) => {
+  const task = state["/api/tasks/detail"]?.[String(taskId)]?.task;
+  if (task?.SourceRef !== "assistant:dock") return REPLIES[assistantBox(taskId).messages.length % REPLIES.length];
+  const attention = feedRows().find((r) => r.NeedsYou) || feedRows()[0];
+  const work = taskRows().find((t) => t.Status && !["done", "dropped"].includes(t.Status));
+  if (/agent|coding|output/i.test(asked) && work) {
+    const ref = work.ref || `TQ-${String(work.TaskId).padStart(4, "0")}`;
+    return `The freshest agent work is on [${ref}](#task=${work.TaskId}). Open it to see the live output and filed result; I would check anything marked waiting before starting more work.`;
+  }
+  if (/task|outstanding|stuck|quiet/i.test(asked) && work) {
+    const ref = work.ref || `TQ-${String(work.TaskId).padStart(4, "0")}`;
+    return `Start with [${ref}](#task=${work.TaskId}) — **${work.Title}**. It is ${work.Status || "open"}; after that, I would clear anything already waiting in Review.`;
+  }
+  if (attention) {
+    const ref = attention.TaskId ? `[TQ-${String(attention.TaskId).padStart(4, "0")}](#task=${attention.TaskId})` : "the newest Timeline item";
+    return `I’d start with ${ref}: **${attention.Subject || attention.Title || "the latest message"}**. ${attention.RouteReason || "It is the item currently marked as needing you."} Then open Review for any answer that is already drafted.`;
+  }
+  return "Nothing in the current Timeline is marked as needing you. I’d use this quiet window to review the active task list or ask me about recent agent output.";
+};
+
 // Start the demo's answer OUTSIDE the mounted assistant-ui generator. If the visitor clicks
 // another task, React stops listening but this timer still completes and files the reply in the
 // recorded task state. Coming back therefore behaves like the desktop server instead of losing
@@ -98,7 +133,7 @@ export const startDemoAssistant = (taskId, body, emit = () => {}) => {
       const progress = { type: "progress", name: "text", detail: "reading the task and the thread it came from" };
       box.session.trace.push(progress); box.session.trace_revision += 1; emit(clone(progress));
       setTimeout(() => {
-        const said = REPLIES[box.messages.length % REPLIES.length];
+        const said = demoReply(taskId, asked);
         box.messages.push({ id: `a${++nextId}`, role: "assistant", content: [{ type: "text", text: said }] });
         box.session.busy = false;
         const done = { type: "done", reply: said, payload: clone(box) };
@@ -125,6 +160,11 @@ const write = (method, url, body) => {
   const p = path(url);
   noted(method, p);
   let m;
+
+  if (method === "post" && p === "/api/assistant/dock") {
+    const task = dockTask();
+    return { task: clone(task), ref: task.ref, created: true };
+  }
 
   if (method === "post" && p === "/api/tasks") {
     const id = ++nextId;
@@ -177,7 +217,7 @@ const write = (method, url, body) => {
     const asked = String(body?.text || "").trim();
     if (asked) {
       box.messages.push({ id: `u${++nextId}`, role: "user", content: [{ type: "text", text: asked }] });
-      const said = REPLIES[box.messages.length % REPLIES.length];
+      const said = demoReply(m[1], asked);
       box.messages.push({ id: `a${++nextId}`, role: "assistant", content: [{ type: "text", text: said }] });
       return { reply: said, ...box };
     }

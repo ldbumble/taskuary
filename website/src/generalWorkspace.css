@@ -40,6 +40,11 @@
 .tq-aui-cancel:disabled { display: none; }
 .tq-aui-hint { margin: 5px auto 0; text-align: center; color: #a09b92; font: 9px/1.2 'Cascadia Mono', Consolas, monospace; }
 .tq-aui-attachments { width: min(820px, 100%); margin: 0 auto 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+.tq-aui-dock .tq-aui-viewport { padding: 14px 13px 8px; }
+.tq-aui-dock .tq-aui-message { width: 100%; grid-template-columns: 54px minmax(0, 1fr); gap: 7px; margin-bottom: 14px; }
+.tq-aui-dock .tq-aui-user-bubble { max-width: 100%; }
+.tq-aui-dock .tq-aui-footer { padding: 8px 10px 7px; }
+.tq-aui-dock .tq-aui-hint { display: none; }
 @media (max-width: 700px) {
   .tq-aui-viewport { padding-left: 10px; padding-right: 10px; }
   .tq-aui-message { width: 100%; grid-template-columns: 1fr; gap: 3px; }

@@ -25,6 +25,7 @@ import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark } from "./ui.jsx";
+import FloatingAssistant from "./FloatingAssistant.jsx";
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
 // (Board, Tasks), what is waiting on you (Review), then what has been WRITTEN DOWN - Reports and
@@ -284,7 +285,7 @@ export default function TaskHubPage() {
         <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised} autoHideDuration={12000}
           onClose={() => setRaisedQueue(dismissHandRaise)}
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-          sx={{ mb: 1 }}
+          sx={{ mb: 8 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
           action={raised && <Button size="small" sx={{ color: ACCENT, fontWeight: 700 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
@@ -412,6 +413,7 @@ export default function TaskHubPage() {
           {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} />}
         </Box>
+        <FloatingAssistant onNavigate={go} />
       </Box>
     </ThemeProvider>
   );

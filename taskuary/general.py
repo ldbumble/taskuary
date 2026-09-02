@@ -21,6 +21,7 @@ ASSISTANT_TYPE = 'assistant_agent'
 # to ``general``. Keep it as a read-compatible alias so existing discussions still open in the
 # Assistant workspace without a data migration.
 GENERAL_KINDS = {'general', 'research', 'marketing', 'triage', 'assistant'}
+DOCK_TAG = 'assistant:dock'
 SCROLLBACK = 200_000
 MAX_CONTEXT = 24_000
 MAX_REPLY_TOKENS = 2_000
@@ -140,6 +141,92 @@ def _cut(text, n):
     return text if len(text) <= n else text[:n] + f'\n[trimmed {len(text) - n:,} characters]'
 
 
+def is_dock(task: dict | None) -> bool:
+    """The global guide is stored like a chat, but is not work on the owner's task list."""
+    return str((task or {}).get('SourceRef') or '') == DOCK_TAG
+
+
+def dock_task(store, actor='owner') -> tuple[dict, bool]:
+    """Return the one durable guide conversation shared by desktop and remote chat."""
+    raw = store.get_settings().get('assistant_dock_task_id')
+    task = store.get_task(int(raw)) if str(raw or '').isdigit() else None
+    if task and is_dock(task) and task.get('Status') not in ('done', 'dropped'):
+        return task, False
+    tid = store.create_task({
+        'Title': 'Taskuary guide',
+        'Summary': 'An always-available walkthrough of the Timeline, outstanding work, reviews, and agent output.',
+        'Kind': 'general', 'Status': 'open', 'Priority': 'normal',
+        'Source': 'assistant', 'SourceRef': DOCK_TAG,
+    }, actor)
+    store.set_setting('assistant_dock_task_id', str(tid), actor)
+    store.audit('task', tid, 'create_assistant_dock', actor)
+    return store.get_task(tid), True
+
+
+def dock_snapshot(store) -> str:
+    """A compact, live map of the surfaces the hovering assistant is meant to explain.
+
+    This is deliberately assembled by Taskuary instead of asking a model to infer the state of
+    the app from an old conversation. It is refreshed for every turn, including resumed CLI
+    conversations, so "what needs me now?" cannot answer from yesterday's task list.
+    """
+    from .store import task_ref
+
+    def one_line(value, limit=280):
+        return _cut(' '.join(str(value or '').split()), limit)
+
+    tasks = [t for t in store.list_tasks()
+             if t.get('Status') not in ('done', 'dropped') and not is_dock(t)][:30]
+    reviews = store.list_reviews('pending')[:20]
+    recent = store.feed(limit=30, days=14)
+    needs = [r for r in recent if r.get('NeedsYou')][:12]
+
+    lines = [f'WORKSPACE SNAPSHOT ({datetime.now().strftime("%Y-%m-%d %H:%M local")})']
+    lines.append('\nNEEDS THE OWNER NOW')
+    if not needs:
+        lines.append('- Nothing in the recent Timeline is currently marked as needing the owner.')
+    for r in needs:
+        ref = task_ref(r['TaskId']) if r.get('TaskId') else f"message {r.get('MessageId')}"
+        who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel')
+        state = 'reply/review ready' if r.get('ReviewStatus') == 'pending' else (r.get('RouteReason') or 'needs attention')
+        lines.append(f"- {ref} | {r.get('SentAt') or ''} | {who} | {one_line(r.get('Subject') or r.get('Title'))} | {one_line(state, 180)}")
+        if r.get('Preview'): lines.append(f"  Message: {one_line(r.get('Preview'), 360)}")
+
+    lines.append('\nACTIVE TASKS')
+    if not tasks: lines.append('- No open, in-progress, or waiting tasks.')
+    for t in tasks:
+        run = f" | agent {t.get('RunAgent')}: {t.get('RunStatus')}" if t.get('RunAgent') else ''
+        review = f" | review {t.get('ReviewStatus')}" if t.get('ReviewStatus') else ''
+        lines.append(f"- {task_ref(t['TaskId'])} | {t.get('Status') or 'open'} | {t.get('Priority') or 'normal'} | {one_line(t.get('Title'))}{run}{review}")
+
+    lines.append('\nPENDING REVIEW')
+    if not reviews: lines.append('- Nothing is waiting in Review.')
+    for r in reviews:
+        ref = task_ref(r['TaskId']) if r.get('TaskId') else f"message {r.get('MessageId')}"
+        lines.append(f"- {ref} | {r.get('Kind') or 'review'} | {one_line(r.get('Title') or r.get('Subject'))} | from {one_line(r.get('FromName') or r.get('FromEmail') or r.get('Channel'), 100)}")
+
+    lines.append('\nRECENT TIMELINE')
+    if not recent: lines.append('- The Timeline is empty in the current lookback window.')
+    for r in recent[:18]:
+        ref = task_ref(r['TaskId']) if r.get('TaskId') else f"message {r.get('MessageId')}"
+        flag = ' | NEEDS OWNER' if r.get('NeedsYou') else ''
+        lines.append(f"- {r.get('SentAt') or ''} | {r.get('Channel') or ''} | {ref} | {one_line(r.get('Subject') or r.get('Title'))}{flag}")
+
+    lines.append('\nRECENT AGENT OUTPUT')
+    output = []
+    for t in store.list_tasks()[:25]:
+        if is_dock(t): continue
+        comments = store.list_comments(t['TaskId'])
+        last = next((c for c in reversed(comments)
+                     if c.get('ActorType') in ('agent', ASSISTANT_TYPE)
+                     or str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE'))), None)
+        if last:
+            output.append(f"- {task_ref(t['TaskId'])} | {one_line(t.get('Title'), 160)} | {one_line(last.get('Body'), 460)}")
+        if len(output) >= 10: break
+    lines.extend(output or ['- No recent filed agent output.'])
+    return '\n'.join(lines)
+
+
 def _task_files(store, tid: int) -> list[dict]:
     """Files that arrived with the task's source messages, once each, in message order."""
     detail = store.task_detail(tid) or {}
@@ -179,6 +266,7 @@ def _turn_only(store, tid: int, text: str) -> str:
 def _prompt(store, tid: int) -> tuple[str, str]:
     detail = store.task_detail(tid) or {}
     task = detail.get('task') or {}
+    dock = is_dock(task)
     soul = _cut(store.doc('soul') or '', 4_000)
     counsel = _cut(store.doc('counsel') or '', 3_000)
     # What is CERTIFIED about the company's own systems. Without it the assistant writes a
@@ -195,6 +283,15 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"OPERATOR RULES\n{_cut(soul, 4_000)}\n\nASSISTANT STYLE\n{_cut(counsel, 3_000)}"
     )
+    if dock:
+        system += (
+            "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide. "
+            "Use the fresh workspace snapshot to walk them through what arrived, what needs a decision, "
+            "what agents produced, and what to do next. Prioritize; do not merely recite every row. "
+            "When you mention a task, link it as [TQ-0001](#task=1), using its real id. The buttons above "
+            "the chat open Timeline, Tasks, and Review. You may explain or perform actions only through "
+            "tools you actually have; approval and sending remain the owner's actions."
+        )
     sources = []
     for m in (detail.get('messages') or [])[-12:]:
         who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
@@ -228,6 +325,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if sources and selfclose.mode(store) != 'off': system = system + '\n\n' + selfclose.CHAT_LINE
     head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
             f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n\n"
+            + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
             + (social.strip() + '\n\n' if social else ''))
     tail = "\n\nRespond to the last USER turn. Do not repeat the task context."
@@ -507,9 +605,11 @@ class GeneralSession:
             brain = llm_mod.build_llm(self.store, pick=self.pick, model=self.model or None,
                                       trace=visible, cancel=cancel, resume=self.cli_sid or None)
             if not brain: raise RuntimeError('the selected AI connector is unavailable')
-            # a resumed CLI has the conversation already, so only the turn is said - and for an opening
-            # turn the 'turn' IS the instruction, which was never written to the history
-            if self.cli_sid: user = _turn_only(self.store, self.task_id, text) if as_owner else text
+            if self.cli_sid:
+                # an opening turn's 'turn' IS the instruction, which the history never saw
+                user = _turn_only(self.store, self.task_id, text) if as_owner else text
+                if is_dock(self.store.get_task(self.task_id)):
+                    user += f'\n\n{dock_snapshot(self.store)}'
             # Paths are harmless context to an API brain and essential if its CLI backup takes
             # over after a quota failure. The source message already names its files too; this
             # line also carries images attached directly in the composer.

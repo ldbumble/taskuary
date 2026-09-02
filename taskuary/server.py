@@ -95,7 +95,7 @@ async def token_gate(request: Request, call_next):
     # ...and a request some OTHER page told the browser to make is not the owner asking, whatever
     # token the browser had lying around. The Intuit callback is the one cross-site arrival by
     # design - a redirect from their site, proving itself with the one-time state it was issued.
-    elif (request.url.path.startswith('/api') and request.url.path != '/api/quickbooks/callback'
+    elif (request.url.path.startswith('/api') and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback')
           and not guard.origin_ok(request.headers)):
         logger.warning(f'refused {request.method} {request.url.path} from origin {request.headers.get("origin")!r}')
         return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
@@ -106,7 +106,7 @@ async def token_gate(request: Request, call_next):
         # string - the same concession websockets already needed
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
-        if not (request.url.path.startswith('/api/attachments/') and request.query_params.get('token') == tok)                 and request.url.path != '/api/quickbooks/callback':
+        if not (request.url.path.startswith('/api/attachments/') and request.query_params.get('token') == tok)                 and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback'):
             return HTMLResponse('unauthorized', status_code=401)
     # WHAT AN AGENT MAY NOT DO, before a handler exists to be talked round (guard.py). A session
     # runs with the agent token in its environment, and the routes that SEND - approve a reply,
@@ -296,6 +296,18 @@ def create_task(body: TaskBody):
     selfclose.claim(store, tid, ACTOR)
     store.audit('task', tid, 'create', ACTOR)
     return {'taskId': tid, 'ref': task_ref(tid)}
+
+
+@app.post('/api/assistant/dock')
+def assistant_dock():
+    """Return the one durable conversation behind the floating Taskuary guide.
+
+    It uses the normal general-work session and comment history, but SourceRef keeps this
+    application-level conversation off the owner's task list and Timeline.
+    """
+    from .general import dock_task
+    task, created = dock_task(store, ACTOR)
+    return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created}
 
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
@@ -1208,6 +1220,8 @@ def assistant_act(iid: int, verb: str, body: IdeaBody = None, background: Backgr
             return out
         return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1),
                              learn_async=background.add_task if background is not None else None)
+        return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1),
+                             learn_async=background.add_task if background is not None else None)
     except ValueError as e: raise HTTPException(422, str(e))
 
 # What the assistant is told when the owner opens one of its notes for discussion. It is an
@@ -1408,6 +1422,10 @@ def live_runs(lines: int = 3):
     # whether the agent is thinking or parked at a question waiting for the owner
     for t in hub_term.live_sessions(tail=max(1, min(lines, 10))):
         if t.get('taskId'):
+            # The floating guide reuses a general session, but it is app chrome rather than an
+            # agent assigned to work. Do not put a duplicate of it on the Board or ring the
+            # hand-raise bell while its answer is visible in the dock itself.
+            if (store.get_task(t['taskId']) or {}).get('SourceRef') == 'assistant:dock': continue
             # `asking` = the last lines look like a question for the owner (waitroom.looks_like_question):
             # the hand-raise notification says "asked you something" instead of "stopped"
             out.append({'RunId': None, 'TaskId': t['taskId'], 'AgentName': t['agent'] or t['label'],
@@ -1429,7 +1447,10 @@ def get_run(run_id: int):
 def reviews(status: str = None):
     rows = store.list_reviews(status)
     gh_ok = store.github_replies_ok()
-    for r in rows: r['CanSend'] = _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
+    for r in rows:
+        try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
+        except (TypeError, ValueError): special = False
+        r['CanSend'] = special or _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
     return {'data': rows}
 
 @app.post('/api/reviews/{rid}/decide')
@@ -2027,6 +2048,41 @@ def report_runs(sid: int, limit: int = 60):
     if not store.get_source(sid): raise HTTPException(404, 'source not found')
     return {'data': store.report_runs(sid, min(max(1, limit), 200))}
 
+@app.get('/api/reports/{sid}/invoice-batches')
+def invoice_batches(sid: int):
+    src = store.get_source(sid)
+    if not src: raise HTTPException(404, 'report not found')
+    return {'data': store.list_invoice_batches(sid)}
+
+@app.post('/api/reports/{sid}/invoice-batches')
+def open_invoice_batch(sid: int, body: dict = None):
+    from . import invoice_workflow
+    src = store.get_source(sid)
+    if not src: raise HTTPException(404, 'report not found')
+    try: return invoice_workflow.open_batch(store, src, (body or {}).get('period'))
+    except Exception as e: raise HTTPException(422, str(e)[:500])
+
+@app.get('/api/invoice-batches/{bid}')
+def invoice_batch(bid: int):
+    from . import invoice_workflow
+    out = invoice_workflow.detail(store, bid)
+    if not out: raise HTTPException(404, 'invoice batch not found')
+    return out
+
+@app.patch('/api/invoice-batches/{bid}/items/{iid}')
+def update_invoice_item(bid: int, iid: int, body: dict):
+    from . import invoice_workflow
+    try: return invoice_workflow.update_amount(store, bid, iid, body or {})
+    except KeyError as e: raise HTTPException(404, str(e))
+    except Exception as e: raise HTTPException(422, str(e)[:500])
+
+@app.post('/api/invoice-batches/{bid}/prepare')
+def prepare_invoice_batch(bid: int):
+    from . import invoice_workflow
+    try: return invoice_workflow.prepare(store, bid)
+    except KeyError as e: raise HTTPException(404, str(e))
+    except Exception as e: raise HTTPException(422, str(e)[:500])
+
 @app.get('/api/reports/runs/{rid}')
 def report_run(rid: int):
     r = store.get_report_run(rid)
@@ -2509,6 +2565,68 @@ def quickbooks_callback(code: str = None, state: str = '', realmId: str = None, 
     except Exception as e: return page(str(e)[:300], False)
     return page(f'QuickBooks company {realmId} is connected to the {c["Name"]} card. Press Test there to read the company name.')
 
+# Zoho Invoice uses the same local OAuth shape as QuickBooks, but a token can see multiple
+# organizations. Connect selects the first one; the organization id remains editable on the card.
+_ZOHO_STATES = {}
+
+@app.get('/api/connectors/{cid}/zoho/status')
+def zoho_status(cid: int):
+    from . import zoho
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'zoho_invoice': raise HTTPException(404, 'not a Zoho Invoice connector')
+    conf = json.loads(c.get('ConfigJson') or '{}')
+    return {'redirect_uri': zoho.redirect_uri(cfg['server']), 'connected': bool(c.get('Secret')),
+            'organization_id': conf.get('organization_id') or '',
+            'organization_name': conf.get('organization_name') or '',
+            'has_app': bool(conf.get('client_id') and conf.get('client_secret'))}
+
+@app.get('/api/connectors/{cid}/zoho/authorize')
+def zoho_authorize(cid: int):
+    from . import zoho
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'zoho_invoice': raise HTTPException(404, 'not a Zoho Invoice connector')
+    nonce = secrets.token_urlsafe(16); _ZOHO_STATES[cid] = (nonce, time.time())
+    try: return {'url': zoho.authorize_url(json.loads(c.get('ConfigJson') or '{}'), zoho.redirect_uri(cfg['server']), f'tq-{cid}-{nonce}')}
+    except zoho.ZohoError as e: raise HTTPException(409, str(e))
+
+@app.get('/api/zoho/callback', response_class=HTMLResponse)
+def zoho_callback(code: str = None, state: str = '', error: str = None):
+    from . import zoho
+    from html import escape as _esc
+    csp = {'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'"}
+    page = lambda msg, ok=True: HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
+        f'<p style="font-weight:700">{"Connected" if ok else "Not connected"}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>', headers=csp)
+    if error: return page(f'Zoho said: {error}', False)
+    if not (code and state.startswith('tq-')): return page('the callback came back without a code', False)
+    try: cid, nonce = int(state.split('-')[1]), state.split('-', 2)[2]
+    except (ValueError, IndexError): return page('bad state', False)
+    issued = _ZOHO_STATES.pop(cid, None)
+    if not issued or issued[0] != nonce or time.time() - issued[1] > 900:
+        return page('this Connect link expired; press Connect on the Zoho card again', False)
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'zoho_invoice': return page('no such Zoho Invoice card', False)
+    try:
+        conf = zoho.connection(store, cid)
+        zoho.exchange_code(conf, code, zoho.redirect_uri(cfg['server']))
+        orgs = zoho.organizations(conf)
+        if not orgs: raise RuntimeError('the account returned no Zoho Invoice organizations')
+        first = orgs[0]
+        zoho._save(conf, organization_id=str(first.get('organization_id')), organization_name=first.get('name'))
+        store.save_connector({'ConnectorId': cid, 'Active': True}, ACTOR)
+        store.audit('connector', cid, 'zoho_connected', ACTOR, detail={'organization_id': first.get('organization_id')})
+    except Exception as e: return page(str(e)[:300], False)
+    return page(f'Zoho Invoice organization {first.get("name") or first.get("organization_id")} is connected. Press Test on the card to verify it.')
+
+@app.get('/api/connectors/{cid}/zoho/customers')
+def zoho_customers(cid: int):
+    from . import scopes, zoho
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'zoho_invoice': raise HTTPException(404, 'not a Zoho Invoice connector')
+    try:
+        scopes.require(c, 'zoho_customers')
+        return {'data': zoho.customers(zoho.connection(store, cid))}
+    except Exception as e: raise HTTPException(422, str(e)[:500])
+
 # ── Teller (teller.py): the card runs Teller Connect in the browser; the token it hands back lands here ──
 class TellerEnrollBody(BaseModel): access_token: str; enrollment_id: str | None = None; institution: str | None = None
 
@@ -2572,6 +2690,11 @@ def report_preview(body: dict):
     from .reports import card_of
     from . import scopes
     t = (body or {}).get('type')
+    if t == 'zoho_monthly_invoices':
+        selected = len((body or {}).get('customers') or [])
+        return {'ok': bool(selected), 'headline': f'{selected} customer invoice(s) per monthly batch',
+                'summary': ('The schedule opens an editable batch. Prepare creates Zoho drafts; each email waits in Review. Nothing sends automatically.'
+                            if selected else 'Choose at least one Zoho customer.'), 'rows': selected, 'chart': ''}
     conn = store.get_connector_by_type(card_of(t)) if t in REGISTRY and card_of(t) else None
     if conn:
         if not conn.get('Active'): return {'ok': False, 'error': f'the {card_of(t)} connection is off - turn it on under Connections'}
@@ -3173,7 +3296,9 @@ class TermBody(BaseModel):
     model: str | None = None; instruction: str | None = None
 
 @app.get('/api/terminals')
-def terminals(): return {'data': hub_term.listing()}
+def terminals():
+    return {'data': [t for t in hub_term.listing()
+                     if (store.get_task(t.get('taskId')) or {}).get('SourceRef') != 'assistant:dock']}
 
 @app.get('/api/terminals/{sid}/screen')
 def terminal_screen(sid: str, lines: int = 32):

@@ -89,6 +89,14 @@ def intercept(store, channel: str, chat_id: str, text: str, quoted: str = None) 
         else:
             _ack(store, channel, chat_id, f'tq{tid:04d} has no live agent to answer any more.')
         return True
+    explicit_review = bool(TAG.search(quoted or '') or TAG.search(t))
+    # Once natural guide chat is enabled, an ordinary sentence is a question for the guide,
+    # not an accidental replacement for whichever review happened to ping most recently.
+    # Explicit [rvN] replies retain editable-draft semantics; the short verdict words still
+    # keep their convenient last-ping fallback.
+    if (store.get_settings().get('phone_assistant') == '1' and not explicit_review
+            and not (APPROVE.match(t) or REJECT.match(t) or NO_REPLY.match(t))):
+        return False
     rv, rid = _find_review(store, t, quoted)
     if not rid: return False                      # nothing was ever pinged: a plain chat message
     if not rv or rv['Status'] != 'pending':

@@ -29,6 +29,7 @@ const MAX_KEPT = 500;
 
 let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = "", seq = 0;
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
+const taskuarySent = new Set();             // ids sent through localhost /send, never user prompts
 
 const text = (m) => m.conversation || m.extendedTextMessage?.text
   || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
@@ -101,7 +102,7 @@ async function connect() {
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
         fromMe: !!m.key.fromMe, quoted, key: m.key, // quote routes phone answers; key is for read receipts
         audio, mime, seconds: Number(am?.seconds) || 0, voice: !!am?.ptt, image, imageMime,
-        doc, docMime, docName: dm?.fileName || "" });
+        doc, docMime, docName: dm?.fileName || "", taskuary: taskuarySent.has(m.key.id) });
       while (messages.length > MAX_KEPT) messages.shift();
     }
   });
@@ -137,8 +138,17 @@ http.createServer(async (req, res) => {
       const { jid, text: t } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
       if (!connected) return json(res, 503, { error: "not connected to WhatsApp" });
       if (!jid || !t) return json(res, 400, { error: "jid and text are required" });
-      await sock.sendMessage(jid, { text: t });
-      return json(res, 200, { ok: true });
+      const sent = await sock.sendMessage(jid, { text: t });
+      const id = sent?.key?.id || "";
+      if (id) {
+        taskuarySent.add(id);
+        // Baileys may emit messages.upsert before sendMessage resolves. Mark that already-kept
+        // echo as ours as well, closing the race without relying on visible magic text.
+        const echo = messages.find((m) => m.id === id);
+        if (echo) echo.taskuary = true;
+        if (taskuarySent.size > MAX_KEPT * 2) taskuarySent.delete(taskuarySent.values().next().value);
+      }
+      return json(res, 200, { ok: true, id });
     }
     json(res, 404, { error: "unknown path" });
   } catch (e) { json(res, 500, { error: String(e?.message || e) }); }

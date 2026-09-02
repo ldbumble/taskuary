@@ -11,6 +11,7 @@ attention. They share one builder, which is why they share one page here.
 - [Where a run goes](#where-a-run-goes)
 - [Schedules](#schedules)
 - [The Assistant](#the-assistant)
+- [Monthly invoice workflows](#monthly-invoice-workflows)
 - [Sage Intacct, specifically](#sage-intacct-specifically)
 - [API](#api)
 
@@ -164,6 +165,54 @@ it is.
 The morning brief is a separate report of type `digest`; it writes `DIGEST.md` and lands on the
 Timeline daily. Deleting that report turns the brief off.
 
+### The interactive guide, on desktop and WhatsApp
+
+The floating Taskuary logo is the interactive side of the Assistant. It is a durable chat with a
+fresh snapshot of needs-me email and messages, open tasks, pending Review items, recent Timeline
+activity, and filed coding or other agent output on every turn. It can prioritize that state and
+walk through it with you; it is not a second scheduled report.
+
+The same conversation can travel over WhatsApp:
+
+1. Pair the WhatsApp connector and send a message to WhatsApp's private **Message yourself** chat.
+2. Under the connector's chat list, click **Use for assistant** beside that direct chat. This adds
+   the Notifications role, names the chat, and enables **Settings → Notifications → Chat with the
+   assistant in WhatsApp**.
+3. Ask naturally: “what needs me?”, “walk through important email,” “what is outstanding?”, or
+   “what did the coding agents finish?” Answers also remain in the desktop guide conversation.
+
+Only messages sent by the linked owner account in that exact direct chat are accepted. Groups
+cannot be selected because guide answers may reveal private workspace information. Taskuary marks
+its own bridge output so notifications and answers cannot loop back into the guide. Tagged agent
+answers and Review verdicts continue to use `[tq…]` and `[rv…]`; explicit `approve`, `reject`, and
+`no reply` retain their phone shortcuts.
+
+## Monthly invoice workflows
+
+**Monthly Zoho invoices** is the first stateful workflow living on the Reports page. It is not a
+query that produces one result: one scheduled run opens a batch, the batch contains one row per
+customer, and every row advances separately through amount, Zoho draft, Review, and sent.
+
+1. Connect **Zoho Invoice** under Connections, then use **Monthly invoices** on Reports.
+2. Choose the customers and a monthly cron. Saving enables the workflow.
+3. On schedule (or **Open this month**), Taskuary reads each customer's latest prior sent invoice
+   and prefills its total. No new invoice exists yet.
+4. Confirm or change the amounts, then **Prepare Zoho drafts**. Taskuary duplicates the prior
+   invoice as a draft and creates one durable Review card per customer.
+5. Edit and approve each email in Review. Approval sends that invoice through Zoho; leaving the
+   page, restarting Taskuary, or approving a different customer does not lose the other drafts.
+
+The duplicate boundary is `(workflow, customer, YYYY-MM)`. Taskuary stores it locally and writes
+it into Zoho's `reference_number`. If preparation is retried after a timeout, an existing draft
+is reused; an existing non-draft invoice blocks the retry rather than creating another. A changed
+total is applied automatically only when the previous invoice has one line. A multi-line invoice
+with a changed total stops for attention because Taskuary cannot safely guess how to allocate it.
+
+This is deliberately under **Reports** for now. It shares the scheduler, connector model, Timeline
+receipt, and Review gate. If more stateful workflows join it and the page becomes primarily about
+multi-step work rather than read-only outputs, renaming the page to **Workflows** will then describe
+what the page actually contains instead of anticipating it.
+
 ## Sage Intacct, specifically
 
 Intacct is the case that made all of this necessary, so it gets explicit help.
@@ -202,6 +251,10 @@ list you want to eyeball and the wrong one for GL detail.
 | `POST /api/ingest/poll` | Run everything that is due |
 | `GET /api/report-types` | Every type this install can run, and whether its connection is ready |
 | `GET /api/intacct/fields?obj=APBILL` | What that object carries in this company, custom fields included |
+| `GET /api/reports/{id}/invoice-batches` | Monthly batches for a Zoho invoice workflow |
+| `POST /api/reports/{id}/invoice-batches` | Idempotently open a `YYYY-MM` batch |
+| `PATCH /api/invoice-batches/{batch}/items/{item}` | Save a customer amount or recipient |
+| `POST /api/invoice-batches/{batch}/prepare` | Create/reuse Zoho drafts and place their emails in Review |
 
 The full interactive API reference is at `/api/docs` while Taskuary is running.
 

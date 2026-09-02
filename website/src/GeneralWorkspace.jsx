@@ -107,9 +107,11 @@ const AssistantMessage = () => (
   </MessagePrimitive.Root>
 );
 
-function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy }) {
+function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
+  dock = false, prompt, onPromptUsed, onBusyChange }) {
   const modelAdapter = useMemo(() => ({
     async *run({ messages: runMessages, abortSignal }) {
+      onBusyChange?.(true);
       const prompt = textOf([...runMessages].reverse().find((m) => m.role === "user"));
       const selected = selectionRef.current;
       const body = {
@@ -169,10 +171,19 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
       } catch (e) {
         if (abortSignal?.aborted) return;              // the owner pressed stop; that is not an error
         yield { content: content(`⚠ ${e?.message || "The assistant could not answer."}`) };
+      } finally {
+        onBusyChange?.(false);
       }
     },
-  }), [attachmentsRef, onClearAttachments, onSent, selectionRef, task.TaskId]);
+  }), [attachmentsRef, onBusyChange, onClearAttachments, onSent, selectionRef, task.TaskId]);
   const runtime = useLocalRuntime(modelAdapter, { initialMessages: initial(messages) });
+  const prompted = useRef(null);
+  useEffect(() => {
+    if (!prompt?.text || prompted.current === prompt.id) return;
+    prompted.current = prompt.id;
+    runtime.thread.append(prompt.text);
+    onPromptUsed?.(prompt.id);
+  }, [onPromptUsed, prompt, runtime]);
   /* "New task for the agent" with no repository: the prompt the owner typed is the first thing
      said here, appended through the same streaming runtime as anything they type - so they watch
      the answer arrive instead of finding a task with their own words sitting in it, unanswered.
@@ -198,8 +209,10 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
             <div className="tq-aui-welcome">
               <TaskuaryMark size={22} />
               <div>
-                <div className="tq-aui-welcome-title">Work on this with your assistant</div>
-                <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div>
+                <div className="tq-aui-welcome-title">{dock ? "What should we look at?" : "Work on this with your assistant"}</div>
+                <div className="tq-aui-welcome-copy">{dock
+                  ? "I can walk you through what arrived, what needs you, and what your agents finished."
+                  : "Research, plan, write, analyze, or coordinate. This conversation stays on the task."}</div>
               </div>
             </div>
           )}
@@ -208,7 +221,7 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
               half-written answer is an offer to schedule something nobody has read yet - and it
               sat there through every tool call, which is where the eye goes while waiting. */}
           <ThreadPrimitive.If running={false}>
-          {messages?.some((m) => m.role === "assistant") && (
+          {!dock && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
               <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
               <Button size="small" variant="outlined" startIcon={<EventRepeatIcon sx={{ fontSize: 15 }} />}
@@ -244,9 +257,9 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
   );
 }
 
-export function GeneralWorkspace({ task, onSession, onOpenReports, compact = false }) {
+export function GeneralWorkspace({ task, onSession, onOpenReports, compact = false, dock = false, prompt, onPromptUsed, onBusyChange }) {
   const [data, setData] = useState(null);
-  const [view, setView] = useState(savedView);
+  const [view, setView] = useState(() => dock ? "assistant" : savedView());
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
   const [attachments, setAttachments] = useState([]);
@@ -275,7 +288,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       setModel((old) => old || payload?.session?.model || provider.model || "");
     }
     if (payload?.session) onSession?.(payload.session);
-  }, [onSession]);
+    onBusyChange?.(!!payload?.session?.busy);
+  }, [onBusyChange, onSession]);
 
   useEffect(() => {
     let live = true;
@@ -361,11 +375,11 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const session = data?.session;
   const shownMessages = messagesWithTrace(data?.messages, session);
   return (
-    <Box onPaste={pasted} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.75, overflow: "hidden", bgcolor: PANEL2,
+    <Box className={dock ? "tq-aui-dock" : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
       minHeight: 0, display: "flex", flexDirection: "column",
       ...(compact ? { height: "100%" } : { flex: "1 1 auto" }) }}>
       {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid the view buttons entirely */}
-      <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
+      {!dock && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
         <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}>assistant workspace</Typography>
@@ -390,7 +404,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         <Button size="small" startIcon={<FunctionsIcon sx={{ fontSize: 14 }} />} variant={view === "numbers" ? "contained" : "text"}
           title="Certified numbers: the figures this assistant is allowed to state as fact about your own systems, because each was proved against numbers you already knew. Teach it one by asking for a figure it does not have yet."
           onClick={() => chooseView("numbers")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Numbers</Button>
-      </Box>
+      </Box>}
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
       {notice && <Alert severity="success" onClose={() => setNotice("")} sx={{ borderRadius: 0, py: 0 }}>{notice}</Alert>}
       {busy && (
@@ -415,7 +429,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
             <AssistantThread key={`${task.TaskId}-${threadKey}`} task={task} messages={shownMessages}
               onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
               attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
-              onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy} />
+              onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
+              dock={dock} prompt={prompt} onPromptUsed={onPromptUsed} onBusyChange={onBusyChange} />
           </SessionPane>
         ) : null}
       </Box>

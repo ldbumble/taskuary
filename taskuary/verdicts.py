@@ -104,14 +104,29 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if rv.get('Deliver'):
         try: deliver = json.loads(rv['Deliver']) or {}
         except (TypeError, ValueError): deliver = {}
+    if deliver.get('kind') == 'zoho_invoice' and verb in ('reject', 'no_reply') and deliver.get('item_id'):
+        from . import invoice_workflow
+        invoice_workflow.mark_skipped(store, int(deliver['item_id']))
     if final and deliver:
         try:
-            sent = outbound.send_out(store, deliver.get('channel'), deliver.get('to'),
-                                     deliver.get('subject'), final, cc=cc)
+            if deliver.get('kind') == 'zoho_invoice':
+                from . import invoice_workflow, scopes, zoho
+                c = store.get_connector(int(deliver.get('connector_id') or 0), with_secret=True)
+                if not c: raise RuntimeError('the Zoho Invoice connector no longer exists')
+                scopes.require(c, 'zoho_invoice_send')
+                sent = zoho.send_invoice(zoho.connection(store, c['ConnectorId']), deliver.get('invoice_id'),
+                                         deliver.get('to'), deliver.get('subject'), final)
+                invoice_workflow.mark_sent(store, int(deliver.get('item_id')), deliver.get('subject'), final)
+            else:
+                sent = outbound.send_out(store, deliver.get('channel'), deliver.get('to'),
+                                         deliver.get('subject'), final, cc=cc)
             if rv.get('MessageId'):
                 store.set_message_status(rv['MessageId'], 'sent')
         except Exception as e:
             send_err = str(e)[:300]
+            if deliver.get('kind') == 'zoho_invoice' and deliver.get('item_id'):
+                from . import invoice_workflow
+                invoice_workflow.mark_send_error(store, int(deliver['item_id']), send_err)
             logger.warning(f'outbound send failed for review {rid}: {send_err}')
             store.update_review_draft(rid, final, rv.get('RunId'))
             store.decide_review(rid, 'pending', final, actor, note)

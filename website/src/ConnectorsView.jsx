@@ -141,7 +141,7 @@ const META = {
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID; add * to take every direct chat)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
-       "Only for the Notifications role — the WhatsApp JID of the chat to ping"]],
+       "Notifications and remote assistant — use your private Message yourself chat"]],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
     howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
@@ -510,6 +510,21 @@ const DATA_META = {
     agent: ["GET {base}/api/connectors/{cid}/quickbooks/status{hdr}: has_app says whether the Intuit keys are saved; connected says whether a token is. Neither is yours to make - the owner creates the app at developer.intuit.com and presses Connect (a browser sign-in). Ask for the client id and secret, save them in ConfigJson, tell them the redirect URI from status to register, then ask them to press Connect on the card.",
       "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 401 in the detail means the refresh token expired (100 days unused) - the owner presses Connect again.",
       "Never post a bill or an expense yourself: propose it (TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"quickbooks_bill\", \"vendor\": ..., \"amount\": ..., \"account\": ..., \"doc_number\": ...}) and say in the session what it is for. Turn the card on, SETUP DONE."] },
+  zoho_invoice: { title: "Zoho Invoice", types: ["zoho_monthly_invoices"],
+    fields: [["Zoho API client id (api-console.zoho.com)", "client_id"],
+      ["Zoho API client secret", "client_secret"],
+      ["accounts URL — change only for a non-US Zoho data center", "accounts_url", "https://accounts.zoho.com"],
+      ["organization id — filled in by Connect", "organization_id"]],
+    secretLabel: "refresh token (write-only) — Connect fills it in",
+    desc: "Monthly billing as a controlled workflow: copy prior invoices, enter this month's amounts, create Zoho drafts, then approve each outgoing email in Review.",
+    connect: { label: "Connect to Zoho Invoice", status: (cid) => `/api/connectors/${cid}/zoho/status`, start: (cid) => `/api/connectors/${cid}/zoho/authorize`,
+      text: "Opens Zoho sign-in in a new tab. The refresh token returns directly to Taskuary." },
+    howto: ["At api-console.zoho.com create a Server-based application and add the redirect URI shown here exactly.",
+      "Paste the client id and secret, Save, then Connect. For a non-US account use its accounts host, such as accounts.zoho.eu.",
+      "Test reads the organization and active customers. Then open Reports and create a Monthly Zoho invoices workflow; its schedule opens a batch but never sends it.",
+      "Confirm amounts, Prepare drafts, and approve customer emails in Review. The customer/month reference prevents duplicate invoices on retries."],
+    agent: ["The owner connects Zoho in the browser. Do not ask for or print refresh tokens.",
+      "Invoice sends are owner-gated Review actions. Never bypass Review or create a second invoice for the same workflow/customer/period."] },
   teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances"],
     fields: [["Teller application id (teller.io → your application)", "application_id"],
       ["environment — sandbox, development (free, real banks, 100 logins) or production", "environment", "sandbox"],
@@ -1021,7 +1036,7 @@ export default function ConnectorsView() {
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
-      ...dataCards(["intacct", "quickbooks", "teller"]),
+      ...dataCards(["intacct", "quickbooks", "zoho_invoice", "teller"]),
       ...catalogCards("Corporate systems"),
     ]},
     { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...catalogCards("Observability")] },
@@ -2334,6 +2349,8 @@ const WaPair = ({ conn, reload }) => {
 const WaChats = ({ conn, mine, reload }) => {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
+  const [guideBusy, setGuideBusy] = useState("");
+  const guideJid = String(parse(conn.ConfigJson).notify_chat || "");
   const load = useCallback(async () => {
     try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr(""); }
     catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
@@ -2343,12 +2360,27 @@ const WaChats = ({ conn, mine, reload }) => {
   const add = async (jid) => {
     await api.post("/api/sources", { Channel: "whatsapp", Address: jid, ConnectorId: conn.ConnectorId, Active: true }); reload();
   };
+  const useForGuide = async (jid) => {
+    setGuideBusy(jid); setErr("");
+    try {
+      const roles = new Set(String(conn.Roles || "").split(",").filter(Boolean)); roles.add("notify");
+      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Roles: [...roles].join(","),
+        ConfigJson: JSON.stringify({ ...parse(conn.ConfigJson), notify_chat: jid }) });
+      await api.patch("/api/settings", { name: "phone_assistant", value: "1" });
+      reload();
+    } catch (e) { setErr(e?.response?.data?.detail || "could not enable the WhatsApp guide"); }
+    setGuideBusy("");
+  };
   return (
     <Box sx={{ mb: 1.5, maxWidth: 620 }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
         Chats the bridge has seen since it started — <b>write something in the chat you want</b> (or have someone else), refresh,
         and add it. Direct chats come in on their own; a <b>group</b> joins the funnel only when you add it here.
         <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
+      </Typography>
+      <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75, p: 0.8, bgcolor: PANEL2, borderRadius: 1 }}>
+        For remote help, choose your private <b>Message yourself</b> chat below. Messages you send there ask the same Taskuary guide
+        that floats on the desktop; its walkthrough may include private mail, tasks, reviews, and agent output. Groups cannot be used.
       </Typography>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
       {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>nothing seen yet — send a message in a chat and refresh</Typography>}
@@ -2359,6 +2391,11 @@ const WaChats = ({ conn, mine, reload }) => {
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
           </Box>
+          {!r.group && (guideJid === r.jid
+            ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 700 }}>✓ assistant chat</Typography>
+            : <Button size="small" variant="contained" disableElevation disabled={!!guideBusy}
+                onClick={() => useForGuide(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+                {guideBusy === r.jid ? "Enabling…" : "Use for assistant"}</Button>)}
           {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ source</Typography>
             : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
         </Box>

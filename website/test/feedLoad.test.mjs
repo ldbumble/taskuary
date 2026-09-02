@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { feedHeaders, feedOk, takeFeed, threadDetail } from "../src/feedLoad.js";
+import { detailPhase, feedHeaders, feedOk, takeFeed, threadDetail } from "../src/feedLoad.js";
 
 test("a first load sends no If-None-Match", () => {
   assert.deepEqual(feedHeaders(""), {});
@@ -31,4 +31,11 @@ test("a taskless FYI reopens with its persisted reply draft", () => {
   assert.deepEqual(threadDetail({ messages: [{ MessageId: 3 }], reviews: [review] }), {
     messages: [{ MessageId: 3 }], routes: [], reviews: [review],
   });
+});
+
+test("taskless messages still load, then visibly wait while triage decides", () => {
+  const row = { MessageId: 7, TaskId: null, MsgStatus: "triaging" };
+  assert.equal(detailPhase(row, null), "loading");
+  assert.equal(detailPhase(row, { messages: [] }), "triaging");
+  assert.equal(detailPhase({ ...row, MsgStatus: "routed", TaskId: 9 }, { task: { TaskId: 9 } }), "ready");
 });

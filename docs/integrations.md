@@ -22,7 +22,7 @@ Nothing is polled without an enabled role.
 | Teams and Slack | Available | Messages enter the Timeline through AI triage |
 | Gmail and IMAP | Available | Any IMAP mailbox; approved replies return through the provider's SMTP, in-thread |
 | Telegram | Available | Bot-based inbound messages, approved in-chat replies, and optional phone notifications; each chat is opt-in |
-| WhatsApp | Available | Local Baileys bridge for inbound messages, approved replies, and notifications; unofficial protocol, so use a number you can risk |
+| WhatsApp | Available | Local Baileys bridge for inbound messages, approved replies, notifications, and a private remote chat with the Taskuary guide; unofficial protocol, so use a number you can risk |
 | Apple Messages | Available on macOS | Reads the Mac's local Messages history and replies through Messages.app; requires Full Disk Access and Automation permissions |
 | Discord | Available | Watches selected bot channels and posts approved replies into the originating channel |
 | GitHub | Available | Repository discovery, issues and pull requests as inbound triggers, and task-specific standing prompts |
@@ -56,6 +56,7 @@ Nothing is polled without an enabled role.
 | Prometheus and Datadog | Available | PromQL instant queries and Datadog monitor states |
 | Sage Intacct | Available | XML gateway access for GL detail, AP bills, vendors, budgets, statistical accounts, and schema discovery. Writing is the same gateway, generically by object: intacct_create makes a record (an AP bill, a vendor, a journal batch) and intacct_update changes one that names itself. The card ships at scope read, so an agent cannot post - it proposes the write and you approve it in Review, exactly as with a QuickBooks bill. A source card can list the fields an object carries in your company, and the composer reads that list before writing a query |
 | QuickBooks Online | Available | OAuth sign-in from the card. Bills, purchases, vendors and the chart of accounts as reports and agent tools (QBO's own query language), and the first system here an agent can post to: an AP bill or a paid expense. The card ships read-only, so a write is a proposal the owner approves in Review; raising the card to `write` lets a routing policy pass small, known bills through |
+| Zoho Invoice | Available | OAuth sign-in from the card. The Monthly Zoho invoices workflow copies prior invoices into editable monthly batches, creates drafts only after amounts are confirmed, and sends one customer at a time only after Review approval. A stable customer/month reference prevents duplicate creation on retries |
 | Bank & card feed (Teller) | Available | One card per bank login, enrolled in the browser with Teller Connect; accounts, transactions (newest first, with spend/inflow direction) and balances as reports and tools. Read-only by construction. Schedule the transactions with 'can become work' and each new one is a message triage judges — the front door of the card-to-books playbook. Development tier is free to 100 logins; development and production present Teller's client certificate |
 | WinRM | Available | Runs PowerShell on a remote Windows machine and returns output to the Timeline |
 | MCP | Available | Uses an MCP server tool as a scheduled report source |

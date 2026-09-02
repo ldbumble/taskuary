@@ -26,7 +26,7 @@ import { splitTimelineMeetings } from "./timelineMeetings.js";
 import { groupThreads, loudest, spanText } from "./threadGroups.js";
 import EventIcon from "@mui/icons-material/Event";
 import { pollWhileVisible } from "./visible.js";
-import { feedHeaders, feedOk, takeFeed, threadDetail } from "./feedLoad.js";
+import { detailPhase, feedHeaders, feedOk, takeFeed, threadDetail } from "./feedLoad.js";
 import { ALERT, ALERT_BD, ALERT_INK, ASSISTANT, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, GRADIENT, card, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
@@ -153,7 +153,7 @@ const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
 // because a message that no longer exists cannot be what you act on, and for one row that is
 // right. For a fold it is backwards - a withdrawn line must never speak for four others, one of
 // which is a reply waiting on you.
-const LOUDNESS = ["reply", "waving", "working", "held", "answered", "todo", "mine", "done", "withdrawn", "fyi"];
+const LOUDNESS = ["reply", "waving", "working", "triaging", "held", "answered", "todo", "mine", "done", "withdrawn", "fyi"];
 
 const PAGE = 100;
 
@@ -851,6 +851,27 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
     if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
     setDetail(d);
   };
+  // A selected message is a LIVE row, not a frozen copy of what it looked like at click time.
+  // During ingest it moves from taskless/triaging to routed (often gaining a TaskId). Refresh
+  // both the row and the kind of detail endpoint at that boundary, or the open panel circles
+  // forever on yesterday's object while the rail beside it already shows the verdict.
+  useEffect(() => {
+    if (!sel || !rows) return;
+    const fresh = rows.find((r) => r.MessageId === sel.MessageId);
+    if (!fresh) return;
+    const finishedTriage = sel.MsgStatus === "triaging" && fresh.MsgStatus !== "triaging";
+    const changedTask = fresh.TaskId !== sel.TaskId;
+    setSel(fresh);
+    if (!finishedTriage && !changedTask) return;
+    want.current = fresh.MessageId;
+    cache.current.delete(fresh.MessageId);
+    setDetail(null);
+    fetchDetail(fresh).then((d) => {
+      if (want.current === fresh.MessageId) setDetail(d);
+    });
+    // rows is the event: sel is intentionally the previous snapshot used to detect the boundary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
   // Transcription replaces the message body in place. Reflect the returned body immediately,
   // and invalidate the minute-long detail cache so reopening cannot resurrect the placeholder.
   const messageBodyChanged = useCallback((mid, body) => {
@@ -1659,7 +1680,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     return () => { alive = false; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!onIt, sel?.TaskId]);
-  const loading = sel.TaskId && !detail;
+  const phase = detailPhase(sel, detail);
+  const loading = phase === "loading";
+  const triaging = phase === "triaging";
   // triage's OWN verdict, read off the route line it already wrote. reply_only and fyi both
   // mean "no work to do here" - so a coding agent is not the answer, and offering it first
   // made the panel argue with the reason printed at the top of the very same panel.
@@ -1864,7 +1887,29 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
         </Box>
 
         <Box sx={{ px: 2, py: 1.1, overflowY: "auto", flex: 1, minHeight: 0 }}>
-          {loading ? <CircularProgress size={20} sx={{ m: 2 }} /> : (
+          {loading ? (
+            <Box role="status" aria-live="polite" sx={{ minHeight: 180, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 1 }}>
+              <CircularProgress size={22} />
+              <Typography variant="caption" sx={{ color: DIM }}>
+                {sel.MsgStatus === "triaging" ? "Loading this message while triage works…" : "Loading message…"}
+              </Typography>
+            </Box>
+          ) : triaging ? (
+            <Box role="status" aria-live="polite" sx={{ py: 1 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 1,
+                bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, mb: 1.25 }}>
+                <CircularProgress size={18} thickness={5} />
+                <Box>
+                  <Typography sx={{ color: INK, fontWeight: 700, fontSize: 12.5 }}>Triaging this message…</Typography>
+                  <Typography variant="caption" sx={{ color: FAINT }}>
+                    It is safely on the Timeline. The task, agent, and reply steps will appear when the decision lands.
+                  </Typography>
+                </Box>
+              </Box>
+              <MessageBlock messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
+            </Box>
+          ) : (
             <>
               {tab === "summary" && (
                 <Box aria-label="Workflow summary" sx={{ width: "100%",

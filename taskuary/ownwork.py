@@ -48,6 +48,7 @@ def ensure(store, tid: int, when=None, why: str = '', actor: str = 'owner'):
     try:
         t = store.get_task(tid)
         if not t: return None
+        if t.get('SourceRef') == 'assistant:dock': return None
         if [m for m in store.list_messages(tid) if m.get('Status') != 'context']: return None
         at = _stamp(when)
         mid = store.add_message({

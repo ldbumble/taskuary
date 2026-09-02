@@ -17,6 +17,8 @@
 // mark: the glyph. word: what it says. role: the theme role its edge and its word take.
 // loud: genuinely on you — at most two states may ever be loud, or none of them are.
 export const STATES = {
+  triaging: { mark: "spinner", word: "triaging", role: "working",
+              hint: "the message has arrived — triage is deciding where it belongs" },
   waving:  { mark: "👋", word: "agent waving",  role: "you",     loud: true,
              hint: "the agent stopped and asked you something — open it and answer" },
   working: { mark: "taskuary", word: "agent working", role: "working",
@@ -55,6 +57,7 @@ export function stateOf(row) {
   // gone at the source. Above everything: a message that no longer exists cannot be the thing
   // you act on, whatever it was classified as while it did.
   if (row.MsgStatus === "withdrawn") return "withdrawn";
+  if (row.MsgStatus === "triaging") return "triaging";
   const pending = row.ReviewStatus === "pending";
   if (row.TaskStatus === "done" || row.TaskStatus === "dropped") return pending ? "reply" : "done";
   if (pending) return "reply";                          // a draft on the table is always the headline
@@ -87,6 +90,7 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
   const bits = [];
   if (row.TaskId) bits.push(ref(row.TaskId));
   switch (stateOf(row)) {
+    case "triaging": bits.push("triage is deciding what this is"); break;
     case "waving":  bits.push(row.Working ? `${row.Working} asked you something` : "waiting on you — nothing is moving it"); break;
     case "working": bits.push(row.Working ? `${row.Working} has this open` : "an agent has this"); break;
     case "reply":   bits.push(undrafted(row) ? "waiting for your answer — nothing drafted yet" : "a reply is drafted — read it and send"); break;

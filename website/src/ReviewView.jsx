@@ -52,6 +52,9 @@ const deliveryTo = (review) => {
   if (review.FromName && review.FromEmail) return `${review.FromName} <${review.FromEmail}>`;
   return review.FromName || review.FromEmail || review.ConversationId || "this conversation";
 };
+const deliveryMeta = (review) => {
+  try { return JSON.parse(review.Deliver || "null") || {}; } catch { return {}; }
+};
 
 const replyContext = (review) => {
   const channel = String(review.Channel || "").toLowerCase();
@@ -152,7 +155,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                 {r.Subject || r.Title || "(no subject)"}
               </Typography>
               <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
-                {r.Status === "held" ? "Reply on hold" : r.Kind === "auto" ? "Auto-answered" : "Draft reply"}
+                {deliveryMeta(r).kind === "zoho_invoice" ? `Zoho invoice · ${deliveryMeta(r).period}`
+                  : r.Status === "held" ? "Reply on hold" : r.Kind === "auto" ? "Auto-answered" : "Draft reply"}
                 {" · To "}{replyContext(r)} · {timeAgo(r.CreatedAt)}
               </Typography>
             </Box>
@@ -163,6 +167,15 @@ export default function ReviewView({ onOpenTask, onChanged }) {
           <Box sx={{ px: 1.5, py: 1.25 }}>
             {r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
               <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
+            )}
+            {deliveryMeta(r).kind === "zoho_invoice" && (
+              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 1, px: 1.25, py: 0.8,
+                bgcolor: "#eef1ec", border: "1px solid #d9e0d6", borderRadius: 1.5 }}>
+                <Typography variant="caption" sx={{ color: INK, fontWeight: 700 }}>{deliveryMeta(r).customer}</Typography>
+                <Typography variant="caption" sx={{ color: INK }}>${Number(deliveryMeta(r).amount || 0).toFixed(2)}</Typography>
+                <Typography variant="caption" sx={{ color: DIM }}>last month: {deliveryMeta(r).previous_amount == null ? "—" : `$${Number(deliveryMeta(r).previous_amount).toFixed(2)}`}</Typography>
+                {deliveryMeta(r).invoice_number && <Typography variant="caption" sx={{ color: DIM }}>Zoho {deliveryMeta(r).invoice_number}</Typography>}
+              </Box>
             )}
 
             {r.Status === "pending" && (
@@ -177,7 +190,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                 </Box>
                 {/* Looping somebody in: openly, on the answer itself, so the sender sees who else
                     read it. Mail only - a chat has members, not recipients (outbound.reply_to_message). */}
-                {String(r.Channel || "").toLowerCase() === "email" && (
+                {String(r.Channel || "").toLowerCase() === "email" && deliveryMeta(r).kind !== "zoho_invoice" && (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
                     <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800,
                       letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
@@ -241,9 +254,9 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                   )}
                   <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Reject</Button>
                   <Box sx={{ flex: 1 }} />
-                  <Button size="small" disabled={busy === r.ReviewId} onClick={() => redraft(r)}>
+                  {deliveryMeta(r).kind !== "zoho_invoice" && <Button size="small" disabled={busy === r.ReviewId} onClick={() => redraft(r)}>
                     {busy === r.ReviewId ? <CircularProgress size={12} /> : r.DraftText ? "Redraft" : "Draft with AI"}
-                  </Button>
+                  </Button>}
                 </Box>
                 {sendErr?.id === r.ReviewId && (
                   <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSendErr(null)}>

@@ -63,6 +63,17 @@ test("level off overrides a working setup", () => {
   assert.match(st.text, /Pushes are off/);
 });
 
+test("WhatsApp guide can listen while push alerts are off", () => {
+  const st = notifyState([withChat({ Type: "whatsapp", Name: "WhatsApp" })], "off", false, true);
+  assert.equal(st.kind, "pinging");
+  assert.match(st.text, /WhatsApp guide is listening/);
+});
+
+test("assistant chat asks specifically for WhatsApp when only Teams is named", () => {
+  const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me", false, true);
+  assert.match(st.text, /assistant chat needs a WhatsApp notify chat/);
+});
+
 test("nothing configured at all names the three channels to try", () => {
   const st = notifyState([]);
   assert.equal(st.kind, "none");

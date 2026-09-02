@@ -148,6 +148,9 @@ const KNOB_META = {
   phone_approvals: { group: "Notifications", label: "Answer agents & approve from phone", type: "switch",
     desc: "Reply to a tagged ping to answer that live agent, approve a draft, reject it, or write the reply yourself.",
     help: "On: when a live coding agent stops or asks, its chat ping carries a [tqN] tag. Reply to that ping and your words go straight into that exact agent session. Pending-reply pings carry the DRAFT and an [rvN] tag: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft. Confirmations come back into the chat.\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Answers and verdicts are intercepted before triage, so they never become new work. Quoting the [tqN] ping is required for agent answers because several agents may be waiting at once.\n\nOff (default): pings stay read-only." },
+  phone_assistant: { group: "Notifications", label: "Chat with the assistant in WhatsApp", type: "switch",
+    desc: "Ask the floating Taskuary guide the same questions from your private Message yourself chat.",
+    help: "Choose Use for assistant beside a private WhatsApp chat under Connections first. Taskuary then listens only to messages sent BY your linked WhatsApp account in that exact direct chat. Other people and groups cannot command it.\n\nIt is the same durable conversation as the floating desktop guide, with a fresh view of needs-me mail, outstanding tasks, Review, the Timeline, and recent coding or other agent output on every turn. Answers return to WhatsApp and also remain visible on desktop.\n\nBecause answers can contain private workspace information, use WhatsApp's Message yourself chat, not a conversation another person can read. Off (default) leaves your own WhatsApp messages ignored as before." },
 
   // ── Attachments & images ──
   vision_enabled: { group: "Attachments & images", label: "AI reads attached images", type: "switch",
@@ -724,7 +727,8 @@ const HelpDialog = ({ help, onClose }) => (
 // than leaving the page looking like a finished setup that silently goes nowhere.
 const NotifyStatus = ({ connectors, settings }) => {
   const val = (n, d) => (settings.find((s) => s.Name === n) || {}).Value ?? d;
-  const st = notifyState(connectors, val("notify_level", "needs_me"), val("phone_approvals") === "1");
+  const st = notifyState(connectors, val("notify_level", "needs_me"), val("phone_approvals") === "1",
+    val("phone_assistant") === "1");
   const good = st.kind === "pinging", warn = st.kind === "none" || st.kind === "unnamed" || st.kind === "inactive";
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 1.5, mt: -0.5, px: 1.25, py: 0.85,

@@ -4,7 +4,7 @@
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle,
+  Alert, Autocomplete, Box, Button, Checkbox, CircularProgress, Dialog, DialogContent, DialogTitle,
   ListSubheader, MenuItem, Select, Step, StepButton, StepContent, Stepper, Switch, TextField,
   Typography,
 } from "@mui/material";
@@ -156,6 +156,7 @@ const reportSchedule = (c) => [c.on_startup && "on app startup", c.cron && cronT
   .filter(Boolean).join(" + ") || "once a day while Taskuary is open";
 
 const TYPE_LABELS = {
+  zoho_monthly_invoices: "Monthly Zoho invoices",
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
@@ -216,6 +217,7 @@ const TYPE_GROUPS = [
 ];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
+  zoho_monthly_invoices: "zoho_invoice",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
   intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
@@ -282,6 +284,9 @@ export default function ReportsView() {
   const list = sources.filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
   const openId = bucket === "new" ? null : bucket;
   const open = bucket !== "all" && !q;
+  const selectedSource = sources.find((s) => s.SourceId === openId);
+  const selectedConfig = selectedSource ? parse(selectedSource.ConfigJson) : (draft || {});
+  const invoiceOpen = selectedConfig.type === "zoho_monthly_invoices";
 
   return (
     <SideRail title="Reports" q={q} setQ={setQ} placeholder="Search reports…"
@@ -289,10 +294,14 @@ export default function ReportsView() {
       note="A report is a pipeline: source → query → optional AI summary → your Timeline. The connections themselves live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {open ? (
-        <ReportWizard key={String(bucket) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
-          types={types} connectors={connectors} draft={draft}
-          reload={load} onBack={() => { setBucket("all"); setDraft(null); load(); }}
+        invoiceOpen ? <InvoiceWorkflowWizard key={String(bucket)} sourceId={openId} sources={sources}
+          connectors={connectors} draft={draft} reload={load}
+          onBack={() => { setBucket("all"); setDraft(null); load(); }}
           onSaved={(sid) => { setDraft(null); setBucket(sid); }} />
+        : <ReportWizard key={String(bucket) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
+            types={types} connectors={connectors} draft={draft}
+            reload={load} onBack={() => { setBucket("all"); setDraft(null); load(); }}
+            onSaved={(sid) => { setDraft(null); setBucket(sid); }} />
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
@@ -302,8 +311,12 @@ export default function ReportsView() {
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
           {syncing ? "Running…" : "Run due now"}
         </Button>
+        <Button size="small" variant="outlined" disableElevation sx={{ mr: 1 }}
+          onClick={() => { setQ(""); setDraft({ type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *", customers: [] }); setBucket("new"); }}>
+          Monthly invoices
+        </Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => { setQ(""); setBucket("new"); }} sx={{ background: GRADIENT }}>New report</Button>
+          onClick={() => { setQ(""); setDraft(null); setBucket("new"); }} sx={{ background: GRADIENT }}>New report</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       <Composer onDraft={(config, meta) => {
@@ -445,6 +458,131 @@ function SavedReportSummary({ source }) {
           ? `Triage may turn a matching result into work${c.watch_for ? ` — watching for: ${c.watch_for}` : ""}.`
           : "Informational only — it cannot become a task."}
       </Typography>
+    </Box>
+  );
+}
+
+/* A workflow is not a source-query-summary form. Its idle page is the month's workbench:
+   customers and schedule at the top, durable amounts in the middle, Review handoff at the end. */
+function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, onSaved, draft }) {
+  const cur = sources.find((s) => s.SourceId === sourceId);
+  const initial = cur ? parse(cur.ConfigJson) : (draft || { type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *" });
+  const zohoCards = connectors.filter((c) => c.Type === "zoho_invoice");
+  const [cfg, setCfg] = useState({ ...initial, connector_id: initial.connector_id || zohoCards.find((c) => c.Active)?.ConnectorId || zohoCards[0]?.ConnectorId || "", customers: initial.customers || [] });
+  const [customers, setCustomers] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [batch, setBatch] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const period = new Date().toISOString().slice(0, 7);
+  const loadCustomers = useCallback(async () => {
+    if (!cfg.connector_id) return setCustomers([]);
+    try { setCustomers((await api.get(`/api/connectors/${cfg.connector_id}/zoho/customers`)).data.data || []); }
+    catch (e) { setMsg(e?.response?.data?.detail || "Connect and test Zoho Invoice first."); setCustomers([]); }
+  }, [cfg.connector_id]);
+  const loadBatches = useCallback(async () => {
+    if (!cur) return;
+    const rows = (await api.get(`/api/reports/${cur.SourceId}/invoice-batches`)).data.data || [];
+    setBatches(rows);
+    if (rows[0]) setBatch((await api.get(`/api/invoice-batches/${rows[0].BatchId}`)).data);
+  }, [cur?.SourceId]);
+  useEffect(() => { loadCustomers(); }, [loadCustomers]);
+  useEffect(() => { loadBatches().catch(() => {}); }, [loadBatches]);
+  const picked = new Set((cfg.customers || []).map((x) => String(x.customer_id)));
+  const toggle = (customer) => setCfg((c) => ({ ...c, customers: picked.has(String(customer.customer_id))
+    ? c.customers.filter((x) => String(x.customer_id) !== String(customer.customer_id))
+    : [...c.customers, customer] }));
+  const save = async () => {
+    setBusy("save"); setMsg("");
+    try {
+      if (!String(cfg.title || "").trim()) throw new Error("Give this workflow a title.");
+      if (!cfg.connector_id) throw new Error("Choose a Zoho Invoice connection.");
+      if (!cfg.customers.length) throw new Error("Choose at least one customer.");
+      const body = { Channel: "report", Address: cfg.title, ConnectorId: Number(cfg.connector_id), Active: true,
+        ConfigJson: JSON.stringify({ ...cfg, type: "zoho_monthly_invoices", connector_id: Number(cfg.connector_id) }) };
+      if (cur) body.SourceId = cur.SourceId;
+      const { data } = await api.post("/api/sources", body); await reload();
+      setMsg("Saved. The schedule opens a batch; it never sends invoices."); onSaved?.(data.sourceId);
+    } catch (e) { setMsg(e?.response?.data?.detail || e.message || "Save failed"); }
+    setBusy("");
+  };
+  const openMonth = async () => {
+    setBusy("open"); setMsg("");
+    try { setBatch((await api.post(`/api/reports/${cur.SourceId}/invoice-batches`, { period })).data); await loadBatches(); }
+    catch (e) { setMsg(e?.response?.data?.detail || "Could not open the batch"); }
+    setBusy("");
+  };
+  const patchItem = async (item, patch) => {
+    try {
+      await api.patch(`/api/invoice-batches/${batch.BatchId}/items/${item.ItemId}`, patch);
+      setBatch((await api.get(`/api/invoice-batches/${batch.BatchId}`)).data);
+    } catch (e) { setMsg(e?.response?.data?.detail || "Could not save that amount"); }
+  };
+  const prepare = async () => {
+    setBusy("prepare"); setMsg("");
+    try {
+      const { data } = await api.post(`/api/invoice-batches/${batch.BatchId}/prepare`); setBatch(data.batch);
+      setMsg(data.errors?.length ? `${data.created} drafts created; ${data.errors.length} need attention: ${data.errors.join("; ")}`
+        : `${data.created} drafts created${data.reused ? `, ${data.reused} existing drafts reused` : ""}. They are waiting in Review.`);
+    } catch (e) { setMsg(e?.response?.data?.detail || "Could not prepare drafts"); }
+    setBusy("");
+  };
+  return (
+    <Box sx={{ maxWidth: 1050, mx: "auto" }}>
+      <Crumb section="Reports" onBack={onBack} title={cur ? cfg.title : "New monthly invoice workflow"} />
+      <Box sx={{ ...card, p: 2, mb: 2 }}>
+        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>WORKFLOW SETUP</Typography>
+        <Typography sx={{ color: INK, fontWeight: 750, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
+        <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>The schedule starts a monthly checklist. You confirm amounts; Prepare creates drafts; approving each Review card sends it.</Typography>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(240px,1fr) 250px 220px" }, gap: 1 }}>
+          <TextField size="small" label="workflow title" value={cfg.title || ""} onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
+          <Select size="small" displayEmpty value={cfg.connector_id || ""} onChange={(e) => setCfg({ ...cfg, connector_id: e.target.value, customers: [] })}>
+            <MenuItem value="" disabled>Zoho Invoice connection</MenuItem>
+            {zohoCards.map((c) => <MenuItem key={c.ConnectorId} value={c.ConnectorId}>{c.Name}{c.Active ? "" : " — off"}</MenuItem>)}
+          </Select>
+          <TextField size="small" label="monthly cron" value={cfg.cron || ""} helperText={cronText(cfg.cron || "0 9 1 * *")}
+            onChange={(e) => setCfg({ ...cfg, cron: e.target.value })} />
+        </Box>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>Customers included each month</Typography>
+        <Box sx={{ maxHeight: 210, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 1.5, mt: 0.5, bgcolor: "#fff" }}>
+          {!customers.length && <Typography variant="body2" sx={{ color: DIM, p: 1.5 }}>No customers loaded. Save and connect the Zoho card, then return here.</Typography>}
+          {customers.map((c) => <Box key={c.customer_id} onClick={() => toggle(c)} sx={{ display: "flex", alignItems: "center", px: 1, borderBottom: `1px solid ${BORDER}`, cursor: "pointer" }}>
+            <Checkbox size="small" checked={picked.has(String(c.customer_id))} />
+            <Typography sx={{ fontSize: 13, color: INK, flex: 1 }}>{c.customer_name}</Typography>
+            <Typography variant="caption" sx={{ color: FAINT }}>{c.recipient || "no email in Zoho"}</Typography>
+          </Box>)}
+        </Box>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.25 }}>
+          <Button variant="contained" disableElevation disabled={!!busy} onClick={save}>{busy === "save" ? "Saving…" : cur ? "Save workflow" : "Save workflow"}</Button>
+          <Typography variant="caption" sx={{ color: DIM }}>{cfg.customers.length} selected · no automatic sending</Typography>
+        </Box>
+      </Box>
+      {cur && <Box sx={{ ...card, p: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5 }}>
+          <Box sx={{ flex: 1 }}><Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>MONTHLY BATCH</Typography>
+            <Typography sx={{ fontWeight: 750, color: INK }}>{batch ? `${batch.Period} · ${String(batch.Status).replaceAll("_", " ")}` : "No batch opened yet"}</Typography></Box>
+          {batches.length > 1 && <Select size="small" value={batch?.BatchId || ""} onChange={async (e) => setBatch((await api.get(`/api/invoice-batches/${e.target.value}`)).data)}>
+            {batches.map((b) => <MenuItem key={b.BatchId} value={b.BatchId}>{b.Period} · {String(b.Status).replaceAll("_", " ")}</MenuItem>)}</Select>}
+          <Button variant="outlined" disabled={!!busy} onClick={openMonth}>{busy === "open" ? "Opening…" : `Open ${period}`}</Button>
+        </Box>
+        {batch?.items?.map((item) => <Box key={item.ItemId} sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(170px,1fr) 110px 130px minmax(180px,1fr) 140px" }, gap: 1, alignItems: "center", py: 1, borderTop: `1px solid ${BORDER}` }}>
+          <Box><Typography sx={{ fontWeight: 650, fontSize: 13, color: INK }}>{item.CustomerName}</Typography>
+            <Typography variant="caption" sx={{ color: item.Error ? "#6b2733" : FAINT }}>{item.Error || "copied from the latest prior invoice"}</Typography></Box>
+          <Typography variant="caption" sx={{ color: DIM }}>last: {item.PreviousAmount == null ? "—" : `${item.Currency} ${Number(item.PreviousAmount).toFixed(2)}`}</Typography>
+          <TextField size="small" type="number" label="this month" value={item.Amount ?? ""} disabled={["review_ready", "sent"].includes(item.Status)}
+            onChange={(e) => setBatch({ ...batch, items: batch.items.map((x) => x.ItemId === item.ItemId ? { ...x, Amount: e.target.value } : x) })}
+            onBlur={(e) => e.target.value && patchItem(item, { Amount: e.target.value })} />
+          <TextField size="small" label="send to" value={item.Recipient || ""} disabled={["review_ready", "sent"].includes(item.Status)}
+            onChange={(e) => setBatch({ ...batch, items: batch.items.map((x) => x.ItemId === item.ItemId ? { ...x, Recipient: e.target.value } : x) })}
+            onBlur={(e) => patchItem(item, { Recipient: e.target.value })} />
+          <Typography variant="caption" sx={{ color: item.Status === "sent" ? "#47654a" : DIM, fontWeight: 700 }}>{String(item.Status || "").replaceAll("_", " ")}{item.InvoiceNumber ? ` · ${item.InvoiceNumber}` : ""}</Typography>
+        </Box>)}
+        {batch?.items?.length > 0 && <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
+          <Button variant="contained" disableElevation disabled={!!busy || batch.Status === "done"} onClick={prepare}>{busy === "prepare" ? "Preparing…" : "Prepare Zoho drafts"}</Button>
+          <Typography variant="caption" sx={{ color: DIM }}>Each prepared customer becomes a separate approval in Review.</Typography>
+        </Box>}
+      </Box>}
+      {msg && <Alert severity={/failed|could not|need attention|Choose|No /.test(msg) ? "warning" : "success"} sx={{ mt: 1.5 }}>{msg}</Alert>}
     </Box>
   );
 }

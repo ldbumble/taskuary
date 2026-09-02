@@ -34,11 +34,13 @@ def _write(store, tid: int, label: str, body: str, kind: str, actor: str) -> dic
     return store.get_task_artifact(aid)
 
 
-def coding(store, tid: int, report: str, transcript: str, actor='coder') -> dict:
+def coding(store, tid: int, report: str, transcript: str, actor='coder', final_message: str = '') -> dict:
     task = store.get_task(tid) or {}
     body = (f'# {task_ref(tid)} — {task.get("Title") or "Agent session"}\n\n'
             f'## Saved result\n\n{str(report or "(no compact result)").strip()}\n\n'
-            f'## Full session transcript\n\n```text\n{str(transcript or "").strip()}\n```')
+            + (f'## Final agent response\n\n{str(final_message).strip()}\n\n'
+               if str(final_message or '').strip() else '')
+            + f'## Full session transcript\n\n```text\n{str(transcript or "").strip()}\n```')
     return _write(store, tid, 'agent-session', body, 'coding_session', actor)
 
 

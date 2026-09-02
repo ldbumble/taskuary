@@ -22,8 +22,11 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .coder import PAUSE_MARKER, pause_note, reply_target as coder_reply_target, wrap as coder_wrap
-from . import aisetup, assistant, demo, learn, learnedgraph, outbound, playbooks, rank, responder, waitroom
+from . import aisetup, assistant, demo, deps, learn, learnedgraph, outbound, playbooks, rank, responder, waitroom
 
+# whatever the owner's Install button added lives beside their data, not in the build - and it has
+# to be importable BEFORE any card reaches for it (deps.py)
+deps.use_packages()
 cfg = config.load()
 store = SQLiteStore(config.db_path())
 for name, prof in cfg.get('agents', {}).items():
@@ -310,6 +313,30 @@ def assistant_dock():
     from .general import dock_task
     task, created = dock_task(store, ACTOR)
     return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created}
+
+
+@app.post('/api/assistant/dock/new')
+def assistant_dock_new(background: BackgroundTasks):
+    """Archive the current dock conversation and return a genuinely fresh one.
+
+    A client-side clear is dishonest here: the model session and the task comments would still
+    carry the old context. The old hidden task remains the durable record, while its replacement
+    starts with no messages. Reviews and tasks are separate workspace state and remain available.
+    """
+    from . import general
+    old, _created = general.dock_task(store, ACTOR)
+    session = general.session_for(old['TaskId'])
+    if session and session.busy:
+        raise HTTPException(409, 'Taskuary is still answering. Stop it or wait before starting a new chat.')
+    store.update_task(old['TaskId'], {'Status': 'done'}, ACTOR)
+    store.audit('task', old['TaskId'], 'archive_assistant_dock', ACTOR)
+    if session:
+        # Closing is also the conservative point where Social may retain durable company facts.
+        # That can call an AI, so it belongs after the response rather than delaying New chat.
+        background.add_task(session.close)
+    task, created = general.dock_task(store, ACTOR)
+    return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created,
+            'archivedTaskId': old['TaskId']}
 
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
@@ -2253,19 +2280,19 @@ def connector_reset(cid: int):
 
 @app.get('/api/deps')
 def deps_list():
-    """What the cards can install, and whether this install can install anything at all."""
-    from . import deps
+    """What the cards can install, where it would land, and what this build already ships."""
     can, why = deps.can_install()
-    return {'can_install': can, 'why': why, 'python': sys.executable,
-            'packages': {k: {'name': deps.pip_name(k), 'installed': deps.installed(k)} for k in deps.OPTIONAL}}
+    return {'can_install': can, 'why': why, 'python': sys.executable, 'frozen': deps.frozen(),
+            'where': str(deps.packages_dir()) if deps.frozen() else sys.executable,
+            'packages': {k: {'name': deps.pip_name(k), 'installed': deps.installed(k),
+                             'bundled': deps.frozen() and k in deps.BUNDLE} for k in deps.OPTIONAL}}
 
 
 @app.post('/api/deps/install')
 def deps_install(body: dict):
-    """Install one optional package into the Python running Taskuary. The owner's button - it is
+    """Install one optional package where THIS Taskuary imports from. The owner's button - it is
     on guard.DENIED, because pip runs arbitrary setup code and an agent asking for that is an
     agent asking to run anything."""
-    from . import deps
     pkg = str((body or {}).get('package') or '')
     try: out = deps.install(pkg)
     except ValueError as e: raise HTTPException(422, str(e))

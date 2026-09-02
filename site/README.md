@@ -54,10 +54,13 @@ npx wrangler d1 execute taskuary-demo --remote --file functions/schema.sql
 ```
 
 Then in the Pages project: **Settings → Functions → D1 bindings** → `DEMO_EVENTS` →
-`taskuary-demo`, and **Environment variables** → `ANALYTICS_TOKEN` → any long random string.
+`taskuary-demo`. The small admin login is intentionally hardcoded in
+`functions/lib/statsAuth.js`; edit `STATS_USERNAME` and `STATS_PASSWORD` there and redeploy when
+you want to change it. No Cloudflare credential variables are required.
 
-Read it at **`https://taskuary.com/stats.html`** — paste the token once and it shows sessions per
-day, how far people got (bounced after one event, or stayed for fifteen), which buttons were
-pressed and which tabs were opened. The page is not linked from the site and has no data of its
-own; it reads `https://taskuary.com/api/ev?token=<ANALYTICS_TOKEN>&days=30`, which is a 404 to
-anyone without the token, so the numbers are not public.
+Read it at **`https://taskuary.com/stats.html`**. It has a normal username/password sign-in and
+keeps a signed, secure, HttpOnly session for 12 hours. Credentials never appear in the URL or
+browser storage. Once signed in it shows sessions per day, how far people got (bounced after one
+event, or stayed for fifteen), which buttons were pressed and which tabs were opened. The page is
+not linked from the site and has no data of its own; `/api/ev` returns 401 without a valid admin
+session.

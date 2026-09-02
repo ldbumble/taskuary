@@ -62,9 +62,12 @@ NUDGE = ('This reply is a FOLLOW-UP: you wrote last on this thread, asked for or
          'heard nothing since. Nudge in one or two sentences: restate in a line what you need or are waiting on, '
          'make it easy to answer, and assume they are busy rather than ignoring you. No reproach, no "just '
          'checking in", no recap of the whole thread.\n')
-DONE = ('The work this thread asked for is FINISHED - the report below says what was done. Say what '
-        'happened in a sentence or two, claiming nothing the report does not support; if it could NOT '
-        'be done, say that and why, just as briefly. Never mention agents, tasks, tickets, '
+DONE = ('The work this thread asked for is FINISHED - the complete result below says what was done. '
+        'Answer EVERY distinct question, request, and issue in the sender\'s thread that the result '
+        'addresses. Check them one by one before writing: never omit an item merely to make the reply '
+        'short. When there are several items, a compact plain-text numbered or bulleted list is clearer '
+        'than squeezing them into a sentence. Claim nothing the result does not support; if an item could '
+        'NOT be done, say that and why. Never mention agents, tasks, tickets, '
         'repositories or tooling: YOU did this.\n'
         # the report is written for the owner's records and reads like it. Copied straight out, it
         # went to a vendor's mailer as "not an engineering or repo issue, so I closed it as FYI" -
@@ -77,7 +80,8 @@ DONE = ('The work this thread asked for is FINISHED - the report below says what
         'of it.')
 
 CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp', 'imessage')
-REPLY_TOKENS = 300          # a ceiling as well as an instruction: 800 invited an essay
+REPLY_TOKENS = 300          # ordinary reply-only mail should remain quick and short
+COMPLETE_REPLY_TOKENS = 1200  # completed multi-item work must have room to answer every item
 
 # SOUL.md tells the model how to sign off, and it obeys - in a chat window too, where it reads
 # like a form letter. Belt and braces: the prompt says not to, and this takes it off anyway.
@@ -130,6 +134,10 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     llm = llm or build_llm(store)
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     t = store.get_task(task_id) or {}
+    # Redraft/open-reply callers do not pass the completed result again. Recover the durable final
+    # response or transcript here so a second draft cannot fall back to a generic promise.
+    if resolution is None:
+        resolution = resolution_of(store, task_id)
     msgs = [m for m in store.list_messages(task_id) if m.get('Status') != 'context']
     if not msgs: raise RuntimeError('nothing to reply to on this task')
     last = msgs[-1]
@@ -143,7 +151,10 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     from .learn import injectable
     lrn = injectable(store.doc('learned') or '')
     sty = style_doc(store)
-    system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n'
+    # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
+    # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
+    length_rule = '' if resolution else BREVITY
+    system = (SYSTEM.format(owner=owner) + length_rule + (CHAT if chat else EMAIL) + '\n'
               + (NUDGE if nudge else DONE if resolution else NOT_YET)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
@@ -175,7 +186,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     if calendar:   # said on the task, so the Review row can be trusted on what the draft knew
         store.add_comment(task_id, 'responder', 'agent', 'Checked your calendar before drafting'
                           + (' - it could not be read, so the draft does not promise a time.' if 'COULD NOT READ' in calendar else '.'))
-    out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
+    out = (llm(system, user, max_tokens=COMPLETE_REPLY_TOKENS if resolution else REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
 
@@ -189,10 +200,35 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
 
 
 def resolution_of(store, task_id: int):
-    """The coder's own report on this task, if one closed it - so hitting Redraft says what
-    was done instead of reverting to "this needs work doing"."""
-    return next((c['Body'] for c in reversed(store.list_comments(task_id))
-                 if str(c.get('Body') or '').startswith('CODER REPORT')), None)
+    """The complete durable work result, if a coding session closed this task.
+
+    Prefer the exact final agent response saved in the long-form artifact. Older sessions do not
+    have that section, so their filed transcript is the fallback; only legacy records with neither
+    retain the compact CODER REPORT. This is also what makes Review -> Redraft lossless.
+    """
+    report = next((c['Body'] for c in reversed(store.list_comments(task_id))
+                   if str(c.get('Body') or '').startswith('CODER REPORT')), None)
+    if not report:
+        return None
+    try:
+        from . import session_artifacts
+        artifact = next((a for a in store.list_task_artifacts(task_id)
+                         if a.get('Kind') == 'coding_session'), None)
+        path = session_artifacts.confined((artifact or {}).get('Path'))
+        if path:
+            body = path.read_text(encoding='utf-8')
+            marker, end = '## Final agent response\n\n', '\n\n## Full session transcript'
+            if marker in body:
+                final = body.split(marker, 1)[1].split(end, 1)[0].strip()
+                if final:
+                    return 'COMPLETE FINAL RESPONSE FROM THE WORK SESSION:\n' + final
+    except Exception as e:
+        logger.debug(f'could not recover final response artifact for task {task_id}: {e}')
+    transcript = store.last_transcript(task_id) or {}
+    if str(transcript.get('Text') or '').strip():
+        return ('COMPLETE WORK SESSION TRANSCRIPT (the final response is near the end):\n'
+                + str(transcript['Text']).strip())
+    return report
 
 
 def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None, nudge: str = None) -> str:

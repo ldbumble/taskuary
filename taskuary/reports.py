@@ -384,6 +384,16 @@ def run_digest(cfg):
     return head, gather(cfg['store'], days)
 
 
+def run_evening_inbox(cfg):
+    """{"hours": 8} - an executive end-of-day brief over eligible Inbox and Sent email:
+    what the owner completed and the three most important open items for tomorrow. Bulk mail,
+    system notifications, receipts and suppressed messages are removed before the AI sees rows.
+    `store` arrives via resolve_cfg, never persisted."""
+    from .evening import gather
+    hours = max(1, min(int(cfg.get('hours') or 8), 48))
+    return f'the last {hours} hours of Inbox and Sent email', gather(cfg['store'], hours)
+
+
 def run_assistant(cfg):
     """The 'Assistant' report - the post on the Timeline (assistant.py). Scheduled and worded on the
     Reports tab like the Morning digest, but it does not file prose: run_report_source hands the
@@ -544,7 +554,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'teller_balances': _lazy('teller', 'run_teller_balances'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
             'metric': run_metric, 'metric_check': run_metric_check,
-            'rss': run_rss, 'digest': run_digest, 'automate': run_automate, 'assistant': run_assistant,
+            'rss': run_rss, 'digest': run_digest, 'evening_inbox': run_evening_inbox,
+            'automate': run_automate, 'assistant': run_assistant,
             'calendar': _calendar,       # the owner's busy times, off the Outlook (and Google) cards - read-only
             'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
             # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
@@ -685,7 +696,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 
 
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') in ('digest', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
+    if cfg.get('type') in ('digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
                            'metric', 'metric_check'):
         return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards; the knowledge base: its index)
     conn = CONNECTION_OF.get(cfg.get('type'))
@@ -746,6 +757,9 @@ def report_system(store, cfg: dict, charts: bool = False) -> str:
     """The system prompt of a report's AI pass. Rows from a database get the report summarizer;
     the Morning digest is the ASSISTANT speaking (digest.system: COUNSEL.md's voice and its honesty
     rules) - the owner (2026-08-30): a brief of counts is useless, make it the assistant's summary."""
+    if cfg.get('type') == 'evening_inbox' or 'evening_inbox' in {s.get('type') for s in cfg.get('sources') or []}:
+        from .evening import system
+        return system(store)
     if cfg.get('type') == 'digest' or 'digest' in {s.get('type') for s in cfg.get('sources') or []}:
         from .digest import system
         return system(store)
@@ -853,6 +867,15 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
         if startup and stale: return True
         if not any(cfg.get(k) for k in ('cron', 'every_minutes', 'daily_at')): return False
     now = datetime.now()
+    # A first-run dashboard report is useful immediately; a time-specific ritual is not. The
+    # seeded evening brief uses this flag so installing at 9am does not file an "evening" report
+    # before breakfast, while installing after its local slot still runs it that day.
+    if not last_polled and cfg.get('first_run_at_schedule') and cfg.get('daily_at'):
+        try:
+            hh, mm = (str(cfg['daily_at']).strip() + ':0').split(':')[:2]
+            return now >= now.replace(hour=int(hh), minute=int(mm or 0), second=0, microsecond=0)
+        except (TypeError, ValueError):
+            pass
     if not last_polled: return True
     try: last = datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))
     except ValueError: return True

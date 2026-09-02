@@ -85,6 +85,20 @@ def resolution_text(rep: dict) -> str:
     return '\n'.join(f'{k.capitalize()}: {rep[k]}' for k in ('determination', 'actions', 'summary') if rep.get(k))
 
 
+def reply_source(transcript: str, final_message: str = '') -> str:
+    """The unabridged result the sender's reply is written from.
+
+    The compact three-field report is for scanning the task card. It is deliberately lossy and
+    must never be the only source for a reply: one 55-word summary cannot carry eight separate
+    questions and their answers. Hooks give us the CLI's exact final response when they can;
+    otherwise the durable readable transcript is the honest fallback and contains that ending.
+    """
+    final = str(final_message or '').strip()
+    if final:
+        return 'COMPLETE FINAL RESPONSE FROM THE WORK SESSION:\n' + final
+    return 'COMPLETE WORK SESSION TRANSCRIPT (the final response is near the end):\n' + str(transcript or '').strip()
+
+
 def reply_target(store, task_id: int):
     """Which message a reply answers: the last one that came IN. Our own sent mail rides in
     the chain as 'context', and answering that would mail ourselves."""
@@ -112,7 +126,8 @@ def nobody_waiting(store, mid: int, rep: dict) -> bool:
     return sender_class(store.get_message(mid) or {}, team_domains_of(store.get_settings())) != 'person'
 
 
-def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder') -> dict:
+def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder',
+           complete_result: str = None) -> dict:
     """The end of finished work: the responder drafts the reply the sender gets and the task waits
     on you to send it. Nothing to reply to means nothing to wait for, so it just closes."""
     # a held draft is itself proof there is someone waiting on an answer, so it names the message
@@ -147,7 +162,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # remain `in_progress` with no live agent. A pending review is already durable, so `waiting`
     # is honest even while its draft text is being filled in.
     store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
-    if mid: raise_reply(store, task_id, mid, run_id, rep)
+    if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result)
     return {'drafting': bool(mid), 'message_id': mid}
 
 
@@ -167,7 +182,8 @@ def deliver_findings(store, task_id: int, mid: int, run_id: int, rep: dict, tgt:
         logger.warning(f'findings draft failed for task {task_id}: {e}')
 
 
-def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = None) -> dict:
+def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = None,
+         final_message: str = '') -> dict:
     """"We're done" - the whole ending, in one callable. The transcript becomes the report, the
     session dies, proposals become reviews, and finish() drafts the reply the sender gets.
 
@@ -196,6 +212,11 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or session.sid, 'close': close, 'mode': 'assistant'})
         last = next((m['content'][0]['text'] for m in reversed(general.history(store, tid)) if m['role'] == 'assistant'), '')
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [], 'drafting': False}
+    live = term.session_for(tid)
+    # Claude's Stop hook and Codex's rollout both preserve the final assistant response on the
+    # witness. Keep it separate from the card summary; snapshot() truncates it only for display.
+    witnessed = str(getattr(getattr(live, 'witness', None), 'said', '') or '')
+    final_message = str(final_message or witnessed).strip()
     text, agent, found = term.transcript_for(store, tid)
     if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')
     if found: term.close(found)              # done means done - the pty and its shells go too
@@ -208,7 +229,8 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     artifact = None
     try:
         from . import session_artifacts
-        artifact = session_artifacts.coding(store, tid, report, text, agent or actor)
+        artifact = session_artifacts.coding(store, tid, report, text, agent or actor,
+                                            final_message=final_message)
     except Exception as e: logger.warning(f'coding artifact failed for task {tid}: {e}')
     # anything the agent PROPOSED becomes a pending review here, at the one moment its whole
     # transcript is in hand - and refusals are recorded rather than dropped (proposals.py)
@@ -228,7 +250,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # replies off closed with no draft while the card still promised one in Review.
     fin = {}
     if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-        fin = finish(store, tid, rep, None, agent) or {}
+        fin = finish(store, tid, rep, None, agent, reply_source(text, final_message)) or {}
     # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
     # will recur, done here for the first time? The answer is a proposal in Review, never a file
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's
@@ -241,7 +263,8 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
             'drafting': bool(fin.get('drafting')), 'artifacts': [artifact] if artifact else []}
 
 
-def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
+def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
+                complete_result: str = None) -> None:
     """The session reported; the responder writes what the sender actually reads. One voice for
     every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
     that fails to write still leaves the review standing: 'Draft with AI' retries it.
@@ -258,7 +281,9 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict) -> None:
     else:
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply',
                                 'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
-    try: responder.write_draft(store, task_id, rid, resolution_text(rep), 'coder')
+    # The report is intentionally compact UI copy. Draft from the complete final response (or
+    # transcript fallback), so every question the session answered remains available here.
+    try: responder.write_draft(store, task_id, rid, complete_result or resolution_text(rep), 'coder')
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
     # the ping that matters most: work FINISHED and its reply is sitting in Review on you
     if (store.get_settings().get('notify_level') or 'needs_me') != 'off':

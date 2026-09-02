@@ -139,11 +139,14 @@ class PollTests(Base):
         own = self.rows()[1]
         self.assertEqual((own['Status'], own['FromName'], own['TaskId']), ('context', 'You', task['task_id']))
         self.assertEqual(len(self.s.snapshots()), 1)      # no second task for your own line
-        # an own message in a chat with no task: nothing stored, exactly like Outlook sent items
+        # an own message in a chat with no task is KEPT, exactly like Outlook sent items: no task,
+        # no timeline row of its own, and the record that this chat was answered (channels.py)
         self.fx.chat('iMessage;-;+15550002', '+15550002')
         self.fx.msg('will do', chat='iMessage;-;+15550002', me=True)
-        self.assertEqual(self.poll(), 0)
-        self.assertEqual(len(self.rows()), 2)
+        self.assertEqual(self.poll(), 1)
+        loose = self.rows()[2]
+        self.assertEqual((loose['Status'], loose['TaskId']), ('context', None))
+        self.assertEqual(len(self.s.snapshots()), 1)      # still no second task
 
     def test_group_chats_carry_their_name(self):
         self.poll()

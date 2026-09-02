@@ -45,11 +45,27 @@
 .tq-aui-dock .tq-aui-user-bubble { max-width: 100%; }
 .tq-aui-dock .tq-aui-footer { padding: 8px 10px 7px; }
 .tq-aui-dock .tq-aui-hint { display: none; }
+.tq-aui-dock-expanded .tq-aui-message { width: min(760px, 96%); grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
+.tq-aui-dock-expanded .tq-aui-viewport { padding: 22px 24px 12px; }
+.tq-dock-actions { width: 100%; margin: 2px auto 12px; padding: 10px; border: 1px solid #d6cec1; border-left: 4px solid #98743e; border-radius: 12px; background: #fffdf9; box-shadow: 0 5px 18px rgba(51, 45, 35, .07); box-sizing: border-box; }
+.tq-dock-actions-expanded { width: min(760px, 96%); padding: 13px 14px; }
+.tq-dock-action-kicker { min-height: 22px; display: flex; align-items: center; gap: 7px; color: #8d6b38; font: 750 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.tq-dock-action-kicker em { color: #989188; font-style: normal; letter-spacing: .04em; text-transform: none; }
+.tq-dock-action-nav { margin-left: auto; display: flex; }
+.tq-dock-action-nav button { width: 24px; height: 24px; color: #766f64; }
+.tq-dock-action-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.tq-dock-action-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tq-dock-action-head b { color: #34342f; font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.tq-dock-action-head span { margin-top: 2px; color: #817c73; font-size: 10.5px; overflow-wrap: anywhere; }
+.tq-dock-action-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tq-dock-action-buttons button { text-transform: none; font-size: 10.75px; }
 @media (max-width: 700px) {
   .tq-aui-viewport { padding-left: 10px; padding-right: 10px; }
   .tq-aui-message { width: 100%; grid-template-columns: 1fr; gap: 3px; }
   .tq-aui-role { padding-top: 0; }
   .tq-aui-footer { padding-left: 10px; padding-right: 10px; }
+  .tq-aui-dock-expanded .tq-aui-message { width: 100%; grid-template-columns: 1fr; gap: 3px; }
+  .tq-aui-dock-expanded .tq-aui-viewport { padding: 14px 10px 8px; }
 }
 
 /* on a phone the recurring-report offer stacks: side by side the text squeezed into a one-word column */

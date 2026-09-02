@@ -23,6 +23,34 @@ class FloatingAssistantTests(unittest.TestCase):
         self.assertEqual(first.json()['task']['SourceRef'], general.DOCK_TAG)
         self.assertEqual(visible, [])
 
+    def test_new_chat_archives_the_old_dock_and_returns_an_empty_one(self):
+        store = MemoryStore()
+        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+            client = TestClient(server.app)
+            old = client.post('/api/assistant/dock').json()['task']
+            store.add_comment(old['TaskId'], 'owner', general.USER_TYPE, 'A long conversation')
+            store.add_comment(old['TaskId'], 'assistant', general.ASSISTANT_TYPE, 'Its answer')
+            fresh = client.post('/api/assistant/dock/new')
+            again = client.post('/api/assistant/dock').json()['task']
+        self.assertEqual(fresh.status_code, 200)
+        self.assertEqual(fresh.json()['archivedTaskId'], old['TaskId'])
+        self.assertEqual(store.get_task(old['TaskId'])['Status'], 'done')
+        self.assertNotEqual(fresh.json()['task']['TaskId'], old['TaskId'])
+        self.assertEqual(fresh.json()['task']['TaskId'], again['TaskId'])
+        self.assertEqual(general.history(store, again['TaskId']), [])
+
+    def test_new_chat_refuses_to_cut_off_an_answer_in_progress(self):
+        store = MemoryStore()
+        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+            client = TestClient(server.app)
+            old = client.post('/api/assistant/dock').json()['task']
+            session = general.GeneralSession(store, old['TaskId'])
+            session.busy = True
+            terminal.SESSIONS[session.sid] = session
+            response = client.post('/api/assistant/dock/new')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(store.get_task(old['TaskId'])['Status'], 'open')
+
     def test_guide_gets_live_attention_tasks_reviews_timeline_and_agent_output(self):
         store = MemoryStore()
         tid = store.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'waiting',
@@ -41,6 +69,8 @@ class FloatingAssistantTests(unittest.TestCase):
         self.assertIn('ACTIVE TASKS', snapshot)
         self.assertIn('TQ-0001 | waiting | high | Fix the export', snapshot)
         self.assertIn('PENDING REVIEW', snapshot)
+        self.assertIn('rv1 | TQ-0001', snapshot)
+        self.assertIn('Draft ready: Attached.', snapshot)
         self.assertIn('RECENT TIMELINE', snapshot)
         self.assertIn('RECENT AGENT OUTPUT', snapshot)
         self.assertIn('Corrected the CSV escaping', snapshot)
@@ -53,6 +83,8 @@ class FloatingAssistantTests(unittest.TestCase):
         system, user = general._prompt(store, tid)
         self.assertIn('HOVERING GUIDE', system)
         self.assertIn('WALKTHROUGH MODE', system)
+        self.assertIn('ACTION SURFACE', system)
+        self.assertIn('Commentary explains; the clearly labelled owner button acts.', system)
         self.assertIn('exactly ONE unresolved item', system)
         self.assertIn('[TQ-0001](#task=1)', system)
         self.assertIn('WORKSPACE SNAPSHOT', user)

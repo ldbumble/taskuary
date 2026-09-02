@@ -16,7 +16,8 @@ from .ingest import ingest_message
 from .counsel import is_invite
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
-MAIL_SELECT = 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,conversationId,webLink,hasAttachments,isRead'
+MAIL_SELECT = ('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,'
+               'conversationId,webLink,hasAttachments,isRead,inferenceClassification,flag')
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -449,24 +450,51 @@ def _mail_msgs(tok, upn, since, folder='inbox', cap=500):
     return out
 
 
-def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = False) -> int:
-    """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row
-    and never becomes work: when the conversation already has a task it rides along INSIDE
-    the chain (a 'context' message + a history entry, so the panel shows it was answered).
-    Chats may opt to keep unmatched lines too: the assistant needs the owner's half of a
-    conversation even when no task was made from it."""
+# where the owner actually typed it - the timeline entry says so, because "you replied" with no
+# place is the one thing the owner cannot check against their own memory
+SENT_FROM = {'email': 'from your mailbox', 'teams': 'in Teams', 'slack': 'in Slack',
+             'whatsapp': 'in WhatsApp', 'telegram': 'in Telegram', 'imessage': 'in Messages'}
+
+
+def _same_words(a: str, b: str, n: int = 160) -> bool:
+    """Two renderings of the SAME reply. The copy that comes back from the Sent folder went out
+    through the provider's HTML and back through our stripper, so it is never byte-identical to
+    the text approved here - the opening words are what survive both, and the quoted thread the
+    provider appends is what makes a prefix the only honest comparison."""
+    x, y = (re.sub(r'\s+', ' ', a or '').strip().lower()[:n], re.sub(r'\s+', ' ', b or '').strip().lower()[:n])
+    return bool(x) and x == y
+
+
+def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) -> int:
+    """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row and
+    never becomes work: it rides INSIDE the thread as a 'context' message, which is what the
+    Timeline reads to say "you answered this yourself" (store.ANSWERED_AT, timelineState).
+
+    It is kept whether or not a task claims it, and that is the fix for the commonest ending
+    there is: you answer a mail in Outlook that Taskuary filed, or one whose task closed
+    yesterday. The router only ever matched OPEN tasks, so both of those replies were dropped on
+    the floor - the row kept saying nothing had happened, forever (owner, 2026-09-02)."""
     if store.message_exists(msg['external_id']): return 0
     conv = msg.get('conversation_id')
-    tid = next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
+    tid = (next((s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']), None)
+           or store.task_for_conversation(conv, msg.get('subject')))
     if not tid and not keep_unmatched: return 0
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
-                             'SourceLink': msg.get('source_link'), 'Status': 'context'})
-    if tid:
-        store.add_route(mid, tid, 'attach', None, why, [], 'router')
-        store.add_comment(tid, 'you', 'human', f"You replied: {(msg.get('body') or '')[:300]}")
+                             'SourceLink': msg.get('source_link'), 'Status': 'context',
+                             'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None})
+    if not tid: return 1
+    store.add_route(mid, tid, 'attach', None, why, [], 'router')
+    # ...unless Taskuary is reading back its OWN send. That reply already has its line on the
+    # timeline ("Sent by email to ..."), and a second entry under it saying "You replied" read as
+    # the owner having answered twice.
+    rv = store.sent_reply(task_id=tid) or {}
+    body = (msg.get('body') or '').strip()
+    if not _same_words(body, rv.get('FinalText') or rv.get('DraftText') or ''):
+        store.add_comment(tid, 'you', 'human',
+                          f"You replied {SENT_FROM.get(msg['channel'], 'outside Taskuary')}: {body[:300]}")
     return 1
 
 
@@ -475,7 +503,9 @@ def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
         'external_id': f"graph:{m['id']}", 'channel': 'email', 'source_name': mailbox,
         'subject': m.get('subject'), 'from_email': mailbox, 'body': _body(m),
         'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
-        'sent_at': _local(m.get('receivedDateTime') or m.get('sentDateTime') or '')},
+        'sent_at': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
+        'mail_meta': {'folder': 'sentitems', 'focus': m.get('inferenceClassification'),
+                      'flag': (m.get('flag') or {}).get('flagStatus'), 'invite': is_invite(m)}},
         'your reply on this thread - kept for context')
 
 
@@ -892,9 +922,10 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
                     for m in reversed(_mail_msgs(tok, s['Address'], since_iso, folder='sentitems')):
                         n += ingest_outbound_mail(store, s['Address'], m)
                     # every folder the source asks for (the Inbox alone unless the card says otherwise), oldest first
-                    inbound = [m for f in source_folders(s) for m in _mail_msgs(tok, s['Address'], since_iso, folder=f)]
-                    inbound.sort(key=lambda m: m.get('receivedDateTime') or '')
-                    for m in inbound:
+                    inbound = [(f, m) for f in source_folders(s)
+                               for m in _mail_msgs(tok, s['Address'], since_iso, folder=f)]
+                    inbound.sort(key=lambda fm: fm[1].get('receivedDateTime') or '')
+                    for folder, m in inbound:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
                         if (frm.get('address') or '').lower() == s['Address'].lower():
                             continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
@@ -911,7 +942,10 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
                             'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address'],
-                            'images': images_for_triage(store, atts), 'invite': is_invite(m)}, llm=llm)
+                            'images': images_for_triage(store, atts), 'invite': is_invite(m),
+                            'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
+                                          'flag': (m.get('flag') or {}).get('flagStatus'),
+                                          'invite': is_invite(m)}}, llm=llm)
                         n += out['status'] != 'duplicate'
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")

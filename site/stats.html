@@ -3,8 +3,8 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Taskuary · demo traffic</title>
-<!-- Not linked from anywhere and useless without the token: /api/ev refuses any request that does
-     not carry ANALYTICS_TOKEN, so this page is a reader, not a door. -->
+<!-- Not linked from anywhere. Analytics require the signed HttpOnly session issued by the admin
+     login, so this static page contains no credential and has no data of its own. -->
 <style>
   :root{--bg:#f6f4ef;--panel:#fffdfb;--bd:#e7e3da;--ink:#1f2a22;--dim:#6b7a6e;--faint:#98a396;--accent:#4f46e5}
   *{box-sizing:border-box}
@@ -15,6 +15,16 @@
   .row{display:flex;gap:8px;align-items:center;margin-bottom:22px;flex-wrap:wrap}
   input,select,button{font:inherit;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--panel);color:var(--ink)}
   button{cursor:pointer;font-weight:600}
+  button.primary{background:var(--ink);border-color:var(--ink);color:white}
+  button.quiet{background:transparent;color:var(--dim)}
+  .login{max-width:390px;background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:26px 0}
+  .login h2{margin:0 0 4px;color:var(--ink);font-size:15px;letter-spacing:0;text-transform:none}
+  .login p{margin:0 0 14px;color:var(--dim);font-size:12.5px}
+  .login label{display:block;color:var(--dim);font-size:11.5px;font-weight:600;margin:9px 0 4px}
+  .login input{display:block;width:100%}
+  .login button{margin-top:14px;min-width:82px}
+  .login .msg{padding:10px 0 0;color:#9c3f4f}
+  .hidden{display:none!important}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px}
   .card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
   .card b{display:block;font-size:24px;line-height:1.2}
@@ -32,17 +42,27 @@
 <h1>Demo traffic</h1>
 <div class="sub">Who opened taskuary.com and the demo, and what they did once they were in it.
   Nobody here is a person: the id lives in one browser tab and dies with it.</div>
-<div class="row">
-  <input id="tok" type="password" placeholder="ANALYTICS_TOKEN" size="34">
-  <select id="days"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select>
-  <button id="go">Show</button>
+<div id="login" class="login hidden">
+  <h2>Admin sign in</h2>
+  <p>Use the Taskuary stats administrator account.</p>
+  <form id="loginForm">
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button id="signIn" class="primary" type="submit">Sign in</button>
+    <div id="loginMsg" class="msg" aria-live="polite"></div>
+  </form>
 </div>
-<div id="out"><div class="msg">Paste the token set on the Pages project. It is kept in this browser only.</div></div>
+<div id="controls" class="row hidden">
+  <select id="days"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select>
+  <button id="go" class="primary">Refresh</button>
+  <button id="logout" class="quiet">Sign out</button>
+</div>
+<div id="out"><div class="msg">Checking your session…</div></div>
 </div>
 <script>
 var $ = function(id){ return document.getElementById(id); };
-try { $('tok').value = localStorage.getItem('tq_stats_token') || ''; } catch(e){}
-if (location.hash.length > 1) $('tok').value = decodeURIComponent(location.hash.slice(1));
 
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>]/g, function(c){
   return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'; }); }
@@ -88,14 +108,26 @@ function table(head, rows, max){
   return h + '</table>';
 }
 
-$('go').onclick = function(){
-  var tok = $('tok').value.trim(), days = $('days').value;
-  try { localStorage.setItem('tq_stats_token', tok); } catch(e){}
+function showLogin(message){
+  $('login').classList.remove('hidden');
+  $('controls').classList.add('hidden');
+  $('out').innerHTML = '';
+  $('loginMsg').textContent = message || '';
+  setTimeout(function(){ $('username').focus(); }, 0);
+}
+
+function showStats(){
+  $('login').classList.add('hidden');
+  $('controls').classList.remove('hidden');
+  $('loginMsg').textContent = '';
+}
+
+function loadStats(){
+  var days = $('days').value;
   $('out').innerHTML = '<div class="msg">Reading…</div>';
-  fetch('/api/ev?token=' + encodeURIComponent(tok) + '&days=' + days).then(function(r){
-    if (!r.ok) throw new Error(r.status === 404 ? 'That value does not match the production analytics token.'
-      : r.status === 503 ? 'ANALYTICS_TOKEN is missing from the Production runtime variables (build variables do not count).'
-      : 'HTTP ' + r.status);
+  fetch('/api/ev?days=' + days).then(function(r){
+    if (r.status === 401) { showLogin('Your session expired. Sign in again.'); throw new Error('signed out'); }
+    if (!r.ok) throw new Error('Could not read analytics (HTTP ' + r.status + ').');
     return r.json();
   }).then(function(d){
     if (d.note) { $('out').innerHTML = '<div class="msg">' + esc(d.note) + ' — see site/README.md for the two wrangler commands.</div>'; return; }
@@ -122,8 +154,44 @@ $('go').onclick = function(){
     html += '<h2>Which ones</h2>' + table(['event', 'what', 'count'],
       (d.what || []).map(function(x){ return [x.Kind, x.What, x.n]; }), wmax);
     $('out').innerHTML = html;
-  }).catch(function(e){ $('out').innerHTML = '<div class="msg">' + esc(e.message) + '</div>'; });
+  }).catch(function(e){
+    if (e.message !== 'signed out') $('out').innerHTML = '<div class="msg">' + esc(e.message) + '</div>';
+  });
+}
+
+$('go').onclick = loadStats;
+$('loginForm').onsubmit = function(event){
+  event.preventDefault();
+  var button = $('signIn');
+  button.disabled = true;
+  button.textContent = 'Signing in…';
+  $('loginMsg').textContent = '';
+  fetch('/api/stats-auth', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: $('username').value.trim(), password: $('password').value})
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(body){
+      if (!r.ok) throw new Error(body.error || 'Could not sign in.');
+      return body;
+    });
+  }).then(function(){
+    $('password').value = '';
+    showStats();
+    loadStats();
+  }).catch(function(e){ $('loginMsg').textContent = e.message; })
+    .finally(function(){ button.disabled = false; button.textContent = 'Sign in'; });
 };
-if ($('tok').value) $('go').click();
+$('logout').onclick = function(){
+  fetch('/api/stats-auth', {method: 'DELETE'}).finally(function(){
+    $('password').value = '';
+    showLogin('You are signed out.');
+  });
+};
+
+fetch('/api/stats-auth').then(function(r){ return r.json(); }).then(function(session){
+  if (!session.authenticated) { showLogin(''); return; }
+  showStats();
+  loadStats();
+}).catch(function(){ showLogin('The stats login is temporarily unavailable.'); });
 </script>
 </body></html>

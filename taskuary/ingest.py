@@ -7,7 +7,7 @@ answering is the responder's job (reply_only), doing is the coder's.
 """
 import contextlib, json, re, threading
 from loguru import logger
-from .routing import route, draft_task_fields, tokens
+from .routing import ask_line, route, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent, heuristic_intent
 from .store import task_ref
@@ -187,7 +187,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'queued', 'task_id': None, 'message_id': mid}
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
-    new_rid = None                       # set when a fresh reply task opens a review below
+    # ...and on a chat, the room it shares with the task is not a reason to join it (chat_continues)
+    if r['decision'] == 'attach' and is_chat(msg):
+        cont = chat_continues(store, msg, r['task_id'], llm)
+        if not cont['same']:
+            logger.info(f"ingest: a separate ask in the same chat - not joining {task_ref(r['task_id'])}")
+            r = {**r, 'decision': 'create', 'task_id': None,
+                 'reason': f"a separate ask in the same chat, so it did not join {task_ref(r['task_id'])}"
+                           + (f" - {cont['why']}" if cont['why'] else '')}
+    new_rid = None                     # set when a fresh reply task opens a review below
     held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
     mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
@@ -278,6 +286,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                                    subject=msg.get('subject') or '',
                                                    source=msg.get('source_name') or '')
                 thread = others_on_thread(store, msg, mine)
+                # ...and on a chat, what was actually SAID before this - theirs and ours. A mail
+                # quotes its own thread underneath it; a chat line quotes nothing, so triage read
+                # "nope. new" with no idea what had been asked two minutes earlier.
+                if is_chat(msg):
+                    lines = exchange_lines(store, msg)
+                    if lines: thread = {**thread, 'exchange': lines}
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
                                          learned=injectable(store.doc('learned') or ''),
                                          notes=notes, notes_left=notes_left, images=msg.get('images'),
@@ -605,6 +619,78 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
     return {'others_replied': others[-3:], 'last_on_thread': who(last), 'last_on_thread_is_you': is_me(last)}
 
 
+# ── a chat room is not a task ────────────────────────────────────────────────────────────
+# Mail threads itself: a reply carries References and belongs to what came before it. A chat
+# does not - teams:<chat>, whatsapp:<jid> and imessage:<guid> name a ROOM, and every line anyone
+# ever types in it shares that one id. Routing reads it as the thread signal (routing.WEIGHTS:
+# thread=1.0 clears the attach bar on its own), so a person's whole day landed on whichever task
+# the room opened first: eleven lines, four different problems and a screenshot, ONE task - and
+# the agent sent at it only ever saw the first ask (owner, 2026-09-02).
+#
+# So on chat channels the room buys nothing. Each arriving line is asked the one question that
+# matters - is this the ask already open, or a new one - by the only thing that can tell an
+# unfinished sentence from "Also, separate thing:": a reader, holding the exchange, OURS AND
+# THEIRS. Our own replies are the strongest boundary in the conversation and nothing ever showed
+# them to a classifier before.
+CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage'}
+BURST_SECONDS = 120     # a line typed this soon after the last is the same sentence, finished
+
+
+def is_chat(msg: dict) -> bool:
+    return str(msg.get('channel') or '').lower() in CHAT_CHANNELS
+
+
+def _secs(a: str, b: str) -> float:
+    """Seconds between two 'YYYY-MM-DD HH:MM:SS' stamps; inf when either is unreadable, so a
+    missing timestamp never passes for "typed a moment ago"."""
+    from datetime import datetime
+    try: return abs((datetime.fromisoformat(str(b)[:19]) - datetime.fromisoformat(str(a)[:19])).total_seconds())
+    except (TypeError, ValueError): return float('inf')
+
+
+def is_ours(m: dict) -> bool:
+    """A line WE sent: the owner's own reply, wherever they typed it (channels.ingest_own_message
+    stores those as `context`), or one Taskuary sent itself."""
+    return (m.get('Status') == 'context' or m.get('Direction') == 'out'
+            or str(m.get('FromName') or '').strip().lower() == 'you')
+
+
+def exchange_lines(store, msg: dict, limit: int = 12, chars: int = 300) -> list:
+    """The last lines of this conversation as a person scrolling up would read them - theirs and
+    OURS, oldest last, each marked with who said it. The owner's own half was in the database all
+    along and no classifier was ever shown it, which is why triage read every chat line as if it
+    had arrived out of nowhere."""
+    out = []
+    for m in store.thread_messages(msg.get('conversation_id'), msg.get('subject'), limit=limit):
+        # ...never the line being judged, and never the ones AFTER it. Under deferred() a whole
+        # poll is on the timeline as 'triaging' before any of it is judged, so without this the
+        # reader would be shown the rest of the conversation as context for its own beginning.
+        if m.get('Status') == 'skipped' or (msg.get('_mid') and m['MessageId'] == msg['_mid']): continue
+        if msg.get('sent_at') and str(m.get('SentAt') or '') > str(msg['sent_at']): continue
+        who = 'you' if is_ours(m) else (m.get('FromName') or m.get('FromEmail') or 'them')
+        body = ' '.join(str(m.get('BodyText') or '').split())[:chars]
+        if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}")
+    return out
+
+
+def chat_continues(store, msg: dict, tid: int, llm=None) -> dict:
+    """Is this chat line part of the task the room already has open? {'same', 'why', 'asked'}.
+
+    Two things answer without spending a call, because they are facts rather than judgements:
+    a line typed seconds after the last one is one thought in two messages, and an answer
+    arriving while an agent is live on the task is the round trip it asked for. Everything else
+    is a reading, and triage.same_ask does the reading."""
+    from .triage import same_ask
+    prior = store.list_messages(tid)
+    last = prior[-1] if prior else None
+    if last and not is_ours(last) and _secs(last.get('SentAt'), msg.get('sent_at')) <= BURST_SECONDS:
+        return {'same': True, 'why': 'typed seconds after their last line - one thought, two messages', 'asked': False}
+    if any(x['Status'] == 'running' for x in store.list_runs(tid)):
+        return {'same': True, 'why': 'an agent is working this and asked on this chat', 'asked': False}
+    return same_ask((store.get_task(tid) or {}).get('Title') or '', exchange_lines(store, msg),
+                    msg.get('body') or '', llm)
+
+
 def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:
     """The owner's standing notes that apply to this message - global ones plus anything
     learned about this sender or their domain, ranked against what the message actually says.
@@ -633,15 +719,6 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     return tid
 
 
-GREETING = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b', re.I)
-
-def ask_line(body: str) -> str:
-    """The line that carries the ask - never the greeting it opens with."""
-    lines = [l.strip() for l in (body or '').splitlines() if l.strip()]
-    real = [l for l in lines if not GREETING.match(l) and len(l) > 12]
-    return (real or lines or [''])[0][:120]
-
-
 def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> int:
     """Pull one message OUT of the task it was threaded onto and give it its own. Two asks
     that arrived in the same chat are one conversation but two jobs - and an agent sent at
@@ -655,9 +732,7 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
     # the ask itself is the title when the subject is just the chat's name every message
     # shares - and the ask is never the greeting line it opens with
     if parent and (parent.get('Title') or '').strip().lower() == title.strip().lower():
-        lines = [l.strip() for l in body.splitlines() if l.strip()]
-        greet = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b', re.I)
-        title = next((l for l in lines if not greet.match(l) and len(l) > 12), lines[0] if lines else title)[:120]
+        title = ask_line(body) or title
     tid = store.create_task({'Title': title, 'Summary': body[:2000],
                              'Kind': kind or (parent or {}).get('Kind') or 'coding',
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
@@ -754,6 +829,7 @@ def _fields(msg, task_id):
             # any single path sorts the whole timeline out of order (see store.norm_stamp)
             'FromEmail': msg.get('from_email'), 'SentAt': norm_stamp(msg.get('sent_at')),
             'BodyText': msg.get('body'), 'SourceLink': msg.get('source_link'), 'Status': 'routed',
+            'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None,
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)
             'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})
                               if (msg.get('to') or msg.get('cc')) else None}

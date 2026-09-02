@@ -10,6 +10,12 @@ import EventRepeatIcon from "@mui/icons-material/EventRepeat";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ViewDayIcon from "@mui/icons-material/ViewDay";
 import FunctionsIcon from "@mui/icons-material/Functions";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
+import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
+import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { streamAssistant, toolTarget } from "./assistantStream.js";
 import { wantsAsk, withoutAsk } from "./newTask.js";
@@ -99,7 +105,7 @@ const UserMessage = () => (
 );
 const AssistantMessage = () => (
   <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
-    <div className="tq-aui-role">assistant</div>
+    <div className="tq-aui-role">Taskuary</div>
     <div className="tq-aui-agent-body">
       <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: AssistantReasoning,
         tools: { Fallback: AssistantTool } }} />
@@ -107,8 +113,170 @@ const AssistantMessage = () => (
   </MessagePrimitive.Root>
 );
 
+const mentioned = (messages, kind) => {
+  const text = (messages || []).slice(-6).map(textOf).filter(Boolean).join("\n");
+  const pattern = kind === "review" ? /\brv(\d+)\b/gi : /(?:#task=|\bTQ-0*)(\d+)\b/gi;
+  const hits = [...text.matchAll(pattern)];
+  return hits.length ? Number(hits[hits.length - 1][1]) : null;
+};
+
+const reviewTarget = (r) => r.FromName && r.FromEmail ? `${r.FromName} <${r.FromEmail}>`
+  : r.FromName || r.FromEmail || r.ConversationId || "this conversation";
+const reviewDraft = (r) => {
+  if (r.Kind === "action") {
+    try {
+      const proposal = JSON.parse(r.DraftText || "");
+      if (proposal?.action === "write_playbook" && proposal.text) return proposal.text;
+    } catch { /* ordinary reply text */ }
+  }
+  return r.DraftText || "";
+};
+
+export function DockActions({ messages, expanded = false, onNavigate, onChanged }) {
+  const [reviews, setReviews] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [edits, setEdits] = useState({});
+  const [cursor, setCursor] = useState(0);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [receipt, setReceipt] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const [rv, ts] = await Promise.all([
+        api.get("/api/reviews", { params: { status: "pending" } }),
+        api.get("/api/tasks", { params: { active: 1 } }),
+      ]);
+      setReviews(rv.data.data || []);
+      setTasks((ts.data.data || []).filter((t) => !["done", "dropped"].includes(t.Status)));
+      setError("");
+    } catch (e) { setError(errText(e)); }
+  }, []);
+  useEffect(() => { load(); }, [load, messages?.length]);
+
+  const reviewId = mentioned(messages, "review");
+  const taskId = mentioned(messages, "task");
+  const ordered = useMemo(() => {
+    const focus = reviews.find((r) => r.ReviewId === reviewId)
+      || reviews.find((r) => taskId && r.TaskId === taskId);
+    return focus ? [focus, ...reviews.filter((r) => r.ReviewId !== focus.ReviewId)] : reviews;
+  }, [reviewId, reviews, taskId]);
+  useEffect(() => { setCursor(0); }, [reviewId, taskId]);
+  const focusedTask = taskId && !ordered.some((r) => r.TaskId === taskId)
+    ? tasks.find((t) => t.TaskId === taskId) : null;
+  const review = focusedTask ? null : ordered[cursor % Math.max(1, ordered.length)];
+
+  const openTask = (tid) => {
+    if (!tid) return;
+    window.location.hash = `task=${tid}`;
+    onNavigate?.("Tasks");
+  };
+  const refresh = async (message) => {
+    setReceipt(message); setCursor(0); await load(); onChanged?.();
+  };
+  const decide = async (r, verb) => {
+    const key = `review-${r.ReviewId}-${verb}`; setBusy(key); setError(""); setReceipt("");
+    try {
+      const finalText = edits[r.ReviewId] ?? reviewDraft(r);
+      const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`, {
+        verb, final_text: verb === "approve" ? finalText : null, note: null,
+      });
+      if (data.send_error) throw new Error(data.send_error);
+      const message = verb === "approve"
+        ? (r.Kind === "action" ? "Action completed." : `Sent to ${reviewTarget(r)}.`)
+        : verb === "reject" ? "Action dismissed; nothing was run." : "Dismissed; no reply was sent.";
+      setEdits((old) => { const next = { ...old }; delete next[r.ReviewId]; return next; });
+      await refresh(message);
+    } catch (e) { setError(errText(e)); }
+    finally { setBusy(""); }
+  };
+  const redraft = async (r) => {
+    const key = `review-${r.ReviewId}-redraft`; setBusy(key); setError(""); setReceipt("");
+    try {
+      const { data } = await api.post(`/api/reviews/${r.ReviewId}/draft`);
+      setReviews((old) => old.map((x) => x.ReviewId === r.ReviewId ? { ...x, DraftText: data.draft } : x));
+      setEdits((old) => { const next = { ...old }; delete next[r.ReviewId]; return next; });
+      setReceipt("Draft refreshed. Review the text, then use the action button when it is right.");
+    } catch (e) { setError(errText(e)); }
+    finally { setBusy(""); }
+  };
+  const settleTask = async (t, status) => {
+    const key = `task-${t.TaskId}-${status}`; setBusy(key); setError(""); setReceipt("");
+    try {
+      await api.patch(`/api/tasks/${t.TaskId}`, { Status: status });
+      await refresh(status === "done" ? `${t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}`} completed.`
+        : `${t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}`} dismissed.`);
+    } catch (e) { setError(errText(e)); }
+    finally { setBusy(""); }
+  };
+
+  if (!review && !focusedTask && !receipt && !error) return null;
+  return (
+    <div className={`tq-dock-actions${expanded ? " tq-dock-actions-expanded" : ""}`}>
+      <div className="tq-dock-action-kicker">
+        <span>Action</span>
+        {!!ordered.length && !focusedTask && <em>{cursor + 1} of {ordered.length}</em>}
+        <div className="tq-dock-action-nav">
+          {ordered.length > 1 && !focusedTask && <>
+            <IconButton size="small" aria-label="Previous action" onClick={() => setCursor((n) => (n - 1 + ordered.length) % ordered.length)}><ChevronLeftIcon /></IconButton>
+            <IconButton size="small" aria-label="Next action" onClick={() => setCursor((n) => (n + 1) % ordered.length)}><ChevronRightIcon /></IconButton>
+          </>}
+        </div>
+      </div>
+      {error && <Alert severity="error" onClose={() => setError("")} sx={{ mb: 0.75, py: 0 }}>{error}</Alert>}
+      {receipt && <Alert severity="success" onClose={() => setReceipt("")} sx={{ mb: review || focusedTask ? 0.75 : 0, py: 0 }}>{receipt}</Alert>}
+      {review && <>
+        <div className="tq-dock-action-head">
+          <div>
+            <b>{review.Subject || review.Title || (review.Kind === "action" ? "Proposed action" : "Reply ready")}</b>
+            <span>{review.Kind === "action" ? "Review what will run" : `To ${reviewTarget(review)}`}</span>
+          </div>
+          {review.TaskId && <Button size="small" onClick={() => openTask(review.TaskId)}>Open task</Button>}
+        </div>
+        <TextField fullWidth multiline minRows={expanded ? 3 : 2} maxRows={expanded ? 10 : 5}
+          value={edits[review.ReviewId] ?? reviewDraft(review)}
+          onChange={(e) => setEdits((old) => ({ ...old, [review.ReviewId]: e.target.value }))}
+          placeholder="No draft yet — choose Draft with AI"
+          sx={{ mt: 0.75, "& textarea": { fontSize: 12.5, lineHeight: 1.48 } }} />
+        <div className="tq-dock-action-buttons">
+          {review.Kind === "action" ? <>
+            <Button size="small" variant="contained" disabled={!!busy} startIcon={<DoneRoundedIcon />}
+              onClick={() => decide(review, "approve")}>{busy ? "Working…" : "Run action"}</Button>
+            <Button size="small" variant="outlined" color="error" disabled={!!busy} onClick={() => decide(review, "reject")}>Dismiss</Button>
+          </> : <>
+            {review.CanSend === false ? null : (
+              <Button size="small" variant="contained" disabled={!!busy || !(edits[review.ReviewId] ?? reviewDraft(review)).trim()}
+                startIcon={<SendRoundedIcon />} onClick={() => decide(review, "approve")}>
+                {busy.includes("approve") ? "Sending…" : "Approve & send"}
+              </Button>
+            )}
+            <Button size="small" variant="outlined" disabled={!!busy} startIcon={<RefreshRoundedIcon />}
+              onClick={() => redraft(review)}>{busy.includes("redraft") ? "Drafting…" : review.DraftText ? "Redraft" : "Draft with AI"}</Button>
+            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} onClick={() => decide(review, "no_reply")}>Dismiss</Button>
+          </>}
+          <Box sx={{ flex: 1 }} />
+          <Button size="small" onClick={() => onNavigate?.("Review")}>All review</Button>
+        </div>
+      </>}
+      {focusedTask && <>
+        <div className="tq-dock-action-head">
+          <div><b>{focusedTask.ref || `TQ-${String(focusedTask.TaskId).padStart(4, "0")}`} · {focusedTask.Title}</b>
+            <span>{focusedTask.Status} · {focusedTask.Priority || "normal"} priority</span></div>
+        </div>
+        <div className="tq-dock-action-buttons">
+          <Button size="small" variant="contained" onClick={() => openTask(focusedTask.TaskId)}>Open task</Button>
+          <Button size="small" variant="outlined" disabled={!!busy} startIcon={<DoneRoundedIcon />}
+            onClick={() => settleTask(focusedTask, "done")}>{busy.includes("done") ? "Completing…" : "Complete"}</Button>
+          <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }}
+            onClick={() => settleTask(focusedTask, "dropped")}>Dismiss</Button>
+        </div>
+      </>}
+    </div>
+  );
+}
+
 function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
-  dock = false, prompt, onPromptUsed, onBusyChange }) {
+  dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged }) {
   const modelAdapter = useMemo(() => ({
     async *run({ messages: runMessages, abortSignal }) {
       onBusyChange?.(true);
@@ -221,6 +389,7 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
               half-written answer is an offer to schedule something nobody has read yet - and it
               sat there through every tool call, which is where the eye goes while waiting. */}
           <ThreadPrimitive.If running={false}>
+          {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
           {!dock && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
               <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
@@ -243,7 +412,10 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
               <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
               </IconButton>
-              <ComposerPrimitive.Input className="tq-aui-input" placeholder="Tell the assistant what to do next…" />
+              <ComposerPrimitive.Input
+                className="tq-aui-input"
+                placeholder={dock ? "Tell Taskuary what to do next…" : "Tell the assistant what to do next…"}
+              />
               {/* stopping is an ACT: closing this page is not one. The button tells the server
                   to stop the run; abandoning the tab just detaches from it (server.py). */}
               <ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response"
@@ -257,7 +429,9 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
   );
 }
 
-export function GeneralWorkspace({ task, onSession, onOpenReports, compact = false, dock = false, prompt, onPromptUsed, onBusyChange }) {
+export function GeneralWorkspace({ task, onSession, onOpenReports, compact = false, dock = false,
+  dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
+  onDockNewChat }) {
   const [data, setData] = useState(null);
   const [view, setView] = useState(() => dock ? "assistant" : savedView());
   const [connectorId, setConnectorId] = useState("");
@@ -268,6 +442,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
+  const [newChatBusy, setNewChatBusy] = useState(false);
   const fileRef = useRef(null);
   const selectionRef = useRef({ connectorId: "", model: "" });
   const attachmentsRef = useRef([]);
@@ -293,7 +468,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
 
   useEffect(() => {
     let live = true;
-    setData(null); setError(""); setNotice(""); setAttachments([]);
+    setData(null); setError(""); setNotice(""); setAttachments([]); setNewChatBusy(false);
     api.post(`/api/tasks/${task.TaskId}/assistant/session`, {}).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
   }, [accept, task.TaskId]);
@@ -370,12 +545,19 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     const images = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
     if (images.length) { e.preventDefault(); upload(images); }
   };
+  const startNewChat = async () => {
+    if (!onDockNewChat || busy || newChatBusy || !shownMessages.length) return;
+    if (!window.confirm("Start a new chat? This conversation will be archived. Your tasks, reviews, and action cards will stay.")) return;
+    setNewChatBusy(true); setError("");
+    try { await onDockNewChat(); }
+    catch (e) { setError(errText(e)); setNewChatBusy(false); }
+  };
 
   if (!data && !error) return <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   const shownMessages = messagesWithTrace(data?.messages, session);
   return (
-    <Box className={dock ? "tq-aui-dock" : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
+    <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
       minHeight: 0, display: "flex", flexDirection: "column",
       ...(compact ? { height: "100%" } : { flex: "1 1 auto" }) }}>
       {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid the view buttons entirely */}
@@ -411,7 +593,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         <Select size="small" value={connectorId} displayEmpty onChange={(e) => {
           const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
           updateProvider(e.target.value, provider?.model || "");
-        }} sx={{ height: 26, minWidth: 155, maxWidth: 225, flex: 1, fontSize: 10.5, bgcolor: PANEL2 }}>
+        }} MenuProps={{ sx: { zIndex: 1600 } }}
+          sx={{ height: 26, minWidth: 155, maxWidth: 225, flex: 1, fontSize: 10.5, bgcolor: PANEL2 }}>
           {!data?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
           {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>
             {p.label}{p.type === "cli" ? " · tool-capable" : " · fast"}
@@ -420,6 +603,12 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         <TextField size="small" value={model} placeholder="default model" onChange={(e) => setModel(e.target.value)}
           onBlur={() => connectorId && updateProvider(connectorId, model)}
           sx={{ width: 118, "& input": { py: 0.5, fontSize: 10.5 } }} />
+        <Button size="small" variant="outlined" startIcon={<AddCommentOutlinedIcon sx={{ fontSize: 14 }} />}
+          disabled={busy || newChatBusy || !shownMessages.length} onClick={startNewChat}
+          title="Archive this conversation and start a fresh Taskuary chat"
+          sx={{ minWidth: 0, px: 0.8, whiteSpace: "nowrap", textTransform: "none", fontSize: 10.5 }}>
+          {newChatBusy ? "Starting…" : "New chat"}
+        </Button>
       </Box>}
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
       {notice && <Alert severity="success" onClose={() => setNotice("")} sx={{ borderRadius: 0, py: 0 }}>{notice}</Alert>}
@@ -446,7 +635,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
               onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
               attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
               onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
-              dock={dock} prompt={prompt} onPromptUsed={onPromptUsed} onBusyChange={onBusyChange} />
+              dock={dock} dockExpanded={dockExpanded} prompt={prompt} onPromptUsed={onPromptUsed}
+              onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged} />
           </SessionPane>
         ) : null}
       </Box>

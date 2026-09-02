@@ -9,7 +9,8 @@ from loguru import logger
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
-            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson')
+            'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
+            'MailMetaJson')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
@@ -117,7 +118,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
-  Direction TEXT DEFAULT 'in', RecipientsJson TEXT);
+  Direction TEXT DEFAULT 'in', RecipientsJson TEXT, MailMetaJson TEXT);
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
@@ -410,6 +411,11 @@ class SQLiteStore:
             # against them - "was this cc'd mail really mine?" had no evidence left (evalset.py)
             if 'RecipientsJson' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN RecipientsJson TEXT')
+            # Mailbox facts needed by the evening brief: which folder Graph returned the row
+            # from, Focused/Other, its follow-up flag, and whether Graph identified an invite.
+            # One JSON column keeps non-mail channels out of an Outlook-shaped schema.
+            if 'MailMetaJson' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN MailMetaJson TEXT')
             # Keep the evidence when triage answers but breaks its JSON contract. Without the
             # raw answer another machine could only report "could not read it", not why.
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
@@ -602,6 +608,17 @@ class SQLiteStore:
                                  json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 30, 'on_startup': True,
                                              'ai_prompt': ASSISTANT_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
+            # The close of the day deserves a different lens from the Morning digest: eight
+            # rolling hours of Inbox/Sent only, accomplishments first and tomorrow's top three
+            # second. It waits for its 6 pm local slot instead of greeting a morning startup.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='evening_inbox_report_seeded'").fetchone():
+                from .evening import PROMPT as EVENING_PROMPT
+                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
+                                ('report', 'End of day checkup', 'template', 1,
+                                 json.dumps({'type': 'evening_inbox', 'title': 'End of day checkup', 'hours': 8,
+                                             'daily_at': '18:00', 'once_per_day': True,
+                                             'first_run_at_schedule': True, 'ai_prompt': EVENING_PROMPT})))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('evening_inbox_report_seeded', '1', 'template')")
             # prompt heal: a Morning digest still running a SHIPPED instruction tracks the
             # current one (same deal the template docs get) - an owner-edited prompt is never touched
             from .digest import OLD_PROMPTS, PROMPT as DIGEST_PROMPT
@@ -896,6 +913,17 @@ class SQLiteStore:
     def last_inbound_in(self, conversation_id):
         return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','skipped') AND IFNULL(Direction,'in')<>'out' "
                          'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
+    def task_for_conversation(self, conversation_id, subject=None):
+        """The task this thread already belongs to - OPEN OR CLOSED. The router matches a reply
+        against open tasks only (snapshots), which is right for inbound work and wrong for the
+        owner's own reply: answer a thread the day after its task closed and the reply had
+        nowhere to land, so the chain lost the last thing said on it."""
+        if conversation_id:
+            r = self._one('SELECT TaskId FROM message WHERE ConversationId=? AND TaskId IS NOT NULL '
+                          'ORDER BY MessageId DESC LIMIT 1', (conversation_id,))
+            if r: return r['TaskId']
+        # channels without a conversation id (and mail whose References header was rewritten)
+        return next((m['TaskId'] for m in reversed(self.thread_messages(None, subject)) if m['TaskId']), None) if subject else None
     def task_last_activity(self, task_id):
         r = self._one('SELECT MAX(x) last FROM (SELECT MAX(CreatedAt) x FROM comment WHERE TaskId=? UNION ALL '
                       'SELECT MAX(SentAt) FROM message WHERE TaskId=? UNION ALL SELECT MAX(IFNULL(UpdatedAt, StartedAt)) FROM run WHERE TaskId=?)',

@@ -34,11 +34,35 @@ class DepsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'no matching distribution'):
                 deps.install('boto3')
 
-    def test_the_frozen_exe_says_so_instead_of_failing_at_pip(self):
+    def test_the_packaged_exe_installs_beside_the_owners_data(self):
+        """It used to answer "this is the packaged Taskuary.exe" and stop, which left the AWS card
+        permanently dead on the one install most people download (owner, 2026-09-02). sys.executable
+        IS Taskuary.exe there, so `-m pip` would start a second copy of the app: pip runs in this
+        process instead, into ~/.taskuary/packages, which is on sys.path from startup."""
+        seen = {}
         with mock.patch.object(deps.sys, 'frozen', True, create=True):
+            self.assertEqual(deps.can_install(), (True, ''))
+            with mock.patch.object(deps, '_pip_here',
+                                   side_effect=lambda req: (seen.update(req=req), (0, 'Successfully installed boto3'))[1]):
+                out = deps.install('boto3')
+        self.assertEqual(seen['req'], 'boto3>=1.28')
+        self.assertEqual(out['where'], str(deps.packages_dir()))
+        self.assertIn(str(deps.packages_dir()), sys.path)
+
+    def test_a_build_with_no_pip_inside_says_which_install_can(self):
+        no_pip = mock.patch.object(deps, 'installed', lambda pkg: False)
+        with mock.patch.object(deps.sys, 'frozen', True, create=True), no_pip:
             can, why = deps.can_install()
             self.assertFalse(can); self.assertIn('Taskuary.exe', why)
             with self.assertRaisesRegex(RuntimeError, 'Taskuary.exe'): deps.install('boto3')
+
+    def test_what_the_exe_ships_is_one_list_the_build_reads(self):
+        """deps.BUNDLE and taskuary.spec drifting apart is a build that silently ships dead cards."""
+        from pathlib import Path
+        self.assertTrue(set(deps.BUNDLE) <= set(deps.OPTIONAL))
+        spec = (Path(__file__).resolve().parent.parent / 'taskuary.spec').read_text(encoding='utf-8')
+        self.assertIn('from taskuary.deps import BUNDLE', spec)
+        self.assertIn('*BUNDLE', spec)
 
     def test_the_owner_may_install_and_an_agent_may_not(self):
         self.assertTrue(guard.denied('POST', '/api/deps/install'))

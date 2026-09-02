@@ -212,7 +212,11 @@ def dock_snapshot(store) -> str:
     if not reviews: lines.append('- Nothing is waiting in Review.')
     for r in reviews:
         ref = task_ref(r['TaskId']) if r.get('TaskId') else f"message {r.get('MessageId')}"
-        lines.append(f"- {ref} | {r.get('Kind') or 'review'} | {one_line(r.get('Title') or r.get('Subject'))} | from {one_line(r.get('FromName') or r.get('FromEmail') or r.get('Channel'), 100)}")
+        lines.append(f"- rv{r.get('ReviewId')} | {ref} | {r.get('Kind') or 'review'} | "
+                     f"{one_line(r.get('Title') or r.get('Subject'))} | "
+                     f"from {one_line(r.get('FromName') or r.get('FromEmail') or r.get('Channel'), 100)}")
+        if r.get('DraftText'):
+            lines.append(f"  Draft ready: {one_line(r.get('DraftText'), 700)}")
 
     lines.append('\nRECENT TIMELINE')
     if not recent: lines.append('- The Timeline is empty in the current lookback window.')
@@ -300,6 +304,13 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             "When you mention a task, link it as [TQ-0001](#task=1), using its real id. The buttons above "
             "the chat open Timeline, Tasks, and Review. You may explain or perform actions only through "
             "tools you actually have; approval and sending remain the owner's actions.\n\n"
+            "ACTION SURFACE\nThe chat renders a separate action card beneath your commentary for the "
+            "pending review or task you name. Treat that card as part of this workspace. When a reply is "
+            "ready, say that its exact text is in the action card, where the owner can edit it and press "
+            "Approve & send, Redraft, or Dismiss. When a task is the subject, the card offers Open, Complete, "
+            "or Dismiss. Never present a bare word such as 'send' as though it executed anything, never claim "
+            "an action happened until the refreshed workspace says it did, and never bury an executable choice "
+            "inside prose. Commentary explains; the clearly labelled owner button acts.\n\n"
             "WALKTHROUGH MODE\nWhen the owner asks to walk through everything, needs-attention work, "
             "email, tasks, reviews, or agent output, run a turn-by-turn review. On each response: "
             "cover exactly ONE unresolved item; give the concrete context and your recommended action; "

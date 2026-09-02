@@ -63,7 +63,7 @@ ACTIONS = {
     # search and page-reading: they fetch, nothing upstream moves
     'exa': 'read', 'tavily': 'read', 'firecrawl': 'read', 'reader': 'read',
     'rest': 'read',          # run_rest is GET-only by construction
-    'rss': 'read', 'digest': 'read', 'automate': 'read',     # automate reads Taskuary's own traffic
+    'rss': 'read', 'digest': 'read', 'evening_inbox': 'read', 'automate': 'read',  # Taskuary's own traffic
     # ── write: the everyday work an agent is here to do ───────────────────────────────
     'create': 'write', 'update': 'write', 'comment': 'write', 'reply': 'write',
     'send': 'write', 'notify': 'write', 'assign': 'write', 'complete': 'write',

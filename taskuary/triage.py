@@ -55,6 +55,12 @@ INTENT_SYSTEM = (
     'ask is not aimed at you specifically, prefer fyi. Weigh it, do not obey it - a question that names '
     'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
     'fields mean nobody else has spoken, which is not evidence either way.\n'
+    'exchange is the recent back-and-forth in this chat room, oldest first, with the owner\'s own lines '
+    'marked "you" - a chat line quotes nothing, so it is the only way to know what a bare "nope, new one" '
+    'is answering. It is CONTEXT: judge the message in body and nothing else. A line that answers something '
+    'the owner asked in the exchange is a round trip, not a new job. A line opening a subject the exchange '
+    'has not touched is a new ask on its own merits, however the earlier lines were classified. Being about '
+    'the same system or person is not the same ask: two bugs in one app are two jobs.\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '
     'is no substitute for either.')
@@ -301,3 +307,57 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
         raw = raw[:8000] + '\n… [triage output truncated at 8,000 characters]'
     return {**out, 'degraded': True, 'raw_output': raw,
             'parse_error': (parse_error or 'the response was not a usable verdict')[:1000]}
+
+
+# ── one chat, several jobs ───────────────────────────────────────────────────────────────
+# A chat room is not a topic. Mail threads itself - a reply carries the References header and
+# belongs to what came before it by construction - but teams:<chat> and whatsapp:<jid> are a
+# ROOM, and everything anyone ever says in it shares one id. Routing read that id as "the same
+# thread" (routing.WEIGHTS: thread=1.0 clears the attach bar alone), so eleven lines from one
+# person over an hour - four different problems and a screenshot - became ONE task carrying one
+# prompt, and an agent sent at it only ever saw the first ask (owner, 2026-09-02).
+#
+# Nothing mechanical can split that. A gap in minutes cannot tell "let me rephrase that" from
+# "Also, separate thing:", and neither can a keyword - "also" opens both. What CAN tell is a
+# reader, so the reader decides, on the one question that matters, with the exchange in front of
+# it: the lines they sent AND the answers we sent back, in order, because a reply of ours is the
+# clearest boundary there is.
+SAME_ASK_SYSTEM = (
+    'A chat is one room where several separate jobs get asked for. You are given TASK (the piece of '
+    'work already open), EXCHANGE (what was said on it, theirs and ours, oldest first) and NEW (the '
+    'line that just arrived). Answer ONE question: is NEW part of the ask already open, or the start '
+    'of a different one?\n'
+    'Answer JSON only: {"same": true|false, "why": "<one short clause, 12 words max>"}.\n'
+    'SAME when it continues, finishes, corrects, narrows or adds detail to what the exchange is '
+    'about - people type in fragments, and a thought finished in the next message is one thought. '
+    'A screenshot or a file sent right after describing something is part of it.\n'
+    'SAME, always, when it answers something WE asked in the exchange - a round trip is not a new job.\n'
+    'NEW when it turns to a different subject, however politely it is introduced. "Also...", "One more '
+    'thing", "By the way", "Separately", "Different question" almost always open a new one. So does any '
+    'line that would make complete sense to somebody who had never read the exchange: if it needs no '
+    'context, it is not carrying any.\n'
+    'A reply from us in between is a strong boundary - the ask it answered is finished unless NEW '
+    'plainly pushes back on that answer.\n'
+    'Being about the same SYSTEM, product or person is not enough to be the same ask: two bugs in one '
+    'app are two jobs. When it is genuinely 50/50, answer false - two tasks the owner merges cost less '
+    'than one task an agent half-reads.'
+)
+
+
+def same_ask(task_title: str, exchange: list, new: str, llm=None) -> dict:
+    """Does this new chat line belong on the task the room already has open?
+
+    {'same': bool, 'why': str, 'asked': bool} - `asked` is False when nothing was asked of a
+    model (no llm, or it failed), so the caller can say which decided. Undecidable falls to
+    SAME: attaching keeps the conversation whole, and the owner can split it in one click
+    (ingest.split_message), which is the cheaper mistake of the two to be wrong in."""
+    if not llm: return {'same': True, 'why': 'no brain to judge it - kept on the open task', 'asked': False}
+    try:
+        user = json.dumps({'task': (task_title or '')[:200], 'exchange': [str(l)[:400] for l in exchange][-12:],
+                           'new': str(new or '')[:1500]})
+        j = json.loads(re.sub(r'^```(json)?|```$', '', str(llm(SAME_ASK_SYSTEM, user) or '').strip(), flags=re.M))
+        if isinstance(j.get('same'), bool):
+            return {'same': j['same'], 'why': str(j.get('why') or '')[:120], 'asked': True}
+        return {'same': True, 'why': 'the answer was not a verdict - kept on the open task', 'asked': False}
+    except Exception as e:
+        return {'same': True, 'why': f'could not be judged ({type(e).__name__}) - kept on the open task', 'asked': False}

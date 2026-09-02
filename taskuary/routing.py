@@ -36,6 +36,17 @@ def subject_topic(s, min_words=2):
         if len(tokens(cand)) >= min_words: return cand[:200]
     return ''
 
+# the channels where a conversation id names a ROOM and not a topic (store.CHAT_CHANNELS is the
+# same set; this module stays pure, so it keeps its own copy rather than importing the store)
+CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage'}
+GREETING = re.compile(r'^(hi|hello|hey|dear|good (morning|afternoon|evening))\b', re.I)
+
+def ask_line(body: str) -> str:
+    """The line that carries the ask - never the greeting it opens with."""
+    lines = [l.strip() for l in (body or '').splitlines() if l.strip()]
+    real = [l for l in lines if not GREETING.match(l) and len(l) > 12]
+    return (real or lines or [''])[0][:120]
+
 def cosine(a, b):
     """Cosine similarity between two token lists (term-count vectors)."""
     ca,cb = Counter(a),Counter(b)
@@ -135,6 +146,10 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     WHO is writing, so it lives in an escalate policy they can read and edit."""
     subj = norm_subject(msg.get('subject')) or (msg.get('body') or '')[:80] or 'untitled'
     body = (msg.get('body') or '').strip()
+    # A CHAT's "subject" is the ROOM - "Teams chat with Priya", the WhatsApp group's name - which
+    # every line in it shares, so titling tasks with it produced a board of identical rows naming
+    # a person instead of a job. What the message ASKS is the title there.
+    if str(msg.get('channel') or '').lower() in CHAT_CHANNELS: subj = ask_line(body) or subj
     head = subj + '\n' + body[:2000]           # a trace usually sits below the pleasantries
     low = head.lower()
     # the last branch used to be 'general', back when general MEANT the owner's list. It means

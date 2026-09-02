@@ -70,7 +70,7 @@ def state(store) -> dict:
     # 'coder' is a SHIPPED default (config.py seeds it, assuming the claude CLI is on your PATH),
     # so "an agent row exists" proves nothing about this machine. A finished RUN does.
     ran = [r for t in store.list_tasks() for r in store.list_runs(t['TaskId']) if r.get('FinishedAt')]
-    # and the three seeded reports (Morning digest, Automation ideas, the Assistant) file their
+    # and the four seeded reports (Morning digest, End of day checkup, Automation ideas, the Assistant) file their
     # own rows on first start, so "something is in the timeline" was true before a single
     # message had ever been read
     inbox = [m for m in store.feed(limit=5, days=3650) if m.get('Channel') != 'report']

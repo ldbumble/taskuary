@@ -209,17 +209,17 @@ def on_stop(store, term, said: str = '') -> dict:
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     store.add_comment(tid, getattr(term, 'agent', None) or 'agent', 'agent',
                       f'The session stopped and read as finished, so it closed itself: {v["why"]}')
-    return _wrap(store, tid, getattr(term, 'agent', None) or 'coder', v['why'])
+    return _wrap(store, tid, getattr(term, 'agent', None) or 'coder', v['why'], said)
 
 
-def _wrap(store, tid: int, agent: str, why: str) -> dict:
+def _wrap(store, tid: int, agent: str, why: str, final_message: str = '') -> dict:
     """The same ending the Done button gets. A failure here must not take the hook (or the CLI)
     with it, and it must not leave the task looking closed when it is not - so the mark is
     dropped and the reason is written where the owner reads it."""
     from . import coder
     from .store import task_ref
     try:
-        out = coder.wrap(store, tid, close=True, actor=agent or 'coder')
+        out = coder.wrap(store, tid, close=True, actor=agent or 'coder', final_message=final_message)
     except Exception as e:
         forget(tid)
         logger.warning(f'self-close failed for task {tid}: {e}')

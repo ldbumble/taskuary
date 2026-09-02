@@ -57,6 +57,14 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(w.snapshot([], '', '')['rung'], 'files')
         self.assertEqual(w.snapshot([], '', 'some screen line')['rung'], 'line')
 
+    def test_full_final_response_is_retained_while_the_card_stays_short(self):
+        w = witness.Witness()
+        final = '\n'.join(f'{n}. completed item {n} with details' for n in range(1, 9)) + (' x' * 300)
+        for note in witness.claude_notes({'hook_event_name': 'Stop', 'last_assistant_message': final}):
+            w.note(note)
+        self.assertEqual(w.said, final)
+        self.assertEqual(len(w.snapshot([], '', '')['said']), 300)
+
 
 class HookWiringTests(unittest.TestCase):
     def setUp(self): self._keep = dict(term.SESSIONS); term.SESSIONS.clear()

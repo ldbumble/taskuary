@@ -293,6 +293,45 @@ def sent_history(store, days: int, cap: int = 300, progress=None) -> list:
     return sorted(out, key=lambda m: m.get('sent_at') or '')
 
 
+def poll_sent(store, M, user: str, last_uid: int, days: int) -> tuple:
+    """The replies the owner wrote in Outlook, Gmail's web UI, their phone - anywhere but here.
+
+    Graph's mailbox has read them since the beginning (channels.ingest_outbound_mail); an IMAP
+    one never did, so on those installs a mail answered in the mailbox stayed "on your list"
+    with nothing on the thread to say otherwise. Same ride as Graph's: a `context` row on the
+    thread, never work, never a timeline row of its own. Its own watermark - the Sent folder is
+    a separate UID space from INBOX, and sharing one would skip whole days of either.
+
+    Returns (ingested, new watermark)."""
+    from .channels import ingest_own_message
+    box = sent_folder(M)
+    if not box: return 0, last_uid
+    typ, _d = M.select(_quoted(box), readonly=True)
+    if typ != 'OK': return 0, last_uid
+    since = (datetime.now() - timedelta(days=max(1, days))).strftime('%d-%b-%Y')
+    typ, data = M.uid('search', None, f'(SINCE {since})')
+    if typ != 'OK': return 0, last_uid
+    uids = [u for u in sorted(int(x) for x in (data[0] or b'').split()) if u > last_uid][-BATCH:]
+    n = 0
+    for uid in uids:
+        try:
+            typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+            if typ != 'OK' or not parts or parts[0] is None: continue
+            msg = email.message_from_bytes(parts[0][1])
+            body, _atts = _body_and_attachments(msg)
+            try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+            except Exception: when = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            n += ingest_own_message(store, {
+                'external_id': f'imap-sent:{user}:{uid}', 'channel': 'email', 'source_name': user,
+                'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
+                # the SAME thread key the inbound side derives, or the reply lands on nothing
+                'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None},
+                'your reply on this thread - kept for context')
+        except Exception as e:
+            logger.warning(f'imap {user} sent uid {uid} skipped: {e}')
+    return n, (max(uids) if uids else last_uid)
+
+
 def ensure_source(store, c) -> bool:
     """Give an IMAP/Gmail card the source row the poller reads it through, if it has none. True
     when one was just made. The mailbox address IS the source name and it is already saved on the
@@ -357,8 +396,15 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                 # the loop and left the watermark behind it, so the same message failed every poll and
                 # nothing after it was ever read. Step over it, say so, and let the watermark move
                 logger.warning(f'imap {user} uid {uid} skipped: {e}')
-        if new:
-            store.set_connector_config(c['ConnectorId'], {**cfg, 'imap_uid': max(new)})
+        # ...and the other half of the conversation: what the owner sent from the mailbox itself
+        sent_uid = int(cfg.get('imap_sent_uid') or 0)
+        try: got, sent_uid = poll_sent(store, M, user, sent_uid, max(backfill_days, 1))
+        except Exception as e:
+            got = 0
+            logger.warning(f'imap: could not read {user} sent mail - {e}')
+        n += got
+        moved = {k: v for k, v in (('imap_uid', max(new) if new else None), ('imap_sent_uid', sent_uid or None)) if v}
+        if moved: store.set_connector_config(c['ConnectorId'], {**cfg, **moved})
     finally:
         M.logout()
     return n

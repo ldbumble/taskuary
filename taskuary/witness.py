@@ -50,9 +50,9 @@ class Witness:
                 f = self.files.setdefault(n['path'], {'n': 0, 'first': at, 'last': at})
                 f['n'] += 1; f['last'] = at
             elif k == 'todos': self.todos = [{'text': str(t.get('text') or '')[:140], 'status': _STATUS.get(str(t.get('status') or 'todo').lower(), 'todo')} for t in (n.get('items') or [])][:40]
-            elif k == 'done': self.done_at = at; self.said = str(n.get('text') or self.said or '')[:300]
+            elif k == 'done': self.done_at = at; self.said = str(n.get('text') or self.said or '')
             elif k == 'turn': self.done_at = None            # a new prompt: writes from here are not "after done"
-            elif k == 'say': self.said = str(n.get('text') or '')[:300]
+            elif k == 'say': self.said = str(n.get('text') or '')
             if n.get('source'): self.source = n['source']
 
     def snapshot(self, git_files=None, cwd: str = '', last_line: str = '') -> dict:
@@ -83,7 +83,7 @@ class Witness:
                 if r['stray'] and not r['late']: flags.append({'level': 'note', 'text': f"{r['path'].rsplit('/', 1)[-1]} touched but not in the list"})
         rung = 'tool' if tool else 'line' if last_line else 'files'
         return {'source': source, 'rung': rung, 'tool': tool, 'todos': todos, 'files': rows[:30], 'done_at': done_at,
-                'said': said, 'last_line': (last_line or '')[:200], 'flags': flags[:3],
+                'said': said[:300], 'last_line': (last_line or '')[:200], 'flags': flags[:3],
                 'n_done': sum(t['status'] == 'done' for t in todos), 'n_todos': len(todos)}
 
 
@@ -100,7 +100,7 @@ def claude_notes(p: dict) -> list:
         if name == 'TodoWrite':
             out.append({'k': 'todos', 'items': [{'text': t.get('content') or t.get('activeForm') or '', 'status': t.get('status')} for t in (inp.get('todos') or []) if isinstance(t, dict)], 'at': at})
         return out
-    if ev == 'Stop': return [{'k': 'done', 'text': str(p.get('last_assistant_message') or '').strip()[-300:], 'at': at, 'source': 'hook'}]
+    if ev == 'Stop': return [{'k': 'done', 'text': str(p.get('last_assistant_message') or '').strip(), 'at': at, 'source': 'hook'}]
     if ev == 'UserPromptSubmit': return [{'k': 'turn', 'at': at, 'source': 'hook'}]
     return []
 
@@ -143,7 +143,7 @@ def codex_notes(j: dict) -> list:
         if pt == 'patch_apply_end':
             return [{'k': 'file', 'path': x, 'at': at} for x in (p.get('changes') or {}).keys()]
         if pt == 'task_started': return [{'k': 'turn', 'at': at, 'source': 'rollout'}]
-        if pt == 'task_complete': return [{'k': 'done', 'text': str(p.get('last_agent_message') or '').strip()[-300:], 'at': at, 'source': 'rollout'}]
+        if pt == 'task_complete': return [{'k': 'done', 'text': str(p.get('last_agent_message') or '').strip(), 'at': at, 'source': 'rollout'}]
         items = _plan_items(p)
         if items: return [{'k': 'todos', 'items': items, 'at': at, 'source': 'rollout'}]
     if t == 'response_item' and p.get('type') == 'custom_tool_call' and p.get('name') == 'exec':

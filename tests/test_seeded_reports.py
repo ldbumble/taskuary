@@ -1,7 +1,8 @@
 """What a fresh install already has running.
 
-Three reports ship: the Morning digest (an AI pass over the hub's own data), the Assistant (a
-voice on the Timeline) and Automation ideas (the weekly 'what should you automate next' brief).
+Four reports ship: the Morning digest (an AI pass over the hub's own data), the end-of-day Inbox
+checkup, the Assistant (a voice on the Timeline) and Automation ideas (the weekly 'what should
+you automate next' brief).
 Each is a real report - prompt on the Reports tab, deleting the row is the off switch, and a
 sentinel setting keeps a deletion deleted across restarts.
 
@@ -27,17 +28,24 @@ def _ago(days):
 
 
 class WhatShipsTests(unittest.TestCase):
-    def test_the_three_shipped_reports_are_there_and_active(self):
+    def test_the_four_shipped_reports_are_there_and_active(self):
         got = _reports(MemoryStore())
-        self.assertEqual(sorted(got), ['Assistant', 'Automation ideas', 'Morning digest'])
-        self.assertEqual([got[n]['type'] for n in ('Morning digest', 'Automation ideas', 'Assistant')],
-                         ['digest', 'automate', 'assistant'])
+        self.assertEqual(sorted(got), ['Assistant', 'Automation ideas', 'End of day checkup', 'Morning digest'])
+        self.assertEqual([got[n]['type'] for n in ('Morning digest', 'End of day checkup', 'Automation ideas', 'Assistant')],
+                         ['digest', 'evening_inbox', 'automate', 'assistant'])
 
-    def test_all_three_have_something_to_say_the_moment_the_app_opens(self):
-        """The tab is worth opening on day one only if every shipped report has filed."""
+    def test_the_three_startup_reports_have_something_to_say_the_moment_the_app_opens(self):
+        """The evening ritual alone waits for evening; the other shipped reports greet launch."""
         got = _reports(MemoryStore())
         for name in ('Morning digest', 'Automation ideas', 'Assistant'):
             self.assertTrue(is_due(got[name], None, startup=True), name)
+
+    def test_the_evening_checkup_is_eight_hours_at_six_and_waits_for_its_first_slot(self):
+        cfg = _reports(MemoryStore())['End of day checkup']
+        self.assertEqual((cfg['hours'], cfg['daily_at'], cfg['once_per_day']), (8, '18:00', True))
+        self.assertTrue(cfg['first_run_at_schedule'])
+        self.assertIn('Top 3 things to focus on tomorrow', cfg['ai_prompt'])
+        self.assertIn('Focused and Other', cfg['ai_prompt'])
 
     def test_automation_ideas_keeps_its_monday_clock(self):
         cfg = _reports(MemoryStore())['Automation ideas']

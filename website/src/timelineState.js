@@ -98,6 +98,9 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
     case "mine":    bits.push("your own note — nothing is working it"); break;
     case "todo":    bits.push("nobody is on this yet"); break;
     case "done":    bits.push(row.ReviewStatus === "sent" ? "closed — reply sent" : "closed"); break;
+    // where you answered it, not just that you did: the owner checks this against their own
+    // memory of sending it, and "you answered" alone gives them nothing to check
+    case "answered": bits.push(`you replied ${row.Channel === "email" ? "from your mailbox" : `in ${row.Channel}`}`); break;
     default:        if (row.RouteReason) bits.push(String(row.RouteReason).replace(/^triage:\s*/, ""));
   }
   return bits.join(" · ");

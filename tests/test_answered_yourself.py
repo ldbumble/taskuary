@@ -87,5 +87,56 @@ class AnsweringItYourself(unittest.TestCase):
         self.assertIsNone(_row(s, mid)['AnsweredAt'])
 
 
+class TheReplyHasToSurviveTheTrip(unittest.TestCase):
+    """...which it did not. Reading the Sent folder was only ever half of it: the reply was then
+    matched against OPEN tasks and DROPPED when none claimed it. So the two commonest endings -
+    you answer a mail Taskuary filed with no task, and you answer a thread whose task closed -
+    stored nothing at all, and the row went on saying nothing had happened (owner, 2026-09-02).
+    """
+    def _sent(self, conv='c9', i='sm1', body='March thru June attached.'):
+        return {'id': i, 'subject': 'RE: Financial request', 'conversationId': conv,
+                'bodyPreview': body, 'sentDateTime': '2026-08-17T15:00:00Z'}
+
+    def _inbound(self, s, conv='c9', status='filed'):
+        return s.add_message({'ExternalId': 'in1', 'ConversationId': conv, 'Channel': 'email',
+                              'SourceName': 'me@x.com', 'Subject': 'Financial request', 'FromName': 'Client',
+                              'FromEmail': 'client@y.com', 'SentAt': '2026-08-16 08:00:00',
+                              'BodyText': 'send March thru June', 'Status': status})
+
+    def test_a_mail_with_no_task_still_learns_that_you_answered_it(self):
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = self._inbound(s)
+        ingest_outbound_mail(s, 'me@x.com', self._sent())
+        # the stamp is the sent mail's own, in local time - the point is that there IS one
+        self.assertEqual(_row(s, mid)['AnsweredAt'], s.thread_messages('c9')[-1]['SentAt'])
+
+    def test_a_reply_after_the_task_closed_lands_on_that_task(self):
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = self._inbound(s, status='routed')
+        tid = s.create_task({'Title': 'Financial request', 'Kind': 'task', 'Status': 'open'}, 'o')
+        s.attach_message(mid, tid)
+        s.update_task(tid, {'Status': 'done'}, 'o')
+        ingest_outbound_mail(s, 'me@x.com', self._sent())
+        self.assertEqual([m['FromName'] for m in s.list_messages(tid)], ['Client', 'You'])
+        self.assertTrue(any('You replied from your mailbox' in c['Body'] for c in s.list_comments(tid)))
+
+    def test_taskuarys_own_send_coming_back_is_not_a_second_reply(self):
+        """The Sent folder hands back what we sent ourselves. The timeline already says 'Sent by
+        email to...'; a 'You replied' under it read as the owner having answered twice."""
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = self._inbound(s, status='routed')
+        tid = s.create_task({'Title': 'Financial request', 'Kind': 'task', 'Status': 'open'}, 'o')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending',
+                            'DraftText': 'March thru June attached.'})
+        s.decide_review(rid, 'sent', 'March thru June attached.', 'o')
+        ingest_outbound_mail(s, 'me@x.com', self._sent())
+        self.assertEqual(len(s.list_messages(tid)), 2)                        # still on the thread
+        self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
+
+
 if __name__ == '__main__':
     unittest.main()

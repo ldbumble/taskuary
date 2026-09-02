@@ -214,6 +214,46 @@ class TheSourceRowHealsItself(unittest.TestCase):
         self.assertEqual(setup._inbound(s), ['Work'])
 
 
+def reply_raw(uid_body, ref='<orig@them>', date='Mon, 01 Sep 2026 11:00:00 +0000'):
+    return ('Subject: RE: the report\r\nFrom: uri@example.com\r\nTo: dana@vendor.com\r\n'
+            'Date: %s\r\nMessage-ID: <r%s@us>\r\nReferences: %s\r\nContent-Type: text/plain\r\n\r\n%s'
+            % (date, abs(hash(uid_body)) % 999, ref, uid_body)).encode()
+
+
+class ReplyingFromOutlookNotFromHere(unittest.TestCase):
+    """An IMAP mailbox never had its Sent folder POLLED - only read on demand for the style
+    document. So the owner answered a mail in their mail client and the row here went on saying
+    nothing had happened, which is the one thing the Timeline must never do."""
+
+    def _inbound(self, s):
+        return s.add_message({'ExternalId': 'in1', 'ConversationId': '<orig@them>', 'Channel': 'email',
+                              'SourceName': 'uri@example.com', 'Subject': 'the report', 'FromName': 'Dana',
+                              'FromEmail': 'dana@vendor.com', 'SentAt': '2026-09-01 06:00:00',
+                              'BodyText': 'where is it?', 'Status': 'filed'})
+
+    def test_your_reply_lands_on_the_thread_it_answers(self):
+        s = MemoryStore()
+        mid = self._inbound(s)
+        M = FakeImap(LIST_PLAIN, [reply_raw('going out today.')])
+        n, uid = imapmail.poll_sent(s, M, 'uri@example.com', 0, 7)
+        self.assertEqual((n, uid), (1, 1))
+        self.assertEqual(M.selected, 'INBOX.Sent')
+        self.assertTrue(M.readonly)                        # the owner's outbox is never written to
+        row = {r['MessageId']: r for r in s.feed(limit=50)}[mid]
+        self.assertIsNotNone(row['AnsweredAt'])            # ...and the Timeline says so
+        self.assertEqual([m['Status'] for m in s.thread_messages('<orig@them>')], ['filed', 'context'])
+
+    def test_the_watermark_means_a_second_poll_reads_nothing_twice(self):
+        s = MemoryStore()
+        self._inbound(s)
+        M = FakeImap(LIST_PLAIN, [reply_raw('going out today.')])
+        _n, uid = imapmail.poll_sent(s, M, 'uri@example.com', 0, 7)
+        self.assertEqual(imapmail.poll_sent(s, M, 'uri@example.com', uid, 7), (0, uid))
+
+    def test_a_mailbox_with_no_sent_folder_is_not_an_error(self):
+        self.assertEqual(imapmail.poll_sent(MemoryStore(), FakeImap(LIST_NONE), 'uri@example.com', 0, 7), (0, 0))
+
+
 class ChildProcessesOpenNoWindow(unittest.TestCase):
     """The exe is built with console=False, so on Windows every child it starts gets a brand new
     console - a terminal window that opens by itself. Launched from a terminal the child inherits

@@ -754,6 +754,31 @@ class CoreTests(unittest.TestCase):
         self.assertIn('fixed the date parse', seen['user'])            # the report is the source of truth
         self.assertIn('FINISHED', seen['system'])                      # ...and it reports, never promises
 
+    def test_finished_reply_uses_the_complete_eight_item_result(self):
+        """The task card's compact report must not become a lossy reply source. A real session
+        answered eight separate issues; all eight have to reach the responder with room to write."""
+        from unittest import mock
+        from taskuary import coder, responder
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Review all eight import issues', 'Kind': 'coding'}, 'o')
+        s.add_message({'TaskId': tid, 'ExternalId': 'eight-1', 'Channel': 'email',
+                       'Subject': 'Eight import issues', 'FromName': 'Gitty',
+                       'FromEmail': 'gitty@client.example', 'SentAt': '2026-09-02 10:00',
+                       'BodyText': '\n'.join(f'{n}. Please check issue {n}.' for n in range(1, 9))})
+        final = '\n'.join(f'{n}. Issue {n}: completed with result {n}.' for n in range(1, 9))
+        seen = {}
+        def fake_llm(system, user, **kw):
+            seen.update(system=system, user=user, tokens=kw.get('max_tokens'))
+            return final
+        compact = {'summary': 'Issue 1 was checked.', 'determination': '', 'actions': ''}
+        with mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
+            coder.finish(s, tid, compact, complete_result=coder.reply_source('ignored', final))
+        for n in range(1, 9):
+            self.assertIn(f'Issue {n}: completed with result {n}.', seen['user'])
+        self.assertIn('EVERY distinct question', seen['system'])
+        self.assertNotIn('under 60 words', seen['system'])
+        self.assertEqual(seen['tokens'], responder.COMPLETE_REPLY_TOKENS)
+
     def test_finishing_with_nobody_to_reply_to_just_closes(self):
         from taskuary.coder import finish
         s = MemoryStore()

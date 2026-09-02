@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taskuary"
-version = "0.3.2.11"
+version = "0.3.2.12"
 description = "Automate your job - the local-first operating system for your work: AI triage in, coding agents out."
 readme = "README.md"
 license = { text = "MIT" }
@@ -42,6 +42,11 @@ aws = ["boto3>=1.28"]       # azure needs no extra: tokens ride plain requests
 voice = ["faster-whisper>=1.0"]   # Local Whisper: speech to text on this machine, no key, audio never leaves the box
 desktop = ["pywebview>=4"]
 build = ["pyinstaller>=6"]
+# what the DESKTOP EXE ships (taskuary.spec reads deps.BUNDLE and collects each one). A packaged
+# build has no Python to install into afterwards, so the cards that need these must simply work
+# on arrival - `pip install .[desktop,build,bundle]` before pyinstaller, or they ship dead.
+bundle = ["boto3>=1.28", "pyodbc>=4", "sqlalchemy>=2", "psycopg2-binary", "pymysql", "openpyxl>=3", "pypdf"]
+docs = ["pypdf"]            # reading .pdf into the knowledge base
 dev = ["pytest>=7", "httpx>=0.24", "openpyxl>=3"]   # openpyxl READS xlsx in tests; the writer is ours
 
 [project.urls]

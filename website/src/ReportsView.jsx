@@ -62,6 +62,7 @@ const FIELDS = {
   // The Assistant silently pulls selected saved report pipelines; its prompt judges all of
   // those current views together. The selector itself lives in ReportWizard below.
   assistant: [],
+  evening_inbox: [["hours back", "hours", "text", "8"], AI_FIELD],
   // the window starts at MIDNIGHT that many days back: 1 = all of yesterday plus today so far
   digest: [["days back (1 = all of yesterday + today so far; counted from midnight)", "days", "text", "1"], AI_FIELD],
   prometheus: [["PromQL query", "query", "multiline", 'up == 0   ·   sum(rate(http_requests_total[5m])) by (service)'], AI_FIELD],
@@ -167,7 +168,7 @@ const TYPE_LABELS = {
   quickbooks: "QuickBooks Online", quickbooks_vendors: "QuickBooks \u2014 vendors", quickbooks_accounts: "QuickBooks \u2014 chart of accounts",
   teller_transactions: "Bank & card \u2014 transactions", teller_accounts: "Bank & card \u2014 accounts", teller_balances: "Bank & card \u2014 balances",
   metric: "A certified number (Assistant \u2192 Numbers)", metric_check: "Re-prove the certified numbers",
-  digest: "Taskuary digest", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline (its voice: COUNSEL.md, Docs tab)",
+  digest: "Taskuary digest", evening_inbox: "End-of-day Inbox brief", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline (its voice: COUNSEL.md, Docs tab)",
   agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
   google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",
@@ -213,7 +214,7 @@ const TYPE_GROUPS = [
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],
   ["Windows", ["winrm"]],
-  ["Taskuary's own data", ["digest", "automate", "assistant"]],
+  ["Taskuary's own data", ["digest", "evening_inbox", "automate", "assistant"]],
 ];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",

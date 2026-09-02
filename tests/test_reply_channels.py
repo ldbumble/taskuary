@@ -95,6 +95,21 @@ class WrapEndpointTests(unittest.TestCase):
     def test_email_wrap_does_promise_one(self):
         self.assertTrue(self._wrap('email')['drafting'])
 
+    def test_email_wrap_drafts_from_the_full_final_response(self):
+        s = MemoryStore(); tid, _ = task_with(s, 'email')
+        final = '\n'.join(f'{n}. Complete answer for requested item {n}.' for n in range(1, 9))
+        compact = {'summary': 'Only item 1 fits on the card.', 'determination': '', 'actions': ''}
+        from taskuary import terminal
+        with mock.patch.object(terminal, 'session_for', return_value=None), \
+             mock.patch.object(terminal, 'transcript_for', return_value=('full transcript', 'claude', None)), \
+             mock.patch.object(coder, 'report_from_transcript', return_value=compact), \
+             mock.patch('taskuary.responder.write_draft', return_value='draft') as write:
+            coder.wrap(s, tid, close=True, actor='owner', final_message=final)
+        source = write.call_args.args[3]
+        self.assertNotIn('Only item 1 fits on the card.', source)
+        for n in range(1, 9):
+            self.assertIn(f'Complete answer for requested item {n}.', source)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -400,11 +400,14 @@ class OutboundMailTests(unittest.TestCase):
         return {'id': i, 'subject': 'RE: Financial Request', 'conversationId': conv,
                 'bodyPreview': 'March thru June attached.', 'sentDateTime': '2026-08-17T15:00:00Z'}
 
-    def test_sent_mail_without_chain_is_skipped(self):
+    def test_sent_mail_without_chain_is_kept_but_makes_no_work(self):
+        """Nobody has a task for it yet - and it is still the record that you answered. It is
+        kept as a context row: no task, no timeline row of its own, ready for the thread."""
         from taskuary.channels import ingest_outbound_mail
         s = MemoryStore()
-        self.assertEqual(ingest_outbound_mail(s, 'me@x.com', self._sent()), 0)
+        self.assertEqual(ingest_outbound_mail(s, 'me@x.com', self._sent(conv='c1')), 1)
         self.assertEqual(s.feed(), []); self.assertEqual(s.list_tasks(), [])
+        self.assertEqual([m['Status'] for m in s.thread_messages('c1')], ['context'])
 
     def test_sent_mail_attaches_to_conversation_task(self):
         from taskuary.channels import ingest_outbound_mail

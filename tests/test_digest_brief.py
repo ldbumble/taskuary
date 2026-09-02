@@ -77,6 +77,32 @@ class BriefVoiceTests(unittest.TestCase):
         self.assertIn('how I speak up', seen['system'])
 
 
+class BriefMemoryTests(unittest.TestCase):
+    def test_an_applicable_standing_verdict_governs_the_digest(self):
+        s = _store()
+        _mail(s, DANA, 'Resident Refund Request - Watson, Lisa',
+              'The resident refund is still awaiting facility approval.', days=0, conv='refund')
+        s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
+                      'Note': 'Resident refunds are handled by facility staff; do not raise them to Uri.',
+                      'Active': 1, 'CreatedBy': 'owner'})
+        text = digest.gather(s, 1)
+        self.assertIn('WHAT THE OWNER HAS ALREADY DECIDED', text)
+        self.assertIn('do not raise them to Uri', text)
+        self.assertIn('governs every section', digest.PROMPT)
+
+    def test_unrelated_or_switched_off_memory_stays_out_of_the_digest(self):
+        s = _store()
+        _mail(s, DANA, 'Resident Refund Request - Watson, Lisa',
+              'The resident refund is still awaiting facility approval.', days=0, conv='refund')
+        parking = s.add_memory({'Scope': 'subject', 'ScopeKey': 'parking permits',
+                                'Note': 'Parking permits belong to facilities.', 'Active': 1, 'CreatedBy': 'owner'})
+        retired = s.add_memory({'Scope': 'global', 'Note': 'Retired rule.', 'Active': 0, 'CreatedBy': 'owner'})
+        s._exec('UPDATE memory SET CreatedAt=? WHERE MemoryId IN (?,?)', (_ago(days=3), parking, retired))
+        text = digest.gather(s, 1)
+        self.assertNotIn('Parking permits belong', text)
+        self.assertNotIn('Retired rule', text)
+
+
 def _slot_ahead() -> str:
     """A daily_at that has NOT come round yet today, so is_due's answer is about once_per_day
     and nothing else. Hard-coding '08:00' made these two tests pass only before breakfast: after

@@ -98,6 +98,13 @@ class HealingAnOlderInstallTests(unittest.TestCase):
         cfg = self._reopen({'type': 'automate', 'title': 'x', 'days': 30, 'cron': '0 8 * * 1', 'ai_prompt': 'my own words'})
         self.assertNotIn('on_startup', cfg)
 
+    def test_the_previous_stock_digest_prompt_learns_to_honor_memory(self):
+        from taskuary.digest import PROMPT, _PROMPT_WITHOUT_STANDING_MEMORY
+        cfg = self._reopen({'type': 'digest', 'title': 'x', 'days': 1, 'daily_at': '08:00',
+                            'ai_prompt': _PROMPT_WITHOUT_STANDING_MEMORY})
+        self.assertEqual(cfg['ai_prompt'], PROMPT)
+        self.assertIn('WHAT THE OWNER HAS ALREADY DECIDED', cfg['ai_prompt'])
+
 
 if __name__ == '__main__':
     unittest.main()

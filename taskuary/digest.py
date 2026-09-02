@@ -30,7 +30,7 @@ DAYS = 1                 # the window the synthesis reads: all of yesterday, plu
 # task" the owner had already given) and pinned it to a TQ-ref from the open-work list.
 # A brief that invents work waiting on you is worse than no brief, so a ref must arrive
 # wearing the title the data gave it, and an empty section must stay empty.
-PROMPT = (
+_PROMPT_WITHOUT_STANDING_MEMORY = (
     'Write my morning brief - what I, half awake, should hold in mind TODAY. Not a report of counts: '
     'a sharp assistant who has read everything telling me what is going on, what slipped, and what the '
     'day needs. Under 450 words, grouped into sections. Each section is its emoji header on its own line, '
@@ -61,9 +61,21 @@ PROMPT = (
     'carries meaning (THE WINDOW IN NUMBERS is one line at most, or nothing). Lead with what needs me NOW. '
     'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
 
+# A stock prompt already stored in an existing install must be recognisable below so store.py
+# can advance it without touching an owner-edited report. The digest used to receive only the
+# verdicts CREATED in this window; those are news about what the owner decided, not the standing
+# memory that decides whether today's material deserves their attention at all.
+PROMPT = _PROMPT_WITHOUT_STANDING_MEMORY.replace(
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.',
+    'WHAT THE OWNER HAS ALREADY DECIDED governs every section: do not surface, summarize, chase, '
+    'or suggest action on anything those standing verdicts rule out. They are instructions about '
+    'relevance, not events to repeat as news. Never invent facts; no preamble, no sign-off, nothing '
+    'outside the sections.')
+
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
+    _PROMPT_WITHOUT_STANDING_MEMORY,
     (
     'Write what the owner, half awake, should hold in mind TODAY, under 450 words, grouped into '
     'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '
@@ -246,11 +258,20 @@ def gather(store, days: int = DAYS) -> str:
     _block(out, 'WAITING ON THE OWNER (pending reviews):',
            (f"  TQ-{r['TaskId']:04d} ({(r.get('Title') or '?')[:60]}) {r.get('Kind')} "
             f"on mail: {(r.get('Subject') or '(no subject)')[:90]} {task_link(r['TaskId'])}" for r in store.list_reviews('pending')[:15]))
+    people = A._people(store, span)
     _block(out, 'WHAT PEOPLE SAID (the window, by thread, newest first; the last lines of each, oldest first; "you" = the owner):',
-           A._people(store, span))
+           people)
     away = A.ooo(store)
     _block(out, 'OUT OF OFFICE (from their auto-replies):', (f'  {k}: {v}' for k, v in away.items()))
-    _block(out, 'WHAT ARRIVED (xN = that many alike; a report carries its schedule, a failure its cause):', A._recent(store, span))
+    recent = A._recent(store, span)
+    _block(out, 'WHAT ARRIVED (xN = that many alike; a report carries its schedule, a failure its cause):', recent)
+    # The digest reads the same applicable standing verdicts as triage and the Timeline assistant.
+    # Match against the source material's real subjects and senders, not a model's paraphrase of
+    # them: that is how "Resident Refund Request - Doe" keeps matching the owner's resident-refund
+    # ruling even when the summary uses different words. Unrelated scoped memory stays out.
+    verdicts = A._verdicts_block(store, [], f'{people}\n{recent}')
+    if verdicts:
+        out += [verdicts.strip(), '']
     _block(out, 'OPEN WORK (each line ends with the link that opens the task):', _linked(A._open(store)))
     _block(out, 'FINISHED THIS WINDOW (with the agent\'s own summary where there is one):', _linked(A._done(store, span)))
     notes = [m for m in store.list_memories() if str(m.get('CreatedAt') or '') >= since]

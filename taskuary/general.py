@@ -457,7 +457,11 @@ class GeneralSession:
                 self._input += ch; self._emit(ch)
 
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
-                    pick=None, trace=None, cancel=None) -> str:
+                    pick=None, trace=None, cancel=None, as_owner=True) -> str:
+        """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
+        make it open a conversation (server._assistant_opens). It is not written to the history and
+        not echoed, because putting words in the owner's mouth in their own transcript is a lie the
+        rest of this product is built to avoid; the assistant's answer is recorded as normal."""
         text = str(text or '').strip()
         if not text: raise ValueError('empty message')
         if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
@@ -474,9 +478,10 @@ class GeneralSession:
                 self.pick, self.provider, self.model = _selected(self.store, connector_id, model, pick)
             if not self.pick:
                 raise RuntimeError('connect a CLI agent or an AI provider before starting general work')
-            if echo: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
-            self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
+            if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
+            if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
             system, user = _prompt(self.store, self.task_id)
+            if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):
@@ -502,7 +507,9 @@ class GeneralSession:
             brain = llm_mod.build_llm(self.store, pick=self.pick, model=self.model or None,
                                       trace=visible, cancel=cancel, resume=self.cli_sid or None)
             if not brain: raise RuntimeError('the selected AI connector is unavailable')
-            if self.cli_sid: user = _turn_only(self.store, self.task_id, text)
+            # a resumed CLI has the conversation already, so only the turn is said - and for an opening
+            # turn the 'turn' IS the instruction, which was never written to the history
+            if self.cli_sid: user = _turn_only(self.store, self.task_id, text) if as_owner else text
             # Paths are harmless context to an API brain and essential if its CLI backup takes
             # over after a quota failure. The source message already names its files too; this
             # line also carries images attached directly in the composer.

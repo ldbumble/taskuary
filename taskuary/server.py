@@ -1201,10 +1201,47 @@ def assistant_act(iid: int, verb: str, body: IdeaBody = None, background: Backgr
     """One button on one line: followup (the chase, drafted into Review), task (the agent starts),
     discuss (the full Assistant workspace), dismiss, snooze, or done."""
     try:
-        if verb == 'discuss': return assistant.discussion_task(store, iid, ACTOR)
+        if verb == 'discuss':
+            out = assistant.discussion_task(store, iid, ACTOR)
+            if out.get('created') and background is not None:
+                background.add_task(_assistant_opens, out['taskId'])
+            return out
         return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1),
                              learn_async=background.add_task if background is not None else None)
     except ValueError as e: raise HTTPException(422, str(e))
+
+# What the assistant is told when the owner opens one of its notes for discussion. It is an
+# instruction, never recorded as the owner's words (general.send_prompt as_owner=False).
+#
+# The chat used to open with the assistant's note copied into it and then sit there: the owner had
+# just READ that sentence on the Timeline, so the conversation began by repeating them to
+# themselves and waiting. "Discuss" is a request for the assistant's next move, so it makes one.
+OPENING = ("The owner has just opened this conversation from your note on the Timeline. They have "
+           "already read that note - do not repeat it back to them. Open the discussion instead: "
+           "say what you would actually DO about it, concretely, in one short paragraph, and then "
+           "ask the single thing you need from them to go ahead. If you need nothing, say what you "
+           "propose to do and stop. No preamble, no restating the situation.")
+
+
+def _assistant_opens(task_id: int):
+    """The assistant's first turn in a discussion it was asked to have. Runs after the response, so
+    the workspace is already on screen when it starts writing. Never raises: an opening line that
+    could not be written costs a sentence, and the owner can simply type - which is exactly where
+    this conversation stood before."""
+    from . import general
+    if general.session_for(task_id): return          # already in conversation - not ours to interrupt
+    if not general.provider_options(store):
+        # no brain configured. Starting a session anyway left one PARKED on the terminal list,
+        # waiting forever on an answer nothing was ever going to write - a live-looking agent on
+        # the Board doing nothing, from a click that should have done nothing.
+        logger.info(f'no AI connector, so the assistant cannot open {task_ref(task_id)}')
+        return
+    try:
+        general.start_session(store, task_id, actor=ACTOR).send_prompt(OPENING, as_owner=False, echo=False)
+    except Exception as e:
+        general.drop_session(task_id)                # and never leave half a session behind
+        logger.info(f'the assistant could not open {task_ref(task_id)}: {str(e)[:200]}')
+
 
 @app.post('/api/assistant/talk/{iid}')
 def assistant_talk(iid: int, body: TextBody):

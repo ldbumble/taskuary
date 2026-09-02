@@ -1589,7 +1589,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
   const [skipConfirm, setSkipConfirm] = useState(false);
-  const [tab, setTab] = useState("summary");      // overview first; four detailed stages remain one click away
+  const [tab, setTab] = useState("summary");      // overview first; the deeper stages stay one click away
   const [filing, setFiling] = useState("");       // "once" teaches nothing; "learn" writes one Memory verdict
   const [fileErr, setFileErr] = useState("");
   // a reply opened from THIS panel on a message with no pending review
@@ -1690,7 +1690,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     { key: "msg", label: "Message" },
     { key: "why", label: "Triage" },
     { key: "agent", label: "Agent", mark: onIt ? "live" : chatTask ? "chat" : rep ? "done" : "" },
-    { key: "reply", label: "Reply", mark: pending ? "waiting" : answered ? "replied" : opened ? "open" : "" },
+    // no Reply tab: everything it held - the draft, its verdicts, what was sent, what you answered
+    // elsewhere - is on the Summary timeline, in the step that already told you about it. A tab
+    // whose whole content fits under the line describing it was a trip for nothing.
   ];
   // The drawer just read the live session list; the row's chip is whatever the last feed poll
   // saw. When they disagree the drawer is the newer fact, so ask the list to refresh rather than
@@ -1714,6 +1716,36 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   // you may do with a draft.
   const replyControls = (
     <>
+      {/* YOU answered it, somewhere else. Not the same fact as "Sent reply", which means Taskuary
+          drafted it and something here sent it - and the panel said that about both, so a message
+          handled in Teams read as one we had answered for you. The reply itself is on the Message
+          tab, in the thread. */}
+      {answeredOutside && !pending && (
+        <Box sx={{ mb: 1.25 }}>
+          <Typography variant="caption" sx={{ color: DIM, display: "block" }}>
+            You answered this in {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt || threadReply?.SentAt)}
+            {" "}— nothing here sent it, and nothing is waiting on you.
+          </Typography>
+          {outsideReply && (
+            <Box sx={{ mt: 0.65, ml: "auto", maxWidth: "88%", bgcolor: "#e9e3d8",
+              border: "1px solid #d8d0c4", borderRadius: "14px 14px 4px 14px",
+              px: 1.25, py: 0.9, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+              {cleanText(outsideReply)}
+            </Box>
+          )}
+        </Box>
+      )}
+      {replied && (
+        <Box sx={{ mb: 1.25 }}>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.65 }}>
+            Sent to {sel.FromName || sel.FromEmail || "the conversation"}
+          </Typography>
+          <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5,
+            px: 1.25, py: 1, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+            {sentReply}
+          </Box>
+        </Box>
+      )}
       {pending && (
         <ReviewActions reviewId={pendingId} draft={replyDraft}
           editText={editText} setEditText={setEditText} decide={decide}
@@ -1860,7 +1892,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     status={pending ? "waiting on you" : replied ? "sent from Taskuary" : answeredOutside ? "you replied" : opened ? "draft open" : "not drafted"}
                     summary={replied ? cleanText(sentReply)
                       : answeredOutside ? (cleanText(outsideReply) || `Answered in ${sel.Channel}.`) : ""}
-                    state={replyOpen ? "current" : answered ? "done" : "idle"} onOpen={() => setTab("reply")}>
+                    state={replyOpen ? "current" : answered ? "done" : "idle"}>
                     {replyControls}
                   </StoryTimelineStep>
                 </Box>
@@ -1963,43 +1995,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 </Box>
               )}
 
-              {tab === "reply" && (
-                <Box>
-                  {/* YOU answered it, somewhere else. Not the same fact as "Sent reply", which
-                      means Taskuary drafted it and something here sent it - and the panel said
-                      that about both, so a message handled in Teams read as one we had answered
-                      for you. The reply itself is on the Message tab, in the thread. */}
-                  {answeredOutside && !pending && (
-                    <Box sx={{ mb: 1.25 }}>
-                      <PanelLabel>You answered this</PanelLabel>
-                      <Typography variant="caption" sx={{ color: DIM, display: "block" }}>
-                        in {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt || threadReply?.SentAt)}
-                        {" "}— nothing here sent it, and nothing is waiting on you.
-                      </Typography>
-                      {outsideReply && (
-                        <Box sx={{ mt: 0.65, ml: "auto", maxWidth: "88%", bgcolor: "#e9e3d8",
-                          border: "1px solid #d8d0c4", borderRadius: "14px 14px 4px 14px",
-                          px: 1.25, py: 0.9, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                          {cleanText(outsideReply)}
-                        </Box>
-                      )}
-                    </Box>
-                  )}
-                  {replied && (
-                    <Box>
-                      <PanelLabel>Sent reply</PanelLabel>
-                      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.65 }}>
-                        To {sel.FromName || sel.FromEmail || "the conversation"}
-                      </Typography>
-                      <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5,
-                        px: 1.25, py: 1, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                        {sentReply}
-                      </Box>
-                    </Box>
-                  )}
-                  {replyControls}
-                </Box>
-              )}
             </>
           )}
         </Box>

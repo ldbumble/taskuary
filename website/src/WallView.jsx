@@ -18,7 +18,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx"));
 import { Confirm, TellAgent, WorkLine, isWaiting } from "./ui.jsx";
 import { cliName } from "./BoardView.jsx";
-import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, withoutWallSession } from "./wallLayout.js";
+import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, wallPaneAtPoint, withoutWallSession } from "./wallLayout.js";
 
 const COLS = [1, 2, 3, 4];
 const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols")) || 2; } catch { return 2; } };
@@ -28,6 +28,8 @@ const savedCols = () => { try { return Number(localStorage.getItem("tq.wall.cols
 // terminals reads as a mistake, so the bar under any pane resizes them all.
 const MIN_H = 240;
 const hKey = (c) => `tq.wall.h.${c}`;
+const ORDER_KEY = "tq.wall.order";
+const savedOrder = () => { try { const o = JSON.parse(localStorage.getItem(ORDER_KEY) || "[]"); return Array.isArray(o) ? o.filter((x) => typeof x === "string") : []; } catch { return []; } };
 const savedH = (c) => { try { return Number(localStorage.getItem(hKey(c))) || 0; } catch { return 0; } };
 const storeH = (c, h) => { try { h ? localStorage.setItem(hKey(c), String(h)) : localStorage.removeItem(hKey(c)); } catch { /* private */ } };
 
@@ -38,7 +40,10 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
   const [cols, setCols] = useState(savedCols);
   const [paneHpx, setPaneHpx] = useState(() => savedH(savedCols()));   // 0 = default formula
   useEffect(() => { setPaneHpx(savedH(cols)); }, [cols]);
-  const [order, setOrder] = useState([]);           // sids, the display order you drag into
+  // the display order you drag into - kept per browser, so a reload (or the 8s poll) does not
+  // put the panes back where they came from: a rearrangement that lasts one refresh reads as broken
+  const [order, setOrder] = useState(savedOrder);
+  useEffect(() => { if (order.length) { try { localStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch { /* private */ } } }, [order]);
   const [dragging, setDragging] = useState(null);   // rendered too: the pane visibly lifts while moving
   const [closing, setClosing] = useState(null);     // session awaiting an explicit stop confirmation
   const [wrapping, setWrapping] = useState({});     // sid -> true; several panes can finish independently
@@ -67,22 +72,49 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
   // keep `order` in step with what's alive: append new sids, drop the gone, honour drags
   const sids = useMemo(() => (sessions || []).map((s) => s.sid), [sessions]);
   useEffect(() => {
+    if (!sessions) return;      // before the first load the list is empty, not "everything is gone" - reconciling then wiped the saved order
     setOrder((o) => { const set = new Set(sids); return [...o.filter((x) => set.has(x)), ...sids.filter((x) => !o.includes(x))]; });
-  }, [sids]);
+  }, [sids, sessions]);
   const bySid = useMemo(() => Object.fromEntries((sessions || []).map((s) => [s.sid, s])), [sessions]);
   const panes = order.map((sid) => bySid[sid]).filter(Boolean);
 
   const setColsP = (n) => { setCols(n); try { localStorage.setItem("tq.wall.cols", String(n)); } catch { /* private */ } };
-  // Reorder as the handle crosses another pane instead of waiting for an invisible drop result.
-  // Firefox also requires dataTransfer data before it will emit drop; Chromium does not, so the
-  // old ref-only drag appeared to work in one engine and did nothing in another.
+  // Native HTML drag-and-drop is not dependable over an interactive terminal grid: depending on
+  // the browser and whether the pointer starts over the icon's SVG, dragstart may never happen.
+  // Follow the pointer ourselves and ask which keyed pane is underneath. Reordering the keyed
+  // wrappers moves the existing TerminalPane; it does not recreate or visually resize xterm.
   const startDrag = (e, sid) => {
-    drag.current = sid; setDragging(sid);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", sid);
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+    drag.current?.cleanup?.();
+    const pointerId = e.pointerId, handle = e.currentTarget;
+    const active = { sid, pointerId, handle, lastTarget: sid, cleanup: null };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      try { if (handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId); } catch { /* detached */ }
+    };
+    const move = (ev) => {
+      if (ev.pointerId !== pointerId || drag.current !== active) return;
+      const target = wallPaneAtPoint(document, ev.clientX, ev.clientY);
+      if (!target || target === active.lastTarget) return;
+      active.lastTarget = target;
+      setOrder((o) => movePane(o, sid, target));
+    };
+    const finish = (ev) => {
+      if (ev?.pointerId !== undefined && ev.pointerId !== pointerId) return;
+      cleanup();
+      if (drag.current === active) { drag.current = null; setDragging(null); }
+    };
+    active.cleanup = cleanup;
+    drag.current = active; setDragging(sid);
+    try { handle.setPointerCapture?.(pointerId); } catch { /* global listeners still own the drag */ }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
   };
-  const enterPane = (target) => { if (drag.current) setOrder((o) => movePane(o, drag.current, target)); };
-  const finishDrag = () => { drag.current = null; setDragging(null); };
+  useEffect(() => () => drag.current?.cleanup?.(), []);
   const wrap = async (s) => {
     if (!s?.sid || wrappingRef.current[s.sid]) return;
     wrappingRef.current = { ...wrappingRef.current, [s.sid]: true };
@@ -170,9 +202,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
             const wrapBusy = !!wrapping[s.sid], wrapError = wrapErrors[s.sid];
             const who = s.cli || cliName(s.agent || "agent");
             return (
-              <Box key={s.sid} onDragEnter={() => enterPane(s.sid)}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                onDrop={(e) => { e.preventDefault(); finishDrag(); }}
+              <Box key={s.sid} data-wall-pane={s.sid}
                 sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,
                   borderColor: wrapBusy ? ROLES.working.bd : waiting ? ROLES.you.bd : BORDER,
                   opacity: dragging === s.sid ? 0.62 : 1, transform: dragging === s.sid ? "scale(.995)" : "none",
@@ -183,11 +213,12 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
                     remain buttons instead of occasionally starting a pane drag. */}
                 <Box sx={{ borderBottom: `1px solid ${BORDER}`, bgcolor: wrapBusy ? ROLES.working.tint : waiting ? ROLES.you.tint : "#faf8f5", flexShrink: 0 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.75, py: 0.35 }}>
-                    <Box draggable onDragStart={(e) => startDrag(e, s.sid)} onDragEnd={finishDrag}
+                    <Box onPointerDown={(e) => startDrag(e, s.sid)}
                       role="button" aria-label={`Drag ${t.ref || `TQ-${s.taskId}`} to reorder`} tabIndex={0}
                       title="Drag to reorder this pane"
                       sx={{ width: 24, height: 26, display: "flex", alignItems: "center", justifyContent: "center",
-                        flexShrink: 0, borderRadius: 1, cursor: "grab", "&:hover": { bgcolor: "#e7eae2" }, "&:active": { cursor: "grabbing" } }}>
+                        flexShrink: 0, borderRadius: 1, cursor: "grab", touchAction: "none", userSelect: "none",
+                        "&:hover": { bgcolor: "#e7eae2" }, "&:active": { cursor: "grabbing" } }}>
                       <DragIndicatorIcon sx={{ fontSize: 16, color: FAINT }} />
                     </Box>
                     <Typography sx={{ ...mono, fontSize: 11, fontWeight: 700, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${s.taskId}`}</Typography>

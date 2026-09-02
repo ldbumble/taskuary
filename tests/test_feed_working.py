@@ -50,7 +50,10 @@ class DigestBriefTests(unittest.TestCase):
         self.assertNotIn('THE WINDOW BY TAG', text)          # the counts collapsed to one line
 
     def test_the_stock_prompt_that_shipped_before_is_healed_to_the_new_one(self):
-        self.assertIn('What slipped', digest.PROMPT); self.assertIn('The assistant said', digest.PROMPT)
+        # the sections the owner reads first (2026-09-02: in flight, then what people want) - and the
+        # previous stock text, "What slipped" leading, is still recognised so it upgrades
+        self.assertIn('People want', digest.PROMPT); self.assertIn('New ideas', digest.PROMPT)
+        self.assertTrue(any('What slipped' in p and 'The assistant said' in p for p in digest.OLD_PROMPTS))
         self.assertTrue(any("Today's meetings" in p and 'By the tags' in p for p in digest.OLD_PROMPTS))
         self.assertNotIn(digest.PROMPT, digest.OLD_PROMPTS)
 

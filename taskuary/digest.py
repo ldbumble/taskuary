@@ -30,7 +30,10 @@ DAYS = 1                 # the window the synthesis reads: all of yesterday, plu
 # task" the owner had already given) and pinned it to a TQ-ref from the open-work list.
 # A brief that invents work waiting on you is worse than no brief, so a ref must arrive
 # wearing the title the data gave it, and an empty section must stay empty.
-_PROMPT_WITHOUT_STANDING_MEMORY = (
+# The stock prompt up to 2026-09-02 (kept so store.py recognises an untouched install and advances it):
+# it led with "what slipped". The owner reads in flight first, then what people want, then follow-ups,
+# then ideas - and the numbers line stays on top (2026-09-02).
+_PROMPT_2026_08_31 = (
     'Write my morning brief - what I, half awake, should hold in mind TODAY. Not a report of counts: '
     'a sharp assistant who has read everything telling me what is going on, what slipped, and what the '
     'day needs. Under 450 words, grouped into sections. Each section is its emoji header on its own line, '
@@ -60,6 +63,44 @@ _PROMPT_WITHOUT_STANDING_MEMORY = (
     'so I click straight into the task. Name people, dates and quoted phrases; use a number only where it '
     'carries meaning (THE WINDOW IN NUMBERS is one line at most, or nothing). Lead with what needs me NOW. '
     'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
+_PROMPT_2026_08_31_MEMORY = _PROMPT_2026_08_31.replace(
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.',
+    'WHAT THE OWNER HAS ALREADY DECIDED governs every section: do not surface, summarize, chase, '
+    'or suggest action on anything those standing verdicts rule out. They are instructions about '
+    'relevance, not events to repeat as news. Never invent facts; no preamble, no sign-off, nothing '
+    'outside the sections.')
+
+_PROMPT_WITHOUT_STANDING_MEMORY = (
+    'Write my morning brief - what I, half awake, should hold in mind TODAY. Not a report of counts: '
+    'a sharp assistant who has read everything telling me what is going on and what the day needs. Under 450 '
+    'words. FIRST LINE: the numbers (THE WINDOW IN NUMBERS), one line, then a blank line. Then sections: each '
+    'section is its emoji header on its own line, then tight "- " bullets under it (one fact per bullet; first '
+    'person is fine - "I\'d chase this"), then a blank line. Use exactly these sections IN THIS ORDER, and OMIT '
+    'any with nothing to say:\n'
+    '\U0001f680 In flight - from OPEN WORK and FINISHED THIS WINDOW: what an agent is on, what closed and what '
+    'it shipped, what has gone quiet (push it or drop it - say which)\n'
+    '\U0001f64b People want - asks from people I have not answered (THEIR ASKS YOU HAVE NOT ANSWERED) and '
+    'replies waiting for my approval (WAITING ON THE OWNER): who, what, since when, what covers it - check OUT '
+    'OF OFFICE before suggesting a chase, and say when they are back instead\n'
+    '\U0001f501 Follow up - promises I made and have not kept, things I asked for that never came back (MY OPEN '
+    'LOOPS): who owes what, since when, and what I would do\n'
+    '\U0001f4a1 New ideas - what the assistant raised in the window that is still open (WHAT THE ASSISTANT '
+    'ALREADY RAISED) and whether it still stands, plus heads-ups: a sender getting louder, the same system '
+    'failing twice, a report whose every run says nothing\n'
+    '\U0001f4c5 Today - one bullet per meeting from MEETINGS TODAY, in time order: the time, the title, who is '
+    'in it (first names, never me), what it is about in the invite\'s own words (the "about:" text; never '
+    'guess a purpose from a title), and what in WHAT PEOPLE SAID bears on it\n'
+    '\U0001f50e What happened - the story of the window from WHAT PEOPLE SAID and WHAT ARRIVED: who said what '
+    'and what it means for me, decisions made, information worth holding, a machine\'s failure with its cause - '
+    'the words, never the counts\n'
+    '\U0001f4cc Keep honoring - verdicts I gave in the window that should keep applying\n'
+    'Every TQ-ref you write must appear in the data, described with the SAME title it has there - never '
+    'restate a task under another subject, and never carry a subject across from one block to another. A '
+    'block whose data reads "(none)" has nothing to say: omit its section entirely rather than filling it. '
+    'Every TQ-ref keeps the link that follows it in the data, written right after the ref in the same bullet, '
+    'so I click straight into the task. Say WHAT, not why: name people, dates and quoted phrases, and leave '
+    'out your reasoning. Use a number only where it carries meaning. '
+    'Never invent facts; no preamble, no sign-off, nothing outside the sections.')
 
 # A stock prompt already stored in an existing install must be recognisable below so store.py
 # can advance it without touching an owner-edited report. The digest used to receive only the
@@ -76,6 +117,7 @@ PROMPT = _PROMPT_WITHOUT_STANDING_MEMORY.replace(
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
     _PROMPT_WITHOUT_STANDING_MEMORY,
+    _PROMPT_2026_08_31, _PROMPT_2026_08_31_MEMORY,
     (
     'Write what the owner, half awake, should hold in mind TODAY, under 450 words, grouped into '
     'sections. Each section is its emoji header on its own line, then tight "- " bullets under it '

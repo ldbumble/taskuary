@@ -32,7 +32,7 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, RefChip, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, RefChip, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -42,7 +42,7 @@ import StateMark, { edgeOf } from "./StateMark.jsx";
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
-import { TerminalPreview } from "./TerminalView.jsx";
+import { TerminalPane } from "./TerminalView.jsx";
 
 const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.GeneralWorkspace })));
 
@@ -114,11 +114,13 @@ const blurb = (r) => {
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
   if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
   if (r.MsgStatus === "triaging") return "On the timeline first — triage is deciding what it is";
-  if (r.MsgStatus === "ignored") return `Ignored by policy — ${r.RouteReason || "no task created"}`;
-  if (r.Category === "info") return `Info from a person, nothing to do — ${r.RouteReason || "informational"}`;
-  if (r.Category === "promo") return `Promotional — a newsletter or marketing mail, nothing to do — ${r.RouteReason || ""}`;
-  if (r.Category === "automated") return `Automated notice, nothing to do — ${r.RouteReason || ""}`;
-  if (r.MsgStatus === "filed") return `Filed, nothing to do — ${r.RouteReason || "informational"}`;
+  // WHAT happened, never the classifier's sentence about why: that lives on the Triage tab, where
+  // it is asked for (owner, 2026-09-02: "hate the why - just tell me what")
+  if (r.MsgStatus === "ignored") return "Ignored by policy — no task created";
+  if (r.Category === "info") return "Info from a person — nothing to do";
+  if (r.Category === "promo") return "Promotional — nothing to do";
+  if (r.Category === "automated") return "Automated notice — nothing to do";
+  if (r.MsgStatus === "filed") return "Filed — nothing to do";
   const routed = r.Decision === "attach" ? `Added to ${ref(r.TaskId)} (existing thread)` : `New task ${ref(r.TaskId)} created`;
   const state = r.ReviewStatus === "pending" ? "a reply is drafted — waiting on your review"
       : r.ReviewStatus === "auto" ? "AI answered automatically"
@@ -1618,8 +1620,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
     { key: "reply", label: "Reply", mark: replied ? "replied" : pending ? "waiting" : opened ? "open" : "" },
   ];
   const replyDraft = pending ? pendingDraft(detail || { runs: [] }, sel) : (opened?.draft || "");
-  const triageLine = cleanText(String(sel.RouteReason || "")
-    .replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0]) || "No routing reason was recorded.";
+  // the road, in words - the why sentence is one tab over, for when it is asked for
+  const roadMeta = ROADS.find((r) => r.key === roadOf(sel));
+  const roadLine = roadMeta ? `${roadMeta.label} — ${roadMeta.hint}` : (sel.RouteReason ? "Routed; open for the verdict." : "Not routed.");
   const reportText = String(rep?.Body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/i, "").trim();
   const reportResult = ((/(?:^|\n)Summary:[ \t]*([^\n]+)/im.exec(reportText) ||
     /(?:^|\n)Result:[ \t]*([^\n]+)/im.exec(reportText) || [])[1] || cleanText(reportText)).trim();
@@ -1717,7 +1720,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                     status={(detail?.messages || []).length > 1 ? `${detail.messages.length} messages` : "received"}
                     summary={messageSummary}
                     onOpen={() => setTab("msg")} />
-                  <StoryTimelineStep title="Triage" status={triageStatus} summary={triageLine}
+                  <StoryTimelineStep title="Triage" status={triageStatus} summary={roadLine}
                     state={triageStatus !== "not routed" ? "done" : "idle"} onOpen={() => setTab("why")} />
                   <StoryTimelineStep title="Agent"
                     status={onIt ? (onIt.waiting ? "waiting" : "working") : chatTask ? "assistant chat" : rep ? "finished" : "not started"}
@@ -1777,9 +1780,22 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   ) : onIt && (
                     <>
                       <PanelLabel>{onIt.waiting ? `${onIt.agent} is waiting on you` : `${onIt.agent} is working now`}</PanelLabel>
-                      {ses?.sid
-                        ? <TerminalPreview sid={ses.sid} height={420} onOpen={() => onOpenTask(sel.TaskId)} />
-                        : <LiveConsole run={liveRow} agent={onIt.agent} lines={14} onOpen={() => onOpenTask(sel.TaskId)} />}
+                      {ses?.sid ? (
+                        <>
+                          <Box sx={{ height: 440, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+                            <TerminalPane sid={ses.sid} height="100%" onExit={() => onRefresh?.()} />
+                          </Box>
+                          {ses.alive !== false && (
+                            <Box sx={{ mt: 0.75 }}>
+                              <TellAgent taskId={sel.TaskId} taskRef={detail?.ref} compact onQueued={() => onRefresh?.()} />
+                            </Box>
+                          )}
+                          <Typography variant="caption" onClick={() => onOpenTask(sel.TaskId)}
+                            sx={{ color: FAINT, display: "block", mt: 0.5, cursor: "pointer", "&:hover": { color: INK } }}>
+                            open the task page ↗
+                          </Typography>
+                        </>
+                      ) : <LiveConsole run={liveRow} agent={onIt.agent} lines={14} onOpen={() => onOpenTask(sel.TaskId)} />}
                     </>
                   )}
                   {rep && (
@@ -2453,6 +2469,22 @@ const briefOf = (b) => { if (!b) return null; if (typeof b === "object") return 
 // idea of its own). Nothing is pinned above the feed - the owner (2026-08-30): "don't like the
 // 2 open tab on top of the timeline and ask now button". What is open, in flight and waiting on
 // you is the Morning digest's job, on its own clock (Reports tab).
+// The why, folded: the line says WHAT; the facts it rests on open on a click (owner, 2026-09-02:
+// "hate the why - hide it unless it's asked for").
+const Why = ({ text }) => {
+  const [open, setOpen] = useState(false);
+  if (!text) return null;
+  return open ? (
+    <Typography variant="caption" onClick={() => setOpen(false)}
+      sx={{ display: "block", color: DIM, mt: 0.35, whiteSpace: "pre-wrap", lineHeight: 1.4, cursor: "pointer" }}>
+      <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>why · </Box>{text}
+    </Typography>
+  ) : (
+    <Typography variant="caption" onClick={() => setOpen(true)}
+      sx={{ display: "inline-block", color: FAINT, mt: 0.3, cursor: "pointer", "&:hover": { color: INK } }}>why?</Typography>
+  );
+};
+
 // One post, opened: each line with its buttons AND its why - the facts it rests on (the mail, the
 // date, the silence; the model's own reason for an idea) - and under them what the post was built
 // from: candidates by kind, the ones it looked at and let go, how much of the day it read (the
@@ -2561,11 +2593,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
               <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 700, flexShrink: 0 }}>{IDEA_KIND[i.kind] || i.kind}</Typography>
               <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>{i.text}</Typography>
             </Box>
-            {i.why && (
-              <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.35, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
-                <Box component="span" sx={{ fontWeight: 700, color: ASSISTANT.ink }}>why · </Box>{i.why}
-              </Typography>
-            )}
+            <Why text={i.why} />
             {ev && (
               <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.3 }}>
                 {ev.who?.length ? `with ${ev.who.join(", ")}` : ""}{ev.where ? ` · ${ev.where}` : ""}{ev.about ? ` · ${ev.about}` : ""}

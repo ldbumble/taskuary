@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, withoutWallSession } from "../src/wallLayout.js";
+import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, wallPaneAtPoint, withoutWallSession } from "../src/wallLayout.js";
 
 test("dragging a wall pane moves it to the pane entered", () => {
   assert.deepEqual(movePane(["one", "two", "three"], "one", "three"), ["two", "three", "one"]);
@@ -11,6 +11,15 @@ test("invalid and no-op pane drags preserve the existing order object", () => {
   const order = ["one", "two"];
   assert.equal(movePane(order, "one", "one"), order);
   assert.equal(movePane(order, "missing", "two"), order);
+});
+
+test("pointer dragging finds the wall pane under nested terminal content", () => {
+  const pane = { getAttribute: (name) => name === "data-wall-pane" ? "two" : null };
+  const nestedTerminalNode = { closest: (selector) => selector === "[data-wall-pane]" ? pane : null };
+  const documentLike = { elementFromPoint: (x, y) => x === 40 && y === 80 ? nestedTerminalNode : null };
+  assert.equal(wallPaneAtPoint(documentLike, 40, 80), "two");
+  assert.equal(wallPaneAtPoint(documentLike, 0, 0), "");
+  assert.equal(wallPaneAtPoint(null, 40, 80), "");
 });
 
 test("resize follows the pointer and stops at the minimum pane height", () => {

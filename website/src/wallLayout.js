@@ -7,6 +7,15 @@ export const movePane = (order, from, target) => {
   return next;
 };
 
+// Pointer dragging asks the document what pane is actually under the pointer. Unlike native
+// HTML drag-and-drop this works the same way over xterm, nested SVGs, Chromium, Firefox and touch.
+// Keep the DOM lookup here so the event wiring can be small and its important edge cases tested.
+export const wallPaneAtPoint = (documentLike, x, y) => {
+  const hit = documentLike?.elementFromPoint?.(x, y);
+  const pane = hit?.closest?.("[data-wall-pane]");
+  return pane?.getAttribute?.("data-wall-pane") || "";
+};
+
 export const resizedPaneHeight = (startHeight, startY, clientY, minimum) =>
   Math.max(minimum, Math.round(startHeight + clientY - startY));
 

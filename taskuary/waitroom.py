@@ -95,7 +95,13 @@ def add(store, tid: int, note: str, actor: str = 'owner') -> dict:
     if not store.get_task(tid): raise ValueError(f'no task {tid}')
     wid = store.add_waiting(tid, note, actor)
     store.audit('task', tid, 'waitroom_add', actor, detail={'wid': wid, 'chars': len(note)})
-    return {'wid': wid, **deliver(store, tid)}
+    # The note is QUEUED the moment it is written; handing it over may not be possible right now
+    # (no CLI on this machine, no provider, every slot taken). That is not a failure of the note -
+    # it used to come back as a 422 with the note already in the room (2026-09-03).
+    try: return {'wid': wid, **deliver(store, tid)}
+    except Exception as e:
+        logger.warning(f'waitroom: {task_ref(tid)} kept the note but could not hand it over - {e}')
+        return {'wid': wid, 'delivered': 0, 'state': 'held', 'why': str(e)[:200]}
 
 
 def deliver(store, tid: int) -> dict:

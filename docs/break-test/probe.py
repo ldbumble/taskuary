@@ -10,9 +10,10 @@ from taskuary import concierge, funnel, general, ingest, server, terminal
 from test_assistant_reactions import store, brain, arrive, session, ago, ahead
 
 # ── builders: one of each thing the pipe can hold; returns (store, live_sessions, key) ─────────
-def b_review():
+def b_review(draft='Tuesday 3pm works.'):
     s = store(); out = arrive(s, subject='Are you around Tuesday?', body='Quick call?', llm=brain('reply_only', None))
-    rv = s.pending_review(out['task_id']); s.update_review(rv['ReviewId'], {'DraftText': 'Tuesday 3pm works.'}) if hasattr(s, 'update_review') else None
+    rv = s.pending_review(out['task_id'])
+    if draft: s.update_review_draft(rv['ReviewId'], draft, rv.get('RunId'))    # a review with a real draft on it
     return s, [], f"review:{rv['ReviewId']}"
 def b_todo():
     s = store()
@@ -53,11 +54,15 @@ def b_proposal():
     funnel.invalidate(); return s, [], f'review:{rid}'
 def b_idea():
     s = store()
+    # the line is ABOUT a real message - an idea pointing at a mid that does not exist is a fixture
+    # bug, and every verb on it came back 404 rather than telling us anything
+    m = s.add_message({'ExternalId': 'i1', 'Channel': 'email', 'Subject': 'Corrected file for the audit', 'FromName': 'Dana Weiss',
+                       'FromEmail': 'dana@ours.com', 'SentAt': ago(96), 'BodyText': 'Can you send the corrected file?', 'Status': 'filed'})
     s.upsert_idea({'key': 'followup:c9', 'kind': 'followup', 'text': 'No answer from Dana in 4 days - follow up?', 'sig': 'x',
-                   'action': {'type': 'followup', 'mid': 5, 'why': 'you asked on Monday'}}, ago(1))
+                   'action': {'type': 'followup', 'mid': m, 'why': 'you asked on Monday'}}, ago(1))
     funnel.invalidate(); items = funnel.build(s)['items']
     k = next(i['key'] for i in items if i['kind'] == 'idea'); return s, [], k
-BUILDERS = {'review': b_review, 'todo(coding held)': b_todo, 'general': b_general, 'fyi': b_fyi, 'report': b_report, 'report-FAILED': lambda: b_report(True),
+BUILDERS = {'review': b_review, 'review(no draft)': lambda: b_review(''), 'todo(coding held)': b_todo, 'general': b_general, 'fyi': b_fyi, 'report': b_report, 'report-FAILED': lambda: b_report(True),
             'agent-asking': b_agent, 'meeting': b_meeting, 'proposal': b_proposal, 'idea': b_idea}
 
 PHRASES = ['next', 'done', 'later', 'tomorrow', 'skip', 'skip it', 'approve', 'send it', 'looks good, send it', 'yes', 'ok', 'sure', 'go ahead', 'do it', 'no', 'nah',
@@ -68,7 +73,9 @@ PHRASES = ['next', 'done', 'later', 'tomorrow', 'skip', 'skip it', 'approve', 's
            "what's this about?", 'who sent this?', 'summarize the thread', 'show me the draft', 'make the reply shorter', 'forward it to Chana', 'assign it to Chana',
            'ask Chana to handle it', 'delete it', 'archive it', 'snooze it', 'remind me tomorrow', 'approve and remember that Kishan handles refunds',
            'reply: not ours, sorry', 'skip all the newsletters', "it's handled", 'answer the agent: yes remove them', 'tell the agent yes', 'yes remove them',
-           'set up a weekly report on refunds', 'never mind', 'hold on', 'wait', 'stop', 'cancel', 'undo', 'go back', 'what did I miss?']
+           'set up a weekly report on refunds', 'never mind', 'hold on', 'wait', 'stop', 'cancel', 'undo', 'go back', 'what did I miss?',
+           # the sentence names ANOTHER subject than the card on the table (the A1 finding)
+           'not ours, facilities handles the payroll portal outage', 'close the payroll portal one', 'approve the invoice one']
 
 def snap(s):
     d = {}
@@ -82,18 +89,35 @@ def snap(s):
 
 def diff(a, b): return {k: f"{a.get(k)} -> {b.get(k)}" for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)}
 
-NEEDS = {'reply': 'mid', 'approve': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid', 'not_ours_sender': 'mid', 'coder': 'mid', 'mine': 'mid', 'rerun': 'source_id', 'close': 'tid'}
+NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid', 'not_ours_sender': 'mid',
+         'coder': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid', 'answer_agent': 'tid', 'rerun': 'source_id', 'close': 'tid'}
+SETTLES = ('later', 'skip', 'next', 'done', 'closed', 'ack')     # the verbs that move the walk on
 
-def page(c, cur, d, key):
+def page(c, cur, d, key, calls=None):
     """What AssistantView.decide() does with the server's decision. Returns a list of (call, status)."""
-    calls = []; verb = d['verb']; mid = cur.get('mid')
+    calls = calls if calls is not None else []
+    verb = d['verb']
+    if d.get('target'):                                  # the words named another subject: acted on THERE
+        cur = d['target']; key = None
+        calls.append(f"PAGE: acting on the named item {cur.get('key')} - the one on the table is untouched")
+    mid = cur.get('mid')
     def post(p, body=None):
         r = c.post(p, json=body) if body is not None else c.post(p); calls.append(f"POST {p} -> {r.status_code}{'' if r.status_code < 400 else ' ' + r.text[:80]}")
         if r.status_code >= 400: raise RuntimeError('PAGE: error banner, nothing after this ran')
         return r
     if verb in NEEDS and not cur.get(NEEDS[verb]): calls.append(f"PAGE-REFUSED: {cur.get('ref') or 'this one'} has nothing to {verb} on it"); return calls
-    if verb == 'reply': r = post(f'/api/messages/{mid}/reply', {'draft': True, 'instruction': d.get('text') or None}); post('/api/funnel/settle', {'key': key, 'verb': 'done'}); return calls
-    if verb == 'approve': post(f"/api/reviews/{cur['rid']}/decide", {'verb': 'approve', 'final_text': None, 'note': None})
+    if verb == 'reply':
+        post(f'/api/messages/{mid}/reply', {'draft': True, 'instruction': d.get('text') or None})
+        if key: post('/api/funnel/settle', {'key': key, 'verb': 'done'})
+        return calls
+    if verb == 'redraft': post(f'/api/messages/{mid}/reply', {'draft': True, 'redraft': True, 'instruction': d.get('text') or None}); return calls
+    if verb == 'answer_agent': post(f"/api/tasks/{cur['tid']}/waitroom", {'text': d.get('text') or 'yes'})
+    elif verb == 'archive': post(f'/api/messages/{mid}/file', {'learn': False, 'archive': True})
+    elif verb in ('remembered', 'forwarded', 'setting', 'split'): calls.append(f'PAGE: receipt only ({verb}) - nothing settles'); return calls
+    elif verb == 'approve':
+        r = post(f"/api/reviews/{cur['rid']}/decide", {'verb': 'approve', 'final_text': None, 'note': None})
+        if (r.json() or {}).get('empty') or (r.json() or {}).get('already'):
+            calls.append('PAGE: refused by the server - nothing sent, nothing settled'); return calls
     elif verb == 'not_ours_sender': post(f'/api/messages/{mid}/not-mine', {'scope': 'sender'})
     elif verb == 'remember': post('/api/memory', {'note': d.get('text'), 'scope': 'global'}); calls.append('PAGE: returns without settling or surfacing'); return calls
     elif verb == 'not_ours': post(f'/api/messages/{mid}/file', {'learn': False})
@@ -109,6 +133,9 @@ def page(c, cur, d, key):
     elif verb == 'done' and cur.get('kind') != 'agent':
         if cur.get('rid'): post(f"/api/reviews/{cur['rid']}/decide", {'verb': 'no_reply', 'final_text': None, 'note': 'handled - the owner said so'})
         if cur.get('tid'): r = c.patch(f"/api/tasks/{cur['tid']}", json={'Status': 'done'}); calls.append(f'PATCH task done -> {r.status_code}')
+    elif verb not in NEEDS and verb not in SETTLES:
+        calls.append(f'PAGE: no road for {verb} - a receipt, and the item stays on the table'); return calls
+    if not key: calls.append('PAGE: the named item was acted on; the table is untouched'); return calls
     if verb in ('later', 'skip'): post('/api/funnel/settle', {'key': key, 'verb': verb}); return calls
     post('/api/funnel/settle', {'key': key, 'verb': 'done'}); calls.append('PAGE: then surfaces the next item')
     return calls
@@ -130,8 +157,11 @@ def run_one(name, phrase):
         before = snap(s)
         out = concierge.say(s, phrase, key=key, llm=None)
         d = out.get('decision')
-        try: calls = page(c, cur, d, key) if d else ['PAGE: nothing (no decision)']
-        except RuntimeError as e: calls = ['(failed call above)', str(e)]
+        calls = ['PAGE: nothing (no decision)']
+        if d:
+            calls = []
+            try: page(c, cur, d, key, calls)
+            except RuntimeError as e: calls.append(str(e))
         after = snap(s)
         return {'item': name, 'phrase': phrase, 'verb': (d or {}).get('verb'), 'say': out['say'][:110], 'page': calls, 'spawned': spawn.called,
                 'effects': diff(before, after), 'still_in_pipe': key in {i['key'] for i in funnel.build(s)['items']}}

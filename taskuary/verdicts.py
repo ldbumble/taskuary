@@ -20,11 +20,10 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
         return
 
     kind = rv.get('Kind')
-    if kind not in ('clarification', 'draft', 'draft_reply') and task.get('Kind') != 'reply':
-        return
+    if kind == 'action': return                        # a proposed action is not a reply
     # A free-standing draft can be reviewed for learning/editing without having a channel
     # destination. Only a confirmed channel send gets to finish a normal task.
-    if not was_sent and kind in ('clarification', 'draft') and task.get('Kind') != 'reply':
+    if not was_sent and task.get('Kind') != 'reply':
         return
 
     # A clarification is not completion: stop the blocked session and keep the task visibly
@@ -49,17 +48,22 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
                           'Reply sent. This owner-controlled task remains open.')
         return
 
-    # A normal reviewed reply is the answer to this task. It cannot coexist with an agent
-    # still working the same task after the channel confirms the send.
-    if task.get('Kind') == 'reply' or kind in ('draft', 'draft_reply'):
-        from . import terminal
-        session = terminal.session_for(task_id)
-        stopped = bool(session and getattr(session, 'alive', False) and terminal.close(session.sid))
-        if task.get('Status') not in ('done', 'dropped'):
-            store.update_task(task_id, {'Status': 'done'}, actor)
-        if stopped:
-            store.add_comment(task_id, actor, 'human',
-                              'Stopped the agent because the task reply was sent.')
+    # The reply that went out IS the task's ending (the owner, 2026-09-03: "replying should close it") -
+    # whatever kind of review carried it: the coder's own draft after a job, one you opened by hand, one
+    # triage queued. The one exception is an agent still WORKING the task: its result and its own
+    # close-out come first, and the task closes when that lands.
+    from .funnel import working_tids
+    if task_id in working_tids(store):
+        store.add_comment(task_id, actor, 'human', 'Reply sent; the agent still has this task, so it stays open until the agent is done.')
+        return
+    from . import terminal
+    session = terminal.session_for(task_id)
+    stopped = bool(session and getattr(session, 'alive', False) and terminal.close(session.sid))
+    if task.get('Status') not in ('done', 'dropped'):
+        store.update_task(task_id, {'Status': 'done'}, actor)
+        store.add_comment(task_id, actor, 'human', 'Closed - the reply went out.')
+    if stopped:
+        store.add_comment(task_id, actor, 'human', 'Stopped the parked agent because the task reply was sent.')
 
 
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
@@ -72,6 +76,16 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     empty rather than sending to somebody you have forgotten you added."""
     from . import learn, outbound
     rid = rv['ReviewId']
+    # A verdict lands ONCE. There was no guard at all, so "approve" typed and the Approve button
+    # clicked - or one double click - sent the same mail twice (2026-09-03).
+    if str(rv.get('Status') or 'pending') != 'pending':
+        return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'already': True,
+                'send_error': f"this one was already {rv.get('Status')}" + (f" by {rv['DecidedBy']}" if rv.get('DecidedBy') else '')}
+    # ...and approving an EMPTY draft sent nothing, marked the review approved and closed the task
+    # anyway: the person never got an answer and nothing was left in the pipe to say so.
+    if verb_in in ('approve', 'edit') and not (final_text or '').strip() and not (rv.get('DraftText') or '').strip():
+        return {'ok': False, 'status': 'pending', 'sent': None, 'empty': True,
+                'send_error': 'there is no draft to send - write the reply (or let the AI draft it) and approve that'}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
     if verb_in in ('approve', 'edit'):
         final = final_text if (final_text or '').strip() else rv.get('DraftText')
@@ -133,6 +147,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': send_err}
         store.audit('review', rid, 'sent_outbound', actor,
                     detail={'channel': sent.get('channel'), 'to': sent.get('to')})
+        if rv.get('TaskId') and sent is not None: _settle_task_after_sent_reply(store, rv, actor, True)
         return {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None}
     if final and rv.get('MessageId'):
         msg = store.get_message(rv['MessageId'])

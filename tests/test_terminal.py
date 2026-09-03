@@ -626,6 +626,7 @@ class TerminalTests(unittest.TestCase):
         # tests left in the shared store, and this test measures the SEED - so it owns every
         # input to it.
         server.store._exec('DELETE FROM boardnote')
+        server.store._exec('DELETE FROM lore')          # ...and the hub: another test's entry rides into the seed
         server.store._exec('DELETE FROM memory')
         server.store._exec('DELETE FROM metric')
         self.addCleanup(lambda: [server.store.save_doc(n, v or '', 'test') for n, v in saved.items()])

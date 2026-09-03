@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Box, CircularProgress, Slider, Typography } from "@mui/material";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
+import { onLive } from "./live.js";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, ROLES, mono } from "./theme.jsx";
 import { cliName, FileChips } from "./BoardView.jsx";
 import { WorkLine, isWaiting } from "./ui.jsx";
@@ -92,14 +93,14 @@ export default function StudioView({ onOpenTask, refresh = 0 }) {
     const row = (cfg.data.data || []).find((x) => x.Name === "auto_sessions");
     setCap((c) => (c == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : c));
   }, []);
-  useEffect(() => { load(); return pollWhileVisible(load, 15000); }, [load]);
-  useEffect(() => { if (refresh) load(); }, [refresh, load]); // the Board just started a session: seat it now, not in 15s
-  // the tails poll fast, exactly as the Board's do: a screen you are watching is a status wall
+  useEffect(() => { load(); return onLive("task-changed", load); }, [load]);
+  useEffect(() => { if (refresh) load(); }, [refresh, load]); // the Board just started a session: seat it now, not on the next event
+  // the tails arrive as run-tail, exactly as the Board's do: a screen you are watching is a status wall
   useEffect(() => {
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
     tick();
-    return pollWhileVisible(tick, 4000);
+    return onLive("run-tail", tick);
   }, []);
 
   const desks = useMemo(() => {

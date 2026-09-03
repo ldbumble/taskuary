@@ -64,15 +64,37 @@ def source_rules(store, msg: dict) -> str:
 # timeline shows it at once wearing a "triaging" pill; drain() then judges the queue in arrival
 # order and each row lands where its verdict puts it. Dedupe, feeds and policies stay immediate:
 # they cost nothing and their answer is final.
+# The ON/OFF is thread-local: a TestClient that starts the mailbox clock must not make the
+# next unittest on MainThread store-instead-of-judge. Poll workers are other threads, so they
+# wrap themselves in deferred() when the parent poll is already deferring (see channels).
+# Nesting is a counter so an inner deferred() cannot turn the outer off.
 _DEFER = threading.local()
+_DEFER_DEPTH = 0
+_DEFER_LOCK = threading.Lock()
 _PENDING = {}        # MessageId -> the message as it arrived (images, no_auto...), for drain in this process
+_PENDING_LOCK = threading.Lock()
 
 
 @contextlib.contextmanager
 def deferred():
-    prev = getattr(_DEFER, 'on', False); _DEFER.on = True
+    global _DEFER_DEPTH
+    prev = getattr(_DEFER, 'on', False)
+    _DEFER.on = True
+    with _DEFER_LOCK: _DEFER_DEPTH += 1
     try: yield
-    finally: _DEFER.on = prev
+    finally:
+        _DEFER.on = prev
+        with _DEFER_LOCK: _DEFER_DEPTH -= 1
+
+
+def _deferring() -> bool:
+    return getattr(_DEFER, 'on', False)
+
+
+def _parent_deferring() -> bool:
+    """True while SOME thread is inside deferred() - poll workers inherit that, MainThread does not."""
+    with _DEFER_LOCK:
+        return _DEFER_DEPTH > 0
 
 
 def _land(store, msg: dict, task_id, status: str) -> int:
@@ -140,7 +162,8 @@ def drain(store, llm=None, progress=None, limit: int = 500) -> int:
     with store.freeze_snapshots():
         for i, r in enumerate(rows):
             mid = r['MessageId']
-            msg = {**(_PENDING.pop(mid, None) or _from_row(r)), '_mid': mid}
+            with _PENDING_LOCK: held = _PENDING.pop(mid, None)
+            msg = {**(held or _from_row(r)), '_mid': mid}
             try:
                 ingest_message(store, msg, llm=llm)
             except Exception as e:
@@ -180,10 +203,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             mid = store.add_message({**_fields(msg, None), 'Status': 'skipped' if pol['action'] == 'skip' else 'ignored'})
             store.add_route(mid, None, pol['action'], None, f"policy '{pol['rule']}': {pol['reason']}", [], 'policy')
             return {'status': pol['action'] + ('ped' if pol['action'] == 'skip' else 'd'), 'task_id': None, 'message_id': mid}
-        if getattr(_DEFER, 'on', False):
+        if _deferring():
             mid = store.add_message({**_fields(msg, None), 'Status': 'triaging'})
             store.add_route(mid, None, 'queued', None, 'on the timeline first - triage decides next', [], actor)
-            _PENDING[mid] = msg
+            with _PENDING_LOCK: _PENDING[mid] = msg
             return {'status': 'queued', 'task_id': None, 'message_id': mid}
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))

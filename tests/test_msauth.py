@@ -61,6 +61,24 @@ class DeviceFlowTests(unittest.TestCase):
             self.assertEqual(p.call_count, 1); self.assertEqual(saved, [(7, 'RT2')])
         finally: msauth.on_rotate = None; msauth._CACHE.clear()
 
+    def test_two_polls_sharing_a_refresh_token_mint_once(self):
+        """Outlook and Teams can borrow the same card. A parallel poll that minted twice
+        would rotate the first token out from under the second."""
+        import threading, time
+        msauth._CACHE.clear()
+        n = []
+        def post(*a, **k):
+            n.append(1); time.sleep(0.05)
+            return R(200, {'access_token': 'A1', 'refresh_token': 'RT1', 'expires_in': 3600})
+        with mock.patch('requests.post', side_effect=post):
+            got = [None, None]
+            def one(i): got[i] = msauth.access_token(CFG, 'RT1')
+            a = threading.Thread(target=one, args=(0,)); b = threading.Thread(target=one, args=(1,))
+            a.start(); b.start(); a.join(); b.join()
+        self.assertEqual(got, ['A1', 'A1'])
+        self.assertEqual(len(n), 1)
+        msauth._CACHE.clear()
+
     def test_graph_token_takes_the_signed_in_road(self):
         with mock.patch.object(msauth, 'access_token', return_value='DELEGATED') as a:
             self.assertEqual(channels.graph_token({'auth': 'user', 'client_id': 'x'}, 'RT'), 'DELEGATED')

@@ -1,8 +1,8 @@
 // Polls that exist to keep a visible screen honest should not run while the window is
-// in the background. The Timeline's 30s refresh, the Board's 4s live tails, the Studio
-// animation clock - they all hit one sqlite lock, and they have nothing to show if
-// nobody is looking. Hand-raise notifications are the exception: they fire BECAUSE
-// you are on another tab, so they keep their own timer.
+// in the background. The Studio animation clock still ticks this way; Timeline / Board /
+// Studio *data* now rides the live socket (live.js) instead. Hand-raise notifications
+// are the remaining exception: they fire BECAUSE you are on another tab, so they keep
+// their own timer.
 //
 // No document (node:test, SSR) behaves as visible - the interval just runs.
 

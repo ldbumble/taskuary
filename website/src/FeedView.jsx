@@ -1,7 +1,7 @@
 // Timeline: left time rail, messages slide in as compact blurbs - who/where, the subject,
 // and one plain sentence saying what the hub DID with it (routed where, drafted, filed,
-// ignored) plus its current status. Hover or click a blurb for the whole story. Refreshes
-// itself every 30s so new mail animates in while the tab is open.
+// ignored) plus its current status. Hover or click a blurb for the whole story. A live
+// socket pushes new rows in; the list is not on a timer.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Select, TextField, Typography, useMediaQuery,
@@ -19,13 +19,12 @@ import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { fadeBand } from "./timelineFade.js";
-import { syncStatusDelay } from "./syncTiming.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
 import { timelineDayLabel } from "./timelineDay.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
 import { groupThreads, loudest, spanText } from "./threadGroups.js";
 import EventIcon from "@mui/icons-material/Event";
-import { pollWhileVisible } from "./visible.js";
+import { onLive } from "./live.js";
 import { detailPhase, feedHeaders, feedOk, takeFeed, threadDetail } from "./feedLoad.js";
 import { ALERT, ALERT_BD, ALERT_INK, ASSISTANT, ROLES, PILL_COLORS, BG, PANEL, PANEL2, BORDER, DIM, FAINT, INK, ACCENT, ACCENT2, GRADIENT, card, mono, fadeIn } from "./theme.jsx";
 import SyncIcon from "@mui/icons-material/Sync";
@@ -164,7 +163,7 @@ const FunnelBar = ({ onOpenTask }) => {
   const [f, setF] = useState(null);
   const [open, setOpen] = useState(false);
   const load = useCallback(async () => { try { setF((await api.get("/api/funnel")).data); } catch { setF(null); } }, []);
-  useEffect(() => { load(); return pollWhileVisible(load, 10000); }, [load]);
+  useEffect(() => { load(); return onLive(["feed-changed", "task-changed"], load); }, [load]);
   if (!f || f.mode !== "rank") return null;
   const act = async (tid, what) => { await api.post(`/api/funnel/${tid}/${what}`); load(); };
   return (
@@ -665,51 +664,49 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
   const [tick, setTick] = useState(0);
   useEffect(() => { if (!active) return undefined; const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, [active]);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
+  const seenPollAt = useRef(null);
+  const wasRunning = useRef(false);
+  const completionTimer = useRef(null);
+  const applyStatus = useCallback((data) => {
+    if (!data) return;
+    if (data.everyMinutes != null) setEvery(data.everyMinutes);
+    const pollAt = Number(data.lastPollAt) || null;
+    const completedBetweenChecks = seenPollAt.current != null && pollAt != null && pollAt > seenPollAt.current;
+    if (pollAt) setLastSync(new Date(Date.now() - (data.now - pollAt) * 1000));
+    if (pollAt) seenPollAt.current = pollAt;
+    nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
+    setTriageErr(data.triageError || "");
+    if (data.timelineFade) setFade(data.timelineFade);
+    // a coalesced feed-changed can fold running+idle into one idle payload, so lastPollAt
+    // advancing is how a sub-second automatic poll still gets a visible receipt
+    const running = data.status?.state === "running" || data.ingest?.state === "running";
+    const what = data.status?.what || data.ingest?.what || "";
+    if (running) {
+      clearTimeout(completionTimer.current);
+      setBgSync(true); setSyncWhat(what); load(rowsLen.current);
+    } else if (wasRunning.current) {
+      setBgSync(false); setSyncWhat(""); load(rowsLen.current);
+    } else if (completedBetweenChecks) {
+      setBgSync(true); setSyncWhat("timeline refreshed"); load(rowsLen.current);
+      clearTimeout(completionTimer.current);
+      completionTimer.current = setTimeout(() => { setBgSync(false); setSyncWhat(""); }, 900);
+    }
+    wasRunning.current = running;
+    if (!running) setSyncing(false);
+  }, [load]);
   useEffect(() => {
-    // gated on `active`: this loop re-reads the whole list when a sync lands, and the Timeline
-    // now stays MOUNTED behind another tab (so a live session keeps its socket) - ungated it
-    // would poll and refetch for a screen nobody is looking at. Coming back re-asks at once.
+    // gated on `active`: the Timeline stays mounted behind another tab, and coming back
+    // re-asks at once. Hidden windows stay subscribed via onLive but do not refetch.
     if (!active) return undefined;
-    let alive = true, timer = null, completionTimer = null, wasRunning = false, seenPollAt = null;
-    const ask = async () => {
+    let alive = true;
+    api.get("/api/ingest/status").then(({ data }) => { if (alive) applyStatus(data); }).catch(() => {});
+    const stop = onLive("feed-changed", (ev) => {
       if (!alive) return;
-      let running = false;
-      try {
-        const { data } = await api.get("/api/ingest/status");
-        if (!alive) return;
-        if (data.everyMinutes != null) setEvery(data.everyMinutes);
-        const pollAt = Number(data.lastPollAt) || null;
-        const completedBetweenChecks = seenPollAt != null && pollAt != null && pollAt > seenPollAt;
-        if (pollAt) setLastSync(new Date(Date.now() - (data.now - pollAt) * 1000));
-        seenPollAt = pollAt;
-        nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
-        setTriageErr(data.triageError || "");
-        if (data.timelineFade) setFade(data.timelineFade);
-        // the server's OWN ten-minute sync wears the same face as pressing the button: the
-        // button says Syncing…, the caption says what it is reading, rows land as they arrive
-        running = data.status?.state === "running";
-        if (running) {
-          clearTimeout(completionTimer);
-          setBgSync(true); setSyncWhat(data.status.what || ""); load(rowsLen.current);
-        }
-        else if (wasRunning) { setBgSync(false); setSyncWhat(""); load(rowsLen.current); }
-        else if (completedBetweenChecks) {
-          // Even a sub-second automatic poll gets a visible receipt. The clock changing proves
-          // a real refresh ran, even if it completed between the two status requests.
-          setBgSync(true); setSyncWhat("timeline refreshed"); load(rowsLen.current);
-          clearTimeout(completionTimer);
-          completionTimer = setTimeout(() => {
-            if (alive) { setBgSync(false); setSyncWhat(""); }
-          }, 900);
-        }
-        wasRunning = running;
-      } catch { /* the caption just stops counting */ }
-      timer = setTimeout(ask, syncStatusDelay({ running, nextAt: nextAtRef.current }));
-    };
-    ask();
-    return () => { alive = false; clearTimeout(timer); clearTimeout(completionTimer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+      if (ev.ingest) applyStatus({ ingest: ev.ingest, status: ev.ingest });
+      api.get("/api/ingest/status").then(({ data }) => { if (alive) applyStatus(data); }).catch(() => {});
+    });
+    return () => { alive = false; stop(); clearTimeout(completionTimer.current); };
+  }, [applyStatus, active]);
   useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
   const syncNow = useCallback(async (silent) => {
     if (!silent) setSyncing(true);
@@ -734,47 +731,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
     setTimeout(check, 1500);
   }, [load]);
 
-  // The startup catch-up runs before this tab is even open - if it is still going when the
-  // page mounts, say so and refresh the list the moment it finishes. It used to run silently,
-  // and a timeline that had not refreshed read as "it did not sync".
-  useEffect(() => {
-    let alive = true, sawRunning = false;    // local, not state: the closure would freeze state
-    const watch = async () => {
-      try {
-        const { data } = await api.get("/api/ingest/status");
-        if (!alive) return;
-        if (data.everyMinutes != null) setEvery(data.everyMinutes);
-        if (data.status?.state === "running") {
-          sawRunning = true;
-          // background catch-up: say so and keep polling, but never dim rows that are already
-          // real - a readable timeline behind a working banner, not a page that looks loading
-          setBgSync(true); setSyncWhat(data.status.what || "");
-          // ...and SHOW what has landed so far. Ingest writes each message the moment it has
-          // it, oldest first, so the rows were already arriving one at a time - the timeline
-          // just was not asking until the whole poll finished. A three-day catch-up sat behind
-          // a spinner for minutes with a database filling up behind it.
-          load(rowsLen.current);
-          setTimeout(watch, 2000);
-        } else if (sawRunning) {
-          setBgSync(false); setSyncWhat(""); setLastSync(new Date()); load(rowsLen.current);
-        }
-      } catch { if (alive) { setBgSync(false); setSyncWhat(""); } }
-    };
-    watch();
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     setRows(null); rowsLen.current = 0; setNoMore(false);
     etagRef.current = "";                        // a new filter is not the same page
     setSel(null); setEditText("");   // filter switch: never leave a stale review panel up
     load();
-    // Rows only. The INGEST clock moved to the server (server.poll_forever): living here it
-    // died the moment you opened another tab, and restarted its ten minutes every time a
-    // filter changed this effect's dependencies - so "auto-syncs every 10 min" was a promise
-    // kept only by someone sitting on the Timeline, and never when the window was closed.
-    return active ? pollWhileVisible(() => load(rowsLen.current), 30000) : undefined;
+    // Rows only. The INGEST clock lives on the server; this socket is how the list learns
+    // a row landed, instead of asking every 30s whether anything had. Gated on `active`:
+    // the Timeline stays mounted behind another tab, and coming back re-asks at once.
+    return active ? onLive("feed-changed", () => load(rowsLen.current)) : undefined;
   }, [load, active]);
   useEffect(() => {
     // root: the RAIL. A viewport-rooted observer never fires for a sentinel inside a scroll
@@ -1672,14 +1637,15 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const run = (detail?.runs || []).find((r) => r.Status === "running");
   const onIt = ses ? { agent: ses.agent || ses.label, waiting: ses.waiting ?? (ses.idle >= IDLE_WAITING) }
     : run ? { agent: run.AgentName, waiting: false } : null;
-  // the live console: while an agent is on this task, the panel polls its last lines every 3 s
+  // the live console: while an agent is on this task, the last lines arrive as run-tail
   const [liveRow, setLiveRow] = useState(null);
   useEffect(() => {
     if (!onIt || !sel?.TaskId) { setLiveRow(null); return; }
     let alive = true;
     const poll = async () => { try { const { data } = await api.get("/api/runs/live", { params: { lines: 120 } }); if (alive) setLiveRow((data.data || []).find((r) => r.TaskId === sel.TaskId) || null); } catch { /* keep the last */ } };
-    poll(); const id = setInterval(poll, 3000);
-    return () => { alive = false; clearInterval(id); };
+    poll();
+    const stop = onLive("run-tail", poll);
+    return () => { alive = false; stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!onIt, sel?.TaskId]);
   const phase = detailPhase(sel, detail);

@@ -693,6 +693,13 @@ class SQLiteStore:
         cols = list(d)
         return self._exec(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?'*len(cols))})",
                           [d[c] for c in cols])
+    def _poke(self, *kinds, **payload):
+        """Wake the UI. A write that does not change what a tab is looking at stays quiet."""
+        try:
+            from . import live
+            for k in kinds: live.emit(k, **payload)
+        except Exception:
+            pass
 
     # tasks
     def create_task(self, fields, actor):
@@ -709,6 +716,7 @@ class SQLiteStore:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
         self._bump_snapshots()
+        self._poke('task-changed', task_id=tid)
         return tid
 
     def _next_task_id(self) -> int:
@@ -734,6 +742,8 @@ class SQLiteStore:
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
         self._bump_snapshots()
+        # Timeline rows carry task/review state too, so a task transition changes both views.
+        self._poke('feed-changed', 'task-changed', task_id=task_id)
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
 
     def tag_task(self, task_id, tag, on=True, actor='router'):
@@ -802,6 +812,7 @@ class SQLiteStore:
                   'DELETE FROM task WHERE TaskId=?'):
             self._exec(q, (task_id,))
         self._bump_snapshots()
+        self._poke('feed-changed', 'task-changed', task_id=task_id)
     @contextlib.contextmanager
     def freeze_snapshots(self):
         """Reuse one snapshots() result until a task/message write invalidates it.
@@ -887,6 +898,9 @@ class SQLiteStore:
         mid = self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
         if fields.get('TaskId'):
             self._bump_snapshots()
+            self._poke('feed-changed', 'task-changed', message_id=mid, task_id=fields['TaskId'])
+        else:
+            self._poke('feed-changed', message_id=mid)
         return mid
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def message_by_external(self, external_id):
@@ -1060,7 +1074,9 @@ class SQLiteStore:
         return self._rows('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, '
                           'substr(BodyText, 1, 2000) BodyText '
                           'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
-    def set_message_status(self, mid, status): self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
+    def set_message_status(self, mid, status):
+        self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
+        self._poke('feed-changed', message_id=mid)
     def update_message_body(self, mid, body): self._exec('UPDATE message SET BodyText=? WHERE MessageId=?', (body, mid))   # a voice note, transcribed later
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def place_message(self, mid, task_id, status):
@@ -1068,6 +1084,9 @@ class SQLiteStore:
         self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
         if task_id is not None:
             self._bump_snapshots()
+            self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
+        else:
+            self._poke('feed-changed', message_id=mid)
     def claim_retriage(self, mid: int) -> bool:
         """Atomically move one failed, taskless row back into triage.
 
@@ -1078,12 +1097,16 @@ class SQLiteStore:
             cur = self.cx.execute("""UPDATE message SET Status='triaging'
                                    WHERE MessageId=? AND TaskId IS NULL AND Status='filed'""", (mid,))
             self.cx.commit(); self._writes += 1
-            return cur.rowcount == 1
+            ok = cur.rowcount == 1
+        if ok:
+            self._poke('feed-changed', message_id=mid)
+        return ok
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
         self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
         self._bump_snapshots()
+        self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
     # What was ON the mail: the screenshot of the spreadsheet, the invoice PDF. The bytes live on
     # disk (`Path`) - a database that grows by 8MB a mail is a database nobody backs up.
     def add_attachment(self, fields): return self._insert('attachment', fields, ATT_COLS, {'CreatedAt': _now()})
@@ -1176,13 +1199,17 @@ class SQLiteStore:
         if self.get_agent(name): self._exec('UPDATE agent SET Kind=?, Runner=?, Config=? WHERE Name=?', (kind, runner, config, name))
         else: self._exec('INSERT INTO agent (Name,Kind,Runner,Config) VALUES (?,?,?,?)', (name, kind, runner, config))
     def start_run(self, task_id, agent_name, instruction, by):
-        return self._exec('INSERT INTO run (TaskId,AgentName,Instruction,DispatchedBy,StartedAt) VALUES (?,?,?,?,?)',
-                          (task_id, agent_name, instruction, by, _now()))
+        rid = self._exec('INSERT INTO run (TaskId,AgentName,Instruction,DispatchedBy,StartedAt) VALUES (?,?,?,?,?)',
+                         (task_id, agent_name, instruction, by, _now()))
+        self._poke('run-tail', 'task-changed', task_id=task_id, run_id=rid)
+        return rid
     def update_run(self, run_id, fields, finished=False):
         cols = [c for c in RUN_COLS if c in fields]
         fin = f", FinishedAt='{_now()}'" if finished else ''
         self._exec(f"UPDATE run SET {','.join(f'{c}=?' for c in cols)}, UpdatedAt=?{fin} WHERE RunId=?",
                    [fields[c] for c in cols] + [_now(), run_id])
+        row = self.get_run(run_id)
+        if row: self._poke('run-tail', 'task-changed', task_id=row.get('TaskId'), run_id=run_id)
     def get_run(self, run_id): return self._one('SELECT * FROM run WHERE RunId=?', (run_id,))
     def running_runs(self):
         return self._rows("SELECT * FROM run WHERE Status='running' ORDER BY RunId DESC")
@@ -1226,7 +1253,20 @@ class SQLiteStore:
                    (wid, task_id) if task_id else (wid,))
 
     # reviews (orphans - reviews whose task is gone - never surface)
-    def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
+    def _poke_review(self, review):
+        """A review changes both places that render it: its message and its task."""
+        if not review: return
+        kinds = []
+        if review.get('MessageId'): kinds.append('feed-changed')
+        if review.get('TaskId'): kinds.append('task-changed')
+        if kinds:
+            self._poke(*kinds, review_id=review.get('ReviewId'),
+                       message_id=review.get('MessageId'), task_id=review.get('TaskId'))
+    def _review_changed(self, rid): self._poke_review(self.get_review(rid))
+    def add_review(self, fields):
+        rid = self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
+        self._poke_review({**fields, 'ReviewId': rid})
+        return rid
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def reviews_for_message(self, mid):
         """Every review on a taskless message as well as reviews attached to a task.
@@ -1245,6 +1285,7 @@ class SQLiteStore:
     def decide_review(self, rid, status, final, by, note=None):
         self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',
                    (status, final, by, _now(), note, rid))
+        self._review_changed(rid)
     def pending_review(self, task_id, kind=None, live_only=True):
         """The task's live pending review, by the SAME visibility rule the queue uses: a draft the
         owner can no longer see is not one to re-draft into or treat as already-answered. Pass
@@ -1280,19 +1321,25 @@ class SQLiteStore:
                                   (reason, task_id))
             self.cx.commit()
             self._writes += 1
-            return cur.rowcount                    # lastrowid is meaningless on an UPDATE
+            changed = cur.rowcount                 # lastrowid is meaningless on an UPDATE
+        if changed: self._poke('feed-changed', 'task-changed', task_id=task_id)
+        return changed
     def held_review(self, task_id, mid=None):
         q = "SELECT * FROM review WHERE TaskId=? AND Status='held'" + (' AND MessageId=?' if mid else '') + ' ORDER BY ReviewId DESC LIMIT 1'
         return self._one(q, (task_id, mid) if mid else (task_id,))
     def unhold_review(self, rid, reason=None):
         self._exec("UPDATE review SET Status='pending', Reason=COALESCE(?, Reason) WHERE ReviewId=?", (reason, rid))
+        self._review_changed(rid)
     def update_review_reason(self, rid, reason, run_id=None):
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
+        self._review_changed(rid)
     def update_review_draft(self, rid, draft, run_id):
         self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
+        self._review_changed(rid)
     def save_review_draft(self, rid, draft):
         """Persist the owner's editor without erasing which agent run originally produced it."""
         self._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (draft, rid))
+        self._review_changed(rid)
 
     # policies / sources / settings / memory / docs
     def delete_policy(self, pid): self._exec('DELETE FROM policy WHERE PolicyId=?', (pid,))
@@ -1450,6 +1497,10 @@ class SQLiteStore:
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
+        if name == 'ingest_status':
+            try: extra = json.loads(value) if isinstance(value, str) else {}
+            except (TypeError, ValueError): extra = {}
+            self._poke('feed-changed', ingest=extra if isinstance(extra, dict) else {})
     def last_report(self, title):
         """The previous filed run of a report, by title - its shape anchors the next run (reports.run_agent).
         Failed runs and outbound copies do not count: a table of refusals is not a structure to keep."""

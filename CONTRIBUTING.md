@@ -31,6 +31,7 @@ somewhere else on your machine, edit the `executablePath` at the top of the scri
 
 | path | what lives there |
 |------|------------------|
+| `taskuary/live.py` | one WebSocket bus — Timeline/Board/Studio refetch on `feed-changed` / `task-changed` / `run-tail` |
 | `taskuary/store.py` | SQLite store — schema, seeds, one dict-shaped contract (MemoryStore for tests) |
 | `taskuary/testing.py` | picture factory for regression tests — named Timeline/Board states, `inbound()` for ingest |
 | `taskuary/ingest.py` / `triage.py` / `routing.py` / `policy.py` | the funnel: dedupe → policy → route → AI triage |

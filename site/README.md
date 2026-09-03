@@ -8,8 +8,8 @@ and is served at `https://taskuary.com/demo/`.
 
 ## Deploy (Cloudflare Workers)
 
-The existing `taskuary` Workers project deploys both the static site and its tiny analytics
-endpoint from one command. `wrangler.jsonc` serves `site/` as static assets and sends `/api/*`
+The existing `taskuary` Workers project deploys both the static site and its two tiny analytics
+endpoints from one command. `wrangler.jsonc` serves `site/` as static assets and sends `/api/*`
 through `worker.mjs` first:
 
 1. Cloudflare dashboard → the `taskuary` Worker → **Settings → Builds** → connect
@@ -49,8 +49,12 @@ SQLite-backed `StatsStore`; `wrangler.jsonc` creates and binds it automatically 
 There is no database id, analytics token, environment variable, or dashboard setup. A fork that
 already has the old `DEMO_EVENTS` D1 binding can keep using it.
 
-Read the public, anonymous telemetry at **`https://taskuary.com/stats.html`**. It shows the
-landing-to-demo funnel, engagement and duration, CTA outcomes, acquisition, demo actions, and a
-recent-session diagnostic table. The page is not linked from the site and has no data of its own.
-The API is public because the event store deliberately contains no names, addresses, IPs,
-user-agent strings, cookies, or persistent visitor ids.
+The small admin login is intentionally hardcoded in `functions/lib/statsAuth.js`; edit
+`STATS_USERNAME` and `STATS_PASSWORD` there and redeploy when you want to change it.
+
+Read it at **`https://taskuary.com/stats.html`**. It has a normal username/password sign-in and
+keeps a signed, secure, HttpOnly session for 12 hours. Credentials never appear in the URL or
+browser storage. Once signed in it shows sessions per day, how far people got (bounced after one
+event, or stayed for fifteen), which buttons were pressed and which tabs were opened. The page is
+not linked from the site and has no data of its own; `/api/ev` returns 401 without a valid admin
+session.

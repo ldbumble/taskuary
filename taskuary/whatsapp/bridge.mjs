@@ -98,7 +98,8 @@ async function connect() {
       // owner will look for, and a .bin they cannot open is barely better than losing it
       const [doc, docMime] = await grab(dm, "application/octet-stream",
         () => (String(dm?.fileName || "").split(".").pop() || "bin").slice(0, 8).toLowerCase());
-      messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid, group: m.key.remoteJid?.endsWith("@g.us"),
+      messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid,
+        sender: m.key.participant || m.key.remoteJid, group: m.key.remoteJid?.endsWith("@g.us"),
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
         fromMe: !!m.key.fromMe, quoted, key: m.key, // quote routes phone answers; key is for read receipts
         audio, mime, seconds: Number(am?.seconds) || 0, voice: !!am?.ptt, image, imageMime,

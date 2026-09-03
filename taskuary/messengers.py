@@ -176,6 +176,11 @@ def _wa(c, path, body=None):
     return r.json()
 
 
+def _wa_sender_id(jid: str) -> str:
+    """Stable stored identity without making a provider JID look like an email address."""
+    return 'whatsapp:' + str(jid or '').partition('@')[0].split(':', 1)[0]
+
+
 def wa_test(store, c) -> str:
     st = _wa(c, '/status')
     if not st.get('connected'):
@@ -324,6 +329,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             'external_id': ext_id, 'channel': 'whatsapp',
             'subject': None, 'body': body or '(no text - see the attachment)',
             'from_name': m.get('name') or jid.split('@')[0],
+            # Direct chats use the chat JID; groups carry the participant JID from the bridge.
+            # This is the stable cross-message identity project learning needs - a display name
+            # alone is not safe enough to merge two people.
+            'from_email': _wa_sender_id(m.get('sender') or jid),
             'conversation_id': f'whatsapp:{jid}',
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp',

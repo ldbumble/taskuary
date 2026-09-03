@@ -7,6 +7,7 @@ export const DEFAULT_RATIO = 0.58;          // the browser's share of the width
 export const MIN_RATIO = 0.3, MAX_RATIO = 0.8;
 export const CHIP_BELOW = 700;              // a slot narrower than this (a Wall tile) gets a chip, not a split
 const KEY_RATIO = "tq-browser-ratio", KEY_FOLD = "tq-browser-folded";
+const foldKey = (sid) => sid ? `${KEY_FOLD}.${sid}` : KEY_FOLD;
 
 export const clampRatio = (r) => (Number.isFinite(r) ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, r)) : DEFAULT_RATIO);
 
@@ -17,8 +18,10 @@ export const savedRatio = () => {
   try { return clampRatio(parseFloat(localStorage.getItem(KEY_RATIO))); } catch { return DEFAULT_RATIO; }
 };
 export const rememberRatio = (r) => { try { localStorage.setItem(KEY_RATIO, String(clampRatio(r))); } catch { /* private mode */ } };
-export const savedFold = () => { try { return localStorage.getItem(KEY_FOLD) === "1"; } catch { return false; } };
-export const rememberFold = (f) => { try { localStorage.setItem(KEY_FOLD, f ? "1" : "0"); } catch { /* private mode */ } };
+// Folding is a choice about THIS browser, not every browser opened in the future. The old global
+// key made one Fold click hide every later session, which looked exactly like navigation failed.
+export const savedFold = (sid) => { try { return localStorage.getItem(foldKey(sid)) === "1"; } catch { return false; } };
+export const rememberFold = (f, sid) => { try { localStorage.setItem(foldKey(sid), f ? "1" : "0"); } catch { /* private mode */ } };
 
 // Letterbox a frame into a box: the page is drawn whole and centred, never cropped or stretched.
 // Returns the drawn rectangle and the scale from page pixels to canvas pixels.

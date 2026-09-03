@@ -16,6 +16,41 @@ import re as _re
 # and it is judged here, in a document that can be argued with).
 # This text also ships as templates/triage.md - the editable TRIAGE.md doc that overrides it
 # (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
+
+# The evidence fields the payload carries, each with what it MEANS. An owner-written (or
+# history-generated) TRIAGE.md replaces these instructions wholesale, so a signal added to the
+# payload after that document was written arrives with nothing said about it - this install's doc
+# names neither `exchange` nor `assistant_said` (2026-09-03). What a field means is a data
+# dictionary, not a judgement, so classify_intent appends the ones the document never names.
+FIELDS = {
+    'others_replied':
+        'others_replied names people - other than you and the sender - who have already SENT a message on '
+        'this thread, and last_on_thread is whoever spoke most recently. Somebody else answering is the '
+        'strongest everyday sign that a request is not waiting on you: when a colleague has replied and the '
+        'ask is not aimed at you specifically, prefer fyi. Weigh it, do not obey it - a question that names '
+        'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
+        'fields mean nobody else has spoken, which is not evidence either way.',
+    'exchange':
+        'exchange is the recent back-and-forth on this thread or in this chat room, oldest first, with the '
+        'owner\'s own lines marked "you" - a chat line quotes nothing and a mail reply may quote nothing '
+        'either, so it is the only reliable way to know what a bare "nope, new one" or "she wants them back '
+        'on" is answering. It is CONTEXT: judge the message in body and nothing else. A line that answers '
+        'something the owner asked in the exchange is a round trip, not a new job. A line opening a subject '
+        'the exchange has not touched is a new ask on its own merits, however the earlier lines were '
+        'classified. Being about the same system or person is not the same ask: two bugs in one app are two '
+        'jobs. But an ask made two messages back is STILL THE ASK: when somebody asked for something and the '
+        'exchange shows it was never delivered, that thread is live work, and a message moving it on - a '
+        'decision, an approval, a name with authority behind it ("Hindy wants them back on"), a changed '
+        'requirement, a nudge - is a task, however conversational it reads and however little it asks in its '
+        'own words. Only a thread whose ask was plainly settled or dropped goes to fyi.',
+    'assistant_said':
+        'assistant_said is what the Timeline assistant already raised about this very thread (a follow-up it '
+        'suggested, an ask it flagged, a promise it noticed) and what the owner did with it. Be consistent '
+        'with it, not obedient: an OPEN follow-up means the owner is waiting on this person and their line is '
+        'probably the answer (a round trip, not new work); a DISMISSED one means the owner let the thread go - '
+        'do not resurrect it. Say when you disagree.',
+}
+
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
@@ -49,23 +84,9 @@ INTENT_SYSTEM = (
     'reply_only is for what a sentence settles with nothing to do behind it; fyi is thanks, status, and threads '
     'between other people where the owner is neither asked nor named.\n'
     'addressed_to_you and recipients are SIGNALS to weigh, never rules to obey. "to" = the mail was aimed at the owner; "cc" = they were copied, which OFTEN means somebody else owns the work; "not named" = it arrived through a group alias or a shared mailbox the owner is responsible for - their own address is not on it, and the people on the To line own the matter. But a cc can absolutely be theirs: one that names them, asks them something directly, or that only they can answer is their work, and being on the cc line counts for nothing against that. recipients counts everyone on the mail - a note to thirty people is more likely a broadcast than a job. Weigh these with everything else in the message; never decide on them alone. Both fields are absent on channels with no recipient lines.\n'
-    'others_replied names people - other than you and the sender - who have already SENT a message on '
-    'this thread, and last_on_thread is whoever spoke most recently. Somebody else answering is the '
-    'strongest everyday sign that a request is not waiting on you: when a colleague has replied and the '
-    'ask is not aimed at you specifically, prefer fyi. Weigh it, do not obey it - a question that names '
-    'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
-    'fields mean nobody else has spoken, which is not evidence either way.\n'
-    'exchange is the recent back-and-forth in this chat room, oldest first, with the owner\'s own lines '
-    'marked "you" - a chat line quotes nothing, so it is the only way to know what a bare "nope, new one" '
-    'is answering. It is CONTEXT: judge the message in body and nothing else. A line that answers something '
-    'the owner asked in the exchange is a round trip, not a new job. A line opening a subject the exchange '
-    'has not touched is a new ask on its own merits, however the earlier lines were classified. Being about '
-    'the same system or person is not the same ask: two bugs in one app are two jobs.\n'
-    'assistant_said is what the Timeline assistant already raised about this very thread (a follow-up it '
-    'suggested, an ask it flagged, a promise it noticed) and what the owner did with it. Be consistent with it, '
-    'not obedient: an OPEN follow-up means the owner is waiting on this person and their line is probably the '
-    'answer (a round trip, not new work); a DISMISSED one means the owner let the thread go - do not resurrect it. '
-    'Say when you disagree.\n'
+    + FIELDS['others_replied'] + '\n'
+    + FIELDS['exchange'] + '\n'
+    + FIELDS['assistant_said'] + '\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '
     'is no substitute for either.')
@@ -130,8 +151,14 @@ _LEGAL = _re.compile(r'^\s*(NOTICE|DISCLAIMER|CONFIDENTIALITY( NOTICE)?|LEGAL NO
                      r'|unauthorized (use|review|disclosure|distribution))')
 _VALEDICTION = _re.compile(r'^\s*(thank(s| you)|best( regards| wishes)?|kind(est)? regards|regards|'
                            r'sincerely|respectfully|warm(ly| regards)?|cheers|v/?r)\s*[,!.]*\s*$', _re.I)
-_CONTACT = _re.compile(r'^\s*(phone|tel|mobile|cell|fax|office|direct|email|e-?mail|web|www\.|address)'
-                       r'|^\s*\+?[\d(][\d\s().x-]{6,}$'
+# ...and the shapes a mail client actually writes them in: Outlook's phone dash is U+2011, and it
+# pads a signature block with zero-width spaces (which str.strip() does not remove, so the block
+# read as ordinary text). The \b ending the first alternative had been eaten to a literal backspace,
+# so a bare 'Phone:' or 'Email:' line never matched and every signature rode into the prompt.
+_DASH = '\u2010\u2011\u2012\u2013\u2014\u2212-'
+_BLANKISH = _re.compile(r'^[\s\u200b\u200c\u200d\ufeff\u00a0]*$')
+_CONTACT = _re.compile(r'^\s*(phone|tel|mobile|cell|fax|office|direct|email|e-?mail|web|www\.|address)\b'
+                       r'|^\s*\+?[\d(][\d\s().x' + _DASH + r']{6,}$'
                        r'|^[^@\s]+@[^@\s]+\.[a-z]{2,}\s*$', _re.I)
 _KEEP_MIN = 30          # never trim a message down past this - when in doubt, keep
 NL = chr(10)
@@ -153,7 +180,7 @@ def strip_boilerplate(text: str) -> str:
             lines = lines[:i]
             break
     # 3. stray contact lines left at the very end (a block with no valediction above it)
-    while lines and (_CONTACT.match(lines[-1]) or not lines[-1].strip()):
+    while lines and (_CONTACT.match(lines[-1]) or _BLANKISH.match(lines[-1])):
         if len(NL.join(lines[:-1]).strip()) < _KEEP_MIN: break
         lines.pop()
     out = NL.join(lines).rstrip()
@@ -177,7 +204,8 @@ def _agreement(notes) -> tuple:
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
-                    thread: dict = None, watch: str = None, playbooks: str = None) -> dict:
+                    thread: dict = None, watch: str = None, playbooks: str = None,
+                    project: dict = None) -> dict:
     """`notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
@@ -210,6 +238,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     if llm:
         try:
             base = re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM
+            # every signal in this payload the document says nothing about, explained in the shipped
+            # words: a field handed over unexplained is a field the model guesses at, and the exchange
+            # (the prior mail on the thread) reached this install's generated doc as an unnamed key
+            unsaid = [t for k, t in FIELDS.items() if (thread or {}).get(k) and k not in base]
+            if unsaid: base += '\n\nTHE PAYLOAD ALSO CARRIES:\n' + '\n'.join(unsaid)
             system = base + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
@@ -267,11 +300,17 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            '"playbook": "<slug>" to your answer; it is then a task for the agent and it works it from that '
                            'playbook. A message that only mentions the same systems is not an instance - the `when` line '
                            'must fit. Otherwise leave the key out.\n' + str(playbooks)[:3000])
+            if project:
+                system += ('\n\nPROJECT RELATIONSHIP CONTEXT - selected from the owner\'s prior explicit repository '
+                           'choices for this sender/channel. It helps identify what the message is about; it does '
+                           'not make an informational message a task and it is never permission to write or send. '
+                           'A tentative or ambiguous relationship must not be presented as certain.')
             how = addressed_to_you(msg, mine)
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),
+                               **({'project_context': project} if project else {}),
                                'body': strip_boilerplate(str(msg.get('body') or ''))[:1500]})
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '

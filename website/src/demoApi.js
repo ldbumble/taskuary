@@ -43,22 +43,24 @@ const read = (url) => {
   m = p.match(/^\/api\/terminals\/([a-z0-9]+)$/);
   if (m) return clone(state["/api/terminals/scrollback"]?.[m[1]]) || clone(demoTerminalRecording(m[1], state));
   if (p.startsWith("/api/feed")) return clone(state["/api/feed"]);
-  // Social: the recorded shelf, filtered and sorted the way the tab asks, plus what the visitor voted off
-  if (p === "/api/handbook") {
+  // Hub: canonical route backed by the legacy fixture key so old recordings still load.
+  if (p === "/api/hub" || p === "/api/handbook") {
     const qs = Object.fromEntries(new URLSearchParams(query(url)));
-    const all = socialRows(qs.status === "removed");
-    let rows = all.filter((r) => (!qs.topic || r.Topic === qs.topic) && (!qs.q || `${r.Title} ${r.Body}`.toLowerCase().includes(qs.q.toLowerCase())));
+    const all = hubRows(qs.status === "removed");
+    let rows = all.filter((r) => (!qs.topic || r.Topic === qs.topic) && (!qs.kind || r.Kind === qs.kind)
+      && (!qs.q || `${r.Title} ${r.Body}`.toLowerCase().includes(qs.q.toLowerCase())));
     if (qs.sort === "top") rows = [...rows].sort((a, b) => (b.Score || 0) - (a.Score || 0));
-    return clone({ ...state["/api/handbook"], data: rows });
+    return clone({ ...hubBox(), data: rows });
   }
-  m = p.match(/^\/api\/handbook\/(\d+)$/);
-  if (m) { const r = [...socialRows(false), ...socialRows(true)].find((x) => String(x.LoreId) === m[1]); return clone(r ? { ...r, comments: r.comments || [], votes: [] } : null); }
+  m = p.match(/^\/api\/(?:hub|handbook)\/(\d+)$/);
+  if (m) { const r = [...hubRows(false), ...hubRows(true)].find((x) => String(x.LoreId) === m[1]); return clone(r ? { ...r, comments: r.comments || [], votes: [] } : null); }
   if (p.startsWith("/api/tasks")) return clone(state["/api/tasks"]);
   return { data: [] };                 // an unrecorded list reads as empty, never as a crash
 };
 
-// Social's two shelves: what is live, and what the vote (or the visitor) took off
-const socialRows = (removed) => { const box = (state["/api/handbook"] ||= { topics: [], data: [], count: { posts: 0, topics: 0, comments: 0 } }); return removed ? (box.removed ||= []) : (box.data ||= []); };
+// Hub's two shelves: what is live, and what the vote (or the visitor) took off.
+const hubBox = () => (state["/api/hub"] ||= state["/api/handbook"] || { topics: [], data: [], count: { posts: 0, topics: 0, comments: 0 } });
+const hubRows = (removed) => { const box = hubBox(); return removed ? (box.removed ||= []) : (box.data ||= []); };
 
 // ── the writes a visitor is invited to make ──────────────────────────────────────────────
 const REPLIES = [
@@ -224,9 +226,9 @@ const write = (method, url, body) => {
     return { ...box };
   }
 
-  // Social: vote, comment, post, remove, restore - all on the recording, none of it kept
-  if ((m = p.match(/^\/api\/handbook\/(\d+)\/(vote|comment|retire|restore)$/))) {
-    const live = socialRows(false), gone = socialRows(true);
+  // Hub: vote, comment, post, remove, restore - all on the recording, none of it kept
+  if ((m = p.match(/^\/api\/(?:hub|handbook)\/(\d+)\/(vote|comment|retire|restore)$/))) {
+    const live = hubRows(false), gone = hubRows(true);
     const i = live.findIndex((r) => String(r.LoreId) === m[1]), j = gone.findIndex((r) => String(r.LoreId) === m[1]);
     const row = i >= 0 ? live[i] : gone[j];
     if (!row) throw new Error("no such entry");
@@ -248,12 +250,12 @@ const write = (method, url, body) => {
     if (m[2] === "restore" && j >= 0) { row.Status = "live"; gone.splice(j, 1); live.unshift(row); }
     return clone(row);
   }
-  if (method === "post" && p === "/api/handbook") {
+  if (method === "post" && (p === "/api/hub" || p === "/api/handbook")) {
     const row = { LoreId: ++nextId, Topic: (body?.topic || "general").toLowerCase().replace(/[^a-z0-9]+/g, "-"), Title: body?.title || "",
       Body: body?.body || "", Author: "you", Kind: body?.kind || "howto", TaskId: null, Score: 0, MyVote: 0, Status: "live", Comments: 0,
       CreatedAt: new Date().toISOString().slice(0, 19).replace("T", " "), UpdatedAt: new Date().toISOString().slice(0, 19).replace("T", " ") };
-    socialRows(false).unshift(row);
-    const box = state["/api/handbook"]; box.count = { ...box.count, posts: (box.count?.posts || 0) + 1 };
+    hubRows(false).unshift(row);
+    const box = hubBox(); box.count = { ...box.count, posts: (box.count?.posts || 0) + 1 };
     if (!(box.topics || []).some((t) => t.Topic === row.Topic)) (box.topics ||= []).push({ Topic: row.Topic, n: 1 });
     return clone(row);
   }

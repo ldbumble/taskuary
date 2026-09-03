@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taskuary"
-version = "0.3.2.13"
+version = "0.3.3.0"
 description = "Automate your job - the local-first operating system for your work: AI triage in, coding agents out."
 readme = "README.md"
 license = { text = "MIT" }
@@ -67,4 +67,4 @@ include = ["taskuary*"]
 [tool.setuptools.package-data]
 # whatsapp/ too: the bridge error tells you to run `node bridge.mjs` out of the package, and
 # a pip install without it is an instruction pointing at a directory that does not exist.
-taskuary = ["web/*", "web/assets/*", "templates/*.md", "whatsapp/*"]
+taskuary = ["web/*", "web/assets/*", "templates/*.md", "skills/*/*.md", "whatsapp/*"]

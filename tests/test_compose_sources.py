@@ -132,6 +132,15 @@ class SameFenceTests(unittest.TestCase):
                                                             {'type': 'local_file', 'path': 'C:/x.csv'})))
         self.assertEqual([s['type'] for s in out['sources']], ['local_file'])
 
+    def test_write_workflows_cannot_be_read_as_data_source_cards(self):
+        out = compose.compose_sources(self.s, 'run some work', llm_saying(src_answer(
+            {'type': 'agent', 'prompt': 'read it'}, {'type': 'agent', 'access': 'write', 'prompt': 'change it'},
+            {'type': 'zoho_monthly_invoices'},
+            {'type': 'local_file', 'path': 'C:/x.csv'})))
+        # An agent is an executor, not inherently a workflow. Without access:write it is a
+        # read-only report source; the stateful invoice workflow remains fenced out.
+        self.assertEqual([s['type'] for s in out['sources']], ['agent', 'local_file'])
+
     def test_the_check_alone_is_not_an_answer(self):
         out = compose.compose_sources(self.s, 'watch everything', llm_saying(src_answer({'type': 'assistant'})))
         self.assertIn('the check itself', out['error'])

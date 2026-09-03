@@ -18,7 +18,7 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { streamAssistant, toolTarget } from "./assistantStream.js";
-import { wantsAsk, withoutAsk } from "./newTask.js";
+import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
 import { Md } from "./md.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import SemanticPanel from "./SemanticPanel.jsx";
@@ -645,7 +645,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         ) : session && view === "terminal" ? (
           <TerminalPane sid={session.sid} height="100%" />
         ) : session ? (
-          <SessionPane sid={session.sid} height="100%">
+          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task)}>
             <AssistantThread key={`${task.TaskId}-${threadKey}`} task={task} messages={shownMessages}
               onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
               attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}

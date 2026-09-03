@@ -14,7 +14,7 @@ import { track } from "./demoTrack";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
 import FeedView from "./FeedView.jsx";
 import BoardView from "./BoardView.jsx";
-const SocialView = React.lazy(() => import("./SocialView.jsx"));
+const HubView = React.lazy(() => import("./HubView.jsx"));
 import TasksView from "./TasksView.jsx";
 import ReviewView from "./ReviewView.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
@@ -28,18 +28,21 @@ import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark } from "./ui.jsx";
 import FloatingAssistant from "./FloatingAssistant.jsx";
+import AssistantView from "./AssistantView.jsx";
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
 // (Board, Tasks), what is waiting on you (Review), then what has been WRITTEN DOWN - Reports and
-// Social, which is what the agents worked out that is still true next month (handbook.py) - and
-// last the plumbing. Social was next to Board first, which put a slow surface in the middle of
+// Hub, which holds hard-earned discoveries and developed company ideas - and last the plumbing.
+// Hub was next to Board first, which put a slow surface in the middle of
 // the two fast ones. Nine tabs is the most this strip holds at a readable size; the next one has
 // to displace something.
 //
 // Review stays even though a draft reply also shows on the Timeline: a proposal (proposals.py,
 // Kind 'action') carries no MessageId, so it has no Timeline row to live on. Drop this tab and an
 // agent asking permission has nowhere to ask.
-const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Social", "Connections", "Docs", "Settings"];
+// Assistant first: it is where the day starts now - Taskuary walks you through the pipe, and the
+// other tabs are where you go to see the whole of something (AssistantView.jsx, funnel.py).
+const TABS = ["Timeline", "Board", "Tasks", "Review", "Assistant", "Reports", "Hub", "Connections", "Docs", "Settings"];
 const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
@@ -170,7 +173,7 @@ function ServerVersion() {
 }
 
 export default function TaskHubPage() {
-  const [tab, setTab] = useState("Timeline");
+  const [tab, setTab] = useState("Assistant");
   const demo = useDemo();          // the badge, and what the header hides to make room for it
   useEffect(() => holdLive(), []);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -185,7 +188,7 @@ export default function TaskHubPage() {
   // visible notification wait on that request made it appear at arbitrary times on a busy server.
   const [raisedQueue, setRaisedQueue] = useState([]);
   const raised = raisedQueue[0] || null;
-  const tabRef = useRef("Timeline"), selRef = useRef(null);
+  const tabRef = useRef("Assistant"), selRef = useRef(null);
   const selectTask = useCallback((tid) => { setSelectedTask(tid); selRef.current = tid; }, []);
   const onRaise = useCallback((r) => {
     // already looking at this very task's session: no ring, you are watching it stop
@@ -248,11 +251,12 @@ export default function TaskHubPage() {
   // back rebuilt the pane and redrew the CLI's screen from the top of its scrollback. Hidden
   // is enough - fit() reads a display:none pane as NaN and skips, then refits on the way back.
   const [everTasks, setEverTasks] = useState(false);
-  const [everTimeline, setEverTimeline] = useState(true);   // the landing tab: mounted from the first paint
+  const [everTimeline, setEverTimeline] = useState(false);
+  const [everAssistant, setEverAssistant] = useState(true);   // the landing tab: mounted from the first paint
   const [everBoard, setEverBoard] = useState(false);
   useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
   // ...and the two views that can hold a live session: mounted once opened, hidden after
-  useEffect(() => { if (tab === "Timeline") setEverTimeline(true); if (tab === "Board") setEverBoard(true); }, [tab]);
+  useEffect(() => { if (tab === "Timeline") setEverTimeline(true); if (tab === "Board") setEverBoard(true); if (tab === "Assistant") setEverAssistant(true); }, [tab]);
 
   const refreshPending = useCallback(async () => {
     try { setPending(((await api.get("/api/reviews", { params: { status: "pending" } })).data.data || []).length); }
@@ -267,6 +271,8 @@ export default function TaskHubPage() {
   useEffect(() => {
     const fromHash = () => {
       const m = /task=(\d+)/.exec(window.location.hash || ""); if (m) openTask(Number(m[1]));
+      // a card's "open on the Timeline": FeedView reads the same hash and opens the row
+      if (/^#msg=\d+/.test(window.location.hash || "")) go("Timeline");
       // a connector card's playbook link: the words live on the Docs tab (DocsView reads the hash itself)
       if (/playbook=/.test(window.location.hash || "")) go("Docs");
     };
@@ -286,7 +292,8 @@ export default function TaskHubPage() {
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
         {/* bottom-right, not under the top bar: up there it covered the row every tab keeps its
             actions on (the Board's buttons, a task's Mark done) for twelve seconds per hand raised */}
-        <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised} autoHideDuration={12000}
+        {/* ...and not on the Assistant tab: the pipe and its by-the-way line already carry a raised hand */}
+        <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised && tab !== "Assistant"} autoHideDuration={12000}
           onClose={() => setRaisedQueue(dismissHandRaise)}
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           sx={{ mb: 8 }}
@@ -326,8 +333,8 @@ export default function TaskHubPage() {
               "& .MuiSelect-select": { py: 0.4, pl: 1.25, pr: "28px !important" },
               "& .MuiOutlinedInput-notchedOutline": { borderColor: "#d8cfbe" } }}>
             {TABS.map((t) => (
-              <MenuItem key={t} value={t} sx={{ fontSize: 12.5 }}>
-                {t}{t === "Review" && pending > 0 ? ` · ${pending > 99 ? "99+" : pending}` : ""}
+              <MenuItem key={t} value={t} sx={{ fontSize: 12.5, fontWeight: t === "Assistant" ? 800 : 400 }}>
+                {t === "Assistant" ? "✦ Taskuary" : t}{t === "Review" && pending > 0 ? ` · ${pending > 99 ? "99+" : pending}` : ""}
               </MenuItem>
             ))}
           </Select>
@@ -343,7 +350,18 @@ export default function TaskHubPage() {
           <Box sx={{ display: { xs: "none", md: "flex" }, gap: 0.5, minWidth: 0, overflowX: "auto",
             position: "absolute", left: "50%", transform: "translateX(-50%)",
             maxWidth: { md: "58%", xl: "62%" }, pointerEvents: "auto" }}>
-            {TABS.map((t) => (
+            {TABS.map((t) => t === "Assistant" ? (
+              // the Assistant sits in the MIDDLE of the strip wearing the mark: it is the main way through the
+              // day now, and the other tabs are where you go to see the whole of something
+              <Box key={t} onClick={() => go(t)} title="Taskuary — your assistant walks you through what needs you"
+                sx={{ display: "flex", alignItems: "center", gap: 0.7, px: 1.6, py: 0.35, mx: 0.5, borderRadius: 99, cursor: "pointer",
+                  fontSize: 13, fontWeight: 800, whiteSpace: "nowrap", color: tab === t ? "#fff" : "#41525f",
+                  background: tab === t ? GRADIENT : "#e4e9ee", border: `1px solid ${tab === t ? "transparent" : "#cbd4dc"}`,
+                  boxShadow: tab === t ? "0 4px 14px rgba(69,79,70,.28)" : "none", transition: "all .15s",
+                  "&:hover": { boxShadow: "0 4px 14px rgba(69,79,70,.22)" } }}>
+                <TaskuaryMark size={18} />{t}
+              </Box>
+            ) : (
               // the count rides INSIDE the pill. A MUI Badge hangs outside its child's box, and
               // this strip is overflowX:auto - so the number was being clipped by the scroller
               // it sits in, which is how "Review 1" showed up as a half-eaten dot.
@@ -393,6 +411,13 @@ export default function TaskHubPage() {
           {/* Timeline and Board stay MOUNTED behind another tab, like Tasks: each can hold a live
               pty session, and unmounting closed its websocket - so coming back replayed the whole
               scrollback and ran the pane top to bottom. Their polling is gated on `active`. */}
+          {/* the Assistant stays mounted too: its conversation and the pipe's animation state are
+              on screen state worth keeping, and its polling is gated on `active` */}
+          {(everAssistant || tab === "Assistant") && (
+            <Box sx={{ display: tab === "Assistant" ? "block" : "none" }}>
+              <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} active={tab === "Assistant"} />
+            </Box>
+          )}
           {(everTimeline || tab === "Timeline") && (
             <Box sx={{ display: tab === "Timeline" ? "block" : "none" }}>
               <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} active={tab === "Timeline"} />
@@ -412,9 +437,9 @@ export default function TaskHubPage() {
                 onGoReports={(sid) => { window.location.hash = `report=${sid}`; go("Reports"); }} />
             </Box>
           )}
-          {tab === "Social" && (
+          {tab === "Hub" && (
             <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>
-              <SocialView key={`so${tick}`} onOpenTask={openTask} />
+              <HubView key={`hub${tick}`} onOpenTask={openTask} />
             </React.Suspense>
           )}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
@@ -423,7 +448,8 @@ export default function TaskHubPage() {
           {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} />}
         </Box>
-        <FloatingAssistant onNavigate={go} onChanged={refreshPending} activeTab={tab} />
+        {/* the bubble is the same assistant; on its own page it would be a second chat over the first */}
+        {tab !== "Assistant" && <FloatingAssistant onNavigate={go} onChanged={refreshPending} activeTab={tab} />}
       </Box>
     </ThemeProvider>
   );

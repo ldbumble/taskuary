@@ -527,6 +527,13 @@ export const ChoiceList = ({ children }) => (
   <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden" }}>{children}</Box>
 );
 
+// what time an artifact was written, for the run it belongs to
+const artifactTime = (a) => {
+  const at = a?.created_at || a?.createdAt || a?.at;
+  if (!at) return "";
+  const d = new Date(String(at).replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+};
 const artifactUrl = (artifact, download = false) => {
   const token = localStorage.getItem("taskuary_token");
   const query = [download ? "download=true" : "", token ? `token=${encodeURIComponent(token)}` : ""]
@@ -583,11 +590,18 @@ export const CoderReport = ({ body, artifacts = [] }) => {
               <Box sx={{ mt: detailRows.length ? 1.15 : 0 }}>
                 <Typography sx={{ ...mono, color: FAINT, fontWeight: 700, fontSize: 9.5,
                   letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>Full artifact</Typography>
-                {artifacts.slice(0, 3).map((artifact) => (
+                {/* an agent that ran twice leaves two: they were both called "Open full agent output",
+                    which is one link too many and no way to tell them apart (the owner, 2026-09-03:
+                    "there are 2 open full agent outputs since it was run twice. Version them").
+                    Newest first, numbered by run, each with its own time. */}
+                {artifacts.slice(0, 3).map((artifact, i, all) => (        /* newest first, as the API sends them */
                   <Button key={artifact.id} component="a" href={artifactUrl(artifact)} target="_blank"
                     rel="noopener" size="small" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
+                    title={artifact.name || artifact.path || ""}
                     sx={{ mr: 0.75, mb: 0.4, px: 0, justifyContent: "flex-start", textTransform: "none" }}>
-                    Open full agent output
+                    {all.length > 1
+                      ? `Run ${all.length - i}${artifactTime(artifact) ? ` · ${artifactTime(artifact)}` : ""}${i ? "" : " · latest"}`
+                      : "Open full agent output"}
                   </Button>
                 ))}
               </Box>
@@ -1019,6 +1033,13 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }} />
       )}
       {items.map((it) => {
+        if (it.section) return (
+          <Typography key={`section-${it.section}`} variant="overline"
+            sx={{ display: "block", color: ACCENT2, letterSpacing: 1.35, fontWeight: 750,
+              fontSize: 9.5, px: 1.25, mt: it.first ? 0 : 1.6, mb: 0.3 }}>
+            {it.section}
+          </Typography>
+        );
         const key = it.key ?? it, on = !q && value === key;
         return (
           <Box key={key} onClick={() => { setQ?.(""); onChange(key); }}
@@ -1442,7 +1463,7 @@ export const WorkLine = ({ work, who = "agent", waiting = false, asking = false,
    chain already held and the card never showed. Polls only while the session is alive. */
 const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 700, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
 const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
-export const WorkStrip = ({ taskId, live, session, provenance }) => {
+export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed = false }) => {
   // The terminal list already carries current witness/provenance data. Paint that immediately;
   // the richer /work response (diff counts, exact audit provenance) replaces it in the background.
   // Waiting for that request made the whole strip appear to have vanished above a busy terminal.
@@ -1456,9 +1477,12 @@ export const WorkStrip = ({ taskId, live, session, provenance }) => {
   } : null;
   const [d, setD] = useState(seed);
   const [failed, setFailed] = useState(false);
-  // The structured view is why this is more useful than a naked terminal. Show it on first use;
-  // an owner who deliberately folds it keeps that choice for this browser.
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem("tq.workstrip") !== "0"; } catch { return true; } });
+  // During a live run the terminal owns the page, so first use starts folded. Once the owner
+  // chooses, keep that choice for this browser; opening the strip is still one click away.
+  const [open, setOpen] = useState(() => { try {
+    const saved = localStorage.getItem("tq.workstrip");
+    return saved == null ? !defaultCollapsed : saved !== "0";
+  } catch { return !defaultCollapsed; } });
   const toggle = () => { setOpen((o) => { try { localStorage.setItem("tq.workstrip", o ? "0" : "1"); } catch { /* private window */ } return !o; }); };
   useEffect(() => {
     if (!taskId) return undefined;

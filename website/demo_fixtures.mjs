@@ -13,6 +13,19 @@ import { writeFileSync } from "node:fs";
 const BASE = process.argv[2] || "http://127.0.0.1:7801";
 const OUT = process.argv[3] || new URL("./src/demoFixtures.json", import.meta.url).pathname.replace(/^\//, "");
 
+// The local server seeds its owner token into the page it serves. Read that exactly as the real
+// browser does, then authenticate every recorded API call; otherwise a secured demo records a
+// plausible-looking file full of nulls.
+const nativeFetch = globalThis.fetch;
+const shell = await nativeFetch(BASE + "/").then((r) => r.text()).catch(() => "");
+const tokenMatch = shell.match(/localStorage\.setItem\("taskuary_token",\s*("[^"]*")\)/);
+let token = "";
+try { token = tokenMatch ? JSON.parse(tokenMatch[1]) : ""; } catch { token = ""; }
+const fetch = (input, init = {}) => nativeFetch(input, {
+  ...init,
+  headers: { ...Object.fromEntries(new Headers(init.headers || {})), ...(token ? { "X-Taskuary-Token": token } : {}) },
+});
+
 // Everything the app reads on a first look at each tab. Parameterised reads are recorded under
 // the path the UI asks for, so the adapter can match on the same string.
 const PATHS = [
@@ -21,7 +34,7 @@ const PATHS = [
   "/api/feed?limit=200", "/api/tasks?active=1", "/api/tasks",
   "/api/reviews", "/api/terminals", "/api/agents", "/api/brains", "/api/cli/detect",
   "/api/connectors", "/api/sources", "/api/report-types", "/api/reports/last-runs",
-  "/api/board/notes", "/api/handbook", "/api/people", "/api/send-targets", "/api/memory", "/api/policies",
+  "/api/board/notes", "/api/hub", "/api/people", "/api/send-targets", "/api/memory", "/api/policies",
   "/api/calendar/today", "/api/audit/recent", "/api/semantic/metrics", "/api/soul/interview",
   "/api/voice/status", "/api/learned/graph",
 ];
@@ -89,6 +102,9 @@ for (const s of (out["/api/terminals"]?.data || out["/api/terminals"] || [])) {
 // machine: its user folder, its CLI paths. The demo's owner is Dana Whitfield, so the paths are
 // hers - a real user name on an invented page is the one thing the demo must never carry.
 let text = JSON.stringify(out, null, 1);
+if (!out["/api/version"]) {
+  throw new Error("demo server API was unavailable or unauthenticated; refusing to overwrite the fixture");
+}
 // inside JSON every backslash is doubled, so the Windows pattern matches the escaped form
 text = text.replace(/C:\\\\Users\\\\[^\\"]+\\\\/g, "C:\\\\Users\\\\dana\\\\");
 text = text.replace(/\/home\/[^/"]+\//g, "/home/dana/").replace(/\/Users\/[^/"]+\//g, "/Users/dana/");

@@ -12,6 +12,7 @@ import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
+import { Md } from "./md.jsx";
 import LearnedView from "./LearnedView.jsx";
 import SoulInterview from "./SoulInterview.jsx";
 import { FAINT, INK, mono } from "./theme.jsx";
@@ -25,7 +26,7 @@ const DOCS = {
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "How you write replies — greeting, tone, length, phrasing — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
   counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "#55697a" }} />,
-    blurb: "How the assistant speaks to YOU — its posts on the Timeline: the reply you never heard back on, the meeting ahead, the task gone quiet, its own ideas. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
+    blurb: "Who Taskuary is and how it speaks to YOU — the assistant you talk to on the Assistant tab, its posts on the Timeline, the morning brief. It surfaces and takes a position; it does no work itself. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
   coder: { label: "CODER.md", icon: <TaskuaryMark size={19} />,
     blurb: "The coding agent's rules, stacked on top of SOUL.md for every coder run: how to close out, what it may fix itself, what must escalate, and how to answer the sender." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#55697a" }} />,
@@ -35,9 +36,29 @@ const DOCS = {
 };
 const NAMES = Object.keys(DOCS);
 
-// Playbooks: the fourth document is a FOLDER - one file per kind of job, accreted the first time
-// each is done (docs/beyond-code.md). They sit under the six on the same shelf and open in the same
-// editor; a "pb:<slug>" docName is one of them, "pb:new" the blank one from the template.
+// The Assistant, and the gates a message passes in order. Shipped markdown (templates/how-it-works.md),
+// read-only: it describes what the code does, so it is reference rather than an operator document -
+// editing it would only make the description wrong (the owner, 2026-09-03: "add section in the /docs
+// about the new assistant and the gates each message goes through").
+function HowItWorks() {
+  const [text, setText] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get("/api/how-it-works").then(({ data }) => live && setText(data.text || ""))
+      .catch((e) => live && setText(`Could not load the page: ${e?.response?.data?.detail || e.message}`));
+    return () => { live = false; };
+  }, []);
+  if (text === null) return <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={20} /></Box>;
+  return (
+    <Box sx={{ bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2, p: { xs: 2, md: 3 }, maxWidth: 900 }}>
+      <Md text={text} />
+    </Box>
+  );
+}
+
+// Playbooks are a separate section of Docs: one file per kind of job, accreted the first time
+// each is done (docs/beyond-code.md). They open in the same editor, but never share the operator
+// document shelf—a company can have hundreds without burying the owner's identity card.
 const isPb = (n) => n.startsWith("pb:");
 const pbSlug = (n) => n.slice(3);
 const PB_BLURB = "How THIS company does one kind of job, for the agent that will do it: when it starts, which connections it uses, the steps, what it may do alone, what to ask first, and what counts as done. Triage matches new messages against `when`; the connector cards list the playbooks that name them.";
@@ -95,6 +116,7 @@ const OwnerCard = () => {
 
 export default function DocsView() {
   const [docName, setDocName] = useState(NAMES[0]);
+  const [section, setSection] = useState("documents");
   const [docs, setDocs] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
   const [saved, setSaved] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
   const [loaded, setLoaded] = useState(false);
@@ -108,6 +130,7 @@ export default function DocsView() {
   const [books, setBooks] = useState([]);              // the playbooks on disk: slug, title, when, uses
   const [tpl, setTpl] = useState("");                  // what a new one starts from
   const [pbMsg, setPbMsg] = useState("");
+  const [pbFilter, setPbFilter] = useState("");
   // the generation is inspectable, not a vibe: poll its status while it runs so the button
   // narrates ("reading you@... — 240 sent so far"), then show the exact evidence it judged
   useEffect(() => {
@@ -141,7 +164,7 @@ export default function DocsView() {
   // open a playbook: its text is fetched on first open, not with the shelf (the shelf is titles)
   const openPb = useCallback(async (slug, seedUses = "") => {
     const key = `pb:${slug}`;
-    setGenMsg(""); setGenEv(null); setPbMsg(""); setDocName(key);
+    setSection("playbooks"); setGenMsg(""); setGenEv(null); setPbMsg(""); setDocName(key);
     if (slug === "new") {
       // a card's "new playbook for this connection" arrives as new:<type> - the uses line is prefilled
       const t = (tpl || "").replace(/^uses:.*$/m, (l) => (seedUses ? `uses:      ${seedUses} (read)` : l));
@@ -184,74 +207,120 @@ export default function DocsView() {
   };
   const removePb = async () => {
     const slug = pbSlug(docName);
-    if (slug === "new") { setDocName(NAMES[0]); return; }
+    if (slug === "new") {
+      if (books[0]) await openPb(books[0].slug);
+      else setDocs((d) => ({ ...d, "pb:new": tpl }));
+      return;
+    }
     try { await api.delete(`/api/playbooks/${slug}`); } catch { /* already gone */ }
-    setDocName(NAMES[0]); await loadBooks();
+    const next = books.find((b) => b.slug !== slug);
+    await loadBooks(); await openPb(next?.slug || "new");
   };
+  const chooseSection = (next) => {
+    setSection(next); setGenMsg(""); setGenEv(null); setPbMsg("");
+    if (next === "how") return;                      // reference: no shelf, no editor, nothing to open
+    if (next === "documents") {
+      if (isPb(docName)) setDocName(NAMES[0]);
+    } else if (!isPb(docName)) {
+      openPb(books[0]?.slug || "new");
+    }
+  };
+  const visibleBooks = books.filter((b) => {
+    const q = pbFilter.trim().toLowerCase();
+    return !q || [b.title, b.when, b.slug, ...(b.uses || [])].some((v) => String(v || "").toLowerCase().includes(q));
+  });
   const meta = isPb(docName)
     ? { label: docName === "pb:new" ? "New playbook" : `${pbSlug(docName)}.md`, blurb: PB_BLURB }
     : DOCS[docName];
 
   if (!loaded && !err) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  // A list you can see is worth more than a landing you have to go back to: switching
-  // documents used to mean breadcrumb → grid → card, and these six are read together.
+  // Operator documents and playbooks share an editor, not a shelf. The fixed operator set stays
+  // close to the identity it speaks for; the unbounded playbook library gets search and its own
+  // viewport-height list.
   return (
+    <>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2.5, borderBottom: "1px solid #e1dcd5" }}>
+      {[["documents", "Operator documents"], ["playbooks", `Playbooks${books.length ? ` (${books.length})` : ""}`],
+        ["how", "How it works"]].map(([key, label]) => (
+        <Box key={key} component="button" onClick={() => chooseSection(key)}
+          sx={{ appearance: "none", border: 0, borderBottom: `2px solid ${section === key ? "#55697a" : "transparent"}`,
+            bgcolor: "transparent", color: section === key ? INK : FAINT, cursor: "pointer", px: 1.25, py: 0.9,
+            font: "inherit", fontSize: 13, fontWeight: section === key ? 700 : 600,
+            "&:hover": { color: INK, bgcolor: "#f4f1ec" } }}>
+          {label}
+        </Box>
+      ))}
+    </Box>
+    {section === "how" ? <HowItWorks /> : (
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "300px minmax(0,1fr)" },
       gap: 3, alignItems: "start" }}>
 
       <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
-        <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Operator documents</Typography>
-        {NAMES.map((n) => (
-          <Box key={n} onClick={() => { setGenMsg(""); setGenEv(null); setDocName(n); }}
-            sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
-              bgcolor: n === docName ? "#fff" : "transparent",
-              border: `1px solid ${n === docName ? "#d8cfbe" : "transparent"}`,
-              boxShadow: n === docName ? "0 1px 3px rgba(30,50,38,.06)" : "none",
-              "&:hover": { bgcolor: n === docName ? "#fff" : "#f4f1ec" } }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Box sx={{ display: "flex", opacity: n === docName ? 1 : .65 }}>{DOCS[n].icon}</Box>
-              <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>{DOCS[n].label}</Typography>
-              {n === docName && (
-                <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                  borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
+        {section === "documents" ? (
+          <>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Operator documents</Typography>
+            {NAMES.map((n) => (
+              <Box key={n} onClick={() => { setGenMsg(""); setGenEv(null); setDocName(n); }}
+                sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
+                  bgcolor: n === docName ? "#fff" : "transparent",
+                  border: `1px solid ${n === docName ? "#d8cfbe" : "transparent"}`,
+                  boxShadow: n === docName ? "0 1px 3px rgba(30,50,38,.06)" : "none",
+                  "&:hover": { bgcolor: n === docName ? "#fff" : "#f4f1ec" } }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Box sx={{ display: "flex", opacity: n === docName ? 1 : .65 }}>{DOCS[n].icon}</Box>
+                  <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>{DOCS[n].label}</Typography>
+                  {n === docName && (
+                    <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
+                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
+                  )}
+                </Box>
+                <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{DOCS[n].blurb}</Typography>
+              </Box>
+            ))}
+            <Box sx={{ mt: 2 }}><OwnerCard /></Box>
+          </>
+        ) : (
+          <>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Playbooks</Typography>
+            <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.25, lineHeight: 1.5 }}>
+              One per kind of job—how it is done here, and where the line is between “just do it” and “ask”.
+            </Typography>
+            <Box onClick={() => openPb("new")}
+              sx={{ p: 1.1, mb: 1, borderRadius: 2, cursor: "pointer", display: "flex", alignItems: "center", gap: 1,
+                border: `1px dashed ${docName === "pb:new" ? "#d8cfbe" : "#e1dcd5"}`, bgcolor: docName === "pb:new" ? "#fff" : "transparent",
+                "&:hover": { bgcolor: "#f4f1ec" } }}>
+              <AddIcon sx={{ fontSize: 17, color: "#55697a" }} />
+              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>{books.length ? "New playbook" : "Write the first playbook"}</Typography>
+            </Box>
+            {books.length > 0 && <TextField size="small" fullWidth value={pbFilter} onChange={(e) => setPbFilter(e.target.value)}
+              placeholder={`Search ${books.length} playbook${books.length === 1 ? "" : "s"}`}
+              sx={{ mb: 1, bgcolor: "#fff", "& input": { fontSize: 12 } }} />}
+            <Box sx={{ maxHeight: { xs: "min(52vh, 520px)", md: "calc(100vh - 260px)" }, overflowY: "auto", pr: { md: 0.5 } }}>
+              {visibleBooks.map((b) => {
+                const key = `pb:${b.slug}`, on = key === docName;
+                return (
+                  <Box key={key} onClick={() => openPb(b.slug)}
+                    sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer", bgcolor: on ? "#fff" : "transparent",
+                      border: `1px solid ${on ? "#d8cfbe" : "transparent"}`, boxShadow: on ? "0 1px 3px rgba(30,50,38,.06)" : "none",
+                      "&:hover": { bgcolor: on ? "#fff" : "#f4f1ec" } }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ display: "flex", opacity: on ? 1 : .65 }}><MenuBookIcon sx={{ fontSize: 19, color: "#55697a" }} /></Box>
+                      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{b.title}</Typography>
+                      {on && <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
+                        borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>}
+                    </Box>
+                    <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>when: {b.when}</Typography>
+                    {b.uses?.length > 0 && <Typography noWrap sx={{ ...mono, fontSize: 10.5, color: FAINT, pt: 0.25 }}>uses {b.uses.join(" · ")}</Typography>}
+                  </Box>
+                );
+              })}
+              {books.length > 0 && !visibleBooks.length && (
+                <Typography sx={{ fontSize: 12, color: FAINT, py: 2, textAlign: "center" }}>No playbooks match “{pbFilter}”.</Typography>
               )}
             </Box>
-            <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{DOCS[n].blurb}</Typography>
-          </Box>
-        ))}
-        {/* the playbooks shelf: one line per kind of job the company has written down, plus the door to a new one */}
-        <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mt: 2.5, mb: 0.5 }}>Playbooks</Typography>
-        <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.25, lineHeight: 1.5 }}>
-          One per kind of job — how it is done here, and where the line is between "just do it" and "ask".
-          The first is drafted for you when an agent finishes a job for the first time; approve it in Review and the next one runs on it.
-        </Typography>
-        {books.map((b) => {
-          const key = `pb:${b.slug}`, on = key === docName;
-          return (
-            <Box key={key} onClick={() => openPb(b.slug)}
-              sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer", bgcolor: on ? "#fff" : "transparent",
-                border: `1px solid ${on ? "#d8cfbe" : "transparent"}`, boxShadow: on ? "0 1px 3px rgba(30,50,38,.06)" : "none",
-                "&:hover": { bgcolor: on ? "#fff" : "#f4f1ec" } }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Box sx={{ display: "flex", opacity: on ? 1 : .65 }}><MenuBookIcon sx={{ fontSize: 19, color: "#55697a" }} /></Box>
-                <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{b.title}</Typography>
-                {on && <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                  borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>}
-              </Box>
-              <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>when: {b.when}</Typography>
-              {b.uses?.length > 0 && <Typography noWrap sx={{ ...mono, fontSize: 10.5, color: FAINT, pt: 0.25 }}>uses {b.uses.join(" · ")}</Typography>}
-            </Box>
-          );
-        })}
-        <Box onClick={() => openPb("new")}
-          sx={{ p: 1.1, mb: 0.75, borderRadius: 2, cursor: "pointer", display: "flex", alignItems: "center", gap: 1,
-            border: `1px dashed ${docName === "pb:new" ? "#d8cfbe" : "#e1dcd5"}`, bgcolor: docName === "pb:new" ? "#fff" : "transparent",
-            "&:hover": { bgcolor: "#f4f1ec" } }}>
-          <AddIcon sx={{ fontSize: 17, color: "#55697a" }} />
-          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>{books.length ? "New playbook" : "Write the first playbook"}</Typography>
-        </Box>
-        <Box sx={{ mt: 2 }}><OwnerCard /></Box>
+          </>
+        )}
       </Box>
 
       <Box sx={{ minWidth: 0 }}>
@@ -262,12 +331,12 @@ export default function DocsView() {
             <Typography noWrap sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{meta.label}</Typography>
             <Typography variant="body2" sx={{ color: FAINT, pt: 0.75 }}>{meta.blurb}</Typography>
           </Box>
-          {/* SOUL.md cannot be distilled from a mailbox - it is what only the owner knows. So it
-              is asked for, in seven questions, and written from the answers (interview.py). */}
+          {/* SOUL.md cannot be distilled from a mailbox - it is what only the owner knows. The
+              assistant therefore asks seven adaptive questions, one answer at a time. */}
           {docName === "soul" && (
             <Button size="small" variant="outlined" onClick={() => setInterview(true)}
               sx={{ fontSize: 11.5, textTransform: "none" }}
-              title="Seven short questions - who you are, what an agent may do alone, what must never happen without you - and the AI writes SOUL.md from your answers">
+              title="Seven adaptive questions; each one follows your previous answers, then the assistant writes SOUL.md">
               Write it from a few questions
             </Button>
           )}
@@ -349,5 +418,7 @@ export default function DocsView() {
           setSaved((d) => ({ ...d, soul: doc }));
         }} />
     </Box>
+    )}
+    </>
   );
 }

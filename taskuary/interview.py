@@ -1,79 +1,37 @@
-"""SOUL.md, written from a short interview.
+"""An adaptive, seven-turn interview that writes SOUL.md.
 
-STYLE.md and TRIAGE.md can be distilled from history: the owner's sent mail IS how they write,
-and their verdicts ARE what they consider work (histgen.py). SOUL.md cannot. Who you answer for,
-what you will never let an agent decide alone, which systems are yours, who outranks whom -
-none of that is in the mailbox. It is in the owner's head, and the shipped template is a
-stranger called John Smith until somebody replaces him.
-
-So: seven questions, plain, none of them mandatory, most of them already half-answered from
-what Taskuary can see (the connected channels, the repositories, who writes most). The owner
-answers in their own words and the AI writes the document in the template's shape - the same
-headings the rest of the app already reads, because a beautifully written SOUL.md with
-headings nobody parses is a diary.
-
-With no AI connector the answers are still worth having: they are laid into the template
-verbatim, which is a worse document and an honest one.
+The interview behavior lives in ``skills/soul-interview/SKILL.md`` rather than in seven
+hardcoded, IT-shaped questions. The application gives that skill the accumulated transcript
+after every answer, so each next question can follow the person instead of a form.
 """
+import json
+import re
 from datetime import datetime
+from pathlib import Path
 
-QUESTIONS = [
-    {'key': 'who', 'q': 'Who are you, and what is your job?',
-     'why': 'Every reply is signed by you and every agent works on your behalf. A name and a role '
-            'is the difference between "the owner" and somebody the agent can act for.',
-     'placeholder': 'Dana Whitfield, IT director at a facilities group - I own the systems, the vendors and the data'},
-    {'key': 'work', 'q': 'What kind of work actually reaches you in a day?',
-     'why': 'Triage decides what becomes a task. It needs to know what your day is made of before '
-            'it can tell a real request from noise.',
-     'placeholder': 'system fixes and access requests, finance questions about Intacct, vendor chasing, '
-                    'and a lot of mail that is only cc'},
-    {'key': 'task', 'q': 'What should an agent just get on with, without asking you?',
-     'why': 'This is the whole promise. Anything you name here stops arriving as a question.',
-     'placeholder': 'anything read-only, pulling numbers, drafting replies, fixing an obvious bug in our own repos'},
-    {'key': 'never', 'q': 'What must never happen without you?',
-     'why': 'The hard line. It is quoted into every coder run and every draft, and it is the one '
-            'part of the document an agent is told it cannot reason its way around.',
-     'placeholder': 'anything touching payroll or resident data, spending money, promising a date, '
-                    'emailing a regulator, deleting anything'},
-    {'key': 'people', 'q': 'Who do you answer to, and who answers to you?',
-     'why': 'It changes the answer. A question from your CFO is not the same message as the same '
-            'question from a vendor.',
-     'placeholder': 'the CFO and the COO outrank me; my two sysadmins and the helpdesk report to me; '
-                    'vendors get a polite no by default'},
-    {'key': 'systems', 'q': 'Which systems and repositories are yours?',
-     'why': 'An agent that does not know which checkout is yours will guess, and a confident guess '
-            'in the wrong repository is the expensive kind of mistake.',
-     'placeholder': 'Sage Intacct, our Entra tenant, the SQL box behind the census app; repos: '
-                    'acme/census, acme/importers'},
-    {'key': 'voice', 'q': 'How do you want it to sound when it writes as you?',
-     'why': 'STYLE.md learns this from your sent mail later; until then, your own description of '
-            'your voice is better than the shipped default.',
-     'placeholder': 'short, plain, warm but not chatty; no exclamation marks; sign "Dana"'},
-]
+TOTAL_QUESTIONS = 7
+SKILL_FILE = Path(__file__).parent / 'skills' / 'soul-interview' / 'SKILL.md'
 
-SYSTEM = (
-    'You write SOUL.md: the operator document at the top of an AI work assistant. Everything it '
-    'does is stacked on this - triage reads it to decide what is work, the reply writer reads it '
-    'to know who is signing, every coding agent gets it verbatim.\n\n'
-    'You are given an owner\'s answers to a short interview, in their own words, and what the app '
-    'can already see about their setup. Write the document.\n\n'
-    'RULES:\n'
-    '- Keep EXACTLY these headings, in this order: "# SOUL.md - the operator\'s document", then '
-    '"## What counts as a task", "## How we respond", "## Escalate (a human decides) when", '
-    '"## Systems and repositories", "## People". The app reads these sections; inventing your own '
-    'is a document nothing parses.\n'
-    '- Under the title, one short paragraph naming the owner and what the assistant is for.\n'
-    '- Short bullets. Concrete. Their words where they gave you words - never inflate a plain '
-    'sentence into corporate prose.\n'
-    '- Everything they said must survive somewhere. Nothing they did NOT say may appear as fact: '
-    'no invented names, systems, hours, or policies. Where they left a question blank, write the '
-    'section from the safe default (escalate rather than act) and keep it to one line.\n'
-    '- "Nothing sends or ships without <the owner>\'s approval." belongs in the opening paragraph.\n'
-    '- Markdown only. No preamble, no closing commentary, no code fences.')
+# Accept the old request shape while installed clients move to the adaptive UI. This is not the
+# new interview: these labels only make an already-submitted legacy form intelligible to draft().
+_LEGACY_LABELS = {
+    'who': 'Who are you, and what is your work?',
+    'work': 'What kind of work reaches you?',
+    'task': 'What may the assistant handle without asking?',
+    'never': 'What must never happen without you?',
+    'people': 'Which people and relationships matter?',
+    'systems': 'Which systems or sources of truth matter?',
+    'voice': 'How should communication sound?',
+}
+
+
+def skill_text() -> str:
+    """The portable interview contract used for both questioning and writing."""
+    return SKILL_FILE.read_text(encoding='utf-8')
 
 
 def context(store) -> dict:
-    """What the app can already see, so the interview does not ask what it can read."""
+    """Facts the app already knows; the assistant should build on them rather than re-ask."""
     from .store import roles_of
     conns = [c for c in store.list_connectors() if c['Active']]
     repos = [s['Address'] for s in store.list_sources() if s.get('Channel') == 'github']
@@ -85,50 +43,113 @@ def context(store) -> dict:
 
 def _known(ctx: dict) -> str:
     bits = [f"Owner name on file: {ctx['owner'] or '(not set)'}",
-            f"Channels connected: {', '.join(ctx['channels']) or 'none yet'}",
-            f"Repositories: {', '.join(ctx['repos']) or 'none'}",
-            f"Writes to them most: {'; '.join(ctx['writes_most']) or 'nothing ingested yet'}"]
-    return 'WHAT THE APP ALREADY SEES (facts - use them, do not contradict them):\n' + '\n'.join(bits)
+            f"Connected sources: {', '.join(ctx['channels']) or 'none yet'}",
+            f"Known repositories (mention only if relevant): {', '.join(ctx['repos']) or 'none'}",
+            f"Frequent correspondents: {'; '.join(ctx['writes_most']) or 'nothing ingested yet'}"]
+    return 'WHAT TASKUARY ALREADY KNOWS (facts; do not contradict them):\n' + '\n'.join(bits)
+
+
+def _answers(value) -> list[dict]:
+    """Normalize adaptive transcripts and the previous seven-field request shape."""
+    if isinstance(value, list):
+        out = []
+        for item in value[:TOTAL_QUESTIONS]:
+            if not isinstance(item, dict): continue
+            question = str(item.get('q') or item.get('question') or '').strip()
+            if not question: continue
+            out.append({'q': question[:500], 'a': str(item.get('a') or item.get('answer') or '').strip()[:4000]})
+        return out
+    if isinstance(value, dict):
+        return [{'q': label, 'a': str(value.get(key) or '').strip()[:4000]}
+                for key, label in _LEGACY_LABELS.items() if key in value]
+    return []
+
+
+def _transcript(answers: list[dict]) -> str:
+    if not answers: return '(No questions have been asked yet.)'
+    return '\n\n'.join(f"QUESTION {i}: {row['q']}\nANSWER {i}: {row['a'] or '(skipped)'}"
+                       for i, row in enumerate(answers, 1))
+
+
+def _brain(store, llm):
+    if llm is not None: return llm
+    from .llm import build_llm
+    return build_llm(store)
+
+
+def _json_object(raw: str) -> dict:
+    text = str(raw or '').strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
+    try: return json.loads(text)
+    except (TypeError, ValueError):
+        match = re.search(r'\{.*\}', text, re.S)
+        if not match: raise ValueError('The assistant did not return a question. Try again.')
+        try: return json.loads(match.group(0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('The assistant returned an unreadable question. Try again.') from exc
+
+
+def next_question(store, answers, llm=None) -> dict:
+    """Generate exactly one next question from everything already said."""
+    prior = _answers(answers)
+    if len(prior) >= TOTAL_QUESTIONS: raise ValueError('All seven questions have already been asked.')
+    brain = _brain(store, llm)
+    if not brain:
+        raise ValueError('Set up an AI assistant first so the interview can adapt to your answers.')
+    number = len(prior) + 1
+    prompt = (f"MODE: NEXT_QUESTION\nQUESTION NUMBER: {number} OF {TOTAL_QUESTIONS}\n\n"
+              f"{_known(context(store))}\n\nINTERVIEW SO FAR:\n{_transcript(prior)}\n\n"
+              "Return the single next question as the JSON object required by the skill. Do not write SOUL.md yet.")
+    data = _json_object(brain(skill_text(), prompt, max_tokens=350))
+    question = str(data.get('q') or '').strip()
+    if not question: raise ValueError('The assistant did not return a question. Try again.')
+    if '?' not in question: question = question.rstrip('.') + '?'
+    return {'number': number, 'total': TOTAL_QUESTIONS, 'q': question[:500],
+            'why': str(data.get('why') or 'This fills in an important part of how the assistant should work for you.').strip()[:500],
+            'placeholder': str(data.get('placeholder') or '').strip()[:500]}
 
 
 def _plain(answers: dict, ctx: dict) -> str:
-    """No AI connector: their answers, in the template's shape. Worse, and honest."""
+    """Compatibility fallback for the old fixed form when no AI connector exists."""
     a = lambda k: str(answers.get(k) or '').strip()
     owner = a('who') or ctx.get('owner') or 'the owner'
-    lines = [f"# SOUL.md - the operator's document", '',
+    lines = ["# SOUL.md - the operator's document", '',
              f"You work for **{owner}**. You are the funnel between everything inbound and their "
              f"attention. **Nothing sends or ships without {owner.split(',')[0]}'s approval.**", '',
-             '## What counts as a task', f"- {a('task') or 'A concrete request to DO something.'}",
-             (f"- What reaches this desk: {a('work')}" if a('work') else None), '',
-             '## How we respond', f"- {a('voice') or 'Plain, brief, warm-professional.'}", '',
+             '## What counts as a task', f"- {a('task') or 'A concrete request to do something.'}",
+             (f"- What reaches this person: {a('work')}" if a('work') else None), '',
+             '## How we respond', f"- {a('voice') or 'Plain, brief, and warm-professional.'}", '',
              '## Escalate (a human decides) when',
-             f"- {a('never') or 'Money, legal, HR, credentials, permissions, or an external commitment is involved.'}", '',
-             '## Systems and repositories', f"- {a('systems') or ', '.join(ctx.get('repos') or []) or '(none named)'}", '',
-             '## People', f"- {a('people') or '(not stated)'}", '',
+             f"- {a('never') or 'The boundary has not yet been specified; ask before acting.'}", '',
+             '## Systems and repositories', f"- {a('systems') or ', '.join(ctx.get('repos') or []) or '(not specified)'}", '',
+             '## People', f"- {a('people') or '(not specified)'}", '',
              f"<!-- written from the setup interview, {datetime.now().strftime('%Y-%m-%d')} -->"]
-    return '\n'.join(l for l in lines if l is not None)      # '' is a paragraph break, not an absence
+    return '\n'.join(line for line in lines if line is not None)
 
 
-def draft(store, answers: dict, llm=None) -> str:
-    """The document. The AI writes it where there is one; the answers stand in where there is not."""
-    answers = {q['key']: str(answers.get(q['key']) or '').strip() for q in QUESTIONS}
-    if not any(answers.values()): raise ValueError('answer at least one question first')
+def draft(store, answers, llm=None) -> str:
+    """Write SOUL.md from an adaptive transcript (or a legacy form submission)."""
+    transcript = _answers(answers)
+    if not any(row['a'] for row in transcript): raise ValueError('answer at least one question first')
     ctx = context(store)
-    if llm is None:
-        from .llm import build_llm
-        llm = build_llm(store)
-    if not llm: return _plain(answers, ctx)
-    said = '\n\n'.join(f"Q: {q['q']}\nA: {answers[q['key']] or '(no answer)'}" for q in QUESTIONS)
-    out = str(llm(SYSTEM, f'{_known(ctx)}\n\nTHE INTERVIEW:\n\n{said}', max_tokens=1800) or '').strip()
+    brain = _brain(store, llm)
+    if not brain:
+        if isinstance(answers, dict): return _plain(answers, ctx)
+        raise ValueError('The AI assistant used for the interview is no longer available.')
+    prompt = (f"MODE: WRITE_SOUL\n\n{_known(ctx)}\n\nCOMPLETE SEVEN-QUESTION INTERVIEW:\n"
+              f"{_transcript(transcript)}")
+    out = str(brain(skill_text(), prompt, max_tokens=1800) or '').strip()
     out = out.removeprefix('```markdown').removeprefix('```').removesuffix('```').strip()
-    return out or _plain(answers, ctx)
+    if out: return out
+    if isinstance(answers, dict): return _plain(answers, ctx)
+    raise ValueError('The assistant did not produce SOUL.md. Try writing it again.')
 
 
-def write(store, answers: dict, actor: str = 'owner', llm=None) -> str:
-    """Draft it and save it. The owner edits it afterwards like any other document - this is a
-    first draft from their own words, not a thing that happens to them."""
+def write(store, answers, actor: str = 'owner', llm=None) -> str:
+    """Draft, save, and audit an owner-controlled SOUL.md."""
     body = draft(store, answers, llm)
     store.save_doc('soul', body, actor)
+    transcript = _answers(answers)
     store.audit('doc', 0, 'soul_interview', actor,
-                detail={'answered': [k for k, v in answers.items() if str(v or '').strip()]})
+                detail={'answered': sum(bool(row['a']) for row in transcript),
+                        'questions': len(transcript), 'adaptive': isinstance(answers, list)})
     return body

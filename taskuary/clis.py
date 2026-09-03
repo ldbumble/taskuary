@@ -50,6 +50,17 @@ READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '')),
             'codex': (('--dangerously-bypass-approvals-and-sandbox', '--full-auto'), ('--sandbox', 'read-only')),
             'gemini': (('--yolo',), ())}
 
+# A report is allowed to LOOK, but not to act. That is deliberately different from the mail
+# classifier above, which gets no tools at all because the text it classifies is untrusted input.
+# Claude's built-ins are named explicitly, and every MCP tool is denied because MCP permissions
+# are separate from --tools and a connector may expose writes beside reads.
+REPORT_READ = {
+    'claude': (('--dangerously-skip-permissions',),
+               ('--tools', 'Read,Glob,Grep,WebFetch,WebSearch', '--disallowedTools', 'mcp__*')),
+    'codex': READONLY['codex'],
+    'gemini': READONLY['gemini'],
+}
+
 
 def _base(cmd: str) -> str:
     import re
@@ -60,6 +71,12 @@ def _base(cmd: str) -> str:
 def readonly_args(cmd: str, args: list) -> list:
     """`args` with the permission bypass removed and the CLI's own no-tools flags added."""
     drop, add = READONLY.get(_base(cmd), ((), ()))
+    return [a for a in args if a not in drop] + list(add)
+
+
+def report_read_args(cmd: str, args: list) -> list:
+    """CLI arguments for retrieving report data without command, edit, write, or MCP access."""
+    drop, add = REPORT_READ.get(_base(cmd), ((), ()))
     return [a for a in args if a not in drop] + list(add)
 
 

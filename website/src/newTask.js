@@ -24,6 +24,7 @@ export const BROWSER_TAG = "needs:browser";
 // to nobody. Tagged, only an explicit `taskuary --done` ends it (selfclose.STAY_TAG).
 export const STAY_TAG = "stay:open";
 export const wantsAsk = (task) => new RegExp(`(^|[\\s,])${ASK_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));
+export const wantsBrowser = (task) => new RegExp(`(^|[\\s,])${BROWSER_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));
 export const withoutAsk = (tags) => String(tags || "").split(/[\s,]+/).filter((t) => t && t !== ASK_TAG).join(",");
 
 // the picker's value as the API wants it: a repository, or nothing at all

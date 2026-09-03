@@ -19,6 +19,8 @@ import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { fadeBand } from "./timelineFade.js";
+import { syncFace, syncStatusDelay } from "./syncTiming.js";
+import { lazyGeneral } from "./lazyGeneral.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
 import { timelineDayLabel } from "./timelineDay.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
@@ -44,7 +46,7 @@ import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
 import { TerminalPane } from "./TerminalView.jsx";
 
-const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.GeneralWorkspace })));
+const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once (lazyGeneral.js)
 
 // Two different dimensions, two controls: WHAT STATE it's in (everything vs needs me) and WHICH
 // KIND / SOURCE it came from - they combine (e.g. "needs me" + "email"). STATE gets semantic
@@ -816,6 +818,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
     if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
     setDetail(d);
   };
+  // #msg=<id> - a card on the Assistant tab pointing here. Opened once the row is on screen; the
+  // hash is cleared so a reload does not reopen it. A row older than the loaded page stays a plain
+  // Timeline visit, which is still the right place to have landed.
+  useEffect(() => {
+    const m = /^#msg=(\d+)/.exec(window.location.hash || "");
+    if (!m || !rows) return;
+    const row = rows.find((r) => r.MessageId === Number(m[1]));
+    if (!row) return;
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    drill(row);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
   // A selected message is a LIVE row, not a frozen copy of what it looked like at click time.
   // During ingest it moves from taskless/triaging to routed (often gaining a TaskId). Refresh
   // both the row and the kind of detail endpoint at that boundary, or the open panel circles
@@ -1132,10 +1146,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
               appears to describe the sync line beneath it. */}
           <Box sx={{ minHeight: 20, display: "flex", justifyContent: "center", alignItems: "center", gap: 0.25 }}>
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
-              {syncing || bgSync ? (syncWhat || "syncing…")
-                : !every ? "background sync off"
-                : `synced ${lastSync ? lastSync.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}`
-                  + (nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`)}
+              {syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn })}
             </Typography>
             <Button size="small" variant="text" disabled={syncing || bgSync} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
@@ -2913,11 +2924,13 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
         <Box sx={{ mt: 1.5, px: 1.25, py: 0.7, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
             <Box component="span" sx={{ fontWeight: 700, color: "#6b5f45" }}>what it reviewed · </Box>
-            {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
-            {rv.people != null ? ` · ${rv.people} thread${rv.people === 1 ? "" : "s"} of what people said` : ""}
-            {rv.recent != null ? ` · ${rv.recent} sender/subject line${rv.recent === 1 ? "" : "s"} from the last two days · ${rv.week} task${rv.week === 1 ? "" : "s"} closed this week`
-              : ` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today`}
-            {` · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}
+            {rv.scope === "sources" ? `${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only` : <>
+              {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
+              {rv.people != null ? ` · ${rv.people} thread${rv.people === 1 ? "" : "s"} of what people said` : ""}
+              {rv.recent != null ? ` · ${rv.recent} sender/subject line${rv.recent === 1 ? "" : "s"} from the last two days · ${rv.week} task${rv.week === 1 ? "" : "s"} closed this week`
+                : ` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today`}
+              {` · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}
+            </>}
             {rv.model ? " · the model chose the lines" : " · no model — the hub's facts in its own words"}
           </Typography>
           {/* what it left for its next check - so you can see what it will NOT research again */}

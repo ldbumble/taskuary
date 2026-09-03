@@ -89,7 +89,7 @@ const wsUrl = (sid) => {
 // The effect keys on `sid` ALONE: the task page re-renders every few seconds while a run
 // polls, and taking a fresh callback identity as a dependency tore the terminal down and
 // rebuilt it on every one of those renders - which is what "it just flashes" was.
-const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false }) => {
+const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = true }) => {
   const host = useRef(null);
   const exit = useRef(onExit);
   exit.current = onExit;
@@ -194,7 +194,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false }) => {
     const lift = () => {
       clearTimeout(bail); cancelAnimationFrame(revealFrame);
       revealFrame = null; lifted = true;
-      term.scrollToBottom(); setRestoring(false); if (!readOnly) term.focus();
+      term.scrollToBottom(); setRestoring(false); if (!readOnly && autoFocus) term.focus();
     };
     const maybeLift = () => {
       if (canRevealTerminal(readySeen, pendingWrites, lifted) && !revealFrame) revealFrame = requestAnimationFrame(lift);
@@ -279,11 +279,11 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false }) => {
     };
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
-    if (!readOnly) term.focus();
+    if (!readOnly && autoFocus) term.focus();
     return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame); output.dispose();
       el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
       input?.dispose(); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
-  }, [sid, readOnly]);
+  }, [sid, readOnly, autoFocus]);
   return (
     // height="100%": the pane fills the flex slot its parent gives it (the task page sizes it to
     // whatever is left on screen); any other value is a fixed height as before
@@ -409,11 +409,11 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // server (agent-browser's own state files), polled - nothing here asks the agent. A slot too
 // narrow for two panes (a Wall tile three across) gets a chip instead, which opens the browser
 // OVER the terminal until dismissed.
-export const SessionPane = ({ sid, height = "70vh", onExit, children }) => {
+export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true, expectBrowser = false }) => {
   const slot = useRef(null);
   const [browser, setBrowser] = useState({ open: false, url: "" });
   const [width, setWidth] = useState(0);
-  const [folded, setFolded] = useState(savedFold);
+  const [folded, setFolded] = useState(() => savedFold(sid));
   const [ratio, setRatio] = useState(savedRatio);
   const [peek, setPeek] = useState(false);
   useEffect(() => {
@@ -431,8 +431,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children }) => {
     ro.observe(slot.current);
     return () => ro.disconnect();
   }, []);
-  const layout = layoutFor(width, browser.open, folded);
-  const fold = (f) => { setFolded(f); rememberFold(f); };
+  const showingBrowser = browser.open || expectBrowser;
+  const layout = layoutFor(width, showingBrowser, folded);
+  const fold = (f) => { setFolded(f); rememberFold(f, sid); };
   // the handle: the pointer's place across the slot IS the split, remembered on release
   const startDrag = (e) => {
     e.preventDefault();
@@ -448,13 +449,16 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children }) => {
     // top of the agent's first line - the one place a terminal is guaranteed to have something
     // worth reading - and there is no scrolling out from under it (the owner, 2026-08-31).
     <Box component="button" onClick={() => (layout === "chip" ? setPeek(true) : fold(false))}
-      title={layout === "chip" ? "the agent has a browser open - show it" : "unfold the browser"}
+      title={layout === "chip"
+        ? (browser.open ? "the agent has a browser open - show it" : "the agent's browser is starting - show it")
+        : "unfold the browser"}
       sx={{ ...mono, flex: "0 0 auto", alignSelf: "flex-start", m: "5px 0 0 10px", display: "flex",
         alignItems: "center", gap: 0.6,
         fontSize: 10.5, px: 0.9, py: 0.35, borderRadius: 99, cursor: "pointer", border: `1px solid ${BORDER}`,
         bgcolor: "#1a1a1acc", color: "#c9c3b9", "&:hover": { color: "#e1dcd5", borderColor: "#6b655c" } }}>
-      <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: CATPPUCCIN.green }} />
-      browser · {shortUrl(browser.url, 36) || "open"}
+      <Box sx={{ width: 7, height: 7, borderRadius: 99,
+        bgcolor: browser.open ? CATPPUCCIN.green : CATPPUCCIN.yellow }} />
+      {browser.open ? `browser · ${shortUrl(browser.url, 36) || "open"}` : "browser · starting…"}
     </Box>
   );
   return (
@@ -466,7 +470,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children }) => {
         "& > .tq-term-slot": { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
         "& > .tq-term-slot > *": { flex: 1, minHeight: 0 } }}>
         {chip}
-        <Box className="tq-term-slot">{children || <TermOnly sid={sid} height="100%" onExit={onExit} />}</Box>
+        <Box className="tq-term-slot">{children || <TermOnly sid={sid} height="100%" onExit={onExit} autoFocus={autoFocus} />}</Box>
       </Box>
       {layout === "split" && (
         <>
@@ -480,7 +484,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children }) => {
           </Box>
         </>
       )}
-      {peek && browser.open && <BrowserPane sid={sid} url={browser.url} overlay onFold={() => setPeek(false)} />}
+      {peek && showingBrowser && <BrowserPane sid={sid} url={browser.url} overlay onFold={() => setPeek(false)} />}
     </Box>
   );
 };
@@ -489,7 +493,9 @@ const TerminalPaneInner = (props) => <SessionPane {...props} />;
 
 // Wall status polls should update the header, not ask React to reconcile xterm's DOM. xterm owns
 // everything inside its host after mount; sid/height are the only props that change its surface.
-export const TerminalPane = React.memo(TerminalPaneInner, (a, b) => a.sid === b.sid && a.height === b.height);
+export const TerminalPane = React.memo(TerminalPaneInner,
+  (a, b) => a.sid === b.sid && a.height === b.height && a.autoFocus === b.autoFocus
+    && a.expectBrowser === b.expectBrowser);
 TerminalPane.displayName = "TerminalPane";
 
 // Taskuary's terminals default to Catppuccin Mocha, switchable per pane (top-right picker)

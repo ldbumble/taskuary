@@ -1,4 +1,4 @@
-// Social — the handbook the agents write, by topic.
+// Hub — hard-earned discoveries and developed ideas, by topic.
 //
 // The wall (Board) is what an agent is doing in one checkout in the next hour, and it composts
 // every night on purpose. This is the other half: what an agent WORKED OUT that is still true
@@ -31,6 +31,8 @@ import {
 // what KIND of thing an entry is. Not decoration: "a trap" and "a decision" are read
 // differently, and an agent scanning a topic wants to know which it is before the title.
 const KINDS = {
+  new_idea:       { mark: "💡", label: "new idea",        role: "done" },
+  technical_solve:{ mark: "🧩", label: "technical solve", role: "working" },
   howto:    { mark: "🧭", label: "how it works", role: "working" },
   gotcha:   { mark: "⚠️", label: "gotcha",       role: "info" },
   decision: { mark: "⚖️", label: "decision",     role: "done" },
@@ -59,22 +61,22 @@ const Post = ({ p, onChanged, onOpenTask }) => {
   const [busy, setBusy] = useState(false);
   const k = kindOf(p.Kind);
   const load = useCallback(async () => {
-    try { setFull((await api.get(`/api/handbook/${p.LoreId}`)).data); } catch { /* the list row still reads */ }
+    try { setFull((await api.get(`/api/hub/${p.LoreId}`)).data); } catch { /* the list row still reads */ }
   }, [p.LoreId]);
   useEffect(() => { if (open && !full) load(); }, [open, full, load]);
   const comment = async () => {
     const text = draft.trim(); if (!text) return;
     setBusy(true);
-    try { const { data } = await api.post(`/api/handbook/${p.LoreId}/comment`, { body: text });
+    try { const { data } = await api.post(`/api/hub/${p.LoreId}/comment`, { body: text });
       setFull((f) => ({ ...(f || p), comments: data.comments })); setDraft(""); onChanged?.(); }
     catch { /* nothing posted; the box keeps the text */ }
     setBusy(false);
   };
   // one vote per voter, forum rules: pressing the arrow you already pressed changes nothing, the
   // other one flips you. Below zero the entry leaves this list (handbook.vote retires it).
-  const vote = async (up) => { try { await api.post(`/api/handbook/${p.LoreId}/vote?up=${up}`); onChanged?.(); } catch { /* */ } };
-  const retire = async () => { try { await api.post(`/api/handbook/${p.LoreId}/retire`); onChanged?.(); } catch { /* */ } };
-  const restore = async () => { try { await api.post(`/api/handbook/${p.LoreId}/restore`); onChanged?.(); } catch { /* */ } };
+  const vote = async (up) => { try { await api.post(`/api/hub/${p.LoreId}/vote?up=${up}`); onChanged?.(); } catch { /* */ } };
+  const retire = async () => { try { await api.post(`/api/hub/${p.LoreId}/retire`); onChanged?.(); } catch { /* */ } };
+  const restore = async () => { try { await api.post(`/api/hub/${p.LoreId}/restore`); onChanged?.(); } catch { /* */ } };
   const comments = full?.comments || [];
   const removed = p.Status && p.Status !== "live";
   const score = p.Score || 0, mine = p.MyVote || 0;
@@ -83,7 +85,7 @@ const Post = ({ p, onChanged, onOpenTask }) => {
       borderRadius: 2, bgcolor: PANEL, mb: 1.25, overflow: "hidden", opacity: removed ? 0.8 : 1 }}>
       <Box sx={{ display: "flex", gap: 1.25, p: 1.5 }}>
         {/* the score column, forum-style: what the room found useful is what the next agent is
-            handed first (handbook.block ranks by it), and what it voted down is gone */}
+            handed first (the Hub ranks by it), and what it voted down is gone */}
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, flexShrink: 0 }}>
           <IconButton size="small" onClick={() => vote(true)} title="holds up — agents are handed this sooner"
             sx={{ p: { xs: 0.9, md: 0.25 }, color: mine > 0 ? ACCENT : FAINT, "&:hover": { color: ACCENT } }}>
@@ -102,6 +104,8 @@ const Post = ({ p, onChanged, onOpenTask }) => {
             <Typography sx={{ fontSize: 14, fontWeight: 600, color: INK, letterSpacing: "-.15px", flex: 1, minWidth: 140 }}>
               {p.Title}
             </Typography>
+            <Chip size="small" label={k.label} sx={{ height: 18, fontSize: 10,
+              bgcolor: ROLES[k.role].soft, color: ROLES[k.role].solid }} />
             <Chip size="small" label={p.Topic} sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, color: DIM }} />
           </Box>
           {p.Body && (
@@ -130,12 +134,12 @@ const Post = ({ p, onChanged, onOpenTask }) => {
             {removed ? (
               <Button size="small" onClick={restore} startIcon={<RestoreIcon sx={{ fontSize: 14 }} />}
                 sx={{ fontSize: 11, color: DIM, minWidth: 0 }}
-                title={p.Status === "downvoted" ? "the vote took it off; put it back on Social" : "put it back on Social"}>
+                title={p.Status === "downvoted" ? "the vote took it off; put it back on the Hub" : "put it back on the Hub"}>
                 {p.Status === "downvoted" ? "voted off — restore" : "removed — restore"}
               </Button>
             ) : (
               <Button size="small" onClick={retire} sx={{ fontSize: 11, color: FAINT, minWidth: 0 }}
-                title="take it off Social now — kept under Removed, never deleted">
+                title="take it off the Hub now — kept under Removed, never deleted">
                 remove
               </Button>
             )}
@@ -169,11 +173,11 @@ const Post = ({ p, onChanged, onOpenTask }) => {
 /* ── write one yourself ─────────────────────────────────────────────────────── */
 const NewEntry = ({ open, onClose, onDone, topics }) => {
   const [title, setTitle] = useState(""); const [body, setBody] = useState("");
-  const [topic, setTopic] = useState(""); const [kind, setKind] = useState("howto");
+  const [topic, setTopic] = useState(""); const [kind, setKind] = useState("new_idea");
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const save = async () => {
     setBusy(true); setErr("");
-    try { await api.post("/api/handbook", { title: title.trim(), body: body.trim(), topic: topic.trim(), kind });
+    try { await api.post("/api/hub", { title: title.trim(), body: body.trim(), topic: topic.trim(), kind });
       setTitle(""); setBody(""); onDone?.(); onClose?.(); }
     catch (e) { setErr(e?.response?.data?.detail || "That did not save"); }
     setBusy(false);
@@ -231,9 +235,10 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
 };
 
 /* ── the page ───────────────────────────────────────────────────────────────── */
-export default function SocialView({ onOpenTask }) {
+export default function HubView({ onOpenTask }) {
   const [d, setD] = useState(null);
   const [topic, setTopic] = useState("");
+  const [kind, setKind] = useState("");
   const [q, setQ] = useState("");
   const [typed, setTyped] = useState("");
   const [sort, setSort] = useState("new");
@@ -241,10 +246,11 @@ export default function SocialView({ onOpenTask }) {
   const [newOpen, setNewOpen] = useState(false);
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/handbook", { params: { topic: topic || undefined, q: q || undefined, sort, status: removed ? "removed" : "live" } });
+      const { data } = await api.get("/api/hub", { params: { topic: topic || undefined, q: q || undefined,
+        kind: kind || undefined, sort, status: removed ? "removed" : "live" } });
       setD(data);
     } catch { setD({ topics: [], data: [], count: { posts: 0, topics: 0, comments: 0 } }); }
-  }, [topic, q, sort, removed]);
+  }, [topic, q, kind, sort, removed]);
   useEffect(() => { load(); return pollWhileVisible(load, 30000); }, [load]);
   useEffect(() => { const t = setTimeout(() => setQ(typed.trim()), 300); return () => clearTimeout(t); }, [typed]);
 
@@ -283,16 +289,16 @@ export default function SocialView({ onOpenTask }) {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 1.5, flexWrap: "wrap" }}>
           <Box sx={{ minWidth: 0 }}>
             <Typography sx={{ fontSize: 15, fontWeight: 800, color: INK }}>
-              {removed ? "Removed from Social" : "Social"}
+              {removed ? "Removed from Hub" : "Hub"}
             </Typography>
             <Typography variant="caption" sx={{ color: FAINT }}>
               {!d ? "loading…" : removed ? "voted below zero, or taken off by you — kept here, restorable"
-                : `${d.count.posts} posts · ${d.count.topics} topics · ${d.count.comments} comments — what the agents worked out about this company, voted on by the agents that came after`}
+                : `${d.count.posts} posts · ${d.count.topics} topics · ${d.count.comments} comments — hard-earned discoveries and developed ideas, discussed by people and agents`}
             </Typography>
           </Box>
           <Box sx={{ flex: 1 }} />
           <TextField size="small" value={typed} onChange={(e) => setTyped(e.target.value)}
-            placeholder="search Social…"
+            placeholder="search Hub…"
             InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 16, color: FAINT, mr: 0.75 }} /> }}
             sx={{ width: { xs: "100%", sm: 260 }, "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: PANEL } }} />
           <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)}
@@ -300,8 +306,15 @@ export default function SocialView({ onOpenTask }) {
             <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
             <MenuItem value="top" sx={{ fontSize: 12.5 }}>top voted</MenuItem>
           </Select>
+          <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)} displayEmpty
+            sx={{ fontSize: 12, bgcolor: PANEL, height: 34, minWidth: 128 }}>
+            <MenuItem value="" sx={{ fontSize: 12.5 }}>all tags</MenuItem>
+            {Object.entries(KINDS).map(([key, value]) => (
+              <MenuItem key={key} value={key} sx={{ fontSize: 12.5 }}>{value.mark} {value.label}</MenuItem>
+            ))}
+          </Select>
           <Button size="small" onClick={() => setRemoved((v) => !v)} sx={{ fontSize: 11.5, color: removed ? INK : FAINT, minWidth: 0 }}
-            title="what the vote took off, or you did - never deleted">{removed ? "back to Social" : "removed"}</Button>
+            title="what the vote took off, or you did - never deleted">{removed ? "back to Hub" : "removed"}</Button>
           <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 16 }} />}
             onClick={() => setNewOpen(true)} sx={{ background: GRADIENT, fontSize: 12.5 }}>Write one</Button>
         </Box>
@@ -316,7 +329,7 @@ export default function SocialView({ onOpenTask }) {
               <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.7, display: "block", maxWidth: 460, mx: "auto" }}>
                 {removed ? "A post whose score falls below zero lands here, and so does anything you remove. Restore puts it back."
                   : q || topic ? "Try a different word, or clear the topic."
-                  : "Agents post when they work something out that is still true next month — a trap, how a system actually works, who owns what. The agents that come after upvote what held up and downvote what did not; below zero a post is removed. Every agent that starts is handed the top-voted posts that fit its task."}
+                  : "People and agents post only hard-earned discoveries or developed company ideas—not routine task output or raw brainstorming. Anyone can comment, upvote what held up, and downvote what did not. Every agent starts with the best-matching, top-voted Hub posts."}
               </Typography>
             </Box>
           )}

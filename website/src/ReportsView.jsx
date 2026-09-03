@@ -18,7 +18,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
-import { NL, SOURCE_KEYS, addField, showValue, toShape, toSources } from "./sourceShape.js";
+import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
@@ -227,6 +227,7 @@ const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "A
   intacct: "Sage Intacct" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
+const isWorkflowSource = (s) => isWorkflowConfig(parse(s?.ConfigJson));
 
 export default function ReportsView() {
   const [sources, setSources] = useState(null);
@@ -237,7 +238,9 @@ export default function ReportsView() {
   const [err, setErr] = useState("");
   const [bucket, setBucket] = useState(() => {
     const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
-    return value === "new" ? "new" : /^\d+$/.test(value || "") ? Number(value) : "all";
+    return value === "new" ? "new-report"
+      : ["workflows", "new-invoices", "new-agent"].includes(value) ? value
+        : /^\d+$/.test(value || "") ? Number(value) : "reports";
   });   // which rail section is open (a newly promoted discussion links straight to its editor)
   const [q, setQ] = useState("");
 
@@ -259,7 +262,8 @@ export default function ReportsView() {
   useEffect(() => {
     const fromHash = () => {
       const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
-      if (value === "new") { setQ(""); setDraft(null); setBucket("new"); }
+      if (value === "new") { setQ(""); setDraft(null); setBucket("new-report"); }
+      else if (["workflows", "new-invoices", "new-agent"].includes(value)) { setQ(""); setDraft(null); setBucket(value); }
       else if (/^\d+$/.test(value || "")) { setQ(""); setBucket(Number(value)); }
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
@@ -281,62 +285,76 @@ export default function ReportsView() {
 
   if (!sources) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  /* The rail lists the REPORTS, not categories of them, and picking one opens its fields
-     right there - no second click through an Edit button, which is the whole point of a
-     master-detail layout. "All reports" keeps the overview with the per-row Run/Edit
-     controls; a title selects that report and the pipeline appears beside it. */
+  /* Reports and workflows use the same durable scheduler rows, but they are not the same
+     product concept. The rail says which is which; selecting either still opens it directly. */
   const titleOf = (s) => parse(s.ConfigJson).title || s.Address || `report ${s.SourceId}`;
+  const reportSources = sources.filter((s) => !isWorkflowSource(s));
+  const workflowSources = sources.filter(isWorkflowSource);
   const railItems = [
-    { key: "all", label: "All reports", n: sources.length || null },
-    ...sources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
-    { key: "new", label: "+ New report" },
+    { section: "Reports", first: true },
+    { key: "reports", label: "All reports", n: reportSources.length || null },
+    ...reportSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
+    { key: "new-report", label: "+ New report" },
+    { section: "Workflows" },
+    { key: "workflows", label: "All workflows", n: workflowSources.length || null },
+    ...workflowSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
+    { key: "new-invoices", label: "+ Monthly invoices" },
+    { key: "new-agent", label: "+ AI agent" },
   ];
-  const list = sources.filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
-  const openId = bucket === "new" ? null : bucket;
-  const open = bucket !== "all" && !q;
+  const workflowOverview = bucket === "workflows";
+  const baseList = workflowOverview ? workflowSources : reportSources;
+  const list = (q ? sources : baseList).filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
+  const openId = typeof bucket === "number" ? bucket : null;
+  const open = !q && (openId != null || ["new-report", "new-invoices", "new-agent", "draft"].includes(bucket));
   const selectedSource = sources.find((s) => s.SourceId === openId);
-  const selectedConfig = selectedSource ? parse(selectedSource.ConfigJson) : (draft || {});
+  const starter = bucket === "new-invoices" ? { type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *", customers: [] }
+    : bucket === "new-agent" ? { type: "agent", access: "write", title: "", every_minutes: "" } : {};
+  const selectedConfig = selectedSource ? parse(selectedSource.ConfigJson) : (draft || starter);
   const invoiceOpen = selectedConfig.type === "zoho_monthly_invoices";
+  const workflowOpen = isWorkflowConfig(selectedConfig);
+  const backTo = workflowOpen ? "workflows" : "reports";
 
   return (
-    <SideRail title="Reports" q={q} setQ={setQ} placeholder="Search reports…"
+    <SideRail title="Reports & workflows" q={q} setQ={setQ} placeholder="Search reports and workflows…"
       items={railItems} value={bucket} onChange={setBucket}
-      note="A report is a pipeline: source → query → optional AI summary → your Timeline. The connections themselves live on the Connections tab.">
+      note="Reports only read data and summarize it. Workflows write data or keep state. Their connections live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {open ? (
         invoiceOpen ? <InvoiceWorkflowWizard key={String(bucket)} sourceId={openId} sources={sources}
-          connectors={connectors} draft={draft} reload={load}
-          onBack={() => { setBucket("all"); setDraft(null); load(); }}
+          connectors={connectors} draft={selectedConfig} reload={load}
+          onBack={() => { setBucket("workflows"); setDraft(null); load(); }}
           onSaved={(sid) => { setDraft(null); setBucket(sid); }} />
         : <ReportWizard key={String(bucket) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
-            types={types} connectors={connectors} draft={draft}
-            reload={load} onBack={() => { setBucket("all"); setDraft(null); load(); }}
+            types={types} connectors={connectors} draft={selectedConfig} workflow={workflowOpen}
+            reload={load} onBack={() => { setBucket(backTo); setDraft(null); load(); }}
             onSaved={(sid) => { setDraft(null); setBucket(sid); }} />
       ) : (<>
       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
-          {q ? `Matches for “${q}”` : "Scheduled reports"}
+          {q ? `Matches for “${q}”` : workflowOverview ? "Scheduled workflows" : "Scheduled reports"}
         </Typography>
         <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing} sx={{ mr: 1 }}
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
           {syncing ? "Running…" : "Run due now"}
         </Button>
-        <Button size="small" variant="outlined" disableElevation sx={{ mr: 1 }}
-          onClick={() => { setQ(""); setDraft({ type: "zoho_monthly_invoices", title: "Monthly customer invoices", cron: "0 9 1 * *", customers: [] }); setBucket("new"); }}>
-          Monthly invoices
-        </Button>
-        <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => { setQ(""); setDraft(null); setBucket("new"); }} sx={{ background: GRADIENT }}>New report</Button>
+        {workflowOverview ? <>
+          <Button size="small" variant="outlined" disableElevation sx={{ mr: 1 }}
+            onClick={() => { setQ(""); setDraft(null); setBucket("new-invoices"); }}>Monthly invoices</Button>
+          <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+            onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={{ background: GRADIENT }}>AI agent</Button>
+        </> : <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+          onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ background: GRADIENT }}>New report</Button>}
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
-      <Composer onDraft={(config, meta) => {
+      <Composer kind={workflowOverview ? "workflow" : "report"} onDraft={(config, meta) => {
         setDraft(config);
         setNote({ ok: true, detail: `${meta.explain || "Drafted."} Check it below and preview before saving.`
           + (meta.confidence === "low" ? " It is not confident about this one." : "") });
-        setBucket("new");
+        setBucket("draft");
       }} />
-      {!sources.length ? <Empty>No reports yet — "New report" walks you through source, query, AI summary and schedule.</Empty>
-        : !list.length && <Empty>Nothing here.</Empty>}
+      {!list.length && <Empty>{q ? "Nothing here." : workflowOverview
+        ? "No workflows yet — describe one above, or start with Monthly invoices or an AI agent."
+        : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
       {list.map((s) => {
         const c = parse(s.ConfigJson);
         // both halves, not the first one: "on startup" alone hid the Monday cron behind it
@@ -437,7 +455,7 @@ function Destination({ dest, onChange, targets }) {
 // The receipt at the bottom of a saved report. The form above answers one field at a time; this
 // answers the operational question in one glance: what is enabled, what it reads, when it runs,
 // and what the result is allowed to do.
-function SavedReportSummary({ source }) {
+function SavedReportSummary({ source, workflow = false }) {
   if (!source) return null;
   const c = parse(source.ConfigJson);
   const sourceList = Array.isArray(c.sources) && c.sources.length ? c.sources : [c];
@@ -445,7 +463,8 @@ function SavedReportSummary({ source }) {
   const watched = (Array.isArray(c.watch_sources) ? c.watch_sources.length : 0)
     + (Array.isArray(c.watch_source_ids) ? c.watch_source_ids.length : 0);
   const reads = c.type === "assistant"
-    ? `Assistant context${watched ? ` plus ${watched} selected data view${watched === 1 ? "" : "s"}` : " — messages, tasks, calendar, and its configured checks"}`
+    ? (watched ? `${watched} configured data source${watched === 1 ? "" : "s"} only`
+      : "Assistant context — messages, tasks, calendar, and its configured checks")
     : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
   const destinations = ["the Timeline"];
   if (c.deliver?.to) destinations.push(`a draft to ${c.deliver.to} on ${c.deliver.channel || "email"}`);
@@ -456,7 +475,7 @@ function SavedReportSummary({ source }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.65 }}>
         <StatusDot ok={!!source.Active} />
         <Typography sx={{ color: INK, fontWeight: 750, fontSize: 13.5 }}>
-          {source.Active ? "Enabled report" : "Disabled report"}
+          {source.Active ? `Enabled ${workflow ? "workflow" : "report"}` : `Disabled ${workflow ? "workflow" : "report"}`}
         </Typography>
       </Box>
       <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, fontSize: 12.5 }}>
@@ -539,7 +558,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   };
   return (
     <Box sx={{ maxWidth: 1050, mx: "auto" }}>
-      <Crumb section="Reports" onBack={onBack} title={cur ? cfg.title : "New monthly invoice workflow"} />
+      <Crumb section="Workflows" onBack={onBack} title={cur ? cfg.title : "New monthly invoice workflow"} />
       <Box sx={{ ...card, p: 2, mb: 2 }}>
         <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>WORKFLOW SETUP</Typography>
         <Typography sx={{ color: INK, fontWeight: 750, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
@@ -597,7 +616,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   );
 }
 
-function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved, draft }) {
+function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved, draft, workflow = false }) {
   const cur = sources.find((s) => s.SourceId === sourceId);
   // a composed draft is a STARTING POINT, not a saved report: it lands in the same boxes the
   // owner would have filled in, and nothing exists until they preview it and press save
@@ -627,6 +646,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
 
   const bodyCfg = () => {
     const c = { ...cfg };
+    // An agent is not a workflow by virtue of being an agent. The workflow door is the explicit
+    // write grant; the report door removes it and therefore always runs read-only.
+    if (c.type === "agent") {
+      if (workflow) c.access = "write";
+      else delete c.access;
+    }
     // an empty recipient means it was switched on and never filled in - saving that would make
     // a report that tries to send to nobody on every run
     if (c.deliver && !String(c.deliver.to || "").trim()) delete c.deliver;
@@ -679,7 +704,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const save = async () => {
     setSaveErr(""); setSavedMsg("");
     const c = bodyCfg();
-    if (!c.title) { setSaveErr("Give the report a title first — it is the headline on the Timeline (step 1)."); return; }
+    if (!c.title) { setSaveErr(`Give the ${workflow ? "workflow" : "report"} a title first — it is the headline on the Timeline (step 1).`); return; }
     const body = { Channel: "report", Address: c.title, ConfigJson: JSON.stringify(c), Active: true };
     if (cur) body.SourceId = cur.SourceId;
     try {
@@ -692,22 +717,27 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     }
   };
 
-  const typeOptions = types.filter((t) => t.status === "builtin");
+  const typeOptions = types.filter((t) => t.status === "builtin"
+    && (workflow ? t.type === "agent" : !WORKFLOW_TYPES.has(t.type)));
   const isAssistant = cfg.type === "assistant" || (srcs.length === 1 && srcs[0].type === "assistant");
-  const watchChoices = sources.filter((s) => s.SourceId !== cur?.SourceId && parse(s.ConfigJson).type !== "assistant")
+  const watchChoices = sources.filter((s) => s.SourceId !== cur?.SourceId
+      && parse(s.ConfigJson).type !== "assistant" && !isWorkflowSource(s))
     .map((s) => { const c = parse(s.ConfigJson); return { id: s.SourceId, title: c.title || s.Address,
       type: (c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "report"), active: !!s.Active }; });
   const watchedIds = (Array.isArray(cfg.watch_source_ids) ? cfg.watch_source_ids : []).map(Number);
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Reports" onBack={onBack} title={cur ? (parse(cur.ConfigJson).title || "Edit report") : "New report"} />
+      <Crumb section={workflow ? "Workflows" : "Reports"} onBack={onBack}
+        title={cur ? (parse(cur.ConfigJson).title || `Edit ${workflow ? "workflow" : "report"}`) : `New ${workflow ? "AI agent workflow" : "report"}`} />
       <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
         <Step completed={!!String(cfg.title || "").trim() && srcs.some((x) => x.type)}>
           <StepButton onClick={() => setStep(0)}>Pipeline</StepButton>
           <StepContent>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5 }}>
-              {isAssistant
-                ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved — then tell it what deserves your attention across all of them."
+              {workflow
+                ? "Give the AI agent a saved skill or a plain-English job that writes data. It runs with write access on this workflow's schedule and files its result on the Timeline."
+                : isAssistant
+                ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved. This report reads only those sources; the general Assistant and Morning digest are separate."
                 : "Sources at the top feed one prompt at the bottom. Add as many as you want — the same connection twice with different queries is fine, and every source's rows reach the summary together."}
             </Typography>
             <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
@@ -717,7 +747,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>
                 <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>Systems and data views to check</Typography>
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-                  Anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Add it here and nothing else needs to exist: the Assistant pulls it silently on its own schedule and files no intermediate report.
+                  Anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Add it here and nothing else needs to exist. This check reads only the sources below — not your inbox, calendar, tasks, Morning digest, or another Assistant report.
                 </Typography>
                 {/* "I don't know what fields off hand Intacct has set up" - so this step cannot be a
                     form. Describe what the Assistant should keep an eye on and the composer adds
@@ -778,7 +808,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 the column has one right edge instead of three */}
             <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch", maxWidth: 720 }}>
               {srcs.map((src, i) => (
-                <SourceCard key={i} src={src} index={i} count={srcs.length}
+                <SourceCard key={i} src={src} index={i} count={srcs.length} writeEnabled={workflow}
                   typeOptions={typeOptions} connectors={connectors}
                   dragging={drag === i}
                   onDragStart={() => setDrag(i)} onDragEnd={() => setDrag(null)}
@@ -1018,7 +1048,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 <Typography variant="caption" sx={{ color: DIM }}>can become work (triage decides)</Typography>
               </Box>
               <Button variant="contained" disableElevation onClick={save} disabled={!cfg.title}
-                title={cfg.title ? "" : "the report needs a title - step 1"}>Save report</Button>
+                title={cfg.title ? "" : `the ${workflow ? "workflow" : "report"} needs a title - step 1`}>Save {workflow ? "workflow" : "report"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
               Pick one. Everything blank = once a day, whenever the app is open.
@@ -1060,15 +1090,15 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             {cur && (
               <Box sx={{ display: "flex", gap: 1, mt: 1.5, alignItems: "center" }}>
                 <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-                  onClick={() => setConfirmDel(true)}>Delete report</Button>
+                  onClick={() => setConfirmDel(true)}>Delete {workflow ? "workflow" : "report"}</Button>
               </Box>
             )}
           </StepContent>
         </Step>
       </Stepper>
-      <SavedReportSummary source={cur} />
-      <ConfirmDelete open={confirmDel} what={`the report "${cfg.title || cur?.Address || "untitled"}"`}
-        consequence="It stops running on its schedule and disappears from the Reports tab. Briefs it already filed stay on the Timeline."
+      <SavedReportSummary source={cur} workflow={workflow} />
+      <ConfirmDelete open={confirmDel} what={`the ${workflow ? "workflow" : "report"} "${cfg.title || cur?.Address || "untitled"}"`}
+        consequence={`It stops running on its schedule and disappears from the ${workflow ? "Workflows" : "Reports"} section. Anything it already filed stays on the Timeline.`}
         onClose={() => setConfirmDel(false)}
         onConfirm={async () => { await api.delete(`/api/sources/${cur.SourceId}`); await reload(); onBack(); }} />
     </Box>
@@ -1141,7 +1171,7 @@ function AwsPicker({ label, which, value, placeholder, service, onChange }) {
    DRAFT in the ordinary boxes: it is not saved, it has not run, and the next thing the owner
    does is preview it against the real system. Questions come back as questions rather than a
    guess, because a wrong filter on a finance report is silently wrong forever. */
-function Composer({ onDraft }) {
+function Composer({ onDraft, kind = "report" }) {
   const [ask, setAsk] = useState("");
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState(null);
@@ -1150,7 +1180,8 @@ function Composer({ onDraft }) {
   const go = async (withAnswers) => {
     setBusy(true);
     try {
-      const { data } = await api.post("/api/reports/compose", { ask, answers: withAnswers || undefined });
+      const endpoint = kind === "workflow" ? "/api/workflows/compose" : "/api/reports/compose";
+      const { data } = await api.post(endpoint, { ask, answers: withAnswers || undefined });
       setOut(data);
       if (data.config) { onDraft(data.config, data); setAsk(""); setAnswers({}); setOut(null); }
     } catch (e) { setOut({ error: e?.response?.data?.detail || "the composer could not be reached" }); }
@@ -1162,12 +1193,17 @@ function Composer({ onDraft }) {
     <Box sx={{ ...card, p: 1.5, mb: 2, bgcolor: PANEL2 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.9 }}>
         <AutoAwesomeIcon sx={{ fontSize: 15, color: ACCENT2 }} />
-        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>Describe the report you want</Typography>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
+          {kind === "workflow" ? "Describe the workflow you want" : "Describe the report you want"}
+        </Typography>
       </Box>
       <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy}
         sx={{ bgcolor: "#fff" }}
-        placeholder={"Read C:/exports/daily-*.csv every morning, total the units by site and flag anything under 70."
-          + NL + "Every Monday, list the AP bills from Intacct due in the next 30 days and call out anything over 10k."}
+        placeholder={kind === "workflow"
+          ? "On the first of each month, prepare Zoho invoices for Acme and Northwind and leave every send in Review."
+            + NL + "Every Monday, have the coder run /weekly-user-review and file what it finds."
+          : "Read C:/exports/daily-*.csv every morning, total the units by site and flag anything under 70."
+            + NL + "Every Monday, list the AP bills from Intacct due in the next 30 days and call out anything over 10k."}
         onChange={(e) => setAsk(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && ask.trim()) go(); }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.9 }}>
@@ -1386,7 +1422,8 @@ const FILE_FIELD_FOR = { tail: ['', '.log', '.txt', '.md', '.out', '.err'], shee
 /* `removable` is the Assistant's case: every one of its own sources can go, including the last,
    because zero of them is a valid Assistant - a report with zero sources is not a report. */
 function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
-                      onDropHere, onChange, onRetype, onCopy, onRemove, onFill, removable = count > 1 }) {
+                      onDropHere, onChange, onRetype, onCopy, onRemove, onFill, removable = count > 1,
+                      writeEnabled = false }) {
   const fields = (FIELDS[src.type] || []).filter(([, key]) => {
     if (key === "ai_prompt") return false;
     if (src.type !== "local_file") return true;
@@ -1434,6 +1471,12 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           ]);
         })()}
       </Select>
+      {src.type === "agent" && (
+        <Typography variant="caption" sx={{ fontWeight: 650, color: writeEnabled ? "#8a3646" : "#47654a" }}>
+          {writeEnabled ? "Workflow · write access — this agent may change data"
+            : "Report · read-only — this agent can retrieve data but cannot change it"}
+        </Typography>
+      )}
       {needsConn && (
         <>
           {matching.length > 1 && (
@@ -1527,15 +1570,16 @@ function LastRun({ r, sid, embedded }) {
   const outcome = r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
     : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "nothing to say — no post")
     : r.subject ? `filed: ${r.subject}` : "ran";
-  const read = rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
-    `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KINDS[k] || k}`).join(", ") || "no candidates"] : [];
+  const read = rv?.scope === "sources" ? [`${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only`]
+    : rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
+      `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KINDS[k] || k}`).join(", ") || "no candidates"] : [];
   return (
     <Box sx={{ pl: embedded ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded ? 0 : 1.25, mt: embedded ? 0 : -0.5 }}>
       {!embedded && (
       <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
         <Box component="span" sx={{ fontWeight: 700, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
         {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
-        {rv && ` · read ${read[0]}, ${read[1]}`}
+        {rv && ` · read ${read.slice(0, 2).join(", ")}`}
         <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
           sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
           {open ? "hide ↑" : "details ↓"}

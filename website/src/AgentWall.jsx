@@ -161,7 +161,7 @@ export default function AgentWall({ onOpenTask, refresh }) {
             ))}
           </Select>
           <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
-            Task-specific and short-lived; durable company or repo knowledge belongs in Social. Agents post with <code>taskuary --note</code>.
+            Task-specific and short-lived; hard-earned durable knowledge belongs in the Hub. Agents post here with <code>taskuary --note</code>.
           </Typography>
           {/* the older days are still here, folded - one summary each, per checkout */}
           <Button size="small" onClick={() => setAll((x) => !x)} sx={{ fontSize: 11, color: DIM, textTransform: "none" }}>

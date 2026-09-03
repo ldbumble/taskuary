@@ -660,13 +660,13 @@ const DATA_META = {
   // /api/tools/run enforces Active + role + Authority - but only `if conn`, and no card meant no
   // connector, so all three were inert. An entry is read into every later agent's seed prompt, so
   // "who may put a fact in front of every future agent" needs an answer that is not "anyone".
-  handbook: { title: "Company handbook", types: ["handbook_search", "handbook_write"], noSecret: true,
+  handbook: { title: "Company Hub", types: ["hub_search", "hub_write", "hub_vote", "hub_comment"], noSecret: true,
     fields: [],
-    desc: "What the agents work out about this company, written down by topic and read by the next one before it starts. Turn the card off to stop them writing it; set Authority to read to let them search it without adding to it.",
+    desc: "Hard-earned discoveries and developed company ideas, written by people and agents, discussed and voted on. Turn the card off to stop agent publishing; set Authority to read to let agents search without writing.",
     howto: ["It is on by default and needs no setup — an agent files an entry with `taskuary --learned \"...\"`, or is asked once when a session closes whether it learned anything that stays true.",
-      "Authority decides who may WRITE. read = agents search the handbook but cannot add to it; write = they can file entries. An entry is handed to every later session as fact, which is why writing is a write.",
-      "Browse, correct, vote and retire entries on the Social tab. A wrong entry left standing becomes folklore, so retire it rather than arguing with it."],
-    agent: ["GET {base}/api/handbook{hdr} to read what is already written down, and POST {base}/api/tools/run{hdr} with {\"type\": \"handbook_search\", \"query\": \"...\"} to search it. Do not file an entry unless you learned something that is still true next month. SETUP DONE."] },
+      "Authority decides who may WRITE. read = agents search the Hub but cannot add to it; write = they can post, comment and vote. Posts are handed to later sessions as company knowledge.",
+      "Browse, discuss, vote and retire entries on the Hub tab. Keep the bar high: hard-earned discoveries and developed ideas only."],
+    agent: ["GET {base}/api/hub{hdr} to browse, or POST {base}/api/tools/run{hdr} with {\"type\": \"hub_search\", \"query\": \"...\"}. Use hub_write only for a reusable discovery backed by substantial investigation/reasoning, or a developed company idea; include why_earned. Use hub_comment and hub_vote as either a coding or general agent. SETUP DONE."] },
 };
 
 /* A question typed on the Knowledge base card, answered from the index - the same search a

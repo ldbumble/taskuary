@@ -174,6 +174,31 @@ AGENT_SYSTEM = ('You are running a SCHEDULED REPORT for a busy operator. Do exac
                 'questions back. If something the instruction asks about cannot be found, say so in the report.')
 
 
+BLOCKED = ('web search is not available', 'not available on this claude account', 'web search is not enabled',
+           'web search is disabled', 'rate_limit', 'rate limit', 'usage limit', 'quota exceeded',
+           'unable to fetch', 'unable to access', 'unable to retrieve', 'could not fetch', "couldn't fetch",
+           'cannot fetch', 'failed to fetch', 'permission denied', 'tool result:')
+REPORT_LINES = 25       # above this it is a document, and one unlucky phrase inside it proves nothing
+
+
+def _blocked(out: str) -> str:
+    """The agent's excuse, when what came back is the story of a failed run instead of a report - '' otherwise.
+
+    An agent whose tool is refused still ANSWERS: it narrates the refusal, and that narration used to
+    file as news. "Web search is not available on this Claude account" came back as a 14-line report,
+    triage read the apology as a defect and opened a bug task against a repo that has nothing to do
+    with the report (2026-09-03). A run that never reached its source is a FAILED run - exactly like
+    the 300s timeout and the rate-limit rejection the same report hit the day before, both of which
+    filed correctly because they raised.
+
+    Short AND shapeless is the guard: a real report carries headings, a table or fifteen rows, so a
+    long or structured answer is never second-guessed on the strength of one unlucky phrase."""
+    body = (out or '').strip()
+    if len(body.splitlines()) > REPORT_LINES or _outline(body): return ''
+    low = body.lower()
+    return next((m for m in BLOCKED if m in low), '')
+
+
 def _outline(body: str) -> str:
     """Section headings and table header rows of a report body - the shape without the content."""
     out, lines = [], (body or '').splitlines()
@@ -199,7 +224,11 @@ def run_agent(cfg):
     skill, prompt = str(cfg.get('skill') or '').strip().lstrip('/'), str(cfg.get('prompt') or '').strip()
     if not skill and not prompt: raise RuntimeError('give the agent a skill (/name) or a prompt - or both')
     name = str(cfg.get('agent') or 'coder').strip()
-    llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None)
+    # Agent-backed reports are read-only even when their source lives in a repository folder.
+    # Only the Workflows door persists this explicit grant; executor type alone grants nothing.
+    writes = cfg.get('access') == 'write'
+    llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None,
+                       cli_tools=writes, read_only=not writes, research=not writes)
     if llm is None: raise RuntimeError(f'no CLI agent named {name!r} - add one under Connections -> AI CLI agents')
     # Long workflows promoted from an assistant conversation live in Taskuary's neutral skill
     # store. Expand them into the prompt so one skill works through Claude, Codex, Gemini, or any
@@ -221,6 +250,10 @@ def run_agent(cfg):
                       f'report so runs stay comparable - change only the content. Previous outline: {shape}')
     out = str(llm(AGENT_SYSTEM, ask) or '').strip()
     if not out: raise RuntimeError(f'{name} answered nothing')
+    excuse = _blocked(out)
+    # an answer ABOUT a failed run is not a report - file it as FAILED, the way the timeout and the
+    # rate limit already do, instead of putting an apology on the timeline and through triage
+    if excuse: raise RuntimeError(f'{name} could not run this report ("{excuse}") - it answered: {out[:300]}')
     what = f'/{skill}' if skill else 'a prompt'
     return f'{name} ran {what} - {len(out.splitlines())} lines', out[:BODY_CHARS]
 
@@ -400,7 +433,9 @@ def run_assistant(cfg):
     due run to assistant.run, which posts ideas with buttons and state. This executor is what
     PREVIEW shows - the facts a run would hand the model. `store` arrives via resolve_cfg."""
     from .assistant import facts
-    return 'what the assistant would read right now', facts(cfg['store'], cfg.get('watch_source_ids'), cfg.get('watch_sources'))
+    isolated = bool(cfg.get('watch_source_ids') or cfg.get('watch_sources'))
+    return 'what the assistant would read right now', facts(
+        cfg['store'], cfg.get('watch_source_ids'), cfg.get('watch_sources'), systems_only=isolated)
 
 
 def run_automate(cfg):
@@ -565,6 +600,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),
             'handbook_search': _lazy('handbook', 'run_handbook_search'), 'handbook_write': _lazy('handbook', 'run_handbook_write'),
             'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
+            'hub_search': _lazy('hub', 'run_hub_search'), 'hub_write': _lazy('hub', 'run_hub_write'),
+            'hub_vote': _lazy('hub', 'run_hub_vote'), 'hub_comment': _lazy('hub', 'run_hub_comment'),
             **{n: _planned(n) for n in PLANNED}}
 
 
@@ -594,7 +631,8 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'zoho_monthly_invoices': 'zoho_invoice',
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
-           'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook'}
+           'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
+           'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook'}
 
 def card_of(t): return CARD_OF.get(t, t)
 
@@ -714,7 +752,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 
 def resolve_cfg(store, cfg: dict) -> dict:
     if cfg.get('type') in ('digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
-                           'metric', 'metric_check'):
+                           'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
+                           'hub_search', 'hub_write', 'hub_vote', 'hub_comment'):
         return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards; the knowledge base: its index)
     conn = CONNECTION_OF.get(cfg.get('type'))
     if conn:
@@ -992,7 +1031,12 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None) -> dict:
         # not a report row: the assistant posts its own kind of row (ideas with buttons and state),
         # on this report's schedule and with this report's prompt as its instruction
         from . import assistant
-        out = assistant.run(cfg['store'] if cfg.get('store') else store, report_llm(store, cfg, llm), force=True, instruction=cfg.get('ai_prompt'))
+        watched_ids, watched_sources = cfg.get('watch_source_ids') or [], cfg.get('watch_sources') or []
+        out = assistant.run(cfg['store'] if cfg.get('store') else store, report_llm(store, cfg, llm),
+                            force=True, instruction=cfg.get('ai_prompt'),
+                            watch_source_ids=watched_ids, watch_sources=watched_sources,
+                            systems_only=bool(watched_ids or watched_sources),
+                            report_id=src.get('SourceId'), report_title=title)
         return {'message_id': out.get('message_id'), 'subject': f"{title} - {out.get('said', 0)} line(s)", 'files': 0, **out}
     try:
         head, summary = render_report(store, cfg, llm)

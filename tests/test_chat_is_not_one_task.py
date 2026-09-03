@@ -137,7 +137,7 @@ class OneRoomManyJobs(unittest.TestCase):
 class MailIsStillAThread(unittest.TestCase):
     """A mail thread IS a topic - References says so - and nothing here may touch that."""
 
-    def test_a_reply_on_an_email_thread_attaches_with_nothing_asked(self):
+    def test_a_reply_on_an_email_thread_attaches_and_is_still_judged(self):
         s = MemoryStore()
         seen = []
         msg = {'external_id': 'm1', 'channel': 'email', 'subject': 'Financial request',
@@ -148,7 +148,9 @@ class MailIsStillAThread(unittest.TestCase):
                                  'body': 'Also, a completely different thing', 'sent_at': '2026-09-02 15:00:00'},
                              llm=brain(same=False, seen=seen))
         self.assertEqual((out['status'], out['task_id']), ('attached', first['task_id']))
-        self.assertEqual(seen, [])
+        # the thread keeps the reply, and triage still says what the reply IS - a verdict of fyi
+        # files it onto the task for the chain instead of leaving it on the owner's pile
+        self.assertEqual(len(seen), 1)
 
 
 class TheyHearAtOnce(unittest.TestCase):

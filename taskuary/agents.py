@@ -359,7 +359,7 @@ def agent_chain(store, primary: str = None) -> list[str]:
     return out
 
 
-def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None):
+def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None):
     """One headless invocation of the configured CLI, output STREAMED line by line into
     the run trace so the Board shows the agent working live. claude's stream-json events
     render as readable tool/text lines; any other CLI's plain stdout streams as-is.
@@ -386,9 +386,13 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None):
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
     try:
+        # A headless Assistant session can still own an embedded browser. Its session identity
+        # rides here just as it does in a PTY; merge it over the real process environment so PATH,
+        # login homes, and every configured CLI keep working.
+        env = child_env({**os.environ, **(extra_env or {})})
         p = spawn.popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False,
-                             env=child_env())
+                             env=env)
     except PermissionError as e:
         # which() found something that cannot be executed from here. "Not installed" sent people
         # off to reinstall a CLI that was already there; the reason is in denied_msg.

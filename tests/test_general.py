@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import general, handbook, llm, server, terminal, waitroom
+from taskuary import browserview, general, handbook, llm, server, terminal, waitroom
 from taskuary.store import MemoryStore
 
 
@@ -26,6 +26,67 @@ def connect_openai(store):
 
 
 class SharedSessionTests(unittest.TestCase):
+    def test_setup_walkthrough_uses_a_tool_cli_and_starts_its_own_browser(self):
+        store = MemoryStore()
+        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({
+            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}))
+        cid = connect_openai(store)
+        store.set_setting('assistant_ai', f'connector:{cid}', 'owner')
+        tid = store.create_task({'Title': 'Connect Zoho', 'Summary': 'Walk me through Zoho Invoice',
+                                 'Kind': 'general', 'Status': 'open', 'Source': 'assistant',
+                                 'SourceRef': 'assistant:setup', 'Tags': browserview.WANTS}, 'owner')
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(general.threading, 'Thread') as thread:
+            session = general.start_session(store, tid)
+        self.assertEqual(session.pick, 'cli:my-claude')     # the saved API chat cannot drive a browser
+        self.assertIs(thread.call_args.kwargs['target'], browserview.start)
+        self.assertEqual(thread.call_args.kwargs['args'], (session.sid,))
+
+    def test_setup_cli_gets_the_same_visible_browser_without_a_checkout(self):
+        store = MemoryStore()
+        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({
+            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}))
+        tid = store.create_task({'Title': 'Connect Zoho', 'Summary': 'Walk me through Zoho Invoice',
+                                 'Kind': 'general', 'Status': 'open', 'SourceRef': 'assistant:setup',
+                                 'Tags': browserview.WANTS}, 'owner')
+        seen = {}
+        def answer(system, user, **kwargs):
+            seen.update(system=system, user=user, kwargs=kwargs); return 'Zoho is open beside us.'
+        session = general.GeneralSession(store, tid, pick='cli:my-claude')
+        with mock.patch.object(browserview, 'start', return_value=True), \
+             mock.patch.object(llm, 'build_llm', return_value=answer) as build:
+            session.send_prompt('Open Zoho', pick='cli:my-claude')
+        self.assertTrue(build.call_args.kwargs['cli_tools'])
+        env = build.call_args.kwargs['extra_env']
+        self.assertEqual(env['AGENT_BROWSER_SESSION'], browserview.session_name(session.sid))
+        self.assertEqual(env['TASKUARY_TASK'], str(tid))
+        self.assertIn('TASKUARY_URL', env)
+        self.assertIn('NEVER use --session, --headed', seen['system'])
+
+    def test_browser_walkthrough_cli_keeps_tools_in_scratch_and_receives_session_env(self):
+        store = MemoryStore()
+        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({
+            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}))
+        seen = {}
+        def run_cli(profile, prompt, trace, resume=None, **kwargs):
+            seen.update(profile=profile, kwargs=kwargs); return 'done', None, None
+        with mock.patch('taskuary.agents.run_cli', side_effect=run_cli):
+            brain = llm.make_cli_llm(store, 'my-claude', cli_tools=True,
+                                     extra_env={'AGENT_BROWSER_SESSION': 'tq-one'})
+            brain('system', 'user')
+        self.assertIn('--dangerously-skip-permissions', seen['profile']['args'])
+        self.assertNotIn('--tools', seen['profile']['args'])
+        self.assertTrue(str(seen['profile']['cwd']).endswith('scratch'))
+        self.assertEqual(seen['kwargs']['extra_env']['AGENT_BROWSER_SESSION'], 'tq-one')
+
+    def test_closing_the_walkthrough_closes_its_browser_once(self):
+        store = MemoryStore(); tid = general_task(store)
+        session = general.GeneralSession(store, tid)
+        with mock.patch.object(handbook, 'enabled', return_value=False), \
+             mock.patch.object(browserview, 'close') as close:
+            session.close(); session.close()
+        close.assert_called_once_with(session.sid)
+
     def test_native_api_is_the_fast_default_when_assistant_choice_is_blank(self):
         store = MemoryStore()
         store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
@@ -34,13 +95,13 @@ class SharedSessionTests(unittest.TestCase):
         pick, _label, model = general._selected(store)
         self.assertEqual((pick, model), (f'connector:{cid}', 'gpt-test'))
 
-    def test_assistant_reads_relevant_company_knowledge_from_social(self):
+    def test_assistant_reads_relevant_company_knowledge_from_hub(self):
         store = MemoryStore(); tid = general_task(store)
         handbook.post(store, 'Customer launches need operations approval',
                       'Ask the operations owner before fixing the date.', 'customer-launch',
                       'decision', 'coder')
         _system, user = general._prompt(store, tid)
-        self.assertIn('FROM SOCIAL', user)
+        self.assertIn('FROM HUB', user)
         self.assertIn('Customer launches need operations approval', user)
         self.assertNotIn('taskuary --upvote', user)  # an API assistant has no shell for this
 
@@ -56,17 +117,19 @@ class SharedSessionTests(unittest.TestCase):
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=answer):
             session = general.start_session(store, tid, pick='cli:my-codex')
             session.send_prompt('Plan the launch')
-        self.assertIn('Social is company memory, not a technical log', seen['system'])
-        self.assertIn('business, its direction, customers, operations, people', seen['system'])
+        self.assertIn('Hub is a high-signal commons', seen['system'])
+        self.assertIn('substantial investigation', seen['system'])
         self.assertIn('taskuary --learned', seen['system'])
 
-    def test_ending_an_assistant_session_mines_the_conversation_for_social_once(self):
+    def test_ending_an_assistant_session_mines_the_conversation_for_hub_once(self):
         store = MemoryStore(); tid = general_task(store)
         store.add_comment(tid, 'owner', general.USER_TYPE, 'Who approves customer launches?')
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE,
                           'Operations approves every customer launch before a date is promised.')
         session = general.GeneralSession(store, tid)
         brain = mock.Mock(return_value=json.dumps({'entries': [{
+            'earned': True,
+            'why_earned': 'The conversation compared launch ownership and worked through the commitment risk.',
             'title': 'Operations approves customer launch dates',
             'topic': 'customer-launch', 'kind': 'people',
             'body': 'Ask operations before promising a date.',
@@ -82,6 +145,23 @@ class SharedSessionTests(unittest.TestCase):
         posts = store.lore_posts()
         self.assertEqual([(p['Title'], p['Author'], p['TaskId']) for p in posts],
                          [('Operations approves customer launch dates', 'assistant', tid)])
+
+    def test_api_assistant_can_publish_a_hub_idea_without_showing_the_marker(self):
+        store = MemoryStore(); tid = general_task(store)
+        cid = connect_openai(store)
+        payload = {'earned': True,
+                   'why_earned': 'We compared the customer failure modes and developed a concrete operating model.',
+                   'topic': 'customer-launch', 'kind': 'new_idea',
+                   'title': 'Give every launch a reversible dry-run',
+                   'body': 'A dry-run catches ownership gaps before a customer date is committed.'}
+        answer = mock.Mock(return_value='I saved the developed idea to the Hub.\n<TASKUARY-HUB>'
+                                       + json.dumps(payload) + '</TASKUARY-HUB>')
+        with mock.patch.object(llm, 'build_llm', return_value=answer):
+            session = general.GeneralSession(store, tid, connector_id=cid)
+            visible = session.send_prompt('Put that idea in the Hub')
+        self.assertEqual(visible, 'I saved the developed idea to the Hub.')
+        self.assertEqual([(p['Title'], p['Kind'], p['Author']) for p in store.lore_posts()],
+                         [('Give every launch a reversible dry-run', 'new_idea', 'assistant')])
 
     def test_ending_an_assistant_session_respects_social_being_off(self):
         store = MemoryStore(); tid = general_task(store)

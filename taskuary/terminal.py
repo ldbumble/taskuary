@@ -67,13 +67,19 @@ def session_env(agent: str = '', task_id=None, cwd: str = '') -> dict:
     should not have to be told which agent or which task it is - the session already knows, so
     it says so in the environment."""
     from . import config, guard
+    srv = config.load()['server']
+    host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv.get('host')
     out = {k: str(v) for k, v in (('TASKUARY_AGENT', agent), ('TASKUARY_TASK', task_id or ''),
-                                  ('TASKUARY_CWD', cwd)) if v}
+                                  ('TASKUARY_CWD', cwd),
+                                  # A bare shell has no Taskuary job and should carry no ambient
+                                  # app context. Task-backed agents need the exact running URL so
+                                  # they reuse it instead of starting another port.
+                                  ('TASKUARY_URL', f'http://{host}:{srv.get("port") or 7787}' if task_id else '')) if v}
     # ...and the token that says WHO IS ASKING. It is what --note, --learned and --done
     # authenticate with, and it is what the middleware reads to refuse this session the routes
     # that send (guard.DENIED). Less authority than the owner has, by construction rather than by
     # instruction: an untrusted message can argue with a paragraph, not with a header.
-    tok = config.load()['server'].get('agent_token')
+    tok = srv.get('agent_token')
     if tok: out[guard.AGENT_ENV] = tok
     return out
 
@@ -516,6 +522,17 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                              f'checkout with that git remote. Open the task menu (...) > Pick the '
                              f'repository, choose {repo} and give it the path - otherwise the session '
                              f'would open in {profile.get("cwd") or os.getcwd()} and work the wrong tree')
+    # ...and NO repo decided must not mean "the agent's default folder" either. That default is one
+    # particular checkout (FanApp, on this box), so a task nothing matched opened there and an agent
+    # worked a tree it had no business in - the same failure the refusal above exists to prevent, one
+    # branch further along (the owner, 2026-09-03: "sent the coding agent the wrong repo again").
+    if not cwd and not repo and task_id and agent:
+        paths = profile.get('cwd_map') or {}
+        if len(paths) > 1:
+            raise ValueError('I could not tell which checkout this belongs in, and guessing would put an '
+                             f"agent in {profile.get('cwd') or os.getcwd()}. Open the task menu (...) > Pick "
+                             'the repository and say which one - or tag it, and every later session goes there.')
+        if len(paths) == 1: cwd = next(iter(paths.values()))
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
     seed = ' '.join(seed_fn(cwd).split()) if (seed_fn and agent) else None
@@ -1105,6 +1122,21 @@ def repo_tag(task: dict) -> str | None:
     return (re.search(r'repo:([^\s,]+)', str((task or {}).get('Tags') or '')) or [None, None])[1]
 
 
+APP = (__package__ or 'taskuary').split('.')[0]
+
+def our_own_repo(store, tid: int, known) -> str:
+    """A task about Taskuary's own machinery belongs in Taskuary's own checkout. A scheduled report
+    that failed is the plain case: it is our scheduler, our prompt, our code - and it was sent to a
+    coder in a completely unrelated repository (the owner, 2026-09-03: "It was issue with the github
+    trending report but it says fannapp???")."""
+    t = store.get_task(tid) or {}
+    ours = (str(t.get('Source') or '') == 'report'
+            or any(str(m.get('Channel') or '') == 'report' for m in store.list_messages(tid))
+            or str(t.get('SourceRef') or '').startswith('assistant:'))
+    if not ours: return ''
+    return next((r for r in known if APP in r.split('/')[-1].lower()), '')
+
+
 def guess_repo(store, tid: int, profile: dict) -> tuple:
     """Which checkout does this task belong in? The tag on the task wins - that is the override,
     and the only thing that always does what it says.
@@ -1131,6 +1163,26 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
     if not paths: return (None, None)
     ranked = rank_repos(store, tid, profile)
     if not ranked: return (None, None)
+    own = our_own_repo(store, tid, [r for r, _s, _h in ranked])
+    if own: return own, "Taskuary's own work - our own checkout"
+
+    # A relationship learned from repeated OWNER repo choices outranks word overlap. It does not
+    # learn from this answer, so a bad automatic route cannot reinforce itself. When one project
+    # spans several repositories, the task's words still have to distinguish which checkout.
+    from .projects import repositories_for_task
+    related, relation_why = repositories_for_task(store, tid)
+    known = {r for r, _score, _has in ranked}
+    related = [r for r in related if r in known]
+    if len(related) == 1: return related[0], relation_why
+    if len(related) > 1:
+        choices = [row for row in ranked if row[0] in related]
+        if choices:
+            best, sc, _has = choices[0]
+            runner = choices[1][1] if len(choices) > 1 else 0.0
+            if sc >= .05 and sc >= max(runner * 1.4, runner + .04):
+                return best, relation_why + '; message content selected this repository'
+        return None, relation_why + '; the project has several repositories, so choose one'
+
     best, sc, _has = ranked[0]
     runner = ranked[1][1] if len(ranked) > 1 else 0.0
     # "clearly the one" is a RELATIVE test: it beats the alternatives. A fixed floor is the wrong
@@ -1239,11 +1291,21 @@ def waiting_of(t) -> bool:
 
 
 def phase_of(lines) -> str:
-    """'working' | 'parked' | 'unknown' from the tail of a screen."""
+    """'working' | 'parked' | 'unknown' from the tail of a screen.
+
+    WORKING WINS, anywhere in the tail. Claude Code draws ONE footer carrying both readings at
+    once - "bypass permissions on (shift+tab to cycle) - esc to interrupt - for agents" - and the
+    parked half was tested first, so a working agent read as parked whenever that footer was the
+    last line drawn, and as working again on the next frame. That flap is what said "stopped and is
+    waiting on you" and then "is working, nothing for you there" seconds apart (the owner,
+    2026-09-03: "it's stopped for a second that changed it's mind... very buggy").
+
+    "esc to interrupt" is only ever on screen while a turn is in flight, so it is the strongest
+    thing the screen says: one sighting of it in the last few lines means the agent is busy."""
     ls = [str(l) for l in (lines or []) if str(l).strip()]
     for l in reversed(ls):                      # newest first: the first line that says anything decides
+        if _WORKING.search(l): return 'working'   # ...and WITHIN a line, working wins: one footer, both halves
         if _PARKED.search(l): return 'parked'
-        if _WORKING.search(l): return 'working'
     return 'unknown'
 
 def for_task(task_id, tail=0):

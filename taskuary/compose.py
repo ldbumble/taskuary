@@ -43,7 +43,7 @@ REQUIRED = {'agent': ('prompt|skill',), 'intacct': ('object',), 'intacct_fields'
 REPORT_KEYS = ('title', 'ai_prompt', 'ai_brain', 'every_minutes', 'daily_at', 'cron', 'on_startup',
                'deliver', 'alert', 'charts', 'sources', 'watch_sources', 'watch_source_ids')
 MAX_SOURCES = 6      # the Assistant reads every one of them on every check; a wall of them is a slow check
-NOT_A_SOURCE = ('assistant',)   # a check reading its own output is a loop, not a data source
+NOT_A_SOURCE = ('assistant', 'zoho_monthly_invoices')  # checks may read data views, never a stateful workflow
 
 # Sage Intacct, as the model needs it spelled out: the executor docstring says what the keys are,
 # not how the system thinks. Fields are UPPERCASE ids; readByQuery filters, never SQL; nothing
@@ -132,6 +132,98 @@ SYSTEM = (
     'report has a query, a REST report has a url. A title alone is the owner\'s form handed back to them - peek or ask instead.')
 
 
+WORKFLOW_SYSTEM = (
+    'You turn a plain-English request into ONE Taskuary workflow configuration. Workflows do work '
+    'or keep state; reports only read and summarize. This builder supports exactly two workflow types:\n'
+    '- "zoho_monthly_invoices": opens a monthly customer batch, copies each customer\'s last invoice '
+    'into a Zoho draft, and leaves every send in Review for owner approval.\n'
+    '- "agent": runs a configured CLI AI agent with write access, using a saved skill and/or prompt, '
+    'then files its result. A job that only retrieves or summarizes data is a report, not a workflow.\n\n'
+    'Answer JSON only in one of two shapes:\n'
+    '  {"questions": ["..."]} when a necessary choice is missing; at most three short questions.\n'
+    '  {"config": {...}, "explain": "<what it will do>", "confidence": "high|medium|low"}.\n\n'
+    'RULES\n'
+    '- Use only connector ids, customer ids, and agent names present in WORKFLOW OPTIONS. Never invent one.\n'
+    '- A Zoho workflow needs type, title, connector_id, customers, and a schedule. Customers may be '
+    'a list of exact customer ids; the server replaces them with its trusted customer records. If the '
+    'owner did not identify which customers, ask. Nothing ever sends automatically.\n'
+    '- An agent workflow must change data or state, and needs type, title, agent, and prompt and/or skill. Use an exact configured '
+    'agent name. A skill is its slash-command name without requiring the leading slash. cwd and model '
+    'are optional and must come from the owner, never be guessed.\n'
+    '- Schedule with every_minutes, daily_at (HH:MM), or standard five-field cron. If the owner gives '
+    'no schedule, use daily_at "08:00" for an agent or cron "0 9 1 * *" for monthly invoices and say so.\n'
+    '- Do not add report-only keys such as sources, ai_prompt, charts, triage, delivery, or alerts.')
+
+WORKFLOW_KEYS = {
+    'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
+                              'every_minutes', 'daily_at', 'cron', 'on_startup'},
+    'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'access',
+              'every_minutes', 'daily_at', 'cron', 'on_startup'},
+}
+
+
+def workflow_catalog(store) -> dict:
+    """Trusted choices an AI workflow builder may use; credentials never enter its prompt."""
+    from . import zoho
+    zoho_cards = []
+    for row in store.list_connectors():
+        if row.get('Type') != 'zoho_invoice': continue
+        item = {'connector_id': row['ConnectorId'], 'name': row.get('Name') or 'Zoho Invoice',
+                'ready': bool(row.get('Active') and row.get('HasSecret')), 'customers': []}
+        if item['ready']:
+            try: item['customers'] = zoho.customers(zoho.connection(store, row['ConnectorId']))
+            except Exception as e: item['error'] = str(e)[:300]
+        zoho_cards.append(item)
+    return {'zoho_monthly_invoices': zoho_cards,
+            'agent': [{'name': a.get('Name')} for a in store.list_agents() if a.get('Name')]}
+
+
+def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
+    """Draft a stateful invoice or AI-agent workflow from a sentence. Nothing is saved."""
+    if not llm: return {'error': 'no AI connector is configured - Connections → AI'}
+    if not (ask or '').strip(): return {'error': 'say what you want the workflow to do'}
+    options = workflow_catalog(store)
+    user = {'request': ask.strip(), 'workflow_options': options,
+            **({'answers_to_your_questions': answers} if answers else {})}
+
+    def finish(out, looked):
+        raw = out.get('config')
+        if not isinstance(raw, dict): return {'error': 'the model answered without a workflow config'}
+        typ = raw.get('type')
+        if typ not in WORKFLOW_KEYS: return {'error': f'unsupported workflow type: {typ or "(missing)"}'}
+        cfg = {k: v for k, v in raw.items() if k in WORKFLOW_KEYS[typ]}
+        if not str(cfg.get('title') or '').strip(): return {'error': 'the workflow has no title'}
+        schedules = [k for k in ('every_minutes', 'daily_at', 'cron', 'on_startup') if cfg.get(k)]
+        if not schedules:
+            cfg['cron' if typ == 'zoho_monthly_invoices' else 'daily_at'] = '0 9 1 * *' if typ == 'zoho_monthly_invoices' else '08:00'
+        if typ == 'agent':
+            names = {x['name'] for x in options['agent']}
+            if cfg.get('agent') not in names:
+                return {'error': 'choose one of the configured CLI agents: ' + (', '.join(sorted(names)) or '(none configured)')}
+            if not (str(cfg.get('skill') or '').strip() or str(cfg.get('prompt') or '').strip()):
+                return {'error': 'the AI agent workflow needs a skill or a prompt'}
+            if cfg.get('skill'): cfg['skill'] = str(cfg['skill']).strip().lstrip('/')
+            # The workflow door is the owner's grant to write. `type: agent` alone remains a
+            # read-only report, because the executor is not the product boundary.
+            cfg['access'] = 'write'
+        else:
+            try: cid = int(cfg.get('connector_id'))
+            except (TypeError, ValueError): return {'error': 'choose a connected Zoho Invoice account'}
+            card = next((x for x in options['zoho_monthly_invoices'] if x['connector_id'] == cid and x['ready']), None)
+            if not card: return {'error': 'choose a connected Zoho Invoice account'}
+            trusted = {str(x.get('customer_id')): x for x in card.get('customers') or []}
+            chosen = cfg.get('customer_ids') if isinstance(cfg.get('customer_ids'), list) else cfg.get('customers')
+            ids = list(dict.fromkeys(str(x.get('customer_id') if isinstance(x, dict) else x) for x in (chosen or [])))
+            if not ids: return {'error': 'choose at least one Zoho customer'}
+            if any(x not in trusted for x in ids): return {'error': 'the workflow named a customer that is not in the connected Zoho account'}
+            cfg['connector_id'], cfg['customers'] = cid, [trusted[x] for x in ids]
+            cfg.pop('customer_ids', None)
+        return {'config': cfg, 'explain': str(out.get('explain') or '')[:600],
+                'confidence': out.get('confidence') or 'medium', 'looked_at': looked}
+
+    return _rounds(store, llm, WORKFLOW_SYSTEM, user, 0, finish)
+
+
 # The same fence, aimed one step lower down. The report composer answers "what report do I
 # want"; this one answers "what does this card have to say to reach that system", which is the
 # question the Assistant's Pipeline step actually asks - and the one nobody can answer from
@@ -206,20 +298,24 @@ def _playbook(cat) -> str:
     return ('\n\n' + INTACCT_PLAYBOOK) if any(c['type'] == 'intacct' and c['ready'] for c in cat) else ''
 
 
-def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS) -> dict:
+def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS,
+            exclude_types=None) -> dict:
     """{'questions': [...]} or {'config': {...}, 'explain': ..., 'confidence': ..., 'looked_at': [...]}.
 
     `answers` are the owner's replies to a previous round's questions, so asking is a
     conversation rather than a dead end."""
     if not llm: return {'error': 'no AI connector is configured - Connections → AI'}
     if not (ask or '').strip(): return {'error': 'say what you want the report to do'}
-    cat = catalog(store)
+    excluded = set(exclude_types or ())
+    cat = [row for row in catalog(store) if row.get('type') not in excluded]
     user = {'request': ask.strip(), 'catalog': cat,
             **({'answers_to_your_questions': answers} if answers else {})}
 
     def finish(out, looked):
         cfg = out.get('config')
         if not isinstance(cfg, dict): return {'error': 'the model answered without a config'}
+        if cfg.get('type') in excluded:
+            return {'error': f"{cfg.get('type')} is a workflow - create it from the Workflows section"}
         ok, why = validate(store, cfg)
         if not ok: return {'error': why, 'config': cfg}
         return {'config': cfg, 'explain': str(out.get('explain') or '')[:600],
@@ -253,7 +349,8 @@ def compose_sources(store, ask: str, llm, one_type: str = None, answers: dict = 
         if isinstance(srcs, dict): srcs = [srcs]          # one card asked for, one card answered
         if not isinstance(srcs, list) or not srcs: return {'error': 'the model answered without a data source'}
         srcs = [{k: v for k, v in s.items() if k not in REPORT_KEYS} for s in srcs if isinstance(s, dict)]
-        srcs = [s for s in srcs if s.get('type') not in NOT_A_SOURCE][:cap]
+        srcs = [s for s in srcs if s.get('type') not in NOT_A_SOURCE
+                and not (s.get('type') == 'agent' and s.get('access') == 'write')][:cap]
         if not srcs: return {'error': 'the only source it chose was the check itself - say which system it should read'}
         for s in srcs:
             ok, why = validate_source(store, s)

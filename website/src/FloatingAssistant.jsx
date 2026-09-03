@@ -5,11 +5,12 @@ import LaunchIcon from "@mui/icons-material/Launch";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
+import { lazyGeneral } from "./lazyGeneral.js";
 import { TaskuaryMark } from "./ui.jsx";
 import { ASSISTANT, BORDER, DIM, GRADIENT, INK, PANEL, PANEL2 } from "./theme.jsx";
 
-const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.GeneralWorkspace })));
-const DockActions = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.DockActions })));
+const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));
+const DockActions = React.lazy(lazyGeneral("DockActions"));
 
 const STARTERS = [
   ["Walk through", "walk"],
@@ -37,7 +38,11 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
   const [picker, setPicker] = useState("");
   const [expandedBounds, setExpandedBounds] = useState(null);
 
-  const show = () => { setMounted(true); setOpen(true); };
+  // The bubble is a DOOR now, not a second assistant: the Assistant tab is where the conversation
+  // lives, and a dock over another page was one more place for the same chat to be (the owner,
+  // 2026-09-03: "it should take you to the assistant tab. No more pop up"). The panel below is kept
+  // for the places that still mount it with a task of their own.
+  const show = () => onNavigate?.("Assistant");
   useEffect(() => {
     if (!mounted || task || error) return;
     let live = true;

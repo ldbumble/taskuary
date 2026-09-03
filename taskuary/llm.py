@@ -50,7 +50,9 @@ def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
 MAX_TOKENS = 400
 
 
-def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None, resume=None):
+def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
+                 resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
+                 research: bool = False):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -61,15 +63,24 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     row = store.get_agent(agent_name)
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
-    if cwd: prof['cwd'] = cwd           # a scheduled skill that lives in a repo runs from that repo (reports.run_agent)
-    else:
-        # the classifier reads untrusted text with the coder's flags off: no permission bypass, no
-        # tools, and a scratch cwd so no checkout's CLAUDE.md rides along either. An agent the owner
-        # scheduled INTO a repo (cwd above) keeps its hands - that is the owner's call, not mail's
-        from .clis import preset_args, readonly_args
+    # `read_only` is explicit for scheduled reports: a folder tells the agent where it may READ,
+    # not whether it may write. None preserves the older caller contract where a cwd meant hands.
+    no_hands = read_only if read_only is not None else not (cwd or cli_tools)
+    if not no_hands and cwd: prof['cwd'] = cwd
+    elif not no_hands and cli_tools:
+        # An owner-requested setup walkthrough needs the CLI's browser tool, but it still has no
+        # business in a checkout. Keep its capable process in Taskuary's scratch directory.
         from . import config
-        prof['args'] = readonly_args(prof.get('cmd', 'claude'), list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']))
         scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True); prof['cwd'] = str(scratch)
+    else:
+        # The classifier reads untrusted text with every tool off. A report is different: it may
+        # safely read files and the web, but never gets command, edit, write, or connector tools.
+        from .clis import preset_args, readonly_args, report_read_args
+        from . import config
+        restrict = report_read_args if research else readonly_args
+        prof['args'] = restrict(prof.get('cmd', 'claude'), list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']))
+        scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True)
+        prof['cwd'] = cwd or str(scratch)
     light = str(prof.get('light_model') or '')
     if light.startswith('effort:'):
         # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -
@@ -83,13 +94,20 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         prof['model'] = m
         if eff: prof['args'] = list(prof.get('args') or []) + ['-c', f'model_reasoning_effort={eff}']
     if model: prof['model'] = model     # an explicit per-job model outranks the light gear
-    prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
+    # 300s is the CLASSIFIER's leash - one message, one verdict, and a brain that hangs for twenty
+    # minutes on a mail run is a bug. An agent the owner scheduled INTO a repo (cwd) is not
+    # classifying: it researches, reads the systems it has tools for and writes a document. Same
+    # rule as the flags above - the classifier gets the short leash, the owner's agent keeps its
+    # profile (run_cli's own default is 1200s). The cap cut two of one report's four runs off at
+    # exactly "timed out after 300s" (2026-09-03).
+    if not (cwd or cli_tools or research): prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
     def llm(system, user, max_tokens=MAX_TOKENS, images=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says
         how long the answer should be. `images` is accepted and dropped: a CLI reads files off
         disk itself, and the prompt already names their paths."""
         from .agents import run_cli
         kwargs = {'cancel': cancel} if cancel is not None else {}
+        if extra_env: kwargs['extra_env'] = extra_env
         out, sid, _diff = run_cli(prof, f'{system}\n\n{user}', trace or (lambda *a: None),
                                   resume=resume, **kwargs)
         # what the caller needs to CONTINUE this conversation instead of starting another one
@@ -99,17 +117,19 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     return llm
 
 
-def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None):
+def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
+              cli_tools: bool = False, extra_env: dict = None):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
     the machine (demo.py)."""
     from . import demo
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    return _build_llm(store, pick, model, trace, cancel, resume)
+    return _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env)
 
 
-def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None):
+def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
+               cli_tools: bool = False, extra_env: dict = None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -126,7 +146,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         chosen_model, chosen_resume = (model, resume) if first else (None, None)
         if candidate.startswith('cli:'):
             return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
-                                resume=chosen_resume)
+                                resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env)
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None
         for c in store.list_connectors():

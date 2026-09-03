@@ -70,7 +70,8 @@ DENIED = (
     (r'POST', r'^/api/(soul|learn)(/|$)', 'SOUL.md and LEARNED.md are the owner\'s word - propose, do not write'),
     (r'PUT|PATCH', r'^/api/(owner|whoami)$', 'who the owner is'),
     (r'POST', r'^/api/(mcp|mssql)/', 'runs a command, or sends saved credentials to a host of the caller\'s choosing'),
-    (r'POST', r'^/api/reports/(preview|compose|compose-sources)$', 'the report composer runs any executor with a card\'s credentials'),
+    (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose)$',
+     'the report/workflow composer may read a connected system with the card\'s credentials'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/semantic(/|$)', 'a metric spec is SQL run against a database of its choosing'),
 )
 _DENIED = tuple((re.compile(f'^({m})$', re.I), re.compile(p), why) for m, p, why in DENIED)

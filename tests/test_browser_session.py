@@ -11,6 +11,8 @@ So the owner marks the task, and the SESSION owns the browser: started with it, 
 name, restored from the owner's own saved cookies, named in the agent's seed, closed with it.
 """
 import subprocess
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -46,6 +48,8 @@ class AskingForOneTests(unittest.TestCase):
         self.assertIn('agent-browser', said)
         self.assertIn('skills get core', said)          # the CLI documents its own commands
         self.assertIn('NEVER type a password', said)    # ...and the owner types those, in the pane
+        self.assertIn('$TASKUARY_URL', said)             # reuse this server; never start another port
+        self.assertIn('NEVER use --session, --headed', said)
 
 
 class StartingItTests(unittest.TestCase):
@@ -64,6 +68,18 @@ class StartingItTests(unittest.TestCase):
              mock.patch.object(bv.spawn, 'popen') as popen:
             self.assertTrue(bv.start('abc123'))
         popen.assert_not_called()
+
+    def test_two_simultaneous_starts_launch_one_browser_for_the_session(self):
+        opened, calls = threading.Event(), []
+        def launch(cmd, **kwargs):
+            calls.append(cmd); time.sleep(.05); opened.set()
+        with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
+             mock.patch.object(bv, 'state', side_effect=lambda *a, **k: {'open': opened.is_set()}), \
+             mock.patch.object(bv.spawn, 'popen', side_effect=launch):
+            threads = [threading.Thread(target=bv.start, args=('one-session',)) for _ in range(2)]
+            for thread in threads: thread.start()
+            for thread in threads: thread.join(2)
+        self.assertEqual(len(calls), 1)
 
     def test_without_the_tool_it_says_no_rather_than_raising(self):
         with mock.patch.object(bv.shutil, 'which', return_value=None):

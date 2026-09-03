@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:demo": "vite build --mode demo --outDir ../site/demo --base=./",
-    "test": "node --test test/"
+    "test": "node --test test/",
+    "lint:undef": "eslint -c eslint.undef.mjs src/*.jsx src/*.js"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.17",

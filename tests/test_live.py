@@ -4,7 +4,7 @@ feed-changed / task-changed / run-tail are invalidation, not payloads: the tab a
 knows how to GET /api/feed with an ETag. emit() is safe from a worker thread (the poll,
 a pty byte) because the fan-out hops onto the asyncio loop that owns the sockets.
 """
-import asyncio, unittest
+import asyncio, time, unittest
 
 from taskuary import live
 from taskuary.store import MemoryStore
@@ -22,6 +22,18 @@ class _Tab:
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+async def _await_kind(tab, kind, n=1, seconds=2.0):
+    """The timer thread plus run_coroutine_threadsafe is not a 40ms sleep. CI hosts
+    miss a single short wait; poll until the fan-out lands."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        got = [m for m in tab.sent if m.get('type') == kind]
+        if len(got) >= n:
+            return got
+        await asyncio.sleep(0.01)
+    return [m for m in tab.sent if m.get('type') == kind]
 
 
 class LiveSocketTests(unittest.TestCase):
@@ -134,8 +146,7 @@ class LiveSocketTests(unittest.TestCase):
                 live.emit('feed-changed', message_id=1)
                 live.emit('feed-changed', message_id=2)
                 live.emit('feed-changed', message_id=3)
-                await asyncio.sleep(0.12)
-                return [m for m in tab.sent if m.get('type') == 'feed-changed']
+                return await _await_kind(tab, 'feed-changed')
             finally:
                 live.reset()
         try:
@@ -158,12 +169,24 @@ class LiveSocketTests(unittest.TestCase):
             live.bind(asyncio.get_running_loop())
             live.attach(tab)
             try:
-                for i in range(8):
+                i = 0
+                until = time.monotonic() + 0.6
+                while time.monotonic() < until:
                     live.emit('feed-changed', message_id=i)
                     live.emit('run-tail', run_id=i)
+                    i += 1
                     await asyncio.sleep(0.02)
+                    if (any(m.get('type') == 'feed-changed' for m in tab.sent)
+                            and any(m.get('type') == 'run-tail' for m in tab.sent)):
+                        break
                 during = list(tab.sent)
-                await asyncio.sleep(0.08)
+                more = time.monotonic() + 0.15
+                while time.monotonic() < more:
+                    live.emit('feed-changed', message_id=i)
+                    live.emit('run-tail', run_id=i)
+                    i += 1
+                    await asyncio.sleep(0.02)
+                await _await_kind(tab, 'feed-changed', n=max(2, len([m for m in during if m.get('type') == 'feed-changed']) + 1))
                 return during, list(tab.sent)
             finally:
                 live.reset()

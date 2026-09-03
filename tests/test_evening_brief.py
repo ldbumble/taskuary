@@ -1,6 +1,7 @@
 import unittest
 import json
 from datetime import datetime, timedelta
+from unittest import mock
 
 from taskuary import evening, reports
 from taskuary.store import MemoryStore
@@ -60,6 +61,13 @@ class EveningGatherTests(unittest.TestCase):
         reports.render_report(s, cfg, llm=lambda system, user, **kw: seen.update(system=system, user=user) or 'brief')
         self.assertIn('EVENING INBOX BRIEF', seen['system'])
         self.assertIn('ACCOMPLISHED EVIDENCE', seen['user'])
+
+    def test_a_stale_server_explains_that_the_new_report_type_needs_a_restart(self):
+        s = MemoryStore()
+        cfg = {'type': 'evening_inbox', 'hours': 8, 'ai_prompt': evening.PROMPT}
+        with mock.patch.dict(reports.REGISTRY, {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "not available in this running Taskuary.*Restart Taskuary"):
+                reports.render_report(s, cfg)
 
 
 class FirstScheduleTests(unittest.TestCase):

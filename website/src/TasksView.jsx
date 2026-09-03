@@ -41,7 +41,9 @@ import { TerminalPane } from "./TerminalView.jsx";
 const GENERAL_CHUNK_RELOAD = "tq-general-chunk-reload";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { ASK_TAG } from "./newTask.js";
-import { agentPhase, ownerControlsCompletion, replyPhase, taskPhase } from "./taskLifecycle.js";
+import {
+  agentPhase, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
+} from "./taskLifecycle.js";
 
 const loadGeneralWorkspace = () => import("./GeneralWorkspace.jsx").then((module) => {
   try { sessionStorage.removeItem(GENERAL_CHUNK_RELOAD); } catch { /* storage disabled */ }
@@ -131,6 +133,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
+  useEffect(() => {
+    const fromHash = () => {
+      if (window.location.hash === "#new-task") {
+        setNewOpen(true);
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
+    };
+    fromHash(); window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
   // A finished run should lead with what it accomplished. Harness/model/prompt choices stay
   // behind an explicit restart action instead of looking like the main thing to do next.
@@ -437,8 +449,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
   const liveCodingSession = !isGeneral && !!term?.alive;
   const agentWaiting = liveCodingSession && isWaiting(term);
-  const pendingReview = (detail?.reviews || []).find((r) => r.Status === "pending");
-  const sentReview = (detail?.reviews || []).find((r) => ["approved", "edited", "sent"].includes(r.Status));
+  // Proposals also live in Review and are usually newer than the reply. They have their own
+  // action card; the Reply stage must show only communication intended for the sender.
+  const pendingReview = pendingReplyReview(detail?.reviews || []);
+  const sentReview = sentReplyReview(detail?.reviews || []);
   // A successful Review send is the reply even before (or when) the external channel ingests an
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
   // message; otherwise completed tasks showed one inbound message and claimed that was the whole

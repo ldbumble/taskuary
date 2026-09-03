@@ -294,6 +294,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 if is_chat(msg):
                     lines = exchange_lines(store, msg)
                     if lines: thread = {**thread, 'exchange': lines}
+                # ...and what the ASSISTANT has already said about this thread (a chase it suggested,
+                # an ask it flagged, and what the owner did with it) - the other brain's last word
+                from .assistant import said_about
+                said = said_about(store, msg.get('conversation_id'))
+                if said: thread = {**thread, 'assistant_said': said}
                 intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
                                          learned=injectable(store.doc('learned') or ''),
                                          notes=notes, notes_left=notes_left, images=msg.get('images'),
@@ -386,7 +391,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # open repo would start an agent per drive-by PR) - the task queues as needs-you.
             # The rest of the gate is auto_code_ok: what may start a session on this machine.
             ok, who = auto_code_ok(store, msg, mid, f['kind'])
-            if ok: _spawn(_auto_code, store, tid)
+            if ok:
+                _spawn(_auto_code, store, tid)
+                if is_chat(msg): _spawn(_ack_chat, store, msg, mid, tid)   # they hear at once that somebody is on it
             else:
                 held = who
                 # A stranger's first message is its own state, not just an absent session. An
@@ -691,6 +698,41 @@ def chat_continues(store, msg: dict, tid: int, llm=None) -> dict:
         return {'same': True, 'why': 'an agent is working this and asked on this chat', 'asked': False}
     return same_ask((store.get_task(tid) or {}).get('Title') or '', exchange_lines(store, msg),
                     msg.get('body') or '', llm)
+
+
+# ── the first thing they hear ───────────────────────────────────────────────────────────
+# In chat, "the agent isn't working" is a task AND a question. The task starts a coder, and the
+# person hears nothing until it wraps - ten minutes if it is quick, an hour of silence if not.
+# So the moment an agent actually starts on a chat ask, one line goes back into the chat. Fixed
+# words the owner chose (Settings - Replies), never a drafted answer: it promises nothing but
+# attention, which is the one thing that is true at that moment. Not twice in half an hour on one
+# chat, and never over a line of the owner's own - they have already heard from us.
+ACK_DEFAULT = "On it - I'll get back to you here."
+ACK_QUIET_MIN = 30
+ACK_FRESH_MIN = 10      # only an ask that just arrived: a startup catch-up must not answer yesterday's chat
+ECHOES = {'teams', 'imessage'}      # channels that hand our own sends back as context rows (no local copy needed)
+
+
+def _ack_chat(store, msg: dict, mid: int, tid: int) -> bool:
+    cfg = store.get_settings()
+    if not is_chat(msg) or cfg.get('chat_ack_enabled', '1') != '1': return False
+    from datetime import datetime
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if _secs(msg.get('sent_at'), now) > ACK_FRESH_MIN * 60: return False
+    from .outbound import can_reply, reply_to_message
+    if not can_reply(store, msg.get('channel')): return False
+    for m in store.thread_messages(msg.get('conversation_id'), None, limit=12):
+        if is_ours(m) and _secs(m.get('SentAt'), msg.get('sent_at')) <= ACK_QUIET_MIN * 60: return False
+    text = (cfg.get('chat_ack_text') or ACK_DEFAULT).strip()
+    try: reply_to_message(store, store.get_message(mid) or {}, text)
+    except Exception as e:
+        logger.warning(f'chat acknowledgement failed for {task_ref(tid)}: {e}'); return False
+    if msg.get('channel') not in ECHOES:
+        store.add_message({'TaskId': tid, 'ExternalId': f'ack:{mid}', 'ConversationId': msg.get('conversation_id'),
+                           'Channel': msg.get('channel'), 'SourceName': msg.get('source_name'), 'Subject': msg.get('subject'),
+                           'FromName': 'You', 'SentAt': now, 'BodyText': text, 'Status': 'context', 'Direction': 'out'})
+    store.add_comment(tid, 'router', 'agent', f"Acknowledged in {msg.get('channel')}: \"{text}\"")
+    return True
 
 
 def notes_for(store, msg: dict, cap: int = NOTE_CAP, budget: int = NOTE_BUDGET) -> list:

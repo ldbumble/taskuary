@@ -12,6 +12,11 @@ test("stats credentials are the explicit hardcoded admin pair", () => {
   assert.deepStrictEqual(auth.statsCredentials(), {
     username: auth.STATS_USERNAME, password: auth.STATS_PASSWORD,
   });
+  assert.ok(auth.STATS_PASSWORD.length >= 24);
+  assert.match(auth.STATS_PASSWORD, /[a-z]/);
+  assert.match(auth.STATS_PASSWORD, /[A-Z]/);
+  assert.match(auth.STATS_PASSWORD, /\d/);
+  assert.match(auth.STATS_PASSWORD, /[^a-zA-Z0-9]/);
 });
 
 test("the stats password check accepts only the configured pair", async () => {
@@ -30,7 +35,10 @@ test("stats sessions are signed, expire, and travel only in a secure HttpOnly co
   assert.match(cookie, /HttpOnly/);
   assert.match(cookie, /Secure/);
   assert.match(cookie, /SameSite=Strict/);
-  const request = new Request("https://taskuary.com/api/ev", { headers: { Cookie: cookie.split(";")[0] } });
+  const currentSession = await auth.createStatsSession(auth.STATS_USERNAME);
+  const request = new Request("https://taskuary.com/api/ev", {
+    headers: { Cookie: auth.setStatsCookie(currentSession).split(";")[0] },
+  });
   assert.equal(await auth.hasStatsSession(request), true);
 });
 
@@ -41,6 +49,8 @@ test("the stats page uses a normal login and never stores or sends the old token
   assert.match(page, /autocomplete="username"/);
   assert.match(page, /autocomplete="current-password"/);
   assert.match(page, /fetch\('\/api\/stats-auth'/);
+  assert.match(page, /stats login service is not deployed/);
+  assert.match(page, /if \(!r\.ok\) throw new Error\('HTTP ' \+ r\.status\)/);
   assert.doesNotMatch(page, /tq_stats_token|localStorage|[?&]token=/);
   assert.match(reader, /hasStatsSession/);
   assert.doesNotMatch(reader, /searchParams\.get\("token"\)/);

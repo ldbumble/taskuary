@@ -35,6 +35,8 @@ export const STATES = {
              hint: "the sender deleted this where it came from — kept here, with whatever was done about it" },
   answered: { mark: "↩️", word: "you answered", role: "done",
              hint: "you replied to this yourself, outside Taskuary — nothing here is waiting on you" },
+  theirs:  { mark: "⏳", word: "waiting on them", role: "muted",
+             hint: "the last word is yours — a reply went out and nothing has come back. The ball is in their court, not yours" },
   todo:    { mark: "📋", word: "on your list",  role: "working",
              hint: "real work with nobody on it — send it to an agent, or do it yourself" },
   fyi:     { mark: "👀", word: "fyi",           role: null,
@@ -65,6 +67,10 @@ export function stateOf(row) {
   if (row.Working) return "working";
   if (hasTag(row, HOLD_TAG)) return "held";
   if (row.TaskKind === "note") return "mine";
+  // the ball is in THEIR court: the task is open, and the last word on the thread is yours (typed
+  // anywhere) or a reply Taskuary sent that nobody has answered. It read "on your list — nobody is
+  // on this" for the whole of that wait, which put every thread you had just answered in "needs me".
+  if (row.TaskId && row.TheirTurn) return "theirs";
   // you answered it in Teams or Outlook and never came back here. The reply is ingested as a
   // `context` row (channels.ingest_own_message); until now nothing read it, so a message you
   // had already dealt with sat on your list for good.
@@ -101,6 +107,7 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
     // where you answered it, not just that you did: the owner checks this against their own
     // memory of sending it, and "you answered" alone gives them nothing to check
     case "answered": bits.push(`you replied ${row.Channel === "email" ? "from your mailbox" : `in ${row.Channel}`}`); break;
+    case "theirs":  bits.push(`you replied · waiting on ${row.FromName || row.FromEmail || "them"}`); break;
     default:        if (row.RouteReason) bits.push(String(row.RouteReason).replace(/^triage:\s*/, ""));
   }
   return bits.join(" · ");

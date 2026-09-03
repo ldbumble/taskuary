@@ -157,7 +157,8 @@ class CoreTests(unittest.TestCase):
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
             self.assertEqual(ingest_message(s, self.msg(external_id='e5', channel='teams', from_email='new.colleague@elsewhere.example',
                                                         conversation_id='c5', subject='teams: the exporter', body='e5: exporter fails in jobs/export.py'), llm=TASK_LLM)['status'], 'created')
-        spawn.assert_called_once(); wt.assert_not_called()
+        # ...and in chat the person hears at once that an agent is on it (ingest._ack_chat)
+        self.assertEqual([c.args[0].__name__ for c in spawn.call_args_list], ['_auto_code', '_ack_chat']); wt.assert_not_called()
 
     def test_the_digest_window_starts_at_midnight_so_a_one_day_digest_is_all_of_yesterday(self):
         from datetime import datetime, timedelta

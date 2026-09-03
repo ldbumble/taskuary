@@ -236,8 +236,8 @@ export default function ReportsView() {
   const [note, setNote] = useState(null);
   const [err, setErr] = useState("");
   const [bucket, setBucket] = useState(() => {
-    const found = /report=(\d+)/.exec(window.location.hash || "");
-    return found ? Number(found[1]) : "all";
+    const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
+    return value === "new" ? "new" : /^\d+$/.test(value || "") ? Number(value) : "all";
   });   // which rail section is open (a newly promoted discussion links straight to its editor)
   const [q, setQ] = useState("");
 
@@ -256,6 +256,15 @@ export default function ReportsView() {
   // on the row that's working instead of leaving a dead button
   const [draft, setDraft] = useState(null);   // a composed config waiting in the builder
   const [running, setRunning] = useState(null);
+  useEffect(() => {
+    const fromHash = () => {
+      const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
+      if (value === "new") { setQ(""); setDraft(null); setBucket("new"); }
+      else if (/^\d+$/.test(value || "")) { setQ(""); setBucket(Number(value)); }
+    };
+    fromHash(); window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
   const runNow = async (sid) => {
     setRunning(sid); setNote(null);
     try {

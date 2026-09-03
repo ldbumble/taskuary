@@ -262,6 +262,8 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # a sound in the app and the browser's own desktop notification - each its own switch
                     'hand_sound': 'chime', 'hand_desktop': '1',
                     'calendar_enabled': '1',      # a reply about time reads the owner's calendar first
+                    # in chat, an ask that starts an agent gets one line back at once (ingest._ack_chat)
+                    'chat_ack_enabled': '1', 'chat_ack_text': "On it - I'll get back to you here.",
                     # the assistant's POST on the Timeline (assistant.py): what it looks for, the silence and
                     # quiet that count as news, how much it says. Its clock and its instruction live on the
                     # Reports tab (the seeded 'Assistant' report).
@@ -1539,14 +1541,31 @@ class SQLiteStore:
     ANSWERED_AT = """(SELECT MAX(o.SentAt) FROM message o
                        WHERE o.ConversationId = m.ConversationId AND IFNULL(m.ConversationId,'') <> ''
                          AND o.Status = 'context' AND o.SentAt > m.SentAt)"""
+    # ...and it is not on you while the ball is in THEIR court. The last word on the thread is
+    # yours (wherever you typed it), or Taskuary sent the reply and nothing has come back since:
+    # you are waiting on them. The row used to read "on your list - nobody is on this" for the
+    # whole of that wait, so "needs me" counted every thread the owner had just answered.
+    LAST_WORD_YOURS = """(SELECT CASE WHEN o.Status='context' OR IFNULL(o.Direction,'')='out' THEN 1 ELSE 0 END
+                          FROM message o
+                          WHERE o.ConversationId = m.ConversationId AND IFNULL(m.ConversationId,'') <> ''
+                            AND o.Status <> 'skipped'
+                          ORDER BY o.SentAt DESC, o.MessageId DESC LIMIT 1)"""
+    SENT_UNANSWERED = """(rv.Status IN ('approved','edited','sent') AND rv.Kind <> 'action'
+                         AND NOT EXISTS (SELECT 1 FROM message x
+                                         WHERE x.ConversationId = m.ConversationId AND IFNULL(m.ConversationId,'') <> ''
+                                           AND x.Status NOT IN ('context','skipped') AND IFNULL(x.Direction,'in') <> 'out'
+                                           AND x.SentAt > IFNULL(rv.DecidedAt, rv.CreatedAt)))"""
+    THEIR_TURN = ("(CASE WHEN m.TaskId IS NOT NULL AND IFNULL(t.Status,'') NOT IN ('done', 'dropped') "
+                  f"AND (IFNULL({LAST_WORD_YOURS}, 0) = 1 OR {SENT_UNANSWERED}) THEN 1 ELSE 0 END)")
     NEEDS_YOU_T = """(CASE WHEN rv.Status='pending'
                           OR (m.TaskId IS NOT NULL AND IFNULL(t.Status,'') NOT IN ('done', 'dropped')
                               AND rn.TaskId IS NULL
                               AND (IFNULL(t.Kind,'') <> 'note' OR m.SentAt <= datetime('now', 'localtime'))
                               AND m.Status <> 'withdrawn'
-                              AND {answered} IS NULL)
+                              AND {answered} IS NULL
+                              AND {theirs} = 0)
                     THEN 1 ELSE 0 END)"""
-    NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT)
+    NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT).replace('{theirs}', THEIR_TURN)
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
@@ -1557,7 +1576,8 @@ class SQLiteStore:
                        rt.Decision, rt.Reason RouteReason,
                        rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind, rv.HasDraft,
                        IFNULL(att.n, 0) Attachments,
-                       {self.ANSWERED_AT} AnsweredAt
+                       {self.ANSWERED_AT} AnsweredAt,
+                       {self.THEIR_TURN} TheirTurn
                 FROM message m
                 LEFT JOIN task t ON t.TaskId=m.TaskId
                 LEFT JOIN (
@@ -1565,7 +1585,8 @@ class SQLiteStore:
                     WHERE RouteId IN (SELECT MAX(RouteId) FROM route GROUP BY MessageId)
                 ) rt ON rt.MessageId=m.MessageId
                 LEFT JOIN (
-                    SELECT MessageId, ReviewId, Status, Kind, CASE WHEN IFNULL(DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft FROM review
+                    SELECT MessageId, ReviewId, Status, Kind, DecidedAt, CreatedAt,
+                           CASE WHEN IFNULL(DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft FROM review
                     WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)
                 ) rv ON rv.MessageId=m.MessageId
                 LEFT JOIN (

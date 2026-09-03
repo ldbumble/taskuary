@@ -171,7 +171,12 @@ $('loginForm').onsubmit = function(event){
     body: JSON.stringify({username: $('username').value.trim(), password: $('password').value})
   }).then(function(r){
     return r.json().catch(function(){ return {}; }).then(function(body){
-      if (!r.ok) throw new Error(body.error || 'Could not sign in.');
+      if (!r.ok) {
+        var fallback = r.status === 404
+          ? 'The stats login service is not deployed. Redeploy taskuary.com as a Cloudflare Pages project so its Functions are included.'
+          : 'Could not sign in (HTTP ' + r.status + ').';
+        throw new Error(body.error || fallback);
+      }
       return body;
     });
   }).then(function(){
@@ -188,7 +193,10 @@ $('logout').onclick = function(){
   });
 };
 
-fetch('/api/stats-auth').then(function(r){ return r.json(); }).then(function(session){
+fetch('/api/stats-auth').then(function(r){
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}).then(function(session){
   if (!session.authenticated) { showLogin(''); return; }
   showStats();
   loadStats();

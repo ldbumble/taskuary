@@ -443,6 +443,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [notice, setNotice] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
   const [newChatBusy, setNewChatBusy] = useState(false);
+  const [confirmNewChat, setConfirmNewChat] = useState(false);
   const fileRef = useRef(null);
   const selectionRef = useRef({ connectorId: "", model: "" });
   const attachmentsRef = useRef([]);
@@ -468,7 +469,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
 
   useEffect(() => {
     let live = true;
-    setData(null); setError(""); setNotice(""); setAttachments([]); setNewChatBusy(false);
+    setData(null); setError(""); setNotice(""); setAttachments([]); setNewChatBusy(false); setConfirmNewChat(false);
     api.post(`/api/tasks/${task.TaskId}/assistant/session`, {}).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
   }, [accept, task.TaskId]);
@@ -547,8 +548,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   };
   const startNewChat = async () => {
     if (!onDockNewChat || busy || newChatBusy || !shownMessages.length) return;
-    if (!window.confirm("Start a new chat? This conversation will be archived. Your tasks, reviews, and action cards will stay.")) return;
-    setNewChatBusy(true); setError("");
+    setConfirmNewChat(false); setNewChatBusy(true); setError("");
     try { await onDockNewChat(); }
     catch (e) { setError(errText(e)); setNewChatBusy(false); }
   };
@@ -604,12 +604,27 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           onBlur={() => connectorId && updateProvider(connectorId, model)}
           sx={{ width: 118, "& input": { py: 0.5, fontSize: 10.5 } }} />
         <Button size="small" variant="outlined" startIcon={<AddCommentOutlinedIcon sx={{ fontSize: 14 }} />}
-          disabled={busy || newChatBusy || !shownMessages.length} onClick={startNewChat}
+          disabled={busy || newChatBusy || !shownMessages.length} onClick={() => setConfirmNewChat(true)}
           title="Archive this conversation and start a fresh Taskuary chat"
           sx={{ minWidth: 0, px: 0.8, whiteSpace: "nowrap", textTransform: "none", fontSize: 10.5 }}>
           {newChatBusy ? "Starting…" : "New chat"}
         </Button>
       </Box>}
+      {dock && confirmNewChat && (
+        <Box role="group" aria-label="Confirm new chat" sx={{ display: "flex", alignItems: "center", gap: 0.75,
+          px: 1.15, py: 0.8, flexWrap: "wrap", bgcolor: "#f8f5ee", borderBottom: `1px solid ${BORDER}` }}>
+          <Box sx={{ flex: 1, minWidth: 210 }}>
+            <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 700 }}>Start a new chat?</Typography>
+            <Typography sx={{ color: DIM, fontSize: 10.5 }}>
+              This conversation is archived. Tasks, reviews, and action cards stay.
+            </Typography>
+          </Box>
+          <Button size="small" onClick={() => setConfirmNewChat(false)}
+            sx={{ textTransform: "none", fontSize: 10.5 }}>Keep this chat</Button>
+          <Button size="small" variant="contained" disableElevation onClick={startNewChat}
+            sx={{ textTransform: "none", fontSize: 10.5 }}>Start new chat</Button>
+        </Box>
+      )}
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
       {notice && <Alert severity="success" onClose={() => setNotice("")} sx={{ borderRadius: 0, py: 0 }}>{notice}</Alert>}
       {busy && (

@@ -7,7 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import puppeteer from "puppeteer-core";
 
-const EDGE = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
+// BROWSER_EXE overrides: Edge refuses to start from some shells (exit code 0, no stderr) where Chrome is fine
+const EDGE = process.env.BROWSER_EXE || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const [url, outdir, mode = "desktop"] = process.argv.slice(2);
 fs.mkdirSync(outdir, { recursive: true });
 const VIEW = mode === "mobile" ? { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }

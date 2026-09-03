@@ -418,8 +418,13 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         virtual_reply = bool(sent_text and not own_after)
         last_mine = virtual_reply or mine(last)
         last_at = sent_at if virtual_reply else last.get('SentAt')
+        # ...and what TRIAGE decided when the latest line arrived - the other brain's verdict, so
+        # this one argues with it in the open ("triage filed this as fyi, but...") instead of
+        # raising the thread as if nothing had judged it
+        judged = next((r.get('Reason') for r in reversed(store.message_routes(rs[0]['MessageId'])) if r.get('Reason')), '')
         head = (f"- {who} [{rs[0].get('Channel')}] re \"{_short(rs[0].get('Subject'), 60)}\" - {len(rs)} new, last word {'YOURS' if last_mine else 'THEIRS'} {_when(last_at)}"
-                + (f", {task_ref(tid)} {t.get('Kind')} {t.get('Status')}" if t else '') + f" (latest mid {rs[0]['MessageId']})")
+                + (f", {task_ref(tid)} {t.get('Kind')} {t.get('Status')}" if t else '') + f" (latest mid {rs[0]['MessageId']})"
+                + (f' - triage said: "{_short(judged, 140)}"' if judged else ''))
         first = lambda c: ((c.get('FromName') or c.get('FromEmail') or '?').split(',')[0].split() or ['?'])[0]
         def quote(c):
             attachments = store.list_attachments(c['MessageId'])
@@ -438,6 +443,19 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
 
 def _people(store, days: int = 2) -> str:
     return _people_context(store, days)[0]
+
+
+def said_about(store, conversation_id: str, limit: int = 4) -> list:
+    """What this voice has already raised about ONE thread - for TRIAGE to read before it judges
+    the next line on it. The two brains read the same threads with different prompts and never
+    saw each other's conclusions, so a chase the assistant suggested and the owner dismissed was
+    news to triage the next morning, and a thread the assistant had flagged as waiting on the
+    owner was classified as if nobody had ever looked at it. Keys are per thread
+    (followup:/promise:/asked:<conversation id>), so this is a lookup, not a search."""
+    if not conversation_id: return []
+    tail = f':{conversation_id}'
+    return [f"{i.get('Kind')} raised {str(i.get('LastSaid') or '')[:10]}, now {i.get('Status')}: \"{_short(i.get('Text'), 140)}\""
+            for i in store.list_ideas() if str(i.get('Key') or '').endswith(tail)][:limit]
 
 
 def _calendar(store) -> str:
@@ -686,7 +704,9 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
     return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
             + knowledge.block(store, facts_text)
             + f"\n\nCONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):\n{system_checks(store, watch_source_ids, watch_sources)}"
-            + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first):\n{said}"
+            + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. "
+              f"Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - "
+              f"'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):\n{said}"
             + '\n\nOUT OF OFFICE (from their auto-replies):\n' + ('\n'.join(f'- {k}: {v}' for k, v in away.items()) or '(nobody)')
             + f"\n\nCALENDAR (the next two days):\n{_calendar(store)}"
             + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):\n{recent}"

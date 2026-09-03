@@ -52,3 +52,18 @@ test("the second line names who has it, never guesses", () => {
   assert.equal(subline({ Category: "info", RouteReason: "triage: fyi - a colleague copied you" }),
                "fyi - a colleague copied you");
 });
+
+test("a thread whose last word is yours is waiting on them, not on you", () => {
+  // an open task, and you replied (from anywhere) or Taskuary sent the reply: the ball is theirs
+  const row = { TaskId: 7, Category: "coding", TheirTurn: 1, FromName: "Gabi", Channel: "whatsapp" };
+  assert.equal(stateOf(row), "theirs");
+  assert.match(subline(row), /TQ-0007 · you replied · waiting on Gabi/);
+  assert.equal(STATES.theirs.loud, undefined);                        // never on you, so never loud
+  // their next line arrives: the server clears TheirTurn and the row is work again
+  assert.equal(stateOf({ TaskId: 7, Category: "coding", TheirTurn: 0 }), "todo");
+  // a pending draft or a waving agent still outranks it - those ARE on you
+  assert.equal(stateOf({ TaskId: 7, TheirTurn: 1, ReviewStatus: "pending" }), "reply");
+  assert.equal(stateOf({ TaskId: 7, TheirTurn: 1, Working: "claude", AgentWaiting: true }), "waving");
+  // and a closed task is simply done
+  assert.equal(stateOf({ TaskId: 7, TheirTurn: 1, TaskStatus: "done" }), "done");
+});

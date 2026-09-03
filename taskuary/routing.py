@@ -56,6 +56,17 @@ def cosine(a, b):
 
 # Signal weights and the attach threshold. A live thread match alone clears the bar by design;
 # content-only matches need subject+body agreement.
+#
+# THE RULE FOR A THREAD WHOSE TASK HAS CLOSED - written down because it is easy to break by
+# accident and the two halves look inconsistent until you see why they are not:
+#   THEIR reply on a closed thread is NEW WORK. route() only ever sees open tasks
+#   (store.snapshots), so it opens a new task and triage judges the ask afresh - a closed task is
+#   a finished piece of work, and a thread that comes back to life is asking for another one.
+#   YOUR reply on a closed thread is RECORD, not work. channels.ingest_own_message attaches it to
+#   the closed task (store.task_for_conversation reads open and closed alike) so the chain keeps
+#   the last thing said on it; it never reopens the task and never makes a new one.
+# A chat room is neither: its conversation id names the ROOM, so the thread signal is only a
+# candidate there and ingest.chat_continues decides whether the line joins (owner, 2026-09-02).
 WEIGHTS = {'thread': 1.0, 'subject': 0.45, 'sender': 0.15, 'body': 0.40}
 ATTACH_THRESHOLD = 0.42
 

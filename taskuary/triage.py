@@ -61,6 +61,11 @@ INTENT_SYSTEM = (
     'the owner asked in the exchange is a round trip, not a new job. A line opening a subject the exchange '
     'has not touched is a new ask on its own merits, however the earlier lines were classified. Being about '
     'the same system or person is not the same ask: two bugs in one app are two jobs.\n'
+    'assistant_said is what the Timeline assistant already raised about this very thread (a follow-up it '
+    'suggested, an ask it flagged, a promise it noticed) and what the owner did with it. Be consistent with it, '
+    'not obedient: an OPEN follow-up means the owner is waiting on this person and their line is probably the '
+    'answer (a round trip, not new work); a DISMISSED one means the owner let the thread go - do not resurrect it. '
+    'Say when you disagree.\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '
     'is no substitute for either.')

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import { Alert, Box, Button, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LaunchIcon from "@mui/icons-material/Launch";
@@ -12,15 +12,21 @@ const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx").then(
 const DockActions = React.lazy(() => import("./GeneralWorkspace.jsx").then((m) => ({ default: m.DockActions })));
 
 const STARTERS = [
-  ["Walk through it all", "Walk me through everything that is open and needs attention. Cover exactly one item at a time: explain the context and recommendation, ask me the one question needed for that item, then stop and wait for my answer before continuing."],
-  ["Important now", "Walk me through what needs my attention right now. Start with the most consequential item, explain why it matters, and tell me the next action."],
-  ["Outstanding tasks", "Review my outstanding tasks. Call out what is waiting, stuck, or has gone quiet, then recommend the order I should handle them."],
-  ["End of day", "Give me an executive and concise evening Inbox Brief for emails in my Inbox (Focused and Other) and Sent from the last 8 hours only. Group 1: What I accomplished today (emails sent/responded, meeting invites triaged, emails deleted/archived). Group 2: Top 3 things to focus on tomorrow (based on urgency and importance). Exclude all other folders, bulk/marketing, system notifications, receipts, and blocked senders/keywords. Include invites and flagged messages. Start with two one-sentence roll-ups: Summary of accomplishments (themes + number of invites handled). Summary of top 3 priorities for tomorrow. For each group, list 3–5 bullets in this format: [Sender] — Subject — one-line gist with icons (✅ for completed, 🔍 for priority, 📅 for invite). If a group has no items, omit it entirely. End with a short motivational phrase acknowledging progress."],
+  ["Walk through", "walk"],
+  ["Add", "add"],
+  ["Set up report", "report"],
+];
+
+const WALKTHROUGHS = [
+  ["Inbox", "Walk me through the emails that need my attention, exactly one email at a time. Name the sender and subject, explain what they need, recommend the next action, and show the matching reply or task action when one is available. Ask one question, then stop and wait for my answer."],
+  ["Tasks", "Walk me through my outstanding tasks, exactly one task at a time. Start with the most consequential or stuck task, explain its state and the next action, show its task action card, ask one question, then stop and wait for my answer."],
+  ["Agent work", "Walk me through recent agent work, exactly one result at a time. Explain what the agent changed or found, what remains unresolved, and which action I should take next. Ask one question, then stop and wait for my answer."],
+  ["Review", "Walk me through items waiting in Review, exactly one item at a time. Name the rv number and its task when available so the action card shows the exact draft. Explain the decision, recommend Send, Redraft, or Dismiss, ask one question, then stop and wait for my answer."],
 ];
 
 const errorText = (e) => e?.response?.data?.detail || e?.message || "Taskuary could not open.";
 
-export default function FloatingAssistant({ onNavigate, onChanged, onExpandedChange }) {
+export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -28,9 +34,10 @@ export default function FloatingAssistant({ onNavigate, onChanged, onExpandedCha
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [prompt, setPrompt] = useState(null);
+  const [picker, setPicker] = useState("");
+  const [expandedBounds, setExpandedBounds] = useState(null);
 
   const show = () => { setMounted(true); setOpen(true); };
-  useEffect(() => { onExpandedChange?.(open && expanded); }, [expanded, onExpandedChange, open]);
   useEffect(() => {
     if (!mounted || task || error) return;
     let live = true;
@@ -43,12 +50,48 @@ export default function FloatingAssistant({ onNavigate, onChanged, onExpandedCha
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [open]);
+  useLayoutEffect(() => {
+    if (!open || !expanded) { setExpandedBounds(null); return undefined; }
+    const measure = () => {
+      const stage = activeTab === "Timeline" ? document.querySelector("[data-tq-timeline-stage]") : null;
+      const rect = stage?.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        setExpandedBounds({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+        return;
+      }
+      if (window.innerWidth < 900) {
+        setExpandedBounds({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight });
+        return;
+      }
+      const navBottom = document.getElementById("tqTopNav")?.getBoundingClientRect().bottom || 49;
+      const left = Math.min(528, Math.round(window.innerWidth * 0.42));
+      setExpandedBounds({ left, top: navBottom + 14, width: Math.max(320, window.innerWidth - left - 14),
+        height: Math.max(320, window.innerHeight - navBottom - 28) });
+    };
+    measure();
+    const stage = document.querySelector("[data-tq-timeline-stage]");
+    const nav = document.getElementById("tqTopNav");
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    if (stage) observer?.observe(stage);
+    if (nav) observer?.observe(nav);
+    window.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); };
+  }, [activeTab, expanded, open]);
 
-  const ask = (text) => setPrompt({ id: `${Date.now()}-${Math.random()}`, text });
-  const go = (tab) => { onNavigate(tab); if (window.innerWidth < 700) setOpen(false); };
+  const ask = (text) => {
+    setPicker("");
+    setPrompt({ id: `${Date.now()}-${Math.random()}`, text });
+  };
+  const go = (tab) => { setPicker(""); onNavigate(tab); if (window.innerWidth < 700) setOpen(false); };
+  const addTask = () => { window.location.hash = "new-task"; go("Tasks"); };
+  const addReport = () => { window.location.hash = "report=new"; go("Reports"); };
+  const chooseStarter = (kind) => {
+    if (kind === "report") { addReport(); return; }
+    setPicker((old) => old === kind ? "" : kind);
+  };
   const newChat = async () => {
     const { data } = await api.post("/api/assistant/dock/new");
-    setPrompt(null); setBusy(false); setError(""); setTask(data.task);
+    setPrompt(null); setPicker(""); setBusy(false); setError(""); setTask(data.task);
   };
 
   return (
@@ -56,11 +99,13 @@ export default function FloatingAssistant({ onNavigate, onChanged, onExpandedCha
       {mounted && (
         <Box role="dialog" aria-label="Taskuary" aria-hidden={!open}
           sx={{ position: "fixed", zIndex: 1450,
-            right: expanded ? 0 : { xs: 8, sm: 20 }, bottom: expanded ? 0 : { xs: 76, sm: 88 },
-            width: expanded ? { xs: "100vw", md: "min(760px, 58vw)" } : { xs: "calc(100vw - 16px)", sm: 430 },
-            height: expanded ? "100dvh" : { xs: "calc(100dvh - 92px)", sm: "min(680px, calc(100vh - 112px))" },
+            right: expanded ? "auto" : { xs: 8, sm: 20 }, bottom: expanded ? "auto" : { xs: 76, sm: 88 },
+            left: expanded ? `${expandedBounds?.left || 0}px` : "auto",
+            top: expanded ? `${expandedBounds?.top || 0}px` : "auto",
+            width: expanded ? `${expandedBounds?.width || window.innerWidth}px` : { xs: "calc(100vw - 16px)", sm: 430 },
+            height: expanded ? `${expandedBounds?.height || window.innerHeight}px` : { xs: "calc(100dvh - 92px)", sm: "min(680px, calc(100vh - 112px))" },
             display: open ? "flex" : "none", flexDirection: "column", overflow: "hidden",
-            bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: expanded ? 0 : { xs: 2, sm: 3 },
+            bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: expanded ? { xs: 0, md: 2 } : { xs: 2, sm: 3 },
             boxShadow: "0 22px 70px rgba(42, 39, 33, .22), 0 4px 18px rgba(42, 39, 33, .10)" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.35, py: 1.05, color: "white", background: GRADIENT }}>
             <TaskuaryMark size={27} sx={{ boxShadow: "0 1px 5px #0002" }} />
@@ -68,7 +113,7 @@ export default function FloatingAssistant({ onNavigate, onChanged, onExpandedCha
               <Typography sx={{ fontSize: 13.5, lineHeight: 1.2, fontWeight: 800 }}>Taskuary</Typography>
               <Typography sx={{ fontSize: 10.5, opacity: 0.78 }}>{busy ? "Working on your last message…" : "Talk it through. Take action."}</Typography>
             </Box>
-            <Tooltip title={expanded ? "Return to compact view" : "Expand beside your workspace"}>
+            <Tooltip title={expanded ? "Return to compact view" : "Fill the workspace beside Timeline"}>
               <IconButton size="small" aria-label={expanded ? "Return Taskuary to compact view" : "Expand Taskuary"}
                 onClick={() => setExpanded((v) => !v)} sx={{ color: "white" }}>
                 {expanded ? <CloseFullscreenIcon sx={{ fontSize: 17 }} /> : <OpenInFullIcon sx={{ fontSize: 17 }} />}
@@ -79,8 +124,9 @@ export default function FloatingAssistant({ onNavigate, onChanged, onExpandedCha
             </IconButton>
           </Box>
           <Box sx={{ px: 1, py: 0.8, display: "flex", gap: 0.55, flexWrap: "wrap", bgcolor: PANEL, borderBottom: `1px solid ${BORDER}` }}>
-            {STARTERS.map(([label, text]) => (
-              <Button key={label} size="small" variant="outlined" disabled={!task} onClick={() => ask(text)}
+            {STARTERS.map(([label, kind]) => (
+              <Button key={label} size="small" variant={picker === kind ? "contained" : "outlined"}
+                disabled={!task} onClick={() => chooseStarter(kind)}
                 sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none", borderColor: BORDER, color: INK, bgcolor: PANEL2 }}>
                 {label}
               </Button>
@@ -91,6 +137,25 @@ export default function FloatingAssistant({ onNavigate, onChanged, onExpandedCha
                 sx={{ minWidth: 0, px: 0.55, py: 0.2, fontSize: 10.5, color: DIM, textTransform: "none" }}>{tab}</Button>
             ))}
           </Box>
+          {picker && (
+            <Box sx={{ px: 1, py: 0.7, display: "flex", alignItems: "center", gap: 0.55, flexWrap: "wrap",
+              bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}` }}>
+              <Typography sx={{ mr: 0.25, color: DIM, fontSize: 10.5 }}>
+                {picker === "walk" ? "Where should we start?" : "What do you want to add?"}
+              </Typography>
+              {picker === "walk" ? WALKTHROUGHS.map(([label, text]) => (
+                <Button key={label} size="small" variant="outlined" onClick={() => ask(text)}
+                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>{label}</Button>
+              )) : <>
+                <Button size="small" variant="outlined" onClick={addTask}
+                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>Task</Button>
+                <Button size="small" variant="outlined" onClick={addReport}
+                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>Report</Button>
+                <Button size="small" variant="outlined" onClick={() => go("Connections")}
+                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>Connection</Button>
+              </>}
+            </Box>
+          )}
           <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
             {!task && !error && <Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}
             {error && <>

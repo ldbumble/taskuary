@@ -239,7 +239,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     import os
     from datetime import datetime
     from .ingest import ingest_message
-    from .channels import images_for_triage, save_attachments
+    from .channels import images_for_triage, ingest_own_message, save_attachments
     from . import voice
     cfg = _cfg(c)
     # '*' means every DIRECT chat and is itself opt-in (never created by default); a GROUP comes in
@@ -270,10 +270,23 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                 store, jid, m['text'], from_me=bool(m.get('fromMe')),
                 connector=c):
             continue
-        if m.get('fromMe'): continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always
         elif not (star or jid in want): continue              # direct chats ride on '*'
+        if m.get('fromMe'):
+            # the owner's OWN line in a chat the funnel reads - typed on their phone, not here. It
+            # used to be dropped, so a WhatsApp thread the owner had answered still read as waiting
+            # on them, and the reader that splits a room into asks never saw our half of it
+            # (channels.ingest_own_message: context on the thread, never work, never counted)
+            if (m.get('text') or '').strip():
+                ingest_own_message(store, {
+                    'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp', 'subject': None,
+                    'body': m['text'].strip(), 'from_email': None, 'conversation_id': f'whatsapp:{jid}',
+                    'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
+                    'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp'},
+                    'your line in this chat - kept for context')
+            took.append(m.get('id'))
+            continue
         body, audio, image = (m.get('text') or '').strip(), m.get('audio'), m.get('image')
         doc = m.get('doc')
         # a DOCUMENT counts. Without it in this list a .docx with no caption was dropped whole -

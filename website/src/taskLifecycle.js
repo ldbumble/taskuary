@@ -21,11 +21,21 @@ export const agentPhase = ({ session, run, transcript, report } = {}) => {
   return "not started";
 };
 
+// Action proposals (write a playbook, push a branch, close an issue) share the Review table
+// with outbound replies, but they are not communication. A proposal is normally queued after
+// the reply, so blindly taking reviews[0] makes its JSON envelope appear as the current draft.
+export const pendingReplyReview = (reviews = []) =>
+  reviews.find((review) => review.Kind !== "action" && review.Status === "pending");
+
+export const sentReplyReview = (reviews = []) =>
+  reviews.find((review) => review.Kind !== "action" &&
+    ["approved", "edited", "sent"].includes(review.Status));
+
 export const replyPhase = (reviews = []) => {
-  const latest = reviews[0];
-  const pending = reviews.find((review) => review.Status === "pending");
-  if (pending) return pending.Kind === "action" ? "approval needed" : "draft ready";
-  if (latest && ["approved", "edited", "sent"].includes(latest.Status)) return "sent";
+  const replyReviews = reviews.filter((review) => review.Kind !== "action");
+  const latest = replyReviews[0];
+  if (pendingReplyReview(replyReviews)) return "draft ready";
+  if (sentReplyReview(replyReviews)) return "sent";
   if (latest?.Status === "no_reply") return "not needed";
   return "not drafted";
 };

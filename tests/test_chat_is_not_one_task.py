@@ -12,11 +12,17 @@ here is only what is a fact rather than a judgement: a line typed seconds later,
 arriving while an agent is live on the task.
 """
 import json, unittest
+from unittest import mock
 
 from taskuary.ingest import ingest_message
 from taskuary.store import MemoryStore
 
 CONV = 'whatsapp:120363@g.us'
+
+
+def ago(minutes: int) -> str:
+    from datetime import datetime, timedelta
+    return (datetime.now() - timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def brain(same=False, seen=None):
@@ -143,6 +149,86 @@ class MailIsStillAThread(unittest.TestCase):
                              llm=brain(same=False, seen=seen))
         self.assertEqual((out['status'], out['task_id']), ('attached', first['task_id']))
         self.assertEqual(seen, [])
+
+
+class TheyHearAtOnce(unittest.TestCase):
+    """In chat an ask is a task AND a question. The task starts a coder and the person heard
+    nothing until it wrapped - an hour of silence when it was slow. One fixed line goes back the
+    moment an agent actually starts (ingest._ack_chat): attention promised, nothing else."""
+    def setUp(self):
+        from taskuary import ingest
+        self.sent = []
+        self.inline = mock.patch.object(ingest, '_spawn', lambda fn, *a: fn(*a))
+        self.send = mock.patch('taskuary.outbound.reply_to_message',
+                               lambda store, row, text, **kw: self.sent.append((row['ConversationId'], text)) or {'ok': True})
+        self.inline.start(); self.send.start()
+        self.addCleanup(self.inline.stop); self.addCleanup(self.send.stop)
+        self.s = MemoryStore()
+
+    def test_the_ask_is_acknowledged_in_the_chat_it_came_from(self):
+        out = line(self.s, 'the agent isnt working on my dashboard', ago(0), brain())
+        self.assertEqual(self.sent, [(CONV, "On it - I'll get back to you here.")])
+        self.assertTrue(any('Acknowledged in whatsapp' in c['Body'] for c in self.s.list_comments(out['task_id'])))
+        # ...and the line is on the thread as ours, so the reader and the Timeline both see it
+        ours = [m for m in self.s.thread_messages(CONV) if m['Status'] == 'context']
+        self.assertEqual([m['BodyText'] for m in ours], ["On it - I'll get back to you here."])
+
+    def test_not_twice_in_half_an_hour_on_one_chat(self):
+        line(self.s, 'the agent isnt working', ago(5), brain())
+        line(self.s, 'Also, copilot did this in my email', ago(0), brain(same=False), ext='wa:2')
+        self.assertEqual(len(self.sent), 1)
+
+    def test_the_owners_own_recent_line_means_they_already_heard(self):
+        self.s.add_message({'ExternalId': 'mine', 'ConversationId': CONV, 'Channel': 'whatsapp', 'FromName': 'You',
+                            'SentAt': ago(4), 'BodyText': 'looking now', 'Status': 'context'})
+        line(self.s, 'the agent isnt working', ago(0), brain())
+        self.assertEqual(self.sent, [])
+
+    def test_yesterdays_chat_is_never_answered_by_a_catch_up(self):
+        """A startup sync replays what arrived while the app was shut. Nobody wants "on it" at 9am
+        for something they asked at midnight and have long since dealt with."""
+        line(self.s, 'the agent isnt working', ago(60 * 9), brain())
+        self.assertEqual(self.sent, [])
+
+    def test_the_words_are_the_owners_and_the_switch_is_theirs(self):
+        self.s.set_setting('chat_ack_text', 'Got it, on it.', 'owner')
+        line(self.s, 'the agent isnt working', ago(0), brain())
+        self.assertEqual(self.sent[-1][1], 'Got it, on it.')
+        self.s.set_setting('chat_ack_enabled', '0', 'owner')
+        s2 = MemoryStore(); s2.set_setting('chat_ack_enabled', '0', 'owner')
+        line(s2, 'and the report is late', ago(0), brain())
+        self.assertEqual(len(self.sent), 1)
+
+    def test_mail_never_gets_one(self):
+        ingest_message(self.s, {'external_id': 'm1', 'channel': 'email', 'subject': 'Export', 'body': 'please fix the export',
+                                'from_name': 'Client', 'from_email': 'client@y.com', 'conversation_id': 'c9',
+                                'sent_at': ago(0)}, llm=brain())
+        self.assertEqual(self.sent, [])
+
+
+class TheBrainsReadEachOther(unittest.TestCase):
+    """Triage, the assistant and the digest read the same threads with different prompts and
+    never saw each other's conclusions - so the owner watched three brains disagree."""
+    def test_triage_is_shown_what_the_assistant_raised_about_the_thread(self):
+        s = MemoryStore()
+        s.upsert_idea({'key': f'followup:{CONV}', 'kind': 'followup', 'text': 'No answer from Gabi in 2 days - follow up?'},
+                      '2026-09-01 08:00:00')
+        seen = []
+        line(s, 'sorry, yes - it works now', '2026-09-02 16:35:00', brain(seen=seen))
+        self.assertIn('assistant_said', seen[0])
+        self.assertIn('followup raised 2026-09-01, now open', seen[0]['assistant_said'][0])
+
+    def test_a_thread_nobody_raised_costs_no_words(self):
+        seen = []
+        line(MemoryStore(), 'hello there, quick one', '2026-09-02 16:35:00', brain(seen=seen))
+        self.assertNotIn('assistant_said', seen[0])
+
+    def test_the_assistant_is_shown_what_triage_decided(self):
+        from taskuary import assistant
+        s = MemoryStore(); s.set_setting('chat_ack_enabled', '0', 'owner')
+        line(s, 'the agent isnt working on my dashboard', ago(0), brain())
+        head = assistant._people_context(s)[0].splitlines()[0]
+        self.assertIn('triage said: "triage: task', head)
 
 
 if __name__ == '__main__':

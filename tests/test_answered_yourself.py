@@ -138,5 +138,41 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
 
 
+class TheBallIsInTheirCourt(unittest.TestCase):
+    """You answered and they have not. The row read "on your list - nobody is on this" for the
+    whole of that wait, so "needs me" counted every thread the owner had just dealt with."""
+    def setUp(self):
+        self.s = _store()
+        self.mid = _line(self.s, 'Priya', 'can you send the export?', '2026-08-31 12:41:00', status='routed')
+        self.tid = self.s.create_task({'Title': 'send the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        self.s.attach_message(self.mid, self.tid)
+
+    def test_an_open_task_with_nothing_said_back_is_on_you(self):
+        r = _row(self.s, self.mid)
+        self.assertEqual((r['TheirTurn'], r['NeedsYou']), (0, 1))
+
+    def test_your_own_last_word_puts_it_in_their_court(self):
+        _line(self.s, 'You', 'sent - check your inbox', '2026-08-31 12:50:00', status='context')
+        r = _row(self.s, self.mid)
+        self.assertEqual((r['TheirTurn'], r['NeedsYou']), (1, 0))
+
+    def test_a_reply_taskuary_sent_counts_even_before_the_channel_echoes_it(self):
+        rid = self.s.add_review({'MessageId': self.mid, 'TaskId': self.tid, 'Kind': 'draft_reply', 'Status': 'pending',
+                                 'DraftText': 'sent - check your inbox'})
+        self.s.decide_review(rid, 'sent', 'sent - check your inbox', 'o')
+        r = _row(self.s, self.mid)
+        self.assertEqual((r['TheirTurn'], r['NeedsYou']), (1, 0))
+
+    def test_their_next_line_hands_it_back_to_you(self):
+        _line(self.s, 'You', 'sent - check your inbox', '2026-08-31 12:50:00', status='context')
+        _line(self.s, 'Priya', 'it is empty?', '2026-08-31 13:05:00', status='routed')
+        self.assertEqual(_row(self.s, self.mid)['TheirTurn'], 0)
+
+    def test_a_closed_task_is_nobodys_turn(self):
+        _line(self.s, 'You', 'done', '2026-08-31 12:50:00', status='context')
+        self.s.update_task(self.tid, {'Status': 'done'}, 'o')
+        self.assertEqual(_row(self.s, self.mid)['TheirTurn'], 0)
+
+
 if __name__ == '__main__':
     unittest.main()

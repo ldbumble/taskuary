@@ -567,6 +567,23 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
             **{n: _planned(n) for n in PLANNED}}
 
+
+def executor_for(type_name):
+    """Return a report executor with an actionable error for a stale running process.
+
+    During a source-checkout upgrade, a newly seeded report can briefly exist in SQLite before
+    the already-running server has reloaded the matching registry entry. A bare ``KeyError``
+    makes that harmless version skew look like a malformed AI-created report.
+    """
+    name = str(type_name or 'rest').strip() or 'rest'
+    executor = REGISTRY.get(name)
+    if executor is None:
+        raise RuntimeError(
+            f"Report type {name!r} is not available in this running Taskuary. "
+            "Restart Taskuary to load the latest code, then run the report again."
+        )
+    return executor
+
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
@@ -732,7 +749,7 @@ def run_sources(store, subs: list):
         t = sub.get('type', 'rest')
         label = (sub.get('label') or '').strip() or f'{t} #{i}'
         try:
-            head, body = REGISTRY[t](resolve_cfg(store, dict(sub)))
+            head, body = executor_for(t)(resolve_cfg(store, dict(sub)))
         except Exception as e:
             head, body = 'FAILED', f'error: {str(e)[:400]}'
             logger.warning(f'report source "{label}" failed: {e}')
@@ -776,7 +793,7 @@ def render_report(store, cfg: dict, llm=None):
         head, summary = run_sources(store, subs)
     else:
         cfg = resolve_cfg(store, cfg)
-        head, summary = REGISTRY[cfg.get('type', 'rest')](cfg)
+        head, summary = executor_for(cfg.get('type', 'rest'))(cfg)
     if cfg.get('ai_prompt') and llm:
         try:
             data = summary[:AI_CHARS]

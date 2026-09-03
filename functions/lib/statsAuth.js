@@ -5,7 +5,7 @@
 export const STATS_COOKIE = "__Host-taskuary_stats";
 export const SESSION_SECONDS = 12 * 60 * 60;
 export const STATS_USERNAME = "admin";
-export const STATS_PASSWORD = "taskuary-stats";
+export const STATS_PASSWORD = "Tq9!Violet-Cedar_74#Orbit";
 
 const encoder = new TextEncoder();
 const b64url = (bytes) => btoa(String.fromCharCode(...bytes))

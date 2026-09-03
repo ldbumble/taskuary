@@ -153,7 +153,7 @@ const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
 // because a message that no longer exists cannot be what you act on, and for one row that is
 // right. For a fold it is backwards - a withdrawn line must never speak for four others, one of
 // which is a reply waiting on you.
-const LOUDNESS = ["reply", "waving", "working", "triaging", "held", "answered", "todo", "mine", "done", "withdrawn", "fyi"];
+const LOUDNESS = ["reply", "waving", "working", "triaging", "held", "todo", "theirs", "answered", "mine", "done", "withdrawn", "fyi"];
 
 const PAGE = 100;
 
@@ -1383,7 +1383,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
       </Box>
 
       {/* ── the stage: the task, which is what this screen is actually for ────────── */}
-      <Box data-tq-keep onMouseEnter={disarmClose} onMouseLeave={armClose}
+      <Box data-tq-keep data-tq-timeline-stage onMouseEnter={disarmClose} onMouseLeave={armClose}
         sx={{ minWidth: 0, minHeight: 0, display: { xs: "none", md: "block" } }}>
         {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} onOpenTask={onOpenTask} />
           : sel ? (

@@ -99,7 +99,7 @@ class WhatsAppTests(unittest.TestCase):
         s.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': cid, 'Active': 1}, 'o')
         return s, s.get_connector_by_type('whatsapp', with_secret=True)
 
-    def test_poll_skips_own_messages_and_keeps_the_sequence(self):
+    def test_poll_keeps_own_messages_as_context_and_keeps_the_sequence(self):
         s, c = self._store()
         feed = {'seq': 7, 'messages': [
             {'seq': 6, 'id': 'a', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'export is broken', 'ts': 1755700000},
@@ -107,8 +107,11 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
             n = messengers.poll_whatsapp(s, c, s.list_sources(), llm=None)
         self.assertEqual(n, 1)                                 # my own message is not inbound work
-        m = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]
-        self.assertEqual(m['ConversationId'], 'whatsapp:155@s.whatsapp.net')
+        rows = s._rows("SELECT * FROM message WHERE Channel='whatsapp' ORDER BY MessageId")
+        self.assertEqual(rows[0]['ConversationId'], 'whatsapp:155@s.whatsapp.net')
+        # ...but it IS kept, as the owner's half of the thread: the row now knows it was answered
+        self.assertEqual((rows[1]['Status'], rows[1]['FromName'], rows[1]['BodyText']), ('context', 'You', 'on it'))
+        self.assertIsNotNone(s.feed()[0]['AnsweredAt'])
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
 

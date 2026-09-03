@@ -173,7 +173,6 @@ export default function TaskHubPage() {
   const demo = useDemo();          // the badge, and what the header hides to make room for it
   const [selectedTask, setSelectedTask] = useState(null);
   const [pending, setPending] = useState(0);
-  const [assistantExpanded, setAssistantExpanded] = useState(false);
   const [tick, setTick] = useState(0);
   // the counter, and the panel it opens
   const [setup, reloadSetup] = useSetup(tick);
@@ -282,9 +281,7 @@ export default function TaskHubPage() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {/* textAlign left kills the CRA-default .App { text-align: center } leaking in */}
-      <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left",
-        mr: { xs: 0, md: assistantExpanded ? "min(760px, 58vw)" : 0 },
-        transition: "margin-right .2s ease" }}>
+      <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
         {/* bottom-right, not under the top bar: up there it covered the row every tab keeps its
             actions on (the Board's buttons, a task's Mark done) for twelve seconds per hand raised */}
         <Snackbar key={raised?.eventId || "no-hand-raised"} open={!!raised} autoHideDuration={12000}
@@ -424,7 +421,7 @@ export default function TaskHubPage() {
           {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} />}
         </Box>
-        <FloatingAssistant onNavigate={go} onChanged={refreshPending} onExpandedChange={setAssistantExpanded} />
+        <FloatingAssistant onNavigate={go} onChanged={refreshPending} activeTab={tab} />
       </Box>
     </ThemeProvider>
   );

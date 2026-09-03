@@ -54,7 +54,9 @@ def reset():
 def emit(kind, **payload):
     """Tell every attached tab. Unknown kinds are ignored so a typo cannot wedge the queue.
     No listeners means no timer: a poll writing forty rows must not spawn forty Timers
-    when nobody has the UI open."""
+    when nobody has the UI open. The first write arms a fixed window; later writes only
+    update the payload. Re-arming on every emit starved a stream faster than the delay
+    (a pty printing, a 150-row catch-up) and the tab heard nothing until it paused."""
     if kind not in KINDS:
         return
     with _lock:
@@ -62,10 +64,8 @@ def emit(kind, **payload):
             return
         msg = {**(_pending.get(kind) or {}), **payload, 'type': kind}
         _pending[kind] = msg
-        old = _timers.pop(kind, None)
-        if old:
-            try: old.cancel()
-            except Exception: pass
+        if kind in _timers:
+            return                      # a window is already open; this write rides it
         t = threading.Timer(_DELAY.get(kind, 0.08), lambda k=kind: _flush_kind(k))
         t.daemon = True
         _timers[kind] = t

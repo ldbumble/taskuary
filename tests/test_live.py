@@ -107,6 +107,80 @@ class LiveSocketTests(unittest.TestCase):
         self.assertEqual(live._pending, {})
         self.assertEqual(live._timers, {})
 
+    def test_later_writes_ride_the_open_window(self):
+        """Sliding debounce spawned a thread per emit and cancelled it; a fixed window
+        keeps the first timer and only updates the payload."""
+        dummy = object()
+        live.attach(dummy)
+        try:
+            live.emit('feed-changed', message_id=1)
+            first = live._timers['feed-changed']
+            live.emit('feed-changed', message_id=2)
+            self.assertIs(live._timers.get('feed-changed'), first)
+            self.assertEqual(live._pending['feed-changed']['message_id'], 2)
+        finally:
+            live.reset()
+
+    def test_the_timer_folds_a_burst_into_one(self):
+        """Delivery tests used to call flush() and never wait out the timer. A burst
+        inside one window must still land as a single event on the timer path."""
+        tab = _Tab()
+        orig = dict(live._DELAY)
+        live._DELAY[live.FEED] = 0.04
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            try:
+                live.emit('feed-changed', message_id=1)
+                live.emit('feed-changed', message_id=2)
+                live.emit('feed-changed', message_id=3)
+                await asyncio.sleep(0.12)
+                return [m for m in tab.sent if m.get('type') == 'feed-changed']
+            finally:
+                live.reset()
+        try:
+            events = _run(once())
+        finally:
+            live._DELAY.clear()
+            live._DELAY.update(orig)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]['message_id'], 3)
+
+    def test_sustained_writes_deliver_during_the_stream(self):
+        """A write every 20ms into a 50ms window used to re-arm forever and deliver 0
+        until the stream paused. The Studio tail (pty poke 200ms, delay 250ms) froze
+        for the same reason. A fixed window must flush while the writes are still coming."""
+        tab = _Tab()
+        orig = dict(live._DELAY)
+        live._DELAY[live.FEED] = 0.05
+        live._DELAY[live.RUN] = 0.05
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            try:
+                for i in range(8):
+                    live.emit('feed-changed', message_id=i)
+                    live.emit('run-tail', run_id=i)
+                    await asyncio.sleep(0.02)
+                during = list(tab.sent)
+                await asyncio.sleep(0.08)
+                return during, list(tab.sent)
+            finally:
+                live.reset()
+        try:
+            during, after = _run(once())
+        finally:
+            live._DELAY.clear()
+            live._DELAY.update(orig)
+        feed_during = [m for m in during if m.get('type') == 'feed-changed']
+        run_during = [m for m in during if m.get('type') == 'run-tail']
+        self.assertGreaterEqual(len(feed_during), 1,
+            'sliding debounce would deliver nothing until the stream paused')
+        self.assertGreaterEqual(len(run_during), 1,
+            'run-tail must reach the Studio while the pty is still printing')
+        self.assertGreaterEqual(len([m for m in after if m.get('type') == 'feed-changed']), 2)
+        self.assertGreaterEqual(len([m for m in after if m.get('type') == 'run-tail']), 2)
+
     def test_a_closed_loop_is_a_noop(self):
         """The poll thread can emit after a TestClient's asyncio.run has finished. That used
         to surface as 'Event loop is closed' on the next test."""

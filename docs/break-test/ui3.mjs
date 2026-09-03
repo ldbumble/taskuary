@@ -1,0 +1,24 @@
+import { launch } from "file:///C:/Users/unussbaum/Documents/General/Testing/taskhub/website/browser.mjs";
+import { mkdirSync } from "node:fs";
+const [url, out] = process.argv.slice(2); mkdirSync(out, { recursive: true });
+const b = await launch(); const p = await b.newPage();
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const clickText = (l) => p.evaluate((l) => { const els = [...document.querySelectorAll("button")].filter((x) => x.offsetWidth > 0); const el = els.find((x) => x.textContent.trim() === l) || els.find((x) => x.getAttribute("aria-label") === l); if (el) el.click(); return !!el; }, l);
+const last = () => p.evaluate(() => [...document.querySelectorAll(".tq-msg")].slice(-2).map((m) => m.innerText.replace(/\s+/g, " ").slice(0, 220)));
+await p.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 });
+await p.goto(url, { waitUntil: "load" }); await wait(6000);
+await p.screenshot({ path: `${out}/mobile-assistant.png` });
+console.log("mobile: pipe visible?", await p.evaluate(() => { const el = document.querySelector(".tq-asst-pipe"); const r = el?.getBoundingClientRect(); return el ? `${Math.round(r.width)}x${Math.round(r.height)} at ${Math.round(r.left)},${Math.round(r.top)}` : "none"; }), "| composer:", await p.evaluate(() => !!document.querySelector(".tq-compose-box textarea")), "| body scrollWidth vs inner:", await p.evaluate(() => [document.body.scrollWidth, window.innerWidth]));
+await p.setViewport({ width: 1440, height: 900, isMobile: false, deviceScaleFactor: 1 });
+await p.goto(url, { waitUntil: "load" }); await wait(5000);
+await clickText("All"); await wait(1500); await p.screenshot({ path: `${out}/all-list.png` });
+console.log("All rows:", await p.evaluate(() => [...document.querySelectorAll(".tq-pipe-recent .r")].slice(0, 8).map((r) => r.innerText.replace(/\s+/g, " ").slice(0, 90))));
+await p.evaluate(() => [...document.querySelectorAll(".tq-pipe-recent .r")].find((r) => /payroll portal/i.test(r.innerText))?.click()); await wait(9000);
+console.log("pulled outage row ->", await last());
+await p.evaluate(() => [...document.querySelectorAll(".tq-pipe-recent .r")].find((r) => /Nightly export/i.test(r.innerText))?.click()); await wait(9000);
+console.log("pulled deleted TQ-0002 row ->", await last());
+const btw = await p.evaluate(() => document.querySelector(".tq-btw")?.innerText.replace(/\s+/g, " ")); console.log("BTW:", btw);
+if (btw) { await clickText("Show me"); await wait(9000); console.log("Show me ->", await last()); }
+await clickText("Past chats"); await wait(1200); await p.screenshot({ path: `${out}/chats.png` });
+console.log("chats:", await p.evaluate(() => [...document.querySelectorAll(".tq-chats-list > *")].slice(0, 4).map((r) => r.innerText.replace(/\s+/g, " ").slice(0, 160))));
+await b.close();

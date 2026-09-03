@@ -1,0 +1,20 @@
+[
+ {"click": "New chat — archives this one", "wait": 2500, "note": "new chat", "shot": "newchat"},
+ {"click": "Walk me through my tasks", "shot": "agent-finished"},
+ {"type": "is it done?"},
+ {"type": "wrap it up", "wait": 6000, "shot": "wrapped"},
+ {"note": "after wrap", "wait": 8000, "shot": "after-wrap"},
+ {"click": "Next", "shot": "next-after-wrap"},
+ {"type": "what about the payroll portal outage?"},
+ {"type": "not ours, facilities handles the portal"},
+ {"type": "skip all the fyi from Chana and Dovid, I don't need those"},
+ {"type": "remember that Dovid handles the badge printers"},
+ {"click": "Next"},
+ {"type": "close it"},
+ {"click": "Next", "shot": "late"},
+ {"type": "set up a weekly report on refunds"},
+ {"type": "which tasks are still open?"},
+ {"click": "All", "wait": 1500, "shot": "all-list"},
+ {"click": "Unread", "wait": 800},
+ {"click": "Past chats", "wait": 1200, "shot": "chats"}
+]

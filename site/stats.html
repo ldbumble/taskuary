@@ -173,7 +173,7 @@ $('loginForm').onsubmit = function(event){
     return r.json().catch(function(){ return {}; }).then(function(body){
       if (!r.ok) {
         var fallback = r.status === 404
-          ? 'The stats login service is not deployed. Redeploy taskuary.com as a Cloudflare Pages project so its Functions are included.'
+          ? 'The stats login service is not deployed yet. Check that the latest taskuary Workers Build finished.'
           : 'Could not sign in (HTTP ' + r.status + ').';
         throw new Error(body.error || fallback);
       }

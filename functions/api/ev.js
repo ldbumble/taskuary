@@ -1,6 +1,6 @@
 // What the demo is actually worth, measured first-party.
 //
-// taskuary.com is static on Cloudflare Pages, so until now nothing knew whether anyone opened
+// taskuary.com is static on Cloudflare, so until now nothing knew whether anyone opened
 // /demo/, let alone whether they clicked anything once they were there - which is the only
 // question the demo exists to answer. This takes batched events from the page and writes them
 // to a D1 table. No third party, no cookies, no ad network: an id that lives in sessionStorage
@@ -9,7 +9,7 @@
 // Setup (once, from the repo root):
 //   npx wrangler d1 create taskuary-demo
 //   npx wrangler d1 execute taskuary-demo --remote --file functions/schema.sql
-//   Pages project -> Settings -> Functions -> D1 bindings: DEMO_EVENTS -> taskuary-demo
+//   Worker -> Bindings -> Add binding -> D1 database: DEMO_EVENTS -> taskuary-demo
 // Unbound it is a no-op, so a preview deploy or a fork never errors and never collects.
 
 import { hasStatsSession } from "../lib/statsAuth.js";

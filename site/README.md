@@ -6,19 +6,18 @@ hero, the icon, and a social card. No build step, no framework, nothing to insta
 The interactive demo is built to `site/demo/` with `npm --prefix website run build:demo`
 and is served at `https://taskuary.com/demo/`.
 
-## Deploy (Cloudflare Pages)
+## Deploy (Cloudflare Workers)
 
-The domain is on Cloudflare, so Pages is the shortest path and needs no token anywhere:
+The existing `taskuary` Workers project deploys both the static site and its two tiny analytics
+endpoints from one command. `wrangler.jsonc` serves `site/` as static assets and sends `/api/*`
+through `worker.mjs` first:
 
-1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git** → pick
-   `ldbumble/taskuary`.
-2. Build settings: framework **None**, build command *(empty)*, build output directory **`site`**.
-3. Deploy. Then **Custom domains → Set up a custom domain → `taskuary.com`** (and `www`);
-   Cloudflare writes the DNS records itself because the zone is already here.
+1. Cloudflare dashboard → the `taskuary` Worker → **Settings → Builds** → connect
+   `ldbumble/taskuary`, production branch `master`.
+2. Leave the build command empty and use deploy command **`npx wrangler deploy`**.
+3. Keep `taskuary.com` and `www.taskuary.com` under the Worker's custom domains.
 
-Every push to `master` that touches `site/` redeploys. Preview URLs come with pull requests.
-
-Or from a terminal, one-off: `npx wrangler pages deploy site --project-name taskuary`.
+Every push to `master` redeploys. A one-off deployment is simply `npx wrangler deploy`.
 
 ## Editing
 
@@ -45,16 +44,16 @@ pieces, no third-party script and no cookie:
   `dwell` (15s/1m/3m/10m) and `leave` with the seconds spent — never a word the visitor typed,
   and only when the page is served from `taskuary.com`.
 
-Both POST to `functions/api/ev.js`, a Pages Function that writes to D1 and **does nothing at all
-without a binding** — so a preview deploy or a fork collects no data. To turn it on once:
+Both POST to `functions/api/ev.js`, routed by `worker.mjs`, which writes to D1 and **does nothing
+at all without a binding** — so a preview deploy or a fork collects no data. To turn it on once:
 
 ```
 npx wrangler d1 create taskuary-demo
 npx wrangler d1 execute taskuary-demo --remote --file functions/schema.sql
 ```
 
-Then in the Pages project: **Settings → Functions → D1 bindings** → `DEMO_EVENTS` →
-`taskuary-demo`. The small admin login is intentionally hardcoded in
+Then in the Worker: **Bindings → Add binding → D1 database** → variable name `DEMO_EVENTS` →
+database `taskuary-demo`. The small admin login is intentionally hardcoded in
 `functions/lib/statsAuth.js`; edit `STATS_USERNAME` and `STATS_PASSWORD` there and redeploy when
 you want to change it. No Cloudflare credential variables are required.
 

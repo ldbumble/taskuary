@@ -97,15 +97,19 @@ def refresh(cfg: dict, refresh_token: str) -> dict:
 
 def access_token(cfg: dict, refresh_token: str) -> str:
     """A live access token for a signed-in card - cached until a minute before expiry, and a
-    rotated refresh token is handed to on_rotate so it survives a restart."""
+    rotated refresh token is handed to on_rotate so it survives a restart.
+
+    The mint itself sits inside the lock: Outlook and Teams can share one refresh token,
+    and a parallel poll that minted twice would rotate the first token out from under the
+    second. Waiters reuse the cache entry the first thread just wrote."""
     if not refresh_token: raise RuntimeError('not signed in - click "Sign in with Microsoft" on the Outlook card')
     with _LOCK:
         hit = _CACHE.get(refresh_token)
         if hit and hit[1] > time.time() + 60: return hit[0]
         rt_now = hit[2] if hit else refresh_token
-    t = refresh(cfg, rt_now)
-    new_rt = t.get('refresh_token') or rt_now
-    with _LOCK: _CACHE[refresh_token] = (t['access_token'], time.time() + int(t.get('expires_in') or 3600), new_rt)
+        t = refresh(cfg, rt_now)
+        new_rt = t.get('refresh_token') or rt_now
+        _CACHE[refresh_token] = (t['access_token'], time.time() + int(t.get('expires_in') or 3600), new_rt)
     if new_rt != refresh_token and on_rotate and cfg.get('_cid'):
         try: on_rotate(cfg['_cid'], new_rt)
         except Exception as e: logger.warning(f'could not persist the rotated Microsoft refresh token: {e}')

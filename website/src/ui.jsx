@@ -6,6 +6,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
+import { onLive } from "./live.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
 import GitHubIcon from "@mui/icons-material/GitHub";
@@ -1149,7 +1150,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     if (!taskId) return;
     try { setWait((await api.get(`/api/tasks/${taskId}/waitroom`)).data); } catch { setWait({ data: [], state: null }); }
   }, [taskId]);
-  React.useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  React.useEffect(() => { load(); return onLive("task-changed", load); }, [load]);
   React.useEffect(() => () => clearTimeout(peekTimer.current), []);
   const lines = text.split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean).length;
   const queue = async () => {
@@ -1470,9 +1471,9 @@ export const WorkStrip = ({ taskId, live, session, provenance }) => {
       } catch { if (alive) setFailed(true); }
     };
     load(true);
-    // the witness is cheap and polled; git's per-file diff is not, so it refreshes only when the session ends
-    const id = live ? setInterval(() => load(false), 5000) : 0;
-    return () => { alive = false; clearInterval(id); };
+    // the witness is cheap and pushed as run-tail; git's per-file diff is not, so it refreshes only when the session ends
+    const stop = live ? onLive("run-tail", () => load(false)) : undefined;
+    return () => { alive = false; stop?.(); };
   }, [taskId, live]);
   const w = d?.work;
   if (!d) return failed ? (

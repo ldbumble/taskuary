@@ -284,12 +284,17 @@ class EventsSocketTests(unittest.TestCase):
     def test_the_events_socket_says_hello(self):
         from fastapi.testclient import TestClient
         from taskuary import server
-        with TestClient(server.app) as c:
-            with c.websocket_connect('/api/events/ws') as ws:
-                self.assertEqual(ws.receive_json()['type'], 'hello')
-                server.store.create_task({'Title': 'ws-task', 'Status': 'open'}, 't')
-                live.flush()
-                self.assertEqual(ws.receive_json()['type'], 'task-changed')
+        saved = server.cfg['server'].pop('token', None)
+        try:
+            with TestClient(server.app) as c:
+                with c.websocket_connect('/api/events/ws') as ws:
+                    self.assertEqual(ws.receive_json()['type'], 'hello')
+                    server.store.create_task({'Title': 'ws-task', 'Status': 'open'}, 't')
+                    live.flush()
+                    self.assertEqual(ws.receive_json()['type'], 'task-changed')
+        finally:
+            if saved is not None:
+                server.cfg['server']['token'] = saved
 
     def test_the_events_socket_wants_the_same_token_as_the_rest(self):
         from fastapi.testclient import TestClient

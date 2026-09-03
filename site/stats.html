@@ -2,147 +2,204 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Taskuary · traffic and demo analytics</title>
+<title>Taskuary · demo traffic</title>
+<!-- Not linked from anywhere. Analytics require the signed HttpOnly session issued by the admin
+     login, so this static page contains no credential and has no data of its own. -->
 <style>
-  :root{--bg:#f6f4ef;--panel:#fffdfb;--bd:#e4dfd5;--ink:#1f2a22;--dim:#66766a;--faint:#98a396;--green:#42634b;--purple:#6256d9;--blue:#4d7896;--amber:#a66b2c}
+  :root{--bg:#f6f4ef;--panel:#fffdfb;--bd:#e7e3da;--ink:#1f2a22;--dim:#6b7a6e;--faint:#98a396;--accent:#4f46e5}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",Helvetica,Arial}
-  .wrap{max-width:1120px;margin:0 auto;padding:34px 22px 80px}
-  .top{display:flex;align-items:flex-end;gap:20px;justify-content:space-between;flex-wrap:wrap;margin-bottom:22px}
-  h1{font-size:23px;line-height:1.2;margin:0 0 5px;letter-spacing:-.02em}
-  .sub{color:var(--dim);font-size:13px;max-width:720px}
-  .controls{display:flex;gap:8px;align-items:center}
-  select,button{font:inherit;padding:8px 11px;border:1px solid var(--bd);border-radius:8px;background:var(--panel);color:var(--ink)}
-  button{cursor:pointer;font-weight:650;background:var(--ink);border-color:var(--ink);color:white}
-  button:disabled{opacity:.6;cursor:wait}
-  .insight{padding:13px 15px;margin-bottom:14px;border:1px solid #d8ddcf;border-radius:11px;background:#fdfef9;color:#3f5946}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:26px}
-  .card,.panel{background:var(--panel);border:1px solid var(--bd);border-radius:11px}
-  .card{padding:14px 15px;min-height:93px}
-  .card .label{display:block;color:var(--dim);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.055em}
-  .card b{display:block;font-size:28px;line-height:1.15;margin:5px 0 2px;font-variant-numeric:tabular-nums}
-  .card .detail{color:var(--dim);font-size:12px}
-  .section{margin-top:28px}
-  .section-head{display:flex;gap:12px;align-items:baseline;justify-content:space-between;margin:0 0 9px}
-  h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0}
-  .help{color:var(--faint);font-size:11.5px;text-align:right}
-  .panel{overflow:hidden}
-  .chart{padding:12px 12px 5px}
-  svg{display:block;width:100%;height:auto}
-  .legend{display:flex;gap:16px;flex-wrap:wrap;padding:0 12px 11px;color:var(--dim);font-size:11.5px}
-  .legend i{width:9px;height:9px;border-radius:99px;display:inline-block;margin-right:5px}
-  .funnel{padding:7px 14px}
-  .frow{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(120px,3fr) 58px minmax(115px,1fr);gap:12px;align-items:center;padding:8px 0;border-top:1px solid #eeeae2}
-  .frow:first-child{border-top:0}
-  .track{height:9px;background:#efede7;border-radius:99px;overflow:hidden}
-  .fill{height:100%;min-width:2px;background:var(--purple);border-radius:99px}
-  .num{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
-  .rate{color:var(--dim);font-size:11.5px;text-align:right}
-  .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
-  .three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-  table{width:100%;border-collapse:collapse}
-  th,td{text-align:left;padding:8px 12px;border-top:1px solid #ebe7df;font-size:12.5px;vertical-align:top}
-  th{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;border-top:none;background:#fbfaf7}
+  .wrap{max-width:900px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:20px}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:22px;flex-wrap:wrap}
+  input,select,button{font:inherit;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--panel);color:var(--ink)}
+  button{cursor:pointer;font-weight:600}
+  button.primary{background:var(--ink);border-color:var(--ink);color:white}
+  button.quiet{background:transparent;color:var(--dim)}
+  .login{max-width:390px;background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:26px 0}
+  .login h2{margin:0 0 4px;color:var(--ink);font-size:15px;letter-spacing:0;text-transform:none}
+  .login p{margin:0 0 14px;color:var(--dim);font-size:12.5px}
+  .login label{display:block;color:var(--dim);font-size:11.5px;font-weight:600;margin:9px 0 4px}
+  .login input{display:block;width:100%}
+  .login button{margin-top:14px;min-width:82px}
+  .login .msg{padding:10px 0 0;color:#9c3f4f}
+  .hidden{display:none!important}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px 14px}
+  .card b{display:block;font-size:24px;line-height:1.2}
+  .card span{color:var(--dim);font-size:12px}
+  h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:26px 0 8px}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:7px 12px;border-top:1px solid var(--bd);font-size:13px}
+  th{color:var(--dim);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;border-top:none}
   td:last-child,th:last-child{text-align:right}
-  .metricbar{display:flex;align-items:center;gap:8px}
-  .metricbar .track{flex:1;min-width:55px}
-  .metricbar span{min-width:28px;text-align:right;font-variant-numeric:tabular-nums}
-  .empty,.loading{color:var(--dim);padding:18px 14px}
-  .journey{white-space:nowrap;color:var(--dim)}
-  .pill{display:inline-block;font-size:10.5px;padding:2px 7px;border-radius:99px;background:#edf2ea;color:#49604d;margin:1px 3px 1px 0}
-  .pill.win{background:#eceafd;color:#5147bd}.pill.out{background:#f8ecdd;color:#845926}
-  .recent-wrap{overflow-x:auto}
-  .recent{min-width:790px}
-  .recent td:first-child{white-space:nowrap}
-  .muted{color:var(--faint)}
-  @media(max-width:760px){.two,.three{grid-template-columns:1fr}.frow{grid-template-columns:minmax(110px,1fr) 2fr 40px}.frow .rate{display:none}.wrap{padding:24px 14px 60px}.help{text-align:left}.section-head{align-items:flex-start;flex-direction:column;gap:2px}}
+  .bar{height:6px;background:var(--accent);border-radius:99px;opacity:.85;display:inline-block;vertical-align:middle;margin-right:6px}
+  .msg{color:var(--dim);padding:14px 0}
+  svg{background:var(--panel);border:1px solid var(--bd);border-radius:10px;width:100%;height:auto}
 </style>
-</head><body><main class="wrap">
-  <div class="top">
-    <div><h1>Traffic and demo analytics</h1>
-      <div class="sub">Anonymous, first-party usage: where visits came from, whether they tried the demo, and what convinced them to stay or act.</div></div>
-    <div class="controls">
-      <select id="days" aria-label="Date range"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select>
-      <button id="go">Refresh</button>
-    </div>
-  </div>
-  <div id="out"><div class="loading">Reading analytics…</div></div>
-</main>
+</head><body><div class="wrap">
+<h1>Demo traffic</h1>
+<div class="sub">Who opened taskuary.com and the demo, and what they did once they were in it.
+  Nobody here is a person: the id lives in one browser tab and dies with it.</div>
+<div id="login" class="login hidden">
+  <h2>Admin sign in</h2>
+  <p>Use the Taskuary stats administrator account.</p>
+  <form id="loginForm">
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button id="signIn" class="primary" type="submit">Sign in</button>
+    <div id="loginMsg" class="msg" aria-live="polite"></div>
+  </form>
+</div>
+<div id="controls" class="row hidden">
+  <select id="days"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select>
+  <button id="go" class="primary">Refresh</button>
+  <button id="logout" class="quiet">Sign out</button>
+</div>
+<div id="out"><div class="msg">Checking your session…</div></div>
+</div>
 <script>
 var $ = function(id){ return document.getElementById(id); };
-function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-function n(v){ return Number(v) || 0; }
-function pct(a,b){ return b ? Math.round(100 * a / b) + '%' : '—'; }
-function duration(seconds){
-  seconds=n(seconds); if(seconds<60)return seconds+'s';
-  if(seconds<3600)return Math.round(seconds/60)+'m'; return (seconds/3600).toFixed(1)+'h';
+
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>]/g, function(c){
+  return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'; }); }
+
+// sessions per day is one measure over time, so it is a line - the same shape the app's own
+// report charts draw for a dated series (taskuary/artifacts.py)
+function line(rows){
+  if (rows.length < 2) return '';
+  var W = 860, H = 220, L = 44, R = 16, T = 18, B = 26;
+  var peak = Math.max.apply(null, rows.map(function(r){ return r.sessions; })) || 1;
+  var step = Math.pow(10, Math.floor(Math.log10(peak / 3 || 1)));
+  [1, 2, 2.5, 5, 10].some(function(m){ if (step * m * 3 >= peak) { step *= m; return true; } return false; });
+  var ticks = [];
+  for (var t = 0; t <= peak; t += step) ticks.push(Math.round(t * 100) / 100);
+  var top = ticks[ticks.length - 1] || 1;
+  var px = function(i){ return L + (W - L - R) * (i / Math.max(1, rows.length - 1)); };
+  var py = function(v){ return H - B - (H - T - B) * (v / top); };
+  var pts = rows.map(function(r, i){ return px(i).toFixed(1) + ',' + py(r.sessions).toFixed(1); }).join(' ');
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
+  ticks.forEach(function(t){
+    var y = py(t).toFixed(1);
+    s += '<line x1="' + L + '" y1="' + y + '" x2="' + (W - R) + '" y2="' + y + '" stroke="#e7e3da"/>'
+       + '<text x="' + (L - 8) + '" y="' + (py(t) + 4).toFixed(1) + '" font-size="10" fill="#98a396" text-anchor="end">' + t + '</text>';
+  });
+  s += '<polygon points="' + L + ',' + (H - B) + ' ' + pts + ' ' + (W - R) + ',' + (H - B) + '" fill="#4f46e5" fill-opacity="0.08"/>';
+  s += '<polyline points="' + pts + '" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linejoin="round"/>';
+  var every = Math.max(1, Math.floor(rows.length / 7));
+  rows.forEach(function(r, i){
+    if (i % every && i !== rows.length - 1) return;
+    s += '<text x="' + px(i).toFixed(1) + '" y="' + (H - B + 16) + '" font-size="10" fill="#98a396" text-anchor="middle">' + esc(r.d.slice(5)) + '</text>';
+  });
+  return s + '</svg>';
 }
-function metricTable(rows,labelKey,valueKey){
-  if(!rows.length)return '<div class="empty">No data in this period.</div>';
-  var max=Math.max.apply(null,rows.map(function(r){return n(r[valueKey]);}).concat([1]));
-  var h='<table><tr><th>Breakdown</th><th>Sessions</th></tr>';
-  rows.forEach(function(r){h+='<tr><td>'+esc(r[labelKey])+'</td><td><div class="metricbar"><div class="track"><div class="fill" style="width:'+Math.round(100*n(r[valueKey])/max)+'%"></div></div><span>'+n(r[valueKey])+'</span></div></td></tr>';});
-  return h+'</table>';
+
+function table(head, rows, max){
+  var h = '<table><tr>' + head.map(function(c){ return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
+  rows.forEach(function(r){
+    h += '<tr>' + r.map(function(c, i){
+      if (i === r.length - 1 && max) return '<td><span class="bar" style="width:' + Math.round(60 * c / max) + 'px"></span>' + esc(c) + '</td>';
+      return '<td>' + esc(c) + '</td>';
+    }).join('') + '</tr>';
+  });
+  return h + '</table>';
 }
-function dailyChart(input,days){
-  var values={},today=new Date();
-  input.forEach(function(r){values[r.d]=r;});
-  var rows=[];
-  for(var back=days-1;back>=0;back--){var day=new Date(today);day.setUTCDate(today.getUTCDate()-back);var key=day.toISOString().slice(0,10);rows.push(values[key]||{d:key,landing:0,demo:0,engaged:0});}
-  var W=1060,H=235,L=42,R=14,T=14,B=28,keys=['landing','demo','engaged'],colors=['#4d7896','#6256d9','#42634b'];
-  var peak=Math.max.apply(null,rows.map(function(r){return Math.max(n(r.landing),n(r.demo),n(r.engaged));}).concat([1]));
-  var step=Math.max(1,Math.ceil(peak/4)),top=step*4;
-  var px=function(i){return L+(W-L-R)*(i/Math.max(1,rows.length-1));};
-  var py=function(v){return H-B-(H-T-B)*(v/top);};
-  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Daily landing, demo and engaged sessions">';
-  for(var tick=0;tick<=top;tick+=step){var y=py(tick);s+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" stroke="#e8e4dc"/><text x="'+(L-8)+'" y="'+(y+4)+'" fill="#98a396" font-size="10" text-anchor="end">'+tick+'</text>';}
-  keys.forEach(function(key,k){var pts=rows.map(function(r,i){return px(i).toFixed(1)+','+py(n(r[key])).toFixed(1);}).join(' ');s+='<polyline points="'+pts+'" fill="none" stroke="'+colors[k]+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';if(rows.length<12)rows.forEach(function(r,i){s+='<circle cx="'+px(i)+'" cy="'+py(n(r[key]))+'" r="2.6" fill="'+colors[k]+'"/>';});});
-  var every=Math.max(1,Math.ceil(rows.length/7));rows.forEach(function(r,i){if(i%every&&i!==rows.length-1)return;s+='<text x="'+px(i)+'" y="'+(H-8)+'" fill="#98a396" font-size="10" text-anchor="middle">'+esc(r.d.slice(5))+'</text>';});
-  return s+'</svg>';
+
+function showLogin(message){
+  $('login').classList.remove('hidden');
+  $('controls').classList.add('hidden');
+  $('out').innerHTML = '';
+  $('loginMsg').textContent = message || '';
+  setTimeout(function(){ $('username').focus(); }, 0);
 }
-function card(label,value,detail){return '<div class="card"><span class="label">'+esc(label)+'</span><b>'+esc(value)+'</b><span class="detail">'+detail+'</span></div>';}
-function render(d){
-  var s=d.summary||{}, landing=n(s.landing), demo=n(s.demo), converted=n(s.converted), engaged=n(s.engaged), acted=n(s.acted), downloads=n(s.downloads);
-  var insight;
-  if(!n(s.sessions)) insight='No traffic was recorded in this period.';
-  else if(!demo) insight='Visits reached the landing page, but none opened the demo. The landing-page proposition and Try it now button are the first place to investigate.';
-  else if(!engaged) insight='People opened the demo but left before 15 seconds or any interaction. The first screen is the clearest drop-off.';
-  else if(!acted) insight=pct(engaged,demo)+' of demo sessions engaged, but nobody opened an item or tried an action yet.';
-  else insight=pct(engaged,demo)+' of demo sessions engaged and '+pct(acted,demo)+' tried a core action. '+(downloads?downloads+' session'+(downloads===1?'':'s')+' clicked download.':'No download clicks were recorded.');
-  var html='<div class="insight"><strong>Readout:</strong> '+esc(insight)+'</div><div class="cards">';
-  html+=card('Landing visits',landing,'anonymous browser-tab sessions');
-  html+=card('Demo opens',demo,converted+' from landing · '+Math.max(0,demo-converted)+' direct / other');
-  html+=card('Engaged demo',engaged,pct(engaged,demo)+' of demo opens');
-  html+=card('Core actions',acted,pct(acted,demo)+' opened or changed something');
-  html+=card('Download intent',downloads,'sessions that clicked download');
-  html+=card('Average demo time',duration(s.avg_seconds),'longest observed stay '+duration(s.max_seconds));
-  html+='</div>';
 
-  html+='<section class="section"><div class="section-head"><h2>Conversion path</h2><span class="help">A direct demo visit can skip the first two steps.</span></div><div class="panel funnel">';
-  var stages=[['Landing viewed',landing,'baseline'],['Clicked Try it now',n(s.demo_clicks),pct(s.demo_clicks,landing)+' of landing'],['Reached demo from landing',converted,pct(converted,landing)+' exact conversion'],['All demo opens',demo,'includes direct visits'],['Engaged with demo',engaged,pct(engaged,demo)+' of demo'],['Tried a core action',acted,pct(acted,demo)+' of demo']];
-  var widest=Math.max.apply(null,stages.map(function(x){return n(x[1]);}).concat([1]));
-  stages.forEach(function(x){html+='<div class="frow"><span>'+esc(x[0])+'</span><div class="track"><div class="fill" style="width:'+Math.round(100*n(x[1])/widest)+'%"></div></div><span class="num">'+n(x[1])+'</span><span class="rate">'+esc(x[2])+'</span></div>';});
-  html+='</div></section>';
-
-  html+='<section class="section"><div class="section-head"><h2>Trend</h2><span class="help">Unique sessions per UTC day</span></div><div class="panel chart">'+dailyChart(d.daily||[],n(d.days)||30)+'<div class="legend"><span><i style="background:#4d7896"></i>Landing</span><span><i style="background:#6256d9"></i>Demo opened</span><span><i style="background:#42634b"></i>Engaged</span></div></div></section>';
-
-  html+='<div class="two"><section class="section"><div class="section-head"><h2>Time in demo</h2><span class="help">Best observed dwell or exit time</span></div><div class="panel">'+metricTable(d.engagement||[],'bucket','sessions')+'</div></section>';
-  html+='<section class="section"><div class="section-head"><h2>Landing-page outcomes</h2><span class="help">Unique sessions and total clicks</span></div><div class="panel">';
-  if(!(d.ctas||[]).length)html+='<div class="empty">No CTA clicks in this period.</div>';else{var ctaNames={demo:'Try it now',download:'Download',source:'View source'};html+='<table><tr><th>Button</th><th>Sessions</th><th>Clicks</th></tr>';(d.ctas||[]).forEach(function(r){html+='<tr><td>'+esc(ctaNames[r.What]||r.What||'unknown')+'</td><td>'+n(r.sessions)+'</td><td>'+n(r.clicks)+'</td></tr>';});html+='</table>';}
-  html+='</div></section></div>';
-
-  html+='<section class="section"><div class="section-head"><h2>What people explored</h2><span class="help">Demo actions; repeated clicks are shown separately</span></div><div class="panel">';
-  if(!(d.actions||[]).length)html+='<div class="empty">No demo interactions in this period.</div>';else{var actionNames={tab:'Switched tab',row:'Opened item',verdict:'Tried action',ask:'Asked assistant',watch:'Watched'};html+='<table><tr><th>Action</th><th>Where / what</th><th>Sessions</th><th>Total</th></tr>';(d.actions||[]).forEach(function(r){html+='<tr><td>'+esc(actionNames[r.Kind]||r.Kind)+'</td><td>'+esc(r.What||'—')+'</td><td>'+n(r.sessions)+'</td><td>'+n(r.events)+'</td></tr>';});html+='</table>';}
-  html+='</div></section>';
-
-  html+='<div class="three"><section class="section"><div class="section-head"><h2>Referrers</h2></div><div class="panel">'+metricTable(d.referrers||[],'label','sessions')+'</div></section><section class="section"><div class="section-head"><h2>Countries</h2></div><div class="panel">'+metricTable(d.countries||[],'label','sessions')+'</div></section><section class="section"><div class="section-head"><h2>Devices</h2></div><div class="panel">'+metricTable(d.devices||[],'label','sessions')+'</div></section></div>';
-
-  html+='<section class="section"><div class="section-head"><h2>Recent sessions</h2><span class="help">Anonymous diagnostics; one row per browser tab</span></div><div class="panel recent-wrap">';
-  if(!(d.recent||[]).length)html+='<div class="empty">No sessions in this period.</div>';else{html+='<table class="recent"><tr><th>Started (UTC)</th><th>Source</th><th>Location</th><th>Journey</th><th>Time</th><th>Events</th></tr>';(d.recent||[]).forEach(function(r){var pills='';if(n(r.landing))pills+='<span class="pill">landing</span>';if(n(r.demo_click))pills+='<span class="pill">clicked demo</span>';if(n(r.demo))pills+='<span class="pill win">demo</span>';if(n(r.engaged))pills+='<span class="pill win">engaged</span>';if(n(r.acted))pills+='<span class="pill win">acted</span>';if(n(r.downloaded))pills+='<span class="pill out">download</span>';html+='<tr><td>'+esc(String(r.started||'').replace('T',' ').slice(0,16))+'</td><td>'+esc(r.referrer)+'</td><td>'+esc(r.country)+' · '+esc(r.device)+'</td><td class="journey">'+(pills||'<span class="muted">open only</span>')+'</td><td>'+duration(r.seconds)+'</td><td>'+n(r.events)+'</td></tr>';});html+='</table>';}
-  html+='</div></section>';
-  $('out').innerHTML=html;
+function showStats(){
+  $('login').classList.add('hidden');
+  $('controls').classList.remove('hidden');
+  $('loginMsg').textContent = '';
 }
-function loadStats(){var button=$('go');button.disabled=true;button.textContent='Refreshing…';$('out').innerHTML='<div class="loading">Reading analytics…</div>';fetch('/api/ev?days='+$('days').value).then(function(r){if(!r.ok)throw new Error('Could not read analytics (HTTP '+r.status+').');return r.json();}).then(function(d){if(d.note){$('out').innerHTML='<div class="insight">Analytics storage is not configured for this deployment.</div>';return;}render(d);}).catch(function(e){$('out').innerHTML='<div class="insight">'+esc(e.message)+'</div>';}).finally(function(){button.disabled=false;button.textContent='Refresh';});}
-$('go').onclick=loadStats;$('days').onchange=loadStats;loadStats();
+
+function loadStats(){
+  var days = $('days').value;
+  $('out').innerHTML = '<div class="msg">Reading…</div>';
+  fetch('/api/ev?days=' + days).then(function(r){
+    if (r.status === 401) { showLogin('Your session expired. Sign in again.'); throw new Error('signed out'); }
+    if (!r.ok) throw new Error('Could not read analytics (HTTP ' + r.status + ').');
+    return r.json();
+  }).then(function(d){
+    if (d.note) { $('out').innerHTML = '<div class="msg">' + esc(d.note) + ' — see site/README.md for the two wrangler commands.</div>'; return; }
+    var visits = d.visits || [];
+    var sessions = visits.reduce(function(a, b){ return a + b.sessions; }, 0);
+    var events = visits.reduce(function(a, b){ return a + b.events; }, 0);
+    var kinds = {};
+    (d.kinds || []).forEach(function(k){ kinds[k.Kind] = k.n; });
+    var stayed = (d.depth || []).filter(function(x){ return x.bucket !== '1 (bounced)'; })
+                                .reduce(function(a, b){ return a + b.sessions; }, 0);
+    var html = '<div class="cards">'
+      + '<div class="card"><b>' + sessions + '</b><span>sessions</span></div>'
+      + '<div class="card"><b>' + events + '</b><span>things done</span></div>'
+      + '<div class="card"><b>' + (kinds.cta || 0) + '</b><span>pressed a button on the landing page</span></div>'
+      + '<div class="card"><b>' + stayed + '</b><span>did more than arrive</span></div></div>';
+    html += '<h2>Sessions per day</h2>' + (line(visits) || '<div class="msg">Not enough days yet.</div>');
+    var dmax = Math.max.apply(null, (d.depth || []).map(function(x){ return x.sessions; }).concat([1]));
+    html += '<h2>How far they got</h2>' + table(['events in the session', 'sessions'],
+      (d.depth || []).map(function(x){ return [x.bucket, x.sessions]; }), dmax);
+    var kmax = Math.max.apply(null, (d.kinds || []).map(function(x){ return x.n; }).concat([1]));
+    html += '<h2>What they did</h2>' + table(['event', 'count'],
+      (d.kinds || []).map(function(x){ return [x.Kind, x.n]; }), kmax);
+    var wmax = Math.max.apply(null, (d.what || []).map(function(x){ return x.n; }).concat([1]));
+    html += '<h2>Which ones</h2>' + table(['event', 'what', 'count'],
+      (d.what || []).map(function(x){ return [x.Kind, x.What, x.n]; }), wmax);
+    $('out').innerHTML = html;
+  }).catch(function(e){
+    if (e.message !== 'signed out') $('out').innerHTML = '<div class="msg">' + esc(e.message) + '</div>';
+  });
+}
+
+$('go').onclick = loadStats;
+$('loginForm').onsubmit = function(event){
+  event.preventDefault();
+  var button = $('signIn');
+  button.disabled = true;
+  button.textContent = 'Signing in…';
+  $('loginMsg').textContent = '';
+  fetch('/api/stats-auth', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: $('username').value.trim(), password: $('password').value})
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(body){
+      if (!r.ok) {
+        var fallback = r.status === 404
+          ? 'The stats login service is not deployed yet. Check that the latest taskuary Workers Build finished.'
+          : 'Could not sign in (HTTP ' + r.status + ').';
+        throw new Error(body.error || fallback);
+      }
+      return body;
+    });
+  }).then(function(){
+    $('password').value = '';
+    showStats();
+    loadStats();
+  }).catch(function(e){ $('loginMsg').textContent = e.message; })
+    .finally(function(){ button.disabled = false; button.textContent = 'Sign in'; });
+};
+$('logout').onclick = function(){
+  fetch('/api/stats-auth', {method: 'DELETE'}).finally(function(){
+    $('password').value = '';
+    showLogin('You are signed out.');
+  });
+};
+
+fetch('/api/stats-auth').then(function(r){
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}).then(function(session){
+  if (!session.authenticated) { showLogin(''); return; }
+  showStats();
+  loadStats();
+}).catch(function(){ showLogin('The stats login is temporarily unavailable.'); });
 </script>
 </body></html>

@@ -44,18 +44,13 @@ pieces, no third-party script and no cookie:
   `dwell` (15s/1m/3m/10m) and `leave` with the seconds spent — never a word the visitor typed,
   and only when the page is served from `taskuary.com`.
 
-Both POST to `functions/api/ev.js`, routed by `worker.mjs`, which writes to D1 and **does nothing
-at all without a binding** — so a preview deploy or a fork collects no data. To turn it on once:
+Both POST to `functions/api/ev.js`, routed by `worker.mjs`. The Worker keeps the events in its own
+SQLite-backed `StatsStore`; `wrangler.jsonc` creates and binds it automatically on deployment.
+There is no database id, analytics token, environment variable, or dashboard setup. A fork that
+already has the old `DEMO_EVENTS` D1 binding can keep using it.
 
-```
-npx wrangler d1 create taskuary-demo
-npx wrangler d1 execute taskuary-demo --remote --file functions/schema.sql
-```
-
-Then in the Worker: **Bindings → Add binding → D1 database** → variable name `DEMO_EVENTS` →
-database `taskuary-demo`. The small admin login is intentionally hardcoded in
-`functions/lib/statsAuth.js`; edit `STATS_USERNAME` and `STATS_PASSWORD` there and redeploy when
-you want to change it. No Cloudflare credential variables are required.
+The small admin login is intentionally hardcoded in `functions/lib/statsAuth.js`; edit
+`STATS_USERNAME` and `STATS_PASSWORD` there and redeploy when you want to change it.
 
 Read it at **`https://taskuary.com/stats.html`**. It has a normal username/password sign-in and
 keeps a signed, secure, HttpOnly session for 12 hours. Credentials never appear in the URL or

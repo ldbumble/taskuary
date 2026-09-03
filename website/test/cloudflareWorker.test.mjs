@@ -21,6 +21,23 @@ test("the Workers deployment runs the stats APIs before static assets", async ()
   assert.equal(beacon.status, 204);
 });
 
+test("analytics uses the built-in store without a dashboard database binding", async () => {
+  let objectName = "", forwarded = "";
+  const ANALYTICS_STORE = {
+    idFromName(name) { objectName = name; return "object-id"; },
+    get(id) {
+      assert.equal(id, "object-id");
+      return { fetch: async (request) => { forwarded = request.url; return Response.json({ visits: [] }); } };
+    },
+  };
+  const response = await worker.fetch(new Request("https://taskuary.com/api/ev?days=30"), {
+    ASSETS: assets, ANALYTICS_STORE,
+  });
+  assert.equal(response.status, 200);
+  assert.equal(objectName, "taskuary.com");
+  assert.equal(forwarded, "https://taskuary.com/api/ev?days=30");
+});
+
 test("the hardcoded admin account signs in through the Worker", async () => {
   const response = await worker.fetch(new Request("https://taskuary.com/api/stats-auth", {
     method: "POST",

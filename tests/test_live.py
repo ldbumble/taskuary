@@ -97,6 +97,23 @@ class LiveSocketTests(unittest.TestCase):
         self.assertIn('task-changed', [m['type'] for m in tab.sent])
         self.assertTrue(tid)
 
+    def test_a_task_update_pokes_the_feed_and_task_views(self):
+        tab, s = _Tab(), MemoryStore()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            try:
+                tid = s.create_task({'Title': 'live-task', 'Status': 'open'}, 't')
+                live.flush(); await asyncio.sleep(0); tab.sent.clear()
+                s.update_task(tid, {'Status': 'done'}, 't')
+                live.flush()
+                await _await_kind(tab, 'feed-changed')
+                await _await_kind(tab, 'task-changed')
+                return {m['type'] for m in tab.sent}
+            finally:
+                live.reset()
+        self.assertEqual(_run(once()), {'feed-changed', 'task-changed'})
+
     def test_unknown_kinds_are_dropped(self):
         live.emit('not-a-kind')
         live.flush()          # must not raise, must not send
@@ -296,6 +313,58 @@ class LiveSocketTests(unittest.TestCase):
         kinds = [m['type'] for m in tab.sent]
         self.assertIn('run-tail', kinds)
         self.assertIn('task-changed', kinds)
+
+    def test_review_writes_poke_the_message_and_task(self):
+        """A background draft can finish after the event that created its review. The
+        completed text must wake both views now that neither one polls."""
+        tab, s = _Tab(), MemoryStore()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            try:
+                tid = s.create_task({'Title': 'reply', 'Status': 'waiting'}, 't')
+                mid = s.add_message({'external_id': 'review-poke', 'channel': 'email',
+                                     'subject': 'question', 'body': 'can you help?',
+                                     'task_id': tid, 'status': 'routed'})
+                live.flush(); await asyncio.sleep(0); tab.sent.clear()
+                rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
+                                    'Status': 'pending'})
+                live.flush()
+                await _await_kind(tab, 'feed-changed')
+                await _await_kind(tab, 'task-changed')
+                created = {m['type'] for m in tab.sent}
+                tab.sent.clear()
+                s.update_review_draft(rid, 'Yes.', None)
+                live.flush()
+                await _await_kind(tab, 'feed-changed')
+                await _await_kind(tab, 'task-changed')
+                drafted = {m['type'] for m in tab.sent}
+                return created, drafted
+            finally:
+                live.reset()
+        created, drafted = _run(once())
+        self.assertEqual(created, {'feed-changed', 'task-changed'})
+        self.assertEqual(drafted, {'feed-changed', 'task-changed'})
+
+    def test_deleting_a_task_pokes_the_feed_and_task_views(self):
+        tab, s = _Tab(), MemoryStore()
+        async def once():
+            live.bind(asyncio.get_running_loop())
+            live.attach(tab)
+            try:
+                tid = s.create_task({'Title': 'not work', 'Status': 'open'}, 't')
+                s.add_message({'external_id': 'delete-poke', 'channel': 'email',
+                               'subject': 'fyi', 'body': 'nothing to do',
+                               'task_id': tid, 'status': 'routed'})
+                live.flush(); await asyncio.sleep(0); tab.sent.clear()
+                s.delete_task(tid)
+                live.flush()
+                await _await_kind(tab, 'feed-changed')
+                await _await_kind(tab, 'task-changed')
+                return {m['type'] for m in tab.sent}
+            finally:
+                live.reset()
+        self.assertEqual(_run(once()), {'feed-changed', 'task-changed'})
 
 
 class EventsSocketTests(unittest.TestCase):

@@ -742,7 +742,8 @@ class SQLiteStore:
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
         self._bump_snapshots()
-        self._poke('task-changed', task_id=task_id)
+        # Timeline rows carry task/review state too, so a task transition changes both views.
+        self._poke('feed-changed', 'task-changed', task_id=task_id)
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
 
     def tag_task(self, task_id, tag, on=True, actor='router'):
@@ -811,6 +812,7 @@ class SQLiteStore:
                   'DELETE FROM task WHERE TaskId=?'):
             self._exec(q, (task_id,))
         self._bump_snapshots()
+        self._poke('feed-changed', 'task-changed', task_id=task_id)
     @contextlib.contextmanager
     def freeze_snapshots(self):
         """Reuse one snapshots() result until a task/message write invalidates it.
@@ -1251,7 +1253,20 @@ class SQLiteStore:
                    (wid, task_id) if task_id else (wid,))
 
     # reviews (orphans - reviews whose task is gone - never surface)
-    def add_review(self, fields): return self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
+    def _poke_review(self, review):
+        """A review changes both places that render it: its message and its task."""
+        if not review: return
+        kinds = []
+        if review.get('MessageId'): kinds.append('feed-changed')
+        if review.get('TaskId'): kinds.append('task-changed')
+        if kinds:
+            self._poke(*kinds, review_id=review.get('ReviewId'),
+                       message_id=review.get('MessageId'), task_id=review.get('TaskId'))
+    def _review_changed(self, rid): self._poke_review(self.get_review(rid))
+    def add_review(self, fields):
+        rid = self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
+        self._poke_review({**fields, 'ReviewId': rid})
+        return rid
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def reviews_for_message(self, mid):
         """Every review on a taskless message as well as reviews attached to a task.
@@ -1270,6 +1285,7 @@ class SQLiteStore:
     def decide_review(self, rid, status, final, by, note=None):
         self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',
                    (status, final, by, _now(), note, rid))
+        self._review_changed(rid)
     def pending_review(self, task_id, kind=None, live_only=True):
         """The task's live pending review, by the SAME visibility rule the queue uses: a draft the
         owner can no longer see is not one to re-draft into or treat as already-answered. Pass
@@ -1305,19 +1321,25 @@ class SQLiteStore:
                                   (reason, task_id))
             self.cx.commit()
             self._writes += 1
-            return cur.rowcount                    # lastrowid is meaningless on an UPDATE
+            changed = cur.rowcount                 # lastrowid is meaningless on an UPDATE
+        if changed: self._poke('feed-changed', 'task-changed', task_id=task_id)
+        return changed
     def held_review(self, task_id, mid=None):
         q = "SELECT * FROM review WHERE TaskId=? AND Status='held'" + (' AND MessageId=?' if mid else '') + ' ORDER BY ReviewId DESC LIMIT 1'
         return self._one(q, (task_id, mid) if mid else (task_id,))
     def unhold_review(self, rid, reason=None):
         self._exec("UPDATE review SET Status='pending', Reason=COALESCE(?, Reason) WHERE ReviewId=?", (reason, rid))
+        self._review_changed(rid)
     def update_review_reason(self, rid, reason, run_id=None):
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
+        self._review_changed(rid)
     def update_review_draft(self, rid, draft, run_id):
         self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
+        self._review_changed(rid)
     def save_review_draft(self, rid, draft):
         """Persist the owner's editor without erasing which agent run originally produced it."""
         self._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (draft, rid))
+        self._review_changed(rid)
 
     # policies / sources / settings / memory / docs
     def delete_policy(self, pid): self._exec('DELETE FROM policy WHERE PolicyId=?', (pid,))

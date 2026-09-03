@@ -332,8 +332,11 @@ def assistant_dock_new(background: BackgroundTasks):
         raise HTTPException(409, 'Taskuary is still answering. Stop it or wait before starting a new chat.')
     store.update_task(old['TaskId'], {'Status': 'done'}, ACTOR)
     store.audit('task', old['TaskId'], 'archive_assistant_dock', ACTOR)
+    from . import funnel, concierge
+    funnel.reset_walk(store)       # the new chat walks the pipe afresh; what was decided stands
+    store.set_setting(f"{concierge.SID_KEY}:{old['TaskId']}", '', ACTOR)   # a new chat is a new CLI conversation too
     if session:
-        # Closing is also the conservative point where Social may retain durable company facts.
+        # Closing is also the conservative point where the Hub may retain hard-earned knowledge.
         # That can call an AI, so it belongs after the response rather than delaying New chat.
         background.add_task(session.close)
     task, created = general.dock_task(store, ACTOR)
@@ -658,6 +661,9 @@ def set_task_repo(task_id: int, body: RepoBody):
     the wrong tree, `restart` closes it and opens a fresh one whose prompt names the new repo."""
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
+    # Replacing a choice replaces what that task taught. Otherwise correcting repo A to repo B
+    # would leave the same task as positive evidence for both projects forever.
+    store.clear_project_evidence(task_id)
     tags = [x for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x and not x.startswith('repo:')]
     if body.repo: tags.append(f'repo:{body.repo}')
     store.update_task(task_id, {'Tags': ' '.join(tags)}, ACTOR)
@@ -677,6 +683,11 @@ def set_task_repo(task_id: int, body: RepoBody):
                       else f'Repo set to {body.repo} - the session works there and the prompt says so.'
                       if body.repo else 'Cleared the repo - Taskuary picks it from the ask again.')
     store.audit('task', task_id, 'set_repo', ACTOR, detail={'repo': body.repo, 'path': body.path})
+    if body.repo and body.repo != hub_term.NO_REPO:
+        from .projects import learn_task_repository
+        learn_task_repository(store, task_id, body.repo, ACTOR)
+    from .docsync import sync_projects
+    sync_projects(store, ACTOR)
     out = {'ok': True, 'repo': body.repo}
     if body.restart:
         live = hub_term.session_for(task_id)
@@ -684,7 +695,11 @@ def set_task_repo(task_id: int, body: RepoBody):
         out['session'] = start_session(store, task_id, body.agent)
     return out
 
-class NotATaskBody(BaseModel): learn: bool = True
+class NotATaskBody(BaseModel):
+    learn: bool = True
+    # "archive it": off the pipe and closed, never deleted - the chat's own verb, and what
+    # filing does anyway to a task an agent has worked (work_on_task)
+    archive: bool = False
 
 def _teach_not_a_task(m: dict, background=None):
     """The NOT A TASK verdict, written the SAME way whichever door it came through - the task
@@ -819,6 +834,41 @@ def purge_dropped():
         store.audit('task', tid, 'purge_dropped', ACTOR)
         _drop_task(tid)
     return {'ok': True, 'deleted': len(victims)}
+
+def work_on_task(tid: int) -> str:
+    """What deleting this task would DESTROY, in words - '' when there is nothing to lose. An agent
+    on it, a report it wrote, a commit it made: none of that can be recovered, and one sentence in
+    the chat used to be enough to lose all three (the 2026-09-03 break test: "not ours" about the
+    Teams outage deleted TQ-0002, its CODER REPORT and its drafted reply)."""
+    if not store.get_task(tid): return ''
+    had = []
+    try:
+        # live_sessions is the same truth the pipe reads for "an agent has this one" - for_task alone
+        # misses a session the watcher knows about
+        live = hub_term.for_task(tid) or next((x for x in hub_term.live_sessions() if x.get('taskId') == tid), None)
+        if live: had.append('an agent is working it')
+    except Exception: pass
+    cs = store.list_comments(tid)
+    if any(str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')) for c in cs): had.append('it carries an agent report')
+    if any(str(c.get('ActorType') or '') == 'agent' for c in cs) and 'it carries an agent report' not in had: had.append('an agent has worked on it')
+    return ' and '.join(had)
+
+
+def _file_task(tid: int, why: str) -> str:
+    """The task behind a filed message: DELETED when nothing was ever done on it, ARCHIVED (closed,
+    with the reason on it) when an agent touched it. Returns 'deleted' or 'archived'."""
+    lost = work_on_task(tid)
+    if not lost:
+        _drop_task(tid); return 'deleted'
+    try:                                       # the work is kept; the agent doing it is not
+        live = hub_term.for_task(tid)
+        if live: hub_term.close(live['sid'])
+    except Exception as e: logger.warning(f'could not stop the agent on archived task {tid}: {e}')
+    store.update_task(tid, {'Status': 'done'}, ACTOR)
+    store.add_comment(tid, ACTOR, 'human', f'Archived, not deleted - {why}. Kept because {lost}.')
+    store.audit('task', tid, 'archived_not_deleted', ACTOR, detail={'why': why, 'kept': lost})
+    return 'archived'
+
 
 def _drop_task(tid: int):
     """Deleting a task must also stop the agent working it. "Not a task" read as a kill - it
@@ -963,7 +1013,12 @@ def fetch_attachments(mid: int):
         raise HTTPException(422, str(e)[:300])
     return {'fetched': n, 'data': [_att_row(a) for a in store.list_attachments(mid)]}
 
-class OpenReplyBody(BaseModel): draft: bool = True
+class OpenReplyBody(BaseModel):
+    draft: bool = True
+    instruction: str | None = None
+    # "make it shorter": write it AGAIN over the draft that is there. Without this the model
+    # claimed the edit and the next approve sent the untouched original (2026-09-03).
+    redraft: bool = False
 
 @app.post('/api/messages/{mid}/reply')
 def open_reply(mid: int, body: OpenReplyBody = None):
@@ -980,13 +1035,17 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
                                                       'Status': 'pending', 'Reason': 'you opened a reply on this message'})
     draft = (rv or {}).get('DraftText') or ''
+    if body is not None and body.redraft: draft = ''          # write it again over what is there
     if not draft and (body is None or body.draft):
         try:
-            draft = (responder.write_draft(store, tid, rid, actor=ACTOR) if tid
+            # the owner's own words on what to say ("tell Kishan it is not owned here") ride into the draft
+            note = f"THE OWNER'S INSTRUCTION FOR THIS REPLY - follow it: {body.instruction.strip()}" if body is not None and (body.instruction or '').strip() else None
+            draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=note) if tid
                      else responder.draft_for_message(store, m, rid))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
-    store.audit('review', rid, 'open_reply', ACTOR, detail={'message_id': mid})
+    if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
+    store.audit('review', rid, 'redraft' if (body is not None and body.redraft) else 'open_reply', ACTOR, detail={'message_id': mid})
     return {'reviewId': rid, 'taskId': tid, 'draft': draft}
 
 
@@ -1057,9 +1116,10 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
                               'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR})
     learn.note_verdicts(store)
     tid = m.get('TaskId')
+    fate = ''
     if tid and store.get_task(tid):
         store.audit('task', tid, 'not_mine_delete', ACTOR, detail={'message_id': mid, 'memory_id': memid})
-        _drop_task(tid)                              # its messages revert to 'filed'
+        fate = _file_task(tid, f'not ours - {note[:80]}')     # deleted, or archived when an agent worked it
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, f'not ours - {note[:200]}', [], ACTOR)
     store.audit('memory', memid, 'create', ACTOR, detail={'scope': scope, 'key': key, 'from': em})
@@ -1069,7 +1129,8 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
                             f"mem{memid}: owner said NOT OURS ({scope}): \"{(m.get('Subject') or '')[:80]}\" "
                             f"from {em or '?'} - {note[:200]}")
     return {'ok': True, 'memoryId': memid, 'note': note, 'scope': scope, 'scopeKey': key,
-            'taskDeleted': bool(tid), 'alsoCovered': _also_covered(scope, key, tid)}
+            'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived', 'ref': task_ref(tid) if tid else None,
+            'alsoCovered': _also_covered(scope, key, tid)}
 
 def _also_covered(scope: str, key: str, dropped_tid) -> list:
     """Other OPEN tasks this new verdict now covers - REPORTED, never deleted. One click that
@@ -1102,14 +1163,19 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
     and then a task from its next reply is the funnel arguing with itself."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    tid = m.get('TaskId')
+    tid, fate = m.get('TaskId'), ''
     if tid and store.get_task(tid):
         store.audit('task', tid, 'filed_not_work', ACTOR, detail={'message_id': mid})
-        _drop_task(tid)                              # its messages revert to 'filed'
+        # never delete work: a task an agent has been on is CLOSED and kept, report and all
+        fate = 'archived' if (body is not None and body.archive) else _file_task(tid, 'filed from the pipe')
+        if fate == 'archived' and store.get_task(tid) and store.get_task(tid).get('Status') not in ('done', 'dropped'):
+            store.update_task(tid, {'Status': 'done'}, ACTOR)
+            store.add_comment(tid, ACTOR, 'human', 'Archived from the pipe - closed, not deleted.')
     learned = _teach_not_a_task(m, background) if (body is None or body.learn) else None
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner', [], ACTOR)
-    return {'ok': True, 'taskDeleted': bool(tid), 'memoryId': learned}
+    return {'ok': True, 'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived',
+            'ref': task_ref(tid) if tid else None, 'memoryId': learned}
 
 @app.get('/api/messages/{mid}/not-mine/suggest')
 def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
@@ -1577,82 +1643,111 @@ async def claude_hook(request: Request):
         logger.debug(f'claude hook ignored: {e}'); return {'bound': False}
 
 # ── the handbook (handbook.py): what the agents worked out, by topic, open to comment ──────
-class LoreBody(BaseModel):
+class HubPostBody(BaseModel):
     title: str; body: str = ''; topic: str = ''; kind: str = 'howto'; author: str | None = None
-class LoreCommentBody(BaseModel): body: str
+    why_earned: str | None = None
+class HubCommentBody(BaseModel): body: str; author: str | None = None
 
+def _hub_actor(request: Request, claimed: str | None = None) -> str:
+    """The browser is the owner; an agent token may name its agent without spoofing the owner."""
+    from . import guard
+    if guard.scope_of(cfg['server'], request.headers) != guard.AGENT: return ACTOR
+    raw = request.headers.get('X-Taskuary-Agent') or claimed or 'agent'
+    return re.sub(r'[^a-zA-Z0-9_.-]+', '-', str(raw)).strip('-')[:60] or 'agent'
+
+def _require_hub_write(request: Request):
+    from . import guard, scopes
+    if guard.scope_of(cfg['server'], request.headers) != guard.AGENT: return
+    conn = store.get_connector_by_type('handbook')
+    if not conn: return
+    try: scopes.require(conn, 'hub_write')
+    except PermissionError as e:
+        store.audit('tool', conn['ConnectorId'], 'run_refused', _hub_actor(request),
+                    detail={'type': 'hub_write', 'scope': scopes.scope_of(conn)})
+        raise HTTPException(403, str(e))
+
+@app.get('/api/hub')
 @app.get('/api/handbook')
-def handbook_list(topic: str = None, q: str = None, sort: str = 'new', limit: int = 60, status: str = 'live'):
-    """The Social tab. Topics down the side, posts in the middle - the company's own know-how,
+def hub_list(topic: str = None, q: str = None, kind: str = None, sort: str = 'new', limit: int = 60, status: str = 'live'):
+    """The Hub tab. Topics down the side, high-signal posts in the middle,
     written by whichever agent worked it out, and correctable by whoever knows better.
     status=removed lists what the vote or the owner took off - readable, restorable."""
-    posts = store.lore_posts(topic or None, q or None, min(limit, 200), sort, 'live' if status == 'live' else 'removed')
+    posts = store.lore_posts(topic or None, q or None, min(limit, 200), sort,
+                             'live' if status == 'live' else 'removed', kind or None)
     # the owner's own vote rides on each row so the arrow can show which way they leaned
     for p in posts: p['MyVote'] = next((v['Delta'] for v in store.lore_votes(p['LoreId']) if v['Actor'] == ACTOR), 0)
     return {'topics': store.lore_topics(), 'data': posts, 'count': store.lore_count()}
 
+@app.get('/api/hub/{lid}')
 @app.get('/api/handbook/{lid}')
-def handbook_one(lid: int):
+def hub_one(lid: int):
     p = store.lore_get(lid)
     if not p: raise HTTPException(404, 'no such entry')
     return {**p, 'comments': store.lore_comments(lid), 'votes': store.lore_votes(lid)}
 
+@app.post('/api/hub')
 @app.post('/api/handbook')
-def handbook_post(body: LoreBody, request: Request):
-    """File an entry. Gated the same way the handbook_write TOOL is, because it is the same act
+def hub_post(body: HubPostBody, request: Request):
+    """File an entry. Gated the same way the hub_write tool is, because it is the same act
     through a different door - and this door was the way round the ladder.
 
-    An entry is not a note: handbook.block reads it into every later agent's seed prompt, so it is
+    An entry is not a note: the Hub gives it to relevant future agents as company knowledge, so it is
     a claim handed to every future session as company fact. scopes.py classifies that as a WRITE
-    for exactly that reason. Only AGENTS are measured against it - the owner writing on the Social
+    for exactly that reason. Only AGENTS are measured against it - the owner writing on the Hub
     tab is the person the ladder exists to protect, not a caller to check."""
-    from . import guard, handbook, scopes
-    if not handbook.enabled(store):
-        raise HTTPException(403, 'the handbook is off - turn its card on under Connections')
-    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
-        conn = store.get_connector_by_type('handbook')
-        if conn:
-            try: scopes.require(conn, 'handbook_write')
-            except PermissionError as e:
-                store.audit('tool', conn['ConnectorId'], 'run_refused', ACTOR,
-                            detail={'type': 'handbook_write', 'scope': scopes.scope_of(conn)})
-                raise HTTPException(403, str(e))
-    try: return handbook.post(store, body.title, body.body, body.topic, body.kind, body.author or ACTOR)
+    from . import guard, handbook as hub
+    if not hub.enabled(store):
+        raise HTTPException(403, 'the Hub is off - turn its card on under Connections')
+    _require_hub_write(request)
+    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT and len((body.why_earned or '').strip()) < 20:
+        raise HTTPException(422, 'agent Hub posts need why_earned: the concrete investigation or reasoning that earned the post')
+    try: return hub.post(store, body.title, body.body, body.topic, body.kind,
+                         _hub_actor(request, body.author), why_earned=body.why_earned or '')
     except ValueError as e: raise HTTPException(422, str(e))
 
+@app.post('/api/hub/{lid}/restore')
 @app.post('/api/handbook/{lid}/restore')
-def handbook_restore(lid: int):
-    """Back on Social - a removed entry that turned out to be right after all."""
+def hub_restore(lid: int, request: Request):
+    """Back on the Hub - a removed entry that turned out to be right after all."""
     if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
-    store.lore_restore(lid); store.audit('lore', lid, 'restore', ACTOR)
+    _require_hub_write(request)
+    actor = _hub_actor(request)
+    store.lore_restore(lid); store.audit('lore', lid, 'restore', actor)
     return dict(store.lore_get(lid))
 
+@app.post('/api/hub/{lid}/comment')
 @app.post('/api/handbook/{lid}/comment')
-def handbook_comment(lid: int, body: LoreCommentBody):
+def hub_comment(lid: int, body: HubCommentBody, request: Request):
     """A comment is how a post gets corrected without being erased. An agent that finds an entry
     wrong says so here, and the next reader sees both."""
     if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
+    _require_hub_write(request)
     text = ' '.join((body.body or '').split())[:4000]
     if not text: raise HTTPException(422, 'say something')
-    cid = store.lore_comment(lid, text, ACTOR)
+    cid = store.lore_comment(lid, text, _hub_actor(request, body.author))
     return {'commentId': cid, 'comments': store.lore_comments(lid)}
 
+@app.post('/api/hub/{lid}/vote')
 @app.post('/api/handbook/{lid}/vote')
-def handbook_vote(lid: int, up: bool = True, by: str = None):
-    """Up or down, one vote per voter - forum rules. The score ranks what `handbook.block` hands
-    an agent, and an entry voted below zero is removed from Social (restorable). `by` names an
+def hub_vote(lid: int, request: Request, up: bool = True, by: str = None):
+    """Up or down, one vote per voter - forum rules. The score ranks what the Hub gives
+    an agent, and an entry voted below zero is removed from the Hub (restorable). `by` names an
     agent voting through the API; the owner's own votes are ACTOR."""
-    from . import handbook
-    try: return handbook.vote(store, lid, 1 if up else -1, (by or ACTOR)[:60])
+    from . import handbook as hub
+    _require_hub_write(request)
+    try: return hub.vote(store, lid, 1 if up else -1, _hub_actor(request, by))
     except ValueError as e: raise HTTPException(404, str(e))
 
+@app.post('/api/hub/{lid}/retire')
 @app.post('/api/handbook/{lid}/retire')
-def handbook_retire(lid: int):
-    """No longer true. Retired, not deleted: a handbook that silently loses entries is one you
+def hub_retire(lid: int, request: Request):
+    """No longer true. Retired, not deleted: a Hub that silently loses entries is one you
     cannot tell the difference between right and empty in."""
     if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
-    store.lore_retire(lid, ACTOR)
-    store.audit('lore', lid, 'retire', ACTOR)
+    _require_hub_write(request)
+    actor = _hub_actor(request)
+    store.lore_retire(lid, actor)
+    store.audit('lore', lid, 'retire', actor)
     return {'retired': True}
 
 class OutboxBody(BaseModel):
@@ -1883,6 +1978,171 @@ def funnel_later(tid: int):
 
 @app.post('/api/funnel/rerank')
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
+
+# ── the pipe and the concierge (funnel.py, concierge.py): what comes next, said out loud ──────
+class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None
+class SurfaceBody(BaseModel): key: str | None = None; only: str | None = None
+class ConciergeSayBody(BaseModel): text: str; key: str | None = None
+class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
+
+@app.get('/api/funnel/pile')
+def funnel_pile(force: bool = False, current: str = None):
+    """The ranked pile the Assistant page draws: next-first, every item with the words it rests
+    on, plus the alerts that interrupt. Cached a few seconds - it is polled while the page is open."""
+    from . import funnel
+    p = funnel.pile(store, force)
+    # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
+    # leaves the pile, and nothing told the page - so a sent reply sat on the table as
+    # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
+    # showing back up if the ai agent replied, i edited it and sent??").
+    if current: p = {**p, 'current': funnel.next_item(store, current)}
+    return p
+
+@app.post('/api/funnel/settle')
+def funnel_settle(body: SettleBody):
+    from . import funnel
+    try: return funnel.settle(store, body.key, body.verb, ACTOR, body.hours)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.get('/api/concierge')
+def concierge_state():
+    """The conversation as it stands: the dock task, its turns with their cards, the AI choices."""
+    from . import concierge, general
+    task, _ = general.dock_task(store, ACTOR)
+    options = general.provider_options(store)
+    pick = concierge.pick(store)
+    chosen = next((o for o in options if o['pick'] == pick), None)
+    model = str(store.get_settings().get(concierge.MODEL_KEY) or '').strip() or (chosen or {}).get('model') or ''
+    if pick.startswith('cli:') and not str(store.get_settings().get(concierge.MODEL_KEY) or '').strip():
+        model = concierge.LIGHT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
+    return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
+            'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model}
+
+class ConciergeAiBody(BaseModel): pick: str | None = None; model: str | None = None
+
+@app.post('/api/concierge/ai')
+def concierge_ai(body: ConciergeAiBody):
+    """Which AI speaks on the Assistant tab - configuration, not a tab-local preference. Empty pick =
+    back to the default (the CLI agent on its quick gear). A change starts a fresh CLI conversation."""
+    from . import concierge, general
+    store.set_setting(concierge.AI_KEY, str(body.pick or ''), ACTOR)
+    store.set_setting(concierge.MODEL_KEY, str(body.model or ''), ACTOR)
+    task, _ = general.dock_task(store, ACTOR)
+    store.set_setting(f"{concierge.SID_KEY}:{task['TaskId']}", '', ACTOR)
+    return {'pick': concierge.pick(store), 'model': body.model or ''}
+
+@app.get('/api/funnel/mutes')
+def funnel_mutes():
+    """The standing "stop showing me these" rules - written when the owner sweeps the pipe with a
+    reason, or tells us in advance. Listed so they are never a black box, and removable."""
+    from . import funnel                      # module-scope `funnel` here is the rank route, not the module
+    return {'data': funnel.mutes(store)}
+
+@app.delete('/api/funnel/mutes/{idx}')
+def funnel_unmute(idx: int):
+    from . import funnel
+    rules = funnel.mutes(store)
+    if not 0 <= idx < len(rules): raise HTTPException(404, 'no such rule')
+    gone = rules.pop(idx)
+    store.set_setting(funnel.MUTES_KEY, json.dumps(rules), ACTOR)
+    funnel.invalidate()
+    store.audit('setting', 0, 'funnel_unmute', ACTOR, 'human', {'rule': gone})
+    return {'ok': True, 'data': rules}
+
+@app.get('/api/concierge/chats')
+def concierge_chats():
+    from . import concierge
+    return {'data': concierge.chats(store, ACTOR)}
+
+@app.get('/api/concierge/chats/{tid}')
+def concierge_chat(tid: int):
+    from . import concierge, general
+    t = store.get_task(tid)
+    if not t or not general.is_dock(t): raise HTTPException(404, 'no such chat')
+    return {'task': t, 'messages': concierge.history(store, tid)}
+
+@app.post('/api/concierge/next')
+def concierge_next(body: SurfaceBody = None):
+    """Pull the next thing out of the pipe - or the one named, or the next piece of mail - and say it."""
+    from . import concierge
+    body = body or SurfaceBody()
+    return concierge.surface(store, body.key, actor=ACTOR, only=body.only)
+
+@app.post('/api/concierge/open')
+def concierge_open():
+    """The first line of a new chat: the day in a breath, and the buttons that start the walk."""
+    from . import concierge
+    return concierge.open_day(store, actor=ACTOR)
+
+class ConciergeStreamBody(BaseModel):
+    mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None
+
+@app.post('/api/concierge/stream')
+async def concierge_stream(body: ConciergeStreamBody):
+    """One turn of the assistant, streamed: the CLI's tool calls and progress as they happen, then
+    `done` with the same payload the plain endpoints return. Same shape as the task assistant's
+    stream; the browser walking away detaches, the stop button (cancel) is not wired here yet."""
+    from . import concierge
+    loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
+    def put(e):
+        try: loop.call_soon_threadsafe(events.put_nowait, e)
+        except RuntimeError: pass
+    def trace(kind, name, detail):
+        if kind == 'prompt' or (kind == 'tool' and name == 'cli'): return    # the prompt and the launch line are ours, not news
+        put({'type': kind, 'name': name, 'detail': detail if isinstance(detail, (dict, str)) else str(detail)})
+    def work():
+        try:
+            if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
+            elif body.mode == 'next': out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel)
+            else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel)
+            put({'type': 'done', **out})
+        except Exception as e:
+            logger.warning(f'concierge stream failed: {e}')
+            put({'type': 'error', 'error': str(e)})
+    threading.Thread(target=work, daemon=True).start()
+    async def generate():
+        while True:
+            e = await events.get()
+            yield json.dumps(e, default=str) + '\n'
+            if e.get('type') in ('done', 'error'): break
+    return StreamingResponse(generate(), media_type='application/x-ndjson', headers={'Cache-Control': 'no-cache, no-transform'})
+
+@app.post('/api/reports/{sid}/rerun')
+def report_rerun(sid: int):
+    """Run one report now and hand back what it produced - the assistant's door (an agent token may
+    not touch /api/sources, and should not: this changes no configuration). The report lands on the
+    Timeline exactly as a scheduled run would."""
+    src = store.get_source(sid)
+    if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
+    def work():
+        try: run_report_source(store, src, _llm()); store.touch_source(sid)
+        except Exception as e: logger.warning(f'rerun of report {sid} failed: {e}')
+    # queued, not awaited: the report lands on the Timeline like a scheduled run, and the pipe picks it up
+    threading.Thread(target=work, daemon=True).start()
+    try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
+    except ValueError: title = src.get('Address')
+    return {'queued': True, 'sourceId': sid, 'title': title}
+
+@app.post('/api/concierge/say')
+def concierge_say(body: ConciergeSayBody):
+    from . import concierge
+    try: return concierge.say(store, body.text, body.key, actor=ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+class SetupBody2(BaseModel): text: str
+
+@app.post('/api/concierge/setup')
+def concierge_setup(body: SetupBody2):
+    """'Set up X': a coding task with the owner's words, started on the default agent."""
+    from . import concierge
+    try: return concierge.setup_task(store, body.text, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.post('/api/concierge/act')
+def concierge_act(body: ConciergeActBody):
+    from . import concierge
+    try: return concierge.act(store, body.key, body.verb, ACTOR, _llm(), body.hours)
+    except ValueError as e: raise HTTPException(422, str(e))
 
 # ── the waiting room: notes for a working agent, delivered when it stops (waitroom.py) ──
 @app.get('/api/tasks/{tid}/waitroom')
@@ -2156,7 +2416,9 @@ def report_run(rid: int):
 
 @app.get('/api/report-types')
 def report_types():
-    return {'data': [{'type': t, 'status': 'planned' if t in PLANNED else 'builtin'} for t in REGISTRY]}
+    legacy = {'handbook_search', 'handbook_write', 'handbook_vote'}
+    return {'data': [{'type': t, 'status': 'legacy' if t in legacy else ('planned' if t in PLANNED else 'builtin')}
+                     for t in REGISTRY]}
 
 @app.get('/api/problems')
 def problems_now():
@@ -2523,7 +2785,7 @@ def macos_probe(body: dict):
     except Exception as e: return {'ok': False, 'detail': str(e)[:500]}
 
 @app.post('/api/tools/run')
-def tool_run(body: dict):
+def tool_run(body: dict, request: Request):
     """The agents' hands on your other systems: run ONE query/script through a connection
     the owner marked as a tool, and get the raw output back (no AI pass, no timeline row).
     Same executors the Reports tab uses, same saved credentials - so an agent working a
@@ -2550,19 +2812,27 @@ def tool_run(body: dict):
         raise HTTPException(403, f'the {t} connection is off - turn it on under Connections')
     if 'tool' not in store_mod.roles_of(conn):
         raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connections → {t} → Role)')
+    hub_tools = {'handbook_search', 'handbook_write', 'handbook_vote',
+                 'hub_search', 'hub_write', 'hub_vote', 'hub_comment'}
+    actor = _hub_actor(request, (body or {}).get('author')) if t in hub_tools else ACTOR
     try:
         scopes.require(conn, t)
     except PermissionError as e:
-        store.audit('tool', conn['ConnectorId'], 'run_refused', ACTOR, detail={'type': t, 'scope': scopes.scope_of(conn)})
+        store.audit('tool', conn['ConnectorId'], 'run_refused', actor, detail={'type': t, 'scope': scopes.scope_of(conn)})
         raise HTTPException(403, str(e))
     try:
         # the body says WHAT to run, never WHERE: a base_url/account/server in it used to override the
         # card's, sending the card's token to a host of the caller's choosing (reports.query_only)
-        head, out = REGISTRY[t](resolve_cfg(store, {**query_only(body), 'type': t}))
+        tool_cfg = {**query_only(body), 'type': t}
+        if t in hub_tools:
+            # The token decides who spoke. A tool payload cannot claim to be the owner or
+            # another agent, even though the executor accepts an author for internal calls.
+            tool_cfg['author'] = actor
+        head, out = REGISTRY[t](resolve_cfg(store, tool_cfg))
     except Exception as e:
-        store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run_failed', ACTOR, detail={'type': t, 'error': str(e)[:300]})
+        store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run_failed', actor, detail={'type': t, 'error': str(e)[:300]})
         return {'ok': False, 'error': str(e)[:1000]}
-    store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', ACTOR, detail={'type': t, 'headline': str(head)[:200]})
+    store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
 
 @app.post('/api/reports/compose')
@@ -2571,11 +2841,24 @@ def report_compose(body: dict):
     between here and one. Nothing is saved - the answer goes into the same builder the owner
     would have filled in by hand, and Preview runs it for real before anything is scheduled."""
     from .compose import compose
-    out = compose(store, (body or {}).get('ask') or '', _llm(), (body or {}).get('answers'))
+    out = compose(store, (body or {}).get('ask') or '', _llm(), (body or {}).get('answers'),
+                  exclude_types=('zoho_monthly_invoices',))
     if out.get('config'):
         store.audit('report', 0, 'compose', ACTOR, detail={'ask': ((body or {}).get('ask') or '')[:300],
                                                            'type': out['config'].get('type'),
                                                            'confidence': out.get('confidence')})
+    return out
+
+
+@app.post('/api/workflows/compose')
+def workflow_compose(body: dict):
+    """Describe a stateful invoice or scheduled AI-agent workflow; return an editable draft."""
+    from .compose import compose_workflow
+    out = compose_workflow(store, (body or {}).get('ask') or '', _llm(), (body or {}).get('answers'))
+    if out.get('config'):
+        store.audit('workflow', 0, 'compose', ACTOR,
+                    detail={'ask': ((body or {}).get('ask') or '')[:300],
+                            'type': out['config'].get('type'), 'confidence': out.get('confidence')})
     return out
 
 # ── QuickBooks Online (quickbooks.py): OAuth against Intuit, with a redirect back to this server ──
@@ -2933,6 +3216,16 @@ def _heal_blank_doc(name: str) -> str:
             return t
     return cur or ''
 
+@app.get('/api/how-it-works')
+def how_it_works():
+    """The reference page on the Docs tab: the Assistant, and the gates a message passes in order.
+    Shipped with the app (templates/how-it-works.md) and read-only - it describes what the code does,
+    so it is not an operator document to edit and never becomes a `doc` row."""
+    from pathlib import Path
+    f = Path(__file__).parent / 'templates' / 'how-it-works.md'
+    if not f.exists(): raise HTTPException(404, 'the reference page is missing from this build')
+    return {'text': f.read_text(encoding='utf-8')}
+
 @app.get('/api/doc/{name}')
 def get_doc(name: str):
     """Raw for the editor, rendered so you can see what an agent will actually read."""
@@ -3000,18 +3293,25 @@ def doc_generate_status():
 
 # ── SOUL.md from a short interview (interview.py) ────────────────────────────────────────
 class InterviewBody(BaseModel):
-    answers: dict = {}
+    answers: list[dict] | dict = {}
 
 @app.get('/api/soul/interview')
 def soul_questions():
-    """The questions, and what the app can already see - so it never asks what it can read."""
+    """Interview context only; the assistant generates one question at a time."""
     from . import interview
-    return {'questions': interview.QUESTIONS, 'context': interview.context(store),
+    return {'total': interview.TOTAL_QUESTIONS, 'context': interview.context(store),
             'current': (store.get_doc('soul') or '')[:400], 'owner': store.owner()}
+
+@app.post('/api/soul/interview/next')
+def soul_next_question(body: InterviewBody):
+    """Use the answers so far to ask one relevant next question, never a fixed form."""
+    from . import interview
+    try: return {'question': interview.next_question(store, body.answers or [])}
+    except ValueError as e: raise HTTPException(422, str(e))
 
 @app.post('/api/soul/interview')
 def soul_write(body: InterviewBody):
-    """Their answers in, SOUL.md out - saved, and theirs to edit like any other document."""
+    """The seven-turn transcript in, SOUL.md out - saved and still theirs to edit."""
     from . import interview
     try: return {'doc': interview.write(store, body.answers or {}, ACTOR)}
     except ValueError as e: raise HTTPException(422, str(e))
@@ -3323,8 +3623,12 @@ def _refresh_soul_connections():
     """The connections block in SOUL.md is GENERATED text, so a fix to its wording has to reach
     installs that never touch a connector again - refresh it once per launch. The owner's own
     prose outside the markers is untouched, as always."""
-    from .docsync import sync_connections
-    try: sync_connections(store, 'startup')
+    from .docsync import sync_connections, sync_projects
+    from .projects import backfill
+    try:
+        sync_connections(store, 'startup')
+        backfill(store)
+        sync_projects(store, 'startup')
     except Exception as e: logger.warning(f'connection sync at startup failed: {e}')
 
 @app.post('/api/ingest/poll')

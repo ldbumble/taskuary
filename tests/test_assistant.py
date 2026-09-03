@@ -133,6 +133,47 @@ class PostTests(unittest.TestCase):
         self.assertEqual([x for x in s.list_sources(active_only=False)
                           if json.loads(x['ConfigJson'] or '{}').get('type') == '_beds'], [])
 
+    def test_a_source_backed_assistant_report_reads_only_its_own_sources(self):
+        """A second Assistant report is an isolated monitor, not an alias for the seeded digest-like
+        Assistant. Its SQL/data result is the complete fact set shown in Preview and handed to AI."""
+        from taskuary import reports
+        s = _store(); seen = {}
+        _mail(s, DANA, 'Private mailbox distraction', 'This must not reach the SQL monitor.', days=0, conv='private')
+        reports.REGISTRY['_backend_watch'] = lambda cfg: ('2 process rows', 'process=Import success=0\nprocess=Export success=1')
+        try:
+            sid = s.save_source({'Channel': 'report', 'Address': 'Backend monitor', 'Active': 1,
+                                 'ConfigJson': json.dumps({'type': 'assistant', 'title': 'Backend monitor',
+                                     'ai_prompt': 'Raise any process whose success is zero.',
+                                     'watch_sources': [{'type': '_backend_watch', 'label': 'tranCodeRun last hour',
+                                                        'query': 'SELECT * FROM tranCodeRun'}]})}, 't')
+            src = s.get_source(sid)
+            cfg_ = reports.resolve_cfg(s, json.loads(src['ConfigJson']))
+            _head, preview = reports.run_assistant(cfg_)
+            def llm(system, user, **kwargs):
+                seen.update(system=system, user=user, kwargs=kwargs)
+                return json.dumps({'say': [{'key': 'idea:failed-import',
+                    'text': 'Import has a failed run; I would inspect it now.', 'section': 'systems',
+                    'why': 'tranCodeRun: process=Import success=0', 'mid': None, 'task': None}],
+                    'notes': 'mailbox facts must never leak through notes'})
+            out = reports.run_report_source(s, src, llm)
+        finally:
+            reports.REGISTRY.pop('_backend_watch', None)
+
+        for text in (preview, seen['user'], out['inputs']):
+            self.assertIn('CONFIGURED DATA SOURCES (the only facts available to this report)', text)
+            self.assertIn('process=Import success=0', text)
+            self.assertNotIn('WHAT PEOPLE SAID', text)
+            self.assertNotIn('OPEN WORK', text)
+            self.assertNotIn('Private mailbox distraction', text)
+        self.assertIn("THE OWNER'S RULE FOR THIS MONITOR", seen['system'])
+        self.assertIn('Raise any process whose success is zero', seen['system'])
+        self.assertNotIn('images', seen['kwargs'])
+        self.assertEqual((out['reviewed']['scope'], out['reviewed']['systems'], out['reviewed']['people']),
+                         ('sources', 1, 0))
+        self.assertEqual(s.get_message(out['message_id'])['SourceName'], 'Backend monitor')
+        self.assertTrue(out['lines'][0]['key'].startswith(f'report:{sid}:idea:'))
+        self.assertNotIn('mailbox facts', s.get_settings().get('assistant_notes', ''))
+
     def test_an_assistant_with_neither_kind_of_view_says_both_ways_to_add_one(self):
         s = _store()
         self.assertIn('add a data source', assistant.system_checks(s))

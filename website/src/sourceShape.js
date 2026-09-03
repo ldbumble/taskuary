@@ -3,6 +3,13 @@
 // filter that previewed correctly could still be saved as a string.
 export const NL = String.fromCharCode(10);
 
+// Product boundary: a report only reads; a workflow writes data or keeps state. The program used
+// to classify every `type: agent` source as a workflow, even when the agent only fetched GitHub
+// Trending and wrote a report. Agent is an executor, so only an explicit write grant changes shelf.
+export const WORKFLOW_TYPES = new Set(["zoho_monthly_invoices"]);
+export const isWorkflowConfig = (cfg) => WORKFLOW_TYPES.has(cfg?.type)
+  || (cfg?.type === "agent" && cfg?.access === "write");
+
 // longest first, so ">=" is never read as ">" with a stray "=" left on the value
 export const OPS = ["<=", ">=", "!=", "=", "<", ">", "like", "in", "isnull", "isnotnull"];
 

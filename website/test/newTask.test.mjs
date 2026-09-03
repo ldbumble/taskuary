@@ -3,7 +3,7 @@
 // question to answer", which has no checkout for a CLI to stand in and belongs in the chat.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ASK_TAG, BROWSER_TAG, NO_REPO, planTask, repoOf, wantsAsk, withoutAsk } from "../src/newTask.js";
+import { ASK_TAG, BROWSER_TAG, NO_REPO, planTask, repoOf, wantsAsk, wantsBrowser, withoutAsk } from "../src/newTask.js";
 
 test("a repository means a coding task for a CLI in that checkout", () => {
   const p = planTask("acme/fanapp", "live");
@@ -77,6 +77,12 @@ test("a task can say it needs a browser, on either kind", () => {
   assert.equal(planTask(NO_REPO, "live", true).tags, `${ASK_TAG},${BROWSER_TAG}`);
   assert.equal(planTask(NO_REPO, "terminal", true).tags, BROWSER_TAG);
   assert.equal(planTask(NO_REPO, "file", true).tags, BROWSER_TAG);
+});
+
+test("an already-created walkthrough's browser marker is detected exactly", () => {
+  assert.equal(wantsBrowser({ Tags: `assistant:setup,${BROWSER_TAG}` }), true);
+  assert.equal(wantsBrowser({ Tags: "needs:browsers" }), false);
+  assert.equal(wantsBrowser({}), false);
 });
 
 test("and by default it does not", () => {

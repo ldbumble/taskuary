@@ -1,14 +1,5 @@
-"""SOUL.md, asked for rather than guessed.
-
-STYLE.md and TRIAGE.md bootstrap from history - the owner's sent mail IS how they write, their
-verdicts ARE what they count as work. SOUL.md cannot: who you answer for, what an agent may
-never decide alone, which systems are yours, who outranks whom. None of that is in a mailbox,
-so until somebody says it the document is about a stranger called John Smith.
-
-What is pinned here is the part that can quietly rot: that the document keeps the headings the
-rest of the app reads, that a machine with no AI still gets a usable one, and that nothing the
-owner did not say is invented for them.
-"""
+"""SOUL.md is learned through one adaptive seven-turn conversation, not a fixed IT form."""
+import json
 import unittest
 from unittest import mock
 
@@ -17,29 +8,31 @@ from taskuary.store import MemoryStore
 
 HEADINGS = ('## What counts as a task', '## How we respond', '## Escalate (a human decides) when',
             '## Systems and repositories', '## People')
-ANSWERS = {'who': 'Dana Whitfield, IT director at a nursing-home group',
-           'never': 'nothing that touches payroll or resident data, ever',
-           'systems': 'Sage Intacct, our Entra tenant'}
+LEGACY_ANSWERS = {'who': 'Dana Whitfield, operations director at a nursing-home group',
+                  'never': 'nothing that touches payroll or resident data, ever',
+                  'systems': 'Sage Intacct and the scheduling records'}
+TRANSCRIPT = [
+    {'q': 'What should I understand about you and the world you work in?',
+     'a': 'I run a community theatre with volunteers and a very small budget.'},
+    {'q': 'Which parts of running the theatre most need help?',
+     'a': 'Keeping rehearsals, front of house, and grant deadlines from colliding.'},
+]
 
 
-class TheQuestionsTests(unittest.TestCase):
-    def test_every_question_says_why_it_is_being_asked(self):
-        """A form that explains itself gets answered; one that does not gets abandoned."""
-        for q in interview.QUESTIONS:
-            self.assertTrue(q['q'].endswith('?'), q['key'])
-            self.assertGreater(len(q['why']), 40, q['key'])
-            self.assertTrue(q['placeholder'], q['key'])
+class TheSkillTests(unittest.TestCase):
+    def test_the_behavior_lives_in_a_real_skill_file(self):
+        text = interview.skill_text()
+        self.assertTrue(text.startswith('---\nname: soul-interview'))
+        self.assertIn('Ask exactly seven user-facing questions, one at a time', text)
+        self.assertIn('Generate questions 2–7 from the full transcript', text)
 
-    def test_it_is_short_enough_that_somebody_finishes_it(self):
-        self.assertLessEqual(len(interview.QUESTIONS), 8)
-        self.assertEqual(len({q['key'] for q in interview.QUESTIONS}), len(interview.QUESTIONS))
+    def test_it_does_not_assume_the_owner_writes_code(self):
+        text = interview.skill_text()
+        self.assertIn('Never ask specifically about code', text)
+        self.assertIn('unless the person', text)
+        self.assertEqual(interview.TOTAL_QUESTIONS, 7)
 
-    def test_it_asks_the_two_that_decide_everything_else(self):
-        keys = {q['key'] for q in interview.QUESTIONS}
-        self.assertIn('who', keys)          # who is being signed for
-        self.assertIn('never', keys)        # ...and the line an agent may not cross
-
-    def test_what_the_app_can_already_see_is_not_asked_for(self):
+    def test_what_the_app_can_already_see_is_supplied_as_context(self):
         s = MemoryStore()
         s.set_setting('owner', 'Uri', 'o')
         ctx = interview.context(s)
@@ -47,77 +40,108 @@ class TheQuestionsTests(unittest.TestCase):
         self.assertEqual(sorted(ctx.keys()), ['channels', 'owner', 'repos', 'roles', 'writes_most'])
 
 
-class WithNoAiTests(unittest.TestCase):
-    """A machine with no AI connector still gets a document out of its own answers."""
-    def test_the_answers_are_laid_into_the_template_shape(self):
-        body = interview.draft(MemoryStore(), ANSWERS, llm=None)
-        for h in HEADINGS: self.assertIn(h, body)
-        self.assertIn('Dana Whitfield', body)
-        self.assertIn('payroll', body)
+class AdaptiveQuestionTests(unittest.TestCase):
+    def test_the_first_question_is_generated_by_the_assistant(self):
+        seen = {}
+        def llm(system, user, **kw):
+            seen.update(system=system, user=user, kw=kw)
+            return json.dumps({'q': 'What should I understand about your life and work?',
+                               'why': 'This gives the rest of the interview its direction.',
+                               'placeholder': 'The responsibilities, people, or goals that shape your days'})
+        question = interview.next_question(MemoryStore(), [], llm=llm)
+        self.assertEqual(question['number'], 1)
+        self.assertEqual(question['total'], 7)
+        self.assertIn('QUESTION NUMBER: 1 OF 7', seen['user'])
+        self.assertIn('Start broad', seen['system'])
 
-    def test_the_standing_promise_survives_even_the_plain_one(self):
-        self.assertIn('Nothing sends or ships without', interview.draft(MemoryStore(), ANSWERS, llm=None))
+    def test_each_next_question_receives_every_previous_answer(self):
+        seen = {}
+        def llm(_system, user, **_kw):
+            seen['user'] = user
+            return ('```json\n{"q":"When rehearsal and grant deadlines collide, which wins?",'
+                    '"why":"You named that collision as the recurring pressure point.",'
+                    '"placeholder":"For example, opening night may be immovable"}\n```')
+        question = interview.next_question(MemoryStore(), TRANSCRIPT, llm=llm)
+        self.assertEqual(question['number'], 3)
+        self.assertIn('community theatre', seen['user'])
+        self.assertIn('grant deadlines', seen['user'])
+        self.assertIn('When rehearsal and grant deadlines collide', question['q'])
 
-    def test_an_unanswered_question_falls_back_and_never_invents(self):
-        body = interview.draft(MemoryStore(), {'who': 'Uri'}, llm=None)
-        self.assertIn('## People', body)
-        self.assertIn('(not stated)', body)
+    def test_it_stops_after_exactly_seven_questions(self):
+        seven = [{'q': f'Question {i}?', 'a': f'Answer {i}'} for i in range(1, 8)]
+        with self.assertRaisesRegex(ValueError, 'seven'):
+            interview.next_question(MemoryStore(), seven, llm=lambda *_a, **_k: '{}')
 
-    def test_an_empty_interview_is_refused_rather_than_written(self):
-        for empty in ({}, {'who': '   '}, {'nonsense': 'x'}):
-            with self.assertRaises(ValueError): interview.draft(MemoryStore(), empty, llm=None)
+    def test_it_requires_an_assistant_instead_of_falling_back_to_fixed_questions(self):
+        with mock.patch('taskuary.interview._brain', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'AI assistant'):
+                interview.next_question(MemoryStore(), [])
 
 
-class WithAnAiTests(unittest.TestCase):
-    def test_the_model_is_given_the_answers_and_what_the_app_sees(self):
-        s = MemoryStore()
-        s.set_setting('owner', 'Uri', 'o')
+class WritingTests(unittest.TestCase):
+    def test_the_model_gets_the_full_conversation_and_known_context(self):
+        s = MemoryStore(); s.set_setting('owner', 'Uri', 'o')
         seen = {}
         def llm(system, user, **kw):
             seen.update(system=system, user=user)
-            return '# SOUL.md - the operator\'s document\n\nWritten.'
-        interview.draft(s, ANSWERS, llm=llm)
-        self.assertIn('nursing-home group', seen['user'])          # their words
-        self.assertIn('Owner name on file: Uri', seen['user'])     # ...and the facts
-        for h in HEADINGS: self.assertIn(h, seen['system'])        # the headings it must keep
-        self.assertIn('Nothing they did NOT say may appear as fact', seen['system'])
+            return "# SOUL.md - the operator's document\n\nWritten."
+        interview.draft(s, TRANSCRIPT, llm=llm)
+        self.assertIn('community theatre', seen['user'])
+        self.assertIn('grant deadlines', seen['user'])
+        self.assertIn('Owner name on file: Uri', seen['user'])
+        self.assertIn('MODE: WRITE_SOUL', seen['user'])
+        for heading in HEADINGS: self.assertIn(heading, seen['system'])
+        self.assertIn('Never add a policy', seen['system'])
 
     def test_a_model_that_fences_its_answer_does_not_fence_the_document(self):
-        body = interview.draft(MemoryStore(), ANSWERS, llm=lambda *a, **k: '```markdown\n# SOUL.md\n\nx\n```')
-        self.assertFalse(body.startswith('`'))
-        self.assertFalse(body.endswith('`'))
+        body = interview.draft(MemoryStore(), TRANSCRIPT,
+                               llm=lambda *_a, **_k: '```markdown\n# SOUL.md\n\nx\n```')
+        self.assertFalse(body.startswith('`')); self.assertFalse(body.endswith('`'))
 
-    def test_a_model_that_answers_with_nothing_falls_back_to_the_owners_own_words(self):
-        body = interview.draft(MemoryStore(), ANSWERS, llm=lambda *a, **k: '   ')
+    def test_an_empty_interview_is_refused(self):
+        for empty in ([], {}, [{'q': 'Anything?', 'a': '   '}], {'who': '   '}):
+            with self.assertRaises(ValueError): interview.draft(MemoryStore(), empty, llm=lambda *_a, **_k: '')
+
+    def test_an_adaptive_interview_is_not_silently_flattened_without_its_assistant(self):
+        with mock.patch('taskuary.interview._brain', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'no longer available'):
+                interview.draft(MemoryStore(), TRANSCRIPT)
+
+    def test_old_clients_keep_the_safe_plain_fallback(self):
+        with mock.patch('taskuary.interview._brain', return_value=None):
+            body = interview.draft(MemoryStore(), LEGACY_ANSWERS)
+        for heading in HEADINGS: self.assertIn(heading, body)
         self.assertIn('Dana Whitfield', body)
-        self.assertIn('## People', body)
+        self.assertIn('payroll', body)
+        self.assertIn('Nothing sends or ships without', body)
 
-
-class WritingItTests(unittest.TestCase):
-    def test_it_saves_the_document_and_leaves_a_receipt(self):
+    def test_write_saves_the_document_and_leaves_a_receipt(self):
         s = MemoryStore()
-        interview.write(s, ANSWERS, 'owner', llm=None)
-        self.assertIn('Dana Whitfield', s.get_doc('soul') or '')
-        self.assertTrue(any(a['Action'] == 'soul_interview' for a in s.list_audit('doc', 0)))
-
-    def test_it_replaces_the_stranger_the_template_ships_with(self):
-        s = MemoryStore()
-        self.assertIn('John Smith', s.get_doc('soul') or '')       # the shipped template
-        interview.write(s, ANSWERS, 'owner', llm=None)
-        self.assertNotIn('John Smith', s.get_doc('soul') or '')
+        interview.write(s, TRANSCRIPT, 'owner', llm=lambda *_a, **_k: "# SOUL.md - the operator's document")
+        self.assertIn('SOUL.md', s.get_doc('soul') or '')
+        receipt = next(a for a in s.list_audit('doc', 0) if a['Action'] == 'soul_interview')
+        self.assertIn('adaptive', receipt['Detail'])
 
 
 class OverTheApiTests(unittest.TestCase):
-    def test_the_questions_and_the_writing_are_one_endpoint_each(self):
+    def test_context_next_question_and_writing_have_separate_contracts(self):
         from fastapi.testclient import TestClient
         from taskuary import server
-        c = TestClient(server.app)
-        q = c.get('/api/soul/interview').json()
-        self.assertEqual(len(q['questions']), len(interview.QUESTIONS))
-        self.assertEqual(c.post('/api/soul/interview', json={'answers': {}}).status_code, 422)
-        r = c.post('/api/soul/interview', json={'answers': {'who': 'Uri, IT director'}})
-        self.assertEqual(r.status_code, 200)
-        self.assertIn('Uri', r.json()['doc'])
+        client = TestClient(server.app)
+        context = client.get('/api/soul/interview').json()
+        self.assertEqual(context['total'], 7)
+        self.assertNotIn('questions', context)
+        made = {'number': 1, 'total': 7, 'q': 'What matters?', 'why': 'To begin.', 'placeholder': ''}
+        with mock.patch('taskuary.interview.next_question', return_value=made):
+            response = client.post('/api/soul/interview/next', json={'answers': []})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['question']['q'], 'What matters?')
+
+    def test_an_empty_final_interview_is_still_refused(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        response = TestClient(server.app).post('/api/soul/interview', json={'answers': []})
+        self.assertEqual(response.status_code, 422)
 
 
 if __name__ == '__main__':

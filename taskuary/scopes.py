@@ -56,6 +56,7 @@ ACTIONS = {
     # machine) but because an entry is a claim the next agent is handed as fact, and "who may put
     # a fact in front of every future agent" is exactly the question this ladder exists to ask.
     'handbook_search': 'read', 'handbook_write': 'write', 'handbook_vote': 'write',
+    'hub_search': 'read', 'hub_write': 'write', 'hub_vote': 'write', 'hub_comment': 'write',
     'aws': 'read', 's3_object': 'read', 'cloudwatch_logs': 'read',
     'azure': 'read', 'azure_blob': 'read', 'azure_logs': 'read',
     'entra_users': 'read', 'entra_groups': 'read', 'entra_signins': 'read', 'entra_licenses': 'read',

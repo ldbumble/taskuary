@@ -420,11 +420,14 @@ docker compose up -d</div>
     window.__room = function(){ return floor && floor.room(); };   // the README's GIF crop asks where the room is
     var cue = document.getElementById('cue'); if (cue) cue.addEventListener('click', enter);
   })();
-  /* Two numbers, first-party, no cookie and no third-party script: how many people saw the
-     page, and how many pressed the one button on it. functions/api/ev.js drops both on the
-     floor unless a D1 binding is configured, so a fork of this repo collects nothing. */
+  /* First-party, anonymous visit + CTA counts. The id is kept only for this browser tab so the
+     stats page can connect "clicked demo" to "opened demo" after navigation. */
   (function(){
-    var sid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    var sid;
+    try {
+      sid = sessionStorage.getItem('tq_demo_sid');
+      if (!sid) { sid = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('tq_demo_sid', sid); }
+    } catch(e) { sid = Math.random().toString(36).slice(2) + Date.now().toString(36); }
     var send = function(kind, what){
       try {
         var body = JSON.stringify({ sid: sid, page: location.pathname, ref: document.referrer.split('/').slice(0,3).join('/'),

@@ -58,8 +58,8 @@ def main():
     ap.add_argument('--note', metavar='TEXT',
                     help='leave a line on the wall for the next agent (see --kind)')
     ap.add_argument('--kind', default='note', metavar='KIND',
-                    help='working | note | blocked | ready | done - "ready" is how the next agent '
-                         'learns the tree is safe to build on')
+                    help='wall: working | note | blocked | ready | done; Hub: new_idea | '
+                         'technical_solve | howto | gotcha | decision | system | people')
     # ...and how a session ENDS itself. The Done button was the only way a finished task ever
     # produced its report and its reply, so an agent that finished at 2am and a person who never
     # opened the tab left the sender with nothing (selfclose.py).
@@ -67,20 +67,22 @@ def main():
     # needs - and it is the difference between a company whose know-how lives in its people and
     # one a new agent can be plugged into.
     ap.add_argument('--learned', metavar='TEXT',
-                    help='write one line into the company handbook: something still true next month '
-                         '(a trap, how a system actually works, who owns what). NOT what you did - that '
-                         'is the task. See --topic and --body.')
+                    help='write one hard-earned discovery or developed company idea into the Hub. '
+                         'Use only after substantial investigation/reasoning; never routine output or '
+                         'what you did. See --topic, --kind and --body.')
     ap.add_argument('--topic', default='', metavar='TOPIC',
                     help='with --learned: which shelf it goes on - a repository, a system, a part of '
                          'the business. Defaults to the checkout you are in.')
     ap.add_argument('--body', default='', metavar='TEXT',
                     help='with --learned: the two or three sentences under the title - the fact, why it '
                          'is so, and what to do about it')
+    ap.add_argument('--why-earned', default='', metavar='TEXT',
+                    help='with --learned: what substantial investigation, tests, comparison, or reasoning earned this Hub post')
     # ...and how agents keep it honest: agree, disagree, add. One vote per agent per entry, and an
-    # entry the room votes below zero leaves Social and every later seed prompt.
-    ap.add_argument('--upvote', type=int, metavar='ID', help='this Social entry held up - agree with it (ids are in the FROM SOCIAL block of your prompt)')
-    ap.add_argument('--downvote', type=int, metavar='ID', help='this Social entry is wrong or stale - say why with --body')
-    ap.add_argument('--comment', type=int, metavar='ID', help='add to a Social entry without re-posting it: the text goes in --body')
+    # entry the room votes below zero leaves the Hub and every later seed prompt.
+    ap.add_argument('--upvote', type=int, metavar='ID', help='this Hub entry held up - agree with it (ids are in the FROM HUB block of your prompt)')
+    ap.add_argument('--downvote', type=int, metavar='ID', help='this Hub entry is wrong or stale - say why with --body')
+    ap.add_argument('--comment', type=int, metavar='ID', help='add to a Hub entry without re-posting it: the text goes in --body')
     ap.add_argument('--done', metavar='SUMMARY', nargs='?', const='',
                     help='finish the task this session is working: close it, file the report from '
                          'this transcript, and draft the reply the sender gets (you are not '
@@ -147,15 +149,18 @@ def main():
                 p = handbook.vote(store, lid, 1 if args.upvote else -1, who)
                 if args.downvote and args.body.strip(): store.lore_comment(lid, args.body.strip()[:handbook.BODY_MAX], who)
             except ValueError as e: print(str(e)); return
-            print(f"#{lid} is now {p['Score']:+d}" + (' - removed from Social' if p['Status'] == 'downvoted' else ''))
+            print(f"#{lid} is now {p['Score']:+d}" + (' - removed from the Hub' if p['Status'] == 'downvoted' else ''))
             return
         if args.learned:
             from . import handbook
+            if len(' '.join(args.why_earned.split())) < 20:
+                print('not filed: --why-earned must name the substantial investigation, tests, or reasoning behind this Hub post')
+                return
             try: p = handbook.post(store, args.learned, args.body, args.topic, args.kind if args.kind in handbook.KINDS else 'howto',
-                                   who, int(tid) if str(tid).isdigit() else None, cwd)
+                                   who, int(tid) if str(tid).isdigit() else None, cwd, why_earned=args.why_earned)
             except ValueError as e: print(f'not filed: {e}'); return
-            if p.get('merged'): print(f"Social already says this - #{p['LoreId']} upvoted, now {p['Score']:+d}: {p['Title']}")
-            else: print(f"filed on Social under {p['Topic']} as #{p['LoreId']}: {p['Title']}")
+            if p.get('merged'): print(f"The Hub already says this - #{p['LoreId']} upvoted, now {p['Score']:+d}: {p['Title']}")
+            else: print(f"filed in the Hub under {p['Topic']} as #{p['LoreId']}: {p['Title']}")
             return
         if args.note:
             try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None)

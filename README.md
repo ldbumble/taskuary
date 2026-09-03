@@ -13,7 +13,7 @@ and replies wait for your approval. Nothing sends or ships without you.
 
 ![The Taskuary Studio: work arrives, triage decides what needs action, and agents take seats to work it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
 
-Taskuary is early—currently **v0.3.2.13**—and moving fast. The funnel, review queue,
+Taskuary is early—currently **v0.3.3.0**—and moving fast. The funnel, review queue,
 agent sessions, and reports pipeline are in daily use; breaking changes are still possible
 before 1.0.
 
@@ -107,8 +107,8 @@ taskuary --demo                    # or: docker compose --profile demo up
 
 A full Taskuary over invented work — a morning's mail and chats already triaged with the
 reasons attached, drafts waiting in Review, agents on the board with their transcripts
-playing, live task handoffs on the Board, and the durable agent-written handbook in Social.
-Every Social entry names the agent and originating task; Board handoffs are short-lived
+playing, live task handoffs on the Board, and the durable, high-signal company Hub.
+Every Hub post names its human or agent author and originating task; Board handoffs are short-lived
 checkout coordination that rolls up nightly. The AI answers from a script and every door
 to the outside world is shut at the API layer (`taskuary/demo.py`): nothing sends, no
 connection can be made or edited, no tool runs, and no CLI starts. Nobody's real data is in

@@ -212,8 +212,10 @@ def resolution_of(store, task_id: int):
         return None
     try:
         from . import session_artifacts
-        artifact = next((a for a in store.list_task_artifacts(task_id)
-                         if a.get('Kind') == 'coding_session'), None)
+        # the NEWEST session: an agent that ran twice leaves two, and the first one's transcript is
+        # what it knew before it corrected itself (the owner, 2026-09-03: "it was run twice")
+        sessions = [a for a in store.list_task_artifacts(task_id) if a.get('Kind') == 'coding_session']
+        artifact = max(sessions, key=lambda a: (str(a.get('CreatedAt') or ''), a.get('ArtifactId') or 0), default=None)
         path = session_artifacts.confined((artifact or {}).get('Path'))
         if path:
             body = path.read_text(encoding='utf-8')

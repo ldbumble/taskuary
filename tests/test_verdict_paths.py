@@ -162,7 +162,9 @@ class TaskWithoutAgentTests(unittest.TestCase):
             finally:
                 server.store.set_setting('coder_auto_enabled', '0', 'test')
             self.assertEqual((second['status'], second['task_id']), ('attached', tid))
-            self.assertEqual(asked, [])                              # a thread with a task needs no re-triage
+            # the follow-up IS judged now - what a reply on an open task is, is triage's call (the
+            # owner, 2026-09-03) - and a verdict of work leaves it attached, with no agent on a reply task
+            self.assertEqual(len(asked), 1)
             coder.assert_not_called()                                # a reply task never gets an agent
 
 
@@ -184,7 +186,7 @@ class SentToAgentTests(unittest.TestCase):
         second = push(2, conv=conv, channel='email', from_email='reports@vendor.com', subject='Re: Process Check - FAILED',
                       body='Re-ran it, still 3 rows off', sent_at=stamp(hours=1), calls=asked)
         self.assertEqual((second['status'], second['task_id']), ('attached', tid))
-        self.assertEqual(asked, [])
+        self.assertEqual(len(asked), 1)                              # judged, and it says there is still work
         self.assertEqual(feed_row(second['message_id'])['MsgStatus'], 'routed')
 
 

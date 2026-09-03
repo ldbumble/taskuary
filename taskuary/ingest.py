@@ -175,6 +175,60 @@ def drain(store, llm=None, progress=None, limit: int = 500) -> int:
     return len(rows)
 
 
+def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
+    """What IS this message - triage's verdict, with everything around the message as evidence:
+    the standing notes, who else has spoken on the thread, what the assistant already said about
+    it, the playbooks. Returns (intent, fail); `fail` carries the model's error when it threw.
+
+    One brain, one question, wherever the message landed: a reply that joins an open task gets
+    judged exactly like one that opens a new one (the owner, 2026-09-03: "the triage should
+    realize that")."""
+    fail = {}
+    # **kw, not two positional args: a message with a picture on it calls the brain
+    # as llm(system, user, images=[...]) - a screenshot of the error IS the request
+    # (triage.classify_intent) - and this wrapper refused the keyword it had never
+    # been told about. Every mail carrying an image had its verdict thrown away as
+    # unusable and was filed, which is the one outcome that looks like the model
+    # being stupid rather than like a TypeError three frames down
+    def _guarded(sys_, usr_, **kw):
+        try:
+            return llm(sys_, usr_, **kw)
+        except Exception as e:
+            fail['err'] = str(e)[:200]
+            raise
+    from .learn import injectable
+    notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
+                                       f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
+                                       subject=msg.get('subject') or '',
+                                       source=msg.get('source_name') or '')
+    thread = others_on_thread(store, msg, mine)
+    # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
+    # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
+    # arrives with the ask two messages back invisible. A chat line quotes nothing at all, so
+    # triage read "nope. new" with no idea what had been asked two minutes earlier.
+    lines = exchange_lines(store, msg)
+    if lines: thread = {**thread, 'exchange': lines}
+    # ...and what the ASSISTANT has already said about this thread (a chase it suggested,
+    # an ask it flagged, and what the owner did with it) - the other brain's last word
+    from .assistant import said_about
+    said = said_about(store, msg.get('conversation_id'))
+    if said: thread = {**thread, 'assistant_said': said}
+    from .projects import context_for_message
+    project = context_for_message(store, msg)
+    intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
+                             learned=injectable(store.doc('learned') or ''),
+                             notes=notes, notes_left=notes_left, images=msg.get('images'),
+                             system=store.doc('triage'), mine=me,
+                             # a scheduled report carries its own brief - what the owner
+                             # set it up to catch (reports.py: the card's watch_for)
+                             watch=msg.get('watch_for'),
+                             # ...and the playbooks: a message that is an instance of one is
+                             # tagged with it, and the agent is seeded from it (playbooks.py)
+                             playbooks=_playbook_menu(), project=project)
+    intent['notes'], intent['notes_left'] = notes, notes_left
+    return intent, fail
+
+
 def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only: bool = False) -> dict:
     """file_only = this connection is a FEED, not a trigger: the item is shown on the
     timeline and nothing else happens to it - no triage, no AI call, no task. It is a
@@ -210,6 +264,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'queued', 'task_id': None, 'message_id': mid}
 
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
+    r = own_thread_only(store, msg, r)
     # ...and on a chat, the room it shares with the task is not a reason to join it
     # (chat_continues). Off with triage: an owner who has switched the classifier off has said
     # they do not want the brain reading their messages, and this is the brain reading them.
@@ -245,6 +300,24 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                             [], 'memory')
             logger.info(f'ingest: filed by your ruling on the thread instead of attaching to {task_ref(tid)}')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
+        # A reply INHERITS the task's kind and nothing used to ask what it actually says, so
+        # "Thank you!" on an open coding task read as "asked you" in the pipe. Triage judges it
+        # like any other message (the owner, 2026-09-03: "the triage should realize that"); an
+        # fyi verdict keeps it on the task for the chain and off the owner's pile. Never while an
+        # agent is waiting on this thread: that round trip IS the answer it asked for.
+        follow = None
+        # chat has its own reader for this (chat_continues/same_ask): a room is not a topic, and a
+        # fragment typed seconds later is one thought in two messages, not a thing to re-judge
+        if not busy and cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg) and not decided_intent(msg, mine):
+            try: follow, _fail = judge(store, msg, llm, mine, me)
+            except Exception as e: logger.debug(f'ingest: the follow-up verdict failed, keeping it as work - {e}')
+        if follow and follow.get('intent') == 'fyi' and not follow.get('degraded'):
+            mid = _land(store, msg, tid, 'filed')
+            store.add_route(mid, tid, 'attach', r.get('score'),
+                            f"triage: fyi - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain", [], 'triage')
+            store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - fyi, nothing to do")
+            logger.info(f"ingest: filed onto {task_ref(tid)} as fyi - {msg.get('subject') or ''}")
+            return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
         # the classic round trip: the agent asked something, the hub asked the person, and
@@ -292,46 +365,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 logger.debug(f"ingest: filed (no AI connector) - {msg.get('subject') or ''}")
                 return {'status': 'filed', 'task_id': None, 'message_id': mid}
             else:
-                fail = {}
-                # **kw, not two positional args: a message with a picture on it calls the brain
-                # as llm(system, user, images=[...]) - a screenshot of the error IS the request
-                # (triage.classify_intent) - and this wrapper refused the keyword it had never
-                # been told about. Every mail carrying an image had its verdict thrown away as
-                # unusable and was filed, which is the one outcome that looks like the model
-                # being stupid rather than like a TypeError three frames down
-                def _guarded(sys_, usr_, **kw):
-                    try:
-                        return llm(sys_, usr_, **kw)
-                    except Exception as e:
-                        fail['err'] = str(e)[:200]
-                        raise
-                from .learn import injectable
-                notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
-                                                   f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
-                                                   subject=msg.get('subject') or '',
-                                                   source=msg.get('source_name') or '')
-                thread = others_on_thread(store, msg, mine)
-                # ...and on a chat, what was actually SAID before this - theirs and ours. A mail
-                # quotes its own thread underneath it; a chat line quotes nothing, so triage read
-                # "nope. new" with no idea what had been asked two minutes earlier.
-                if is_chat(msg):
-                    lines = exchange_lines(store, msg)
-                    if lines: thread = {**thread, 'exchange': lines}
-                # ...and what the ASSISTANT has already said about this thread (a chase it suggested,
-                # an ask it flagged, and what the owner did with it) - the other brain's last word
-                from .assistant import said_about
-                said = said_about(store, msg.get('conversation_id'))
-                if said: thread = {**thread, 'assistant_said': said}
-                intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
-                                         learned=injectable(store.doc('learned') or ''),
-                                         notes=notes, notes_left=notes_left, images=msg.get('images'),
-                                         system=store.doc('triage'), mine=me,
-                                         # a scheduled report carries its own brief - what the owner
-                                         # set it up to catch (reports.py: the card's watch_for)
-                                         watch=msg.get('watch_for'),
-                                         # ...and the playbooks: a message that is an instance of one is
-                                         # tagged with it, and the agent is seeded from it (playbooks.py)
-                                         playbooks=_playbook_menu())
+                intent, fail = judge(store, msg, llm, mine, me)
+                notes, notes_left = intent.get('notes') or [], intent.get('notes_left') or 0
                 if fail:
                     # the AI errored - filing beats the old default-to-task heuristic. The error is
                     # also kept as a setting so the Timeline's caption can say the brain is failing:
@@ -619,6 +654,33 @@ def ruled_on_thread(store, msg: dict) -> str:
     return f'you already ruled on this conversation: {on_thread}' if on_thread else ''
 
 
+def own_thread_only(store, msg: dict, r: dict) -> dict:
+    """A message may only join the task ITS OWN THREAD belongs to - never a third task that merely
+    looks similar.
+
+    route() scores content: sender 1.0 plus a decent body cosine can clear the bar on its own. So
+    when a thread's task has CLOSED, its next reply had no thread signal to win with and landed on
+    whatever open task looked most like it. That is how "RE: July 2026 Financials" (and the
+    undeliverable bounce behind it) joined the PointClickCare task - and the reply drafted for that
+    task was then about Rene Gomez's full mailbox, correctly written from the newest message on the
+    wrong pile (the owner, 2026-09-03: "the reply was about another task? How does this happen").
+
+    The rule that was already written down (routing.py) is kept: their reply on a closed thread is
+    NEW WORK. This only stops it becoming somebody else's work. A chat room is exempt - its
+    conversation id names the room, and chat_continues does that reading."""
+    if r.get('decision') != 'attach' or is_chat(msg): return r
+    home = store.task_for_conversation(msg.get('conversation_id'), msg.get('subject'))
+    if not home or home == r.get('task_id'): return r
+    t = store.get_task(home) or {}
+    if t.get('Status') not in ('done', 'dropped'):
+        logger.info(f"ingest: this thread already belongs to {task_ref(home)} - joining it, not {task_ref(r['task_id'])}")
+        return {**r, 'task_id': home, 'reason': f"this thread already belongs to {task_ref(home)}"}
+    logger.info(f"ingest: this thread's task {task_ref(home)} is closed - opening new work, not joining {task_ref(r['task_id'])}")
+    return {**r, 'decision': 'create', 'task_id': None,
+            'reason': (f"a reply on the thread of {task_ref(home)}, which is closed - so this is new work, "
+                       f"not part of {task_ref(r['task_id'])}")}
+
+
 def others_on_thread(store, msg: dict, mine=()) -> dict:
     """Has somebody ELSE already answered on this thread?
 
@@ -700,7 +762,8 @@ def exchange_lines(store, msg: dict, limit: int = 12, chars: int = 300) -> list:
         if m.get('Status') == 'skipped' or (msg.get('_mid') and m['MessageId'] == msg['_mid']): continue
         if msg.get('sent_at') and str(m.get('SentAt') or '') > str(msg['sent_at']): continue
         who = 'you' if is_ours(m) else (m.get('FromName') or m.get('FromEmail') or 'them')
-        body = ' '.join(str(m.get('BodyText') or '').split())[:chars]
+        from .triage import strip_boilerplate
+        body = ' '.join(strip_boilerplate(str(m.get('BodyText') or '')).split())[:chars]
         if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}")
     return out
 

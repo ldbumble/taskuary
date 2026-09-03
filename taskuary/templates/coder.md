@@ -41,13 +41,14 @@ dirty. What it cannot tell them is "the migration is half applied, don't run the
 - **Say what you learned this hour.** Anything the next agent working *right now* would waste
   an hour rediscovering — a flaky test, a build step, a dead end — is one line:
   `taskuary --note "the mssql tests need pyodbc"`. The wall composts nightly; this is for today.
-- **Say what is still true next month.** A trap, how something actually works, who owns what:
-  `taskuary --learned "<lasting fact>" --topic <repo-or-system>` puts one line on Social, which
+- **Put only hard-earned knowledge in the Hub.** A reusable technical solve reached through
+  substantial investigation/testing, or a developed company idea whose tradeoffs you thought through:
+  `taskuary --learned "<lasting fact>" --why-earned "<specific investigation or reasoning>" --topic <repo-or-system>` puts one line in the Hub, which
   every later agent reads before it starts. One line under 140 characters saying what is TRUE,
   `--body` for the why in two or three sentences. Never what you *did* — that is the task's
-  record, and it is stale the moment the task closes. Most sessions learn nothing lasting, and
-  "nothing" is the right answer when it is the true one.
-- **Vote before you post.** Your prompt's FROM SOCIAL block carries the entries that fit this
+  record, and it is stale the moment the task closes. Do not post quick facts, routine output, or
+  raw brainstorming. Most sessions earn nothing for the Hub, and "nothing" is the right answer.
+- **Vote before you post.** Your prompt's FROM HUB block carries the entries that fit this
   task, each with an id. One that held up: `taskuary --upvote <id>`. One that is wrong or stale:
   `taskuary --downvote <id> --body "why"` — below zero it is removed. Something to add to one:
   `taskuary --comment <id> --body "..."`. Saying again what is already there is an upvote, not a

@@ -21,7 +21,7 @@ what keeps a slow tab looking at the current page instead of ten seconds of hist
 proxy generating acks itself would leave frames queued on the far side (agent-browser's
 streaming notes say exactly this).
 """
-import base64, json, os, re, shutil, socket, subprocess, time
+import base64, json, os, re, shutil, socket, subprocess, threading, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
@@ -32,6 +32,8 @@ MAX_FRAME = 8 * 1024 * 1024     # a 1280x720 jpeg is ~54KB; this is the ceiling 
 _TTL = 2.0                      # state() is on the terminal-listing poll path: one socket probe per pane per 2s, not per render
 LAST = {}                       # sid -> the newest frame seen by any relay: what Snapshot files
 _CACHE = {}                     # sid -> (when, state)
+_START_LOCKS = {}               # sid -> one launch at a time; session mount + first prompt race otherwise opens two Chromes
+_START_LOCKS_GUARD = threading.Lock()
 _KEPT = re.compile(r'^\{\s*"type"\s*:\s*"(frame|url)"')   # the head of the message, before paying for a 50KB parse
 
 
@@ -140,10 +142,17 @@ def close(sid: str):
     """The pty ended: close its browser too. Best effort, and only when there is one - otherwise a
     headless Chrome per finished task sits idle for an hour each."""
     exe = shutil.which('agent-browser')
-    if not exe or not _read(session_name(sid), 'stream'): return
-    try: spawn.run([exe, '--session', session_name(sid), 'close'], timeout=20, capture_output=True)
-    except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
-    _CACHE.pop(sid, None); LAST.pop(sid, None)
+    with _START_LOCKS_GUARD:
+        lock = _START_LOCKS.setdefault(sid, threading.Lock())
+    # If the workspace closes while Chrome is still coming up, wait for that exact launch and
+    # close it. Reading the stream file before the launch settled leaked the late browser.
+    with lock:
+        if exe and _read(session_name(sid), 'stream'):
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], timeout=20, capture_output=True)
+            except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
+        _CACHE.pop(sid, None); LAST.pop(sid, None)
+    with _START_LOCKS_GUARD:
+        if _START_LOCKS.get(sid) is lock: _START_LOCKS.pop(sid, None)
 
 
 # One profile's worth of cookies, keyed here and not on the session id: a session is born and
@@ -170,30 +179,40 @@ def start(sid: str, url: str = 'about:blank') -> bool:
     """
     exe = shutil.which('agent-browser')
     if not exe: return False
-    if state(sid, fresh=True)['open']: return True                # the agent got there first
-    cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, 'open', url or 'about:blank']
-    try:
-        # detached: it outlives this request and answers on its own screencast port. Output is
-        # dropped - the pane IS the output, and a full pipe would block the browser.
-        spawn.popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         stdin=subprocess.DEVNULL, close_fds=True)
-    except (OSError, subprocess.SubprocessError) as e:
-        logger.warning(f'could not start the browser for {sid}: {e}')
+    # General work starts the browser as soon as the workspace mounts, then its first prompt
+    # verifies that it is ready before handing the CLI browser instructions. Those two roads can
+    # arrive together. agent-browser's on-disk session files are not a launch mutex: without one,
+    # both processes may decide the name is absent and leave two Chromes and two stream ports.
+    with _START_LOCKS_GUARD:
+        lock = _START_LOCKS.setdefault(sid, threading.Lock())
+    with lock:
+        if state(sid, fresh=True)['open']: return True             # the agent or mount got there first
+        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, 'open', url or 'about:blank']
+        try:
+            # detached and HEADLESS: the live pane is the visible browser. --headed opens a second
+            # desktop window outside Taskuary and defeats the side-by-side surface.
+            spawn.popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, close_fds=True)
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.warning(f'could not start the browser for {sid}: {e}')
+            return False
+        for _ in range(40):                                        # it has a Chrome to launch
+            time.sleep(0.25)
+            if state(sid, fresh=True)['open']: return True
+        logger.warning(f'the browser for {sid} did not come up within 10s')
         return False
-    for _ in range(40):                                            # it has a Chrome to launch
-        time.sleep(0.25)
-        if state(sid, fresh=True)['open']: return True
-    logger.warning(f'the browser for {sid} did not come up within 10s')
-    return False
 
 
 def brief() -> str:
     """What an agent with a browser of its own needs to know. Longer than hint() on purpose -
     this only rides when the owner asked for a browser, so it can afford to say how to drive
     it and where the line is."""
-    return ('A BROWSER IS OPEN for this task and the owner is WATCHING it beside your terminal. '
-            'Drive it with `agent-browser` - it is already bound to this session, so no --session '
-            'flag. Read `agent-browser skills get core --full` before your first command. '
+    return ('A BROWSER IS OPEN for this task and the owner is WATCHING it beside this session. '
+            'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
+            'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
+            'with `agent-browser open <url>`; read `agent-browser skills get core --full` only if '
+            'you do not know a command. Taskuary itself is already running at $TASKUARY_URL: do not '
+            'start Taskuary, Vite, or another local server. '
             'NEVER type a password, a 2FA code or a card number: navigate to the page that asks '
             'and tell the owner here - they type it in the pane themselves.')
 

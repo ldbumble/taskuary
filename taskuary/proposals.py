@@ -41,7 +41,35 @@ ACTIONS = {
     # and an agent that knows it did: a playbook is filed only past the owner's click
     'write_playbook': ('file a new PLAYBOOK - how this kind of job is done here - for the next agent to follow',
                        ('slug', 'text'), 'playbooks_enabled'),
+    # An instruction that BELONGS in a switch should be written there, not left as a note the
+    # classifier merely weighs - but nothing may change a switch on its own. So it arrives as a
+    # proposal: the assistant says which switch it means, the owner's click applies it, and only the
+    # keys below can ever be named (the owner, 2026-09-03: "yes do it that way ask user if it can
+    # change setttings").
+    'settings': ('change a setting you named - nothing else, and only once you approve it',
+                 ('changes',), None),
 }
+
+# What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
+# (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
+SETTING_ALLOW = {
+    'coder_auto_enabled': 'start the coding agent automatically on new coding work',
+    'auto_draft_enabled': 'write the reply draft in the background, before you look',
+    'intent_classify_enabled': 'let the brain classify inbound mail at all',
+    'answer_to_agent': 'what happens when an answer arrives for a waiting agent (auto / ask / off)',
+    'poll_minutes': 'how often the mailboxes are read',
+    'funnel_hours': 'how far back the pipe reaches',
+    'funnel_max': 'how much the pipe holds at once',
+    'timeline_fade': 'how old rows dim on the Timeline',
+    'calendar_enabled': 'read your calendar',
+    'learn_enabled': 'learn from your verdicts',
+    'playbooks_enabled': 'let agents follow and propose playbooks',
+    'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are Timeline rows, not tasks)',
+}
+# ...and the same rule for a CONNECTOR's own switches, which is where "PRs are Timeline items, not
+# tasks" actually lives (store.github_permissions reads the connector first).
+CONNECTOR_ALLOW = {'github': {'use_as_tracker': 'treat GitHub issues/PRs as the tracker'}}
+SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off'), 'timeline_fade': ('none', 'soft', 'normal', 'strong')}
 
 
 def _switch_ok(store, name) -> bool:
@@ -67,11 +95,36 @@ def parse(text: str) -> list:
     return out
 
 
+def setting_changes(p: dict) -> tuple:
+    """(changes, reason). Every named switch checked against the allow-list BEFORE it is proposed -
+    so a proposal the owner sees is one that could actually be applied."""
+    out = []
+    for c in (p.get('changes') or []):
+        if not isinstance(c, dict): return [], 'a change must be an object'
+        conn, name, val = str(c.get('connector') or '').strip().lower(), str(c.get('name') or '').strip(), c.get('value')
+        if conn:
+            if name not in CONNECTOR_ALLOW.get(conn, {}): return [], f'{conn}.{name} is not a switch a proposal may touch'
+            out.append({'connector': conn, 'name': name, 'value': bool(val), 'says': CONNECTOR_ALLOW[conn][name]})
+            continue
+        if name not in SETTING_ALLOW: return [], f'{name} is not a switch a proposal may touch'
+        v = str('1' if val is True else '0' if val is False else val).strip()
+        if name in SETTING_VALUES and v not in SETTING_VALUES[name]:
+            return [], f'{name} must be one of {", ".join(SETTING_VALUES[name])}'
+        if name in ('poll_minutes', 'funnel_hours', 'funnel_max') and not v.isdigit():
+            return [], f'{name} must be a whole number'
+        out.append({'name': name, 'value': v, 'says': SETTING_ALLOW[name]})
+    return out, '' if out else 'no change was named'
+
+
 def validate(store, p: dict) -> tuple:
     """(ok, reason). The whole gate: known action, required fields present, switch on."""
     a = p.get('action')
     if a not in ACTIONS: return False, f'unknown action {a!r}'
     words, need, switch = ACTIONS[a]
+    if a == 'settings':
+        changes, why = setting_changes(p)
+        if not changes: return False, why
+        return True, 'change ' + '; '.join(f"{c['name']} -> {c['value']}" for c in changes)
     missing = [k for k in need if not str(p.get(k) or '').strip()]
     if missing: return False, f'{a} needs {", ".join(missing)}'
     if not _switch_ok(store, switch):
@@ -134,6 +187,22 @@ def execute(store, rv: dict, actor='owner', final_text: str = None) -> dict:
         else:
             github.close_issue(c['Secret'], repo, num, p.get('body'))
             out = {'closed': f'{repo}#{num}'}
+    elif a == 'settings':
+        changes, why = setting_changes(p)
+        if not changes: raise RuntimeError(why)
+        done = []
+        for c in changes:
+            if c.get('connector'):
+                conn = store.get_connector_by_type(c['connector'])
+                if not conn: raise RuntimeError(f"no {c['connector']} connector to change")
+                cfg = json.loads(conn.get('ConfigJson') or '{}')
+                cfg[c['name']] = c['value']
+                store.save_connector({**dict(conn), 'ConfigJson': json.dumps(cfg)}, actor)
+                done.append(f"{c['connector']}.{c['name']} = {c['value']}")
+            else:
+                store.set_setting(c['name'], str(c['value']), actor)
+                done.append(f"{c['name']} = {c['value']}")
+        out = {'changed': done}
     elif a == 'write_playbook':
         from . import playbooks
         slug = playbooks.write(p['slug'], p['text'])

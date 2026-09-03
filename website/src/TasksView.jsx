@@ -12,6 +12,7 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { lazyGeneral } from "./lazyGeneral.js";
 import { taskMatchesQuery } from "./taskSearch.js";
 import { filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
@@ -20,7 +21,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, WorkLine, isWaiting, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
@@ -38,28 +39,14 @@ import { TerminalPane } from "./TerminalView.jsx";
 // An open tab can still hold yesterday's entry bundle after a local upgrade. Vite names lazy
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
 // Recover once automatically; a real module error still reaches the view boundary on retry.
-const GENERAL_CHUNK_RELOAD = "tq-general-chunk-reload";
 import { autostartPlan, isGeneralKind } from "./autostart.js";
+import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import {
   agentPhase, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
 } from "./taskLifecycle.js";
 
-const loadGeneralWorkspace = () => import("./GeneralWorkspace.jsx").then((module) => {
-  try { sessionStorage.removeItem(GENERAL_CHUNK_RELOAD); } catch { /* storage disabled */ }
-  return module;
-}).catch((error) => {
-  const stale = /dynamically imported module|importing a module script failed|failed to fetch/i.test(String(error?.message || error));
-  let retried = false;
-  try { retried = sessionStorage.getItem(GENERAL_CHUNK_RELOAD) === "1"; } catch { /* storage disabled */ }
-  if (stale && !retried) {
-    try { sessionStorage.setItem(GENERAL_CHUNK_RELOAD, "1"); } catch { /* storage disabled */ }
-    window.location.reload();
-    return new Promise(() => {});
-  }
-  throw error;
-});
-const GeneralWorkspace = React.lazy(loadGeneralWorkspace);
+const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
@@ -428,9 +415,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // finished with. Closing a task is a statement that you are finished looking at it, so let go
   // of it and stay where the work is.
   const finish = async (status) => {
+    // Where they were is where they stay. Closing a task used to switch the list back to "live" and
+    // then follow the selection to the top - so finishing one in progress threw them into another
+    // bucket looking at the task they had just closed (the owner, 2026-09-03: "it should not take you
+    // to the done task but stay on in progress and move to next task"). The one to look at next is
+    // the one AFTER it in the list they are already reading.
+    const order = shown.map((x) => x.TaskId);
+    const at = order.indexOf(selected);
+    const next = order[at + 1] ?? order[at - 1] ?? null;
     await api.patch(`/api/tasks/${selected}`, { Status: status });
     seenState.current = { id: null, key: null };     // nothing for the follow effect to chase
-    setFilter("live"); setOlder(false); onSelect(null);
+    onSelect(next);
     loadTasks(); onChanged?.();
   };
   // The desktop page is a master/detail workspace. Opening it with a populated list but no
@@ -521,6 +516,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
   });
+  const workspaceMode = agentWorkspaceMode({ isGeneral, session: term, wrapping, wrapped });
   const replyState = replyPhase(detail?.reviews || []);
   const startCodingAgent = async () => {
     if (!selected || startingAgent) return;
@@ -647,12 +643,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
               {/* header strip: identity + controls. Calm on purpose - white ground, one quiet
                   outlined action, ghost icons: the loud green block + boxed dots read as three
                   alarms where nothing was wrong */}
-              <Box sx={{ px: 2.5, py: 1.5, bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+              <Box sx={{ px: liveCodingSession ? 1.5 : 2.5, py: liveCodingSession ? 0.7 : 1.5,
+                bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* one primary action, everything else behind one tidy menu - six buttons in a
                     row read as none of them mattering */}
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography sx={{ ...mono, color: "#55697a", fontWeight: 700, fontSize: 12.5 }}>{detail.ref}</Typography>
-                  <Typography sx={{ color: INK, flex: 1, fontWeight: 650, fontSize: 15,
+                  <Typography sx={{ ...mono, color: "#55697a", fontWeight: 700,
+                    fontSize: liveCodingSession ? 11.5 : 12.5 }}>{detail.ref}</Typography>
+                  <Typography sx={{ color: INK, flex: 1, fontWeight: 650,
+                    fontSize: liveCodingSession ? 13.5 : 15,
                     minWidth: { xs: 110, sm: 200 }, letterSpacing: "-.01em" }} noWrap>
                     {t.Title}
                   </Typography>
@@ -688,13 +687,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
                   </Tooltip>
                 </Box>
-                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+                <Typography variant="caption" sx={{ color: FAINT, display: liveCodingSession ? "none" : "block", mt: 0.75 }}>
                   from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
                 </Typography>
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
-              <Box sx={{ px: 2, py: 1.5, overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <Box sx={{ px: liveCodingSession ? 1 : 2, py: liveCodingSession ? 0.65 : 1.5,
+                overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -702,13 +702,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     result of the work is the thing you are looking at */}
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
-                {term?.alive ? (
-                  <Box sx={{ ...card, mb: 0.75, px: 1.5, py: 0.9, bgcolor: "#fff", flexShrink: 0,
-                    borderLeft: "4px solid #55697a" }}>
-                    <WorkflowHeading number="1" title="Task" description={`${t.Title} · controls return when the agent stops.`}
-                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" />
-                  </Box>
-                ) : (
+                {!term?.alive && (
                   <Box sx={{ ...card, mb: 1.25, p: 1.5, bgcolor: "#fff", flexShrink: 0,
                     borderLeft: "4px solid #55697a" }}>
                     <WorkflowHeading number="1" title="Task" description="The job itself — ownership and completion live here."
@@ -818,27 +812,33 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Typography>
                   </Box>
                 )}
-                <Box sx={{ ...card, mb: 1.25, p: 1.5, bgcolor: "#fff", flexShrink: 0,
-                  borderLeft: "4px solid #6f8a6e" }}>
-                  <WorkflowHeading number="2" title="Agent work"
+                <Box sx={{ ...card, mb: liveCodingSession ? 0.55 : 1.25,
+                  px: liveCodingSession ? 1 : 1.5, py: liveCodingSession ? 0.55 : 1.5,
+                  bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #6f8a6e",
+                  display: liveCodingSession ? "flex" : "block", alignItems: "center",
+                  gap: liveCodingSession ? 1 : 0, flexWrap: "wrap" }}>
+                  <Box sx={{ minWidth: 0, flex: liveCodingSession ? "0 1 auto" : "initial" }}>
+                    <WorkflowHeading number="2" title={liveCodingSession ? "Agent running" : "Agent work"}
                     description={term?.alive
-                      ? "Live workspace — this is the primary surface until the agent stops."
+                      ? ""
                       : "Run, pause, stop, or restart an agent. None of these actions completes the task."}
                     chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" />
+                  </Box>
                   {liveCodingSession && (
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
-                      gap: 0.8, flexWrap: "wrap", mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
                       <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
-                        sx={{ fontSize: 11.5, bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>
+                        sx={{ fontSize: 10.5, minHeight: 27, px: 1,
+                          bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>
                         {agentWaiting ? "Answer agent" : "Give new prompt"}{waitingN ? ` · ${waitingN} queued` : ""}
                       </Button>
-                      <Button size="small" startIcon={<DifferenceIcon sx={{ fontSize: 15 }} />}
+                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
                         onClick={() => setDiffOpen(true)}>Review changes</Button>
-                      <Button size="small" disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
                         onClick={wrapUp}>Finish agent run</Button>
-                      <Button size="small" disabled={!!wrapping} startIcon={<PauseCircleIcon sx={{ fontSize: 15 }} />}
+                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<PauseCircleIcon sx={{ fontSize: 14 }} />}
                         onClick={pause}>Pause & save</Button>
-                      <Button size="small" color="error" disabled={!!wrapping}
+                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} color="error" disabled={!!wrapping}
                         startIcon={<BlockIcon sx={{ fontSize: 14 }} />} onClick={stopAgent}>Stop session</Button>
                     </Box>
                   )}
@@ -923,11 +923,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       onDone={() => { loadDetail(selected); loadTasks(); findTerm(selected); }} />
                   </Box>
                 )}
-                {isGeneral ? (
+                {workspaceMode === "general" ? (
                   <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                     <GeneralWorkspace task={t} onSession={generalSession} onOpenReports={onGoReports} />
                   </React.Suspense>
-                ) : wrapping && !wrapped ? (
+                ) : workspaceMode === "wrapping" ? (
                   <Box sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <CircularProgress size={15} />
@@ -943,7 +943,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Typography>
                     <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />
                   </Box>
-                ) : wrapped ? (
+                ) : workspaceMode === "wrapped" ? (
                   <Box sx={{ ...card, bgcolor: wrapped.note ? "#dfeade" : "#e3e6e1",
                     border: `1px solid ${wrapped.note ? "#d8cfbe" : "#d2d6cf"}` }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
@@ -967,30 +967,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         onClick={onGoReview}>Read the draft in Review</Button>
                     )}
                   </Box>
-                ) : term?.alive ? (
+                ) : workspaceMode === "live" ? (
                   <>
                     {/* said and did, above the session: the agent's own list beside the files it wrote */}
-                    <WorkStrip taskId={selected} live={!!term.alive} session={term}
+                    <WorkStrip taskId={selected} live={!!term.alive} session={term} defaultCollapsed={!!term.alive}
                       provenance={{ from: t.Source || "task", kind: t.Kind, by: term.cli || term.agent }} />
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
-                      {term.alive && term.work && (
-                        <WorkLine work={term.work} who={term.cli || term.agent || term.label} waiting={isWaiting(term)} startedAt={term.started} />
-                      )}
+                    {!term.alive && <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
                       </Typography>
-                      {!term.alive && (
-                        <Chip size="small" label="exited — its output is still here"
-                          sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
-                      )}
-                    </Box>
+                      <Chip size="small" label="exited — its output is still here"
+                        sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
+                    </Box>}
                     {/* A live coding session is the primary workspace, not a preview squeezed by
                         the report and history below it. Give it a terminal-sized viewport and let
                         the surrounding task page scroll to the evidence after the session. */}
                     {/* it takes what is left between the strip above and the waiting room below, and
                         never less than a readable terminal - a fixed 64vh pushed the waiting room under
                         the fold the moment the strip above it had anything to say */}
-                    <Box sx={{ flex: "1 1 auto", minHeight: { xs: 360, md: 460 }, maxHeight: 760,
+                    <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 },
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
                     </Box>
@@ -1006,7 +1001,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </>
                 ) : null}
 
-                <Box sx={{ ...card, mt: term?.alive ? 0.75 : 1.25, p: term?.alive ? 0.9 : 1.5,
+                {!term?.alive && <Box sx={{ ...card, mt: 1.25, p: 1.5,
                   bgcolor: "#fff", flexShrink: 0,
                   borderLeft: "4px solid #9a7444" }}>
                   <WorkflowHeading number="3" title="Reply"
@@ -1058,9 +1053,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       No inbound sender is attached to this task, so there is nothing to reply to.
                     </Typography>
                   ))}
-                </Box>
+                </Box>}
 
-                <Fold title={`Context & history · ${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
+                {!term?.alive && <Fold title={`Context & history · ${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
                   <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
                     fontSize: 9, fontWeight: 750, display: "block", mb: 0.65 }}>Messages</Typography>
                   {taskMessages.map((m) => {
@@ -1114,10 +1109,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
                     <Button size="small" onClick={post}>Post</Button>
                   </Box>
-                </Fold>
+                </Fold>}
 
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
-                {detail.runs.length > 0 && (
+                {!term?.alive && detail.runs.length > 0 && (
                   <Fold title={`Earlier runs · ${detail.runs.length}`}>
                     {detail.runs.map((r) => (
                       <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
@@ -1349,7 +1344,7 @@ const WorkflowHeading = ({ number, title, description, chip, tone }) => (
     </Box>
     <Box sx={{ minWidth: 0, flex: 1 }}>
       <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 750, lineHeight: 1.25 }}>{title}</Typography>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>
+      {description && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
     </Box>
     {chip}
   </Box>

@@ -87,6 +87,21 @@ PROMPT = (
     'of office; the failure has a cause; they answered) is new and worth one line.\n'
     'End every check with a note to your next one: what you looked at and found nothing in, when something becomes worth '
     'raising (a date, a length of silence), anything you would otherwise have to work out again - facts, never rules.')
+
+# An Assistant report with sources written on it is a monitor, not the general check above. Its
+# instruction and those source results are the whole input. In particular it must not quietly add
+# inbox, calendar, tasks, Morning digest material, or another Assistant report's configured views.
+SYSTEMS_PROMPT = (
+    'You are monitoring only the configured data sources in this report. Apply the owner\'s instruction '
+    'to the returned data and say only what needs attention now. Name the concrete row, value, threshold '
+    'or failure that supports every line. Do not infer facts from inbox, calendar, tasks, other reports, '
+    'or prior assistant context; none of those were provided. Nothing actionable -> {"say": []}.')
+SYSTEMS_CONTRACT = (
+    '\n\nAnswer JSON only: {"say": [{"key": "idea:<short stable slug>", "text": "<one line, '
+    'under 30 words, first person: the finding and what I would do>", "section": "systems", '
+    '"why": "<the exact row, value, threshold or failure behind it>", "mid": null, "task": null}], '
+    '"notes": ""}. At most {max_lines} entries. Use only CONFIGURED DATA SOURCES. If nothing '
+    'needs attention, return {"say": []}.')
 # a stock prompt still starting like one of these is healed to PROMPT (store.__init__)
 OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;',
                     'You are my assistant. Every 30 minutes you check in;',
@@ -543,6 +558,13 @@ def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
             act = {'type': 'task', 'mid': mid, 'title': title} if title and mid else {'type': 'message', 'mid': mid} if mid else {'type': 'note'}
+            # a line that NAMES a task belongs to it, whatever else it carries: without the tid the
+            # pipe could not tell that an agent had the work, so "TQ-0329 July financials hasn't moved"
+            # sat in 'slipped' while the task said in_progress (the owner, 2026-09-03)
+            ref = re.search(r'\bTQ-?0*(\d+)\b', f'{txt} {why}', re.I)
+            if ref and not act.get('tid'):
+                rt = int(ref.group(1))
+                if store.get_task(rt): act['tid'] = rt
             # where in the post it goes. Only an idea gets to choose: a candidate the hub found is
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})
@@ -616,7 +638,10 @@ def system_checks(store, source_ids=None, inline=None) -> str:
     future connector already know how to execute there - so both kinds run through that same
     executor, without touching a schedule, delivering anything, or applying a view's own AI summary.
     """
-    saved, own = _watch(store)
+    # Supplying both arguments means a particular report is being run. Do not even consult the
+    # first Assistant row in the database: there can be several, and that was how a SQL monitor
+    # wound up reading another Assistant's configuration.
+    saved, own = _watch(store) if source_ids is None or inline is None else ([], [])
     ids = saved if source_ids is None else _ids(source_ids)
     subs = own if inline is None else _inline(inline)
     if not ids and not subs:
@@ -716,22 +741,39 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
             + f"\n\n{_notes_block(store)}")
 
 
-def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES) -> list:
+def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
+    """The complete model input for a source-backed Assistant report."""
+    now = datetime.now()
+    return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n"
+            "CONFIGURED DATA SOURCES (the only facts available to this report):\n"
+            f"{system_checks(store, watch_source_ids or [], watch_sources or [])}")
+
+
+def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
+          watch_source_ids=None, watch_sources=None, systems_only: bool = False) -> list:
     """One call: COUNSEL.md's voice, the owner's instruction (the Reports tab), the candidates, the
     day, what was already said."""
     doc = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
     soul = store.doc('soul') or ''
-    system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{(instruction or PROMPT).strip()}" + CONTRACT.replace('{max_lines}', str(max_lines))
+    direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
+                 if systems_only else (instruction or PROMPT).strip())
+    contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
+    system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
-    user = inputs(store, cands)
-    from .llm import readable_images
-    images = readable_images(store, _people_context(store)[1])
+    user = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only
+            else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources))
+    images = []
+    if not systems_only:
+        from .llm import readable_images
+        images = readable_images(store, _people_context(store)[1])
     text = llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {}))
     return parse(text, cands, max_lines), _notes(text), user
 
 
-def facts(store, watch_source_ids=None, watch_sources=None) -> str:
+def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False) -> str:
     """What a run would hand the model, as text - the Reports tab's Preview (reports.run_assistant)."""
+    if systems_only:
+        return systems_inputs(store, watch_source_ids, watch_sources)
     c = cfg(store); now = datetime.now()
     state = {i['Key']: i for i in store.list_ideas()}
     return inputs(store, [x for x in candidates(store, c) if fresh(state, x, now)],
@@ -927,6 +969,9 @@ def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: 
 
 
 def _footer(r: dict) -> str:
+    if r.get('scope') == 'sources':
+        n = int(r.get('systems') or 0)
+        return f"Reviewed: {n} configured data source{'s' if n != 1 else ''} only"
     kinds = ', '.join(f"{v} {k}" for k, v in r['candidates'].items()) or 'no candidates'
     skip = f"; let go: {len(r['skipped'])}" if r['skipped'] else ''
     return (f"Reviewed: {kinds}{skip} - {r.get('people', 0)} thread(s) of what people said, {r['recent']} sender/subject line(s) from the last two days, "
@@ -934,22 +979,32 @@ def _footer(r: dict) -> str:
             + ('' if r['model'] else " - no model: the facts in the hub's own words"))
 
 
-def run(store, llm=None, force: bool = False, instruction: str = None) -> dict:
+def run(store, llm=None, force: bool = False, instruction: str = None, *,
+        watch_source_ids=None, watch_sources=None, systems_only: bool = False,
+        report_id=None, report_title: str = None) -> dict:
     """One post. The Reports tab's scheduler calls this when the 'Assistant' report is due
     (reports.run_report_source) and its "Run now" calls it forced; the instruction is the report's
     editable prompt. Deleting or switching off that report is the off switch - a forced run still
     answers. Posts nothing when nothing is new."""
     src = source(store)
     if not force and not (src and src.get('Active')): return {'ran': False, 'said': 0}
-    if instruction is None and src: instruction = (src['cfg'].get('ai_prompt') or '').strip() or None
-    with _LOCK: return _run(store, llm, instruction)
+    if instruction is None and src and report_id is None:
+        instruction = (src['cfg'].get('ai_prompt') or '').strip() or None
+    # Direct calls retain the seeded Assistant's configuration. Report-scheduled calls pass their
+    # own lists, including empty lists, so one Assistant report can never borrow another's sources.
+    if report_id is None and watch_source_ids is None and watch_sources is None:
+        watch_source_ids, watch_sources = _watch(store)
+    with _LOCK:
+        return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
+                    systems_only, report_id, report_title)
 
 
-def _run(store, llm, instruction) -> dict:
+def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=False,
+         report_id=None, report_title=None) -> dict:
     c = cfg(store); now = datetime.now()
     store.set_setting('assistant_last_run', now.isoformat(timespec='seconds'), 'assistant')
     state = {i['Key']: i for i in store.list_ideas()}
-    cands = [x for x in candidates(store, c) if fresh(state, x, now)]
+    cands = [] if systems_only else [x for x in candidates(store, c) if fresh(state, x, now)]
     if llm is None:
         from .llm import build_llm
         try: llm = build_llm(store)
@@ -957,22 +1012,36 @@ def _run(store, llm, instruction) -> dict:
             logger.debug(f'assistant: no model - {e}'); llm = None
     # Selecting system views is itself an explicit request for model judgement. It must keep
     # working even if the owner turns off the free-form "idea" producer in Settings.
-    used, note, read = bool(llm and ('idea' in c['producers'] or any(_watch(store)))), '', ''
+    configured = bool(_ids(watch_source_ids) or _inline(watch_sources))
+    used, note, read = bool(llm and (configured if systems_only else ('idea' in c['producers'] or configured))), '', ''
     if used:
-        try: say, note, read = think(store, cands, llm, instruction, c['max'])
+        try:
+            say, note, read = think(store, cands, llm, instruction, c['max'],
+                                    watch_source_ids, watch_sources, systems_only)
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
-    if not read: read = inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)')
+    if not read:
+        read = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only else
+                inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)',
+                       watch_source_ids, watch_sources))
     # the note outlives the post: a quiet check leaves one too, so the next check starts where this one stopped
-    if note:
+    if note and not systems_only:
         store.set_setting('assistant_notes', note, 'assistant'); store.set_setting('assistant_notes_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
+    # Namespace monitor findings so two SQL checks can use the same natural idea key without one
+    # report suppressing the other report's finding.
+    if systems_only and report_id is not None:
+        say = [{**s, 'key': f"report:{report_id}:{s['key']}"} if str(s.get('key') or '').startswith('idea:') else s for s in say]
     # the state is read AGAIN here: another process may have posted while the model was thinking, and a
     # model echoing a dismissed key changes nothing
     state = {i['Key']: i for i in store.list_ideas()}
     say = [s | {'why': s.get('why') or s.get('facts') or ''} for s in say
-           if fresh(state, s, now) and not contradicts_sent_reply(store, s)]
-    rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {'notes': note}
+           if fresh(state, s, now) and (systems_only or not contradicts_sent_reply(store, s))]
+    if systems_only:
+        rv = reviewed([], say, '(', '(', '(', used, '(', '(') | {
+            'notes': '', 'scope': 'sources', 'systems': len(_ids(watch_source_ids)) + len(_inline(watch_sources))}
+    else:
+        rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {'notes': note}
     if not say: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': read}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}}, stamp) for s in say]
@@ -981,8 +1050,10 @@ def _run(store, llm, instruction) -> dict:
     # the row's one line: the first idea, cut at a word, and how many more wait behind it
     head = rows[0]['Text'] if len(rows[0]['Text']) <= 90 else rows[0]['Text'][:90].rsplit(' ', 1)[0] + '…'
     subj = head + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
-    mid = store.add_message({'TaskId': None, 'ExternalId': f'assistant:{stamp}', 'ConversationId': 'assistant', 'Channel': CHANNEL,
-                             'SourceName': 'Assistant', 'Subject': subj, 'FromName': 'Assistant', 'SentAt': stamp,
+    identity = f'assistant:{report_id}' if systems_only and report_id is not None else 'assistant'
+    name = (report_title or 'Assistant') if systems_only else 'Assistant'
+    mid = store.add_message({'TaskId': None, 'ExternalId': f'{identity}:{stamp}', 'ConversationId': identity, 'Channel': CHANNEL,
+                             'SourceName': name, 'Subject': subj, 'FromName': name, 'SentAt': stamp,
                              'BodyText': body, 'Status': 'feed'})
     store.add_route(mid, None, 'feed', None, "the assistant's post: what it noticed and what it would do - open it to talk back or act",
                     [], 'assistant')
@@ -990,7 +1061,8 @@ def _run(store, llm, instruction) -> dict:
     # the hub already holds; asking a model to restate them is how a brief starts describing work
     # that is not there. Snapshotted onto the post so it still reads correctly tomorrow.
     store.set_brief(mid, json.dumps({'ideas': [_public(i) for i in rows], 'reviewed': rv,
-                                     'flight': in_flight(store), 'stats': day_stats(store)}))
+                                     'flight': [] if systems_only else in_flight(store),
+                                     'stats': [] if systems_only else day_stats(store)}))
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')

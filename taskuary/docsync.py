@@ -8,6 +8,7 @@ write themselves in. Two mechanisms, both non-destructive to hand-written prose:
 import json
 
 CONN_START, CONN_END = '<!-- connections:start -->', '<!-- connections:end -->'
+PROJECT_START, PROJECT_END = '<!-- projects:start -->', '<!-- projects:end -->'
 REPO_MAP_HEADER = '## Repository map'
 # The poller's own map, not a second copy of it. This used to be a hand-kept duplicate that
 # stopped at monday, so every connector added after it (gitlab, azdo, linear, trello, notion,
@@ -83,6 +84,31 @@ def sync_connections(store, actor='system'):
     if new != doc: store.save_doc('soul', new, actor)
 
 
+def sync_projects(store, actor='system'):
+    """Render structured project links into one replaceable, human-readable SOUL.md block.
+
+    Raw addresses and provider ids stay in SQLite. The document names the people and channels,
+    which is enough for an owner to understand it and avoids spraying contact identifiers into
+    every agent prompt that receives part of SOUL.md.
+    """
+    from .projects import soul_rows
+    doc = store.get_doc('soul') or ''
+    rows = soul_rows(store)
+    body = '\n'.join(rows) or '_(relationships appear after you route work to repositories)_'
+    section = ('## Project relationships\n'
+               f'{PROJECT_START}\n{body}\n{PROJECT_END}')
+    if PROJECT_START in doc and PROJECT_END in doc:
+        head, rest = doc.split(PROJECT_START, 1)
+        _, tail = rest.split(PROJECT_END, 1)
+        new = f'{head}{PROJECT_START}\n{body}\n{PROJECT_END}{tail}'
+    elif REPO_MAP_HEADER in doc:
+        head, tail = doc.split(REPO_MAP_HEADER, 1)
+        new = f'{head.rstrip()}\n\n{section}\n\n{REPO_MAP_HEADER}{tail}'
+    else:
+        new = f'{doc.rstrip()}\n\n{section}\n'
+    if new != doc: store.save_doc('soul', new, actor)
+
+
 def _readme_blurb(tok, repo, llm) -> str:
     """No GitHub description? Read the repo's README instead - AI one-liner when an AI
     connector is up, else the first real prose line."""
@@ -108,6 +134,8 @@ def update_repo_map(store, repos: list, actor='github', tok=None, llm=None):
     """repos: [{full_name, description, archived}] - append unknown repos under the map
     header in SOUL.md so EVERY agent knows which repo owns what. Repos without a GitHub
     description get summarized from their README (AI one-liner when available)."""
+    from .projects import ensure_repositories
+    ensure_repositories(store, repos, actor)
     doc = store.get_doc('soul') or ''
     have = doc.lower()
     PLACEHOLDER = 'no description on GitHub - fill me in'
@@ -127,6 +155,7 @@ def update_repo_map(store, repos: list, actor='github', tok=None, llm=None):
             for r in repos if r['full_name'].lower() not in have]
     if not adds:
         if healed: store.save_doc('soul', doc, actor)
+        sync_projects(store, actor)
         return
     if REPO_MAP_HEADER in doc:
         head, rest = doc.split(REPO_MAP_HEADER, 1)
@@ -136,3 +165,4 @@ def update_repo_map(store, repos: list, actor='github', tok=None, llm=None):
                'Route each coding task to the repo whose purpose matches; when unsure, escalate.\n'
                + '\n'.join(adds) + '\n')
     store.save_doc('soul', doc, actor)
+    sync_projects(store, actor)

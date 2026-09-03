@@ -49,7 +49,7 @@ class DenyListTests(unittest.TestCase):
                              ('POST', '/api/soul/interview'), ('POST', '/api/learn/reflect'), ('POST', '/api/learn/adopt'),
                              ('PUT', '/api/owner'), ('PATCH', '/api/whoami'),
                              ('POST', '/api/mssql/test'), ('POST', '/api/mcp/tools'),
-                             ('POST', '/api/reports/preview'), ('POST', '/api/reports/compose'),
+                             ('POST', '/api/reports/preview'), ('POST', '/api/reports/compose'), ('POST', '/api/workflows/compose'),
                              ('POST', '/api/reports/3/invoice-batches'), ('PATCH', '/api/invoice-batches/2/items/8'),
                              ('POST', '/api/invoice-batches/2/prepare'),
                              ('POST', '/api/semantic/metrics'), ('DELETE', '/api/semantic/metrics/3'), ('POST', '/api/semantic/metrics/3/try')):
@@ -107,7 +107,9 @@ class OverTheWireTests(unittest.TestCase):
 
     def test_a_session_can_still_do_its_job(self):
         self.assertEqual(c.post('/api/board/notes', json={'body': 'taking store.py'}, headers=AGENT).status_code, 200)
-        self.assertEqual(c.post('/api/handbook', json={'title': 'the tests need pyodbc'}, headers=AGENT).status_code, 200)
+        self.assertEqual(c.post('/api/hub', json={'title': 'the tests need pyodbc',
+                                                  'why_earned': 'Repeated isolated test runs proved this native dependency was required.'},
+                                headers=AGENT).status_code, 200)
 
     def test_a_session_is_given_the_token_in_its_environment(self):
         """...which is how `taskuary --note` works at all, and how the middleware knows."""

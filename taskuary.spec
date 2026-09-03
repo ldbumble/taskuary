@@ -38,7 +38,8 @@ datas, bins, hidden = _collect('winpty', 'wcwidth', 'pip', *BUNDLE)
 a = Analysis(['taskuary/desktop.py'],
              # templates/ too: the operator documents (SOUL.md, CODER.md, TRIAGE.md...) seed the store
              # from here, and a build without them ran every prompt with no constitution (audit 2026-09-02)
-             datas=[('taskuary/web', 'taskuary/web'), ('taskuary/templates', 'taskuary/templates'), *datas],
+             datas=[('taskuary/web', 'taskuary/web'), ('taskuary/templates', 'taskuary/templates'),
+                    ('taskuary/skills', 'taskuary/skills'), *datas],
              binaries=bins,
              hiddenimports=['taskuary.server', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
                             'websockets', 'uvicorn.protocols.websockets.websockets_impl', 'pyte', *hidden],

@@ -50,10 +50,13 @@ ALLOWED_WRITES = (
     r'^/api/messages/\d+/(file|promote|read)$',        # the triage verdicts: the whole funnel
     r'^/api/reviews?/\d+/(hold|drop|edit)$',           # ...but never /send
     r'^/api/board/notes',                              # the wall
-    r'^/api/handbook',                                 # durable handbook entries and comments
+    r'^/api/(hub|handbook)',                           # durable Hub posts and compatibility route
     r'^/api/settings$',                                # display preferences
     r'^/api/setup/dismiss$',
     r'^/api/terminals/\d+/resize$',
+    # the Assistant page: the pipe's own memory and the concierge's turns - the demo's database,
+    # the demo's canned brain, nothing real behind either (funnel.py, concierge.py)
+    r'^/api/(funnel/settle|concierge/(open|next|say|act|stream|ai|setup)|assistant/dock(/new)?)$',
 )
 
 # What is refused, and the sentence the visitor sees. Order matters: the first match wins.
@@ -373,10 +376,16 @@ def seed(store) -> int:
                                 'the census sync is behind a VPN and will not run from a laptop'),
     ):
         store.add_note({'TaskId': None, 'Agent': agent, 'Cwd': '', 'Kind': kind, 'Body': body, 'Files': ''})
-    # ...and Social: what those sessions worked out that is still true next month, voted on by the
+    # ...and the Hub: hard-earned discoveries and ideas, voted on by the
     # agents that came after - a shelf with something on it, so the tab shows how the votes work
-    from . import handbook
+    from . import hub
     for topic, kind, title, body, votes in (
+        ('customer-launch', 'new_idea', 'Give every customer launch a reversible dry-run',
+         'A rehearsal exposes ownership and data gaps before a date is promised. Keep the rollback path visible and ask operations to sign off.',
+         (('assistant', 1), ('coder', 1))),
+        ('importers', 'technical_solve', 'Bound retries by elapsed time, not only attempt count',
+         'Backoff intervals vary by provider, so attempt counts created wildly different outages. Use an elapsed-time budget and preserve the final response for diagnosis.',
+         (('coder', 1), ('codex', 1))),
         ('importers', 'gotcha', 'The AP importer needs pyodbc on the box before its tests mean anything',
          'Without the driver every test passes vacuously - the SQL Server fixtures skip. pip install pyodbc, then run the suite.',
          (('coder', 1), ('codex', 1), ('gemini', 1))),
@@ -390,8 +399,14 @@ def seed(store) -> int:
          'Decided with the CFO in July so the bank feed has settled. Anything asking for numbers before then gets the previous month.',
          ()),
     ):
-        lid = handbook.post(store, title, body, topic, kind, 'coder')['LoreId']
-        for who, d in votes: handbook.vote(store, lid, d, who)
+        author = 'assistant' if kind == 'new_idea' else 'coder'
+        lid = hub.post(store, title, body, topic, kind, author)['LoreId']
+        for who, d in votes: hub.vote(store, lid, d, who)
+        if kind == 'new_idea':
+            store.lore_comment(lid, 'This would also give sales a concrete readiness signal before confirming a date.', 'coder')
+            store.lore_comment(lid, 'Try it on the next two launches and compare escaped issues.', 'owner')
+        elif kind == 'technical_solve':
+            store.lore_comment(lid, 'The same elapsed-time budget should apply to report polling.', 'assistant')
     logger.info(f'demo: seeded {made} items of invented work')
     return made
 

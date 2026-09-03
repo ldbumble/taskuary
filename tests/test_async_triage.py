@@ -52,7 +52,9 @@ class DeferredIngestTests(unittest.TestCase):
         ra, rb = self.s.get_message(a), self.s.get_message(b)
         self.assertEqual((ra['Status'], rb['Status']), ('routed', 'routed'))
         self.assertIsNotNone(ra['TaskId']); self.assertEqual(rb['TaskId'], ra['TaskId'])   # the second joined the first's task
-        self.assertEqual(len(asked), 1)                                                     # ...without a second AI call
+        # ...and the follower is judged too: what a reply on an open task IS is triage's call, not the
+        # task's kind (the owner, 2026-09-03: "the triage should realize that")
+        self.assertEqual(len(asked), 2)
         self.assertEqual(len([m for m in self.s.scan_messages() if m['Subject'].startswith('Question')]), 2)   # no duplicate rows
         self.assertEqual(self.s.pending_triage(), [])
 

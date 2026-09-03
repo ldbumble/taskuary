@@ -137,7 +137,7 @@ def conversation_text(store, tid: int) -> str:
     """The durable assistant conversation as plain text, for end-of-session learning.
 
     General work has no terminal transcript: its real record is the typed conversation in task
-    comments. Keeping this adapter here lets Social use the same conservative closeout question
+    comments. Keeping this adapter here lets the Hub use the same conservative closeout question
     as coding sessions without inventing a second definition of durable company knowledge.
     """
     return '\n\n'.join(
@@ -260,12 +260,14 @@ POST_LINE = ('You can leave a line for the other agents and the owner: run '
              '`taskuary --note "..."` (add --kind working|note|blocked|ready|done) when you find '
              'something worth their time. One line. Only when it is genuinely worth someone else '
              'reading - a wall of chatter is a wall nobody reads.')
-SOCIAL_LINE = ('Social is company memory, not a technical log. When you establish something still '
-               'true next month about the business, its direction, customers, operations, people, '
-               'decisions, or systems, file it with `taskuary --learned "<lasting fact>" --topic '
-               '<company-area>`. Never post current activity or what you did; Tasks and Timeline '
-               'already hold that. Use the ids in FROM SOCIAL to upvote, correct, or comment before '
-               'posting the same fact again.')
+HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusable discovery that '
+            'took substantial investigation, testing, comparison, or repeated reasoning, or a '
+            'well-developed new company idea with a considered rationale. Use `taskuary --learned '
+            '"<durable claim>" --why-earned "<specific investigation or reasoning>" --topic <company-area> --kind new_idea|technical_solve|howto|gotcha|'
+            'decision|system|people`. Never file routine output, a raw brainstorm, current activity, '
+            'or what you did. Use ids in FROM HUB to upvote, correct, or comment before reposting.')
+# Old imports/tests may still name this while installations roll forward.
+SOCIAL_LINE = HUB_LINE
 
 
 def _turn_only(store, tid: int, text: str) -> str:
@@ -334,17 +336,17 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     for c in chat_rows(store, tid)[-30:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
         turns.append(f"{role}: {_cut(c.get('Body'), 4_000)}")
-    # Social is company memory, not coding trivia. The general assistant needs the same relevant
+    # The Hub is company memory, not coding trivia. The general assistant needs the same relevant
     # facts as a coding session: how the business works, decisions, ownership, people and traps.
     # API-backed assistants cannot run taskuary's voting commands, so hand them the facts without
     # advertising controls they do not have; CLI sessions receive the action line separately.
-    from . import handbook
-    social_query = ' '.join([
+    from . import handbook as hub
+    hub_query = ' '.join([
         str(task.get('Title') or ''), str(task.get('Summary') or ''),
         *[str(m.get('BodyText') or '') for m in (detail.get('messages') or [])[-12:]],
         *[str(c.get('Body') or '') for c in chat_rows(store, tid)[-12:]],
     ])
-    social = handbook.block(store, social_query[:8_000], actions=False) if handbook.enabled(store) else ''
+    hub_context = hub.block(store, hub_query[:8_000], actions=False) if hub.enabled(store) else ''
     # the chat is an agent too, so it is on the wall - the HOUSE lane, the notes with no
     # checkout behind them, which is where it and the owner leave things for everybody
     from . import blackboard as bb, selfclose
@@ -357,7 +359,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n\n"
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
-            + (social.strip() + '\n\n' if social else ''))
+            + (hub_context.strip() + '\n\n' if hub_context else ''))
     tail = "\n\nRespond to the last USER turn. Do not repeat the task context."
     # The question sits at the END, so the end is what must survive the budget: the oldest turns go
     # first, then the oldest source material. _cut(user) kept the head and dropped exactly the
@@ -477,6 +479,8 @@ class GeneralSession:
         self._input, self._lock = '', threading.Lock()
         self._cancel = None                  # the stop switch for the answer being written now
         self.cli_sid = ''                    # the CLI's OWN conversation, resumed turn to turn
+        from . import browserview
+        self.browser_wanted = browserview.wanted(self.store.get_task(self.task_id))
         # The browser that asked the question is only one VIEW of this session. Keep the
         # structured tool/progress stream here as well as sending it down that browser's
         # request, so leaving this task and coming back does not turn visible work into a blank
@@ -610,12 +614,25 @@ class GeneralSession:
             if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
             system, user = _prompt(self.store, self.task_id)
             if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
+            browser_tools, browser_env = False, None
+            if self.browser_wanted and self.pick.startswith('cli:'):
+                # This is still the conversational Assistant, not a coding PTY. Give its headless
+                # CLI the same named browser session as the pane, and wait for the one background
+                # launch so its first command reuses that Chrome instead of racing a second one.
+                from . import browserview, terminal
+                if browserview.start(self.sid):
+                    browser_tools = True
+                    browser_env = {**terminal.session_env('assistant', self.task_id), **browserview.env(self.sid)}
+                    system = f'{system}\n\n{browserview.brief()}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):
                 system = f'{system}\n\n{POST_LINE}'
-                from . import handbook
-                if handbook.enabled(self.store): system = f'{system}\n\n{SOCIAL_LINE}'
+                from . import handbook as hub
+                if hub.enabled(self.store): system = f'{system}\n\n{HUB_LINE}'
+            else:
+                from . import handbook as hub
+                if hub.enabled(self.store): system = f'{system}\n\n{hub.ASSISTANT_LINE}'
             source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
@@ -632,8 +649,11 @@ class GeneralSession:
             # whole chat again - slower, dearer, and silently forgetful once the conversation
             # outgrew MAX_CONTEXT. Resumed, the CLI still has what it read and did last turn,
             # so the turn itself is all that has to be said.
-            brain = llm_mod.build_llm(self.store, pick=self.pick, model=self.model or None,
-                                      trace=visible, cancel=cancel, resume=self.cli_sid or None)
+            build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
+                              cancel=cancel, resume=self.cli_sid or None)
+            if browser_tools:
+                build_args.update(cli_tools=True, extra_env=browser_env)
+            brain = llm_mod.build_llm(self.store, **build_args)
             if not brain: raise RuntimeError('the selected AI connector is unavailable')
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
@@ -655,8 +675,20 @@ class GeneralSession:
                 logger.info(f'assistant could not resume {self.cli_sid} on task {self.task_id}; starting a new one')
                 self.cli_sid = ''
                 system, user = _prompt(self.store, self.task_id)
-                brain = llm_mod.build_llm(self.store, pick=self.pick, model=self.model or None,
-                                          trace=visible, cancel=cancel)
+                from . import handbook as hub
+                if self.pick.startswith('cli:'):
+                    system = f'{system}\n\n{POST_LINE}'
+                    if hub.enabled(self.store): system = f'{system}\n\n{HUB_LINE}'
+                elif hub.enabled(self.store):
+                    system = f'{system}\n\n{hub.ASSISTANT_LINE}'
+                if browser_tools:
+                    from . import browserview
+                    system = f'{system}\n\n{browserview.brief()}'
+                build_args = dict(pick=self.pick, model=self.model or None,
+                                  trace=visible, cancel=cancel)
+                if browser_tools:
+                    build_args.update(cli_tools=True, extra_env=browser_env)
+                brain = llm_mod.build_llm(self.store, **build_args)
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
                 reply = str(brain(system, user, max_tokens=limit, images=_images(paths)) or '').strip()
             self.cli_sid = getattr(brain, 'session_id', '') or self.cli_sid
@@ -667,6 +699,12 @@ class GeneralSession:
                 if choice:
                     self.provider, self.model = choice['label'], choice.get('model') or ''
             if not reply: raise RuntimeError('the model returned an empty response')
+            # An API-backed assistant has no shell, so Hub publishing rides as a private response
+            # envelope. Consume it before the response enters history or reaches the browser.
+            from . import handbook as hub
+            if hub.enabled(self.store):
+                reply = hub.publish_assistant_entries(self.store, self.task_id, reply, 'assistant')
+            if not reply: reply = 'Saved to the Hub.'
             # the assistant's own "and that's the job done" (selfclose.CHAT_LINE). The marker is a
             # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and
             # what gets shown - the sentence after it becomes the closing comment.
@@ -721,19 +759,23 @@ class GeneralSession:
     def close(self):
         # Coding sessions already ask this at wrap. General sessions used to bypass that branch,
         # so everything the assistant learned about the business disappeared with the chat even
-        # though Social explicitly holds more than technical facts. A session boundary is the
+        # though the Hub explicitly holds more than technical facts. A session boundary is the
         # conservative time to ask once; duplicate close calls are no-ops, and learning can never
         # prevent the session itself from closing.
-        if self.alive:
-            from . import handbook
+        was_alive = self.alive
+        if was_alive:
+            from . import handbook as hub
             transcript = conversation_text(self.store, self.task_id)
-            if transcript and handbook.enabled(self.store):
+            if transcript and hub.enabled(self.store):
                 try:
                     brain = llm_mod.build_llm(self.store, pick=self.pick or None, model=self.model or None)
-                    handbook.learn_from_session(self.store, self.task_id, transcript, 'assistant', llm=brain)
+                    hub.learn_from_session(self.store, self.task_id, transcript, 'assistant', llm=brain)
                 except Exception as e:
-                    logger.debug(f'handbook: assistant conversation {self.task_id} learned nothing - {e}')
+                    logger.debug(f'hub: assistant conversation {self.task_id} learned nothing - {e}')
         self.alive, self.ended = False, time.time()
+        if was_alive:
+            from . import browserview
+            browserview.close(self.sid)
         self._emit('\r\n\x1b[2msession closed\x1b[0m\r\n')
         for loop, q in list(self.subs):
             try: loop.call_soon_threadsafe(q.put_nowait, None)
@@ -775,6 +817,12 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     task = store.get_task(tid)
     if not task: raise ValueError(f'no task {tid}')
     if not handles(task): raise ValueError('assistant view is for general, research, marketing, and triage tasks')
+    # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
+    # backed by an API-only chat model, choose the first configured CLI for this task so it can
+    # actually drive the embedded browser. An explicit provider choice still wins.
+    if task.get('SourceRef') == 'assistant:setup' and connector_id is None and not model and not pick:
+        tool_cli = next((o for o in provider_options(store) if o.get('type') == 'cli'), None)
+        if tool_cli: pick = tool_cli['pick']
     existing = session_for(tid)
     if existing:
         if connector_id is not None or model or pick:
@@ -795,4 +843,7 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     from . import ownwork
     ownwork.ensure(store, tid, session.started, 'the assistant started here', actor)
     if task.get('Status') == 'open': store.update_task(tid, {'Status': 'in_progress'}, actor)
+    if session.browser_wanted:
+        from . import browserview
+        threading.Thread(target=browserview.start, args=(session.sid,), daemon=True).start()
     return session

@@ -1,13 +1,6 @@
-// SOUL.md, written from a short interview.
-//
-// STYLE.md and TRIAGE.md bootstrap themselves from history — the owner's sent mail IS how they
-// write. SOUL.md cannot: who you answer for, what an agent may never decide alone, which systems
-// are yours, who outranks whom. None of that is in a mailbox. It is in the owner's head, and
-// until somebody says it the document is about a stranger called John Smith.
-//
-// So it asks. Seven questions, none of them required, each one saying why it is being asked —
-// a form that explains itself gets answered; a form that does not gets abandoned. The AI writes
-// the document from the answers, and it lands in the editor as a first draft the owner owns.
+// SOUL.md comes from a seven-turn conversation, not a fixed questionnaire. The assistant sees
+// every earlier answer before it asks the next question, so a teacher, an accountant, a founder,
+// and a developer get four different interviews rather than the same repository-shaped form.
 import React, { useEffect, useState } from "react";
 import {
   Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -18,68 +11,96 @@ import api from "./api";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
 
 export default function SoulInterview({ open, onClose, onWritten }) {
-  const [qs, setQs] = useState(null);
-  const [ctx, setCtx] = useState({});
-  const [answers, setAnswers] = useState({});
-  const [busy, setBusy] = useState(false);
+  const [question, setQuestion] = useState(null);
+  const [total, setTotal] = useState(7);
+  const [answers, setAnswers] = useState([]);
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    api.get("/api/soul/interview").then(({ data }) => { setQs(data.questions || []); setCtx(data.context || {}); })
-      .catch((e) => setErr(e?.response?.data?.detail || "Could not load the questions"));
+    let live = true;
+    setQuestion(null); setAnswers([]); setAnswer(""); setErr(""); setBusy("question");
+    api.get("/api/soul/interview").then(({ data }) => {
+      if (!live) return null;
+      setTotal(data.total || 7);
+      return api.post("/api/soul/interview/next", { answers: [] });
+    }).then((result) => {
+      if (live && result) setQuestion(result.data.question);
+    }).catch((e) => {
+      if (live) setErr(e?.response?.data?.detail || "Could not start the interview");
+    }).finally(() => { if (live) setBusy(""); });
+    return () => { live = false; };
   }, [open]);
 
-  const answered = Object.values(answers).filter((v) => String(v || "").trim()).length;
-  const write = async () => {
-    setBusy(true); setErr("");
+  const advance = async (skip = false) => {
+    if (!question) return;
+    const next = [...answers, { q: question.q, a: skip ? "" : answer.trim() }];
+    if (next.length >= total && !next.some((row) => row.a)) {
+      setErr("Answer at least one question so the assistant has something true to write from.");
+      return;
+    }
+    setBusy(next.length >= total ? "write" : "question"); setErr("");
     try {
-      const { data } = await api.post("/api/soul/interview", { answers });
-      onWritten?.(data.doc);
-      onClose();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not write it"); }
-    setBusy(false);
+      if (next.length >= total) {
+        const { data } = await api.post("/api/soul/interview", { answers: next });
+        onWritten?.(data.doc); onClose();
+      } else {
+        const { data } = await api.post("/api/soul/interview/next", { answers: next });
+        setAnswers(next); setQuestion(data.question); setAnswer("");
+      }
+    } catch (e) { setErr(e?.response?.data?.detail || "The assistant could not continue the interview"); }
+    setBusy("");
   };
 
+  const number = question?.number || answers.length + 1;
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ pb: 0.5 }}>
-        Write SOUL.md from a few questions
+        Shape SOUL.md with the assistant
         <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
-          Answer what you can — every one is optional, and you edit the result like any other document.
-          {ctx.channels?.length ? ` It already knows about ${ctx.channels.join(", ")}${ctx.repos?.length ? ` and ${ctx.repos.length} repositor${ctx.repos.length === 1 ? "y" : "ies"}` : ""}.` : ""}
+          Seven questions, one at a time. Each new question follows what you have already said.
         </Typography>
       </DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "8px !important" }}>
-        {err && <Alert severity="error" onClose={() => setErr("")}>{err}</Alert>}
-        {qs === null ? <CircularProgress size={22} sx={{ m: 3, alignSelf: "center" }} /> : qs.map((q, i) => (
-          <Box key={q.key}>
-            <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{i + 1}. {q.q}</Typography>
-            {/* a form that says why it is asking gets answered */}
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>{q.why}</Typography>
-            <TextField fullWidth multiline minRows={2} maxRows={6} size="small" placeholder={q.placeholder}
-              value={answers[q.key] || ""} onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-              sx={{ bgcolor: "#fff", "& textarea": { fontSize: 13 } }} />
+      <LinearProgress variant={question ? "determinate" : "indeterminate"}
+        value={question ? Math.max(4, ((number - 1) / total) * 100) : undefined} />
+      <DialogContent sx={{ pt: "18px !important" }}>
+        {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 2 }}>{err}</Alert>}
+        {!question && busy === "question" ? (
+          <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", color: DIM, py: 4, justifyContent: "center" }}>
+            <CircularProgress size={18} /><Typography variant="body2">The assistant is choosing the first question…</Typography>
           </Box>
-        ))}
-        {!!ctx.writes_most?.length && (
-          <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
-            <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block" }}>
-              Who writes to you most, if it helps answer the people question
+        ) : question && (
+          <>
+            <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700, letterSpacing: ".06em" }}>
+              QUESTION {number} OF {total}
             </Typography>
-            <Typography variant="caption" sx={{ color: FAINT }}>{ctx.writes_most.slice(0, 6).join(" · ")}</Typography>
-          </Box>
+            <Typography sx={{ fontSize: 19, lineHeight: 1.35, fontWeight: 700, color: INK, mt: 0.75, mb: 1 }}>
+              {question.q}
+            </Typography>
+            <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>{question.why}</Typography>
+            <TextField autoFocus fullWidth multiline minRows={3} maxRows={8} size="small"
+              placeholder={question.placeholder || "Answer in your own words"} value={answer}
+              onChange={(e) => setAnswer(e.target.value)} disabled={!!busy}
+              onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && answer.trim()) advance(); }}
+              sx={{ bgcolor: "#fff", "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
+            {!!answers.length && (
+              <Box sx={{ mt: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>
+                  The assistant is carrying forward {answers.filter((row) => row.a).length} answer{answers.filter((row) => row.a).length === 1 ? "" : "s"} from the earlier questions.
+                </Typography>
+              </Box>
+            )}
+          </>
         )}
       </DialogContent>
-      {busy && <LinearProgress />}
       <DialogActions>
-        <Typography variant="caption" sx={{ color: FAINT, flex: 1, pl: 1.5 }}>
-          {answered ? `${answered} of ${qs?.length || 7} answered` : "Nothing answered yet"}
-        </Typography>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="contained" disableElevation disabled={busy || !answered} onClick={write}
-          startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>
-          {busy ? "Writing…" : "Write SOUL.md"}
+        <Button onClick={onClose} disabled={!!busy}>Cancel</Button>
+        {question && <Button onClick={() => advance(true)} disabled={!!busy}>Skip</Button>}
+        <Button variant="contained" disableElevation disabled={!!busy || !question || !answer.trim()}
+          onClick={() => advance()} startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>
+          {busy === "write" ? "Writing…" : busy === "question" ? "Thinking…" : number >= total ? "Write SOUL.md" : "Next question"}
         </Button>
       </DialogActions>
     </Dialog>

@@ -16,6 +16,9 @@ REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText',
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
+PROJECT_COLS = ('Name', 'Description', 'Active', 'CreatedBy', 'UpdatedBy')
+PROJECT_LINK_COLS = ('ProjectId', 'Kind', 'Value', 'Label', 'Confidence', 'EvidenceCount',
+                     'Confirmed', 'Source')
 ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
 ARTIFACT_COLS = ('TaskId', 'Name', 'ContentType', 'Size', 'Path', 'Kind', 'CreatedBy')
 
@@ -150,6 +153,17 @@ CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
   Source TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT);
+-- A small project graph. `project_link` is deliberately generic: repositories, email addresses,
+-- WhatsApp JIDs and future customer/system identities all point at the same project. Evidence is
+-- task-keyed so replaying startup history cannot make a guess grow more confident each launch.
+CREATE TABLE IF NOT EXISTS project (ProjectId INTEGER PRIMARY KEY, Name TEXT COLLATE NOCASE UNIQUE,
+  Description TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT);
+CREATE TABLE IF NOT EXISTS project_link (LinkId INTEGER PRIMARY KEY, ProjectId INTEGER NOT NULL,
+  Kind TEXT NOT NULL, Value TEXT COLLATE NOCASE NOT NULL, Label TEXT, Confidence REAL DEFAULT 0,
+  EvidenceCount INTEGER DEFAULT 0, Confirmed INTEGER DEFAULT 0, Source TEXT, CreatedAt TEXT, UpdatedAt TEXT,
+  UNIQUE(ProjectId, Kind, Value));
+CREATE TABLE IF NOT EXISTS project_evidence (EvidenceId INTEGER PRIMARY KEY, LinkId INTEGER NOT NULL,
+  TaskId INTEGER NOT NULL, Reason TEXT, CreatedAt TEXT, UNIQUE(LinkId, TaskId));
 CREATE TABLE IF NOT EXISTS doc (Name TEXT PRIMARY KEY, Content TEXT, UpdatedBy TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, BehindTaskId INTEGER,
   Agent TEXT, Reason TEXT, CreatedAt TEXT);
@@ -167,6 +181,11 @@ CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Te
 CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Kind TEXT, Text TEXT, ActionJson TEXT, Sig TEXT,
   Status TEXT DEFAULT 'open', SnoozeUntil TEXT, MessageId INTEGER, FirstSeen TEXT, LastSaid TEXT, SaidCount INTEGER DEFAULT 0,
   DecidedBy TEXT, DecidedAt TEXT);
+-- The pipe's memory (funnel.py): what the assistant has already surfaced in this walk, what the
+-- owner marked done or pushed back, and until when. Keys are the funnel item's own; the FACTS
+-- behind an item are never stored here, they are recomputed - a reply approved or a task closed
+-- leaves the pile on its own.
+CREATE TABLE IF NOT EXISTS funnel_state (Key TEXT PRIMARY KEY, Status TEXT, Until TEXT, Note TEXT, By TEXT, At TEXT);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
@@ -221,6 +240,9 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_sent ON message(SentAt, MessageId)',
     'CREATE INDEX IF NOT EXISTS idx_message_created ON message(CreatedAt)',
     'CREATE INDEX IF NOT EXISTS idx_message_from ON message(FromEmail)',
+    'CREATE INDEX IF NOT EXISTS idx_project_link_identity ON project_link(Kind, Value, Confidence)',
+    'CREATE INDEX IF NOT EXISTS idx_project_link_project ON project_link(ProjectId, Kind)',
+    'CREATE INDEX IF NOT EXISTS idx_project_evidence_task ON project_evidence(TaskId, LinkId)',
     'CREATE INDEX IF NOT EXISTS idx_route_message ON route(MessageId, RouteId)',
     'CREATE INDEX IF NOT EXISTS idx_route_task ON route(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_review_message ON review(MessageId, ReviewId)',
@@ -495,7 +517,7 @@ class SQLiteStore:
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
                          ('sharepoint', 'SharePoint'), ('google_sheets', 'Google Sheets'),
-                         ('knowledge', 'Knowledge base'), ('handbook', 'Company handbook'),
+                         ('knowledge', 'Knowledge base'), ('handbook', 'Company Hub'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
                          ('clickup', 'ClickUp'), ('todoist', 'Todoist'),
                          ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),
@@ -516,10 +538,12 @@ class SQLiteStore:
                                 (t, n, DEFAULT_ROLES.get(t, ''), t))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
                 self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
+            # Product rename without touching a name the owner customised.
+            self.cx.execute("UPDATE connector SET Name='Company Hub' WHERE Type='handbook' AND Name='Company handbook'")
             # The handbook ships ON - handbook.enabled has said so since it was written - but its
             # card is seeded like every other, at Active 0, and enabled() reads the card when one
             # exists. So the feature was off on every install that ever ran: coder.wrap skipped
-            # learn_from_session, `--learned` was refused, and the Social tab could only ever hold
+            # learn_from_session, `--learned` was refused, and the Hub tab could only ever hold
             # what a person typed. Flip it once and remember that we did, so an owner who turns it
             # off later does not find it back on after a restart.
             if self.cx.execute("SELECT 1 FROM setting WHERE Name='handbook_on_by_default'").fetchone() is None:
@@ -926,6 +950,24 @@ class SQLiteStore:
                           'AND m.SentAt>=? AND m.SentAt<=? AND NOT EXISTS (SELECT 1 FROM message x WHERE x.ConversationId=m.ConversationId '
                           "AND x.MessageId<>m.MessageId AND x.Status<>'skipped' AND x.SentAt>m.SentAt) ORDER BY m.SentAt DESC LIMIT ?",
                           (since, before, limit))
+    def own_reply_on_thread(self, conversation_id=None, task_id=None):
+        """The owner's own last word on a thread (or on a task's chain), however it was typed: a
+        'context' row is their reply read back out of Sent, 'out' is one Taskuary sent. The
+        assistant needs this to know the ball is in the other court - a reply typed in Outlook
+        counts exactly as much as one approved here."""
+        own = "(m.Status='context' OR IFNULL(m.Direction,'')='out')"
+        if conversation_id:
+            r = self._one(f"SELECT * FROM message m WHERE {own} AND m.ConversationId=? ORDER BY m.SentAt DESC LIMIT 1", (conversation_id,))
+            if r: return r
+        if not task_id: return None
+        return self._one(f"SELECT * FROM message m WHERE {own} AND m.TaskId=? ORDER BY m.SentAt DESC LIMIT 1", (task_id,))
+    def last_inbound_on_task(self, task_id):
+        """The newest message on this task that somebody SENT us - never our own reply, never a
+        report row. It is who a reply from this task goes to, which an item with no message of its
+        own (an agent that finished, a wrap-up) had no way to name."""
+        return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','skipped') "
+                         "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' "
+                         'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (task_id,))
     def last_inbound_in(self, conversation_id):
         return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','skipped') AND IFNULL(Direction,'in')<>'out' "
                          'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
@@ -982,6 +1024,20 @@ class SQLiteStore:
         self._exec('UPDATE idea SET ActionJson=? WHERE IdeaId=?', (json.dumps(action), idea_id))
     def set_ideas_message(self, ids, mid):
         if ids: self._exec(f"UPDATE idea SET MessageId=? WHERE IdeaId IN ({','.join('?' * len(ids))})", [mid, *ids])
+    # ── the pipe (funnel.py): surfaced / done / later, per item key ─────────────────────────
+    def funnel_states(self) -> dict:
+        return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
+    def set_funnel_state(self, key, status, by='owner', until=None, note=None):
+        self._exec('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
+                   'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
+                   (key, status, until, note, by, _now()))
+    def clear_funnel_states(self, statuses=('surfaced',)):
+        """A new chat walks the pile afresh: what was merely SHOWN comes back; what the owner
+        decided (done, later) stands."""
+        if statuses: self._exec(f"DELETE FROM funnel_state WHERE Status IN ({','.join('?' * len(statuses))})", list(statuses))
+    def dock_tasks(self, tag, limit=60):
+        """Every conversation the guide has had, newest first - the chats list."""
+        return self._rows('SELECT * FROM task WHERE SourceRef=? ORDER BY TaskId DESC LIMIT ?', (tag, int(limit)))
     # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────
     REPORT_RUNS_KEPT = 60          # per report - a month of half-hourly assistant checks is 1400, and nobody reads past the last few dozen
     def add_report_run(self, sid: int, rec: dict) -> int:
@@ -1522,6 +1578,87 @@ class SQLiteStore:
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')
     def set_memory_active(self, mid, active): self._exec('UPDATE memory SET Active=? WHERE MemoryId=?', (1 if active else 0, mid))
+
+    # projects and their identities ---------------------------------------------------------
+    def ensure_project(self, name: str, description: str = None, actor: str = 'system') -> int:
+        """Return the durable project id for a display name, creating it if needed."""
+        name = str(name or '').strip()
+        if not name: raise ValueError('a project needs a name')
+        row = self._one('SELECT ProjectId FROM project WHERE Name=? COLLATE NOCASE', (name,))
+        if row:
+            if description:
+                self._exec('UPDATE project SET Description=COALESCE(NULLIF(Description,\'\'),?), UpdatedBy=?, UpdatedAt=? '
+                           'WHERE ProjectId=?', (description, actor, _now(), row['ProjectId']))
+            return row['ProjectId']
+        try:
+            return self._insert('project', {'Name': name, 'Description': description, 'Active': 1,
+                                            'CreatedBy': actor, 'UpdatedBy': actor}, PROJECT_COLS,
+                                {'CreatedAt': _now(), 'UpdatedAt': _now()})
+        except sqlite3.IntegrityError:       # another ingest thread created the same name
+            return self._one('SELECT ProjectId FROM project WHERE Name=? COLLATE NOCASE', (name,))['ProjectId']
+
+    def upsert_project_link(self, project_id: int, kind: str, value: str, label: str = None,
+                            confidence: float = 0, confirmed: bool = False,
+                            source: str = 'system') -> int:
+        """Add one edge without weakening evidence already on it."""
+        kind, value = str(kind or '').strip().lower(), str(value or '').strip()
+        if not kind or not value: raise ValueError('a project link needs a kind and value')
+        row = self._one('SELECT * FROM project_link WHERE ProjectId=? AND Kind=? AND Value=? COLLATE NOCASE',
+                        (project_id, kind, value))
+        if row:
+            self._exec('UPDATE project_link SET Label=COALESCE(NULLIF(?,\'\'),Label), Confidence=MAX(Confidence,?), '
+                       'Confirmed=MAX(Confirmed,?), Source=COALESCE(NULLIF(?,\'\'),Source), UpdatedAt=? WHERE LinkId=?',
+                       (label, float(confidence or 0), 1 if confirmed else 0, source, _now(), row['LinkId']))
+            return row['LinkId']
+        return self._insert('project_link', {'ProjectId': project_id, 'Kind': kind, 'Value': value,
+                                             'Label': label, 'Confidence': float(confidence or 0),
+                                             'EvidenceCount': 0, 'Confirmed': 1 if confirmed else 0,
+                                             'Source': source}, PROJECT_LINK_COLS,
+                            {'CreatedAt': _now(), 'UpdatedAt': _now()})
+
+    def add_project_evidence(self, link_id: int, task_id: int, reason: str = 'owner chose repository') -> bool:
+        """Count a task once on an identity edge; return False when startup already replayed it."""
+        if self._one('SELECT 1 x FROM project_evidence WHERE LinkId=? AND TaskId=?', (link_id, task_id)):
+            return False
+        try:
+            self._exec('INSERT INTO project_evidence (LinkId,TaskId,Reason,CreatedAt) VALUES (?,?,?,?)',
+                       (link_id, task_id, reason, _now()))
+        except sqlite3.IntegrityError:
+            return False
+        n = self._one('SELECT COUNT(*) n FROM project_evidence WHERE LinkId=?', (link_id,))['n']
+        # One choice is a visible hypothesis; two independent owner choices are enough to route.
+        confidence = min(.96, .58 + .14 * int(n))
+        self._exec('UPDATE project_link SET EvidenceCount=?, Confidence=MAX(Confidence,?), UpdatedAt=? WHERE LinkId=?',
+                   (n, confidence, _now(), link_id))
+        return True
+
+    def clear_project_evidence(self, task_id: int):
+        """Forget what one former repo choice taught before recording its replacement."""
+        links = [r['LinkId'] for r in self._rows('SELECT DISTINCT LinkId FROM project_evidence WHERE TaskId=?',
+                                                 (task_id,))]
+        if not links: return
+        self._exec('DELETE FROM project_evidence WHERE TaskId=?', (task_id,))
+        for lid in links:
+            row = self._one('SELECT Confirmed FROM project_link WHERE LinkId=?', (lid,))
+            if not row: continue
+            n = self._one('SELECT COUNT(*) n FROM project_evidence WHERE LinkId=?', (lid,))['n']
+            if not n and not row['Confirmed']:
+                self._exec('DELETE FROM project_link WHERE LinkId=?', (lid,))
+            else:
+                confidence = 1.0 if row['Confirmed'] else min(.96, .58 + .14 * int(n))
+                self._exec('UPDATE project_link SET EvidenceCount=?, Confidence=?, UpdatedAt=? WHERE LinkId=?',
+                           (n, confidence, _now(), lid))
+
+    def list_projects(self, active_only=True):
+        return self._rows('SELECT * FROM project' + (' WHERE Active=1' if active_only else '') + ' ORDER BY Name')
+
+    def project_links(self, project_id: int = None, kind: str = None):
+        q = ('SELECT l.*, p.Name ProjectName, p.Description ProjectDescription FROM project_link l '
+             'JOIN project p ON p.ProjectId=l.ProjectId WHERE p.Active=1')
+        vals = []
+        if project_id is not None: q += ' AND l.ProjectId=?'; vals.append(project_id)
+        if kind is not None: q += ' AND l.Kind=?'; vals.append(kind)
+        return self._rows(q + ' ORDER BY l.Confirmed DESC, l.Confidence DESC, l.LinkId', vals)
     def get_doc(self, name):
         """The document AS WRITTEN - placeholders and all. This is what the editor loads and saves;
         every consumer that feeds a doc to an AI wants `doc()` instead."""
@@ -1836,7 +1973,7 @@ class SQLiteStore:
                  'was', 'will', 'has', 'but', 'all', 'our', 'your', 'their', 'its', 'any', 'out',
                  'can', 'when', 'what', 'how', 'why', 'who', 'does', 'did', 'about', 're'}
 
-    def lore_posts(self, topic=None, q=None, limit=50, sort='new', status='live') -> list:
+    def lore_posts(self, topic=None, q=None, limit=50, sort='new', status='live', kind=None) -> list:
         """Ranked by HOW MANY of the query's distinctive words a post carries, not by whether it
         carries all of them. Requiring all is right for a person typing three words and wrong for
         handbook.block, which hands a whole task's text in - that found nothing at all, because no
@@ -1852,8 +1989,10 @@ class SQLiteStore:
         # params bind in TEXTUAL order across the whole statement: the score expression in SELECT,
         # then the topic in WHERE, then the score expression again in WHERE. ORDER BY uses the
         # alias, which is why it costs no third copy.
-        w = (["l.Status='live'"] if status == 'live' else ["l.Status<>'live'"]) + (['l.Topic=?'] if topic else []) + ([f'({score}) > 0'] if terms else [])
-        p = [*like] + ([topic] if topic else []) + [*like]
+        w = ((["l.Status='live'"] if status == 'live' else ["l.Status<>'live'"])
+             + (['l.Topic=?'] if topic else []) + (['l.Kind=?'] if kind else [])
+             + ([f'({score}) > 0'] if terms else []))
+        p = [*like] + ([topic] if topic else []) + ([kind] if kind else []) + [*like]
         order = ('Hits DESC, ' if terms else '') + ('l.Score DESC, l.UpdatedAt DESC' if sort == 'top' or terms else 'l.UpdatedAt DESC')
         return self._rows(f'SELECT l.*, ({score}) Hits, (SELECT COUNT(*) FROM lore_comment WHERE LoreId=l.LoreId) Comments '
                           f'FROM lore l WHERE {" AND ".join(w)} ORDER BY {order} LIMIT ?', (*p, int(limit)))

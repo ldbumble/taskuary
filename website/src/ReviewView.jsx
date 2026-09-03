@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
+import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
 import { CcRow, ChannelIcon, RefChip, timeAgo, Empty, FilterPills, cleanText, splitQuoted } from "./ui.jsx";
 
@@ -64,13 +65,6 @@ const replyContext = (review) => {
   return deliveryTo(review);
 };
 
-// A proposed PLAYBOOK is a page of markdown inside a JSON envelope: show the page, and let the owner
-// edit it before approving - the edited page is what gets filed (proposals.execute).
-const proposalText = (t) => {
-  try { const j = JSON.parse(t || ""); if (j?.action === "write_playbook" && j.text) return j.text; } catch { /* a plain draft */ }
-  return t || "";
-};
-
 export default function ReviewView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("pending");
@@ -95,9 +89,9 @@ export default function ReviewView({ onOpenTask, onChanged }) {
     setBusy(r.ReviewId); setErr(""); setSendErr(null);
     try {
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
-        { verb, final_text: verb === "approve" ? (edits[r.ReviewId] ?? r.DraftText ?? "") : null, note: null,
+        { verb, final_text: verb === "approve" ? (edits[r.ReviewId] ?? reviewText(r)) : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" ? (cc[r.ReviewId] || []) : null });
+          cc: verb === "approve" && !proposalPresentation(r) ? (cc[r.ReviewId] || []) : null });
       if (data.send_error) setSendErr({ id: r.ReviewId, msg: data.send_error });
       load(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
@@ -132,7 +126,9 @@ export default function ReviewView({ onOpenTask, onChanged }) {
         <Empty>{filter === "pending" ? "Queue is clear — nothing needs you."
           : filter === "held" ? "Nothing is waiting on an agent."
           : "Nothing here."}</Empty>
-      ) : rows.map((r) => (
+      ) : rows.map((r) => {
+        const proposal = proposalPresentation(r);
+        return (
         <Box key={r.ReviewId} sx={{ ...card, mt: 1.25, p: 0, overflow: "hidden" }}>
           {/* header strip: what kind of decision this is + who/what it's about */}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", px: 1.5, py: 1,
@@ -144,12 +140,13 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ color: INK, fontWeight: 700, lineHeight: 1.25 }} noWrap>
-                {r.Subject || r.Title || "(no subject)"}
+                {proposal?.title || r.Subject || r.Title || "(no subject)"}
               </Typography>
               <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
-                {deliveryMeta(r).kind === "zoho_invoice" ? `Zoho invoice · ${deliveryMeta(r).period}`
+                {proposal ? proposal.context
+                  : deliveryMeta(r).kind === "zoho_invoice" ? `Zoho invoice · ${deliveryMeta(r).period}`
                   : r.Status === "held" ? "Reply on hold" : r.Kind === "auto" ? "Auto-answered" : "Draft reply"}
-                {" · To "}{replyContext(r)} · {timeAgo(r.CreatedAt)}
+                {!proposal && <> · To {replyContext(r)}</>} · {timeAgo(r.CreatedAt)}
               </Typography>
             </Box>
             <ChannelIcon channel={r.Channel} />
@@ -172,27 +169,35 @@ export default function ReviewView({ onOpenTask, onChanged }) {
 
             {r.Status === "pending" && (
               <Box sx={{ mt: 0.5 }}>
-                <Inbound r={r} />
+                {!proposal && <Inbound r={r} />}
                 <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
                   <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800,
-                    letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
+                    letterSpacing: "1.5px", flexShrink: 0 }}>{proposal?.destinationLabel || "TO"}</Typography>
                   <Typography variant="body2" sx={{ color: INK, fontWeight: 650 }} noWrap>
-                    {replyContext(r)}
+                    {proposal?.destination || replyContext(r)}
                   </Typography>
                 </Box>
-                <CcRow cc={cc[r.ReviewId] || []} setCc={(v) => setCc({ ...cc, [r.ReviewId]: v })}
-                  channel={r.Channel} />
+                {!proposal && <CcRow cc={cc[r.ReviewId] || []} setCc={(v) => setCc({ ...cc, [r.ReviewId]: v })}
+                  channel={r.Channel} />}
                 <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
-                  value={edits[r.ReviewId] ?? proposalText(r.DraftText)}
+                  value={edits[r.ReviewId] ?? reviewText(r)}
                   onChange={(e) => setEdits({ ...edits, [r.ReviewId]: e.target.value })}
-                  placeholder={r.DraftText ? "" : "No draft yet — hit Draft with AI"}
+                  placeholder={r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
                   inputProps={{ style: { fontSize: 12.5, lineHeight: 1.45 } }} />
                 <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
                   {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
                       asked you to declare something the text already shows. */}
                   {/* a channel that cannot carry the reply must SAY so: github with replies
                       off gets 'No response required' as THE action, not a send that bounces */}
-                  {r.CanSend === false ? (
+                  {proposal ? (
+                    <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
+                      onClick={() => decide(r, "approve")}
+                      title={proposal.kind === "playbook"
+                        ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
+                        : "Run the proposed action; nothing is sent to the sender"}>
+                      {busy === r.ReviewId ? proposal.busyLabel : proposal.approveLabel}
+                    </Button>
+                  ) : r.CanSend === false ? (
                     <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
                       sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
                       title={r.Channel === "github"
@@ -211,13 +216,13 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                         : "Approve & send"}
                     </Button>
                   )}
-                  {r.CanSend !== false && (
+                  {!proposal && r.CanSend !== false && (
                     <Button size="small" sx={{ color: "#867f74" }} disabled={busy === r.ReviewId}
                       onClick={() => decide(r, "no_reply")}>No reply needed</Button>
                   )}
-                  <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>Reject</Button>
+                  <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>{proposal?.rejectLabel || "Reject"}</Button>
                   <Box sx={{ flex: 1 }} />
-                  {deliveryMeta(r).kind !== "zoho_invoice" && <Button size="small" disabled={busy === r.ReviewId} onClick={() => redraft(r)}>
+                  {!proposal && deliveryMeta(r).kind !== "zoho_invoice" && <Button size="small" disabled={busy === r.ReviewId} onClick={() => redraft(r)}>
                     {busy === r.ReviewId ? <CircularProgress size={12} /> : r.DraftText ? "Redraft" : "Draft with AI"}
                   </Button>}
                 </Box>
@@ -263,7 +268,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             )}
           </Box>
         </Box>
-      ))}
+        );
+      })}
     </Box>
   );
 }

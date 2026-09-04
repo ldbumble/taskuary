@@ -104,7 +104,13 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /By the way/);
   assert.doesNotMatch(view, /tq-pipe-walls/);             // no funnel: what comes out next is the FIRST row
   assert.match(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);   // what is on the table sits at the TOP as CURRENT
-  assert.match(view, /<FeedView[^]*top=\{<Pile/);           // the pipe is the top of the Timeline's own rail
+  // The pipe is still the top of the Timeline's own rail - but `top` is a FUNCTION now, because a
+  // click on a pile row in task mode has to reach FeedView's stage, and an element could not be
+  // handed the way to do it. A row with no message behind it (a meeting, a wrapup, an agent) has
+  // nothing to open, so those still answer in the chat.
+  assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid \}\) => <Pile/);
+  assert.match(view, /stageMode === "task" && it\?\.mid && openByMid/);
+  assert.match(read("FeedView.jsx"), /typeof top === "function" \? top\(\{ openByMid \}\) : top/);
   assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage
   assert.match(view, /onPull=\{\(r\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
   assert.match(view, /window\.location\.hash = `msg=\$\{mid\}`/);   // "on the Timeline" pins the row over the chat

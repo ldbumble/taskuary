@@ -384,13 +384,19 @@ class EventsSocketTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import server
         saved = server.cfg['server'].pop('token', None)
+        # NOT `with TestClient(...)`: entering it runs the lifespan, which starts the poll thread,
+        # the startup catch-up and the waitroom - and any of them can emit a feed-changed that
+        # reaches the socket before the task-changed this test caused. That is what failed on
+        # macos-latest ('feed-changed' != 'task-changed'), intermittently, for no reason to do with
+        # the socket. live.serve() binds the loop itself on connect, so the socket needs no
+        # lifespan at all, and without one this is the only writer.
+        client = TestClient(server.app)
         try:
-            with TestClient(server.app) as c:
-                with c.websocket_connect('/api/events/ws') as ws:
-                    self.assertEqual(ws.receive_json()['type'], 'hello')
-                    server.store.create_task({'Title': 'ws-task', 'Status': 'open'}, 't')
-                    live.flush()
-                    self.assertEqual(ws.receive_json()['type'], 'task-changed')
+            with client.websocket_connect('/api/events/ws') as ws:
+                self.assertEqual(ws.receive_json()['type'], 'hello')
+                server.store.create_task({'Title': 'ws-task', 'Status': 'open'}, 't')
+                live.flush()
+                self.assertEqual(ws.receive_json()['type'], 'task-changed')
         finally:
             if saved is not None:
                 server.cfg['server']['token'] = saved

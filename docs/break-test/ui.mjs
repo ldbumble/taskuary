@@ -22,11 +22,11 @@ const state = () => p.evaluate(() => {
     const buttons = [...m.querySelectorAll("button")].filter((x) => x.offsetWidth > 0).map((x) => x.textContent.trim()).filter(Boolean);
     return `${role}: ${m.innerText.replace(/\s+/g, " ").slice(0, 260)}${buttons.length ? `  [buttons: ${buttons.join(" | ")}]` : ""}`;
   });
-  const rows = [...document.querySelectorAll(".tq-pipe-stack > div")].map((r) => r.innerText.replace(/\s+/g, " ").slice(0, 110));
-  const n = document.querySelector(".tq-pipe-head .n")?.textContent;
+  const rows = [...document.querySelectorAll(".tq-pile-stack > div")].map((r) => r.innerText.replace(/\s+/g, " ").slice(0, 110));
+  const n = String(document.querySelectorAll(".tq-pile-row").length);
   const btw = document.querySelector(".tq-btw")?.innerText.replace(/\s+/g, " ");
   const quick = [...document.querySelectorAll(".tq-quick button")].map((x) => `${x.textContent.trim()}${x.disabled ? "(off)" : ""}`);
-  const mouth = document.querySelector(".tq-pipe-mouth")?.textContent;
+  const mouth = ""   // the funnel's mouth is gone: the pipe is the top of the rail;
   const err = document.querySelector(".MuiAlert-message, .tq-err, [role=alert]")?.innerText?.slice(0, 200);
   const typing = !!document.querySelector(".tq-typing");
   return { n, rows, msgs, btw, quick, mouth, err, typing };

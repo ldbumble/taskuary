@@ -1,90 +1,58 @@
-/* The Assistant page: the pipe on the left, the chat on the right. Colour identifies (a dot, a
-   mark, a word), never tints a surface; the only loud colour is the oxblood dot on what is on you. */
-.tq-asst { display: grid; grid-template-columns: 372px minmax(0, 1fr); gap: 18px; min-height: 0; overflow: hidden; }
+/* The Assistant page: the Timeline's rail on the left with the pipe at its top, the chat on the
+   right. Colour identifies (a dot, a mark, a word), never tints a surface; the only loud colour is
+   the oxblood dot on what is on you. */
 .tq-asst-col { min-height: 0; display: flex; flex-direction: column; background: #fffdfb; border: 1px solid #e1dcd5; border-radius: 12px; overflow: hidden; }
 
-/* ── the pipe ─────────────────────────────────────────────────────────────────────────────── */
-.tq-pipe-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid #e1dcd5; }
-.tq-pipe-head b { font-size: 12.5px; color: #262521; }
-.tq-pipe-head .n { font: 700 10.5px/1 'IBM Plex Mono', Consolas, monospace; color: #6e685f; padding: 3px 7px; border-radius: 99px; background: #eee9e1; }
-.tq-pipe-sync { margin-left: auto; border: 1px solid #ddd6cb; background: #fffdfb; color: #6e685f; border-radius: 99px; padding: 3px 9px; font: 600 10px 'IBM Plex Mono', Consolas, monospace; cursor: pointer; white-space: nowrap; }
-.tq-pipe-sync:disabled { opacity: .6; cursor: default; }
-.tq-pipe-toggle { margin-left: 6px; display: inline-flex; border: 1px solid #ddd6cb; border-radius: 99px; overflow: hidden; }
-.tq-pipe-toggle button { border: 0; background: transparent; padding: 3px 9px; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; cursor: pointer; }
-.tq-pipe-toggle button.on { background: #eae4d8; color: #55697a; }
-.tq-pipe-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 10px 10px 4px; position: relative; display: flex; flex-direction: column; }
-/* gravity: the pile sits at the mouth and arrivals fall in from the empty space above it. The
-   funnel's walls are drawn behind the stack; the rows themselves narrow toward the mouth. */
-.tq-pipe-stack { margin-top: auto; }
-.tq-pipe-walls { position: absolute; left: 2px; right: 2px; bottom: 0; top: 0; pointer-events: none; background: linear-gradient(180deg, #ebe6dd00 0%, #e4ded4 45%, #d9d2c6 100%); clip-path: polygon(0 0, 100% 0, 93% 100%, 7% 100%); }
-.tq-pipe-walls::after { content: ""; position: absolute; inset: 0 3px 0 3px; background: linear-gradient(180deg, #fffdfb00 0%, #f7f4ee 45%, #f3efe8 100%); clip-path: polygon(0 0, 100% 0, 93% 100%, 7% 100%); }
-.tq-pipe-stack { position: relative; transition: height .5s cubic-bezier(.2,.8,.2,1); }
-/* a row is a Timeline row: the time on a rail at the left, the dot on the rail in the lane's colour,
-   then the card - so the pipe reads as the day, and triage's promotions visibly jump the queue */
-.tq-pipe-row { position: absolute; height: 30px; box-sizing: border-box; padding: 0 8px 0 0; border: 1px solid #e6e1d8; border-left: 3px solid #d3ccc1; border-radius: 8px; background: #fffdfb;
-  display: grid; grid-template-columns: 54px 20px minmax(0, 1fr) auto; grid-template-rows: 1fr; column-gap: 6px; align-items: center; cursor: pointer;
-  transition: top .55s cubic-bezier(.2,.8,.2,1), left .55s cubic-bezier(.2,.8,.2,1), right .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease, border-color .15s, box-shadow .15s; box-shadow: 0 1px 2px rgba(30,50,38,.04); }
-.tq-pipe-row:hover { border-color: #d8cfbe; box-shadow: 0 2px 8px rgba(47,107,79,.10); }
-.tq-pipe-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
-.tq-pipe-row.settling { border-style: dashed; }
-.tq-pipe-row.shown { opacity: .62; border-style: dashed; }   /* shown once, still waiting on you - it comes round again */
-/* the ring is INSET: an outer one made the highlighted row narrower than its neighbours to keep
-   it inside the funnel's wall, which read as the row being smaller (the owner, 2026-09-03) */
-.tq-pipe-row.next { border-color: #7d9a7c; border-left-color: #7d9a7c !important; background: #fffefb; box-shadow: inset 0 0 0 2px #dfe8dd, 0 10px 24px rgba(69,79,70,.16); z-index: 1; }
-.tq-pipe-next { flex: 0 0 auto; font: 800 8.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #fff; background: linear-gradient(90deg, #55697a, #7d9a7c); padding: 3px 6px; border-radius: 99px; }
-.tq-pipe-stack { transition: none; }
-.tq-pipe-dot { width: 7px; height: 7px; border-radius: 50%; background: #d3ccc1; display: inline-block; margin-right: 5px; vertical-align: middle; flex: 0 0 7px; }
-.tq-pipe-row .age { display: flex; align-items: center; }
-.tq-pipe-more { text-align: center; color: #8a847a; font: 500 10px 'IBM Plex Mono', Consolas, monospace; padding: 4px 0; }
-/* the task's own number, small, on any row that has one: what an agent holds is a task you can open */
-.tq-pipe-row .tq-pipe-ref { flex: 0 0 auto; font: 500 9px 'IBM Plex Mono', Consolas, monospace; color: #a09889; letter-spacing: .02em; }
-/* how close the mouth is - said once the count is small enough to be encouraging */
-.tq-pipe-cheer { position: relative; z-index: 1; text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 6px 0 2px; }
-/* The lane's word lives in the row's LAST COLUMN, not inside the flexing text. As a flex item it
-   was the thing that overflowed when the row narrowed - "reply pending" hanging over the right
-   border (the owner, 2026-09-03: "reply pending is still overhanging the border"). A grid column
-   reserves its width and the title's 1fr column is what gives way. */
-.tq-pipe-row .tq-pipe-tag { grid-column: 4; grid-row: 1; justify-self: end; }
-.tq-pipe-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; line-height: 15px; border-radius: 99px; border: 1px solid; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
-/* what just came out of the mouth: it drops below the neck, into the chat, and is gone */
-.tq-pipe-ghost { position: absolute; bottom: 4px; pointer-events: none; opacity: 0; animation: tqFall .65s cubic-bezier(.3,.7,.4,1) both; z-index: 2; border-color: #7d9a7c; box-shadow: 0 6px 18px rgba(69,79,70,.18); }
-@keyframes tqFall { 0% { transform: translateY(-44px) scale(1); opacity: 1; } 60% { transform: translateY(6px) scale(.97); opacity: .9; } 100% { transform: translateY(34px) scale(.92); opacity: 0; } }
-.tq-pipe-row .when { position: relative; height: 100%; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font: 500 9px 'IBM Plex Mono', Consolas, monospace; color: #8a847a; white-space: nowrap; border-right: 1px solid #ebe6de; }
-.tq-pipe-row .when i { position: absolute; right: -4px; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid #fffdfb; background: #d3ccc1; }
-.tq-pipe-row .sub .up { color: #526b53; font-weight: 700; margin-right: 6px; }
-.tq-pipe-row .logo { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; background: #f3efe8; border: 1px solid #e6e1d8; }
-/* the current one opens up: the rail and the logo span both lines, the second line says why it is here */
-.tq-pipe-row.current { height: 54px; grid-template-rows: 26px 22px; align-items: center; }
-.tq-pipe-row.current .tq-pipe-tag { align-self: center; }
-.tq-pipe-row.current .when, .tq-pipe-row.current .logo { grid-row: 1 / span 2; }
-.tq-pipe-row.current .logo { align-self: center; }
-.tq-pipe-row .sub { grid-column: 3; grid-row: 2; font-size: 10.5px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: start; }
-/* one line, like the Timeline: [next] ↑ sender  subject ……… [tag] */
-.tq-pipe-row .t { min-width: 0; display: flex; align-items: center; gap: 6px; }
-.tq-pipe-row .t .who { flex: 0 1 auto; min-width: 46px; max-width: 42%; font-size: 11px; font-weight: 700; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-pipe-row .t b { flex: 1 1 auto; min-width: 0; font-size: 11px; color: #4d4a43; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-.tq-pipe-row .t .up { flex: 0 0 auto; color: #526b53; font-weight: 800; font-size: 11px; }
-.tq-pipe-row.current { border-color: #55697a; border-left-color: #55697a !important; background: #f7f9fa; box-shadow: inset 0 0 0 2px #e4e9ee, 0 10px 24px rgba(69,79,70,.14); z-index: 1; cursor: default; padding-top: 3px; padding-bottom: 3px; }
-.tq-pipe-next.cur { background: linear-gradient(90deg, #41525f, #55697a); }
-.tq-pipe-foot { flex: 0 0 auto; padding: 0 10px 2px; border-top: 1px solid #efeae2; background: #fffdfb; }   /* the date and the mouth stay put under the pile, however tall it gets */
-.tq-pipe-day { text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 6px 0 0; }
-.tq-pipe-more { position: relative; z-index: 1; }
-.tq-pipe-mouth { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 3px 12% 8px; color: #8a847a; font: 600 10px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; }
-.tq-pipe-mouth::before, .tq-pipe-mouth::after { content: ""; flex: 1; height: 1px; background: #e1dcd5; }
-.tq-pipe-empty { flex: 1; display: grid; place-items: center; text-align: center; color: #6e685f; padding: 24px; }
-.tq-pipe-empty b { display: block; color: #3c5740; font-size: 15px; margin-top: 6px; }
-.tq-pipe-empty span { font-size: 11.5px; line-height: 1.5; }
-.tq-pipe-recent { padding: 6px 10px; }
-.tq-pipe-recent .r { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; padding: 6px 4px; border-bottom: 1px solid #efeae2; cursor: pointer; }
-.tq-pipe-recent .r:hover { background: #f6f4f1; }
-.tq-pipe-recent .r b { display: block; font-size: 11.5px; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.tq-pipe-recent .r span { display: block; font-size: 10px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ── the pipe, at the top of the rail ─────────────────────────────────────────────────────────
+   Rows share the Timeline row's geometry exactly - the 70px clock gutter, the 14px rail with its
+   dot, the card 8px in - so the pipe reads as the top of the same list, ranked instead of dated.
+   What comes out next is the FIRST row; the walls and the taper are gone (the owner, 2026-09-03:
+   "no more funnel... everything comes out from the top"). */
+.tq-pile { position: relative; padding: 4px 0 8px; }
+/* how close the pipe is to empty - said once the count is small enough to be encouraging */
+.tq-pile-cheer { text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 10px 0 2px; }
+.tq-pile-note { text-align: center; color: #8a847a; font: 500 10px 'IBM Plex Mono', Consolas, monospace; padding: 3px 0; }
+.tq-pile-stack { position: relative; }
+.tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 70px 14px minmax(0, 1fr); align-items: stretch;
+  transition: top .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease; }
+.tq-pile-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
+.tq-pile-row .when { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #a09b92; text-align: right; padding: 6px 12px 0 8px; white-space: nowrap; letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.tq-pile-row .rail { position: relative; }
+.tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
+.tq-pile-row .rail i { position: absolute; left: 2.5px; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: #d3ccc1; box-shadow: 0 0 0 3px #fffdfb; }
+.tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid #e1dcd5; border-left: 2px solid var(--edge, #d3ccc1); border-radius: 8px; padding: 3px 10px 4px; background: #fffdfb; cursor: pointer; transition: box-shadow .18s, border-color .18s; }
+.tq-pile-row .card:hover { border-color: #d8cfbe; border-left-color: var(--edge, #d3ccc1); box-shadow: 0 2px 8px rgba(47,107,79,.10); }
+.tq-pile-row.settling .card { border-style: dashed; }
+.tq-pile-row.shown .card { opacity: .62; border-style: dashed; }   /* shown once, still waiting on you - it comes round again */
+/* NEXT wears a ring in the working colour; CURRENT (on the table in the chat) the deeper one */
+.tq-pile-row.next .card { border-color: #7d9a7c; box-shadow: inset 0 0 0 1px #7d9a7c, 0 2px 10px rgba(47,107,79,.14); }
+.tq-pile-row.current { height: 54px; }
+.tq-pile-row.current .card { border-color: #55697a; background: #f7f9fa; box-shadow: inset 0 0 0 1px #55697a, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
+/* one line, like the Timeline: [next] ↑ TQ-0012 sender  subject ……… [tag] */
+.tq-pile-row .t { display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 22px; }
+.tq-pile-row .logo { display: flex; flex-shrink: 0; }
+.tq-pile-row .who { flex: 0 0 auto; max-width: 118px; font-size: 12px; font-weight: 600; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-row .t b { flex: 1 1 auto; min-width: 0; font-size: 11.5px; font-weight: 500; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-row .up { flex: 0 0 auto; color: #526b53; font-weight: 800; font-size: 11px; }
+.tq-pile-ref { flex: 0 0 auto; font: 500 9px 'IBM Plex Mono', Consolas, monospace; color: #a09889; letter-spacing: .02em; }
+.tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
+.tq-pile-next { flex: 0 0 auto; font: 800 8.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #fff; background: linear-gradient(90deg, #55697a, #7d9a7c); padding: 3px 6px; border-radius: 99px; }
+.tq-pile-next.cur { background: linear-gradient(90deg, #41525f, #55697a); }
+/* the current one opens up: the second line says why it is here */
+.tq-pile-row .sub { font-size: 10.5px; line-height: 1.5; padding: 2px 0 0 24px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-empty { padding: 56px 24px 24px; text-align: center; color: #6e685f; font-size: 11.5px; line-height: 1.5; }
+.tq-pile-empty .mark { display: block; font-size: 30px; line-height: 1; color: #3c5740; }
+.tq-pile-empty b { display: block; color: #3c5740; font-size: 15px; margin: 6px 0 4px; }
 
 /* ── the chat ─────────────────────────────────────────────────────────────────────────────── */
 .tq-chat-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 14px; border-bottom: 1px solid #e1dcd5; background: #fffdfb; }
 .tq-chat-head .who b { display: block; font-size: 14px; color: #262521; font-weight: 800; letter-spacing: .2px; }
-.tq-chat-head .who span { display: block; font-size: 10.5px; color: #6e685f; margin-top: 1px; }
+.tq-chat-head .who { min-width: 0; }
+.tq-chat-head .who span { display: block; font-size: 10.5px; color: #6e685f; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-chat-head .grow { flex: 1; }
+.tq-stage-mode { display: inline-flex; border: 1px solid #ddd6cb; border-radius: 99px; overflow: hidden; flex: 0 0 auto; }
+.tq-stage-mode button { border: 0; background: transparent; padding: 4px 10px; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; cursor: pointer; white-space: nowrap; }
+.tq-stage-mode button.on { background: #eae4d8; color: #55697a; }
 .tq-chat-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px 8px; scroll-behavior: smooth; }
 .tq-chat-inner { width: min(900px, 100%); margin: 0 auto; }
 .tq-msg { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; margin-bottom: 16px; }
@@ -168,9 +136,7 @@
 .tq-old-banner { padding: 6px 14px; background: #eee7d6; border-bottom: 1px solid #ddd2b9; color: #6b5f45; font-size: 11.5px; display: flex; align-items: center; gap: 10px; }
 
 @media (max-width: 899.95px) {
-  .tq-asst { grid-template-columns: minmax(0, 1fr); }
-  .tq-asst-pipe { display: none; }
-  .tq-asst-pipe.open { display: flex; position: fixed; inset: 56px 0 0 0; z-index: 40; border-radius: 0; }
+  .tq-phone-hide { display: none !important; }   /* the voice and AI knobs: room for the name and the mode toggle */
   .tq-msg.you .body { max-width: 92%; }
   .tq-chat-body { padding: 12px 12px 6px; }
   .tq-compose, .tq-btw { padding-left: 12px; padding-right: 12px; margin-left: 12px; margin-right: 12px; }

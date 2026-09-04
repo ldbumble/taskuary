@@ -498,10 +498,18 @@ const TodayStrip = () => {
   );
 };
 
-export default function FeedView({ onOpenTask, onChanged, active = true }) {
+// The rail can be the Assistant page's rail (AssistantView.jsx): `top` sits above the days (the
+// pipe), `stage` is what the stage shows when nothing is pinned (the chat), and rowMode "chat" makes
+// a click on a row `onPull` it into the conversation instead of opening it here - hover previews are
+// off in that mode, since the stage is a conversation and not a preview pane. A card's "open on the
+// Timeline" (#msg=) still pins the row over the chat; its close comes back. On a phone the chat and
+// the rail take turns: `railOnNarrow` says which one is up.
+export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
+  const chatMode = rowMode === "chat" && !!onPull;
+  const railShown = !narrow || !stage || railOnNarrow, stageShown = !narrow || (!!stage && !railOnNarrow);
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const calEvents = useCalToday();
   // The filter dock is a fixed flex sibling of the scroller. Rows never fade at its top edge;
@@ -567,7 +575,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
-  const [view, setView] = useState("");              // "" everything | "pending" needs me
+  // "unread" the pipe alone (the default when there is one: it empties as you work it) | "" everything | "pending" needs me
+  const [view, setView] = useState(top ? "unread" : "");
+  const views = top ? [{ key: "unread", label: "unread", c: PILL_COLORS.pick }, { key: "", label: "all", c: PILL_COLORS.pick }, VIEW_FILTERS[1]] : VIEW_FILTERS;
   const [openFolds, setOpenFolds] = useState(() => new Set());   // conversations unfolded by hand
   const [cat, setCat] = useState("");                // broad content family; exact choices live in the source picker
   const [pick, setPick] = useState("");              // "" all in category | "channel:x" | "src:channel:name"
@@ -818,18 +828,25 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
     if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
     setDetail(d);
   };
-  // #msg=<id> - a card on the Assistant tab pointing here. Opened once the row is on screen; the
-  // hash is cleared so a reload does not reopen it. A row older than the loaded page stays a plain
-  // Timeline visit, which is still the right place to have landed.
-  useEffect(() => {
+  // what a click on a row does: pull it into the chat (rowMode chat) or open it on the stage
+  const openRow = (row) => (chatMode ? onPull(row) : drill(row));
+  // #msg=<id> - a card in the chat pointing here. Opened once the row is on screen, and again whenever
+  // the hash changes while the rows are already here; the hash is cleared so a reload does not reopen
+  // it. A row older than the loaded page stays a plain Timeline visit, which is still the right place
+  // to have landed. It pins the row in EVERY mode: over the chat, this is how a card says "read it whole".
+  const rowsRef = useRef(null); rowsRef.current = rows;
+  const openHash = useCallback(() => {
     const m = /^#msg=(\d+)/.exec(window.location.hash || "");
-    if (!m || !rows) return;
-    const row = rows.find((r) => r.MessageId === Number(m[1]));
+    const cur = rowsRef.current;
+    if (!m || !cur) return;
+    const row = cur.find((r) => r.MessageId === Number(m[1]));
     if (!row) return;
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     drill(row);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows]);
+  }, []);
+  useEffect(() => { openHash(); }, [rows, openHash]);
+  useEffect(() => { window.addEventListener("hashchange", openHash); return () => window.removeEventListener("hashchange", openHash); }, [openHash]);
   // A selected message is a LIVE row, not a frozen copy of what it looked like at click time.
   // During ingest it moves from taskless/triaging to routed (often gaining a TaskId). Refresh
   // both the row and the kind of detail endpoint at that boundary, or the open panel circles
@@ -879,7 +896,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
   const [panelLock, setPanelLock] = useState(false);
   const hoverSelect = (row) => {
     clearTimeout(hoverTimer.current);
-    if (narrow) return;                                 // a phone taps; the drawer opens on the tap
+    if (narrow || chatMode) return;                     // a phone taps; the drawer opens on the tap - and a chat is not a preview pane
     if (!hoverArmed.current) return;
     if (sel?.MessageId === row.MessageId) return;
     if (sel && ((editText ?? "").trim() || panelLock)) return;   // don't yank an OPEN panel mid-edit
@@ -1022,7 +1039,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
 
       {/* ── the rail ────────────────────────────────────────────────────────────── */}
       <Box data-tq-keep onMouseEnter={disarmClose} onMouseLeave={armClose}
-        sx={{ display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", position: "relative",
+        sx={{ display: railShown ? "flex" : "none", flexDirection: "column", minHeight: 0, overflow: "hidden", position: "relative",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
 
         {/* the header. Frozen by construction now rather than by position:sticky - it is a
@@ -1036,10 +1053,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
           {/* wraps: on a phone the pickers and New drop to a second row as one group, under the
               pill, instead of the whole row scrolling sideways */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: "wrap" }}>
-            {narrow
+            {narrow && !top
               ? <NeedsMe on={view === "pending"} n={(rows || []).filter(needsYou).length}
                   onClick={() => setView(view === "pending" ? "" : "pending")} />
-              : <FilterPills options={VIEW_FILTERS} value={view} onChange={setView} />}
+              : <FilterPills options={views} value={view} onChange={setView} />}
             {/* on a phone the pickers take a full second line and New sits beside the pill; from md
                 up the three share one line, right-aligned */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: { md: "auto" }, minWidth: 0,
@@ -1202,6 +1219,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
             boxShadow: "none !important", transition: "none !important", cursor: "default",
           } }}>
           <FunnelBar onOpenTask={onOpenTask} />
+          {view === "unread" ? top : (
           <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
             {syncing && (
               <Box sx={{ position: "absolute", inset: 0, zIndex: 4, display: "flex",
@@ -1249,11 +1267,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
                             filter that should have shown three rows showed four. */}
                         {!view && !cat && !pick && meetingsAt(day, items, i).map((e, j) => (
                           <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
-                            preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); drill(p); }}
+                            preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); openRow(p); }}
                             onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                         ))}
                         {fold && (
-                          <ThreadFold entry={fold} open={openFolds.has(fold.tid)} onOpenRow={drill} sel={sel}
+                          <ThreadFold entry={fold} open={openFolds.has(fold.tid)} onOpenRow={openRow} sel={sel}
                             onToggle={() => setOpenFolds((cur) => {
                               const next = new Set(cur);
                               if (next.has(fold.tid)) next.delete(fold.tid); else next.add(fold.tid);
@@ -1281,7 +1299,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
                               short rest and unfolds a second line; click pins it. It used to
                               unfold on hover alone, and a cursor sweeping the list heaved every
                               row below it. */}
-                          <Box data-tq-keep data-tq-open={open ? "true" : "false"} onClick={() => drill(r)}
+                          <Box data-tq-keep data-tq-open={open ? "true" : "false"} onClick={() => openRow(r)}
                             onMouseMove={() => hoverSelect(r)} onMouseLeave={hoverCancel}
                             sx={{ "--tq-row-edge": edgeOf(st), bgcolor: ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
                               border: `1px solid ${BORDER}`, borderLeft: `2px solid ${edgeOf(st)}`,
@@ -1338,7 +1356,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
                   {/* meetings that started before the oldest message of the day shown so far */}
                   {!view && !cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
                     <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
-                            preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); drill(p); }}
+                            preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); openRow(p); }}
                             onPick={(ev) => { setSel(null); setCalSel(ev); }} />
                   ))}
                 </Box>
@@ -1348,6 +1366,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
             <Box ref={endRef} sx={{ height: 8 }} />
             {!!sorted.length && !noMore && <CircularProgress size={16} sx={{ display: "block", mx: "auto", my: 1 }} />}
           </Box>
+          )}
         </Box>
         {bottomFade && (
           <Box data-tq-bottom-fade={fade} aria-hidden sx={{
@@ -1359,17 +1378,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true }) {
       </Box>
 
       {/* ── the stage: the task, which is what this screen is actually for ────────── */}
+      {/* a flex column so the chat can fill it; the canvas and the event panel size themselves to 100% */}
       <Box data-tq-keep data-tq-timeline-stage onMouseEnter={disarmClose} onMouseLeave={armClose}
-        sx={{ minWidth: 0, minHeight: 0, display: { xs: "none", md: "block" } }}>
+        sx={{ minWidth: 0, minHeight: 0, display: stageShown ? "flex" : "none", flexDirection: "column", "& > *": { minHeight: 0 } }}>
         {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} onOpenTask={onOpenTask} />
           : sel ? (
             <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
-              decide={decide} onOpenTask={onOpenTask} onClose={() => setSel(null)}
+              decide={decide} onOpenTask={onOpenTask} onClose={() => { setPinned(false); setSel(null); }}
               onSkipped={() => { setSel(null); load(); onChanged?.(); }}
               onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
               onMessageChanged={messageBodyChanged}
               sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
-          ) : (
+          ) : stage || (
             // an empty stage is not a broken one. It says what the rail is for and what the
             // one button on it does, which is the only thing a new install has to be told.
             <Box sx={{ height: "100%", border: `1px dashed ${BORDER}`, borderRadius: 2,

@@ -83,7 +83,7 @@ const inspect = (page) => page.evaluate(() => {
   };
 
   // ── top-level tabs ──────────────────────────────────────────────────────────────────────
-  const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Social", "Connections", "Docs", "Settings"];
+  const TABS = ["Board", "Tasks", "Review", "Reports", "Assistant", "Hub", "Connections", "Docs", "Settings"];
   const openTab = async (t) => {
     let ok = await clickText(page, t);
     if (!ok && mode === "mobile") {
@@ -97,8 +97,8 @@ const inspect = (page) => page.evaluate(() => {
     return ok;
   };
 
-  // Timeline: the list, a row, and each drawer tab
-  await openTab("Timeline"); await stop("timeline");
+  // the Timeline is the Assistant tab's rail now: the list, a row, and each drawer tab
+  await openTab("Assistant"); await stop("timeline");
   const rowBox = await page.evaluate(() => {
     // the state word sits at the right end of every row card; the row itself is to its left
     // the word rides with its mark in one span ("👋agent waving"), so allow the emoji child

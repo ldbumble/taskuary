@@ -12,7 +12,7 @@ const click = (label) => p.evaluate((l) => { const el = [...document.querySelect
 const last = () => p.evaluate(() => { const ms = [...document.querySelectorAll(".tq-msg")]; return ms.slice(-2).map((m) => m.innerText.replace(/\s+/g, " ").slice(0, 140)); });
 const type = async (t) => { await p.type(".tq-compose-box textarea", t); await p.keyboard.press("Enter"); };
 const steps = [];
-const note = async (what) => { steps.push([what, await last(), await p.evaluate(() => document.querySelector(".tq-pipe-head .n")?.textContent)]); };
+const note = async (what) => { steps.push([what, await last(), await p.evaluate(() => String(document.querySelectorAll(".tq-pile-row").length))]); };
 await p.setViewport({ width: 1440, height: 900 });
 await p.goto(url, { waitUntil: "networkidle0" }); await wait(8000);
 await note("open");
@@ -23,8 +23,7 @@ await type("not my issue, let them sort it out"); await wait(4500); await note("
 await type("what did Marcus send?"); await wait(4500); await note("typed lookup: Marcus");
 await click("Next"); await wait(3500); await note("Next chip");
 await click("Read it"); await wait(1500); await note("Read it (inline)");
-await p.evaluate(() => [...document.querySelectorAll(".tq-pipe-toggle button")].find((x) => x.textContent === "All")?.click()); await wait(1500);
-await p.evaluate(() => document.querySelector(".tq-pipe-recent .r")?.click()); await wait(3500); await note("All → pull a row");
+await p.evaluate(() => document.querySelector(".tqRow [data-tq-keep]")?.click()); await wait(3500); await note("Timeline row → pull it in");
 await click("Past chats"); await wait(800); await note("chats open");
 await p.evaluate(() => document.querySelector(".tq-chats-head button")?.click()); await wait(300);
 await click("New chat — archives this one"); await wait(6000); await note("new chat");

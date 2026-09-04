@@ -1,12 +1,12 @@
 {
  "/api/version": {
-  "version": "0.3.3.1",
+  "version": "0.3.3.2",
   "started": "2026-09-03 10:23:19"
  },
  "/api/build": {
   "asset": "index-CLWo_lre.js",
-  "version": "0.3.3.1",
-  "disk_version": "0.3.3.1"
+  "version": "0.3.3.2",
+  "disk_version": "0.3.3.2"
  },
  "/api/demo": {
   "demo": true,

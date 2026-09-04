@@ -12,10 +12,10 @@ console.log("mobile: pipe visible?", await p.evaluate(() => { const el = documen
 await p.setViewport({ width: 1440, height: 900, isMobile: false, deviceScaleFactor: 1 });
 await p.goto(url, { waitUntil: "load" }); await wait(5000);
 await clickText("All"); await wait(1500); await p.screenshot({ path: `${out}/all-list.png` });
-console.log("All rows:", await p.evaluate(() => [...document.querySelectorAll(".tq-pipe-recent .r")].slice(0, 8).map((r) => r.innerText.replace(/\s+/g, " ").slice(0, 90))));
-await p.evaluate(() => [...document.querySelectorAll(".tq-pipe-recent .r")].find((r) => /payroll portal/i.test(r.innerText))?.click()); await wait(9000);
+console.log("All rows:", await p.evaluate(() => [...document.querySelectorAll(".tqRow [data-tq-keep]")].slice(0, 8).map((r) => r.innerText.replace(/\s+/g, " ").slice(0, 90))));
+await p.evaluate(() => [...document.querySelectorAll(".tqRow [data-tq-keep]")].find((r) => /payroll portal/i.test(r.innerText))?.click()); await wait(9000);
 console.log("pulled outage row ->", await last());
-await p.evaluate(() => [...document.querySelectorAll(".tq-pipe-recent .r")].find((r) => /Nightly export/i.test(r.innerText))?.click()); await wait(9000);
+await p.evaluate(() => [...document.querySelectorAll(".tqRow [data-tq-keep]")].find((r) => /Nightly export/i.test(r.innerText))?.click()); await wait(9000);
 console.log("pulled deleted TQ-0002 row ->", await last());
 const btw = await p.evaluate(() => document.querySelector(".tq-btw")?.innerText.replace(/\s+/g, " ")); console.log("BTW:", btw);
 if (btw) { await clickText("Show me"); await wait(9000); console.log("Show me ->", await last()); }

@@ -58,12 +58,9 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
   useLayoutEffect(() => {
     if (!open || !expanded) { setExpandedBounds(null); return undefined; }
     const measure = () => {
-      const stage = activeTab === "Timeline" ? document.querySelector("[data-tq-timeline-stage]") : null;
-      const rect = stage?.getBoundingClientRect();
-      if (rect && rect.width > 0 && rect.height > 0) {
-        setExpandedBounds({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
-        return;
-      }
+      // (the Timeline's stage lives on the Assistant tab now, where this bubble is never mounted -
+      // so the expanded panel always takes the window's own right-hand side)
+      void activeTab;
       if (window.innerWidth < 900) {
         setExpandedBounds({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight });
         return;
@@ -137,7 +134,7 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
               </Button>
             ))}
             <Box sx={{ flex: 1 }} />
-            {["Timeline", "Tasks", "Review"].map((tab) => (
+            {["Assistant", "Tasks", "Review"].map((tab) => (
               <Button key={tab} size="small" endIcon={<LaunchIcon sx={{ fontSize: "12px !important" }} />} onClick={() => go(tab)}
                 sx={{ minWidth: 0, px: 0.55, py: 0.2, fontSize: 10.5, color: DIM, textTransform: "none" }}>{tab}</Button>
             ))}

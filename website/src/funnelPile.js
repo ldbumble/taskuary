@@ -3,7 +3,7 @@
 // Pure and dependency-free so it runs under bare node (test/funnelPile.test.mjs); colour is named
 // by ROLE (theme.jsx ROLES) so this file cannot drift from the palette.
 
-// top of the pipe first, mouth last: the SERVER sends next-first, the column draws it upside down
+// the lanes, most urgent first - the order the server ranks the pile in
 export const LANES = ["blocked", "time", "approve", "asked", "forgotten", "report", "fyi", "working"];
 export const LANE_META = {
   blocked:   { word: "agent waiting", role: "you",     mark: "👋", hint: "an agent stopped and is waiting on you — it is blocking work" },
@@ -26,8 +26,10 @@ export const KIND_META = {
 };
 export const rowMeta = (item) => ({ ...laneMeta(item?.lane), ...(KIND_META[item?.kind] || {}) });
 
-// The column is drawn top → bottom = last out → next out. `items` arrive next-first.
-export const drawOrder = (items) => [...(items || [])].reverse();
+// The column is drawn top → bottom = next out → last out: the SERVER sends next-first and the rail
+// keeps that order, so what triage moved up is what you see first (it used to be drawn upside down,
+// mouth at the bottom of a funnel; the owner, 2026-09-03: "everything comes out from the top").
+export const drawOrder = (items) => [...(items || [])];
 
 // Which keys just LEFT: drawn last time, gone now - they fall out of the mouth
 export const departures = (prevItems, items) => {

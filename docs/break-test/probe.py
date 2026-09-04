@@ -90,7 +90,8 @@ def snap(s):
 def diff(a, b): return {k: f"{a.get(k)} -> {b.get(k)}" for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)}
 
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid', 'not_ours_sender': 'mid',
-         'coder': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid', 'answer_agent': 'tid', 'rerun': 'source_id', 'close': 'tid'}
+         'coder': 'mid', 'regular_agent': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid', 'answer_agent': 'tid',
+         'rerun': 'source_id', 'close': 'tid'}
 SETTLES = ('later', 'skip', 'next', 'done', 'closed', 'ack')     # the verbs that move the walk on
 
 def page(c, cur, d, key, calls=None):
@@ -122,11 +123,20 @@ def page(c, cur, d, key, calls=None):
     elif verb == 'remember': post('/api/memory', {'note': d.get('text'), 'scope': 'global'}); calls.append('PAGE: returns without settling or surfacing'); return calls
     elif verb == 'not_ours': post(f'/api/messages/{mid}/file', {'learn': False})
     elif verb == 'not_ours_remember': post(f'/api/messages/{mid}/not-mine', {'scope': 'subject'})
-    elif verb == 'coder': post(f'/api/messages/{mid}/dispatch', {'instruction': d.get('text') or None})
+    # dispatch REFUSES to guess which agent (server.dispatch_message: 422 'Choose an agent type'),
+    # because reading it off triage's kind is the bug that endpoint exists to prevent - so the page
+    # names it, and the two hand-off verbs are the two answers (AssistantView.decide).
+    elif verb == 'coder': post(f'/api/messages/{mid}/dispatch', {'kind': 'coding', 'instruction': d.get('text') or None})
+    elif verb == 'regular_agent': post(f'/api/messages/{mid}/dispatch', {'kind': 'general', 'instruction': d.get('text') or None})
+    # a follow-up is drafted through the pile's own door - the mail it chases may never have been a task
+    elif verb == 'followup': post('/api/concierge/act', {'key': key, 'verb': 'followup'})
     elif verb == 'mine': post(f'/api/messages/{mid}/mine', {'kind': 'task'})
     elif verb == 'rerun': post(f"/api/reports/{cur['source_id']}/rerun")
     elif verb == 'close': r = c.patch(f"/api/tasks/{cur['tid']}", json={'Status': 'done'}); calls.append(f'PATCH task -> {r.status_code}')
     elif verb == 'stop_agent':
+        # NOTE: `effects` stays empty here and that is the HARNESS, not a bug. Ending a session is
+        # in-memory, and run_one mocks live_sessions and empties terminal.SESSIONS - so there is no
+        # real pty to kill and snap() (tasks, reviews, messages, funnel_state) cannot see it either way.
         post(f"/api/tasks/{d['taskId']}/wrap", {'close': True}) if d.get('wrap') else post(f"/api/tasks/{d['taskId']}/agent/stop"); return calls
     elif verb in ('walkthrough', 'created', 'clear'): calls.append(f'PAGE: receipt only ({verb})'); return calls
     elif verb == 'setup': post('/api/concierge/setup', {'text': d.get('text')})

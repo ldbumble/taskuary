@@ -353,6 +353,23 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual(t['Kind'], 'coding')
         self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_code'])
 
+    def test_make_it_a_task_preserves_a_closed_general_task_and_uses_a_new_regular_agent(self):
+        s, mid, idea = self._posted()
+        tid = s.create_task({'Title': 'Read this', 'Kind': 'general', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        closed_at = s.get_task(tid)['ClosedAt']
+        self.assertTrue(closed_at)
+        with mock.patch('taskuary.ingest._spawn') as spawn:
+            out = assistant.act(s, idea['IdeaId'], 'task')
+        self.assertNotEqual(out['taskId'], tid)
+        old = s.get_task(tid)
+        self.assertEqual((old['Title'], old['Status'], old['ClosedAt']), ('Read this', 'done', closed_at))
+        task = s.get_task(out['taskId'])
+        self.assertEqual((task['Kind'], task['Status'], task['ClosedAt']), ('general', 'open', None))
+        self.assertEqual(task['SourceRef'], f'assistant:idea:{idea["IdeaId"]}')
+        self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_general'])
+
     def test_dismiss_teaches_and_stays_dismissed_until_the_facts_change(self):
         s, mid, idea = self._posted()
         s.set_setting('learn_enabled', '1', 't')

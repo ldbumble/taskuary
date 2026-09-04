@@ -146,7 +146,8 @@ class WhatsAppTests(unittest.TestCase):
         s.save_source({'Channel': 'whatsapp', 'Address': '4242@g.us',
                        'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
         cfg = json.loads(c.get('ConfigJson') or '{}')
-        s.set_connector_config(c['ConnectorId'], {**cfg, 'notify_chat': 'me@s.whatsapp.net'})
+        s.set_connector_config(c['ConnectorId'], {**cfg, 'notify_chat': 'alerts@s.whatsapp.net',
+                                                   'assistant_chat': 'me@s.whatsapp.net'})
         c = s.get_connector_by_type('whatsapp', with_secret=True)
         calls = []
         def fake(_c, path, body=None):
@@ -155,7 +156,7 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(messengers, '_wa', fake):
             self.assertEqual(messengers.poll_whatsapp(s, c, s.list_sources(), llm=None), 0)
         self.assertEqual(calls[0], ('/filter', {
-            'allDirect': True, 'jids': ['4242@g.us', 'me@s.whatsapp.net']}))
+            'allDirect': True, 'jids': ['4242@g.us', 'alerts@s.whatsapp.net', 'me@s.whatsapp.net']}))
         self.assertTrue(calls[1][0].startswith('/messages?after='))
 
     def test_the_pairing_qr_is_drawn_for_the_card_and_a_down_bridge_is_a_state(self):
@@ -190,6 +191,21 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(server.store, 'get_connector', return_value={**c, 'Type': 'whatsapp'}), \
              mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
             self.assertEqual(len(c_api.get(f"/api/connectors/{c['ConnectorId']}/wa/chats").json()['data']), 2)
+
+    def test_the_bridge_account_roster_is_preferred_over_the_legacy_message_rollup(self):
+        s, c = self._store()
+        calls = []
+        roster = {'chats': [
+            {'jid': '120363@g.us', 'group': True, 'name': 'Operations', 'n': 0,
+             'last': 1755700300, 'snippet': ''},
+            {'jid': '155@s.whatsapp.net', 'group': False, 'name': 'Marcus', 'n': 4,
+             'last': 1755700200, 'snippet': ''}]}
+        with mock.patch.object(messengers, '_wa', side_effect=lambda c_, p, body=None: (calls.append(p), roster)[1]):
+            rows = messengers.wa_chats(c)
+        self.assertEqual(calls, ['/chats'])
+        self.assertEqual([(r['jid'], r['name']) for r in rows],
+                         [('120363@g.us', 'Operations'), ('155@s.whatsapp.net', 'Marcus')])
+        self.assertTrue(rows[0]['last'].startswith('2025-'))
 
     def test_blocked_chat_is_discoverable_without_its_content(self):
         s, c = self._store()

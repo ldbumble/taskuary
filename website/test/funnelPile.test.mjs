@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, ageText, arrivals, cardFor, departures, drawOrder, keysOf, laneMeta, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, ageText, arrivals, cardFor, currentItemFromPile, departures, drawOrder, followsItem, keysOf, laneMeta, statusLine, topAlert } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -51,7 +51,17 @@ test("the card under a line is decided by kind, one card per kind", () => {
   assert.strictEqual(cardFor({ kind: "task" }), "task");
   assert.strictEqual(cardFor({ kind: "fyis" }), "fyis");
   assert.strictEqual(cardFor({ kind: "wrapup" }), "wrapup");
+  assert.strictEqual(cardFor({ kind: "todo", lane: "working", tid: 358 }), "agent");
   assert.strictEqual(cardFor(null), null);
+});
+
+test("a dispatched message follows its task into the live agent row", () => {
+  const card = { key: "msg:44", tid: 358, kind: "todo", lane: "asked" };
+  const working = { key: "agent:358", tid: 358, kind: "todo", lane: "working", agent: "coder", sid: "abc" };
+  assert.equal(currentItemFromPile(card, { current: null, items: [working] }), working);
+  assert.equal(followsItem(card, working), true);
+  assert.equal(cardFor(working), "agent");
+  assert.equal(followsItem(card, { key: "agent:999", tid: 999, lane: "working" }), false);
 });
 
 test("ages read as a person says them", () => {
@@ -96,7 +106,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.ok(!tabs.includes("Timeline"));                    // the Timeline is the Assistant's rail now...
   assert.match(page, /if \(t === "Timeline"\) t = "Assistant"/);   // ...and old links to it still land
   assert.doesNotMatch(page, /<FeedView/);                   // the rail is mounted by the Assistant, nowhere else
-  assert.match(page, /useState\("Assistant"\)/);
+  assert.match(page, /return "Assistant";/);              // still the default, after honoring a deep link first
   assert.match(page, /tab !== "Assistant" && <FloatingAssistant/);
   assert.match(page, /t === "Assistant" \? \(/);
   assert.match(page, /<TaskuaryMark size=\{18\} \/>\{t\}/);
@@ -107,26 +117,28 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /By the way/);
   assert.doesNotMatch(view, /tq-pipe-walls/);             // no funnel: what comes out next is the FIRST row
   assert.match(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);   // what is on the table sits at the TOP as CURRENT
-  // The pipe is still the top of the Timeline's own rail - but `top` is a FUNCTION now, because a
-  // click on a pile row in task mode has to reach FeedView's stage, and an element could not be
-  // handed the way to do it. A row with no message behind it (a meeting, a wrapup, an agent) has
-  // nothing to open, so those still answer in the chat.
+  // Unread is the ranked pipe again: it is the only source for CURRENT/NEXT and for what the chat
+  // will actually ask about. All remains FeedView's chronological history.
   assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid \}\) => <Pile/);
-  assert.match(view, /stageMode === "task" && it\?\.mid && openByMid/);
   assert.match(read("FeedView.jsx"), /typeof top === "function" \? top\(\{ openByMid \}\) : top/);
   // The rail's kind/source filters narrow the rail's OWN rows and nothing else: the pile and the
   // walk are asked for over everything, so the assistant processes the whole pipe whatever the
   // rail is showing (the owner, 2026-09-04: "how the assistant works on filtered tasks - does it
   // only process those?"). The one narrowing the walk takes is `only`, which is the "Just what
   // came in" button. If that ever changes, these two are where it has to be said out loud.
-  assert.match(view, /\/api\/funnel\/pile", \{ params: currentRef\.current\?\.key \? \{ current: currentRef\.current\.key \} : \{\} \}/);
-  assert.match(view, /\{ key: body\.key, only: body\.only \}/);
+  const pileRequest = view.slice(view.indexOf('api.get("/api/funnel/pile"'), view.indexOf("setPile", view.indexOf('api.get("/api/funnel/pile"')));
+  assert.match(pileRequest, /currentRef\.current\?\.key \? \{ current: currentRef\.current\.key \}/);
+  assert.doesNotMatch(pileRequest, /\b(cat|pick|channel|source)\b/);
+  assert.match(view, /\{ key: body\.key, only: body\.only, include_surfaced: body\.include_surfaced, exclude: body\.exclude \}/);
+  assert.doesNotMatch(view, /include_surfaced: true/); // a read row is not presented again by Next
+  assert.doesNotMatch(view, /i\.surfaced && !i\.current \? "shown"/);                              // unread never looks processed
   assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage
   assert.match(view, /onPull=\{\(r\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
   assert.match(view, /window\.location\.hash = `msg=\$\{mid\}`/);   // "on the Timeline" pins the row over the chat
   assert.doesNotMatch(view, /turn\(\{ mode: "open" \}\)/);   // the day never writes itself: the welcome is the door
   assert.match(view, /if \(data\.decision\) await decide\(data\.decision\)/);   // words are carried out, never left as advice
-  assert.match(view, /dispatch`, \{ instruction: d\.text \|\| null \}/);          // ...and a hand-off to the coder carries them
+  assert.match(view, /dispatch`, \{ kind: "coding", instruction: d\.text \|\| null \}/); // ...and an explicit coding hand-off carries them
+  assert.match(view, /verb === "regular_agent"/);                                  // regular and coding are different roads
   assert.match(view, /triage moved it up/);                // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
   assert.match(cardsSrc(), /Show the final report/);        // ...and a finished job's report reads right there
@@ -148,8 +160,17 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.doesNotMatch(css, /tq-pipe-/);                    // the funnel's CSS is gone with it
   assert.doesNotMatch(view, /tq-pile-head/);               // no "The pipe · N" header over the rows (the owner, 2026-09-03)
   assert.match(view, /One more and the pipe is clear/);    // ...the count is the encouragement, at the bottom, from fifteen
-  assert.match(read("FeedView.jsx"), /useState\(top \? "unread" : ""\)/);   // the rail opens on the pipe alone; "all" is the Timeline
   const feed = read("FeedView.jsx");
+  assert.match(feed, /useState\(top \? "unread" : ""\)/);   // the Assistant rail opens on unread
+  assert.match(feed, /view === "unread" \? \(typeof top/);     // ranked pipe, not historical rows
+  assert.match(feed, /const visibleStage = unreadView \? stage : null/); // All/Needs me never keep the chat on the right
+  assert.match(feed, /const chatMode = unreadView && rowMode === "chat"/); // their rows open one at a time instead
+  assert.match(feed, /\) : visibleStage \|\| \(/);                    // no selection shows the review placeholder, not chat history
+  assert.match(feed, /label: "Assistant discussion"/);               // task-bound walkthrough turns remain readable in All
+  assert.match(feed, /"concierge_user", "concierge_assistant"/);      // distinct from an agent's own working conversation
+  assert.match(feed, /tab === "discussion"/);
+  assert.match(view, /for \(const pending of deferredChat\.current\) clearTimeout\(pending\)/); // one transition cannot queue two Next turns
+  assert.match(view, /deferredChat\.current\.clear\(\);\s*const epoch = chatEpoch\.current/);
   assert.match(feed, /if \(narrow \|\| chatMode\) return;/);   // a chat is not a preview pane: no hover-open in chat mode
   assert.match(feed, /addEventListener\("hashchange", openHash\)/);   // a card's #msg= opens the row while the rail is already up
   const cards = read("assistantCards.jsx");
@@ -158,6 +179,15 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(cards, /Approve & send/); assert.match(cards, /Prep me/);
   assert.match(cards, /SourceMark/); assert.match(cards, /ChannelIcon/);   // the logo of where it came from
   assert.match(cards, /On the Timeline/);                                   // every card links to the whole of it
+  // Once triage combines chat lines into a task, both an ordinary item and its pending reply show
+  // that exact task bundle together. The conversation endpoint is intentionally not used here: a
+  // long WhatsApp room may contain several separate tasks.
+  assert.match(cards, /function CombinedTaskText/);
+  assert.match(cards, /api\.get\(`\/api\/tasks\/\$\{card\.tid\}`\)/);
+  assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
+  assert.match(cards, /messages combined by triage/);
+  assert.match(cards, /const \[full, setFull\] = useState\(true\)/);
+  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 2); // reply + ordinary message
   assert.match(read("SettingsView.jsx"), /funnel_hours/); assert.match(read("SettingsView.jsx"), /funnel_max/);
 });
 

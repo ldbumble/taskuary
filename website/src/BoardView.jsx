@@ -272,8 +272,9 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
   useEffect(() => {
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
-    tick();
-    return active ? onLive("run-tail", tick) : undefined;
+    if (!active) return undefined;
+    tick(); const id = setInterval(tick, 3000);
+    return () => clearInterval(id);
   }, [active]);
   useEffect(() => {
     if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0] }));
@@ -396,9 +397,9 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
       </Dialog>
 
       {/* what the agents are telling EACH OTHER - the half of the board git cannot show */}
-      {view === "notes" && <AgentWall onOpenTask={onOpenTask} refresh={boardTick} />}
-      {view === "studio" && <StudioView onOpenTask={onOpenTask} refresh={boardTick} />}
-      {view === "wall" && <WallView onOpenTask={onOpenTask} onOpenReports={onOpenReports} refresh={boardTick} />}
+      {view === "notes" && <AgentWall onOpenTask={onOpenTask} refresh={boardTick} active={active} />}
+      {view === "studio" && <StudioView onOpenTask={onOpenTask} refresh={boardTick} active={active} />}
+      {view === "wall" && <WallView onOpenTask={onOpenTask} onOpenReports={onOpenReports} refresh={boardTick} active={active} />}
 
       <Box sx={{ display: view === "columns" ? "grid" : "none", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(4, minmax(0, 1fr))" }, gap: 2, alignItems: "start" }}>
         {COLS.map((col) => {

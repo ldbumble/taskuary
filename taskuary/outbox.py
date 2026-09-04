@@ -56,7 +56,8 @@ def _voice(store) -> str:
     return (SYSTEM.format(owner=owner), soul, style_doc(store), injectable(store.doc('learned') or ''), BREVITY, CHAT, EMAIL)
 
 
-def draft_message(store, channel: str, to: str, about: str, resolution: str = None, llm=None) -> str:
+def draft_message(store, channel: str, to, about: str, resolution: str = None, llm=None,
+                  cc: list = None) -> str:
     """The message itself. `resolution` is what an agent found, when one was sent to find out
     first - the brief says what to write about, the resolution says what is true."""
     from .knowledge import block as kb_block
@@ -69,7 +70,10 @@ def draft_message(store, channel: str, to: str, about: str, resolution: str = No
               + (f'\n\nYOUR OWN document - your voice, your rules, your responsibilities:\n{soul[:4000]}' if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like this:\n{sty[:2500]}' if sty else '')
               + (f'\n\nYour learned profile:\n{lrn[:2000]}' if lrn else ''))
-    user = f'TO: {to}\nCHANNEL: {channel}\n\nWHAT THIS IS ABOUT (the owner\'s own words to you):\n{about}'
+    recipients = ', '.join(to) if isinstance(to, (list, tuple)) else str(to)
+    copies = ', '.join(cc or [])
+    user = f'TO: {recipients}' + (f'\nCC: {copies}' if copies else '') + \
+           f'\nCHANNEL: {channel}\n\nWHAT THIS IS ABOUT (the owner\'s own words to you):\n{about}'
     if resolution: user += f'\n\nWHAT WAS ACTUALLY FOUND (an agent looked into this first - write from THESE facts):\n{resolution}'
     # what the company already has written down on this subject: quoted as facts to draw on,
     # never as instructions (knowledge.block says so in the block itself)
@@ -96,8 +100,25 @@ def subject_for(store, about: str, llm=None) -> str:
         return fallback
 
 
-def compose(store, channel: str, to: str, about: str, mode: str = 'draft', subject: str = None,
-            repo: str = None, actor: str = 'owner', llm=None) -> dict:
+def redraft_review(store, review: dict, resolution: str = None, llm=None) -> str:
+    """Rewrite a new outbound message from its saved envelope, including all To/CC recipients."""
+    try: deliver = json.loads(review.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): deliver = {}
+    if not deliver.get('channel'): raise ValueError('this review has no outbound destination')
+    task = store.get_task(review.get('TaskId')) or {}
+    message = store.get_message(review.get('MessageId')) or {}
+    about = task.get('Summary') or message.get('BodyText') or task.get('Title') or ''
+    if resolution is None:
+        from .responder import resolution_of
+        resolution = resolution_of(store, review.get('TaskId')) if review.get('TaskId') else None
+    draft = draft_message(store, deliver['channel'], deliver.get('to'), about,
+                          resolution=resolution, llm=llm, cc=deliver.get('cc'))
+    store.update_review_draft(review['ReviewId'], draft, review.get('RunId'))
+    return draft
+
+
+def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: str = None,
+            repo: str = None, actor: str = 'owner', llm=None, cc: list = None) -> dict:
     """Start something outbound. Returns {taskId, messageId, reviewId, mode, draft, subject}.
 
     Both modes leave the same shape behind - a task, a Timeline row marked outbound, and a
@@ -105,9 +126,23 @@ def compose(store, channel: str, to: str, about: str, mode: str = 'draft', subje
     tag on the Timeline are the ones that already exist."""
     from . import outbound, terminal as term
     from .store import task_ref
-    channel, to, about = str(channel or '').strip().lower(), str(to or '').strip(), str(about or '').strip()
+    channel, about = str(channel or '').strip().lower(), str(about or '').strip()
     if not about: raise ValueError('say what the message is about')
-    if not to: raise ValueError('say who it goes to')
+    if channel == 'email':
+        def parts(values):
+            values = values if isinstance(values, (list, tuple)) else [values]
+            return [part.strip() for value in values
+                    for part in str(value or '').replace(';', ',').split(',') if part.strip()]
+        raw_to, raw_cc = parts(to), parts(cc or [])
+        to = outbound.addrs(raw_to)
+        cc = [a for a in outbound.addrs(raw_cc) if a.lower() not in {x.lower() for x in to}]
+        bad = [a for a in raw_to + raw_cc if not outbound.addrs([a])]
+        if bad: raise ValueError(f"not a valid email address: {', '.join(bad)}")
+        if not to: raise ValueError('add at least one email recipient')
+    else:
+        to = str(to[0] if isinstance(to, (list, tuple)) and to else to or '').strip()
+        cc = []
+        if not to: raise ValueError('say who it goes to')
     if mode not in MODES: raise ValueError(f"mode must be one of {', '.join(MODES)}")
     if not outbound.can_reply(store, channel):
         raise ValueError(f'{channel or "that channel"} cannot send from here - turn its replies on '
@@ -121,11 +156,12 @@ def compose(store, channel: str, to: str, about: str, mode: str = 'draft', subje
     # the Timeline row. It wears the TARGET channel, not a synthetic one: Direction 'out' is
     # already how the feed renders something we sent, and can_reply / the send path both need a
     # real channel behind the row.
+    to_text = ', '.join(to) if isinstance(to, list) else to
     mid = store.add_message({'TaskId': tid, 'ExternalId': f'outbox:{tid}', 'ConversationId': f'outbox:{tid}',
-                             'Channel': channel, 'SourceName': to, 'Subject': subject, 'FromName': 'You',
+                             'Channel': channel, 'SourceName': to_text, 'Subject': subject, 'FromName': 'You',
                              'Direction': 'out', 'BodyText': about, 'Status': 'routed',
                              'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-    deliver = json.dumps({'channel': channel, 'to': to, 'subject': subject})
+    deliver = json.dumps({'channel': channel, 'to': to, 'cc': cc, 'subject': subject})
     store.add_route(mid, tid, 'outbox', None,
                     f'you started this from the Timeline - ' +
                     ('an agent is finding out first, then it drafts the message'
@@ -136,11 +172,11 @@ def compose(store, channel: str, to: str, about: str, mode: str = 'draft', subje
         # and has the responder rewrite it from what was actually found. Without it, finishing an
         # outbound task would look for a message to answer, find only ours, and draft nothing.
         rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
-                                'Reason': f'you asked for this to be looked into first - {to} hears back when it is',
+                                'Reason': f'you asked for this to be looked into first - {to_text} hears back when it is',
                                 'Deliver': deliver})
         store.hold_reviews(tid, 'held while an agent finds out - the message is written from what it finds')
         try:
-            ses = term.start_on_task(store, tid, instruction=f'Find out what is needed to send this message to {to}: {about}', actor=actor)
+            ses = term.start_on_task(store, tid, instruction=f'Find out what is needed to send this message to {to_text}: {about}', actor=actor)
         except Exception as e:
             logger.warning(f'outbox could not start an agent on {task_ref(tid)}: {e}')
             store.add_comment(tid, 'router', 'agent', f'Could not start the agent ({str(e)[:200]}) - start it from the task.')
@@ -150,7 +186,7 @@ def compose(store, channel: str, to: str, about: str, mode: str = 'draft', subje
 
     draft = ''
     try:
-        draft = draft_message(store, channel, to, about, llm=llm)
+        draft = draft_message(store, channel, to, about, llm=llm, cc=cc)
     except Exception as e:
         # a review with no draft is still the right row: "Draft with AI" retries it, and the
         # owner can simply type the message themselves. Losing the row would lose the intent.
@@ -158,7 +194,7 @@ def compose(store, channel: str, to: str, about: str, mode: str = 'draft', subje
         store.add_comment(tid, 'router', 'agent', f'Could not draft this ({str(e)[:200]}) - write it yourself, or retry the draft.')
     rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
                             'DraftText': draft, 'Deliver': deliver,
-                            'Reason': f'a message to {to} you started - approve to send it'})
-    store.audit('task', tid, 'outbox', actor, detail={'channel': channel, 'to': to, 'mode': mode})
+                            'Reason': f'a message to {to_text} you started - approve to send it'})
+    store.audit('task', tid, 'outbox', actor, detail={'channel': channel, 'to': to, 'cc': cc, 'mode': mode})
     return {'taskId': tid, 'ref': task_ref(tid), 'messageId': mid, 'reviewId': rid,
             'mode': mode, 'subject': subject, 'draft': draft}

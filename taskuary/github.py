@@ -1,9 +1,52 @@
 """Minimal GitHub helpers (optional): a fine-grained PAT is all the config."""
+import re
+
 import requests
+from loguru import logger
 
 GH = 'https://api.github.com'
 def _h(tok): return {'Authorization': f'Bearer {tok}', 'Accept': 'application/vnd.github+json',
                      'X-GitHub-Api-Version': '2022-11-28'}
+
+# Markdown and HTML both, because an issue template uses whichever the writer's editor produced:
+# ![shot](https://github.com/user-attachments/assets/<uuid>) or <img src="..." />. Only the hosts
+# GitHub itself serves attachments from - an issue body is a stranger's text on a public repo, and
+# following an arbitrary URL out of it is an SSRF with extra steps.
+_IMG_MD = re.compile(r'!\[[^\]]*\]\((https?://[^\s)]+)\)')
+_IMG_TAG = re.compile(r'<img\b[^>]*?\bsrc\s*=\s*["\']([^"\']+)["\']', re.I)
+_IMG_HOSTS = ('github.com/user-attachments/', 'user-images.githubusercontent.com/',
+              'private-user-images.githubusercontent.com/', 'raw.githubusercontent.com/')
+
+
+def body_images(tok, body: str, cap: int = 4, max_bytes: int = 5_000_000) -> list:
+    """[(media_type, base64)] for the pictures embedded in an issue or PR body.
+
+    A bug report's whole content is often the screenshot: the template's own headings come through
+    empty and the words are in the image. Triage read the empty text and filed it as informational
+    (the owner, 2026-09-04: "when you triage github issues you have to read the image"). Mail has
+    solved this since Graph hands attachments over inline - see channels.images_for_triage, whose
+    docstring is about the same failure - and this is the GitHub end of it.
+    """
+    import base64
+    seen, out = set(), []
+    for rx in (_IMG_MD, _IMG_TAG):
+        for url in rx.findall(body or ''):
+            if len(out) >= cap: return out
+            if url in seen or not any(h in url for h in _IMG_HOSTS): continue
+            seen.add(url)
+            try:
+                r = requests.get(url, headers={'Authorization': f'Bearer {tok}'} if tok else {},
+                                 timeout=20, stream=True)
+                if r.status_code != 200: continue
+                ct = str(r.headers.get('Content-Type') or '').split(';')[0].lower()
+                if not ct.startswith('image/') or ct in ('image/svg+xml',): continue
+                raw = r.raw.read(max_bytes + 1, decode_content=True) or b''
+                if not raw or len(raw) > max_bytes: continue
+                out.append((ct, base64.b64encode(raw).decode()))
+            except Exception as e:
+                logger.debug(f'github: could not read the image on an item - {e}')
+    return out
+
 
 def create_issue(tok, repo, title, body):
     r = requests.post(f'{GH}/repos/{repo}/issues', headers=_h(tok), json={'title': title, 'body': body}, timeout=20)

@@ -13,8 +13,8 @@ def armed_store():
     store = MemoryStore()
     store.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
     cid = store.get_connector_by_type('whatsapp')['ConnectorId']
-    store.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'notify',
-                          'ConfigJson': json.dumps({'notify_chat': JID})}, 'test')
+    store.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool',
+                          'ConfigJson': json.dumps({'assistant_chat': JID})}, 'test')
     store.set_setting('phone_assistant', '1', 'test')
     return store, store.get_connector(cid, with_secret=True)
 
@@ -31,7 +31,7 @@ class RemoteAssistantBoundaryTests(unittest.TestCase):
         self.assertFalse(remote_assistant.intercept(store, 'other@s.whatsapp.net', 'mine', from_me=True,
                                                     connector=connector))
         self.assertFalse(remote_assistant.intercept(store, 'private@g.us', 'mine', from_me=True,
-                                                    connector={**connector, 'ConfigJson': json.dumps({'notify_chat': 'private@g.us'})}))
+                                                    connector={**connector, 'ConfigJson': json.dumps({'assistant_chat': 'private@g.us'})}))
         store.set_setting('phone_assistant', '0', 'test')
         self.assertFalse(remote_assistant.intercept(store, JID, 'mine', from_me=True, connector=connector))
 
@@ -94,6 +94,8 @@ class RemoteAssistantConversationTests(unittest.TestCase):
         self.assertIn('Payroll file is still wrong', seen['user'])
         self.assertIn('Fixed rounding', seen['user'])
         self.assertIn('HOVERING GUIDE', seen['system'])
+        self.assertIn('WHATSAPP TEXT-ONLY DELIVERY', seen['system'])
+        self.assertIn('2-4 short numbered choices', seen['system'])
         self.assertEqual(send.call_args.args[1], JID)
         self.assertEqual(send.call_args.args[2], 'Taskuary:\nStart with TQ-0001: review the corrected payroll file.')
 

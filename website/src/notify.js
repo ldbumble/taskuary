@@ -5,6 +5,10 @@ export const CAN_NOTIFY = new Set(["telegram", "whatsapp", "teams"]);
 
 const cfg = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 export const notifyChat = (c) => String(cfg(c.ConfigJson).notify_chat || "").trim();
+export const assistantChat = (c) => {
+  const conf = cfg(c.ConfigJson);
+  return String(conf.assistant_chat || conf.notify_chat || "").trim();
+};
 export const hasNotifyRole = (c) => String(c.Roles || "").split(",").includes("notify");
 
 // One verdict for Settings → Notifications: is this actually wired up, and if not, what is
@@ -16,7 +20,9 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
   const able = all.filter((c) => CAN_NOTIFY.has(c.Type));
   const named = able.filter((c) => c.Active && notifyChat(c));
   const phoneNamed = named.filter((c) => c.Type === "telegram" || c.Type === "whatsapp");
-  const guideNamed = named.filter((c) => c.Type === "whatsapp");
+  const guideAble = (connectors || []).filter((c) => c.Type === "whatsapp");
+  const guideNamed = guideAble.filter((c) => c.Active && assistantChat(c));
+  const guideAsleep = guideAble.filter((c) => !c.Active && assistantChat(c));
   const asleep = able.filter((c) => !c.Active && notifyChat(c));
   const unnamed = able.filter((c) => !notifyChat(c));
   const stale = all.filter((c) => !CAN_NOTIFY.has(c.Type));
@@ -24,16 +30,20 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
   const note = stale.length ? ` ${names(stale)} still carries the role but cannot send — clear it on its card.` : "";
   const one = (cs) => cs.length === 1;
   if (level === "off" && phoneAssistant && guideNamed.length) return { kind: "pinging", targets: guideNamed, stale,
-    text: `Push alerts are off; the WhatsApp guide is listening in ${guideNamed.map((c) => `${c.Name} · ${notifyChat(c)}`).join(" · ")}.` + note };
+    text: `Push alerts are off; the WhatsApp guide is listening in ${guideNamed.map((c) => `${c.Name} · ${assistantChat(c)}`).join(" · ")}.` + note };
   if (level === "off") return { kind: "off", targets: [], stale,
     text: "Pushes are off — nothing is sent, even if a chat is named."
-      + (phoneAssistant ? " The WhatsApp guide still needs an active, named WhatsApp notify chat." : "") + note };
+      + (phoneAssistant ? " The WhatsApp guide still needs an active, private WhatsApp self-chat." : "") + note };
   if (named.length) return { kind: "pinging", targets: named, stale,
     text: `Pinging ${named.map((c) => `${c.Name} · ${notifyChat(c)}`).join(" · ")}`
       + (phoneApprovals && phoneNamed.length ? " — reply there to answer agents or approve drafts" : "")
       + (phoneApprovals && !phoneNamed.length ? " — phone replies need a Telegram or WhatsApp notify chat" : "")
       + (phoneAssistant && guideNamed.length ? " — ask the Taskuary guide from that WhatsApp chat" : "")
-      + (phoneAssistant && !guideNamed.length ? " — assistant chat needs a WhatsApp notify chat" : "") + note };
+      + (phoneAssistant && !guideNamed.length ? " — assistant chat needs a private WhatsApp self-chat" : "") + note };
+  if (phoneAssistant && guideNamed.length) return { kind: "pinging", targets: guideNamed, stale,
+    text: `Ordinary push alerts are not configured; the WhatsApp guide is listening in ${guideNamed.map((c) => `${c.Name} · ${assistantChat(c)}`).join(" · ")}.` + note };
+  if (phoneAssistant && guideAsleep.length) return { kind: "inactive", targets: guideAsleep, stale,
+    text: `${names(guideAsleep)} ${one(guideAsleep) ? "has an Assistant chat but is" : "have Assistant chats but are"} switched off — enable ${one(guideAsleep) ? "it" : "them"} on the connector card.` + note };
   if (asleep.length) return { kind: "inactive", targets: asleep, stale,
     text: `${names(asleep)} ${one(asleep) ? "names a chat but is" : "name chats but are"} switched off`
       + ` — enable ${one(asleep) ? "it" : "them"} on the connector card.` + note };
@@ -42,5 +52,6 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
       + " — set it under Connections → Credentials." + note };
   return { kind: "none", targets: [], stale,
     text: "No notify chat yet — on a Telegram, WhatsApp or Teams card, add the Notifications role"
-      + " and name the chat in Credentials." + note };
+      + " and name the chat in Credentials."
+      + (phoneAssistant ? " The Assistant separately needs a private WhatsApp self-chat." : "") + note };
 }

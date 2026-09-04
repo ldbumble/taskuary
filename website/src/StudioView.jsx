@@ -54,7 +54,7 @@ const stateOf = (t, l) => {
   return { label: "open", color: ROLES.muted.solid };
 };
 
-export default function StudioView({ onOpenTask, refresh = 0 }) {
+export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [agents, setAgents] = useState([]);
   const [cam, setCam] = useState({ yaw: 0, zoom: 1.1, px: 0, py: 0 });
@@ -93,15 +93,16 @@ export default function StudioView({ onOpenTask, refresh = 0 }) {
     const row = (cfg.data.data || []).find((x) => x.Name === "auto_sessions");
     setCap((c) => (c == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : c));
   }, []);
-  useEffect(() => { load(); return onLive("task-changed", load); }, [load]);
-  useEffect(() => { if (refresh) load(); }, [refresh, load]); // the Board just started a session: seat it now, not on the next event
+  useEffect(() => { if (!active) return undefined; load(); return onLive("task-changed", load); }, [active, load]);
+  useEffect(() => { if (active && refresh) load(); }, [active, refresh, load]); // the Board just started a session: seat it now, not on the next event
   // the tails arrive as run-tail, exactly as the Board's do: a screen you are watching is a status wall
   useEffect(() => {
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
-    tick();
-    return onLive("run-tail", tick);
-  }, []);
+    if (!active) return undefined;
+    tick(); const id = setInterval(tick, 3000);
+    return () => clearInterval(id);
+  }, [active]);
 
   const desks = useMemo(() => {
     const n = Math.max(1, Math.min(8, cap ?? 4));

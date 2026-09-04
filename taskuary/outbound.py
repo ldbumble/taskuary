@@ -224,18 +224,22 @@ def _chat_id(channel: str, cid) -> str:
 
 def send_targets(store) -> list:
     """[{'channel', 'to': [{'to', 'name', 'hint'}]}] - every destination known on every
-    channel a report can go out on: your own notify chat first, then the chats you already
-    take messages from, then everything else that has written in. Email also gets the
-    address book, and is the one channel where typing a new address still makes sense."""
+    channel a report can go out on. Destinations with message history are newest first;
+    configured destinations with no history follow them. Email also gets the full address
+    book, and is the one channel where typing a new address still makes sense."""
     from .channels import _cfg
     seen = {ch: {} for ch in send_channels(store)}
 
-    def add(ch, to, name='', hint=''):
+    def add(ch, to, name='', hint='', last=''):
         to = str(to or '').strip()
         if not to or ch not in seen: return
-        r = seen[ch].setdefault(to, {'to': to, 'name': '', 'hint': ''})
+        r = seen[ch].setdefault(to, {'to': to, 'name': '', 'hint': '', '_last': ''})
         if name and not r['name']: r['name'] = name
-        if hint and not r['hint']: r['hint'] = hint
+        if last and str(last) >= r['_last']:
+            r['_last'] = str(last)
+            if hint: r['hint'] = hint
+        elif hint and not r['hint']:
+            r['hint'] = hint
 
     for c in store.list_connectors():
         if not c['Active']: continue
@@ -245,16 +249,41 @@ def send_targets(store) -> list:
         if ch == 'email': add(ch, cfg.get('address'), f"you — {cfg.get('address')}", f"the mailbox on the {c['Name']} card")
     for s in store.list_sources():
         add((s.get('Channel') or '').lower(), s.get('Address'), '', 'a chat you already take messages from')
-    for r in store.chats():
+    # WhatsApp's paired account knows about reachable chats that have never entered Taskuary:
+    # notably groups excluded by the inbound source filter. They still belong in compose. A
+    # stopped/old bridge must not take the saved conversation list down with it.
+    if 'whatsapp' in seen:
+        from . import messengers
+        for c in store.list_connectors():
+            if c.get('Active') and c.get('Type') == 'whatsapp':
+                try:
+                    for chat in messengers.wa_chats(c):
+                        last = chat.get('last') or ''
+                        n = int(chat.get('n') or 0)
+                        hint = (f"{n} recent message{'' if n == 1 else 's'}"
+                                + (f", last {last}" if last else '')) if n else \
+                               ('available in your paired WhatsApp account'
+                                + (f", last {last}" if last else ''))
+                        add('whatsapp', chat.get('jid'), chat.get('name') or '', hint, last)
+                except RuntimeError as e:
+                    logger.debug(f'WhatsApp roster unavailable; using saved chats: {e}')
+    # These calls deliberately have no cap. The picker only renders five until somebody
+    # searches, but its search must cover every known conversation, not an arbitrary newest 200.
+    for r in store.chats(None):
         ch = (r['Channel'] or '').lower()
-        add(ch, _chat_id(ch, r['Cid']), r['Name'], f"{r['N']} message{'' if r['N'] == 1 else 's'}, last {(r['Last'] or '')[:16]}")
+        add(ch, _chat_id(ch, r['Cid']), r['Name'],
+            f"{r['N']} message{'' if r['N'] == 1 else 's'}, last {(r['Last'] or '')[:16]}", r['Last'])
     if 'email' in seen:
-        for p in store.people(30):
-            add('email', p['Email'], p['Name'], f"{p['N']} message{'' if p['N'] == 1 else 's'}, last {(p['Last'] or '')[:16]}")
+        for p in store.people(None):
+            add('email', p['Email'], p['Name'],
+                f"{p['N']} message{'' if p['N'] == 1 else 's'}, last {(p['Last'] or '')[:16]}", p['Last'])
     for tos in seen.values():
         for r in tos.values():
             if not r['name']: r['name'] = r['to']
-    return [{'channel': ch, 'to': list(tos.values())} for ch, tos in seen.items()]
+    return [{'channel': ch, 'to': [
+        {k: v for k, v in r.items() if not k.startswith('_')}
+        for r in sorted(tos.values(), key=lambda x: (x['_last'], x['name'].lower()), reverse=True)
+    ]} for ch, tos in seen.items()]
 
 
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None) -> dict:

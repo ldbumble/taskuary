@@ -175,7 +175,17 @@ function ServerVersion() {
 }
 
 export default function TaskHubPage() {
-  const [tab, setTab] = useState("Assistant");
+  // Honor a deep link on the first render. Starting every reload on Assistant meant its hidden
+  // conversation, feed and funnel all fetched before #task=356 (or a report) was allowed to load.
+  // On a busy live session that left the requested page looking completely blank for many seconds.
+  const [tab, setTab] = useState(() => {
+    const hash = window.location.hash || "";
+    if (/^#(?:task=\d+|new-task)/.test(hash)) return "Tasks";
+    if (/^#report=/.test(hash)) return "Reports";
+    if (/^#connector=/.test(hash)) return "Connections";
+    if (/^#playbook=/.test(hash)) return "Docs";
+    return "Assistant";
+  });
   const demo = useDemo();          // the badge, and what the header hides to make room for it
   useEffect(() => holdLive(), []);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -190,7 +200,7 @@ export default function TaskHubPage() {
   // visible notification wait on that request made it appear at arbitrary times on a busy server.
   const [raisedQueue, setRaisedQueue] = useState([]);
   const raised = raisedQueue[0] || null;
-  const tabRef = useRef("Assistant"), selRef = useRef(null);
+  const tabRef = useRef(tab), selRef = useRef(null);
   const selectTask = useCallback((tid) => { setSelectedTask(tid); selRef.current = tid; }, []);
   const onRaise = useCallback((r) => {
     // already looking at this very task's session: no ring, you are watching it stop
@@ -253,12 +263,14 @@ export default function TaskHubPage() {
   // holding a live pty: unmounting it dropped the websocket, so every trip to the Board and
   // back rebuilt the pane and redrew the CLI's screen from the top of its scrollback. Hidden
   // is enough - fit() reads a display:none pane as NaN and skips, then refits on the way back.
-  const [everTasks, setEverTasks] = useState(false);
+  const [everTasks, setEverTasks] = useState(tab === "Tasks");
   const [everBoard, setEverBoard] = useState(false);
+  const [everAssistant, setEverAssistant] = useState(tab === "Assistant");
   useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
   // ...and the Board, which can hold a live session too: mounted once opened, hidden after. The
-  // Assistant is the landing tab and is mounted from the first paint.
+  // Assistant is the normal landing tab, but a deep link does not boot it until it is opened.
   useEffect(() => { if (tab === "Board") setEverBoard(true); }, [tab]);
+  useEffect(() => { if (tab === "Assistant") setEverAssistant(true); }, [tab]);
 
   const refreshPending = useCallback(async () => {
     try { setPending(((await api.get("/api/reviews", { params: { status: "pending" } })).data.data || []).length); }
@@ -413,12 +425,13 @@ export default function TaskHubPage() {
           {/* Timeline and Board stay MOUNTED behind another tab, like Tasks: each can hold a live
               pty session, and unmounting closed its websocket - so coming back replayed the whole
               scrollback and ran the pane top to bottom. Their polling is gated on `active`. */}
-          {/* the Assistant (the Timeline's rail + the chat) stays mounted from the first paint: its
-              conversation and the pipe's animation state are on-screen state worth keeping, and its
-              polling is gated on `active` */}
-          <Box sx={{ display: tab === "Assistant" ? "block" : "none" }}>
-            <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending} active={tab === "Assistant"} />
-          </Box>
+          {/* Once opened, the Assistant (the Timeline's rail + chat) stays mounted: its conversation
+              and pipe animation are on-screen state worth keeping, and polling is gated on `active`. */}
+          {everAssistant && (
+            <Box sx={{ display: tab === "Assistant" ? "block" : "none" }}>
+              <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending} active={tab === "Assistant"} />
+            </Box>
+          )}
           {(everBoard || tab === "Board") && (
             <Box sx={{ display: tab === "Board" ? "block" : "none" }}>
               <BoardView key={`b${tick}`} onOpenTask={openTask}

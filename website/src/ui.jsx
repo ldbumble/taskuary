@@ -7,6 +7,7 @@ import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { onLive } from "./live.js";
+import { Md } from "./md.jsx";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
 import GitHubIcon from "@mui/icons-material/GitHub";
@@ -139,7 +140,9 @@ export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete"
 
 export const RefChip = ({ taskId, onClick }) => taskId ? (
   <Chip size="small" label={`TQ-${String(taskId).padStart(4, "0")}`} onClick={onClick}
-    sx={{ ...mono, bgcolor: "#eae4d8", color: "#55697a", height: 19, fontSize: 10.5 }} />
+    sx={{ fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
+      letterSpacing: ".015em", fontWeight: 700, bgcolor: "#eae4d8", color: "#55697a",
+      height: 19, fontSize: 10.5 }} />
 ) : null;
 
 export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, category, working }) => {
@@ -535,14 +538,19 @@ const artifactTime = (a) => {
   const d = new Date(String(at).replace(" ", "T"));
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 };
-const artifactUrl = (artifact, download = false) => {
-  const token = localStorage.getItem("taskuary_token");
-  const query = [download ? "download=true" : "", token ? `token=${encodeURIComponent(token)}` : ""]
-    .filter(Boolean).join("&");
-  return `${artifact?.url || ""}${query ? `?${query}` : ""}`;
-};
-
 export const CoderReport = ({ body, artifacts = [] }) => {
+  const [reader, setReader] = useState(null);
+  const [readerBusy, setReaderBusy] = useState(false);
+  const [readerError, setReaderError] = useState("");
+  const openArtifact = async (artifact) => {
+    setReader({ artifact, text: "" }); setReaderBusy(true); setReaderError("");
+    try {
+      const { data } = await api.get(artifact.url, { responseType: "text" });
+      setReader({ artifact, text: String(data || "") });
+    } catch (e) {
+      setReaderError(e?.response?.data?.detail || "Could not open this session result.");
+    } finally { setReaderBusy(false); }
+  };
   const text = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim();
   // ^ anchored per line, and the label eats spaces but NOT the newline - letting \s* run on
   // swallowed the separator, so an all-empty report rendered "TRIAGE -> Determination:"
@@ -590,19 +598,16 @@ export const CoderReport = ({ body, artifacts = [] }) => {
             {!!artifacts.length && (
               <Box sx={{ mt: detailRows.length ? 1.15 : 0 }}>
                 <Typography sx={{ ...mono, color: FAINT, fontWeight: 700, fontSize: 9.5,
-                  letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>Full artifact</Typography>
-                {/* an agent that ran twice leaves two: they were both called "Open full agent output",
-                    which is one link too many and no way to tell them apart (the owner, 2026-09-03:
-                    "there are 2 open full agent outputs since it was run twice. Version them").
-                    Newest first, numbered by run, each with its own time. */}
+                  letterSpacing: 1, textTransform: "uppercase", mb: 0.3 }}>Session result</Typography>
+                {/* Newest first, numbered by run, each with its own time. */}
                 {artifacts.slice(0, 3).map((artifact, i, all) => (        /* newest first, as the API sends them */
-                  <Button key={artifact.id} component="a" href={artifactUrl(artifact)} target="_blank"
-                    rel="noopener" size="small" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
+                  <Button key={artifact.id} onClick={() => openArtifact(artifact)}
+                    size="small" startIcon={<ArticleIcon sx={{ fontSize: 15 }} />}
                     title={artifact.name || artifact.path || ""}
                     sx={{ mr: 0.75, mb: 0.4, px: 0, justifyContent: "flex-start", textTransform: "none" }}>
                     {all.length > 1
                       ? `Run ${all.length - i}${artifactTime(artifact) ? ` · ${artifactTime(artifact)}` : ""}${i ? "" : " · latest"}`
-                      : "Open full agent output"}
+                      : "Read session result"}
                   </Button>
                 ))}
               </Box>
@@ -610,6 +615,23 @@ export const CoderReport = ({ body, artifacts = [] }) => {
           </Box>
         </Box>
       )}
+      <Dialog open={!!reader} onClose={() => !readerBusy && setReader(null)} fullWidth maxWidth="md"
+        PaperProps={{ sx: { borderRadius: 2.5, maxHeight: "88vh" } }}>
+        <DialogTitle sx={{ pb: 0.75 }}>
+          Session result
+          <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25, fontWeight: 400 }}>
+            {reader?.artifact?.name || "Agent session"}
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers sx={{ bgcolor: "#fffdfb" }}>
+          {readerBusy ? <Box sx={{ py: 5, display: "grid", placeItems: "center" }}><CircularProgress size={24} /></Box>
+            : readerError ? <Alert severity="error">{readerError}</Alert>
+              : <Md text={reader?.text || "Nothing was saved for this session."} />}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReader(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
@@ -784,10 +806,12 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
   );
 };
 
-// Hand ANY timeline item to a coding agent: your prompt + the item's context (subject,
-// sender, full body, thread, the operator docs) go down together. Items that aren't a
-// task yet become one server-side, so the run has somewhere to live and stream into.
-export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first }) => {
+// One door, then an explicit choice. Triage may suggest which kind fits, but it must not silently
+// choose the regular API agent or a coding CLI on the owner's behalf.
+export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, row, first }) => {
+  const suggestedKind = !taskKind || String(taskKind).toLowerCase() === "coding" ? "coding" : "general";
+  const [agentKind, setAgentKind] = useState("");
+  const coding = agentKind === "coding";
   const [open, setOpen] = useState(false);
   const { agents, models } = useAgents();
   const [agent, setAgent] = useState("coder");
@@ -798,10 +822,12 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
   const [err, setErr] = useState("");
   useEffect(() => { if (agents.length && !agents.includes(agent)) setAgent(agents[0]); }, [agents, agent]);
   const send = async () => {
+    if (!agentKind) return;
     setBusy(true); setErr("");
     try {
       const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
-        { agent, model: model || null, instruction: prompt.trim() || null });
+        { kind: agentKind, agent: coding ? agent : null,
+          model: model || null, instruction: prompt.trim() || null });
       setSent(data); setPrompt("");
       onOpenTask?.(data.taskId);          // the session IS the page - go watch it
     } catch (e) { setErr(e?.response?.data?.detail || "Could not reach the agent"); }
@@ -811,7 +837,7 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: dense ? 0.5 : 1 }}>
       <TaskuaryMark size={16} />
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>
-        {sent.agent} is on it in a live session — {sent.ref}
+        {sent.agent || "The agent"} is on it in a live session — {sent.ref}
       </Typography>
       <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
       <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>send another</Button>
@@ -820,7 +846,7 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
   if (!open) return row ? (
     <ChoiceRow first={first} tint="#e3e6e1" onClick={() => setOpen(true)}
       icon={<TaskuaryMark size={17} />}
-      label="Send it to a coding agent" hint="opens a live session on a new task — you watch it work" />
+      label="Send to agent…" hint="choose a coding agent or a regular agent" />
   ) : (
     <Button size="small" disableElevation startIcon={<TaskuaryMark size={15} />}
       onClick={() => setOpen(true)}
@@ -828,28 +854,38 @@ export const SendToAgent = ({ messageId, subject, onOpenTask, dense, row, first 
         justifyContent: "flex-start", fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
         border: `1px solid ${BORDER}`, boxShadow: "none",
         "&:hover": { color: INK, bgcolor: PANEL, borderColor: "#d8cfbe", boxShadow: "none" } }}>
-      Send to coding agent
+      Send to agent…
     </Button>
   );
   return (
     <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
         <TaskuaryMark size={17} />
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Send to a coding agent</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Which kind of agent?</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
-        <AgentPicker agents={agents} models={models} agent={agent} model={model}
-          onAgent={setAgent} onModel={setModel} size={26} />
+        {coding && <AgentPicker agents={agents} models={models} agent={agent} model={model}
+          onAgent={setAgent} onModel={setModel} size={26} />}
       </Box>
-      <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        placeholder={`What should it do? e.g. "Find why this failed and fix it, then tell me what changed."`}
-        sx={{ bgcolor: "#fff" }} />
+      <Box sx={{ display: "flex", gap: 0.75, mb: agentKind ? 0.75 : 0, flexWrap: "wrap" }}>
+        <Button size="small" variant={agentKind === "coding" ? "contained" : "outlined"} disableElevation
+          onClick={() => setAgentKind("coding")}>Coding agent</Button>
+        <Button size="small" variant={agentKind === "general" ? "contained" : "outlined"} disableElevation
+          onClick={() => setAgentKind("general")}>Regular agent</Button>
+      </Box>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: agentKind ? 0.5 : 0 }}>
+        Triage tagged this {suggestedKind}; your choice here is what actually runs.
+      </Typography>
+      {agentKind && <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder={coding ? `What should it do? e.g. "Find why this failed and fix it, then tell me what changed."`
+            : "What should the regular agent do with this?"}
+          sx={{ bgcolor: "#fff" }} />}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap>
           it gets the full message{subject ? ` “${subject}”` : ""} + your operator docs as context
         </Typography>
         <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>cancel</Button>
-        <Button size="small" variant="contained" disableElevation disabled={busy} onClick={send}
+        <Button size="small" variant="contained" disableElevation disabled={busy || !agentKind} onClick={send}
           startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
           sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
           {busy ? "sending…" : "Send"}
@@ -1489,6 +1525,9 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
     if (!taskId) return undefined;
     let alive = true;
     setD(seed); setFailed(false);
+    // The terminal roster already supplies the folded summary. Do not fetch detail the owner
+    // cannot see; opening the strip performs the richer read immediately.
+    if (!open) return () => { alive = false; };
     const load = async (diff) => {
       try {
         const { data } = await api.get(`/api/tasks/${taskId}/work`, { params: { diff } });
@@ -1496,10 +1535,10 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
       } catch { if (alive) setFailed(true); }
     };
     load(true);
-    // the witness is cheap and pushed as run-tail; git's per-file diff is not, so it refreshes only when the session ends
-    const stop = live ? onLive("run-tail", () => load(false)) : undefined;
-    return () => { alive = false; stop?.(); };
-  }, [taskId, live]);
+    // PTY output must not fan out into HTTP. This secondary summary refreshes at a bounded pace.
+    const id = live ? setInterval(() => load(false), 5000) : 0;
+    return () => { alive = false; clearInterval(id); };
+  }, [taskId, live, open]);
   const w = d?.work;
   if (!d) return failed ? (
     <Box sx={{ mb: 0.75, border: `1px solid ${ROLES.you.bd}`, borderRadius: 2, bgcolor: ROLES.you.tint,

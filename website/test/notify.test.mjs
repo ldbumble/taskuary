@@ -6,6 +6,8 @@ import { notifyState, CAN_NOTIFY } from "../src/notify.js";
 
 const conn = (o) => ({ Name: "c", Type: "telegram", Active: 1, Roles: "notify", ConfigJson: "{}", ...o });
 const withChat = (o) => conn({ ConfigJson: JSON.stringify({ notify_chat: "-100123" }), ...o });
+const withAssistant = (o) => conn({ Type: "whatsapp", Roles: "trigger,tool",
+  ConfigJson: JSON.stringify({ assistant_chat: "15551234567@s.whatsapp.net" }), ...o });
 
 test("the sendable channels match the backend's list", () => {
   assert.deepEqual([...CAN_NOTIFY].sort(), ["teams", "telegram", "whatsapp"]);
@@ -64,14 +66,21 @@ test("level off overrides a working setup", () => {
 });
 
 test("WhatsApp guide can listen while push alerts are off", () => {
-  const st = notifyState([withChat({ Type: "whatsapp", Name: "WhatsApp" })], "off", false, true);
+  const st = notifyState([withAssistant({ Name: "WhatsApp" })], "off", false, true);
   assert.equal(st.kind, "pinging");
   assert.match(st.text, /WhatsApp guide is listening/);
 });
 
+test("connecting the WhatsApp Assistant does not turn on ordinary notifications", () => {
+  const st = notifyState([withAssistant({ Name: "WhatsApp" })], "needs_me", false, true);
+  assert.equal(st.kind, "pinging");
+  assert.match(st.text, /Ordinary push alerts are not configured/);
+  assert.doesNotMatch(st.text, /^Pinging/);
+});
+
 test("assistant chat asks specifically for WhatsApp when only Teams is named", () => {
   const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me", false, true);
-  assert.match(st.text, /assistant chat needs a WhatsApp notify chat/);
+  assert.match(st.text, /assistant chat needs a private WhatsApp self-chat/);
 });
 
 test("nothing configured at all names the three channels to try", () => {

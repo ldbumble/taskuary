@@ -6,7 +6,7 @@ a pty byte) because the fan-out hops onto the asyncio loop that owns the sockets
 """
 import asyncio, time, unittest
 
-from taskuary import live
+from taskuary import funnel, live
 from taskuary.store import MemoryStore
 
 
@@ -96,6 +96,12 @@ class LiveSocketTests(unittest.TestCase):
         tid = _run(once())
         self.assertIn('task-changed', [m['type'] for m in tab.sent])
         self.assertTrue(tid)
+
+    def test_a_feed_or_task_write_invalidates_the_expensive_assistant_pile(self):
+        s = MemoryStore()
+        funnel._CACHE.update(at=time.time(), pile={'rev': 'old'})
+        s.create_task({'Title': 'new work', 'Status': 'open'}, 't')
+        self.assertIsNone(funnel._CACHE['pile'])
 
     def test_a_task_update_pokes_the_feed_and_task_views(self):
         tab, s = _Tab(), MemoryStore()

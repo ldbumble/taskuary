@@ -81,6 +81,8 @@ const BRAINS = [
    you create. Those are card work, and saying so is kinder than a form that cannot finish. */
 const BOXES = [
   { type: "gmail", label: "Gmail", hint: "needs an App Password, not your Google password — myaccount.google.com → Security → App passwords" },
+  { type: "outlook", label: "Outlook / Microsoft 365", card: true,
+    hint: "Microsoft stopped accepting mailbox passwords, so this one signs in instead — its card does the sign-in and remembers it" },
   { type: "imap", label: "Any other mailbox", hint: "IMAP — your provider's host, address and password" },
 ];
 
@@ -276,6 +278,15 @@ const MailboxForm = ({ onDone, onGo }) => {
               color: type === b.type ? "#55697a" : DIM, border: `1px solid ${type === b.type ? "#d8cfbe" : BORDER}` }} />
         ))}
       </Box>
+      {box.card ? (
+        <Box>
+          <Button variant="contained" disableElevation size="small" onClick={() => {
+            window.location.hash = `connector=${box.type}`;
+            onGo("Connections");
+          }}>Set up {box.label}</Button>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>{box.hint}</Typography>
+        </Box>
+      ) : (<>
       <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
         {type === "imap" && (
           <Field label="IMAP host" placeholder="imap.yourdomain.com" value={f.imap_host}
@@ -290,7 +301,16 @@ const MailboxForm = ({ onDone, onGo }) => {
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>{box.hint}</Typography>
       {ok && <Alert severity="success" sx={{ mt: 1, fontSize: 12.5 }}>{ok}</Alert>}
-      {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}</Alert>}
+      {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}
+        {/* the server's own words for a Microsoft address on IMAP - make the way out clickable */}
+        {/no longer accept IMAP|Outlook connector/i.test(err) && <>{" "}
+          <Box component="span" sx={{ color: "#55697a", cursor: "pointer", fontWeight: 600 }}
+            onClick={() => { window.location.hash = "connector=outlook"; onGo("Connections"); }}>
+            Set up Outlook instead
+          </Box>.
+        </>}
+      </Alert>}
+      </>)}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
         Outlook, Teams, Slack, GitHub and the trackers need an app registration or a bot token —{" "}
         <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connections")}>

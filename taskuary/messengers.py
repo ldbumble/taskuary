@@ -210,11 +210,31 @@ def wa_status(c) -> dict:
 
 
 def wa_chats(c) -> list:
-    """The chats the bridge has seen since it started - one row per JID, newest first. This is
-    how the owner finds the JID of "only this group": there is no directory to browse, the JID
-    shows up the moment someone writes in the chat, and the card offers it as a source."""
+    """Chats reachable through the paired account, newest first.
+
+    New bridges expose a metadata-only roster (including every group the account still belongs
+    to). The legacy message roll-up remains as a compatibility path until an already-running
+    bridge is restarted onto the new endpoint.
+    """
     from datetime import datetime
-    out = _wa(c, '/messages?after=0')
+    try:
+        out = _wa(c, '/chats')
+    except RuntimeError as e:
+        if 'bridge /chats failed (404)' not in str(e): raise
+        out = _wa(c, '/messages?after=0')
+    if 'chats' in out:
+        rows = []
+        for item in out.get('chats', []):
+            jid = item.get('jid') or ''
+            if not jid or jid.endswith('@broadcast'): continue
+            last = item.get('last') or 0
+            rows.append({'jid': jid, 'group': bool(item.get('group')), 'name': item.get('name') or '',
+                         'n': int(item.get('n') or 0), 'last': last,
+                         'snippet': item.get('snippet') or ''})
+        rows.sort(key=lambda r: (-r['last'], (r['name'] or r['jid']).lower()))
+        for r in rows:
+            r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
+        return rows
     by = {}
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
@@ -263,7 +283,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     star = any(s['Address'] == '*' for s in srcs)
     want = {s['Address'] for s in srcs if s['Address'] != '*'}
     notify_chat = str(cfg.get('notify_chat') or '').strip()
-    bridge_want = want | ({notify_chat} if notify_chat else set())  # approvals/assistant may not be an inbound source
+    assistant_chat = str(cfg.get('assistant_chat') or '').strip()
+    # Control chats do not have to be inbound sources. Notification replies and Assistant
+    # questions are different opt-ins, but both must reach the bridge's pre-decryption gate.
+    bridge_want = want | ({notify_chat} if notify_chat else set()) | ({assistant_chat} if assistant_chat else set())
     # Filtering here alone was too late: Baileys had already decrypted and downloaded media from
     # every chat. Give the same policy to its pre-decryption hook before asking for messages.
     try: _wa(c, '/filter', {'allDirect': star, 'jids': sorted(bridge_want)})

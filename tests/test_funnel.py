@@ -1,7 +1,7 @@
 """The pipe (funnel.py): one ranked pile out of what the hub already knows, lanes in the order
 a sharp assistant raises them, oldest first inside a lane, and a small memory of what was shown,
 done and pushed back. No model anywhere."""
-import json, unittest
+import json, threading, time, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -27,6 +27,36 @@ def store():
 def mail(s, subject, who='Dana', email='dana@vendor.com', body='Can you send the corrected file?', hours=2, tid=None, status='routed', channel='email', conv=None):
     return s.add_message({'TaskId': tid, 'ExternalId': f'x:{subject}:{hours}', 'ConversationId': conv, 'Channel': channel, 'SourceName': 'inbox',
                           'Subject': subject, 'FromName': who, 'FromEmail': email, 'SentAt': ago(hours), 'BodyText': body, 'Status': status})
+
+
+class CacheTests(unittest.TestCase):
+    def test_two_forced_reads_in_one_windows_clock_tick_both_refresh(self):
+        """Equal wall-clock timestamps do not mean another caller rebuilt while this one waited."""
+        s = store()
+        with mock.patch.object(funnel.time, 'time', return_value=1000.0):
+            self.assertEqual(funnel.pile(s, force=True)['items'], [])
+            t = s.create_task({'Title': 'new work', 'Kind': 'coding', 'Status': 'open'}, 'o')
+            mail(s, 'new work', tid=t)
+            self.assertEqual([i['title'] for i in funnel.pile(s, force=True)['items']], ['new work'])
+
+    def test_concurrent_forced_reads_share_the_rebuild_that_finished_while_they_waited(self):
+        s = store()
+        started, release, calls, answers = threading.Event(), threading.Event(), [], []
+
+        def slow_build(_store):
+            calls.append(1); started.set(); release.wait(2)
+            return {'rev': 'fresh', 'items': []}
+
+        def read(): answers.append(funnel.pile(s, force=True)['rev'])
+
+        with mock.patch.object(funnel, 'announce', return_value=[]), \
+             mock.patch.object(funnel, 'build', side_effect=slow_build), \
+             mock.patch.object(funnel, 'alerts', return_value=[]):
+            first = threading.Thread(target=read); first.start(); self.assertTrue(started.wait(1))
+            second = threading.Thread(target=read); second.start(); time.sleep(.03); release.set()
+            first.join(2); second.join(2)
+        self.assertEqual(calls, [1])
+        self.assertEqual(answers, ['fresh', 'fresh'])
 
 
 class FollowUpTests(unittest.TestCase):
@@ -133,6 +163,26 @@ class OneLinePerThreadTests(unittest.TestCase):
         m = mail(s2, '', who='Gabi', email='', body='just one', hours=0, channel='whatsapp', conv='wa:one', status='filed')
         s2.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertIsNone(funnel.build(s2)['items'][0].get('more'))
+
+    def test_a_triaged_task_is_one_row_and_does_not_swallow_other_tasks_in_the_same_chat(self):
+        """The task, not a long-lived WhatsApp room, is the grouping boundary after triage."""
+        s = store()
+        first = s.create_task({'Title': 'Reorder the intake', 'Kind': 'general', 'Status': 'open'}, 'o')
+        second = s.create_task({'Title': 'Fix the login', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        for n in range(7):
+            mid = mail(s, 'Reorder the intake', who='Gabi', email='', body=f'intake line {n}', hours=n / 100,
+                       tid=first, channel='whatsapp', conv='wa:long-room')
+            s.add_route(mid, first, 'attach', 1.0, 'triage: same task', [], 'triage')
+        for n in range(2):
+            mid = mail(s, 'Fix the login', who='Gabi', email='', body=f'login line {n}', hours=1 + n / 100,
+                       tid=second, channel='whatsapp', conv='wa:long-room')
+            s.add_route(mid, second, 'attach', 1.0, 'triage: different task', [], 'triage')
+
+        items = funnel.build(s)['items']
+        by_task = {i['tid']: i for i in items}
+        self.assertEqual(set(by_task), {first, second})
+        self.assertEqual(by_task[first].get('more'), 6)
+        self.assertEqual(by_task[second].get('more'), 1)
 
 
 class ReportFailedTests(unittest.TestCase):
@@ -479,11 +529,19 @@ class LanesTests(unittest.TestCase):
         items = funnel.build(s)['items']
         self.assertEqual([(i['lane'], i['kind'], i['idea_kind']) for i in items], [('forgotten', 'idea', 'followup')])
         self.assertEqual(items[0]['why'], 'you asked on Monday')
-        # a line about a task that has since closed is over, and is marked so
+        # Being spoken in the Assistant marks an ordinary follow-up read and removes it.
+        funnel.settle(s, items[0]['key'], 'surfaced')
+        self.assertEqual(funnel.build(s)['items'], [])
+        # Closing the underlying task does not mean the owner read the Assistant's line. It stays
+        # in Unread until it is explicitly surfaced there; task completion and reading are
+        # deliberately separate state machines.
         done = s.create_task({'Title': 'Deploy gpt-4.1', 'Kind': 'coding', 'Status': 'done'}, 'o')
         s.upsert_idea({'key': 'cold:TQ-done', 'kind': 'cold', 'text': 'Deploy gpt-4.1 has sat quiet', 'sig': 'z', 'action': {'tid': done}}, ago(1))
-        self.assertEqual([i['idea_kind'] for i in funnel.build(s)['items']], ['followup'])
-        self.assertEqual(s.get_idea(next(i['IdeaId'] for i in s.list_ideas() if i['Key'] == 'cold:TQ-done'))['Status'], 'done')
+        task_line = funnel.build(s)['items'][0]
+        self.assertEqual((task_line['kind'], task_line['tid']), ('idea', done))
+        self.assertEqual(s.get_idea(next(i['IdeaId'] for i in s.list_ideas() if i['Key'] == 'cold:TQ-done'))['Status'], 'open')
+        funnel.settle(s, task_line['key'], 'surfaced')
+        self.assertEqual(funnel.build(s)['items'], [])
         # ...and a line about a thread the owner has since replied on is over too
         s.set_setting('team_domains', 'ours.com', 't')
         mm = mail(s, 'PTO', who='Chana', email='chana@ours.com', hours=20, status='filed', conv='pto')   # a filed mail, past the window
@@ -495,7 +553,7 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(next(i for i in s.list_ideas() if i['Key'] == 'asked:pto')['Status'], 'done')
         # ...and it enters when SAID: a line last raised days ago is not this morning's pipe
         s.upsert_idea({'key': 'cold:TQ-0009', 'kind': 'cold', 'text': 'TQ-0009 has sat quiet', 'sig': 'y', 'action': {'tid': 9}}, ago(days=3))
-        self.assertEqual([i['idea_kind'] for i in funnel.build(s)['items']], ['followup'])
+        self.assertEqual(funnel.build(s)['items'], [])
 
     def test_a_persons_ask_comes_before_follow_up_lines_and_reports_and_fyi_is_last(self):
         s = store()
@@ -512,11 +570,109 @@ class LanesTests(unittest.TestCase):
         s.add_review({'TaskId': t2, 'MessageId': m2, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})   # newest, but promoted
         self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review', 'todo', 'idea', 'report', 'fyi'])   # a person's ask before the assistant's line before a report
 
-    def test_quiet_mail_stays_off_the_pile(self):
+    def test_marketing_mail_is_still_unread_until_the_owner_handles_it(self):
         s = store()
         m = mail(s, 'Weekly newsletter', who='news@vendor.com', email='news@vendor.com', body='Unsubscribe here. Manage your preferences.', status='filed')
         s.add_route(m, None, 'file', None, 'marketing', [], 'triage')
-        self.assertEqual(funnel.build(s)['items'], [])
+        self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('fyi', 'fyi')])
+
+    def test_an_unread_assistant_idea_survives_its_source_task_closing(self):
+        s = store()
+        task = s.create_task({'Title': 'One login case', 'Kind': 'general', 'Status': 'open'}, 'o')
+        source = mail(s, 'Blank login', tid=task, conv='login')
+        idea = s.upsert_idea({'key': 'blank-logins-pattern', 'kind': 'idea',
+                              'text': 'Blank logins happened twice; add an import check.', 'sig': 'new',
+                              'action': {'type': 'task', 'mid': source, 'tid': task}}, ago(1))
+        s.update_task(task, {'Status': 'done'}, 'owner')
+        items = funnel.build(s)['items']
+        self.assertIn(f"idea:{idea['IdeaId']}", [i['key'] for i in items])
+        self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'open')
+
+    def test_a_read_source_row_does_not_hide_a_later_unread_assistant_idea(self):
+        s = store()
+        source = mail(s, 'Connector issue', conv='connector')
+        idea = s.upsert_idea({'key': 'connector-followup', 'kind': 'idea',
+                              'text': 'The connector report suggests a separate follow-up.', 'sig': 'new',
+                              'action': {'type': 'task', 'mid': source}}, ago(1))
+        funnel.settle(s, f'msg:{source}', 'surfaced')
+        items = funnel.build(s)['items']
+        self.assertIn(f"idea:{idea['IdeaId']}", [i['key'] for i in items])
+        self.assertNotIn(f'msg:{source}', [i['key'] for i in items])
+
+
+class FeedUnreadTests(unittest.TestCase):
+    def test_all_and_unread_share_the_same_rows_until_the_owner_handles_one(self):
+        """The Claude product email regression: All showed a filed/automated row while Unread used
+        funnel.build() and silently filtered it.  Feed rows now carry the one durable distinction."""
+        s = store()
+        mid = mail(s, 'New ways to manage skills and messaging', who='Claude Team',
+                   email='team@claude.com', body='Product update', status='filed')
+        s.add_route(mid, None, 'file', None, 'triage: fyi product update', [], 'triage')
+        row = next(r for r in s.feed() if r['MessageId'] == mid)
+        self.assertEqual(row['Unread'], 1)
+        self.assertEqual(row['FunnelKey'], f'msg:{mid}')
+        funnel.settle(s, f'msg:{mid}', 'done')
+        self.assertEqual(next(r for r in s.feed() if r['MessageId'] == mid)['Unread'], 0)
+
+    def test_showing_a_row_marks_it_read_and_defer_temporarily_hides_it(self):
+        s = store(); mid = mail(s, 'FYI', status='filed')
+        funnel.settle(s, f'msg:{mid}', 'surfaced')
+        self.assertEqual(s.feed()[0]['Unread'], 0)
+        funnel.settle(s, f'msg:{mid}', 'later', hours=2)
+        self.assertEqual(s.feed()[0]['Unread'], 0)
+
+    def test_an_explicit_ignore_and_historical_rows_do_not_resurrect_as_unread(self):
+        s = store()
+        ignored = mail(s, 'Daily balance notice', status='ignored')
+        old = mail(s, 'Already read yesterday', status='filed')
+        s._exec("UPDATE message SET CreatedAt=datetime('now','localtime','-2 days') WHERE MessageId=?", (old,))
+        by_id = {r['MessageId']: r for r in s.feed()}
+        self.assertEqual((by_id[ignored]['Unread'], by_id[old]['Unread']), (0, 0))
+
+    def test_unread_priority_uses_the_saved_triage_fields_without_reclassifying(self):
+        s = store()
+        fyi = mail(s, 'Claude product update', status='filed')
+        task = s.create_task({'Title': 'Production is down', 'Kind': 'general', 'Status': 'open', 'Priority': 'urgent'}, 'o')
+        urgent = mail(s, 'Production is down', tid=task)
+        by_id = {r['MessageId']: r for r in s.feed()}
+        self.assertEqual(by_id[urgent]['UnreadRank'], 1)
+        self.assertEqual(by_id[fyi]['UnreadRank'], 7)
+
+    def test_repeated_assistant_posts_follow_the_latest_idea_and_read_state(self):
+        s = store()
+        old = s.add_message({'ExternalId': 'a1', 'Channel': 'assistant', 'Subject': 'Hindy still needs a sample',
+                             'FromName': 'Assistant', 'SentAt': ago(2), 'BodyText': 'send it', 'Status': 'feed',
+                             'Brief': json.dumps({'ideas': [{'id': 1}]})})
+        s.set_brief(old, json.dumps({'ideas': [{'id': 1}]}))
+        idea = s.upsert_idea({'key': 'hindy-sample', 'kind': 'idea', 'text': 'Hindy still needs a sample',
+                              'sig': 'one', 'action': {'mid': 9}}, ago(2))
+        new = s.add_message({'ExternalId': 'a2', 'Channel': 'assistant', 'Subject': 'Hindy still needs a sample',
+                             'FromName': 'Assistant', 'SentAt': ago(1), 'BodyText': 'send it', 'Status': 'feed',
+                             'Brief': json.dumps({'ideas': [{'id': idea['IdeaId']}]})})
+        s.set_brief(new, json.dumps({'ideas': [{'id': idea['IdeaId']}]}))
+        s.set_ideas_message([idea['IdeaId']], new)
+        by_id = {r['MessageId']: r for r in s.feed()}
+        self.assertEqual((by_id[old]['Unread'], by_id[new]['Unread'], by_id[new]['FunnelKey']),
+                         (0, 1, f"idea:{idea['IdeaId']}"))
+        funnel.settle(s, f"idea:{idea['IdeaId']}", 'surfaced')
+        self.assertEqual(next(r for r in s.feed() if r['MessageId'] == new)['Unread'], 0)
+
+    def test_work_an_agent_has_stays_in_unread_but_never_becomes_the_next_chat_item(self):
+        s = store()
+        task = s.create_task({'Title': 'Import the files', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        mid = mail(s, 'Import the files', tid=task)
+        live = [{'taskId': task, 'agent': 'codex', 'label': 'codex', 'started': ago(minutes=5),
+                 'idle': 2, 'waiting': False, 'tail': ['working']}]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
+            row = next(r for r in s.feed() if r['MessageId'] == mid)
+            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 8, 'codex'))
+            self.assertEqual(row['FunnelKey'], f'agent:{task}')
+            self.assertIsNone(funnel.next_item(s))
+        waving = [dict(live[0], idle=200, waiting=True, tail=['Which region should I use?'])]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=waving):
+            row = next(r for r in s.feed() if r['MessageId'] == mid)
+            self.assertEqual((row['Unread'], row['UnreadRank']), (1, 0))
+            self.assertEqual(funnel.next_item(s)['key'], f'agent:{task}')
 
 
 class MemoryTests(unittest.TestCase):
@@ -622,11 +778,11 @@ class MemoryTests(unittest.TestCase):
         self.assertIsNone(funnel.next_item(s))
         self.assertIn('surfaced', funnel.VERBS)
 
-    def test_a_quiet_row_can_still_be_pulled_into_the_chat_by_hand(self):
+    def test_a_low_priority_row_is_unread_and_can_be_pulled_into_the_chat_by_hand(self):
         s = store()
         m = mail(s, 'Weekly newsletter', who='news@vendor.com', email='news@vendor.com', body='Unsubscribe here. Manage your preferences.', status='filed')
         s.add_route(m, None, 'file', None, 'marketing - skim past', [], 'triage')
-        self.assertEqual(funnel.build(s)['items'], [])
+        self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('fyi', 'fyi')])
         it = funnel.item_for_key(s, f'msg:{m}')
         self.assertEqual((it['kind'], it['lane'], it['mid']), ('fyi', 'fyi', m))
         self.assertEqual(it['why'], 'marketing - skim past')

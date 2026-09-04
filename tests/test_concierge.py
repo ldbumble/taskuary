@@ -64,6 +64,47 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(hist[0]['options'], ['send it', 'redraft it'])
         self.assertEqual((hist[0]['card']['kind'], hist[0]['card']['rid'], hist[0]['card']['draft']), ('review', r, True))
 
+    def test_task_specific_walkthrough_turns_are_kept_with_that_task(self):
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        concierge.say(s, 'what exactly did she ask?', key=f'review:{r}',
+                      llm=lambda *a, **k: 'She asked for the corrected file.')
+        discussion = [c for c in s.list_comments(t)
+                      if c['ActorType'] in (concierge.DISCUSSION_USER_TYPE, concierge.DISCUSSION_ASSISTANT_TYPE)]
+        self.assertEqual([c['ActorType'] for c in discussion],
+                         [concierge.DISCUSSION_ASSISTANT_TYPE, concierge.DISCUSSION_USER_TYPE,
+                          concierge.DISCUSSION_ASSISTANT_TYPE])
+        self.assertIn('corrected export', discussion[0]['Body'])
+
+    def test_a_deep_dive_is_dispatched_to_a_regular_agent_instead_of_merely_offered(self):
+        s = store()
+        session = mock.Mock()
+        with mock.patch.object(concierge.general, 'start_session', return_value=session), \
+             mock.patch.object(concierge.threading, 'Thread') as thread:
+            out = concierge.say(s, 'can you do a deep dive on the ECC agent harness?')
+        task = s.get_task(out['decision']['taskId'])
+        self.assertEqual((task['Kind'], task['SourceRef']), ('general', 'assistant:agent'))
+        self.assertIn('deep dive', task['Summary'])
+        thread.assert_called_once()
+        thread.return_value.start.assert_called_once()
+        self.assertIn('regular agent now', out['say'])
+
+    def test_okay_send_it_accepts_the_regular_work_offer_and_keeps_the_prior_brief(self):
+        s = store()
+        dock, _ = general.dock_task(s)
+        concierge.record(s, dock['TaskId'], 'user', 'back to GitHub: do a deep dive on the ECC harness')
+        concierge.record(s, dock['TaskId'], 'assistant', 'I can dig into the ECC harness. That is reading and analysis work, not a code change.')
+        session = mock.Mock()
+        with mock.patch.object(concierge.general, 'start_session', return_value=session), \
+             mock.patch.object(concierge.threading, 'Thread') as thread:
+            out = concierge.say(s, 'okay send it')
+        task = s.get_task(out['decision']['taskId'])
+        self.assertIn('ECC harness', task['Summary'])
+        self.assertNotEqual(task['Title'].lower(), 'okay send it')
+        self.assertEqual(task['SourceRef'], 'assistant:agent')
+        thread.return_value.start.assert_called_once()
+
     def test_without_a_model_the_facts_speak(self):
         s = store()
         t, m, r = drafted(s)
@@ -83,10 +124,17 @@ class TurnTests(unittest.TestCase):
         s = store()
         out = concierge.surface(s, llm=lambda *a, **k: 'never called')
         self.assertIsNone(out['item']); self.assertEqual(out['say'], concierge.ALL_DONE)
+        concierge.surface(s, llm=lambda *a, **k: 'never called')
+        self.assertEqual([h['text'] for h in concierge.history(s, general.dock_task(s)[0]['TaskId'])],
+                         [concierge.ALL_DONE])                         # two auto-advances persist one answer
+        dock = general.dock_task(s)[0]
+        s.add_comment(dock['TaskId'], 'assistant', general.ASSISTANT_TYPE, concierge.ALL_DONE)
+        self.assertEqual([h['text'] for h in concierge.history(s, dock['TaskId'])],
+                         [concierge.ALL_DONE])                         # legacy duplicate rows render once too
         drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertIsNone(again['item']); self.assertIn("Nothing new. 1 thing I've shown you still waits - Dana - Export still broken (needs your yes)", again['say'])
+        self.assertIsNone(again['item']); self.assertEqual(again['say'], "1 unread thing still waits. Say next and I'll take them one at a time.")
         s.add_message({'ExternalId': 'r9', 'Channel': 'report', 'SourceName': 'Nightly', 'Subject': 'Nightly report', 'FromName': 'Nightly', 'SentAt': ago(1), 'BodyText': '5 rows', 'Status': 'feed'})
         mail_out = concierge.surface(s, llm=lambda *a, **k: 'never', only='mail')
         self.assertIsNone(mail_out['item']); self.assertEqual(mail_out['exhausted'], 'mail'); self.assertIn("That's all the mail. 2 other things still wait", mail_out['say'])
@@ -189,6 +237,9 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(_verb(concierge.decide_words('reply: we are on it, expect the file Friday')), ('reply', 'we are on it, expect the file Friday'))
         self.assertEqual(concierge.decide_words('tell them the import runs tonight')['verb'], 'reply')
         self.assertEqual(concierge.decide_words('send it to the coding agent')['verb'], 'coder')
+        self.assertEqual(_verb(concierge.decide_words('coding agent')), ('coder', ''))
+        self.assertEqual(_verb(concierge.decide_words('regular agent')), ('regular_agent', ''))
+        self.assertEqual(concierge.decide_words('send to agent')['verb'], 'agent_choice')
         self.assertEqual(concierge.decide_words('send to codex to review')['verb'], 'coder')
         self.assertEqual(concierge.decide_words('rerun please')['verb'], 'rerun')
         self.assertEqual(concierge.decide_words('approve')['verb'], 'approve')
@@ -223,6 +274,10 @@ class DecisionTests(unittest.TestCase):
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.say(s, 'not mine, ignore it', key=f'review:{r}')
         self.assertEqual(out['decision']['verb'], 'not_ours'); self.assertIn('filed', out['say'])
+        out = concierge.say(s, 'send to agent', key=f'review:{r}', llm=lambda *a, **k: 'must not be asked')
+        self.assertIsNone(out['decision'])
+        self.assertEqual(out['options'], ['Coding agent', 'Regular agent'])
+        self.assertIn('Nothing has been started', out['say'])
         self.assertEqual(concierge.parse_decision('Sure.\nDECIDE: bogus'), ('Sure.', None))
 
 
@@ -306,8 +361,8 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(c.post('/api/reports/999/rerun').status_code, 404)
 
 
-class FyiBatchTests(unittest.TestCase):
-    def test_fyis_come_as_a_handful_and_a_mail_walk_still_stops_for_a_waiting_agent(self):
+class FyiWalkTests(unittest.TestCase):
+    def test_fyis_come_four_at_a_time_and_a_mail_walk_still_stops_for_a_waiting_agent(self):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         for n in range(5):
@@ -315,18 +370,16 @@ class FyiBatchTests(unittest.TestCase):
                                'FromEmail': f'p{n}@ours.com', 'SentAt': ago(n), 'BodyText': f'FYI number {n}, done.', 'Status': 'filed'})
             s.add_route(m, None, 'file', None, 'triage: fyi - a colleague keeping you in the loop', [], 'triage')
         self.assertEqual([i['lane'] for i in funnel.build(s)['items']], ['fyi'] * 5)
-        seen = {}
-        out = concierge.surface(s, llm=lambda sy, u, **k: seen.update(u=u) or 'Four notes from the team - all done items, nothing for you. Dig into any?')
-        self.assertEqual(out['item']['kind'], 'fyis'); self.assertEqual(len(out['item']['items']), 4)
-        self.assertIn('4 things people told the owner', seen['u']); self.assertIn('Note 4', seen['u']); self.assertNotIn('Note 0', seen['u'])   # oldest first
-        self.assertEqual(out['left'], 1)
-        self.assertEqual(len(funnel.build(s)['items']), 1)                                  # the four are read
-        funnel.settle(s, out['item']['key'], 'done')                                          # the batch key lands on each
-        self.assertEqual({k: v['Status'] for k, v in s.funnel_states().items() if v['Status'] == 'done'}.__len__(), 4)
-        # the last one alone, without a model, in the hub's words
         with mock.patch.object(concierge, 'brain', return_value=None):
-            one = concierge.surface(s)
-        self.assertEqual(one['item']['kind'], 'fyis'); self.assertIn('1 thing people told you, nothing to do: Person 0 - Note 0', one['say'])
+            out = concierge.surface(s)
+        self.assertEqual((out['item']['kind'], out['item']['title'], out['left']), ('fyis', '4 fyi', 1))
+        self.assertEqual(len(out['item']['items']), 4)
+        self.assertIn('4 things people told you', out['say'])
+        self.assertEqual([i['title'] for i in funnel.build(s)['items']], ['Note 0'])
+        with mock.patch.object(concierge, 'brain', return_value=None):
+            two = concierge.surface(s)
+        self.assertEqual((two['item']['kind'], two['item']['title'], two['left']), ('fyis', '1 fyi', 0))
+        self.assertEqual(funnel.build(s)['items'], [])
         # a mail-only walk does not step over an agent waiting on you
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 120, 'waiting': True, 'tail': ['ok?']}]
@@ -380,6 +433,29 @@ class TaskNowTests(unittest.TestCase):
 
 
 class ThreadTests(unittest.TestCase):
+    def test_every_message_triage_combined_is_handed_to_the_assistant_in_one_item(self):
+        s = store()
+        t = s.create_task({'Title': 'Reorder the seven steps', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mids = []
+        for n in range(7):
+            mids.append(s.add_message({'TaskId': t, 'ExternalId': f'wa:{n}', 'ConversationId': 'wa:room',
+                                       'Channel': 'whatsapp', 'Direction': 'in', 'Subject': 'Reorder the seven steps',
+                                       'FromName': 'Gabi', 'SentAt': ago(0), 'BodyText': f'combined message {n}',
+                                       'Status': 'routed'}))
+        # Supporting context belongs in reasoning about whether the owner answered, but it is not an
+        # eighth triaged ask and must not inflate the grouped-message count.
+        s.add_message({'TaskId': t, 'ExternalId': 'wa:mine', 'ConversationId': 'wa:room', 'Channel': 'whatsapp',
+                       'Direction': 'in', 'Subject': 'Reorder the seven steps', 'FromName': 'You',
+                       'SentAt': ago(0), 'BodyText': 'I will log it as a spec.', 'Status': 'context'})
+        item = {'key': f'msg:{mids[-1]}', 'kind': 'asked', 'lane': 'asked', 'title': 'Reorder the seven steps',
+                'who': 'Gabi', 'when': ago(0), 'why': 'triage combined the ask', 'mid': mids[-1], 'tid': t}
+
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            fx = concierge.facts(s, item)
+        self.assertIn('TRIAGE COMBINED THESE 7 MESSAGES INTO THIS ONE TASK', fx)
+        for n in range(7): self.assertIn(f'combined message {n}', fx)
+        self.assertNotIn('TRIAGE COMBINED THESE 8 MESSAGES', fx)
+
     def test_the_owner_own_reply_on_the_thread_is_in_the_facts(self):
         """The newest message on a live thread is usually the owner's own answer, read back out of
         Sent - the facts used to drop it, and the assistant said it could not see the reply."""
@@ -743,6 +819,9 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0])
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r); self.assertIn('Dana wrote on email', nxt['say'])   # the facts, no model
+            # The browser's walk resumes unresolved rows it already showed; a shown card is not read.
+            resumed = c.post('/api/concierge/next', json={'include_surfaced': True}).json()
+            self.assertEqual(resumed['item']['rid'], r)
             state = c.get('/api/concierge').json()
             self.assertEqual(state['messages'][0]['card']['kind'], 'review'); self.assertIn('providers', state)
             said = c.post('/api/concierge/say', json={'text': 'what did she attach?', 'key': nxt['item']['key']}).json()

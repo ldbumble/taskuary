@@ -327,7 +327,8 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'already and yours is ignored for those; this is for idea:* lines>", '
             '"why": "<one line: what this rests on - the mail, the date, the silence, the pattern - named as it appears in what you '
             'were given (sender, subject, mid, TQ-ref), so the owner can check it>", "mid": <the message id it is '
-            'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>"}], '
+            'about, or null>, "task": "<idea:* only - a task title the owner could accept as-is, or null>", '
+            '"kind": "<when task is not null: coding if it needs a repository/system changed, otherwise general>"}], '
             '"notes": "<your note to the next check, under 120 words: FACTS AND TIMINGS ONLY - what you looked at and found nothing in, '
             'the date or silence length at which something becomes worth raising, a fact you settled so it need not be worked out again. '
             'Never a standing rule about what to ignore or what is noise: the instruction decides that, and a note that says '
@@ -558,6 +559,8 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
             act = {'type': 'task', 'mid': mid, 'title': title} if title and mid else {'type': 'message', 'mid': mid} if mid else {'type': 'note'}
+            if act['type'] == 'task' and str(s.get('kind') or '').lower() in ('coding', 'general'):
+                act['kind'] = str(s['kind']).lower()
             # a line that NAMES a task belongs to it, whatever else it carries: without the tid the
             # pipe could not tell that an agent had the work, so "TQ-0329 July financials hasn't moved"
             # sat in 'slipped' while the task said in_progress (the owner, 2026-09-03)
@@ -1101,9 +1104,40 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
     elif verb == 'task':
         if not a.get('mid'): raise ValueError('this idea is not about a message, so there is nothing to make a task from')
         from . import ingest
-        tid = ingest.task_from_message(store, a['mid'], actor, 'coding')
+        message = store.get_message(a['mid']) or {}
+        prior = store.get_task(message.get('TaskId')) if message.get('TaskId') else None
+        # The task kind is the router. The old path always launched `_auto_code`, even when the
+        # message already belonged to a GENERAL task; that is how TQ-0367 was silently reopened
+        # in a repository after it had been completed. An explicit kind from this assistant's
+        # one triage wins, then the existing task kind, with coding retained only as the legacy
+        # default for older idea rows that carry neither.
+        kind = str(a.get('kind') or (prior or {}).get('Kind') or 'coding').lower()
+        if kind not in ('coding', 'general'): kind = 'coding'
+        if prior and prior.get('Status') in ('done', 'dropped'):
+            # This is NEW work noticed after an earlier task was completed. A message can point
+            # at only one task, so do not steal it from history or rename/reopen the completed
+            # task. Carry the evidence into a fresh assistant-owned task instead.
+            title = str(a.get('title') or i.get('Text') or 'Assistant follow-up').strip()[:200]
+            source_text = str(message.get('BodyText') or '').strip()
+            summary = str(i.get('Text') or '').strip()
+            if source_text and source_text not in summary: summary += f'\n\nSource message: {source_text}'
+            tid = store.create_task({'Title': title, 'Summary': summary[:2000], 'Kind': kind,
+                                     'Source': 'assistant', 'SourceRef': f'assistant:idea:{idea_id}'}, actor)
+            store.add_comment(tid, 'assistant', 'assistant_agent',
+                              f'Created from assistant idea {idea_id}; related completed task {task_ref(prior["TaskId"])}.')
+            store.audit('task', tid, 'create_from_assistant_idea', actor,
+                        detail={'idea_id': idea_id, 'message_id': a['mid'], 'related_task_id': prior['TaskId']})
+        else:
+            tid = ingest.task_from_message(store, a['mid'], actor, kind)
         if a.get('title'): store.update_task(tid, {'Title': str(a['title'])[:200]}, actor)
-        if store.get_settings().get('coder_auto_enabled') == '1': ingest._spawn(ingest._auto_code, store, tid)
+        task = store.get_task(tid) or {}
+        brief = str(a.get('title') or i.get('Text') or task.get('Title') or '').strip()
+        why = str(a.get('why') or '').strip()
+        if why: brief += f'\n\nWhy the assistant raised it: {why}'
+        if kind == 'general':
+            ingest._spawn(_auto_general, store, tid, brief)
+        elif store.get_settings().get('coder_auto_enabled') == '1':
+            ingest._spawn(ingest._auto_code, store, tid)
         out |= {'taskId': tid, 'ref': task_ref(tid)}
     elif verb == 'snooze':
         until = (datetime.now() + timedelta(days=max(1, int(days or 1)))).strftime('%Y-%m-%d %H:%M:%S')
@@ -1119,3 +1153,15 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
         else: learn.learn_from(store, ev)
     store.audit('idea', idea_id, verb, actor, detail={'kind': i.get('Kind')})
     return out
+
+
+def _auto_general(store, tid: int, brief: str) -> None:
+    """The regular-agent counterpart to ingest._auto_code for an accepted assistant idea."""
+    from . import general
+    try:
+        session = general.start_session(store, tid, actor='router')
+        store.add_comment(tid, 'router', 'agent', 'sent to the regular agent from the assistant')
+        session.send_prompt(brief)
+    except Exception as e:
+        logger.warning(f'regular-agent dispatch failed for task {tid}: {e}')
+        store.add_comment(tid, 'router', 'agent', f'Regular-agent start failed: {str(e)[:200]}')

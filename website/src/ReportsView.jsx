@@ -255,8 +255,9 @@ export default function ReportsView() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // a report run is synchronous and can take a while (a slow query, an AI pass) - say so
-  // on the row that's working instead of leaving a dead button
+  // Manual runs belong to the server, not to this mounted page. A synchronous browser request was
+  // abandoned when the owner switched tabs, so the report stopped before it filed its result.
+  // Queue the same background road the Assistant uses; leaving Reports cannot cancel it.
   const [draft, setDraft] = useState(null);   // a composed config waiting in the builder
   const [running, setRunning] = useState(null);
   useEffect(() => {
@@ -272,9 +273,9 @@ export default function ReportsView() {
   const runNow = async (sid) => {
     setRunning(sid); setNote(null);
     try {
-      const { data } = await api.post(`/api/sources/${sid}/run`);
-      setNote({ ok: !String(data.subject).includes("FAILED"), detail: `filed on the Timeline: ${data.subject}` });
-    } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "run failed" }); }
+      const { data } = await api.post(`/api/reports/${sid}/rerun`);
+      setNote({ ok: true, detail: `${data.title || "Report"} is running in the background. You can leave this tab; its result will land on the Timeline.` });
+    } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
     setRunning(null); load();
   };
   const syncNow = async () => {
@@ -727,8 +728,16 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const watchedIds = (Array.isArray(cfg.watch_source_ids) ? cfg.watch_source_ids : []).map(Number);
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section={workflow ? "Workflows" : "Reports"} onBack={onBack}
-        title={cur ? (parse(cur.ConfigJson).title || `Edit ${workflow ? "workflow" : "report"}`) : `New ${workflow ? "AI agent workflow" : "report"}`} />
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Crumb section={workflow ? "Workflows" : "Reports"} onBack={onBack}
+            title={cur ? (parse(cur.ConfigJson).title || `Edit ${workflow ? "workflow" : "report"}`) : `New ${workflow ? "AI agent workflow" : "report"}`} />
+        </Box>
+        {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
+          onClick={() => setConfirmDel(true)} sx={{ mt: 0.25, flexShrink: 0 }}>
+          Delete {workflow ? "workflow" : "report"}
+        </Button>}
+      </Box>
       <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
         <Step completed={!!String(cfg.title || "").trim() && srcs.some((x) => x.type)}>
           <StepButton onClick={() => setStep(0)}>Pipeline</StepButton>
@@ -1106,12 +1115,6 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             )}
             {saveErr && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{saveErr}</Alert>}
             {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#47654a" }}>✓ {savedMsg}</Typography>}
-            {cur && (
-              <Box sx={{ display: "flex", gap: 1, mt: 1.5, alignItems: "center" }}>
-                <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-                  onClick={() => setConfirmDel(true)}>Delete {workflow ? "workflow" : "report"}</Button>
-              </Box>
-            )}
           </StepContent>
         </Step>
       </Stepper>

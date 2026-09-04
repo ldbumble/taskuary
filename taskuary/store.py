@@ -720,6 +720,12 @@ class SQLiteStore:
     def _poke(self, *kinds, **payload):
         """Wake the UI. A write that does not change what a tab is looking at stays quiet."""
         try:
+            # The Assistant pile is expensive to assemble, so its normal reads use a long cache.
+            # Any durable feed/task change invalidates that cache before the websocket wakes the
+            # views: new provider messages stay immediate without every open tab rebuilding it.
+            if any(k in ('feed-changed', 'task-changed') for k in kinds):
+                from . import funnel
+                funnel.invalidate()
             from . import live
             for k in kinds: live.emit(k, **payload)
         except Exception:
@@ -757,7 +763,12 @@ class SQLiteStore:
     def update_task(self, task_id, fields, actor):
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
-        closed = ", ClosedAt='" + _now() + "'" if fields.get('Status') in ('done', 'dropped') else ''
+        # ClosedAt describes the CURRENT lifecycle, not merely that the task was closed once.
+        # An explicit reopen used to change Status while retaining the old close timestamp, so
+        # the API simultaneously said "waiting" and "closed" and different views chose a
+        # different truth. A write that does not touch Status leaves the timestamp alone.
+        closed = (", ClosedAt='" + _now() + "'" if fields.get('Status') in ('done', 'dropped')
+                  else ', ClosedAt=NULL' if 'Status' in fields else '')
         self._exec(f"UPDATE task SET {','.join(f'{c}=?' for c in cols)}, UpdatedBy=?, UpdatedAt=?{closed} WHERE TaskId=?",
                    [fields[c] for c in cols] + [actor, _now(), task_id])
         # closing a task IS the decision: its pending reviews (escalations, drafts) resolve
@@ -1031,14 +1042,18 @@ class SQLiteStore:
         self._exec('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
                    'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
                    (key, status, until, note, by, _now()))
+        self._poke('feed-changed')                 # Unread is a feed filter; remove/read it immediately
     def clear_funnel_state(self, key):
         """Forget one row's state entirely - it is new again. A new chat does this to an agent
         that is still waiting on you: shown once yesterday is not an answer."""
         self._exec('DELETE FROM funnel_state WHERE Key=?', (key,))
+        self._poke('feed-changed')
     def clear_funnel_states(self, statuses=('surfaced',)):
         """A new chat walks the pile afresh: what was merely SHOWN comes back; what the owner
         decided (done, later) stands."""
-        if statuses: self._exec(f"DELETE FROM funnel_state WHERE Status IN ({','.join('?' * len(statuses))})", list(statuses))
+        if statuses:
+            self._exec(f"DELETE FROM funnel_state WHERE Status IN ({','.join('?' * len(statuses))})", list(statuses))
+            self._poke('feed-changed')
     def dock_tasks(self, tag, limit=60):
         """Every conversation the guide has had, newest first - the chats list."""
         return self._rows('SELECT * FROM task WHERE SourceRef=? ORDER BY TaskId DESC LIMIT ?', (tag, int(limit)))
@@ -1208,6 +1223,24 @@ class SQLiteStore:
     def add_comment(self, task_id, actor, actor_type, body):
         return self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
                           (task_id, actor, actor_type, body, _now()))
+    def add_comment_once(self, task_id, actor, actor_type, body):
+        """Append a turn unless it is already the last turn on this task.
+
+        Concierge auto-advance can be requested by more than one open browser or by a card and a
+        simultaneous live event. Check-and-insert under the store lock so identical assistant
+        turns cannot both become durable while those requests race.
+        """
+        with self.lock:
+            last = self.cx.execute(
+                'SELECT CommentId,Actor,ActorType,Body FROM comment WHERE TaskId=? ORDER BY CommentId DESC LIMIT 1',
+                (task_id,)).fetchone()
+            if last and last['Actor'] == actor and last['ActorType'] == actor_type and last['Body'] == body:
+                return last['CommentId']
+            cur = self.cx.execute(
+                'INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
+                (task_id, actor, actor_type, body, _now()))
+            self.cx.commit(); self._writes += 1
+            return cur.lastrowid
     def list_comments(self, task_id): return self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
 
     # audit chain
@@ -1337,6 +1370,22 @@ class SQLiteStore:
     def add_review(self, fields):
         rid = self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
         self._poke_review({**fields, 'ReviewId': rid})
+        # Sync and triage run independently. If the owner answered in WhatsApp/Teams/mail while
+        # triage was still drafting, the context row can beat this insert. Reconcile in both
+        # directions so thread timing -- rather than worker timing -- decides whether a draft lives.
+        # This reverse-order repair is intentionally limited to triage-created reply work. A
+        # person can deliberately ask for a follow-up draft after their last sent message; that
+        # new instruction must stay pending. Once any draft is already pending, the normal sync
+        # path in channels.py still retires it when a newer owner reply arrives.
+        triage_reply = str(fields.get('Reason') or '').startswith('needs a reply:')
+        if fields.get('Status') == 'pending' and triage_reply and fields.get('MessageId'):
+            target = self.get_message(fields['MessageId']) or {}
+            conv, after = target.get('ConversationId'), target.get('SentAt')
+            sent = self._one("SELECT * FROM message WHERE Status='context' AND ConversationId=? AND SentAt>=? "
+                             'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (conv, after)) if conv and after else None
+            if sent:
+                from .channels import retire_draft_answered_elsewhere
+                retire_draft_answered_elsewhere(self, fields.get('TaskId'), sent)
         return rid
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def reviews_for_message(self, mid):
@@ -1406,6 +1455,15 @@ class SQLiteStore:
         self._review_changed(rid)
     def update_review_draft(self, rid, draft, run_id):
         self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
+        self._review_changed(rid)
+    def update_review_message(self, rid, mid):
+        """Pin a reply draft to the newest inbound message it was written against.
+
+        MessageId is more than the eventual delivery target for chat.  It is also the durable
+        freshness marker: if another line lands on the task after this one, approval can see that
+        the draft predates the conversation and refuse to send it unchanged.
+        """
+        self._exec('UPDATE review SET MessageId=? WHERE ReviewId=?', (mid, rid))
         self._review_changed(rid)
     def save_review_draft(self, rid, draft):
         """Persist the owner's editor without erasing which agent run originally produced it."""
@@ -1771,7 +1829,7 @@ class SQLiteStore:
     NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT).replace('{theirs}', THEIR_TURN)
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
-        q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt,
+        q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
@@ -1838,6 +1896,91 @@ class SQLiteStore:
                 r['Working'] = live[r['TaskId']]
                 r['AgentWaiting'] = r['TaskId'] in parked
                 if r.get('ReviewStatus') != 'pending': r['NeedsYou'] = 1 if r['TaskId'] in parked else 0
+        # Unread and All are two views of this SAME feed.  Triage's verdict is not a read receipt:
+        # a filed FYI, automated notice, promotional message, ignored-by-policy row, report, or
+        # Assistant post all arrived and therefore start unread.  The old Assistant rail used
+        # funnel.build() as its unread source; that separate source applied category, age, mute,
+        # conversation and size filters, so rows plainly visible in All (notably ordinary product
+        # mail) could never appear in Unread.  Put the durable handled state on every feed row and
+        # let the client filter the one shared result instead.
+        funnel_states = self.funnel_states()
+        ideas_by_mid = {}
+        for idea in self.list_ideas():
+            if idea.get('MessageId'):
+                ideas_by_mid.setdefault(idea['MessageId'], []).append(idea)
+        now_dt = datetime.now()
+        now = now_dt.strftime('%Y-%m-%d %H:%M:%S')
+        try: unread_hours = max(1, int(self.get_settings().get('funnel_hours') or 12))
+        except (TypeError, ValueError): unread_hours = 12
+        unread_cutoff = (now_dt - timedelta(hours=unread_hours)).strftime('%Y-%m-%d %H:%M:%S')
+        for r in rows:
+            linked_ideas = ideas_by_mid.get(r['MessageId'], []) if r.get('Channel') == 'assistant' else []
+            brief_idea_ids = []
+            if r.get('Channel') == 'assistant' and r.get('Brief'):
+                try: brief_idea_ids = [i.get('id') for i in (json.loads(r['Brief']).get('ideas') or []) if i.get('id')]
+                except (TypeError, ValueError, json.JSONDecodeError): pass
+            open_ideas = [i for i in linked_ideas if i.get('Status') == 'open']
+            unread_ideas = [i for i in open_ideas
+                            if (funnel_states.get(f"idea:{i['IdeaId']}") or {}).get('Status') not in ('surfaced', 'done', 'later', 'skip')]
+            if unread_ideas:
+                key = f"idea:{unread_ideas[0]['IdeaId']}"
+            elif r.get('ReviewStatus') == 'pending' and r.get('ReviewId'):
+                key = f"review:{r['ReviewId']}"
+            elif r.get('Working') and r.get('TaskId'):
+                key = f"agent:{r['TaskId']}"
+            elif r.get('Channel') == 'report':
+                key = f"report:{r['MessageId']}"
+            else:
+                key = f"msg:{r['MessageId']}"
+            state = funnel_states.get(key) or {}
+            verdict = state.get('Status')
+            deferred = verdict in ('later', 'skip') and (not state.get('Until') or state['Until'] > now)
+            # The pipe is a live unread window, not a migration that resurrects every historical
+            # Timeline row which predates funnel_state. CreatedAt is used (not the provider's sent
+            # date), so mail first synced after an offline weekend is still a new arrival. Explicit
+            # work remains visible past the window; an owner policy's `ignored` is already handled.
+            active_work = bool(r.get('AgentWaiting') or r.get('Working')
+                               or r.get('ReviewStatus') == 'pending' or r.get('NeedsYou'))
+            aged = bool(r.get('IngestedAt') and r['IngestedAt'] < unread_cutoff and not active_work)
+            # Assistant reports can repeat the same durable idea. set_ideas_message moves that
+            # idea to the newest post, so an older post whose Brief names ideas but owns none is a
+            # superseded copy, not fresh unread work. The newest row follows idea:<id>, exactly the
+            # same key the chat settles.
+            assistant_handled = bool(brief_idea_ids and not unread_ideas)
+            handled = (assistant_handled or verdict in ('surfaced', 'done') or deferred
+                       or r.get('TaskStatus') in ('done', 'dropped')
+                       or (r.get('ReviewId') and r.get('ReviewStatus') not in (None, 'pending'))
+                       or bool(r.get('AnsweredAt'))
+                       or r.get('MsgStatus') in ('withdrawn', 'ignored')
+                       or aged)
+            # Work currently inside an agent remains on the unread rail as an inactive status row.
+            # It cannot become Next (funnel.next_item skips lane=working), and when the agent waves
+            # the same stable agent:<task> key is promoted. A prior read of the source message must
+            # not make the live work disappear.
+            if r.get('Working') and not r.get('AgentWaiting') and r.get('TaskStatus') not in ('done', 'dropped'):
+                handled = False
+            r['FunnelKey'] = key
+            r['Unread'] = 0 if handled else 1
+            # Sorting Unread is not a second triage. These are only the durable fields written by
+            # the one route decision, plus live agent state. All remains chronological; Unread uses
+            # this band to promote what blocks work or needs the owner.
+            if r.get('AgentWaiting'):
+                rank = 0
+            elif (r.get('Priority') or '').lower() == 'urgent':
+                rank = 1
+            elif r.get('ReviewStatus') == 'pending':
+                rank = 2
+            elif r.get('Channel') == 'report' and str(r.get('Subject') or '').rstrip().endswith('FAILED'):
+                rank = 3
+            elif r.get('NeedsYou'):
+                rank = 4
+            elif r.get('Channel') == 'report':
+                rank = 6
+            elif r.get('Working'):
+                rank = 8
+            else:
+                rank = 7
+            r['UnreadRank'] = rank
         # the SQL filter matched before live sessions were known; a row a working agent just took off
         # you must not sit in "needs me" wearing a chip that says otherwise
         if pending_only: rows = [r for r in rows if r.get('NeedsYou')]
@@ -1860,19 +2003,21 @@ class SQLiteStore:
 
     def people(self, limit=60):
         """Everyone who has written to you lately - the hand-off picker's address book."""
-        return self._rows("""SELECT FromEmail Email, MAX(FromName) Name, COUNT(*) N, MAX(SentAt) Last
-                             FROM message WHERE FromEmail LIKE '%@%' AND Status<>'context'
-                             GROUP BY LOWER(FromEmail) ORDER BY Last DESC LIMIT ?""", (int(limit),))
+        q = """SELECT FromEmail Email, MAX(FromName) Name, COUNT(*) N, MAX(SentAt) Last
+               FROM message WHERE FromEmail LIKE '%@%' AND Status<>'context'
+               GROUP BY LOWER(FromEmail) ORDER BY Last DESC"""
+        return self._rows(q if limit is None else q + ' LIMIT ?', () if limit is None else (int(limit),))
 
     def chats(self, limit=200):
         """Every chat Taskuary has seen, newest first: the id a message can be SENT to, and a
         name to recognise it by. The id is whatever the channel itself uses - a Graph chat id,
         a WhatsApp JID - which is exactly why nobody can type it from memory."""
-        return self._rows("""SELECT Channel, ConversationId Cid,
-                                    MAX(CASE WHEN IFNULL(Direction,'in')<>'out' THEN FromName END) Name,
-                                    COUNT(*) N, MAX(SentAt) Last
-                             FROM message WHERE ConversationId IS NOT NULL AND IFNULL(Channel,'')<>'email'
-                             GROUP BY Channel, ConversationId ORDER BY Last DESC LIMIT ?""", (int(limit),))
+        q = """SELECT Channel, ConversationId Cid,
+                      MAX(CASE WHEN IFNULL(Direction,'in')<>'out' THEN FromName END) Name,
+                      COUNT(*) N, MAX(SentAt) Last
+               FROM message WHERE ConversationId IS NOT NULL AND IFNULL(Channel,'')<>'email'
+               GROUP BY Channel, ConversationId ORDER BY Last DESC"""
+        return self._rows(q if limit is None else q + ' LIMIT ?', () if limit is None else (int(limit),))
 
     def message_routes(self, mid: int) -> list:
         """Every judgement ever made ABOUT THIS MESSAGE, oldest first.

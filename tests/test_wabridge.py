@@ -39,9 +39,10 @@ class BridgeManagerTests(unittest.TestCase):
         s.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'o')
         s.save_source({'Channel': 'whatsapp', 'Address': 'picked@g.us', 'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'o')
         s.save_source({'Channel': 'whatsapp', 'Address': 'off@g.us', 'ConnectorId': wa['ConnectorId'], 'Active': 0}, 'o')
-        s.set_connector_config(wa['ConnectorId'], {'notify_chat': 'me@s.whatsapp.net'})
+        s.set_connector_config(wa['ConnectorId'], {'notify_chat': 'alerts@s.whatsapp.net',
+                                                    'assistant_chat': 'me@s.whatsapp.net'})
         self.assertEqual(wabridge.filter_policy(s, wa['ConnectorId']), {
-            'allDirect': True, 'jids': ['me@s.whatsapp.net', 'picked@g.us']})
+            'allDirect': True, 'jids': ['alerts@s.whatsapp.net', 'me@s.whatsapp.net', 'picked@g.us']})
 
     def test_an_off_or_external_whatsapp_card_does_not_start_a_local_bridge(self):
         s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')

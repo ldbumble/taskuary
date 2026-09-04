@@ -11,14 +11,15 @@
 // the one send path the app has and the only one that respects the per-channel reply switches.
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
-  Alert, Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton,
-  MenuItem, Select, TextField, Typography,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton,
+  TextField, Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono } from "./theme.jsx";
 import { ChannelIcon, AgentPicker, useAgents, TaskuaryMark } from "./ui.jsx";
 import { NO_REPO, planTask } from "./newTask.js";
+import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 
@@ -42,6 +43,32 @@ const Fork = ({ on, title, hint, onClick }) => (
     <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, mb: 0.4 }}>{title}</Typography>
     <Typography sx={{ fontSize: 11, color: FAINT, lineHeight: 1.5 }}>{hint}</Typography>
   </Box>
+);
+
+const EmailRecipients = ({ value, onChange, options, placeholder }) => (
+  <Autocomplete multiple freeSolo autoHighlight openOnFocus size="small" fullWidth
+    options={options}
+    value={value}
+    onChange={(_event, values) => onChange(normalizeEmails(values))}
+    getOptionLabel={(option) => typeof option === "string" ? option : (option.name || option.to || "")}
+    isOptionEqualToValue={(option, selected) => option.to?.toLowerCase() === String(selected).toLowerCase()}
+    filterOptions={(rows, state) => emailRecipientOptions(rows, state.inputValue)}
+    renderTags={(emails, getTagProps) => emails.map((email, index) => (
+      <Chip {...getTagProps({ index })} key={email} label={email} size="small" sx={{ maxWidth: 260 }} />
+    ))}
+    renderOption={(props, option) => {
+      const address = typeof option === "string" ? option : option.to;
+      return (
+        <Box component="li" {...props} key={address} sx={{ display: "block !important", fontSize: 12.5 }}>
+          <Box sx={{ fontWeight: 600 }}>{typeof option === "string" ? `Use ${address}` : (option.name || address)}</Box>
+          {typeof option !== "string" && <Box sx={{ fontSize: 10.5, color: FAINT }}>{address}</Box>}
+        </Box>
+      );
+    }}
+    renderInput={(params) => (
+      <TextField {...params} placeholder={value.length ? "Add another email" : placeholder}
+        sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+    )} />
 );
 
 // Keep the large freeform field below its own render boundary. The sheet contains provider
@@ -79,6 +106,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
   const [targets, setTargets] = useState([]);          // [{channel, to: [{to, name, hint}]}]
   const [channel, setChannel] = useState("");
   const [to, setTo] = useState("");
+  const [emailTo, setEmailTo] = useState([]);
+  const [cc, setCc] = useState([]);
   const [hasAbout, setHasAbout] = useState(false);
   const aboutRef = useRef(null);
   const [mode, setMode] = useState("draft");
@@ -114,7 +143,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
     const about = String(aboutRef.current?.value || "").trim();
     try {
       if (kind === "send") {
-        const { data } = await api.post("/api/outbox", { channel, to: to.trim(), about, mode });
+        const { data } = await api.post("/api/outbox", {
+          channel, to: channel === "email" ? emailTo : to.trim(),
+          cc: channel === "email" ? cc : [], about, mode,
+        });
         setOk(mode === "task"
           ? `${data.ref} — an agent is finding out first; the message is drafted when it is done.`
           : `${data.ref} — drafted. It is on the Timeline waiting for you to send it.`);
@@ -142,9 +174,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, mode, how, agent, model, when, onDone, onOpenTask]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, model, when, onDone, onOpenTask]);
 
-  const canGo = hasAbout && (kind !== "send" || (channel && to.trim()));
+  const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
     : kind === "agent" ? (how === "chat" ? "Ask the assistant" : "Start the session") : "Note it";
 
@@ -178,7 +210,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
               <Label>Channel</Label>
               <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
                 {targets.map((t) => (
-                  <Box key={t.channel} onClick={() => { setChannel(t.channel); setTo(""); }}
+                  <Box key={t.channel} onClick={() => { setChannel(t.channel); setTo(""); setEmailTo([]); setCc([]); }}
                     sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 1.25, py: 0.75, cursor: "pointer",
                       border: `1px solid ${channel === t.channel ? ACCENT : BORDER}`, borderRadius: 2,
                       boxShadow: channel === t.channel ? `inset 0 0 0 1px ${ACCENT}` : "none",
@@ -195,21 +227,38 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
             </Box>
             <Box>
               <Label>To</Label>
-              {/* the addresses this install actually knows, from the same list a report's
-                  delivery offers - a JID typed from memory is a message that goes nowhere */}
-              <Select size="small" fullWidth displayEmpty value={to} onChange={(e) => setTo(e.target.value)}
-                renderValue={(v) => v || "pick someone you already trade messages with"}
-                sx={{ fontSize: 13, bgcolor: "#fcfaf7", color: to ? INK : FAINT }}
-                MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}>
-                {chanTargets.map((t) => (
-                  <MenuItem key={t.to} value={t.to} sx={{ fontSize: 12.5, display: "block" }}>
-                    <Box sx={{ fontWeight: 600 }}>{t.name || t.to}</Box>
-                    {t.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{t.hint}</Box>}
-                  </MenuItem>
-                ))}
-                {!chanTargets.length && <MenuItem disabled sx={{ fontSize: 12 }}>nothing known on this channel yet</MenuItem>}
-              </Select>
+              {channel === "email" ? (
+                <EmailRecipients value={emailTo} onChange={setEmailTo} options={chanTargets}
+                  placeholder="Search contacts or type any email address" />
+              ) : <Autocomplete key={channel} size="small" fullWidth openOnFocus autoHighlight
+                options={chanTargets}
+                value={chanTargets.find((target) => target.to === to) || null}
+                onChange={(_event, target) => setTo(target?.to || "")}
+                getOptionLabel={recipientLabel}
+                isOptionEqualToValue={(option, value) => option.to === value.to}
+                filterOptions={(options, state) => recipientOptions(options, state.inputValue)}
+                noOptionsText={chanTargets.length ? "No matching conversation" : "nothing known on this channel yet"}
+                renderOption={(props, target) => (
+                  <Box component="li" {...props} key={target.to} sx={{ display: "block !important", fontSize: 12.5 }}>
+                    <Box sx={{ fontWeight: 600 }}>{target.name || target.to}</Box>
+                    {target.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{target.hint}</Box>}
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField {...params} placeholder="Search people and conversations"
+                    sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+                )} />}
             </Box>
+            {channel === "email" && (
+              <Box>
+                <Label>CC</Label>
+                <EmailRecipients value={cc} onChange={setCc} options={chanTargets}
+                  placeholder="Search contacts or type any email address" />
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+                  Drafts use STYLE.md. Docs → STYLE.md → Generate from history learns your recurring email signature.
+                </Typography>
+              </Box>
+            )}
           </>
         )}
 

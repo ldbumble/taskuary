@@ -71,9 +71,9 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
     call (the API hands FastAPI's background task runner in); None runs it inline.
 
-    `cc` loops somebody in on this answer. It is passed at the moment of approval and nowhere
-    else: the copy list you can SEE on the card is the one that goes, and a reloaded page starts
-    empty rather than sending to somebody you have forgotten you added."""
+    `cc` loops somebody in on this answer. Replies get the list chosen at approval; a new outbound
+    email starts with the list deliberately saved in its delivery envelope, which remains visible
+    and editable in Review."""
     from . import learn, outbound
     rid = rv['ReviewId']
     # A verdict lands ONCE. There was no guard at all, so "approve" typed and the Approve button
@@ -133,7 +133,8 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                 invoice_workflow.mark_sent(store, int(deliver.get('item_id')), deliver.get('subject'), final)
             else:
                 sent = outbound.send_out(store, deliver.get('channel'), deliver.get('to'),
-                                         deliver.get('subject'), final, cc=cc)
+                                         deliver.get('subject'), final,
+                                         cc=cc if cc is not None else deliver.get('cc'))
             if rv.get('MessageId'):
                 store.set_message_status(rv['MessageId'], 'sent')
         except Exception as e:

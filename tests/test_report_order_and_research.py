@@ -72,13 +72,14 @@ class ReportOrderTests(unittest.TestCase):
 
 
 class ResearchIsAWalkThroughTests(unittest.TestCase):
-    def test_research_no_longer_hard_routes_to_the_coding_agent(self):
-        """The other verbs on that rule DIAGNOSE something that exists; research reads about the
-        world (the owner, 2026-09-04: this opened a coding agent on a checkout)."""
+    def test_research_routes_to_the_regular_agent_not_the_coding_agent(self):
+        """Research is work to hand off, but it has no repository or system to change. The
+        lightweight assistant routes it to the regular agent instead of doing the work inline or
+        opening a coding checkout (the owner, 2026-09-04)."""
         for said in ('can you research teh factor elara gravel bike',
                      'research the best gravel bike for me',
                      'can you research the Factor Elara'):
-            self.assertIsNone(concierge.decide_words(said), said)
+            self.assertEqual((concierge.decide_words(said) or {}).get('verb'), 'regular_agent', said)
 
     def test_diagnosing_a_system_is_still_a_hand_off(self):
         for said in ('can you look into that server and what the file looks like?',

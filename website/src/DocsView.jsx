@@ -24,7 +24,7 @@ const DOCS = {
   triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#55697a" }} />,
-    blurb: "How you write replies — greeting, tone, length, phrasing — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
+    blurb: "How you write email — greeting, tone, length, phrasing, sign-off, and your recurring signature — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
   counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "Who Taskuary is and how it speaks to YOU — the assistant you talk to on the Assistant tab, its posts on the Timeline, the morning brief. It surfaces and takes a position; it does no work itself. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
   coder: { label: "CODER.md", icon: <TaskuaryMark size={19} />,
@@ -68,7 +68,7 @@ const PB_BLURB = "How THIS company does one kind of job, for the agent that will
 // outside the markers always survive.
 const GEN = {
   triage: "reads 3 months of your mailbox — what you answered vs let sit — and writes what matters into the marked block",
-  style: "reads 3 months of your sent mail and distills how you write into the marked block",
+  style: "reads 3 months of your sent mail and distills how you write, including your recurring signature, into the marked block",
 };
 
 // Your name, in one place. The documents refer to the owner nine times between them; typed

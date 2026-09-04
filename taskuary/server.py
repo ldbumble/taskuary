@@ -48,6 +48,9 @@ async def _lifespan(_app):
         except Exception as e: logger.warning(f'demo seed failed: {e}')
         yield
         return
+    # No interactive or headless worker survives into this process. Repair any persisted
+    # in-progress/running flags before the Board and funnel get their first read.
+    hub_term.recover_after_restart(store)
     from . import wabridge
     try: wabridge.start_configured(store)
     except Exception as e: logger.warning(f'wa bridge startup failed: {e}')
@@ -64,7 +67,14 @@ async def _lifespan(_app):
     waitroom.watch(store)          # notes queued for a working agent land when it stops
     from . import msauth
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
-    yield
+    try:
+        yield
+    finally:
+        # Both watched PTYs and one-shot CLI brains are children of this process. An orderly
+        # Taskuary close owns them: leaving them alive creates invisible Claude/Codex sessions
+        # that can keep consuming resources after there is no UI capable of reaching them.
+        hub_term.shutdown_sessions()
+        hub_agents.shutdown_cli_children()
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
 ACTOR = 'owner'
@@ -166,7 +176,11 @@ class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
     SourceId: int | None = None; ConnectorId: int | None = None; Channel: str | None = None
     Address: str | None = None; ConfigJson: str | None = None; Active: bool | None = None
-class DispatchBody(BaseModel): agent: str | None = None; instruction: str | None = None; model: str | None = None
+class DispatchBody(BaseModel):
+    agent: str | None = None; instruction: str | None = None; model: str | None = None
+    # The button says "Send to agent".  The task's Kind remains authoritative once a task
+    # exists; this hint is only how an unpromoted message says which kind of task to create.
+    kind: str | None = None
 class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
@@ -312,8 +326,12 @@ def tasks(status: str = None, active: bool = False):
     wc = store.waiting_counts()
     agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
     books = {b['slug']: b for b in playbooks.list_all()}
+    # One lightweight pass over the live sessions. for_task() used to scan the roster and build
+    # the FULL session payload (including git status and witness reconciliation) for every task;
+    # with hundreds of tasks that made Tasks and Board wait behind repository I/O.
+    sessions = {s['taskId']: s for s in hub_term.live_sessions(tail=0, details=False) if s.get('taskId')}
     return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books),
-                      'Session': hub_term.for_task(t['TaskId']),
+                      'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
                      for t in store.list_tasks(status, active_only=active)]}
@@ -377,7 +395,9 @@ def task_detail(task_id: int):
     tr = store.last_transcript(task_id)
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
-            'session': hub_term.for_task(task_id, tail=3),
+            # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
+            # load their own rich data. Do not block selecting a task on git status.
+            'session': hub_term.for_task(task_id, tail=3, details=False),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
 
@@ -421,6 +441,7 @@ def assistant_session(task_id: int, body: AssistantSessionBody = None):
 def assistant_message(task_id: int, body: AssistantMessageBody):
     from . import general
     try:
+        _refresh_chat_context(task_id=task_id)
         session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
         reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model, pick=body.pick)
     except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
@@ -509,6 +530,10 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
 
     def work():
         try:
+            fresh = _refresh_chat_context(task_id=task_id)
+            if fresh.get('polled'):
+                put({'type': 'tool_call', 'name': 'sync_messages',
+                     'detail': {'new': fresh.get('added', 0)}})
             session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
             put({'type': 'start', 'session': session.info()})
             try:
@@ -625,6 +650,7 @@ def continue_task(task_id: int, body: CodeBody):
     if not task: raise HTTPException(404, 'task not found')
     instruction = str(body.instruction or '').strip()
     if not instruction: raise HTTPException(422, 'say what code changes you want next')
+    _refresh_chat_context(task_id=task_id)
     previous = store.last_transcript(task_id) or {}
     if hub_term.for_task(task_id): raise HTTPException(409, 'this task already has a live coding session')
     from . import agents as hub_agents
@@ -650,9 +676,7 @@ def comment(task_id: int, body: TextBody):
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    agent = body.agent or hub_agents.default_agent(store)
-    ses = start_session(store, task_id, agent, body.model, body.instruction)
-    return {'dispatch': 'session', 'agent': agent, 'model': body.model, 'session': ses}
+    return _dispatch_task_to_its_agent(task_id, body, background)
 
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again
@@ -1014,9 +1038,13 @@ def task_artifact(aid: int, download: bool = False):
     if not artifact: raise HTTPException(404, 'artifact not found')
     path = session_artifacts.confined(artifact.get('Path'))
     if not path: raise HTTPException(404, 'this artifact is no longer on disk')
-    response = FileResponse(path, media_type='text/markdown; charset=utf-8',
-                            filename=_att_filename(artifact.get('Name')),
-                            content_disposition_type='attachment' if download else 'inline')
+    # Old artifacts copied the raw PTY stream after the useful result. Keep that durable source
+    # file intact, but do not make the in-app reader render terminal repaints and tool chatter.
+    text = path.read_text(encoding='utf-8', errors='replace')
+    text = text.split('\n## Full session transcript', 1)[0].rstrip() + '\n'
+    response = Response(text, media_type='text/markdown; charset=utf-8')
+    disposition = 'attachment' if download else 'inline'
+    response.headers['Content-Disposition'] = f'{disposition}; filename="{_att_filename(artifact.get("Name"))}"'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
 
@@ -1054,6 +1082,12 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     sends; nothing here does."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
+    try: _refresh_chat_context(task_id=m.get('TaskId'), message_id=mid)
+    except RuntimeError as e: raise HTTPException(503, str(e))
+    # The requested row may no longer be the end of the conversation after that sync.  Draft and
+    # deliver against the newest inbound line, while keeping the same task/review.
+    m = (_latest_context_message(m.get('TaskId'), mid) or store.get_message(mid) or m)
+    mid = m['MessageId']
     # a FILED message stays filed: answering it is a reply, not a project, and promoting it to a
     # task just to hold the review put a TQ badge on chatter. The review rides task-less.
     tid = m.get('TaskId')
@@ -1061,6 +1095,8 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
                                                       'Status': 'pending', 'Reason': 'you opened a reply on this message'})
     draft = (rv or {}).get('DraftText') or ''
+    if rv and rv.get('MessageId') != mid:
+        draft = ''                    # a correct old draft is still wrong for a newer conversation
     if body is not None and body.redraft: draft = ''          # write it again over what is there
     if not draft and (body is None or body.draft):
         try:
@@ -1248,23 +1284,89 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
 
 def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
     try:
+        _refresh_chat_context(task_id=tid)
         return hub_term.start_on_task(store_, tid, agent or hub_agents.default_agent(store_), model, instruction, ACTOR)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
 
-@app.post('/api/messages/{mid}/dispatch')
-def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
-    """Hand ANY timeline item (failed report, email, chat) to an agent with your own
-    prompt. Messages that are not on a task yet become one first, so the run carries the
-    full context (subject, sender, body, thread) the agent needs."""
-    m = store.get_message(mid)
-    if not m: raise HTTPException(404, 'message not found')
+
+def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: BackgroundTasks) -> dict:
+    """Start the explicitly selected kind of agent, or preserve an existing task kind.
+
+    ``general`` is the conversational assistant; ``coding`` is a CLI in a checkout.  The caller
+    may deliberately correct triage here: clicking Coding agent or Regular agent is an owner
+    verdict, not a hint. A request without a kind remains compatible with task-page continuation
+    and uses the task's already-established kind.
+    """
+    from . import general
+    task = store.get_task(tid)
+    if not task: raise HTTPException(404, 'task not found')
+    # An explicit selection is still a real input even when this task ultimately belongs in the
+    # regular workspace. Reject stale/deleted agent names instead of silently accepting a typo.
+    if body.agent and not store.get_agent(body.agent):
+        raise HTTPException(422, f'unknown agent: {body.agent}')
+    task_kind = str(task.get('Kind') or '').lower()
+    requested = str(body.kind or '').lower()
+    if requested and requested not in ('general', 'coding'):
+        raise HTTPException(422, 'kind must be general or coding')
+
+    if requested and requested != task_kind:
+        live = hub_term.session_for(tid)
+        if live and live.alive:
+            who = getattr(live, 'agent', None) or getattr(live, 'label', None) or 'agent'
+            raise HTTPException(409, f'{who} is already working on this task; stop that agent before changing agent type')
+        store.update_task(tid, {'Kind': requested}, ACTOR)
+        task = store.get_task(tid)
+        task_kind = requested
+
+    regular = general.handles(task)
+
+    if regular:
+        try:
+            session = general.start_session(store, tid, model=body.model, actor=ACTOR)
+        except (ValueError, RuntimeError) as e:
+            raise HTTPException(422, str(e))
+        # The source messages and their files are injected by GeneralSession.send_prompt.  On a
+        # new conversation the task summary is the first ask; on an existing conversation only
+        # an explicit new instruction is sent, so clicking twice cannot duplicate the task.
+        history = general.history(store, tid)
+        prompt = str(body.instruction or '').strip()
+        if not prompt and not history:
+            prompt = str(task.get('Summary') or task.get('Title') or '').strip()
+        if prompt:
+            background.add_task(session.send_prompt, prompt)
+        return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model,
+                'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}
+
     agent = body.agent or hub_agents.default_agent(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
-    _learn_promotion(m, background)
-    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR)
     ses = start_session(store, tid, agent, body.model, body.instruction)
-    return {'dispatch': 'session', 'agent': agent, 'taskId': tid, 'ref': task_ref(tid), 'session': ses}
+    return {'dispatch': 'session', 'agent': agent, 'model': body.model,
+            'taskId': tid, 'ref': task_ref(tid), 'session': ses}
+
+@app.post('/api/messages/{mid}/dispatch')
+def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
+    """Hand a timeline item to the explicitly selected agent type."""
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    requested = str(body.kind or '').lower()
+    # A named CLI agent is itself an explicit coding choice for old API clients. With neither a
+    # kind nor an agent, guessing from triage is exactly the bug this endpoint must prevent.
+    if not requested and not body.agent:
+        raise HTTPException(422, 'Choose an agent type: general or coding')
+    _learn_promotion(m, background)
+    tid = m.get('TaskId') or task_from_message(
+        store, mid, ACTOR, requested if requested in ('general', 'coding') else 'coding')
+    try:
+        return _dispatch_task_to_its_agent(tid, body, background)
+    except HTTPException as e:
+        reason = str(e.detail or '')
+        # This is a decision, not a failed action. The message may only just have become a task,
+        # so return its id and let the card ask which repo before resuming the same dispatch.
+        if e.status_code == 422 and re.search(r'could not tell which checkout|no local path', reason, re.I):
+            return {'dispatch': 'needs_repo', 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
+                    'ref': task_ref(tid), 'reason': reason}
+        raise
 
 def _learn_promotion(m: dict, background):
     """A FILED message the owner promotes by hand is a triage miss in the other direction -
@@ -1367,7 +1469,7 @@ def reclassify_message(mid: int, body: ReclassifyBody, background: BackgroundTas
     out = {'ok': True, 'road': road, 'changed': True, 'was': was, 'memory': memid or None}
     if road == 'fyi': file_message(mid, None, background)
     elif road == 'reply': out['reply'] = open_reply(mid, None)
-    elif road == 'coding': out['agent'] = dispatch_message(mid, DispatchBody(agent=body.agent), background)
+    elif road == 'coding': out['agent'] = dispatch_message(mid, DispatchBody(agent=body.agent, kind='coding'), background)
     elif road == 'general': out['chat'] = chat_message(mid, background)
     else: out['task'] = mine_message(mid, MineBody(kind='task'), background)
     return out
@@ -1521,9 +1623,10 @@ class NoteBody(BaseModel):
 
 @app.get('/api/board/notes')
 def board_notes(cwd: str = '', limit: int = 60, all: bool = False):
-    """Everything by default - the Board is one wall - or one checkout's own when cwd is given.
-    `all` includes the notes a daily roll-up has already composted into a summary."""
-    return {'data': store.notes(blackboard.norm(cwd) or None, limit, rolled=all),
+    """Live handoffs by default; durable note history when ``all`` is requested."""
+    rows = (store.notes(blackboard.norm(cwd) or None, limit, rolled=True) if all
+            else blackboard.live_wall(store, cwd, limit))
+    return {'data': rows,
             'kinds': list(blackboard.KINDS), 'summary_kind': blackboard.SUMMARY}
 
 @app.post('/api/board/notes')
@@ -1638,6 +1741,13 @@ def reviews(status: str = None):
         try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
         except (TypeError, ValueError): special = False
         r['CanSend'] = special or _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
+        latest = _latest_context_message(r.get('TaskId'), r.get('MessageId'))
+        r['Stale'] = bool(r.get('Kind') != 'action' and latest
+                          and latest.get('MessageId') != r.get('MessageId'))
+        if r['Stale']:
+            r['LatestMessageId'] = latest.get('MessageId')
+            r['LatestPreview'] = str(latest.get('BodyText') or '')[:1500]
+            r['LatestSentAt'] = latest.get('SentAt')
     return {'data': rows}
 
 @app.post('/api/reviews/{rid}/decide')
@@ -1648,6 +1758,25 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     if not rv: raise HTTPException(404, 'review not found')
     from .verdicts import VERB2STATUS, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    if body.verb in ('approve', 'edit') and rv.get('Kind') != 'action':
+        try: _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
+        except RuntimeError as e: raise HTTPException(503, str(e))
+        rv = store.get_review(rid) or rv
+        latest = _latest_context_message(rv.get('TaskId'), rv.get('MessageId'))
+        if latest and latest.get('MessageId') != rv.get('MessageId'):
+            # Never let a click send wording composed before the newest chat line.  Refresh the
+            # draft automatically when a brain is available, but still require a new human yes.
+            draft = None
+            try:
+                draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
+                         if rv.get('TaskId') else responder.draft_for_message(store, latest, rid))
+            except Exception as e:
+                logger.warning(f'could not refresh stale review {rid}: {e}')
+            return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
+                    'draft': draft,
+                    'send_error': ('New messages arrived after this draft. '
+                                   + ('I refreshed it with the latest context; review it and approve again.' if draft
+                                      else 'Nothing was sent. Redraft it with the latest context before approving.'))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc)
 
@@ -1807,7 +1936,8 @@ def hub_retire(lid: int, request: Request):
     return {'retired': True}
 
 class OutboxBody(BaseModel):
-    channel: str; to: str; about: str; mode: str = 'draft'
+    channel: str; to: str | list[str]; about: str; mode: str = 'draft'
+    cc: list[str] = []
     subject: str | None = None; repo: str | None = None
 
 @app.post('/api/outbox')
@@ -1819,7 +1949,8 @@ def outbox(body: OutboxBody):
     from what it actually found and lands in the same place. Neither one sends: the approved
     review does, through the one door every outgoing message already goes through."""
     from . import outbox as ob
-    try: return ob.compose(store, body.channel, body.to, body.about, body.mode, body.subject, body.repo, ACTOR)
+    try: return ob.compose(store, body.channel, body.to, body.about, body.mode, body.subject,
+                           body.repo, ACTOR, cc=body.cc)
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:400])
 
@@ -2037,8 +2168,12 @@ def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
 # ── the pipe and the concierge (funnel.py, concierge.py): what comes next, said out loud ──────
 class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None
-class SurfaceBody(BaseModel): key: str | None = None; only: str | None = None
-class ConciergeSayBody(BaseModel): text: str; key: str | None = None
+class SurfaceBody(BaseModel):
+    key: str | None = None
+    only: str | None = None
+    include_surfaced: bool = False
+    exclude: str | None = None
+class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
 @app.get('/api/funnel/pile')
@@ -2122,7 +2257,9 @@ def concierge_next(body: SurfaceBody = None):
     """Pull the next thing out of the pipe - or the one named, or the next piece of mail - and say it."""
     from . import concierge
     body = body or SurfaceBody()
-    return concierge.surface(store, body.key, actor=ACTOR, only=body.only)
+    if body.key: _refresh_chat_key(body.key)
+    return concierge.surface(store, body.key, actor=ACTOR, only=body.only,
+                             include_surfaced=body.include_surfaced, exclude=body.exclude)
 
 @app.post('/api/concierge/open')
 def concierge_open():
@@ -2131,7 +2268,8 @@ def concierge_open():
     return concierge.open_day(store, actor=ACTOR)
 
 class ConciergeStreamBody(BaseModel):
-    mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None
+    mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None
+    include_surfaced: bool = False; exclude: str | None = None
 
 @app.post('/api/concierge/stream')
 async def concierge_stream(body: ConciergeStreamBody):
@@ -2148,9 +2286,16 @@ async def concierge_stream(body: ConciergeStreamBody):
         put({'type': kind, 'name': name, 'detail': detail if isinstance(detail, (dict, str)) else str(detail)})
     def work():
         try:
+            freshness = _refresh_chat_key(body.key, body.context_mid) if body.key else {}
+            if freshness.get('polled'):
+                put({'type': 'tool_call', 'name': 'sync_messages',
+                     'detail': {'new': freshness.get('added', 0)}})
             if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
-            elif body.mode == 'next': out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel)
+            elif body.mode == 'next': out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
+                                                               include_surfaced=body.include_surfaced, exclude=body.exclude)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel)
+            if freshness.get('newer'):
+                out['context_update'] = _context_update_line(freshness)
             put({'type': 'done', **out})
         except Exception as e:
             logger.warning(f'concierge stream failed: {e}')
@@ -2182,7 +2327,11 @@ def report_rerun(sid: int):
 @app.post('/api/concierge/say')
 def concierge_say(body: ConciergeSayBody):
     from . import concierge
-    try: return concierge.say(store, body.text, body.key, actor=ACTOR)
+    try:
+        freshness = _refresh_chat_key(body.key, body.context_mid) if body.key else {}
+        out = concierge.say(store, body.text, body.key, actor=ACTOR)
+        if freshness.get('newer'): out['context_update'] = _context_update_line(freshness)
+        return out
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str
@@ -2283,11 +2432,19 @@ def draft_review(rid: int):
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     try:
-        if rv.get('TaskId'):
+        try: deliver = json.loads(rv.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): deliver = {}
+        if deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
+            from . import outbox as ob
+            draft = ob.redraft_review(store, rv)
+        elif rv.get('TaskId'):
+            _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
             draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
         else:
             message = store.get_message(rv.get('MessageId'))
             if not message: raise RuntimeError('the message behind this reply no longer exists')
+            _refresh_chat_context(message_id=message['MessageId'])
+            message = _latest_context_message(None, message['MessageId']) or message
             draft = responder.draft_for_message(store, message, rid)
     except Exception as e:
         raise HTTPException(422, str(e)[:300])
@@ -2723,7 +2880,7 @@ def wa_bridge_restart(cid: int):
 
 @app.get('/api/connectors/{cid}/wa/chats')
 def wa_chats(cid: int):
-    """The chats the WhatsApp bridge has seen - to pick 'only these' as sources (messengers.wa_chats)."""
+    """Chats reachable through the paired WhatsApp account, for compose and inbound sources."""
     from .messengers import wa_chats as _chats
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
@@ -3553,6 +3710,79 @@ def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(l
 _POLL_BUSY = threading.Lock()   # whether a poll runs IN THIS PROCESS; the DB flag is only for the UI
 _LAST_POLL = [time.time()]      # startup's own catch-up counts as the first one
 POLL_TICK = 30                  # how often the loop wakes to look at the clock
+CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
+CHAT_POLL_SECONDS = 30
+
+
+def _latest_context_message(task_id: int = None, message_id: int = None):
+    """Newest inbound line in exactly the context an action is about."""
+    if task_id:
+        return store.last_inbound_on_task(task_id)
+    m = store.get_message(message_id) if message_id else None
+    if not m: return None
+    cid = m.get('ConversationId')
+    return store.last_inbound_in(cid) if cid else m
+
+
+def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
+    """Synchronize a live chat before its stored text is used to answer or act.
+
+    The background clock keeps the screen lively; this is the correctness gate.  If an Assistant
+    answer, draft, approval, or agent launch is about a chat, its provider is read first and the
+    newly ingested lines are attached/triaged before the context is built.
+    """
+    before = _latest_context_message(task_id, message_id)
+    channel = str((before or {}).get('Channel') or '').lower()
+    if channel not in CHAT_CONNECTORS:
+        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
+    connectors = [c for c in store.list_connectors()
+                  if c.get('Active') and str(c.get('Type') or '').lower() == channel]
+    active = {str(c.get('Type') or '').lower() for c in connectors}
+    if channel not in active:
+        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
+    added = _poll_reports(0, what=f'refreshing {channel} context', only=[channel], wait=True)
+    if added is False:
+        raise RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
+    failed = [store.get_connector(c['ConnectorId']) for c in connectors]
+    failed = [c for c in failed if c and c.get('LastError')]
+    if failed:
+        raise RuntimeError(f"I could not refresh {channel}, so I did not use stale chat context: {failed[0]['LastError']}")
+    after = _latest_context_message(task_id, message_id)
+    newer = bool(after and (not before or after.get('MessageId') != before.get('MessageId')))
+    if newer:
+        from . import funnel
+        funnel.invalidate()
+    return {'polled': True, 'newer': newer, 'before': before, 'after': after,
+            'added': int(added or 0), 'channel': channel}
+
+
+def _refresh_chat_key(key: str = None, seen_mid: int = None) -> dict:
+    """Refresh the item held by the Assistant and compare it with what the browser saw."""
+    if not key: return {}
+    from . import funnel
+    item = funnel.next_item(store, key) or funnel.item_for_key(store, key)
+    if not item: return {}
+    out = _refresh_chat_context(item.get('tid'), item.get('mid'))
+    fresh = funnel.next_item(store, key) or funnel.item_for_key(store, key) or item
+    after = _latest_context_message(fresh.get('tid'), fresh.get('mid'))
+    # `stale` catches a background sync that landed before this request; seen_mid catches the
+    # narrower race where it landed after the browser's last five-second pile refresh.
+    out['newer'] = bool(out.get('newer') or
+                        (seen_mid and after and after.get('MessageId') != seen_mid) or
+                        (seen_mid is None and fresh.get('stale')))
+    out['item'] = fresh
+    out['after'] = after or out.get('after')
+    return out
+
+
+def _context_update_line(freshness: dict) -> str:
+    m, item = freshness.get('after') or {}, freshness.get('item') or {}
+    who = m.get('FromName') or m.get('FromEmail') or 'Someone'
+    ref = item.get('ref') or item.get('title') or 'this thread'
+    body = ' '.join(str(m.get('BodyText') or '').split())[:180]
+    tail = f': “{body}”' if body else ''
+    draft = ' The earlier draft is now out of date; redraft it before sending.' if item.get('rid') else ''
+    return f'New message from {who} arrived on {ref}{tail}. I refreshed the context.{draft}'
 
 
 def poll_forever():
@@ -3579,10 +3809,9 @@ def poll_forever():
         time.sleep(POLL_TICK)
 
 
-# A chat channel on the ten-minute mailbox clock is a slow conversation. A connector whose
-# config carries poll_seconds asks to be read more often than poll_minutes, on its own - the
-# quick pass polls ONLY those connectors and runs no reports or CI, so the expensive ones stay
-# on the global clock. Granularity is POLL_TICK.
+# A chat channel on the ten-minute mailbox clock is a slow conversation. Chat connectors default
+# to the 30-second clock; poll_seconds can make one slower (or explicitly zero to leave it only on
+# the global clock). The quick pass polls ONLY those connectors and runs no reports or CI.
 _QUICK_LAST = {}
 
 def _quick_due() -> list:
@@ -3591,19 +3820,21 @@ def _quick_due() -> list:
         if not c['Active']: continue
         try:
             cfg = json.loads(c.get('ConfigJson') or '{}')
-            secs = int(cfg.get('poll_seconds') or 0) if isinstance(cfg, dict) else 0
+            raw = cfg.get('poll_seconds', CHAT_POLL_SECONDS if c.get('Type') in CHAT_CONNECTORS else 0) if isinstance(cfg, dict) else 0
+            secs = int(raw or 0)
         except (TypeError, ValueError): secs = 0
         if secs > 0 and time.time() - _QUICK_LAST.get(c['Type'], 0) >= secs:
             due.append(c['Type'])
     return due
 
-def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None):
+def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None, wait: bool = False):
     # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
     # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
     # rewriting 'running', and the "catching up" banner never ended.
-    if not _POLL_BUSY.acquire(blocking=False):
-        logger.info('poll already running - skipped'); return
+    acquired = _POLL_BUSY.acquire(timeout=45) if wait else _POLL_BUSY.acquire(blocking=False)
+    if not acquired:
+        logger.info('poll already running - skipped'); return False
     if only is None:
         _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
                                      # does not fire again moments later over the same watermarks
@@ -3626,14 +3857,14 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
         from . import ingest as ingest_mod
         with ingest_mod.deferred():
-            poll_channels(store, backfill_days, progress=_say, **({'only': only} if only is not None else {}))
+            added = poll_channels(store, backfill_days, progress=_say, **({'only': only} if only is not None else {}))
         def _left(n):
             store.set_setting('ingest_status', json.dumps(
                 {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
                  'what': f'{what} · triaging' + (f' · {n} left' if n else '')}), 'system')
         try: ingest_mod.drain(store, _llm(), progress=_left)
         except Exception as e: logger.warning(f'deferred triage drain failed: {e}')
-        if only is not None: return            # a quick pass reads its channels and stops
+        if only is not None: return added      # a quick pass reads its channels and stops
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         try:
@@ -3648,6 +3879,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         except Exception as e:
             logger.warning(f'the wall roll-up failed: {e}')
         run_due_reports(store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
+        return added
     finally:
         try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
         finally: _POLL_BUSY.release()
@@ -3776,8 +4008,8 @@ class TermBody(BaseModel):
     model: str | None = None; instruction: str | None = None
 
 @app.get('/api/terminals')
-def terminals():
-    return {'data': [t for t in hub_term.listing()
+def terminals(details: bool = True):
+    return {'data': [t for t in hub_term.listing(details=details)
                      if (store.get_task(t.get('taskId')) or {}).get('SourceRef') != 'assistant:dock']}
 
 @app.get('/api/terminals/{sid}/screen')
@@ -3835,6 +4067,21 @@ def _wrap_task(tid: int, close: bool, sid: str = None):
 
 def _pause_task(tid: int, sid: str = None):
     if not tid or not store.get_task(tid): raise HTTPException(422, 'this session is not on a task')
+    # A general session already persists every turn. Pausing it only has to close the live
+    # provider session; its complete conversation is the handover when the owner resumes.
+    from . import general
+    task = store.get_task(tid) or {}
+    assistant = general.session_for(tid) if general.handles(task) else None
+    if assistant:
+        history = general.history(store, tid)
+        note = next((m['content'][0]['text'] for m in reversed(history)
+                     if m.get('role') == 'assistant' and m.get('content')), '')
+        hub_term.close(assistant.sid)
+        store.add_comment(tid, ACTOR, 'human', 'Paused the assistant session - the conversation is saved here for later.')
+        store.audit('terminal', tid, 'pause', ACTOR,
+                    detail={'sid': sid or assistant.sid, 'mode': 'assistant'})
+        return {'pause': 'done', 'taskId': tid,
+                'note': note or 'Conversation saved. Continue here when you are ready.'}
     text, agent, found = hub_term.transcript_for(store, tid)
     if not text.strip(): raise HTTPException(422, 'nothing to save - this task has no session transcript')
     note = pause_note(store, tid, text)
@@ -3876,6 +4123,16 @@ def pause_terminal(sid: str, body: WrapBody):
 
 @app.delete('/api/terminals/{sid}')
 def close_terminal(sid: str):
+    session = hub_term.get(sid)
+    if not session: raise HTTPException(404, 'terminal not found')
+    # X ends the worker, not the task. A deliberate Done/Wrap takes the routes above; a plain
+    # close must immediately put abandoned in-progress work back in front of the owner.
+    tid = getattr(session, 'task_id', None)
+    if tid:
+        hub_term.release_task(store, tid, ACTOR,
+                              'Closed the agent session. The task is open again - nobody is working it.')
+        from . import funnel as _funnel
+        _funnel.invalidate()
     if not hub_term.close(sid): raise HTTPException(404, 'terminal not found')
     return {'ok': True}
 
@@ -3884,6 +4141,7 @@ def stop_task_agent(task_id: int):
     """End only the current worker. The task and reply are separate state machines."""
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
+    _refresh_chat_context(task_id=task_id)
     live = hub_term.session_for(task_id)
     if not live or not getattr(live, 'alive', False):
         return {'stopped': False, 'taskStatus': task.get('Status')}
@@ -3955,7 +4213,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
         await send_frame({'type': 'ready'})
 
     async def to_browser():
-        nonlocal delivered, inflight, redraw_quiet
+        nonlocal delivered, inflight, redraw_quiet, redraw_cap
         while True:
             data = await q.get()
             if data is None: return await send_frame({'type': 'exit'})
@@ -3978,6 +4236,12 @@ async def terminal_ws(ws: WebSocket, sid: str):
             # Ignore output that was already queued when the resize began. The first new chunk
             # and every repaint chunk after it move the quiet barrier; ready follows the burst.
             if redraw_boundary is not None and delivered >= redraw_boundary:
+                # The cap is only a no-output fallback. Once repaint bytes arrive, quiet after
+                # the LAST chunk is the barrier; a fixed cap exposed a long Codex redraw while it
+                # was still painting line by line.
+                if redraw_cap:
+                    redraw_cap.cancel()
+                    redraw_cap = None
                 if redraw_quiet: redraw_quiet.cancel()
                 redraw_quiet = asyncio.create_task(finish_redraw(.09))
             if ended: return await send_frame({'type': 'exit'})
@@ -4003,9 +4267,9 @@ async def terminal_ws(ws: WebSocket, sid: str):
         # RENDERED, not raw (terminal.replay_text): the raw bytes of a full-screen TUI replay as
         # debris in a fresh xterm, and the live repaint then appends to that debris. Flagged as a
         # REPLAY so the browser holds the curtain over it until the live screen is up.
-        # Attaching REPAINTS the screen - the replay below, then the wiggle's full redraw. None of
-        # that is the agent doing anything, and counting it as output reset idle(): a session parked
-        # on a dialog read as working again every time its card was opened (2026-09-03).
+        # A geometry change can repaint the screen. None of that is the agent doing anything, and
+        # counting it as output reset idle(): a session parked on a dialog read as working again
+        # every time its card was opened (2026-09-03).
         t.quiet_for(ATTACH_QUIET)
         if t.scrollback():
             snap = hub_term.replay_text(t)
@@ -4016,19 +4280,22 @@ async def terminal_ws(ws: WebSocket, sid: str):
             if m.get('type') == 'in': input_q.put_nowait(m.get('data') or '')
             elif m.get('type') == 'resize':
                 rows, cols = m.get('rows') or 32, m.get('cols') or 110
-                # a full-screen TUI (codex) paints with absolute cursor moves, so the raw
-                # scrollback replay above renders as smeared bars on a reopened page - and
-                # nothing repaints until the CHILD is told to. A one-column wiggle on the
-                # first resize makes ConPTY signal a window change: a full redraw, the live
-                # screen instead of the replay's debris.
                 if first_resize:
                     first_resize = False
-                    # The child repaints asynchronously. Mark the queue boundary before the
-                    # wiggle; output beyond it is evidence of the live Codex screen arriving.
+                    # The rendered snapshot already hydrates a same-size reconnect. The old
+                    # one-column wiggle forced Codex/Claude to repaint their entire TUI on every
+                    # task switch, even when the geometry had not changed; large sessions then
+                    # visibly replayed from the top for minutes. Same size means no child resize
+                    # at all: reveal the snapshot and resume only live output.
+                    if (int(rows), int(cols)) == (int(t.rows), int(t.cols)):
+                        await send_frame({'type': 'ready'})
+                        continue
+                    # For a real geometry change, request exactly one resize. The child repaints
+                    # asynchronously, so output beyond this boundary is the new live screen.
                     redraw_boundary = delivered + inflight + q.qsize() + 1
-                    redraw_cap = asyncio.create_task(finish_redraw(1.5))
-                    t.resize(rows, max(2, cols - 1))
-                    await asyncio.sleep(0.05)
+                    redraw_cap = asyncio.create_task(finish_redraw(.35))
+                elif (int(rows), int(cols)) == (int(t.rows), int(t.cols)):
+                    continue
                 t.resize(rows, cols)
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass

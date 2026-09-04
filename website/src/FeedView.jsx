@@ -161,11 +161,11 @@ const PAGE = 100;
 // The funnel bar (rank mode): what is being worked and what waits, in value order. One line
 // folded - "In the funnel 3/4 · Next up 7" - so the Timeline is never stuffed with the tail of
 // the queue; unfold it for the ranks, the reasons, and the two overrides.
-const FunnelBar = ({ onOpenTask }) => {
+const FunnelBar = ({ onOpenTask, active = true }) => {
   const [f, setF] = useState(null);
   const [open, setOpen] = useState(false);
   const load = useCallback(async () => { try { setF((await api.get("/api/funnel")).data); } catch { setF(null); } }, []);
-  useEffect(() => { load(); return onLive(["feed-changed", "task-changed"], load); }, [load]);
+  useEffect(() => { if (!active) return undefined; load(); return onLive(["feed-changed", "task-changed"], load); }, [active, load]);
   if (!f || f.mode !== "rank") return null;
   const act = async (tid, what) => { await api.post(`/api/funnel/${tid}/${what}`); load(); };
   return (
@@ -498,18 +498,22 @@ const TodayStrip = () => {
   );
 };
 
-// The rail can be the Assistant page's rail (AssistantView.jsx): `top` sits above the days (the
-// pipe), `stage` is what the stage shows when nothing is pinned (the chat), and rowMode "chat" makes
-// a click on a row `onPull` it into the conversation instead of opening it here - hover previews are
-// off in that mode, since the stage is a conversation and not a preview pane. A card's "open on the
-// Timeline" (#msg=) still pins the row over the chat; its close comes back. On a phone the chat and
-// the rail take turns: `railOnNarrow` says which one is up.
+// The rail can be the Assistant page's rail (AssistantView.jsx): `top` is its ranked Unread pipe and
+// `stage` is the Unread conversation. All/Needs me are review lists: they never mount that chat;
+// each row opens by itself on the right. A card's "open on the Timeline" (#msg=) still pins its row.
+// On a phone the chat and the rail take turns: `railOnNarrow` says which one is up.
 export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
-  const chatMode = rowMode === "chat" && !!onPull;
-  const railShown = !narrow || !stage || railOnNarrow, stageShown = !narrow || (!!stage && !railOnNarrow);
+  // Unread alone owns the conversational walk. All and Needs me are deliberately one-item review
+  // surfaces even if the parent still has its chat selected from the previous tab.
+  const [view, setView] = useState(top ? "unread" : "");
+  const unreadView = view === "unread";
+  const visibleStage = unreadView ? stage : null;
+  const chatMode = unreadView && rowMode === "chat" && !!onPull;
+  const railShown = !narrow || !visibleStage || railOnNarrow;
+  const stageShown = !narrow || (!!visibleStage && !railOnNarrow);
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
   const calEvents = useCalToday();
   // The filter dock is a fixed flex sibling of the scroller. Rows never fade at its top edge;
@@ -575,8 +579,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
-  // "unread" the pipe alone (the default when there is one: it empties as you work it) | "" everything | "pending" needs me
-  const [view, setView] = useState(top ? "unread" : "");
+  // Unread is the ranked live pipe supplied by the Assistant; All is chronological history.
   const views = top ? [{ key: "unread", label: "unread", c: PILL_COLORS.pick }, { key: "", label: "all", c: PILL_COLORS.pick }, VIEW_FILTERS[1]] : VIEW_FILTERS;
   const [openFolds, setOpenFolds] = useState(() => new Set());   // conversations unfolded by hand
   const [cat, setCat] = useState("");                // broad content family; exact choices live in the source picker
@@ -1227,7 +1230,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             borderColor: `${BORDER} !important`, borderLeftColor: "var(--tq-row-edge) !important",
             boxShadow: "none !important", transition: "none !important", cursor: "default",
           } }}>
-          <FunnelBar onOpenTask={onOpenTask} />
+          <FunnelBar onOpenTask={onOpenTask} active={active} />
           {view === "unread" ? (typeof top === "function" ? top({ openByMid }) : top) : (
           <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
             {syncing && (
@@ -1310,7 +1313,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                               row below it. */}
                           <Box data-tq-keep data-tq-open={open ? "true" : "false"} onClick={() => openRow(r)}
                             onMouseMove={() => hoverSelect(r)} onMouseLeave={hoverCancel}
-                            sx={{ "--tq-row-edge": edgeOf(st), bgcolor: ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
+                            sx={{ "--tq-row-edge": edgeOf(st), bgcolor: view !== "unread" && ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? "#faf8f4" : PANEL,
                               border: `1px solid ${BORDER}`, borderLeft: `2px solid ${edgeOf(st)}`,
                               borderRadius: "8px", px: "10px", pt: "3px", pb: "4px", ml: "8px",
                               minWidth: 0, overflow: "hidden",
@@ -1327,11 +1330,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                               <Box sx={{ display: "flex", flexShrink: 0 }}>
                                 <ChannelIcon channel={r.Channel} sx={{ fontSize: 16 }} />
                               </Box>
-                              <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? DIM : INK,
+                              <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: view !== "unread" && ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? DIM : INK,
                                 fontSize: 12, letterSpacing: "-.1px", maxWidth: 118, minWidth: 0, flexShrink: 0 }}>
                                 {r.FromName || r.FromEmail || "unknown"}
                               </Typography>
-                              <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
+                              <Typography variant="body2" noWrap sx={{ color: view === "unread" ? INK : DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
                                 {subjectOf(r) || ""}
                               </Typography>
                               {r.Attachments > 0 && (
@@ -1397,8 +1400,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               onSkipped={() => { setSel(null); load(); onChanged?.(); }}
               onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
               onMessageChanged={messageBodyChanged}
-              sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
-          ) : stage || (
+              sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active} />
+          ) : visibleStage || (
             // an empty stage is not a broken one. It says what the rail is for and what the
             // one button on it does, which is the only thing a new install has to be told.
             <Box sx={{ height: "100%", border: `1px dashed ${BORDER}`, borderRadius: 2,
@@ -1431,7 +1434,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 onSkipped={() => { setSel(null); load(); onChanged?.(); }}
                 onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
                 onMessageChanged={messageBodyChanged}
-                sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} />
+                sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active} />
             ) : null}
         </Drawer>
       )}
@@ -1612,7 +1615,7 @@ const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
 const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh,
-                        onMessageChanged, sendErr, clearSendErr, onLock }) => {
+                        onMessageChanged, sendErr, clearSendErr, onLock, active = true }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
@@ -1677,17 +1680,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const run = (detail?.runs || []).find((r) => r.Status === "running");
   const onIt = ses ? { agent: ses.agent || ses.label, waiting: ses.waiting ?? (ses.idle >= IDLE_WAITING) }
     : run ? { agent: run.AgentName, waiting: false } : null;
-  // the live console: while an agent is on this task, the last lines arrive as run-tail
+  // This small text summary polls calmly. Fetching it for every PTY frame starved the real terminal.
   const [liveRow, setLiveRow] = useState(null);
   useEffect(() => {
-    if (!onIt || !sel?.TaskId) { setLiveRow(null); return; }
+    if (!active || !onIt || !sel?.TaskId) { setLiveRow(null); return; }
     let alive = true;
     const poll = async () => { try { const { data } = await api.get("/api/runs/live", { params: { lines: 120 } }); if (alive) setLiveRow((data.data || []).find((r) => r.TaskId === sel.TaskId) || null); } catch { /* keep the last */ } };
-    poll();
-    const stop = onLive("run-tail", poll);
-    return () => { alive = false; stop(); };
+    poll(); const id = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!onIt, sel?.TaskId]);
+  }, [active, !!onIt, sel?.TaskId]);
   const phase = detailPhase(sel, detail);
   const loading = phase === "loading";
   const triaging = phase === "triaging";
@@ -1716,11 +1718,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const replyOpen = pending || !!opened;
   const chatTask = !!sel.TaskId && ["general", "research", "marketing", "triage", "assistant"]
     .includes(String(detail?.task?.Kind || sel.TaskKind || "").toLowerCase());
+  const assistantDiscussion = (detail?.comments || []).filter((c) =>
+    ["concierge_user", "concierge_assistant", "assistant_user", "assistant_agent"].includes(c.ActorType));
   const tabs = [
     { key: "summary", label: "Summary" },
     { key: "msg", label: "Message" },
     { key: "why", label: "Triage" },
     { key: "agent", label: "Agent", mark: onIt ? "live" : chatTask ? "chat" : rep ? "done" : "" },
+    ...(assistantDiscussion.length ? [{ key: "discussion", label: "Assistant discussion", mark: assistantDiscussion.length }] : []),
     // no Reply tab: everything it held - the draft, its verdicts, what was sent, what you answered
     // elsewhere - is on the Summary timeline, in the step that already told you about it. A tab
     // whose whole content fits under the line describing it was a trip for nothing.
@@ -2048,6 +2053,28 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                 </Box>
               )}
 
+              {tab === "discussion" && (
+                <Box aria-label="Assistant discussion" sx={{ display: "flex", flexDirection: "column", gap: 0.9, py: 0.5 }}>
+                  {assistantDiscussion.map((c) => {
+                    const owner = ["concierge_user", "assistant_user"].includes(c.ActorType);
+                    const body = cleanText(c.Body || "").replace(/\nOPTIONS:\s*.*$/s, "").trim();
+                    return (
+                      <Box key={c.CommentId} sx={{ alignSelf: owner ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+                        <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.25,
+                          textAlign: owner ? "right" : "left", fontSize: 10 }}>
+                          {owner ? "You" : "Taskuary"}{c.CreatedAt ? ` · ${fmtDateTime(c.CreatedAt)}` : ""}
+                        </Typography>
+                        <Box sx={{ bgcolor: owner ? "#e9e3d8" : "#f8f6f2", border: `1px solid ${BORDER}`,
+                          borderRadius: owner ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                          px: 1.2, py: 0.85, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                          {body}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
+
             </>
           )}
         </Box>
@@ -2092,7 +2119,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
               )}
               {onIt && sel.TaskId && <TellAgentButton taskId={sel.TaskId} />}
               {!onIt && !codeless && !held && (
-                <SendToAgent messageId={sel.MessageId} subject={sel.Subject} onOpenTask={onOpenTask} />
+                <SendToAgent messageId={sel.MessageId} subject={sel.Subject} taskKind={sel.TaskKind}
+                  onOpenTask={onOpenTask} />
               )}
               {!onIt && <TalkItThrough messageId={sel.MessageId} onOpenTask={onOpenTask}
                 teaches={!sel.TaskId && sel.MsgStatus === "filed"} />}

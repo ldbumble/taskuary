@@ -1060,10 +1060,10 @@ class ApiTests(unittest.TestCase):
             alive, task_id, agent, label = True, tid, 'coder', 'coder'
             sid, cwd, argv = 'sid1', 'C:/repo', ['claude']
             started = '2026-08-18 20:00:00'
-            def __init__(self): self.last = _t.time()
+            def __init__(self): self.last, self.file_reads = _t.time(), 0
             idle = term.Term.idle
             tail = lambda self, n=3: ['Christina needs an AD account created. How do you want it done?']
-            files = lambda self: ['taskuary/ad.py']
+            def files(self): self.file_reads += 1; return ['taskuary/ad.py']
             info = term.Term.info
 
         term.SESSIONS['sid1'] = FakeTerm()
@@ -1071,10 +1071,15 @@ class ApiTests(unittest.TestCase):
             t = next(x for x in c.get('/api/tasks').json()['data'] if x['TaskId'] == tid)
             self.assertEqual(t['Session']['agent'], 'coder')
             self.assertLess(t['Session']['idle'], 5)                       # just spoke = working
+            self.assertEqual(term.SESSIONS['sid1'].file_reads, 0)          # task roster never shells out to git
             live = next(r for r in c.get('/api/runs/live').json()['data'] if r['TaskId'] == tid)
+            self.assertEqual(term.SESSIONS['sid1'].file_reads, 1)          # rich Board read asks once
             self.assertEqual((live['kind'], live['RunId']), ('session', None))
             self.assertIn('How do you want it done?', live['tail'][0])
             self.assertEqual(c.get(f'/api/tasks/{tid}').json()['session']['sid'], 'sid1')
+            self.assertEqual(term.SESSIONS['sid1'].file_reads, 1)          # selecting a task is lightweight too
+            self.assertEqual(c.get('/api/terminals', params={'details': False}).status_code, 200)
+            self.assertEqual(term.SESSIONS['sid1'].file_reads, 1)
             term.SESSIONS['sid1'].last -= 120                              # gone quiet: parked at its prompt
             t = next(x for x in c.get('/api/tasks').json()['data'] if x['TaskId'] == tid)
             self.assertGreater(t['Session']['idle'], term.IDLE_WAITING)

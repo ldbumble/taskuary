@@ -20,6 +20,7 @@ import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt
 import CloseIcon from "@mui/icons-material/Close";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import api from "./api.js";
+import { DEMO } from "./demoApi.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { syncFace, syncStatusDelay } from "./syncTiming.js";
@@ -339,11 +340,17 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turn = useCallback(async (body) => {
     setWork([]);
+    const plain = async () => {
+      const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
+      return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only } : body.mode === "say" ? { text: body.text, key: body.key } : {})).data;
+    };
+    // The public demo is intentionally a local script. Do not even attempt the streaming AI
+    // endpoint: its invented threads should never look like a model is working behind the page.
+    if (DEMO) return plain();
     const token = localStorage.getItem("taskuary_token");
     const res = await fetch("/api/concierge/stream", { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
     if (!res.ok || !res.body) {                       // the static demo, or an older server: the plain door
-      const path = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
-      return (await api.post(path, body.mode === "next" ? { key: body.key, only: body.only } : body.mode === "say" ? { text: body.text, key: body.key } : {})).data;
+      return plain();
     }
     for await (const ev of readNdjson(res.body)) {
       if (ev.type === "done") { setWork([]); return ev; }
@@ -560,8 +567,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
       }
       else if (verb === "walkthrough" && d.taskId) {      // a set-up is a conversation, not a build
         setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
-                                text: `${d.ref} is open as a walk-through - nothing was built. Its browser opens beside the assistant.` }]);
-        loadPile(); onOpenTask?.(d.taskId); return;
+                                text: `${d.ref} is open as a walk-through - nothing was built. Open it when you want to start; its browser opens beside the assistant.` }]);
+        loadPile(); return;                              // the owner is mid-conversation: do not yank the tab
       }
       else if (verb === "created") {                      // the words WERE the brief: the task exists already
         setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
@@ -578,9 +585,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
       else if (verb === "setup" && d.text) {
         const { data } = await api.post("/api/concierge/setup", { text: d.text });
         setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
-                                text: `${data.ref} — "${data.title}" is open as a step-by-step walkthrough. Its browser opens beside the assistant.` }]);
-        if (data.taskId) onOpenTask?.(data.taskId);
-        if (!current) return;
+                                text: `${data.ref} — "${data.title}" is open as a step-by-step walkthrough. Open it when you want to start; its browser opens beside the assistant.` }]);
+        if (!current) return;                       // ...and the walk stays where it was: see handOff
       }
       else if (["later", "skip", "next", "done", "closed", "ack"].includes(verb)) { /* settled below */ }
       else if (!(verb in needs)) {
@@ -621,9 +627,12 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text }]);
     try {
       const { data } = await api.post("/api/concierge/setup", { text });
+      // ...and we STAY here. Opening the task yanked the owner off the Assistant tab the moment
+      // they asked for a walk-through, and sixty seconds later its own session raised a hand at
+      // them from the tab they had been thrown onto (the 2026-09-03 break test). The receipt is a
+      // link: they go when they want to.
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
-                              text: `${data.ref} — "${data.title}" is open as a step-by-step walkthrough. Its browser opens beside the assistant.` }]);
-      if (data.taskId) onOpenTask?.(data.taskId);
+                              text: `${data.ref} — "${data.title}" is open as a step-by-step walkthrough. Open it when you want to start; its browser opens beside the assistant.` }]);
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
@@ -671,17 +680,19 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
           <div className="grow" />
           <Tooltip title="The pipe"><IconButton size="small" onClick={() => setPipeOpen((v) => !v)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
           <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
-          <Tooltip title={`AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+          <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
           <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
           <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
         </div>
         <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
           slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 700, color: INK, mb: 0.5 }}>Which AI speaks here</Typography>
-          <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.45 }}>Your CLI agent is the default, on its quick gear (haiku, low effort, flash) - it can read, rerun reports and run tools. An API model answers faster but cannot act. The agents doing the actual work are chosen elsewhere.</Typography>
-          <Select size="small" fullWidth value={state?.pick || ""} displayEmpty onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
+          <Typography sx={{ fontSize: 12, fontWeight: 700, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>
+          <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.45 }}>{state?.scripted
+            ? "Every thread, Timeline post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
+            : "Your CLI agent is the default, on its quick gear (haiku, low effort, flash) - it can read, rerun reports and run tools. An API model answers faster but cannot act. The agents doing the actual work are chosen elsewhere."}</Typography>
+          <Select size="small" fullWidth value={state?.pick || ""} displayEmpty disabled={!!state?.scripted} onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
             {!state?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
-            {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "cli" ? " · can act (default)" : " · fast, talk only"}</MenuItem>)}
+            {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "demo" ? " · local fixture" : p.type === "cli" ? " · can act (default)" : " · fast, talk only"}</MenuItem>)}
           </Select>
         </Popover>
         {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span><button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}

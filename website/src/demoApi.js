@@ -13,11 +13,15 @@
 import FIXTURES from "./demoFixtures.json";
 import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
+import { createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
 
 export const DEMO = import.meta.env?.VITE_DEMO === "1";
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const state = clone(FIXTURES);          // the recording, as this visitor has changed it
+installDemoAssistantTimeline(state);
+const scriptedAssistant = createDemoAssistantState();
+scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistant.messages;
 let nextId = 9000;
 
 const path = (url) => String(url || "").split("?")[0];
@@ -25,8 +29,21 @@ const query = (url) => String(url || "").includes("?") ? String(url).split("?").
 
 // a read: the exact url, then the path alone, then a shape that will not crash a caller
 const read = (url) => {
-  if (state[url] !== undefined && state[url] !== null) return clone(state[url]);
   const p = path(url);
+  if (p === "/api/concierge") return clone({
+    task: scriptedAssistant.task, ref: `TQ-${String(scriptedAssistant.activeTaskId).padStart(4, "0")}`,
+    messages: scriptedAssistant.messages, providers: [{ pick: "demo:scripted", type: "demo", label: "Scripted demo" }],
+    pick: "demo:scripted", provider: "Scripted demo", model: "", scripted: true,
+  });
+  if (p === "/api/funnel/pile") return clone(scriptedAssistant.pile);
+  if (p === "/api/concierge/chats") return clone({ data: scriptedAssistant.chats });
+  let conciergeChat = p.match(/^\/api\/concierge\/chats\/(\d+)$/);
+  if (conciergeChat) {
+    const taskId = Number(conciergeChat[1]);
+    const chat = scriptedAssistant.chats.find((c) => c.taskId === taskId);
+    return clone({ task: chat || null, messages: scriptedAssistant.transcripts[taskId] || [] });
+  }
+  if (state[url] !== undefined && state[url] !== null) return clone(state[url]);
   if (state[p] !== undefined && state[p] !== null) return clone(state[p]);
   let m = p.match(/^\/api\/tasks\/(\d+)\/assistant$/);
   if (m) return clone(state["/api/tasks/detail"]?.[`${m[1]}:assistant`]) || { messages: [], providers: [], session: null };
@@ -117,6 +134,66 @@ const demoReply = (taskId, asked) => {
   return "Nothing in the current Timeline is marked as needing you. I’d use this quiet window to review the active task list or ask me about recent agent output.";
 };
 
+const scriptedItemLine = (item) => {
+  if (!item) return "The scripted demo pipe is clear. Nothing here connects to a mailbox, an agent, or an AI.";
+  if (item.kind === "agent") return item.asking
+    ? `${item.agent || "The coder"} stopped on ${item.ref} and needs one choice: ${item.preview || item.why}`
+    : `${item.ref} is still with ${item.agent || "the coder"}. Nothing needs you there until it stops.`;
+  if (item.kind === "review") return `${item.who || "The sender"} is waiting on \u201c${item.title}\u201d. The invented draft is ready below; approving it in this demo sends nothing.`;
+  if (item.kind === "report") return `${item.title} landed normally. Open the recorded report below if you want the detail.`;
+  if (item.kind === "idea") return `I would keep an eye on \u201c${item.title}\u201d. ${item.why}.`;
+  if (item.kind === "fyi") return `${item.who || "Someone"} sent \u201c${item.title}\u201d. It is only an FYI; no work was started.`;
+  return `${item.who || "Someone"} asked about \u201c${item.title}\u201d. ${item.why || "It is still waiting for a decision."}`;
+};
+
+const itemFromTimeline = (key) => {
+  const match = /^msg:(\d+)$/.exec(String(key || ""));
+  if (!match) return null;
+  const row = feedRows().find((r) => String(r.MessageId) === match[1]);
+  if (!row) return null;
+  return {
+    key, kind: row.Channel === "report" ? "report" : "fyi", lane: "fyi",
+    title: row.Subject || row.Title || "Timeline item", who: row.FromName || row.FromEmail || row.SourceName,
+    when: row.SentAt, why: row.RouteReason, mid: row.MessageId, tid: row.TaskId, channel: row.Channel,
+    preview: row.Preview,
+  };
+};
+
+const scriptedNext = (key = null, only = null) => {
+  const candidates = scriptedAssistant.pile.items.filter((i) => !i.settling && i.lane !== "working"
+    && (!only || only !== "mail" || (i.mid && !["report", "assistant"].includes(i.channel))));
+  const item = (key ? scriptedAssistant.pile.items.find((i) => i.key === key) || itemFromTimeline(key) : null)
+    || candidates.find((i) => !i.surfaced) || candidates[0] || null;
+  if (item && scriptedAssistant.pile.items.includes(item)) {
+    item.surfaced = true;
+    item.surfaced_at = "2026-09-03 10:23:00";
+    scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+  }
+  const say = scriptedItemLine(item);
+  scriptedAssistant.messages.push({ id: `demo-turn-${++nextId}`, role: "assistant", text: say, card: item ? clone(item) : null, at: "2026-09-03 10:23:00" });
+  return { item: clone(item), say, options: [], left: Math.max(0, candidates.length - (item ? 1 : 0)), exhausted: null, scripted: true };
+};
+
+const scriptedSay = (asked, key) => {
+  const text = String(asked || "").trim();
+  if (/^(next|what(?:'s| is) next|keep going)\b/i.test(text)) return scriptedNext(null, null);
+  if (/\b(coder|agent|census|manager)\b/i.test(text)) return scriptedNext("agent:7", null);
+  let decision = null;
+  if (/\b(approve|send it|looks good)\b/i.test(text)) decision = { verb: "approve" };
+  else if (/\b(later|not now)\b/i.test(text)) decision = { verb: "later" };
+  else if (/\b(tomorrow|remind me tomorrow)\b/i.test(text)) decision = { verb: "skip" };
+  else if (/^(done|all set|close it)\b/i.test(text)) decision = { verb: "done" };
+  const current = scriptedAssistant.pile.items.find((i) => i.key === key);
+  const say = decision
+    ? ({ approve: "The demo will mark the invented draft handled; nothing is sent.", later: "I will move this invented item back in the demo pipe.", skip: "It will reappear tomorrow in the demo.", done: "Marked done in this temporary demo." }[decision.verb])
+    : current
+      ? `For this scripted example: ${scriptedItemLine(current)}`
+      : "This is a scripted demo response. I would use the Timeline and task history to answer that in a real Taskuary; no AI or agent is running here.";
+  scriptedAssistant.messages.push({ id: `demo-user-${++nextId}`, role: "user", text, at: "2026-09-03 10:23:00" });
+  scriptedAssistant.messages.push({ id: `demo-answer-${++nextId}`, role: "assistant", text: say, at: "2026-09-03 10:23:01" });
+  return { say, options: [], decision, item: null, scripted: true };
+};
+
 // Start the demo's answer OUTSIDE the mounted assistant-ui generator. If the visitor clicks
 // another task, React stops listening but this timer still completes and files the reply in the
 // recorded task state. Coming back therefore behaves like the desktop server instead of losing
@@ -162,6 +239,124 @@ const write = (method, url, body) => {
   const p = path(url);
   noted(method, p);
   let m;
+
+  if (method === "post" && p === "/api/assistant/dock/new") {
+    const previous = scriptedAssistant.chats.find((c) => c.taskId === scriptedAssistant.activeTaskId);
+    if (previous) previous.open = false;
+    const taskId = ++nextId;
+    scriptedAssistant.activeTaskId = taskId;
+    scriptedAssistant.task = { TaskId: taskId, Title: "New demo chat", Kind: "general", Status: "open", Source: "assistant", SourceRef: "assistant:dock", CreatedAt: "2026-09-03 10:23:00" };
+    scriptedAssistant.messages = [];
+    scriptedAssistant.transcripts[taskId] = scriptedAssistant.messages;
+    scriptedAssistant.chats.unshift({ taskId, title: "New demo chat", at: "2026-09-03 10:23:00", started: "2026-09-03 10:23:00", turns: 0, seen: 0, mail: 0, minutes: 0, open: true });
+    for (const item of scriptedAssistant.pile.items) delete item.surfaced;
+    scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+    return { task: clone(scriptedAssistant.task), ref: `TQ-${String(taskId).padStart(4, "0")}`, created: true, scripted: true };
+  }
+
+  if (method === "post" && p === "/api/concierge/next") return scriptedNext(body?.key || null, body?.only || null);
+  if (method === "post" && p === "/api/concierge/open") return scriptedNext(null, null);
+  if (method === "post" && p === "/api/concierge/say") return scriptedSay(body?.text, body?.key);
+
+  if (method === "post" && p === "/api/funnel/settle") {
+    const item = scriptedAssistant.pile.items.find((i) => i.key === body?.key);
+    if (item) {
+      if (body?.verb === "later" || body?.verb === "skip") {
+        item.surfaced = false;
+        item.later = body.verb === "skip" ? "2026-09-04 07:00:00" : "2026-09-03 13:23:00";
+      } else if (body?.verb === "done") {
+        scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i.key !== body.key);
+      } else if (body?.verb === "surfaced") item.surfaced = true;
+    }
+    scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+    return { key: body?.key, verb: body?.verb, until: item?.later || null, scripted: true };
+  }
+
+  if (method === "post" && (m = p.match(/^\/api\/reviews\/(\d+)\/decide$/))) {
+    const review = (state["/api/reviews"]?.data || []).find((r) => String(r.ReviewId) === m[1]);
+    if (review) {
+      review.Status = body?.verb === "approve" ? "sent" : body?.verb || "dismissed";
+      review.FinalText = body?.final_text ?? review.DraftText;
+      const row = feedRows().find((r) => Number(r.ReviewId) === Number(review.ReviewId));
+      if (row) { row.ReviewStatus = review.Status; row.NeedsYou = 0; }
+      scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => Number(i.rid) !== Number(review.ReviewId));
+      scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+    }
+    return { ok: true, status: review?.Status || "handled", demo: true };
+  }
+
+  if (method === "post" && (m = p.match(/^\/api\/reviews\/(\d+)\/draft$/))) {
+    const review = (state["/api/reviews"]?.data || []).find((r) => String(r.ReviewId) === m[1]);
+    const draft = review?.DraftText || "Thanks - I have this. I will confirm the remaining detail and follow up shortly.";
+    if (review) review.DraftText = draft;
+    return { draft, reviewId: Number(m[1]), demo: true };
+  }
+
+  if (method === "post" && (m = p.match(/^\/api\/tasks\/(\d+)\/waitroom$/))) {
+    const item = scriptedAssistant.pile.items.find((i) => String(i.tid) === m[1]);
+    if (item) { item.asking = false; item.lane = "working"; item.why = "the scripted agent is shown as working again"; }
+    scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+    return { ok: true, queued: true, demo: true };
+  }
+
+  if (method === "post" && p === "/api/concierge/act") {
+    const item = scriptedAssistant.pile.items.find((i) => i.key === body?.key);
+    if (item && body?.verb === "dismiss") scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i !== item);
+    scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+    return { ok: true, verb: body?.verb, demo: true };
+  }
+
+  if (method === "post" && (m = p.match(/^\/api\/reports\/(\d+)\/rerun$/))) {
+    const item = scriptedAssistant.pile.items.find((i) => String(i.source_id) === m[1]);
+    return { queued: true, sourceId: Number(m[1]), title: item?.title || "Demo report", demo: true };
+  }
+
+  if (method === "post" && (m = p.match(/^\/api\/messages\/(\d+)\/(reply|dispatch|chat|mine|not-mine)$/))) {
+    const messageId = Number(m[1]);
+    const verb = m[2];
+    const row = feedRows().find((item) => Number(item.MessageId) === messageId);
+    const item = scriptedAssistant.pile.items.find((candidate) => Number(candidate.mid) === messageId);
+    if (verb === "reply") {
+      let review = (state["/api/reviews"]?.data || []).find((candidate) => Number(candidate.MessageId) === messageId && candidate.Status === "pending");
+      if (!review) {
+        review = {
+          ReviewId: ++nextId, TaskId: row?.TaskId || item?.tid || null, MessageId: messageId, RunId: null, Kind: "draft",
+          DraftText: "Thanks - I have this. I will confirm the remaining detail and follow up shortly.", FinalText: null,
+          Status: "pending", Reason: "Scripted demo draft", DecidedBy: null, DecidedAt: null, DecideNote: null,
+          CreatedAt: "2026-09-03 10:23:00", Deliver: null, Title: row?.Title || item?.title,
+          Subject: row?.Subject || item?.title, FromName: row?.FromName || item?.who, FromEmail: row?.FromEmail || null,
+          SentAt: row?.SentAt || item?.when, Channel: row?.Channel || item?.channel || "email", SourceName: row?.SourceName || null,
+          ConversationId: row?.ConversationId || null, Preview: row?.Preview || item?.preview || "", CanSend: true,
+        };
+        (state["/api/reviews"].data ||= []).unshift(review);
+      }
+      if (row) { row.ReviewId = review.ReviewId; row.ReviewStatus = "pending"; row.HasDraft = 1; row.NeedsYou = 1; row.Category = "review"; }
+      scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((candidate) => candidate !== item);
+      scriptedAssistant.pile.items.unshift({
+        key: `review:${review.ReviewId}`, kind: "review", lane: "approve", title: review.Subject,
+        who: review.FromName || review.FromEmail, when: review.SentAt, why: "a scripted draft is waiting for your yes",
+        mid: messageId, tid: review.TaskId, ref: review.TaskId ? `TQ-${String(review.TaskId).padStart(4, "0")}` : null,
+        rid: review.ReviewId, channel: review.Channel, preview: review.Preview,
+      });
+      scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+      return { reviewId: review.ReviewId, draft: review.DraftText, demo: true };
+    }
+    if (verb === "dispatch") {
+      const taskId = row?.TaskId || item?.tid || ++nextId;
+      scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((candidate) => candidate !== item && candidate.key !== `agent:${taskId}`);
+      scriptedAssistant.pile.items.push({ ...(item || {}), key: `agent:${taskId}`, kind: "agent", lane: "working", tid: taskId,
+        ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coder", working: "coder", asking: false,
+        why: "the scripted demo shows this as handed off; no agent was started" });
+      scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+      return { taskId, ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coder", demo: true };
+    }
+    if (verb === "not-mine") {
+      scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((candidate) => candidate !== item);
+      scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+      return { ok: true, remembered: body?.scope || "subject", demo: true };
+    }
+    return { ok: true, taskId: row?.TaskId || item?.tid || 1, ref: item?.ref || null, demo: true };
+  }
 
   if (method === "post" && p === "/api/assistant/dock") {
     const task = dockTask();

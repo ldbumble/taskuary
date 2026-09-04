@@ -44,6 +44,7 @@ LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'time': ('coming up', 'workin
               'asked': ('asked you', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
               'working': ('agent working', 'working')}   # in hand: at the very top, nothing to do until the agent stops or asks
 SOON_MIN, ALERT_MIN = 120, 15     # a meeting inside two hours is time-sensitive; inside fifteen it interrupts
+SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
 # the owner's two knobs (Settings > Assistant): how far back the pipe reaches for ordinary mail - a
@@ -260,6 +261,7 @@ def from_agents(store) -> list:
     """Live sessions parked on a question - whatever the feed window, an agent waiting is waiting."""
     from . import terminal as term, waitroom
     out = []
+    fresh_setup = (datetime.now() - timedelta(minutes=SETUP_GRACE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     try: live = term.live_sessions(tail=6)
     except Exception: return out
     for t in live:
@@ -267,9 +269,19 @@ def from_agents(store) -> list:
         if not tid: continue
         task = store.get_task(tid) or {}
         if task.get('SourceRef') == 'assistant:dock' or task.get('Status') in ('done', 'dropped'): continue
+        # A WALK-THROUGH the owner just started is a conversation they are IN. It parked because it
+        # said its piece and is waiting for their next line - and the by-the-way bar announced
+        # "assistant stopped on TQ-0009 and is waiting on you" sixty seconds after they opened it
+        # (the 2026-09-03 break test). It comes back as a blocked row only once it has been left.
+        if task.get('SourceRef') == 'assistant:setup' and _ts(t.get('started')) >= fresh_setup: continue
         waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
         if not waiting: continue
         tail = [str(x).strip() for x in (t.get('tail') or []) if str(x).strip()]
+        # ...read off the RENDERED screen when there is one, with the TUI's chrome dropped: the
+        # card showed a theme toolbar where the agent's question belonged (2026-09-03)
+        if t.get('sid'):
+            try: tail = [x for x in term.asking_lines(t['sid'], 4)] or tail
+            except Exception as e: logger.debug(f'funnel: no rendered screen for {t.get("sid")} - {e}')
         asking = waitroom.looks_like_question(tail)
         agent = t.get('agent') or t.get('label') or 'agent'
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),

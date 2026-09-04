@@ -18,7 +18,7 @@ Read it as a matrix:
                close the task · stop the agent · wrap it up · rerun the report · sweep them away ·
                split it in two · set something up · a correction · a question · a lookup
 """
-import json, unittest
+import json, os, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -911,6 +911,55 @@ class PipeTruthTests(unittest.TestCase):
         # ...and it means every fyi from her, not the mails with 'fyi' in the subject
         self.assertTrue(funnel.muted(rule, {'email': 'chana@ours.com', 'lane': 'fyi', 'title': 'lunch on Thursday'}))
         self.assertFalse(funnel.muted(rule, {'email': 'chana@ours.com', 'lane': 'asked', 'title': 'fyi about the audit'}))
+
+
+class AgentsStartAndFinishTests(unittest.TestCase):
+    """E. An agent Taskuary starts must not park on a question the owner already answered, and what
+    it IS asking must reach the card."""
+
+    def test_the_checkout_is_trusted_before_claude_opens_it(self):
+        import json as _json, tempfile
+        home, cwd = tempfile.mkdtemp(), tempfile.mkdtemp()
+        self.assertTrue(terminal.pretrust(cwd, r'C:\bin\claude.cmd --model sonnet', home=home))
+        got = _json.load(open(os.path.join(home, '.claude.json'), encoding='utf-8'))['projects'][cwd]
+        self.assertTrue(got['hasTrustDialogAccepted'] and got['hasClaudeMdExternalIncludesApproved'])
+        self.assertFalse(terminal.pretrust(cwd, 'claude', home=home))       # already answered: nothing written
+        self.assertFalse(terminal.pretrust(cwd, 'codex', home=home))        # only claude asks these
+
+    def test_pretrust_keeps_everything_else_in_the_file(self):
+        import json as _json, tempfile
+        home, cwd = tempfile.mkdtemp(), tempfile.mkdtemp()
+        p = os.path.join(home, '.claude.json')
+        open(p, 'w', encoding='utf-8').write(_json.dumps({'userID': 'abc', 'projects': {'/other': {'allowedTools': ['Bash']}}}))
+        terminal.pretrust(cwd, 'claude', home=home)
+        got = _json.load(open(p, encoding='utf-8'))
+        self.assertEqual(got['userID'], 'abc')
+        self.assertEqual(got['projects']['/other'], {'allowedTools': ['Bash']})
+
+    def test_the_cards_question_is_the_screen_not_the_theme_bar(self):
+        chrome = ['─────────────', '  Catppuccin Mocha  Dracula  Nord', '? for shortcuts', 'auto-accept edits on']
+        real = 'Remove the old rows too? (y/n)'
+        with mock.patch.object(terminal, 'screen', return_value={'lines': [real] + chrome}):
+            self.assertEqual(terminal.asking_lines('s1', 4), [real])
+
+    def test_a_walkthrough_the_owner_just_opened_does_not_raise_its_own_hand(self):
+        s = store()
+        made = concierge.setup_task(s, 'set up a weekly refunds report', 'owner')
+        tid = made['taskId']
+        s.update_task(tid, {'Status': 'in_progress'}, 'router')
+        live = session(tid, idle=200, waiting=True, started=ago(minutes=2),
+                       tail=['What should it cover? (1) refunds (2) everything'])
+        self.assertEqual([i for i in pile(s, live) if i['kind'] == 'agent'], [])     # they are IN it
+        live[0]['started'] = ago(hours=2)                                            # ...but not any more
+        self.assertEqual([i['key'] for i in pile(s, live) if i['kind'] == 'agent'], [f'agent:{tid}'])
+
+    def test_the_coder_brief_has_one_rule_about_finishing(self):
+        doc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                'taskuary', 'templates', 'coder.md'), encoding='utf-8').read()
+        closing = doc.split('## Closing out', 1)[1].split('##', 1)[0]
+        self.assertIn('taskuary --done', closing)                        # it says to say so...
+        self.assertNotIn('do not write a wrap-up', closing)              # ...and no longer says not to
+        self.assertNotIn('clicks **Done**', closing)
 
 
 # ── the order things come out in, and the verdicts that never become work ────────────────────

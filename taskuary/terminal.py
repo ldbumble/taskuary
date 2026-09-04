@@ -6,7 +6,7 @@ agent's own TUI, its approval prompts and your typing all go through this.
 
 Windows uses ConPTY via pywinpty; POSIX uses the stdlib pty module.
 """
-import os, re, shutil, subprocess, threading, time, uuid
+import json, os, re, shutil, subprocess, threading, time, uuid
 from collections import deque
 from datetime import datetime
 from loguru import logger
@@ -345,12 +345,18 @@ class Term:
         working' on every tab switch and the board flapped between lanes."""
         if time.time() > self.calm_until: self.last = time.time()
 
+    def quiet_for(self, secs: float):
+        """The next `secs` of output are OURS - a repaint we asked for - and must not count as the
+        agent working. Opening the card in the chat produced exactly that, idle() reset, and a coder
+        sitting on a trust dialog flipped to "the agent is working again" (2026-09-03)."""
+        self.calm_until = max(self.calm_until, time.time() + float(secs))
+
     def resize(self, rows, cols):
         if self.alive:
             try:
                 self.pty.resize(int(rows), int(cols))
                 self.rows, self.cols = int(rows), int(cols)
-                self.calm_until = time.time() + 3         # the repaint this triggers is not activity
+                self.quiet_for(3)                         # the repaint this triggers is not activity
             except Exception: pass
     def close(self):
         self.keep()                                       # before the bytes go, not after
@@ -487,6 +493,43 @@ def agent_argv(profile: dict, model: str = None) -> list:
     return _codex_windows_auto(_codex_browser_tui(argv))
 
 
+# Claude Code asks two questions the FIRST time it opens a folder: "Do you trust the files in this
+# directory?" and "Allow external CLAUDE.md imports?". An agent Taskuary started answers neither -
+# it sits on the dialog, the pipe says "waiting on you", and the card shows the theme toolbar
+# instead of a question (the 2026-09-03 break test: three auto-started coders parked like that).
+# The owner already answered by dispatching the work, and the folder is one Taskuary chose. So the
+# answers are written where the CLI reads them, before it starts.
+TRUSTED = {'hasTrustDialogAccepted': True, 'hasCompletedProjectOnboarding': True,
+           'hasClaudeMdExternalIncludesApproved': True, 'hasClaudeMdExternalIncludesWarningShown': True}
+
+def pretrust(cwd: str, agent: str = '', home: str = None) -> bool:
+    """Answer the first-run dialogs for `cwd` in ~/.claude.json. True when something was written.
+    Only claude asks these, and only about a directory: nothing else in the file is touched, and a
+    file we cannot read or parse is left exactly as it is."""
+    if not cwd or 'claude' not in str(agent or 'claude').lower(): return False
+    path = os.path.join(home or os.path.expanduser('~'), '.claude.json')
+    try:
+        cfg = json.loads(open(path, encoding='utf-8').read()) if os.path.exists(path) else {}
+        if not isinstance(cfg, dict): return False
+    except (OSError, ValueError) as e:
+        logger.debug(f'pretrust: {path} could not be read ({e}) - the CLI will ask its own questions')
+        return False
+    projects = cfg.setdefault('projects', {})
+    if not isinstance(projects, dict): return False
+    entry = projects.get(cwd) if isinstance(projects.get(cwd), dict) else {}
+    if all(entry.get(k) for k in TRUSTED): return False                  # already answered - nothing to write
+    projects[cwd] = {**entry, **TRUSTED}
+    try:
+        tmp = path + '.tq'
+        with open(tmp, 'w', encoding='utf-8') as f: json.dump(cfg, f, indent=2)
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.warning(f'pretrust: could not write {path} ({e}) - the CLI may ask about {cwd}')
+        return False
+    logger.info(f'pretrust: {cwd} is trusted for claude - no first-run dialog for this session')
+    return True
+
+
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
                  rows: int = 32, cols: int = 110, actor: str = 'owner', model: str = None,
                  seed_fn=None) -> Term:
@@ -535,6 +578,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         if len(paths) == 1: cwd = next(iter(paths.values()))
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
+    if agent:
+        try: pretrust(cwd, ' '.join(str(a) for a in argv))     # no first-run dialog to park on
+        except Exception as e: logger.debug(f'pretrust skipped: {e}')
     seed = ' '.join(seed_fn(cwd).split()) if (seed_fn and agent) else None
     extra = seed_argv(profile, seed) if seed else None
     # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
@@ -1328,6 +1374,26 @@ def screen(sid: str, lines: int = 32) -> dict | None:
     shown = render(t.scrollback(), t.cols, t.rows).splitlines()
     return {'sid': t.sid, 'alive': bool(t.alive), 'rows': t.rows, 'cols': t.cols,
             'lines': shown[-n:]}
+
+
+# What a TUI paints at the bottom of its screen is not what it is asking: a status bar, a theme
+# name, a hint about shortcuts. The pipe's card showed "Catppuccin Mocha Dracula..." where the
+# agent's question should have been (the 2026-09-03 break test), because the raw buffer's last
+# lines are whatever was drawn last. These are the lines to leave out.
+_TUI_FURNITURE = re.compile(r'^[\s─-╿▀-▟\-=_~*.·•]+$'                # rules, borders, spinners
+                            r'|^\s*(\?|/)\s*for\b|shift\s*\+\s*tab|ctrl\s*\+|esc to |press enter to '
+                            r'|^\s*(catppuccin|dracula|solarized|nord|gruvbox|monokai|tokyo ?night)\b'
+                            r'|^\s*(auto-?accept|bypassing permissions|plan mode|accepting edits)\b'
+                            r'|^\s*\d+%?\s*(context|tokens?) (left|used)\b|^\s*(tokens?|context):', re.I)
+
+
+def asking_lines(sid: str, n: int = 4) -> list:
+    """The last lines of the agent's RENDERED screen that could be a question - the same pyte
+    render the reopened pane seeds from, with the chrome dropped. [] when there is no session."""
+    snap = screen(sid, 40)
+    if not snap: return []
+    lines = [l.rstrip() for l in snap['lines'] if l.strip() and not _TUI_FURNITURE.search(l) and not _CHROME.search(l)]
+    return lines[-max(1, n):]
 
 
 def say_to_task(store, task_id: int, msg: dict, actor: str = 'router') -> bool:

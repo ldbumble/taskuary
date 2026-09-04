@@ -111,6 +111,13 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid \}\) => <Pile/);
   assert.match(view, /stageMode === "task" && it\?\.mid && openByMid/);
   assert.match(read("FeedView.jsx"), /typeof top === "function" \? top\(\{ openByMid \}\) : top/);
+  // The rail's kind/source filters narrow the rail's OWN rows and nothing else: the pile and the
+  // walk are asked for over everything, so the assistant processes the whole pipe whatever the
+  // rail is showing (the owner, 2026-09-04: "how the assistant works on filtered tasks - does it
+  // only process those?"). The one narrowing the walk takes is `only`, which is the "Just what
+  // came in" button. If that ever changes, these two are where it has to be said out loud.
+  assert.match(view, /\/api\/funnel\/pile", \{ params: currentRef\.current\?\.key \? \{ current: currentRef\.current\.key \} : \{\} \}/);
+  assert.match(view, /\{ key: body\.key, only: body\.only \}/);
   assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage
   assert.match(view, /onPull=\{\(r\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
   assert.match(view, /window\.location\.hash = `msg=\$\{mid\}`/);   // "on the Timeline" pins the row over the chat

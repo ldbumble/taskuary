@@ -634,6 +634,20 @@ def came_in(i: dict) -> bool:
 FYI_BATCH = 4                              # fyi comes as a handful, not one at a time - there is nothing to do with each
 BLOCKED_AGAIN_MIN = 30                     # an agent still waiting comes out again this long after it was shown
 
+def _not_yet(i: dict) -> bool:
+    """On the timeline, but nothing to say about it YET - the walk skips it and comes back.
+
+    A meeting enters the pipe two hours out (SOON_MIN) so the day is visible, and its lane is
+    'time', which puts it at the very front of the walk. So the assistant opened with a meeting
+    that was still an hour and a half away, ahead of mail that wanted answering now. It is the same
+    shape as an agent that is mid-run: real, on the board, and not yours to do anything about until
+    it stops (the owner, 2026-09-04: "meetings should not go down into the chat until 15 minutes
+    before like a agent in middel of working"). alerts() already drew this line at ALERT_MIN; the
+    walk did not.
+    """
+    return i['kind'] == 'meeting' and i.get('mins') is not None and i['mins'] > ALERT_MIN
+
+
 def next_item(store, key: str = None, only: str = None) -> dict | None:
     """What comes out of the mouth: the named item (read or not - the chat may return to it), or
     the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
@@ -642,6 +656,7 @@ def next_item(store, key: str = None, only: str = None) -> dict | None:
     if key: return next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None) or batch_item(store, key)
     again = (datetime.now() - timedelta(minutes=BLOCKED_AGAIN_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working'
+             and not _not_yet(i)
              and (not i.get('surfaced') or _ts(i.get('surfaced_at')) <= again)]
     if only == 'mail': ready = [i for i in ready if came_in(i) or i['kind'] in INTERRUPTS]
     return ready[0] if ready else None

@@ -573,12 +573,26 @@ def next_item(store, key: str = None, only: str = None) -> dict | None:
     the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
     not ready to be talked about."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
-    if key: return next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None)
+    if key: return next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None) or batch_item(store, key)
     again = (datetime.now() - timedelta(minutes=BLOCKED_AGAIN_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working'
              and (not i.get('surfaced') or _ts(i.get('surfaced_at')) <= again)]
     if only == 'mail': ready = [i for i in ready if came_in(i) or i['kind'] in INTERRUPTS]
     return ready[0] if ready else None
+
+
+def batch_item(store, key: str) -> dict | None:
+    """The fyi batch as ONE item, so words said about it land on something. next_item could not
+    resolve a `fyis:` key at all, so after a batch came out "next", "done" and "not ours" were dead
+    until a button was clicked (the 2026-09-03 break test)."""
+    if not key or not key.startswith('fyis:'): return None
+    want = [k for k in key[5:].split(',') if k]
+    have = {i['key']: i for i in build(store, keep_surfaced=True)['items']}
+    got = [have[k] for k in want if k in have]
+    if not got: return None
+    return _item(key, 'fyis', 'fyi', f"{len(got)} fyi", who='', when=got[0].get('when'), since=got[0].get('since'),
+                 channel=got[0].get('channel'), why='people told you things; nothing to do',
+                 items=[dict(i) for i in got], members=[i['key'] for i in got])
 
 
 def fyi_batch(store, first: dict) -> list:
@@ -634,8 +648,15 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
 
 def reset_walk(store):
     """A new chat. Read stays read - a mail you saw yesterday is not new again because the
-    conversation is - but an alert put down in the old chat may speak once more in this one."""
+    conversation is - but an alert put down in the old chat may speak once more in this one.
+
+    An AGENT waiting on you is the exception to "read stays read": it is the one lane that blocks
+    work, and having been shown it once in yesterday's chat is not an answer. A new chat surfaced
+    two fyi about lunch while a coder sat parked on a question (the 2026-09-03 break test), because
+    a blocked row only comes round again after BLOCKED_AGAIN_MIN. It comes back with the new chat."""
     store.clear_funnel_states(('ack',))
+    for k, st in store.funnel_states().items():
+        if k.startswith('agent:') and st.get('Status') == 'surfaced': store.clear_funnel_state(k)
     invalidate()
 
 

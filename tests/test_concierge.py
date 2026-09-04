@@ -176,9 +176,11 @@ class DecisionTests(unittest.TestCase):
         # a remark is not a decision
         out = concierge.say(s, 'who is Dana again?', key=f'review:{r}', llm=lambda *a, **k: 'Dana is the vendor contact on the export.')
         self.assertIsNone(out['decision'])
-        # ...and nothing on the table means nothing to decide, whatever the words
+        # ...and nothing on the table means nothing to decide - the words move the WALK instead,
+        # which is what "next" and "done" typed into an empty table always meant (2026-09-03)
         out = concierge.say(s, 'done', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nDECIDE: done')
-        self.assertIsNone(out['decision'])
+        self.assertIsNone(out.get('decision'))
+        self.assertIn('still wait', out['say'])
 
     def test_plain_phrases_decide_without_a_model(self):
         # decide_words also hands back what was SAID and what is left of it once every verb phrase is

@@ -125,7 +125,11 @@ function Pipe({ pile, current, onPull, mode, setMode, open, onClose }) {
     api.get("/api/feed", { params: { limit: 80 } }).then(({ data }) => live && setRecent(data.data || [])).catch(() => live && setRecent([]));
     return () => { live = false; };
   }, [mode]);
-  const nextKey = items.find((i) => !i.settling && i.key !== current?.key)?.key;
+  // The NEXT pill has to be what the Next button will actually bring up. The server skips what an
+  // agent has in hand and what this walk already showed (funnel.next_item); the pill did not, so a
+  // coder parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
+  const upNext = (i) => !i.settling && i.lane !== "working" && i.key !== current?.key;
+  const nextKey = (items.find((i) => upNext(i) && !i.surfaced) || items.find(upNext))?.key;
   // ...and how close it is to empty, once that is worth saying (the owner asked for it at "halfway
   // down the funnel", so from fifteen: the count is the encouragement, no exclamation needed)
   const left = items.filter((i) => !i.settling && i.lane !== "working").length;

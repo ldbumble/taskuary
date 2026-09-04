@@ -54,7 +54,9 @@ s = store(); a, b, c_, d = three(s)
 with world(s) as (c, _):
     out = c.post('/api/concierge/next', json={}).json(); key = out['item']['key']
     o = c.post('/api/concierge/say', json={'text': 'stop auto-starting the coder', 'key': key}).json()
-    show('setting mid-walk', f"key on table={key}", f"decision={o.get('decision')}", f"say={o['say'][:120]!r}", 'PAGE: verb "setting" has no branch -> done(null) -> settle(key, done) -> the review is marked done for good')
+    show('setting mid-walk', f"key on table={key}", f"decision={o.get('decision')}", f"say={o['say'][:120]!r}",
+         'PAGE: the "setting" branch shows the proposal card and settles NOTHING - the review stays on the table',
+         f"pile: {keys(s)}")
 
 # 4. later / skip: when do they come back
 s = store(); three(s)
@@ -85,7 +87,8 @@ for words in ('close it', 'not ours', 'done'):
         elif d.get('verb') == 'done': r = c.patch(f'/api/tasks/{tid}', json={'Status': 'done'}).json()
         else: r = None
         show(f'{words!r} with an agent parked on it', f"decision={d} say={o['say'][:90]!r}", f"page call -> {str(r)[:80]}",
-             f"task now: {s.get_task(tid)}", f"pipe: {keys(s)}", 'live session untouched (no /agent/stop was called)')
+             f"task now: {s.get_task(tid)}", f"pipe: {keys(s)}",
+             'the session: close_task stops it through terminal.session_for (SESSIONS is empty in this replay, so nothing to stop here)')
 
 # 7. 'skip it' - a sweep with a pronoun: what does it sweep?
 s = store(); three(s)

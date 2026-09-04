@@ -413,6 +413,9 @@ _ASKING = re.compile(r"\b(check|see|find out|know|tell me|confirm|remember) (if|
 # saying yes: what it means is whatever the card's own button does, so the verb is resolved
 # against the item on the table (assent_verb) and never guessed here
 _ASSENT = re.compile(r"^\s*(yes|yeah|yep|yup|ok|okay|sure|fine|alright|go ahead|do it|please do|sounds good|👍)\b[\s,.!:-]*(?P<tail>.*)$", re.I | re.S)
+# starting the walk in words, not on a button: with nothing on the table these did nothing at all
+_START = re.compile(r"\b(walk me through|take me through|go through (my|the|them|it all)|start with|start on|let'?s go|let'?s start"
+                    r"|get (me )?started|what'?s next|next one|first one|show me what'?s (waiting|left|there)|carry on)\b", re.I)
 _REMEMBER_TOO = re.compile(r"[,;]?\s+and (also )?remember (that |to )?(?P<note>.+)$", re.I | re.S)
 _REMEMBER_TO = re.compile(r"^\s*(remember|note|remind me) to\s+(?P<rest>.+)$", re.I | re.S)
 # what the card's primary button does, said as a word. Anything not here has no yes-able action.
@@ -614,9 +617,17 @@ def parse_options(text: str) -> tuple[str, list]:
     return (text[:m.start()].strip(), opts if len(opts) >= 2 else [])
 
 
-def fallback(item: dict | None, opening: bool) -> str:
+def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
     """No model: the facts in the same three beats - where from, what was done, what you need to do."""
-    if not item: return ALL_DONE if opening else 'No AI is connected, so I can only show you the pipe. Add one under Connections → AI.'
+    if not item:
+        if opening: return ALL_DONE
+        # ...and with nothing on the table, the facts are WHAT IS WAITING. "No AI is connected" was
+        # the answer to every typed word in a fresh install - true, and no use to anybody (2026-09-03).
+        left = [i for i in (pile_items or []) if not i.get('settling')]
+        if left:
+            return (f"{funnel.summary(left)} Say next and I'll take you through them, or name the one you mean. "
+                    '(No AI is connected, so I speak in facts rather than sentences - Connections → AI.)')
+        return ALL_DONE
     if opening and item.get('mid') and item['kind'] in ('review', 'action', 'asked', 'todo', 'fyi'):
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""
         done = (f"the agent {item['summary']}" if item.get('summary') else
@@ -723,6 +734,22 @@ def off_subject(say: str, item: dict | None) -> bool:
     return not (own & set(tokens(say or '')))
 
 
+# The voice must never step out of the part. A CLI brain answered "next" with "I understand the
+# role, but I don't have the queue data" and "yes go ahead" with "I'm in Claude Code... I don't have
+# access to the systems Taskuary would need" - twice, in the owner's face (2026-09-03). It is not
+# the assistant's place to describe its own plumbing: the facts line is a better answer than that.
+_BROKE_CHARACTER = re.compile(r"\b(i (do ?n'?t|don't|cannot|can'?t) (have|see|access)\b.{0,40}\b(access|data|queue|pipe|systems|database|information|context)"
+                              r"|i'?m (in |running (in|on) )?(claude code|codex|gemini|an? (ai|llm|language model))"
+                              r"|as an ai\b|i am an ai\b|i (have|am) (no|not) (able to )?(access|connected)"
+                              r"|i (would|will) need (access|the) \w+ (to|before)|i'?m unable to access"
+                              r"|i (do ?n'?t|cannot) (actually )?(run|execute|call) (anything|tools|commands))", re.I)
+
+
+def in_character(say: str) -> bool:
+    """False when the answer talks about the model's own limits instead of the owner's work."""
+    return not _BROKE_CHARACTER.search(say or '')
+
+
 def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: list) -> tuple[str, list]:
     # the item comes FIRST and is named as the only subject; the pile is counts only while one is on the table
     user = ((f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n" if item else '')
@@ -733,6 +760,9 @@ def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: 
     say, options = parse_options(text)
     if off_subject(say, item):
         logger.info(f"concierge: the model spoke about another task than {item.get('ref')} - using the facts instead")
+        return '', []
+    if not in_character(say):
+        logger.info('concierge: the voice broke character - using the facts instead')
         return '', []
     return say, options
 
@@ -1446,7 +1476,24 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         say_ = 'Nothing is on the table to split - pick the one you mean from the pipe and say it again.'
         record(store, tid, 'assistant', say_)
         return {'say': say_, 'options': [], 'decision': None}
+    # NOTHING ON THE TABLE. "next", "done", "walk me through my tasks", "start with the mail" all did
+    # nothing at all - no item, so no decision, so the words fell through to a model that had nothing
+    # to decide about (2026-09-03). The walk starts and continues from words, exactly as from buttons.
+    if not item0:
+        if words0 and words0['verb'] in ('next', 'done', 'skip', 'later') or _START.search(text):
+            only = 'mail' if re.search(r'\b(mail|inbox|e-?mail|what came in)\b', text, re.I) else None
+            return surface(store, None, llm, actor, only, trace, cancel)
+        # ...and a verb that needs something to act ON says so, rather than letting the model claim
+        # it closed a task it never touched ("Done. Yosef Adler - Hey is closed." - it was not)
+        if words0 and words0['verb'] in NEEDS:
+            say_ = ('Nothing is on the table. Say next and I will bring the next thing up, or name the one '
+                    'you mean - the sender or its TQ ref - and I will do it there.')
+            record(store, tid, 'assistant', say_)
+            return {'say': say_, 'options': [], 'decision': None}
     quick = words0 if item0 else None
+    # a batch of fyi is one thing on the table: "not ours" about a handful of fyi is what "read" means
+    if quick and item0.get('kind') == 'fyis' and quick['verb'] in ('not_ours', 'not_ours_remember', 'archive', 'close'):
+        quick = {**quick, 'verb': 'done'}
     if quick and quick['verb'] == 'assent':                      # "yes" means whatever this card's own button does
         v = assent_verb(item0)
         if not v:
@@ -1525,6 +1572,10 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             if hub.enabled(store): raw = hub.publish_assistant_entries(store, tid, raw, 'assistant')
             raw, decision = parse_decision(raw)
             reply, options = parse_options(raw)
+            # the voice describing its own plumbing is never the answer (in_character): the facts are
+            if not in_character(reply):
+                logger.info('concierge: the voice broke character - answering with the facts instead')
+                reply, options = '', []
             _remember_sid(store, tid, llm)
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
     if item and decision is None: decision = decide_words(text)
@@ -1543,7 +1594,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     # happens now, never the model's claim that it already did something (haiku said "Task created" after
     # trying its own task tool, 2026-09-03)
     if decision: reply = ''
-    if not reply: reply = RECEIPTS.get((decision or {}).get('verb'), '') or fallback(item, False)
+    if not reply: reply = RECEIPTS.get((decision or {}).get('verb'), '') or fallback(item, False, p['items'])
     record(store, tid, 'assistant', reply + (f"\nOPTIONS: {' | '.join(options)}" if options else ''))
     return {'say': reply, 'options': options, 'decision': decision}
 

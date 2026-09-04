@@ -347,6 +347,41 @@ class LanesTests(unittest.TestCase):
         with mock.patch.object(funnel, '_agenda', return_value=ev):
             self.assertEqual(funnel.alerts(s), [])
 
+    def test_a_meeting_waits_for_its_fifteen_minutes_before_the_walk_offers_it(self):
+        """It is on the timeline two hours out so the day is visible, and its lane is 'time' - which
+        put it at the very FRONT of the walk, so the assistant opened with a meeting 90 minutes away
+        ahead of mail that wanted answering now. Same shape as an agent mid-run: real, on the board,
+        nothing for the owner to do about it yet (the owner, 2026-09-04: "meetings should not go down
+        into the chat until 15 minutes before like a agent in middel of working")."""
+        s = store()
+        far = [{'start': ahead(90), 'end': ahead(120), 'subject': 'Budget review', 'who': [], 'all_day': False}]
+        near = [{'start': ahead(10), 'end': ahead(40), 'subject': 'Standup', 'who': [], 'all_day': False}]
+        with mock.patch.object(funnel, '_agenda', return_value=far):
+            funnel.invalidate()
+            self.assertEqual([i['title'] for i in funnel.build(s)['items']], ['Budget review'])   # on the timeline
+            funnel.invalidate()
+            self.assertIsNone(funnel.next_item(s))               # ...and the walk has nothing to open with
+        with mock.patch.object(funnel, '_agenda', return_value=near):
+            funnel.invalidate()
+            nxt = funnel.next_item(s)
+        self.assertEqual((nxt['kind'], nxt['title']), ('meeting', 'Standup'))    # inside fifteen it goes first
+
+    def test_a_far_off_meeting_does_not_interrupt_a_mail_only_walk_either(self):
+        """INTERRUPTS lets a meeting stop a 'just what came in' walk. That is for one about to
+        start, not one two hours out."""
+        s = store()
+        far = [{'start': ahead(95), 'end': ahead(125), 'subject': 'Budget review', 'who': [], 'all_day': False}]
+        with mock.patch.object(funnel, '_agenda', return_value=far):
+            funnel.invalidate()
+            self.assertNotEqual((funnel.next_item(s, only='mail') or {}).get('kind'), 'meeting')
+
+    def test_the_gate_only_ever_holds_back_meetings(self):
+        for kind in ('agent', 'todo', 'asked', 'fyi', 'review', 'wrapup', 'idea', 'report'):
+            self.assertFalse(funnel._not_yet({'kind': kind, 'mins': 999}), kind)
+        self.assertFalse(funnel._not_yet({'kind': 'meeting', 'mins': funnel.ALERT_MIN}))
+        self.assertTrue(funnel._not_yet({'kind': 'meeting', 'mins': funnel.ALERT_MIN + 1}))
+        self.assertFalse(funnel._not_yet({'kind': 'meeting'}))          # no clock on it: never held
+
     def test_a_review_carries_what_the_agent_found(self):
         s = store()
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'waiting'}, 'o')

@@ -553,6 +553,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); surface(key, asUser || null);
   };
 
+  // What the Chat/Task toggle MEANS on the pipe rail: chat pulls the row into the conversation,
+  // task opens it on the stage the way a feed row does. Only a row with a message behind it can be
+  // opened - a meeting, a wrapup or an agent has no message, so those still answer in the chat,
+  // and pull() switches the stage there so the answer is not written somewhere invisible.
+  const pullOrOpen = (key, asUser, openByMid) => {
+    const it = (pile?.items || []).find((i) => i.key === key);
+    if (stageMode === "task" && it?.mid && openByMid?.(it.mid)) { setRailOpen(false); return; }
+    pull(key, asUser);
+  };
+
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
     surface: (key, note) => { if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]); setTimeout(() => key ? surface(key) : loadPile(), 900); } };
   const shown = old ? old.messages : msgs;
@@ -695,7 +705,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   return (
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active}
-      top={<Pile pile={pile} current={old ? null : currentItem} onPull={pull} />}
+      top={({ openByMid }) => <Pile pile={pile} current={old ? null : currentItem}
+        onPull={(key, asUser) => pullOrOpen(key, asUser, openByMid)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} />

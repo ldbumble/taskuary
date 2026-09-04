@@ -368,8 +368,13 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
           {busy === "code" ? "Starting…" : coding ? "Start the coding agent" : "Send to the coding agent"}</Button>
         <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
           onClick={() => post("chat", `/api/messages/${card.mid}/chat`, {}, "Opened in a full workspace.", (d) => d.taskId && onOpenTask?.(d.taskId))}>Talk it through</Button>
-        {asks && <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
-          onClick={() => post("mine", `/api/messages/${card.mid}/mine`, { kind: "task" }, "On your list.")}>{busy === "mine" ? "…" : "Mine, I'll do it"}</Button>}
+        {/* On an fyi too: `asks` hid this, so the one road OFF an fyi that is actually work - turning
+            it into a task - was the one thing the card could not do. The owner asked for exactly
+            that ("turn into x, move on, make task for later", 2026-09-04), and the assistant's own
+            line now offers it out loud, so the button has to be there to keep the promise. */}
+        {card.mid && <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
+          onClick={() => post("mine", `/api/messages/${card.mid}/mine`, { kind: "task" }, "On your list.")}>
+          {busy === "mine" ? "…" : asks ? "Mine, I'll do it" : "Make it a task"}</Button>}
         <span className="sp" />
         <Button size="small" disabled={!!busy} onClick={() => setNotOurs((v) => !v)} sx={faint}>Not ours…</Button>
         <Button size="small" disabled={!!busy} onClick={() => setSender((v) => !v)} sx={faint}>Ignore this sender…</Button>

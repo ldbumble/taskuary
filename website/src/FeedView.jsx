@@ -828,6 +828,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
     setDetail(d);
   };
+  // The unread rail is the PIPE, drawn by whoever passed `top` in - so in task mode a click there
+  // has no way to reach this stage, and did nothing at all. `top` may be a function, and this is
+  // what it is handed (the owner, 2026-09-04: "task instead of chat not working on the unread tab").
+  // False means there is nothing here to open, so the caller can fall back to its chat.
+  const openByMid = (mid) => {
+    if (!mid) return false;
+    drill((rows || []).find((r) => r.MessageId === mid) || { MessageId: mid });
+    return true;
+  };
   // what a click on a row does: pull it into the chat (rowMode chat) or open it on the stage
   const openRow = (row) => (chatMode ? onPull(row) : drill(row));
   // #msg=<id> - a card in the chat pointing here. Opened once the row is on screen, and again whenever
@@ -1219,7 +1228,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             boxShadow: "none !important", transition: "none !important", cursor: "default",
           } }}>
           <FunnelBar onOpenTask={onOpenTask} />
-          {view === "unread" ? top : (
+          {view === "unread" ? (typeof top === "function" ? top({ openByMid }) : top) : (
           <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
             {syncing && (
               <Box sx={{ position: "absolute", inset: 0, zIndex: 4, display: "flex",

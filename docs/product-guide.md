@@ -35,6 +35,35 @@ writes the verdict; the Timeline shows which road was taken and lets you argue w
 Three of those are task *kinds* stored on the task itself (`coding`, `general`, `task`), and they
 are what routes the work. `reply` is a kind too; `fyi` creates nothing.
 
+### The order it is decided in—and which steps are gates
+
+The verdict is the *last* thing that happens, not the first. Eleven checks run in a fixed order
+(`ingest_message` in `taskuary/ingest.py`), and only two of them ask a model anything. A **gate**
+is deterministic—same input, same answer, no AI call, no cost. Knowing which is which is how you
+tell "triage got this wrong" from "a rule caught it before triage ever saw it".
+
+| # | Step | Gate or AI | What it does |
+|---|---|---|---|
+| 1 | Dedupe | gate | A message whose `external_id` is already stored is dropped as `duplicate`. Nothing below runs. |
+| 2 | Feed connections | gate | A connection marked a *feed* lands on the Timeline as `feed` and stops. No verdict, no AI call, no task—cheaper and quieter than `ignore`, which is a judgement *about* the message. |
+| 3 | Policy rules | gate | Your rules, plus whether the sender is known. `skip` and `ignore` end it here; `escalate` only marks the task urgent further down. |
+| 4 | Deferral | gate | When triage is deferred the message lands as `triaging` so the Timeline shows it at once; everything below runs later, in `drain()`. Decides nothing itself. |
+| 5 | Chat opener | gate | "hi", "you there?"—filed to wait for the ask it opens, so a greeting never becomes a task. |
+| 6 | Threading | gate (scored) | Similarity against open tasks picks *attach* or *create* (`attach_threshold`, 0.42 by default); then `own_thread_only` refuses a thread that is not yours. |
+| 7 | Still the same ask? | **AI** | Chats only, and only when step 6 attached: one call asks whether this line continues that task or starts a separate one. |
+| 8 | Your standing ruling | gate (memory) | If you already ruled on this conversation it is filed, quoting your own words as the reason. Your rulings outrank the classifier. |
+| 9 | An agent is waiting | gate | If a run is live on the attached task, **no verdict is asked for at all**—the message goes to the agent as its answer. |
+| 10 | The verdict | gate, then **AI** | `decided_intent` settles tracker items, obvious noise and calendar invites with no call at all. Everything else is one call, reading `TRIAGE.md`, `SOUL.md`, `LEARNED.md` and your past verdicts as evidence. |
+| 11 | Acting on it | gate | `fyi` files. `reply_only` files instead of drafting when replies are off for that channel. Anything else becomes a task with its kind. |
+
+Two rules hold wherever the AI is involved: with no AI connector the message is **filed** with
+"awaiting AI triage" rather than guessed at, and a call that fails or answers something unreadable
+is filed too—never assumed to be work. Triage breaking is quiet and safe, not destructive.
+
+So a message that never reached the classifier was stopped by steps 1–6 or 8–9, and the fix is a
+rule, a feed, or a ruling. A message the classifier *did* judge and got wrong is corrected on the
+Triage tab, which teaches `TRIAGE.md` (below).
+
 ### general means the assistant's chat—everywhere
 
 This word used to mean two different things, which is worth knowing if you are reading older

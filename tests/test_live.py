@@ -203,6 +203,12 @@ class LiveSocketTests(unittest.TestCase):
                     live.emit('run-tail', run_id=i)
                     i += 1
                     await asyncio.sleep(0.02)
+                # A threading.Timer on a loaded runner can slide past _await_kind's window: this
+                # failed only ever on macos-latest, with one delivery instead of two, while the
+                # during-the-stream assertions below (the actual regression guard) passed. flush()
+                # is the module's own affordance for exactly this - deliver what the burst left
+                # pending instead of racing the clock for it.
+                live.flush()
                 await _await_kind(tab, 'feed-changed', n=max(2, len([m for m in during if m.get('type') == 'feed-changed']) + 1))
                 return during, list(tab.sent)
             finally:

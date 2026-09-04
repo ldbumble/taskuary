@@ -538,7 +538,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const timeline = (mid) => { window.location.hash = `msg=${mid}`; };
   // a row pulled off the rail - the pipe's or the Timeline's - goes on the table exactly as the pipe's
   // own click does, by the same key (so the server puts the same item up, whichever list it came from)
-  const pull = (key, asUser) => { setRailOpen(false); if (old) setOld(null); surface(key, asUser || null); };
+  // The pile IS the assistant's walk, so pulling one always answers in the chat. In task mode the
+  // stage was showing the "Pick anything on the left" placeholder instead, so a click on a pipe row
+  // put a turn somewhere invisible and read as nothing happening at all (the owner, 2026-09-04: "I
+  // clicked on task and it just made the morning digest disappear and nothing hovered and opened").
+  const pull = (key, asUser) => {
+    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); surface(key, asUser || null);
+  };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
     surface: (key, note) => { if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]); setTimeout(() => key ? surface(key) : loadPile(), 900); } };
@@ -632,7 +638,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             <button type="button" className="tq-chip" disabled={busy} onClick={setup}>Set something up</button>
           </div>
           <div className="tq-compose-box">
-            <MicButton size={18} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
+            <MicButton size={18} sx={{ p: 0.45, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
               <IconButton size="small" aria-label="Choose an emoji response" disabled={busy}
                 onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ p: 0.45, color: DIM }}>

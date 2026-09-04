@@ -686,7 +686,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
         return f"{item['title']}" + (f" ({item.get('who')})" if item.get('who') else '') + f" - {item.get('why') or 'the assistant raised this'}. Draft the follow-up, make it a task, or let it go."
     if item['kind'] == 'meeting': return f"{item['title']} is {item.get('why')}. Prep me, or move on."
     if item['kind'] == 'report':
-        return f"{item['title']} landed {funnel_age(item)}" + (' and FAILED - the cause is in it.' if item.get('bad') else '.') + ' Read it with the button, or move on.'
+        return f"{item['title']} landed {funnel_age(item)}" + (' and FAILED - the cause is in it.' if item.get('bad') else '.') + ' It is open below - run it again, or move on.'
     if item['kind'] == 'agentdone': return f"{item.get('who') or 'The agent'} finished {item.get('ref') or item['title']}" + (f": {item['summary']}" if item.get('summary') else '.') + ' Want to see the final report?'
     lead = {'agent': f"{item.get('agent') or 'An agent'} is waiting on you on {item.get('ref') or item['title']}.",
             'meeting': f"{item['title']} is {item.get('why')}.",

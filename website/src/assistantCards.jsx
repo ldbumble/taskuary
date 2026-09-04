@@ -231,7 +231,10 @@ export function MeetingCard({ card, onDone, onOpenTask }) {
 
 // a report landed: read it here, or go to the row
 export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
-  const [full, setFull] = useState(false);
+  // Open, like the mail card: a digest behind a "Read it" is a digest nobody reads (the owner,
+  // 2026-09-04: "Same with Morning digest should be open like here is your morning digest?").
+  // .tq-card-full caps at 420px and scrolls, so a long report cannot run away with the page.
+  const [full, setFull] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const rerun = async () => {

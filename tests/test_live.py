@@ -197,17 +197,18 @@ class LiveSocketTests(unittest.TestCase):
                             and any(m.get('type') == 'run-tail' for m in tab.sent)):
                         break
                 during = list(tab.sent)
-                more = time.monotonic() + 0.15
-                while time.monotonic() < more:
+                # The stream KEEPS going after the snapshot, and that second delivery must not be
+                # raced for. A time-bounded burst here failed on macos-latest twice: a loaded
+                # runner can spend the whole 150 ms between computing the deadline and testing it,
+                # so the loop ran zero times and there was nothing left to deliver. A fixed count
+                # plus flush() - the module's own affordance - says the same thing with no clock in
+                # it. The during-the-stream assertions below are the actual regression guard and
+                # are untouched: they still fail if the debounce goes back to re-arming.
+                for _ in range(3):
                     live.emit('feed-changed', message_id=i)
                     live.emit('run-tail', run_id=i)
                     i += 1
-                    await asyncio.sleep(0.02)
-                # A threading.Timer on a loaded runner can slide past _await_kind's window: this
-                # failed only ever on macos-latest, with one delivery instead of two, while the
-                # during-the-stream assertions below (the actual regression guard) passed. flush()
-                # is the module's own affordance for exactly this - deliver what the burst left
-                # pending instead of racing the clock for it.
+                    await asyncio.sleep(0)          # let the loop turn; never a wall-clock wait
                 live.flush()
                 await _await_kind(tab, 'feed-changed', n=max(2, len([m for m in during if m.get('type') == 'feed-changed']) + 1))
                 return during, list(tab.sent)

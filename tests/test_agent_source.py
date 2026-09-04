@@ -164,6 +164,16 @@ class AgentSourceTests(unittest.TestCase):
         self.assertNotIn('Bash', tools); self.assertNotIn('Edit', tools); self.assertNotIn('Write', tools)
         self.assertEqual(args[args.index('--disallowedTools') + 1], 'mcp__*')
 
+    def test_the_report_run_is_granted_the_tools_it_is_given(self):
+        """--tools only says the tool EXISTS. Without --allowedTools, headless WebFetch/WebSearch
+        prompted an operator who was asleep, so the trending report came back as a refusal notice
+        four runs in a row (2026-09-04). Every tool the run may see, it may also use."""
+        from taskuary import clis
+        args = clis.report_read_args('claude', ['-p', '--dangerously-skip-permissions'])
+        self.assertEqual(args[args.index('--tools') + 1], args[args.index('--allowedTools') + 1])
+        for t in ('WebFetch', 'WebSearch'): self.assertIn(t, args[args.index('--allowedTools') + 1].split(','))
+        for t in ('Bash', 'Edit', 'Write'): self.assertNotIn(t, args[args.index('--allowedTools') + 1].split(','))
+
     def test_the_report_composer_may_choose_a_read_only_agent(self):
         out = compose.compose(self.s, 'Fetch GitHub Trending every morning', lambda *_a, **_k: json.dumps({
             'config': {'type': 'agent', 'title': 'GitHub Trending', 'agent': 'coder',

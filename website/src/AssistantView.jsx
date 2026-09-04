@@ -1,13 +1,14 @@
-// The Assistant page: Taskuary walks you through your inbox. The PIPE on the left is what has not
-// been looked at yet, ranked (funnel.py): new things fall in from the top and slide to their slot,
-// the pile sits at the mouth at the bottom, and the bottom item is what comes out next. Showing an
-// item in the chat is reading it, so it leaves the pipe - "All" shows the rest of the recent
-// Timeline for anything you want pulled back in. The CHAT on the right is one long conversation
-// with Taskuary (concierge.py): one item per turn, said in a breath, with the card that acts on it
-// underneath; a name or a subject typed into it pulls that thing in. A meeting in ten minutes or an
-// agent that just asked interrupts as a "by the way" line above the composer, whatever the chat is
-// on. Past chats slide over; New chat starts a fresh conversation. Everything durable lives on the
-// server; this file only draws and pushes buttons.
+// The Assistant page IS the Timeline now. The RAIL on the left is the Timeline's own rail (FeedView),
+// with the PIPE at its top: what has not been looked at yet, ranked (funnel.py), next-out FIRST -
+// triage moves the important things to the top, new things fall in and slide to their slot, and the
+// whole day's Timeline runs on below it, dated. The STAGE on the right is one long conversation with
+// Taskuary (concierge.py): one item per turn, said in a breath, with the card that acts on it
+// underneath; clicking a row pulls it in, a name or a subject typed into it pulls that thing in.
+// A meeting in ten minutes or an agent that just asked interrupts as a "by the way" line above the
+// composer, whatever the chat is on. Two ways to use the stage, one toggle: CHAT (the default -
+// rows go to the conversation) or TASK (rows open on the stage the way the Timeline always did:
+// hover previews, click pins). Past chats slide over; New chat starts a fresh conversation.
+// Everything durable lives on the server; this file only draws and pushes buttons.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, CircularProgress, IconButton, MenuItem, Popover, Select, Tooltip, Typography } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
@@ -23,13 +24,12 @@ import api from "./api.js";
 import { DEMO } from "./demoApi.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
-import { syncFace, syncStatusDelay } from "./syncTiming.js";
 import { Md, looksMd } from "./md.jsx";
-import { MicButton, TaskuaryMark, ChannelIcon, fmtDateTime, fmtTime12 } from "./ui.jsx";
-import { DIM, FAINT, INK, ROLES } from "./theme.jsx";
+import { MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import { ageText, arrivals, cardFor, drawOrder, keysOf, rowMeta, statusLine, topAlert } from "./funnelPile.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
-import { timelineDayLabel } from "./timelineDay.js";
+import FeedView from "./FeedView.jsx";
 import "./assistantView.css";
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
@@ -43,7 +43,7 @@ const waitingLine = (items) => {
     + " I'll take you through them one at a time.";
 };
 
-const ROW_H = 34, CUR_H = 62;   // one thin line, like a Timeline row (30px + a 4px gap); the current one opens up to two
+const ROW_H = 33, CUR_H = 57;   // a Timeline row (30px + its 3px gap); the current one opens up to two lines
 const EMOJI_REPLIES = [
   ["👍", "Sounds good"], ["❤️", "Love it"], ["😂", "Funny"], ["🎉", "Celebrate"],
   ["👏", "Well done"], ["🙏", "Thank you"], ["✅", "Confirmed"], ["👀", "Looking"],
@@ -55,212 +55,91 @@ const speak = (text) => {
   if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
   try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text.replace(/[*_#`>]/g, "")); u.rate = 1.05; window.speechSynthesis.speak(u); } catch { /* no voice on this box */ }
 };
-// the pile's key for a Timeline row, so "All" can pull any row into the chat
-const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `review:${r.ReviewId}`
+// the pile's key for a Timeline row, so any row on the rail can be pulled into the chat - the same
+// key the pipe itself carries, so the server puts the same item on the table either way
+export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `review:${r.ReviewId}`
   : r.AgentWaiting && r.TaskId ? `agent:${r.TaskId}` : r.Channel === "report" ? `report:${r.MessageId}` : `msg:${r.MessageId}`;
 
-// ── the pipe ─────────────────────────────────────────────────────────────────────────────────
-function Pipe({ pile, current, onPull, mode, setMode, open, onClose }) {
+// ── the pipe: the top of the rail ────────────────────────────────────────────────────────────
+function Pile({ pile, current, onPull }) {
   const items = pile?.items || [];
-  // the Timeline's own sync clock, here too, off the same status endpoint and the same formatter:
-  // when the mail was last read, when the next background poll is due, and a button to read it now.
-  // lastPollAt is the SERVER's epoch, so the time comes from (now - lastPollAt) against OUR clock.
-  const [sync, setSync] = useState(null);
-  const [lastSync, setLastSync] = useState(null);
-  const [nextAt, setNextAt] = useState(null);
-  const [syncing, setSyncing] = useState(false);
-  const [tick, setTick] = useState(0);
-  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
-  useEffect(() => {
-    let alive = true, timer = null;
-    const ask = async () => {
-      if (!alive) return;
-      let running = false, due = null;
-      try {
-        const { data } = await api.get("/api/ingest/status");
-        if (!alive) return;
-        setSync(data); running = data.status?.state === "running";
-        const pollAt = Number(data.lastPollAt) || null;
-        setLastSync(pollAt ? new Date(Date.now() - (data.now - pollAt) * 1000) : null);
-        due = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
-        setNextAt(due);
-      } catch { /* the chip just stops counting */ }
-      timer = setTimeout(ask, syncStatusDelay({ running, nextAt: due }));
-    };
-    ask();
-    return () => { alive = false; clearTimeout(timer); };
-  }, []);
-  const syncNow = async () => { setSyncing(true); try { await api.post("/api/ingest/poll"); } catch { /* surfaces in Connections */ } setTimeout(() => setSyncing(false), 4000); };
-  const busy = syncing || sync?.status?.state === "running";
-  const nextIn = nextAt ? Math.max(0, Math.round((nextAt - Date.now()) / 1000)) : null;
-  const face = { busy, what: sync?.status?.what || "", every: sync?.everyMinutes ?? 10, lastAt: lastSync, nextIn };
-  void tick;                                     // the countdown redraws on the tick, not on a fetch
-  // the one on the table sits at the mouth as CURRENT - it slides down there from wherever it was
-  // in the pile (same key, same element), and a task named in the chat lands there from nowhere
-  const drawn = [...drawOrder(items).filter((i) => i.key !== current?.key), ...(current ? [{ ...current, current: true }] : [])];
+  // the one on the table sits at the TOP as CURRENT - it slides up there from wherever it was in the
+  // pile (same key, same element), and a task named in the chat lands there from nowhere
+  const drawn = [...(current ? [{ ...current, current: true }] : []), ...drawOrder(items).filter((i) => i.key !== current?.key)];
   const prev = useRef(null);
-  const prevItems = useRef(null);
-  const bodyRef = useRef(null);
   const [landing, setLanding] = useState(new Set());
   useEffect(() => {
     const fresh = arrivals(prev.current, items);
-    prev.current = keysOf(items); prevItems.current = items;
+    prev.current = keysOf(items);
     if (!fresh.size) return undefined;
     setLanding(fresh);
     const t = setTimeout(() => setLanding(new Set()), 40);       // one frame above the pipe, then it falls to its slot
     return () => clearTimeout(t);
   }, [pile?.rev]);                                                 // eslint-disable-line react-hooks/exhaustive-deps
-  // gravity: the mouth is what you look at, so a pile taller than the column is scrolled to its bottom
-  // ...and the view opens ON the mouth: what comes out next is the one thing to look at. Twice, because
-  // the rows are still sliding into place on the first frame and the scroll height grows under us.
-  useEffect(() => {
-    if (mode !== "pile") return undefined;
-    const down = () => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; };
-    const id = requestAnimationFrame(down); const t = setTimeout(down, 600);
-    return () => { cancelAnimationFrame(id); clearTimeout(t); };
-  }, [pile?.rev, mode, items.length, current?.key]);
-  const [recent, setRecent] = useState(null);
-  useEffect(() => {
-    if (mode !== "all") return undefined;
-    let live = true;
-    api.get("/api/feed", { params: { limit: 80 } }).then(({ data }) => live && setRecent(data.data || [])).catch(() => live && setRecent([]));
-    return () => { live = false; };
-  }, [mode]);
   // The NEXT pill has to be what the Next button will actually bring up. The server skips what an
   // agent has in hand and what this walk already showed (funnel.next_item); the pill did not, so a
   // coder parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
   const upNext = (i) => !i.settling && i.lane !== "working" && i.key !== current?.key;
   const nextKey = (items.find((i) => upNext(i) && !i.surfaced) || items.find(upNext))?.key;
-  // ...and how close it is to empty, once that is worth saying (the owner asked for it at "halfway
-  // down the funnel", so from fifteen: the count is the encouragement, no exclamation needed)
+  // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
+  // funnel", so from fifteen: the count is the encouragement - no header, no total)
   const left = items.filter((i) => !i.settling && i.lane !== "working").length;
-  const cheer = mode !== "pile" || !left || left > 15 ? ""
-    : left === 1 ? "One more and the pipe is clear."
-      : left <= 5 ? `${left} to go, then the pipe is clear.`
-        : `${left} away from a clear pipe.`;
-  const n = drawn.length;
-  const bottom = drawn[n - 1];
-  const day = bottom ? timelineDayLabel(String(bottom.kind === "meeting" ? bottom.when : (bottom.since || bottom.when)).slice(0, 10)) : "";
-  // the funnel's shape: a row's edges sit ON the wall behind it, so the pile reads as the funnel
-  // emptying (the owner, 2026-09-03: "the outside edges of the timeline items shoud match the width
-  // to the edge of the funnel... that's the whole idea so it looks like it's emptying"). The walls
-  // are a clip-path from full width at the top to 12% in at the mouth, so the inset at any height is
-  // measured, not guessed - and it needs the body's own box, which only the DOM knows.
-  const stackRef = useRef(null);
-  const wallRef = useRef(null);
-  const [box, setBox] = useState({ w: 0, h: 0, top: 0 });
-  // The WALL's own box, not the viewport's: an absolutely positioned child of a scrolling column
-  // spans the whole scrollable content, so measuring the visible height put the rows nearest the
-  // mouth on the wrong part of the taper as soon as the pile was long enough to scroll (the owner,
-  // 2026-09-03: "This is out of line"). offsetTop/offsetHeight share one origin - the padding box.
-  const measure = useCallback(() => {
-    const w = wallRef.current, st = stackRef.current;
-    if (!w) return;
-    const next = { w: w.offsetWidth, h: w.offsetHeight, top: st ? st.offsetTop : 0 };
-    setBox((b) => (b.w === next.w && b.h === next.h && b.top === next.top ? b : next));   // same box, no re-render
-  }, []);
-  useEffect(() => {
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(measure);
-    if (wallRef.current) ro.observe(wallRef.current);
-    if (bodyRef.current) ro.observe(bodyRef.current);
-    return () => ro.disconnect();
-  });                                                    // every render: the stack's top moves as the pile grows
-  const WALL = 0.07, PAD = 10;                           // .tq-pipe-walls' clip-path taper, and .tq-pipe-body's padding
-  const inset = (top, h) => {
-    if (!box.w || !box.h) return 0;
-    const y = box.top + top + h / 2;                     // the row's middle, in the wall's own space
-    return Math.max(0, Math.round(2 + WALL * box.w * Math.min(1, Math.max(0, y / box.h)) - PAD));
-  };
+  const cheer = !left || left > 15 ? "" : left === 1 ? "One more and the pipe is clear."
+    : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
   return (
-    <div className={`tq-asst-col tq-asst-pipe${open ? " open" : ""}`}>
-      <div className="tq-pipe-head">
-        <b>The pipe</b><span className="n" title="not looked at yet">{items.length}</span>
-        <button type="button" className="tq-pipe-sync" onClick={syncNow} disabled={busy}
-          title={busy ? (sync?.status?.what || "reading the mailboxes now") : `${syncFace(face)} — click to read the mailboxes now`}>
-          {syncFace({ ...face, terse: true })}</button>
-        <div className="tq-pipe-toggle">
-          <button type="button" className={mode === "pile" ? "on" : ""} onClick={() => setMode("pile")} title="What you have not looked at yet">Unread</button>
-          <button type="button" className={mode === "all" ? "on" : ""} onClick={() => setMode("all")} title="Everything recent on the Timeline — pull any of it back into the chat">All</button>
-        </div>
-        {open && <IconButton size="small" onClick={onClose} sx={{ ml: 0.5 }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>}
-      </div>
-      {mode === "all" ? (
-        <div className="tq-pipe-body tq-pipe-recent">
-          {recent === null && <Box sx={{ display: "grid", placeItems: "center", py: 3 }}><CircularProgress size={18} /></Box>}
-          {recent?.map((r) => (
-            <div key={r.MessageId} className="r" onClick={() => onPull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)} title={r.RouteReason || ""}>
-              <ChannelIcon channel={r.Channel} sx={{ fontSize: 13 }} />
-              <div><b>{r.Subject || r.Title || "(no subject)"}</b><span>{r.FromName || r.FromEmail || r.SourceName} · {r.Category}</span></div>
-              <span style={{ fontFamily: "'IBM Plex Mono', Consolas, monospace", fontSize: 10, color: "#8a847a" }}>{ageText(r.SentAt)}</span>
-            </div>
-          ))}
-        </div>
-      ) : !drawn.length ? (
-        <div className="tq-pipe-empty"><div>
-          <Typography sx={{ fontSize: 30, lineHeight: 1 }}>✓</Typography>
-          <b>All done</b>
-          <span>Nothing is waiting on you. New things fall in here as they land, and Taskuary will speak up.</span>
-        </div></div>
+    <div className="tq-pile" data-tq-keep>
+      {!drawn.length ? (
+        <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : (
-        <div className="tq-pipe-body" ref={bodyRef}>
-          <div className="tq-pipe-walls" ref={wallRef} />
-          {!!pile?.hidden && <div className="tq-pipe-more">+{pile.hidden} more wait behind these</div>}
-          {/* nothing disappears silently: what the owner's own standing rules held back is said here */}
-          {!!pile?.muted && (
-            <div className="tq-pipe-more" title={`Your standing rules:\n${(pile.rules || []).join("\n")}\n\nThey are still on the Timeline.`}>
-              {pile.muted} filed by your rules
-            </div>
-          )}
-          {!!cheer && <div className="tq-pipe-cheer">{cheer}</div>}
-          <div className="tq-pipe-stack" ref={stackRef} style={{ height: drawn.reduce((h, i) => h + (i.current ? CUR_H : ROW_H), 0) + 6 }}>
-            {drawn.map((i, idx) => {
-              const top = drawn.slice(0, idx).reduce((h, r) => h + (r.current ? CUR_H : ROW_H), 0);
-              const meta = rowMeta(i);
-              const role = meta.role ? ROLES[meta.role].solid : "#d3ccc1";
-              const cls = ["tq-pipe-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "", i.surfaced && !i.current ? "shown" : "", i.current ? "current" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
-              const who = i.who && !i.title.toLowerCase().startsWith(i.who.toLowerCase()) ? i.who : "";
-              const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you" : meta.word;
-              const loud = i.lane === "blocked" || i.lane === "time";
-              const promoted = loud || i.lane === "approve";
-              const side = inset(top, i.current ? CUR_H : ROW_H);
-              return (
-                <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top, left: side, right: side, borderLeftColor: role }}
-                  onClick={() => !i.settling && !i.current && onPull(i.key, `Show me “${i.title}”`)}
+        <div className="tq-pile-stack" style={{ height: drawn.reduce((h, i) => h + (i.current ? CUR_H : ROW_H), 0) }}>
+          {drawn.map((i, idx) => {
+            const top = drawn.slice(0, idx).reduce((h, r) => h + (r.current ? CUR_H : ROW_H), 0);
+            const meta = rowMeta(i);
+            const role = meta.role ? ROLES[meta.role].solid : "#d3ccc1";
+            const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "", i.surfaced && !i.current ? "shown" : "", i.current ? "current" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
+            const who = i.who && !i.title.toLowerCase().startsWith(i.who.toLowerCase()) ? i.who : "";
+            const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you" : meta.word;
+            const loud = i.lane === "blocked" || i.lane === "time";
+            const promoted = loud || i.lane === "approve";           // triage moved it up: the little arrow says so
+            return (
+              <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
+                <span className="when">{fmtTime12(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                <span className="rail"><i style={{ background: role }} /></span>
+                <div className="card" onClick={() => !i.settling && !i.current && onPull(i.key, `Show me “${i.title}”`)}
                   title={`${meta.word}${promoted ? " · triage moved it up" : ""}${i.surfaced && !i.current ? " · shown already, still waiting on you" : ""} — ${i.why || ""}`}>
-                  <span className="when"><i style={{ background: role }} />{fmtTime12(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
-                  <span className="logo"><SourceMark item={i} size={13} /></span>
                   <div className="t">
-                    {i.current ? <span className="tq-pipe-next cur">current</span> : i.key === nextKey ? <span className="tq-pipe-next">next</span> : null}
+                    <span className="logo"><SourceMark item={i} size={15} /></span>
+                    {i.current ? <span className="tq-pile-next cur">current</span> : i.key === nextKey ? <span className="tq-pile-next">next</span> : null}
                     {promoted && !i.current && <span className="up" title="triage moved it up">↑</span>}
-                    {/* the task's number comes BEFORE the words: last in the row, it was the first thing
-                        the funnel's narrowing clipped off (the owner, 2026-09-03: "tq is still off") */}
-                    {!!i.ref && !i.current && <span className="tq-pipe-ref" title="the task this belongs to">{i.ref}</span>}
-                    {!!i.more && <span className="tq-pipe-ref" title={`${i.more} more on this thread - the newest speaks for it`}>+{i.more}</span>}
+                    {!!i.ref && <span className="tq-pile-ref" title="the task this belongs to">{i.ref}</span>}
+                    {!!i.more && <span className="tq-pile-ref" title={`${i.more} more on this thread - the newest speaks for it`}>+{i.more}</span>}
                     {who && <span className="who">{who}</span>}<b>{i.title}</b>
+                    <span className="tq-pile-tag" style={{ color: meta.role ? ROLES[meta.role].ink : "#6f6960", background: meta.role ? ROLES[meta.role].tint : "#eee9e1", borderColor: meta.role ? ROLES[meta.role].bd : "#ddd6cb" }}>
+                      {loud ? `${meta.mark} ` : ""}{tag}</span>
                   </div>
-                  {/* the lane's word is the row's own last COLUMN: as a flex item at the end of the
-                      words it was what overflowed when the row narrowed - "reply pending" hanging
-                      over the right border (the owner, 2026-09-03) */}
-                  <span className="tq-pipe-tag" style={{ color: meta.role ? ROLES[meta.role].ink : "#6f6960", background: meta.role ? ROLES[meta.role].tint : "#eee9e1", borderColor: meta.role ? ROLES[meta.role].bd : "#ddd6cb" }}>
-                    {loud ? `${meta.mark} ` : ""}{tag}</span>
                   {i.current && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : `${ageText(i.since || i.when)} ago`].filter(Boolean).join(" · ")}</div>}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       )}
-      {mode === "pile" && !!drawn.length && (
-        <div className="tq-pipe-foot">
-          {day && <div className="tq-pipe-day">{day}</div>}
-          <div className="tq-pipe-mouth">{current ? "on the table" : ""}</div>
-        </div>
-      )}
+      {!!cheer && <div className="tq-pile-cheer">{cheer}</div>}
+      {!!pile?.hidden && <div className="tq-pile-note">+{pile.hidden} more wait behind these</div>}
+      {/* nothing disappears silently: what the owner's own standing rules held back is said here */}
+      {!!pile?.muted && <div className="tq-pile-note" title={`Your standing rules:\n${(pile.rules || []).join("\n")}\n\nThey are still on the Timeline (all).`}>{pile.muted} filed by your rules</div>}
     </div>
   );
 }
+
+// the two ways to use the stage - shown in the chat's header and on the task view's empty stage,
+// so whichever one you are in, the other is one click away
+const StageMode = ({ mode, setMode }) => (
+  <div className="tq-stage-mode" title="What a click on a row does">
+    <button type="button" className={mode === "chat" ? "on" : ""} onClick={() => setMode("chat")} title="Rows go to the conversation - Taskuary walks you through them">Chat</button>
+    <button type="button" className={mode === "task" ? "on" : ""} onClick={() => setMode("task")} title="Rows open here on their own - the message, the triage, the agent's work, the draft">Task</button>
+  </div>
+);
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 function Line({ m, live, actions, fresh }) {
@@ -308,7 +187,7 @@ function Line({ m, live, actions, fresh }) {
 }
 
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
-export default function AssistantView({ onOpenTask, onNavigate, active = true }) {
+export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const [msgs, setMsgs] = useState([]);
   const [pile, setPile] = useState(null);
@@ -316,7 +195,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
   const [work, setWork] = useState([]);              // the turn's tool calls and progress, as they stream
   const [err, setErr] = useState("");
   const [current, setCurrent] = useState(null);       // the key on the table
-  const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the mouth of the pipe
+  const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
   const [acked, setAcked] = useState(() => new Set());
   const [chatsOpen, setChatsOpen] = useState(false);
@@ -325,17 +204,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
   const [aiEl, setAiEl] = useState(null);
   const [emojiEl, setEmojiEl] = useState(null);
   const [speakOnState, setSpeak] = useState(speakOn);
-  const [pipeMode, setPipeMode] = useState("pile");
-  const [pipeOpen, setPipeOpen] = useState(false);
-  const [navH, setNavH] = useState(49);
+  const [stageMode, setStageMode] = useState("chat");   // what a click on a row does: chat (default) or task view
+  const [railOpen, setRailOpen] = useState(false);      // on a phone: the rail instead of the chat
   const bodyRef = useRef(null);
-
-  useEffect(() => {
-    const el = document.getElementById("tqTopNav");
-    if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => setNavH(el.offsetHeight)); ro.observe(el); setNavH(el.offsetHeight);
-    return () => ro.disconnect();
-  }, []);
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turn = useCallback(async (body) => {
@@ -366,7 +237,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
     const { data } = await api.get("/api/concierge");
     setState(data); setMsgs(data.messages || []);
     // A closed task may have an older `agentdone` card in the transcript. It remains readable
-    // history, but it is not live work and must not be restored as CURRENT in the funnel.
+    // history, but it is not live work and must not be restored as CURRENT in the pipe.
     const last = [...(data.messages || [])].reverse().find((m) => m.card && !["brief", "setup", "agentdone"].includes(m.card.kind));
     setCurrent(last?.card?.key || null); setCurrentItem(last?.card || null);
     return data;
@@ -610,6 +481,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
     if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
     if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
     setCurrent(null); setCurrentItem(null);
+    onChanged?.();                                     // a draft may have gone out: the Review badge recounts
     setTimeout(() => surface(), 500);
   };
   const settle = async (verb) => {
@@ -661,134 +533,156 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true })
     setAiEl(null);
   };
   const toggleSpeak = () => { const v = !speakOnState; setSpeak(v); try { localStorage.setItem("taskuary_speak", v ? "1" : "0"); } catch { /* private mode */ } if (!v) window.speechSynthesis?.cancel(); };
-  const timeline = (mid) => { window.location.hash = `msg=${mid}`; onNavigate?.("Timeline"); };
+  // a card's "open on the Timeline": the row opens on the stage, over the chat, right here - the rail
+  // reads the hash and pins the row (FeedView); its close comes back to the conversation
+  const timeline = (mid) => { window.location.hash = `msg=${mid}`; };
+  // a row pulled off the rail - the pipe's or the Timeline's - goes on the table exactly as the pipe's
+  // own click does, by the same key (so the server puts the same item up, whichever list it came from)
+  const pull = (key, asUser) => { setRailOpen(false); if (old) setOld(null); surface(key, asUser || null); };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
     surface: (key, note) => { if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]); setTimeout(() => key ? surface(key) : loadPile(), 900); } };
   const shown = old ? old.messages : msgs;
   const lastCardIdx = useMemo(() => { for (let i = shown.length - 1; i >= 0; i -= 1) if (shown[i].card) return i; return -1; }, [shown]);
-  const height = `calc(100vh - ${navH}px - 38px)`;   // the page padding above and below: the chat fits the screen, nothing scrolls but the thread
+
+  const chat = (
+    <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
+      <div className="tq-chat-head">
+        <Box sx={{ width: 30, height: 30, borderRadius: 2, background: "linear-gradient(90deg, #55697a, #7d9a7c)", display: "grid", placeItems: "center", flexShrink: 0 }}><TaskuaryMark size={22} /></Box>
+        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : statusLine(items, busy)}</span></div>
+        <div className="grow" />
+        <StageMode mode={stageMode} setMode={setStageMode} />
+        <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+        <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
+        <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+        <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+        <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
+      </div>
+      <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 700, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>
+        <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.45 }}>{state?.scripted
+          ? "Every thread, Timeline post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
+          : "Your CLI agent is the default, on its quick gear (haiku, low effort, flash) - it can read, rerun reports and run tools. An API model answers faster but cannot act. The agents doing the actual work are chosen elsewhere."}</Typography>
+        <Select size="small" fullWidth value={state?.pick || ""} displayEmpty disabled={!!state?.scripted} onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
+          {!state?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
+          {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "demo" ? " · local fixture" : p.type === "cli" ? " · can act (default)" : " · fast, talk only"}</MenuItem>)}
+        </Select>
+      </Popover>
+      {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span><button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}
+      {chatsOpen && (
+        <div className="tq-chats">
+          <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
+          <div className="tq-chats-list">
+            {!chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>No earlier chats yet.</Typography>}
+            {chats.map((c) => (
+              <div key={c.taskId} className="c" onClick={() => openOld(c)} title={c.started ? `started ${c.started.slice(0, 16)}` : ""}>
+                {c.open ? <i /> : <span style={{ width: 7 }} />}<b>{c.title}</b>
+                {/* what the walk actually got through, so one transcript can be told from another */}
+                <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", ageText(c.at)].filter(Boolean).join(" · ")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="tq-chat-body" ref={bodyRef}>
+        <div className="tq-chat-inner">
+          {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
+          {state && !shown.length && !busy && (
+            <div className="tq-welcome">
+              <TaskuaryMark size={30} />
+              <b>{items.length ? "Ready when you are" : "All done"}</b>
+              <span>{items.length ? waitingLine(ready) : "Nothing is waiting on you. Ask me anything, or set something up."}</span>
+              <div className="tq-modes">
+                <button type="button" className="tq-chip primary" disabled={!ready.length} onClick={() => start(null)}
+                  title="Everything in the pipe, most important first - mail, reports, agents, meetings">Walk me through my tasks</button>
+                <button type="button" className="tq-chip" disabled={!incoming(ready).length} onClick={() => start("mail")}
+                  title="Only what people sent you - mail and chat">Just what came in</button>
+                <button type="button" className="tq-chip" onClick={setup}>Set something up</button>
+              </div>
+            </div>
+          )}
+          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} actions={actions} fresh={currentItem} />)}
+          {busy && (
+            <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
+              <div className="body"><span className="tq-typing"><i /><i /><i /></span>
+                {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
+              </div>
+            </div>
+          )}
+          {err && <Typography sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}</Typography>}
+        </div>
+      </div>
+      {alert && !old && (
+        <div className="tq-btw" role="status">
+          <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{current ? " Finish this one and say next, or switch now." : ""}</div>
+          <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{current ? "Switch to it" : "Show me"}</button>
+          <button type="button" className="tq-chip" onClick={() => ack(alert, false)}>Later</button>
+        </div>
+      )}
+      {!old && (
+        <div className="tq-compose">
+          <div className="tq-quick">
+            <button type="button" className="tq-chip" disabled={busy || !ready.length} onClick={() => surface()}>Next</button>
+            {current && <>
+              <button type="button" className="tq-chip" disabled={busy} onClick={() => settle("done")}>Done</button>
+              <button type="button" className="tq-chip" disabled={busy} onClick={() => settle("later")}>Later</button>
+              <button type="button" className="tq-chip" disabled={busy} onClick={() => settle("skip")}>Tomorrow</button>
+            </>}
+            <button type="button" className="tq-chip" disabled={busy} onClick={setup}>Set something up</button>
+          </div>
+          <div className="tq-compose-box">
+            <MicButton size={18} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
+            <Tooltip title="Send an emoji response">
+              <IconButton size="small" aria-label="Choose an emoji response" disabled={busy}
+                onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ p: 0.45, color: DIM }}>
+                <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <textarea rows={1} value={text} placeholder={current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
+              onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
+            <button type="button" className="tq-send" aria-label="Send" disabled={busy || !text.trim()} onClick={() => send()}><SendIcon fontSize="small" /></button>
+          </div>
+          <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
+            anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
+            slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: INK, px: 0.4, pb: 0.75 }}>Send a quick response</Typography>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6, 36px)", gap: 0.4 }}>
+              {EMOJI_REPLIES.map(([emoji, label]) => (
+                <Box key={emoji} component="button" type="button" aria-label={`Send ${label}`} title={label}
+                  onClick={() => sendEmoji(emoji)} sx={{ appearance: "none", border: "1px solid transparent", borderRadius: 1.5,
+                    bgcolor: "transparent", cursor: "pointer", width: 36, height: 36, p: 0, fontSize: 20, lineHeight: 1,
+                    "&:hover": { bgcolor: "#f4f1ec", borderColor: "#e1dcd5", transform: "scale(1.08)" } }}>
+                  {emoji}
+                </Box>
+              ))}
+            </Box>
+            {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
+          </Popover>
+          <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the buttons on a card do the acting</div>
+        </div>
+      )}
+    </div>
+  );
+
+  // the task view's resting stage: what the rail is for in this mode, and the way back to the chat
+  const placeholder = (
+    <Box sx={{ height: "100%", border: `1px dashed ${BORDER}`, borderRadius: 2, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", gap: 1, px: 4, textAlign: "center" }}>
+      <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM }}>Pick anything on the left</Typography>
+      <Typography variant="caption" sx={{ color: FAINT, maxWidth: 380, lineHeight: 1.6 }}>
+        Hovering a row opens it here; clicking pins it. You get the message that arrived, why triage sent it
+        where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.
+      </Typography>
+      <Box sx={{ mt: 1 }}><StageMode mode={stageMode} setMode={setStageMode} /></Box>
+    </Box>
+  );
 
   return (
-    <Box className="tq-asst" sx={{ height }}>
-      <Pipe pile={pile} current={old ? null : currentItem} mode={pipeMode} setMode={setPipeMode} open={pipeOpen} onClose={() => setPipeOpen(false)}
-        onPull={(key, asUser) => { setPipeOpen(false); if (old) setOld(null); surface(key, asUser || null); }} />
-      <div className="tq-asst-col" style={{ position: "relative" }}>
-        <div className="tq-chat-head">
-          <Box sx={{ width: 30, height: 30, borderRadius: 2, background: "linear-gradient(90deg, #55697a, #7d9a7c)", display: "grid", placeItems: "center" }}><TaskuaryMark size={22} /></Box>
-          <div className="who"><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : statusLine(items, busy)}</span></div>
-          <div className="grow" />
-          <Tooltip title="The pipe"><IconButton size="small" onClick={() => setPipeOpen((v) => !v)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
-          <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
-          <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
-          <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
-          <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
-        </div>
-        <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
-          slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 700, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>
-          <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.45 }}>{state?.scripted
-            ? "Every thread, Timeline post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
-            : "Your CLI agent is the default, on its quick gear (haiku, low effort, flash) - it can read, rerun reports and run tools. An API model answers faster but cannot act. The agents doing the actual work are chosen elsewhere."}</Typography>
-          <Select size="small" fullWidth value={state?.pick || ""} displayEmpty disabled={!!state?.scripted} onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
-            {!state?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
-            {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "demo" ? " · local fixture" : p.type === "cli" ? " · can act (default)" : " · fast, talk only"}</MenuItem>)}
-          </Select>
-        </Popover>
-        {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span><button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}
-        {chatsOpen && (
-          <div className="tq-chats">
-            <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
-            <div className="tq-chats-list">
-              {!chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>No earlier chats yet.</Typography>}
-              {chats.map((c) => (
-                <div key={c.taskId} className="c" onClick={() => openOld(c)} title={c.started ? `started ${c.started.slice(0, 16)}` : ""}>
-                  {c.open ? <i /> : <span style={{ width: 7 }} />}<b>{c.title}</b>
-                  {/* what the walk actually got through, so one transcript can be told from another */}
-                  <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", ageText(c.at)].filter(Boolean).join(" · ")}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="tq-chat-body" ref={bodyRef}>
-          <div className="tq-chat-inner">
-            {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
-            {state && !shown.length && !busy && (
-              <div className="tq-welcome">
-                <TaskuaryMark size={30} />
-                <b>{items.length ? "Ready when you are" : "All done"}</b>
-                <span>{items.length ? waitingLine(ready) : "Nothing is waiting on you. Ask me anything, or set something up."}</span>
-                <div className="tq-modes">
-                  <button type="button" className="tq-chip primary" disabled={!ready.length} onClick={() => start(null)}
-                    title="Everything in the pipe, oldest first - mail, reports, agents, meetings">Walk me through my tasks</button>
-                  <button type="button" className="tq-chip" disabled={!incoming(ready).length} onClick={() => start("mail")}
-                    title="Only what people sent you - mail and chat">Just what came in</button>
-                  <button type="button" className="tq-chip" onClick={setup}>Set something up</button>
-                </div>
-              </div>
-            )}
-            {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} actions={actions} fresh={currentItem} />)}
-            {busy && (
-              <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
-                <div className="body"><span className="tq-typing"><i /><i /><i /></span>
-                  {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
-                </div>
-              </div>
-            )}
-            {err && <Typography sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}</Typography>}
-          </div>
-        </div>
-        {alert && !old && (
-          <div className="tq-btw" role="status">
-            <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{current ? " Finish this one and say next, or switch now." : ""}</div>
-            <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{current ? "Switch to it" : "Show me"}</button>
-            <button type="button" className="tq-chip" onClick={() => ack(alert, false)}>Later</button>
-          </div>
-        )}
-        {!old && (
-          <div className="tq-compose">
-            <div className="tq-quick">
-              <button type="button" className="tq-chip" disabled={busy || !ready.length} onClick={() => surface()}>Next</button>
-              {current && <>
-                <button type="button" className="tq-chip" disabled={busy} onClick={() => settle("done")}>Done</button>
-                <button type="button" className="tq-chip" disabled={busy} onClick={() => settle("later")}>Later</button>
-                <button type="button" className="tq-chip" disabled={busy} onClick={() => settle("skip")}>Tomorrow</button>
-              </>}
-              <button type="button" className="tq-chip" disabled={busy} onClick={setup}>Set something up</button>
-            </div>
-            <div className="tq-compose-box">
-              <MicButton size={18} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
-              <Tooltip title="Send an emoji response">
-                <IconButton size="small" aria-label="Choose an emoji response" disabled={busy}
-                  onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ p: 0.45, color: DIM }}>
-                  <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
-                </IconButton>
-              </Tooltip>
-              <textarea rows={1} value={text} placeholder={current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
-                onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-              <button type="button" className="tq-send" aria-label="Send" disabled={busy || !text.trim()} onClick={() => send()}><SendIcon fontSize="small" /></button>
-            </div>
-            <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
-              anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
-              slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>
-              <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: INK, px: 0.4, pb: 0.75 }}>Send a quick response</Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6, 36px)", gap: 0.4 }}>
-                {EMOJI_REPLIES.map(([emoji, label]) => (
-                  <Box key={emoji} component="button" type="button" aria-label={`Send ${label}`} title={label}
-                    onClick={() => sendEmoji(emoji)} sx={{ appearance: "none", border: "1px solid transparent", borderRadius: 1.5,
-                      bgcolor: "transparent", cursor: "pointer", width: 36, height: 36, p: 0, fontSize: 20, lineHeight: 1,
-                      "&:hover": { bgcolor: "#f4f1ec", borderColor: "#e1dcd5", transform: "scale(1.08)" } }}>
-                    {emoji}
-                  </Box>
-                ))}
-              </Box>
-              {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
-            </Popover>
-            <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · the buttons on a card do the acting</div>
-          </div>
-        )}
-      </div>
-    </Box>
+    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active}
+      top={<Pile pile={pile} current={old ? null : currentItem} onPull={pull} />}
+      stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
+      onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}
+      railOnNarrow={railOpen} />
   );
 }

@@ -15,9 +15,10 @@ test("every lane the server knows has a word, a mark and a role the theme can co
   assert.strictEqual(laneMeta("nonsense"), LANE_META.fyi);
 });
 
-test("the column draws the server's next-first list upside down, mouth at the bottom", () => {
+test("the rail draws the server's next-first list as it comes: what comes out next is on top", () => {
   const items = [{ key: "a" }, { key: "b" }, { key: "c" }];
-  assert.deepStrictEqual(drawOrder(items).map((i) => i.key), ["c", "b", "a"]);
+  assert.deepStrictEqual(drawOrder(items).map((i) => i.key), ["a", "b", "c"]);
+  assert.notStrictEqual(drawOrder(items), items);   // a copy: the caller splices the current one out
   assert.deepStrictEqual(drawOrder(null), []);
 });
 
@@ -84,10 +85,14 @@ test("the by-the-way bar shows the first alert nobody has put down - and only wh
   assert.strictEqual(topAlert(null, new Set()), null);
 });
 
-test("the Assistant page is the landing tab, sits mid-strip wearing the mark, and the bubble stays off it", () => {
+test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the mark, four tabs each side, the bubble off it", () => {
   const page = read("TaskHubPage.jsx");
   const tabs = page.match(/const TABS = \[([^\]]+)\]/)[1].split(",").map((t) => t.trim().replace(/"/g, ""));
   assert.strictEqual(tabs.indexOf("Assistant"), 4);
+  assert.strictEqual(tabs.length, 9);                       // four to each side of it
+  assert.ok(!tabs.includes("Timeline"));                    // the Timeline is the Assistant's rail now...
+  assert.match(page, /if \(t === "Timeline"\) t = "Assistant"/);   // ...and old links to it still land
+  assert.doesNotMatch(page, /<FeedView/);                   // the rail is mounted by the Assistant, nowhere else
   assert.match(page, /useState\("Assistant"\)/);
   assert.match(page, /tab !== "Assistant" && <FloatingAssistant/);
   assert.match(page, /t === "Assistant" \? \(/);
@@ -97,9 +102,12 @@ test("the Assistant page is the landing tab, sits mid-strip wearing the mark, an
   assert.match(view, /\/api\/concierge\/next/);
   assert.match(view, /All done/);
   assert.match(view, /By the way/);
-  assert.match(view, /tq-pipe-walls/);                    // the funnel's shape
-  assert.match(view, /current: true/);                    // ...and what is on the table sits at the mouth as CURRENT
-  assert.match(view, /tq-pipe-day/);                      // the day, at the bottom, like the Timeline's label
+  assert.doesNotMatch(view, /tq-pipe-walls/);             // no funnel: what comes out next is the FIRST row
+  assert.match(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);   // what is on the table sits at the TOP as CURRENT
+  assert.match(view, /<FeedView[^]*top=\{<Pile/);           // the pipe is the top of the Timeline's own rail
+  assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage
+  assert.match(view, /onPull=\{\(r\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
+  assert.match(view, /window\.location\.hash = `msg=\$\{mid\}`/);   // "on the Timeline" pins the row over the chat
   assert.doesNotMatch(view, /turn\(\{ mode: "open" \}\)/);   // the day never writes itself: the welcome is the door
   assert.match(view, /if \(data\.decision\) await decide\(data\.decision\)/);   // words are carried out, never left as advice
   assert.match(view, /dispatch`, \{ instruction: d\.text \|\| null \}/);          // ...and a hand-off to the coder carries them
@@ -109,16 +117,25 @@ test("the Assistant page is the landing tab, sits mid-strip wearing the mark, an
   assert.match(cardsSrc(), /Run it again/);                 // a rerun is queued, never run in the chat
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout
   assert.match(view, /verb === "done" && cur && cur\.kind !== "agent"/);   // done on a task closes the task
-  assert.match(view, /\/api\/ingest\/poll/);                             // sync now, on the pipe
+  assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   assert.match(view, /new ResizeObserver\(\(\) => \{ if \(el\.scrollHeight/);   // the chat keeps its bottom in view as it grows
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
   assert.match(cardsSrc(), /Just what came in/);           // ...which is what "mail" actually means: a person sent it
   assert.match(view, /Walk me through my tasks/);
   assert.match(cardsSrc(), /All read, next/);             // a handful of fyi's goes in one click
   assert.match(cardsSrc(), /<TerminalPane sid=\{card\.sid\}/);   // a stopped agent's own screen, in the chat
-  assert.match(view, /left: side, right: side/);           // the rows meet the funnel's walls, measured
+  assert.doesNotMatch(view, /left: side, right: side/);    // no taper: every row is a Timeline row's width
   assert.doesNotMatch(view, /<Drawer/);                    // no reader drawer: reading happens in the card
-  assert.match(read("assistantView.css"), /\.tq-pipe-stack \{ margin-top: auto; \}/);   // gravity
+  const css = read("assistantView.css");
+  assert.match(css, /\.tq-pile-row \{[^}]*grid-template-columns: 70px 14px minmax\(0, 1fr\)/);   // the Timeline row's gutter, rail and card
+  assert.match(read("FeedView.jsx"), /const GUTTER = 70;/);
+  assert.doesNotMatch(css, /tq-pipe-/);                    // the funnel's CSS is gone with it
+  assert.doesNotMatch(view, /tq-pile-head/);               // no "The pipe · N" header over the rows (the owner, 2026-09-03)
+  assert.match(view, /One more and the pipe is clear/);    // ...the count is the encouragement, at the bottom, from fifteen
+  assert.match(read("FeedView.jsx"), /useState\(top \? "unread" : ""\)/);   // the rail opens on the pipe alone; "all" is the Timeline
+  const feed = read("FeedView.jsx");
+  assert.match(feed, /if \(narrow \|\| chatMode\) return;/);   // a chat is not a preview pane: no hover-open in chat mode
+  assert.match(feed, /addEventListener\("hashchange", openHash\)/);   // a card's #msg= opens the row while the rail is already up
   const cards = read("assistantCards.jsx");
   // the two "not ours" doors the owner asked for: one that teaches memory, one that does not
   assert.match(cards, /not-mine/); assert.match(cards, /Not ours — remember it/); assert.match(cards, /Not ours, just this once/);

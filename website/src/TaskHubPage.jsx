@@ -1,5 +1,6 @@
 // Task Hub shell - clean light enterprise workspace, compact: slim top bar, pill tabs,
-// content underneath. Five spaces: Timeline, Tasks, Review, Connections, Settings.
+// content underneath. The Assistant (the Timeline's rail + Taskuary's chat) in the middle,
+// Board, Tasks, Review and Reports to its left, Hub, Connections, Docs and Settings to its right.
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge, Box, Button, CircularProgress, IconButton, MenuItem, Popover, Select, Snackbar, Tooltip, Typography } from "@mui/material";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
@@ -12,7 +13,6 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import api from "./api";
 import { track } from "./demoTrack";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } from "./theme.jsx";
-import FeedView from "./FeedView.jsx";
 import BoardView from "./BoardView.jsx";
 const HubView = React.lazy(() => import("./HubView.jsx"));
 import TasksView from "./TasksView.jsx";
@@ -40,9 +40,11 @@ import AssistantView from "./AssistantView.jsx";
 // Review stays even though a draft reply also shows on the Timeline: a proposal (proposals.py,
 // Kind 'action') carries no MessageId, so it has no Timeline row to live on. Drop this tab and an
 // agent asking permission has nowhere to ask.
-// Assistant first: it is where the day starts now - Taskuary walks you through the pipe, and the
-// other tabs are where you go to see the whole of something (AssistantView.jsx, funnel.py).
-const TABS = ["Timeline", "Board", "Tasks", "Review", "Assistant", "Reports", "Hub", "Connections", "Docs", "Settings"];
+// The Assistant IS the Timeline: one tab, the Timeline's rail with the pipe at its top on the left
+// and Taskuary's chat on the right (AssistantView.jsx, funnel.py). It wears the mark in the MIDDLE of
+// the strip, four tabs to each side - what is being worked on the left of it, what has been written
+// down and the plumbing on the right. "Timeline" as a destination still resolves to it (go()).
+const TABS = ["Board", "Tasks", "Review", "Reports", "Assistant", "Hub", "Connections", "Docs", "Settings"];
 const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
@@ -234,6 +236,7 @@ export default function TaskHubPage() {
   // to its landing (Connectors out of a card, Settings to its first page) instead of doing nothing
   const [reset, setReset] = useState(0);
   const go = (t) => {
+    if (t === "Timeline") t = "Assistant";       // the Timeline lives on the Assistant tab now; old links and cards still say Timeline
     if (t === tab) { scrollAt.current[t] = 0; window.scrollTo(0, 0); setReset((r) => r + 1); return; }
     scrollAt.current[tab] = window.scrollY; setTab(t); tabRef.current = t;
     track("tab", t);
@@ -251,12 +254,11 @@ export default function TaskHubPage() {
   // back rebuilt the pane and redrew the CLI's screen from the top of its scrollback. Hidden
   // is enough - fit() reads a display:none pane as NaN and skips, then refits on the way back.
   const [everTasks, setEverTasks] = useState(false);
-  const [everTimeline, setEverTimeline] = useState(false);
-  const [everAssistant, setEverAssistant] = useState(true);   // the landing tab: mounted from the first paint
   const [everBoard, setEverBoard] = useState(false);
   useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
-  // ...and the two views that can hold a live session: mounted once opened, hidden after
-  useEffect(() => { if (tab === "Timeline") setEverTimeline(true); if (tab === "Board") setEverBoard(true); if (tab === "Assistant") setEverAssistant(true); }, [tab]);
+  // ...and the Board, which can hold a live session too: mounted once opened, hidden after. The
+  // Assistant is the landing tab and is mounted from the first paint.
+  useEffect(() => { if (tab === "Board") setEverBoard(true); }, [tab]);
 
   const refreshPending = useCallback(async () => {
     try { setPending(((await api.get("/api/reviews", { params: { status: "pending" } })).data.data || []).length); }
@@ -271,8 +273,8 @@ export default function TaskHubPage() {
   useEffect(() => {
     const fromHash = () => {
       const m = /task=(\d+)/.exec(window.location.hash || ""); if (m) openTask(Number(m[1]));
-      // a card's "open on the Timeline": FeedView reads the same hash and opens the row
-      if (/^#msg=\d+/.test(window.location.hash || "")) go("Timeline");
+      // a card's "open on the Timeline": the rail on the Assistant tab reads the same hash and pins the row
+      if (/^#msg=\d+/.test(window.location.hash || "")) go("Assistant");
       // a connector card's playbook link: the words live on the Docs tab (DocsView reads the hash itself)
       if (/playbook=/.test(window.location.hash || "")) go("Docs");
     };
@@ -411,18 +413,12 @@ export default function TaskHubPage() {
           {/* Timeline and Board stay MOUNTED behind another tab, like Tasks: each can hold a live
               pty session, and unmounting closed its websocket - so coming back replayed the whole
               scrollback and ran the pane top to bottom. Their polling is gated on `active`. */}
-          {/* the Assistant stays mounted too: its conversation and the pipe's animation state are
-              on screen state worth keeping, and its polling is gated on `active` */}
-          {(everAssistant || tab === "Assistant") && (
-            <Box sx={{ display: tab === "Assistant" ? "block" : "none" }}>
-              <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} active={tab === "Assistant"} />
-            </Box>
-          )}
-          {(everTimeline || tab === "Timeline") && (
-            <Box sx={{ display: tab === "Timeline" ? "block" : "none" }}>
-              <FeedView key={`f${tick}`} onOpenTask={openTask} onChanged={refreshPending} active={tab === "Timeline"} />
-            </Box>
-          )}
+          {/* the Assistant (the Timeline's rail + the chat) stays mounted from the first paint: its
+              conversation and the pipe's animation state are on-screen state worth keeping, and its
+              polling is gated on `active` */}
+          <Box sx={{ display: tab === "Assistant" ? "block" : "none" }}>
+            <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending} active={tab === "Assistant"} />
+          </Box>
           {(everBoard || tab === "Board") && (
             <Box sx={{ display: tab === "Board" ? "block" : "none" }}>
               <BoardView key={`b${tick}`} onOpenTask={openTask}

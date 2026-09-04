@@ -1,6 +1,6 @@
-// Frames for the README hero GIF: the funnel doing its actual job - a mail arriving,
-// triage's verdict, the drafted reply waiting on you, then a scheduled report landing with
-// its chart. Writes numbered PNGs plus a manifest of per-frame delays; hero_gif.py turns
+// Frames for the README hero GIF: the Assistant doing its actual job - the pipe ranked by
+// triage beside the chat, a mail pulled in with its drafted reply waiting on you, the whole
+// Timeline in task mode with a scheduled report open, then the Reports and the Board. Writes numbered PNGs plus a manifest of per-frame delays; hero_gif.py turns
 // them into the GIF (no ffmpeg on this box, and Pillow writes GIFs fine).
 //
 //   node hero_frames.mjs http://127.0.0.1:PORT
@@ -38,24 +38,20 @@ const clickRow = async (needle) => p.evaluate((nd) => {
 }, needle);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ── 1. the timeline: everything in one funnel ─────────────────────────────
-await click("Timeline"); await wait(2200);
-await hold(2000);
+// ── 1. the Assistant: the pipe, ranked, beside the chat ───────────────────
+await wait(2200);
+await hold(2200);
 
-// ── 2. a mail: the verdict, the thread, the drafted reply ─────────────────
-await clickRow("Q3 vendor spend");
-await burst(110, 7);                    // the review canvas growing out of the row
-await wait(900); await hold(2600);
-// down to the draft itself - the thing you approve
-await p.evaluate(() => {
-  const box = [...document.querySelectorAll("div")].find((d) => d.scrollHeight > d.clientHeight + 80
-    && d.getBoundingClientRect().left > 700);
-  if (box) box.scrollTop = box.scrollHeight;
-});
-await burst(120, 4); await hold(2800);
+// ── 2. a mail pulled into the chat: what it is, and the drafted reply waiting on you ──
+await p.evaluate(() => [...document.querySelectorAll(".tq-pile-row .card")].find((c) => /AP cutover/i.test(c.textContent))?.click());
+await burst(140, 6);                    // the row slides up to CURRENT, the card lands in the chat
+await wait(2200); await burst(120, 3); await hold(3000);
 
-// ── 3. a scheduled report: rows, chart, spreadsheet ───────────────────────
-await clickRow("Nightly headcount — 6 rows");
+// ── 3. the whole Timeline, in task mode: a scheduled report, whole ────────
+await click("all"); await wait(900);
+await p.evaluate(() => [...document.querySelectorAll(".tq-stage-mode button")].find((x) => x.textContent === "Task")?.click());
+await wait(500); await hold(1600);
+await clickRow("Headcount by site");
 await burst(110, 6);
 await wait(1000); await hold(3000);
 
@@ -66,7 +62,7 @@ await click("Reports"); await burst(130, 4); await wait(700); await hold(2400);
 await click("Board"); await burst(130, 4); await wait(700); await hold(2600);
 
 // ── 6. back where you started ─────────────────────────────────────────────
-await click("Timeline"); await wait(1600); await hold(1800);
+await click("Assistant"); await wait(1600); await hold(1800);
 
 writeFileSync(`${OUT}/frames.json`, JSON.stringify({ width: W, height: H, frames }, null, 1));
 await b.close();

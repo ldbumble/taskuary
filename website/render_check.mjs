@@ -3,7 +3,7 @@
 import puppeteer from "puppeteer-core";
 
 const EDGE = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const TABS = ["Timeline", "Board", "Tasks", "Review", "Reports", "Connectors", "Docs", "Settings"];
+const TABS = ["Board", "Tasks", "Review", "Reports", "Assistant", "Hub", "Connections", "Docs", "Settings"];
 
 (async () => {
   const url = process.argv[2];

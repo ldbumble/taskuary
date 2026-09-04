@@ -180,6 +180,21 @@ BLOCKED = ('web search is not available', 'not available on this claude account'
            'cannot fetch', 'failed to fetch', 'permission denied', 'tool result:')
 REPORT_LINES = 25       # above this it is a document, and one unlucky phrase inside it proves nothing
 
+# The CLI's OWN words when a tool is refused. Unlike BLOCKED above these are not generic failure
+# words - a real report about GitHub, a mailbox or a database does not contain "permission not
+# granted for WebFetch" - so they are conclusive at any length and in any shape.
+#
+# That distinction is the whole fix. BLOCKED is guarded by "short AND shapeless", on the theory
+# that a run which never reached its source answers briefly. A capable agent does not: asked for a
+# report it could not gather, Claude returned a 31-line document with a table whose every Result
+# cell read "Blocked - permission not granted", a "What is therefore missing" section and five
+# numbered recommendations. Both halves of that guard passed it, so the apology filed as the
+# morning report and triage sent it on as work (the owner, 2026-09-04: "the ai task said it fixed
+# this, but it's not fixed"). Length and polish say nothing about whether the tools ran.
+REFUSED = ('permission not granted', 'permission_denied', 'requested permissions to use',
+           "haven't granted it yet", 'has not granted it yet', 'not allowed to use this tool',
+           'tool use was denied', 'permission to use webfetch', 'permission to use websearch')
+
 
 def _blocked(out: str) -> str:
     """The agent's excuse, when what came back is the story of a failed run instead of a report - '' otherwise.
@@ -191,11 +206,18 @@ def _blocked(out: str) -> str:
     the 300s timeout and the rate-limit rejection the same report hit the day before, both of which
     filed correctly because they raised.
 
-    Short AND shapeless is the guard: a real report carries headings, a table or fifteen rows, so a
-    long or structured answer is never second-guessed on the strength of one unlucky phrase."""
+    Two different guards, because there are two different signals. A REFUSED tool (REFUSED) is the
+    agent quoting its own permission error - conclusive at any length, because a real report has no
+    reason to say "permission not granted for WebFetch". A generic inability (BLOCKED - "unable to
+    fetch") is only trusted when the answer is short AND shapeless, since a real report carries
+    headings, a table or fifteen rows and must not be second-guessed on one unlucky phrase."""
     body = (out or '').strip()
-    if len(body.splitlines()) > REPORT_LINES or _outline(body): return ''
     low = body.lower()
+    # A REFUSED TOOL is conclusive however long and however well laid out the excuse is: the agent
+    # is quoting its own permission error, which no genuine report has reason to contain.
+    hard = next((m for m in REFUSED if m in low), '')
+    if hard: return hard
+    if len(body.splitlines()) > REPORT_LINES or _outline(body): return ''
     return next((m for m in BLOCKED if m in low), '')
 
 

@@ -323,6 +323,9 @@ export function IdeaCard({ card, onAct, onOpenTask, onTimeline }) {
         <span className="sp" />
         <Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
+      {/* the buttons are the short way; saying it is the real one, and nothing says so (2026-09-04:
+          "all the ideas should just say it and I will create it") */}
+      <span className="tq-card-note">Or just say what you want done with it and I'll create it.</span>
     </CardShell>
   );
 }
@@ -333,7 +336,12 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [notOurs, setNotOurs] = useState(false);
-  const [full, setFull] = useState(false);
+  const [sender, setSender] = useState(false);
+  // Shown, not offered. Clicking "Read it" to find out what a thing IS put a step in front of every
+  // decision (the owner, 2026-09-04: "by default it should show the full email - not the full chain
+  // ... don't want to have to click read it"). FullText fetches this ONE message, so it is the mail
+  // that arrived and never the thread behind it.
+  const [full, setFull] = useState(true);
   const post = async (verb, path, body, receipt, after) => {
     setBusy(verb); setErr("");
     try { const { data } = await api.post(path, body || {}); after?.(data); if (receipt) onDone?.(typeof receipt === "function" ? receipt(data) : receipt); }
@@ -361,8 +369,22 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
           onClick={() => post("mine", `/api/messages/${card.mid}/mine`, { kind: "task" }, "On your list.")}>{busy === "mine" ? "…" : "Mine, I'll do it"}</Button>}
         <span className="sp" />
         <Button size="small" disabled={!!busy} onClick={() => setNotOurs((v) => !v)} sx={faint}>Not ours…</Button>
+        <Button size="small" disabled={!!busy} onClick={() => setSender((v) => !v)} sx={faint}>Ignore this sender…</Button>
         <Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
+      {sender && (
+        <div className="tq-card-actions" style={{ marginTop: 6 }}>
+          <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
+            onClick={() => post("rule", `/api/messages/${card.mid}/ignore-sender`, { how: "rule" },
+              (d) => `An exclusion rule now skips ${d.sender}${d.affected ? ` — and ${d.affected} of their older messages left the Timeline` : ""}. Settings → Rules turns it back off.`)}>
+            {busy === "rule" ? "…" : "Add an exclusion rule"}</Button>
+          <Button size="small" variant="outlined" disabled={!!busy} sx={{ ...quiet, ...faint }}
+            onClick={() => post("justmem", `/api/messages/${card.mid}/ignore-sender`, { how: "memory" },
+              (d) => `Remembered. Mail from ${d.sender} keeps arriving and stays readable — triage files it from now on.`)}>
+            {busy === "justmem" ? "…" : "Just remember it"}</Button>
+          <span className="tq-card-note">A rule stops their mail reaching triage at all and hides what already arrived. A memory leaves everything readable and teaches triage the verdict.</span>
+        </div>
+      )}
       {notOurs && (
         <div className="tq-card-actions" style={{ marginTop: 6 }}>
           <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}

@@ -54,9 +54,19 @@ READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '')),
 # classifier above, which gets no tools at all because the text it classifies is untrusted input.
 # Claude's built-ins are named explicitly, and every MCP tool is denied because MCP permissions
 # are separate from --tools and a connector may expose writes beside reads.
+REPORT_TOOLS = 'Read,Glob,Grep,WebFetch,WebSearch'
+
+# --tools and --allowedTools answer different questions and a report needs BOTH: --tools says which
+# built-ins EXIST in this run, --allowedTools says which may be used without asking a human. With
+# the bypass flag dropped and only --tools given, WebFetch and WebSearch existed but still prompted,
+# and a headless report has nobody to click: every fetch came back "Claude requested permissions to
+# use WebFetch, but you haven't granted it yet" and the run narrated the refusal instead of the
+# trending page. Read/Glob/Grep never prompt, which is why the gap stayed invisible for two months
+# (the GitHub Trending report, 2026-09-04). Granting the same five is not a widening - the set the
+# run may use is still exactly the set that exists.
 REPORT_READ = {
     'claude': (('--dangerously-skip-permissions',),
-               ('--tools', 'Read,Glob,Grep,WebFetch,WebSearch', '--disallowedTools', 'mcp__*')),
+               ('--tools', REPORT_TOOLS, '--allowedTools', REPORT_TOOLS, '--disallowedTools', 'mcp__*')),
     'codex': READONLY['codex'],
     'gemini': READONLY['gemini'],
 }

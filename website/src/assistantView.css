@@ -126,6 +126,9 @@
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
 .tq-compose-hint { margin: 5px auto 0; text-align: center; color: #a09b92; font: 9px/1.2 'IBM Plex Mono', Consolas, monospace; }
+.tq-whatsapp-connect { margin: 7px auto 0; padding: 3px 8px; border: 0; background: transparent; color: #58705e; display: flex; align-items: center; gap: 5px; font: inherit; font-size: 10.5px; font-weight: 600; line-height: 1.2; cursor: pointer; border-radius: 7px; }
+.tq-whatsapp-connect:hover { color: #36533e; background: #edf4ee; }
+.tq-whatsapp-connect:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
 
 /* past chats, slid over the thread */
 .tq-chats { position: absolute; inset: 0; background: #fffdfbf2; backdrop-filter: blur(2px); z-index: 5; display: flex; flex-direction: column; }

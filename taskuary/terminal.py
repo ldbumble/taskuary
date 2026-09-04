@@ -146,6 +146,12 @@ class Term:
         self.taps = []                                    # plain callables, for server-side readers
         self.failover = None                              # availability-only replacement installed by start_on_task
         self._live_at = 0                                 # last run-tail emit; pty bursts fold into one
+        # One published lifecycle state for every consumer (Timeline, Board, Studio, hand raise,
+        # waiting room). A full-screen TUI redraws in pieces; sampling one piece used to publish
+        # parked for a frame, then working again on the next. The raw observation may move that
+        # quickly, but the state people see must hold before it changes.
+        self._phase_stable, self._phase_candidate, self._phase_since = 'working', None, time.time()
+        self._phase_screen = (0.0, [])                    # rendered-screen cache; one render per request burst
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
         from . import blackboard as _bb, witness as _w
@@ -384,16 +390,33 @@ class Term:
         self._files = (got, time.time())
         return got
 
-    def phase(self) -> str: return phase_of(self.tail(4))
-    def waiting(self) -> bool: return waiting_of(self)
+    def status_tail(self, n=8) -> list:
+        """The bottom of the screen the owner can actually see, not the raw repaint bytes.
+
+        `tail()` deliberately reads the raw stream for transcript snippets. It is the wrong input
+        for lifecycle: Claude's current "esc to interrupt" footer was visible on screen while the
+        raw tail contained only fragments such as "Gallivanting…" and reported `unknown`.
+        """
+        at, lines = self._phase_screen
+        now = time.time()
+        if now - at >= .5:
+            lines = render(self.scrollback(), self.cols, self.rows).splitlines()
+            self._phase_screen = (now, lines)
+        return lines[-max(1, n):]
+
+    def phase(self) -> str: return stable_phase_of(self)
+    def waiting(self) -> bool: return self.phase() == 'parked'
 
     def info(self, tail=0):
         # module functions, not methods: the tests' fakes (and any other stand-in) need only tail() and idle()
         files, w = self.files(), getattr(self, 'witness', None)      # fakes in tests carry no witness
         from . import browserview as _bv
+        # Keep this module-level for the deliberately small terminal stand-ins used by the API
+        # and hook tests; production Terms and fakes must go through the same state machine.
+        phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
         return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'phase': phase_of(self.tail(4)), 'waiting': waiting_of(self),
+                'idle': self.idle(), 'phase': phase, 'waiting': phase == 'parked',
                 'cmd': ' '.join(self.argv), 'files': files, 'browser': _bv.state(self.sid),
                 'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None,
                 **({'tail': self.tail(tail)} if tail else {})}
@@ -606,6 +629,13 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    # The configured profile name is the worker's identity, not just a launch option. Keep it on
+    # the task after this terminal closes so an inbound auto-start and an owner-started session
+    # both have a named owner, and the next session can return to the same worker deliberately.
+    if agent and task_id:
+        task = store.get_task(task_id) or {}
+        assigned = f'agent:{agent}'
+        if task.get('Assignee') != assigned: store.update_task(task_id, {'Assignee': assigned}, actor)
     # A task the owner marked "needs a browser" gets one WITH its session - bound to it by name,
     # restored from the owner's own saved cookies, closed with it (Term._pump). Until now a
     # browser existed only if the agent thought to run agent-browser, so a task that plainly
@@ -1321,6 +1351,10 @@ def get(sid): return SESSIONS.get(sid)
 # either way the next move is the owner's, not the agent's. The FALLBACK: the CLIs we know
 # say it on screen, and that is read first (phase_of).
 IDLE_WAITING = 45
+# A state observed in the terminal must survive this long before the rest of Taskuary sees it.
+# This is deliberately shorter than the UI polls: a genuine question is visible on the next
+# poll, while the clear/draw/clear frames of one TUI repaint can never become a hand raise.
+PHASE_DWELL = 3.0
 
 # What the last lines of the screen say. Claude Code shows "esc to interrupt" (and a spinner)
 # while it works and "? for shortcuts" / "shift+tab to cycle" / "auto mode on" at its prompt;
@@ -1332,11 +1366,48 @@ _PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions o
                      r'\?\s*$|\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|press enter|'
                      r'choose an option|select an option|enter to (confirm|select))\b|^\s*[›>❯](?:\s*\d+\.)?', re.I)
 
+def _observed_phase(t) -> str:
+    """One raw observation from the rendered screen, with a fallback for small test doubles."""
+    try: lines = t.status_tail(8)
+    except (AttributeError, TypeError): lines = t.tail(4)
+    return phase_of(lines)
+
+
+def stable_phase_of(t, now: float = None) -> str:
+    """Return the session's latched `working` or `parked` phase.
+
+    Full-screen CLIs repaint a screen in several writes. During a working turn, one intermediate
+    frame can contain the bare input prompt and the next contains the spinner again. Publishing
+    each observation made every consumer disagree in public: the Timeline waved, the Assistant
+    alerted, then both took it back. A transition is now accepted only after the same target has
+    held for PHASE_DWELL seconds. Process exit is separate (`alive=False`) and remains immediate.
+    """
+    at = time.time() if now is None else float(now)
+    raw = _observed_phase(t)
+    stable = getattr(t, '_phase_stable', 'working')
+    # Known screen chrome is authoritative. Silence is only a fallback for third-party CLIs whose
+    # prompt Taskuary does not recognise. Fresh real output can wake such a parked CLI again.
+    target = raw if raw in ('working', 'parked') else None
+    if target is None and t.idle() >= IDLE_WAITING: target = 'parked'
+    elif target is None and stable == 'parked' and t.idle() < 2: target = 'working'
+
+    if target is None or target == stable:
+        t._phase_candidate = None
+        t._phase_since = at
+        return stable
+    if getattr(t, '_phase_candidate', None) != target:
+        t._phase_candidate, t._phase_since = target, at
+        return stable
+    if at - float(getattr(t, '_phase_since', at)) >= PHASE_DWELL:
+        t._phase_stable, t._phase_candidate, t._phase_since = target, None, at
+        return target
+    return stable
+
+
 def waiting_of(t) -> bool:
-    """Is the agent parked and the next move the owner's? The CLI's own screen decides where it
-    can (phase_of); only an unrecognised screen falls back to IDLE_WAITING of silence - which
-    flapped: Claude Code repaints its footer at rest, so the clock kept resetting."""
-    p = phase_of(t.tail(4))
+    """Compatibility helper for light test doubles; real Terms publish their latched phase."""
+    if isinstance(t, Term): return stable_phase_of(t) == 'parked'
+    p = _observed_phase(t)
     return p == 'parked' or (p != 'working' and t.idle() >= IDLE_WAITING)
 
 

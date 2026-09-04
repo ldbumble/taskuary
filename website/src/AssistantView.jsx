@@ -25,7 +25,7 @@ import { DEMO } from "./demoApi.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { Md, looksMd } from "./md.jsx";
-import { MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import { ageText, arrivals, cardFor, drawOrder, keysOf, rowMeta, statusLine, topAlert } from "./funnelPile.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
@@ -543,6 +543,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a card's "open on the Timeline": the row opens on the stage, over the chat, right here - the rail
   // reads the hash and pins the row (FeedView); its close comes back to the conversation
   const timeline = (mid) => { window.location.hash = `msg=${mid}`; };
+  const openWhatsApp = () => {
+    window.location.hash = "connector=whatsapp";
+    onNavigate?.("Connections");
+  };
   // a row pulled off the rail - the pipe's or the Timeline's - goes on the table exactly as the pipe's
   // own click does, by the same key (so the server puts the same item up, whichever list it came from)
   // The pile IS the assistant's walk, so pulling one always answers in the chat. In task mode the
@@ -685,6 +689,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
           <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the buttons on a card do the acting</div>
+          <button type="button" className="tq-whatsapp-connect" onClick={openWhatsApp}>
+            <ChannelIcon channel="whatsapp" sx={{ fontSize: 15 }} />
+            Connect WhatsApp to the Assistant
+          </button>
         </div>
       )}
     </div>

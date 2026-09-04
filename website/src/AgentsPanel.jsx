@@ -52,6 +52,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
   const [err, setErr] = useState("");
   const [here, setHere] = useState({});           // agent -> its CLI resolves on this machine
   const [effective, setEffective] = useState(""); // ...and the one work is really dispatched to
+  const [work, setWork] = useState({});            // existing tasks/playbooks and scheduled report skills
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +61,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       // which of them this machine can actually start, and which one work really goes to
       setHere(Object.fromEntries((data.data || []).map((r) => [r.Name, r.installed !== false])));
       setEffective(data.default || "");
+      setWork(data.work || {});
     }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load agents"); }
   }, []);
@@ -134,7 +136,8 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
         <Typography variant="body2" sx={{ color: DIM }}>
-          Add the same CLI more than once under different names for separate profiles; Claude Code profiles stay resumable.
+          Name your workers here — Atlas, Scout, Coder, or anything useful. The name stays on every task they own,
+          whether triage started it or you did. Several named workers can use the same CLI with different profiles.
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
@@ -170,62 +173,94 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
         </Box>
       )}
       {!Object.keys(agents).length && <Empty>No agents yet — click a preset above, Save, then Test.</Empty>}
-      {Object.entries(agents).map(([name, a]) => (
-        <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, px: 1,
-          borderBottom: `1px solid ${BORDER}`, borderRadius: 1.5,
-          bgcolor: defAgent === name ? "#f6f7ff" : "transparent",
-          borderLeft: `3px solid ${defAgent === name ? "#55697a" : "transparent"}` }}>
-          <Chip size="small" label={name} sx={{ bgcolor: "#eae4d8", color: "#55697a", height: 21, fontSize: 10.5, fontWeight: 700 }} />
-          {defAgent === name ? (
-            <Chip size="small" icon={<StarIcon sx={{ fontSize: 12 }} />} label="default"
-              title="Works every task nothing names an agent for — Start session, Send to coding agent, auto-dispatch"
-              sx={{ bgcolor: "#55697a", color: "#fff", height: 20, fontSize: 10, fontWeight: 700,
-                "& .MuiChip-icon": { color: "#fff" } }} />
-          ) : (
-            <Button size="small" sx={{ fontSize: 10, minWidth: 0, px: 0.75, color: FAINT }}
-              title="Make this the agent every task uses unless another is picked"
-              onClick={() => makeDefault(name)}>make default</Button>
-          )}
-          <Typography sx={{ ...mono, color: INK, fontSize: 12.5, flex: 1, minWidth: 0 }} noWrap>
-            {a.cmd} {(a.args || []).join(" ")}
-          </Typography>
-          {/* Taskuary ships coder = claude. On a machine without claude that default aimed every
-              dispatch at a CLI nobody had, and the failure read as the agent's, not the setup's. */}
-          {here[name] === false && (
-            <Chip size="small" label="not installed on this machine"
-              title={`Nothing here can start ${a.cmd}. Install it, or point this profile at the CLI you do have.`}
-              sx={{ bgcolor: "#f3e0e2", color: "#8a3646", height: 20, fontSize: 10, fontWeight: 700 }} />
-          )}
-          {defAgent === name && here[name] === false && effective && effective !== name && (
-            <Chip size="small" label={`work goes to ${effective}`}
-              title="Your default cannot run here, so tasks are dispatched to an agent that can."
-              sx={{ bgcolor: "#eae4d8", color: "#55697a", height: 20, fontSize: 10 }} />
-          )}
-          {a.cmd === "claude" && !(a.args || []).includes("--dangerously-skip-permissions") && (
-            <Chip size="small" label="will hang headless — add --dangerously-skip-permissions"
-              sx={{ bgcolor: "#eae4d8", color: "#55697a", height: 20, fontSize: 10 }} />
-          )}
-          <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
-            timeout {a.timeout || 1200}s{a.resume_args ? " · resumable" : ""}{a.light_model ? ` · light: ${a.light_model}` : ""}
-          </Typography>
-          <Button size="small" startIcon={<BoltIcon sx={{ fontSize: 13 }} />} disabled={tests[name]?.busy}
-            onClick={() => runTest(name)}>{tests[name]?.busy ? "Testing…" : "Test"}</Button>
-          <Button size="small" onClick={() => edit(name)}>Edit</Button>
-          <Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
-        </Box>
-      )).flatMap((row, i) => {
-        const name = Object.keys(agents)[i];
-        const t = tests[name];
-        return t && !t.busy ? [row,
-          <Typography key={name + "t"} variant="body2" sx={{ ml: 1, mb: 1, fontWeight: 600, color: t.ok ? "#47654a" : "#6b2733" }}>
-            {t.ok ? `✓ ${t.result || "responded"}${t.resumable ? " · resumable session detected" : ""}` : `✗ ${t.error}`}
-          </Typography>] : [row];
+      {Object.entries(agents).map(([name, a]) => {
+        const owned = work[name] || { tasks: [], reports: [] };
+        const test = tests[name];
+        return (
+          <React.Fragment key={name}>
+            <Box sx={{ py: 1.5, px: 1, borderBottom: `1px solid ${BORDER}`, borderRadius: 1.5,
+              bgcolor: defAgent === name ? "#f6f7ff" : "transparent",
+              borderLeft: `3px solid ${defAgent === name ? "#55697a" : "transparent"}` }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
+                <Chip size="small" label={name} sx={{ bgcolor: "#eae4d8", color: "#55697a", height: 21, fontSize: 10.5, fontWeight: 700 }} />
+                {defAgent === name ? (
+                  <Chip size="small" icon={<StarIcon sx={{ fontSize: 12 }} />} label="default"
+                    title="Works every task nothing names an agent for — Start session, Send to coding agent, auto-dispatch"
+                    sx={{ bgcolor: "#55697a", color: "#fff", height: 20, fontSize: 10, fontWeight: 700,
+                      "& .MuiChip-icon": { color: "#fff" } }} />
+                ) : (
+                  <Button size="small" sx={{ fontSize: 10, minWidth: 0, px: 0.75, color: FAINT }}
+                    title="Make this the agent every task uses unless another is picked"
+                    onClick={() => makeDefault(name)}>make default</Button>
+                )}
+                <Typography sx={{ ...mono, color: INK, fontSize: 12.5, flex: 1, minWidth: 180 }} noWrap>
+                  {a.cmd} {(a.args || []).join(" ")}
+                </Typography>
+                {/* Taskuary ships coder = claude. On a machine without claude that default aimed every
+                    dispatch at a CLI nobody had, and the failure read as the agent's, not the setup's. */}
+                {here[name] === false && (
+                  <Chip size="small" label="not installed on this machine"
+                    title={`Nothing here can start ${a.cmd}. Install it, or point this profile at the CLI you do have.`}
+                    sx={{ bgcolor: "#f3e0e2", color: "#8a3646", height: 20, fontSize: 10, fontWeight: 700 }} />
+                )}
+                {defAgent === name && here[name] === false && effective && effective !== name && (
+                  <Chip size="small" label={`work goes to ${effective}`}
+                    title="Your default cannot run here, so tasks are dispatched to an agent that can."
+                    sx={{ bgcolor: "#eae4d8", color: "#55697a", height: 20, fontSize: 10 }} />
+                )}
+                {a.cmd === "claude" && !(a.args || []).includes("--dangerously-skip-permissions") && (
+                  <Chip size="small" label="will hang headless — add --dangerously-skip-permissions"
+                    sx={{ bgcolor: "#eae4d8", color: "#55697a", height: 20, fontSize: 10 }} />
+                )}
+                <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
+                  timeout {a.timeout || 1200}s{a.resume_args ? " · resumable" : ""}{a.light_model ? ` · light: ${a.light_model}` : ""}
+                </Typography>
+                <Button size="small" startIcon={<BoltIcon sx={{ fontSize: 13 }} />} disabled={tests[name]?.busy}
+                  onClick={() => runTest(name)}>{tests[name]?.busy ? "Testing…" : "Test"}</Button>
+                <Button size="small" onClick={() => edit(name)}>Edit</Button>
+                <Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
+              </Box>
+              <Box sx={{ ml: 0.25, mt: 1, display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
+                {!owned.tasks.length && !owned.reports.length && (
+                  <Typography variant="caption" sx={{ color: FAINT }}>
+                    No work assigned — the playbook or report supplies the job when this worker is chosen.
+                  </Typography>
+                )}
+                {owned.tasks.slice(0, 4).map((task) => (
+                  <Chip key={`task-${task.taskId}`} size="small"
+                    label={`${task.ref} · ${task.title}${task.playbook ? ` · ${task.playbook.title}` : ""}`}
+                    title={task.playbook
+                      ? `Owned task · playbook: ${task.playbook.title}${task.playbook.uses.length ? ` · uses ${task.playbook.uses.join(", ")}` : ""}`
+                      : "Owned task"}
+                    component="a" href={`#task=${task.taskId}`} clickable
+                    sx={{ maxWidth: 360, height: 22, fontSize: 10, bgcolor: "#eef3ec", color: "#47654a",
+                      "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }} />
+                ))}
+                {owned.tasks.length > 4 && <Typography variant="caption" sx={{ color: FAINT }}>+{owned.tasks.length - 4} tasks</Typography>}
+                {owned.reports.slice(0, 4).map((report) => (
+                  <Chip key={`report-${report.sourceId}`} size="small"
+                    label={`${report.title} · ${report.kind}${report.skills.length ? ` · /${report.skills.join(", /")}` : ""}`}
+                    title={`${report.active ? "Enabled" : "Disabled"} ${report.kind}${report.skills.length ? ` · saved skill${report.skills.length === 1 ? "" : "s"}: /${report.skills.join(", /")}` : " · plain-English instructions"}`}
+                    sx={{ maxWidth: 360, height: 22, fontSize: 10, bgcolor: "#f1ead9", color: "#6b5f45",
+                      opacity: report.active ? 1 : 0.6,
+                      "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }} />
+                ))}
+                {owned.reports.length > 4 && <Typography variant="caption" sx={{ color: FAINT }}>+{owned.reports.length - 4} reports</Typography>}
+              </Box>
+            </Box>
+            {test && !test.busy && (
+              <Typography variant="body2" sx={{ ml: 1, mb: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
+                {test.ok ? `✓ ${test.result || "responded"}${test.resumable ? " · resumable session detected" : ""}` : `✗ ${test.error}`}
+              </Typography>
+            )}
+          </React.Fragment>
+        );
       })}
       {draft && (
         <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
           <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 700 }}>{agents[draft.name] ? `Edit agent · ${draft.name}` : "New agent"}</Typography>
           <Box sx={{ display: "flex", gap: 1 }}>
-            <TextField label="name" value={draft.name} disabled={!!agents[draft.name]} sx={{ width: 180 }}
+            <TextField label="worker name" value={draft.name} disabled={!!agents[draft.name]} sx={{ width: 180 }}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             <TextField fullWidth label='cmd — "claude", "codex", your own wrapper…' value={draft.cmd}
               onChange={(e) => setDraft({ ...draft, cmd: e.target.value })} />

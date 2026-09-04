@@ -201,7 +201,8 @@ def wa_status(c) -> dict:
     jid = str(st.get('jid') or '')
     out = {'connected': bool(st.get('connected')), 'me': st.get('me') or '', 'jid': jid,
            'phone': ('+' + jid.split('@')[0].split(':')[0]) if jid and jid.split(':')[0].split('@')[0].isdigit() else '',   # the paired number, from the account jid
-           'pairing_code': st.get('pairingCode') or '', 'qr_svg': ''}
+           'pairing_code': st.get('pairingCode') or '', 'qr_svg': '',
+           'reconnect': st.get('reconnect') or {}, 'filter': st.get('filter') or {}}
     if st.get('qr') and not out['connected']:
         import segno
         out['qr_svg'] = segno.make(st['qr'], error='m').svg_data_uri(scale=5, border=2, dark='#1e1e2e', light='#ffffff')
@@ -222,6 +223,13 @@ def wa_chats(c) -> list:
         r['n'] += 1
         if not m.get('fromMe') and m.get('name'): r['name'] = m['name']     # the other side's push name, never ours
         if (m.get('ts') or 0) >= r['last']: r['last'], r['snippet'] = m.get('ts') or 0, (m.get('text') or '')[:80]
+    # The bridge sees the routing JID before deciding whether to decrypt. That lets the source
+    # picker show a newly active chat without retaining its sender, text, or media first.
+    for m in out.get('blockedChats', []):
+        jid = m.get('jid') or ''
+        if not jid or jid.endswith('@broadcast') or jid in by: continue
+        by[jid] = {'jid': jid, 'group': bool(m.get('group')), 'name': '', 'n': 0,
+                   'last': m.get('last') or 0, 'snippet': 'not opened - chat is not authorized'}
     rows = sorted(by.values(), key=lambda r: -r['last'])
     for r in rows: r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
     return rows
@@ -254,6 +262,13 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     srcs = [s for s in sources if s.get('Channel', 'whatsapp') == 'whatsapp' and s.get('Address')]
     star = any(s['Address'] == '*' for s in srcs)
     want = {s['Address'] for s in srcs if s['Address'] != '*'}
+    notify_chat = str(cfg.get('notify_chat') or '').strip()
+    bridge_want = want | ({notify_chat} if notify_chat else set())  # approvals/assistant may not be an inbound source
+    # Filtering here alone was too late: Baileys had already decrypted and downloaded media from
+    # every chat. Give the same policy to its pre-decryption hook before asking for messages.
+    try: _wa(c, '/filter', {'allDirect': star, 'jids': sorted(bridge_want)})
+    except RuntimeError as e:
+        if '(404)' not in str(e): raise                     # an older detached bridge: keep polling until its next restart
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
     n, took = 0, []
     from . import phone, remote_assistant

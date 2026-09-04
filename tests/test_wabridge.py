@@ -1,6 +1,6 @@
 """The WhatsApp bridge, managed by Taskuary: install if needed, start detached, report the phase -
 so neither a person nor an agent runs a server in the foreground and waits on it."""
-import time, unittest
+import json, time, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import server, wabridge
@@ -32,7 +32,16 @@ class BridgeManagerTests(unittest.TestCase):
              mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}) as start:
             out = wabridge.start_configured(s)
         self.assertTrue(out['started']); self.assertEqual(out['connectorId'], wa['ConnectorId'])
-        start.assert_called_once_with()
+        start.assert_called_once_with(filter_policy={'allDirect': False, 'jids': []})
+
+    def test_launch_filter_contains_only_active_sources_and_the_control_chat(self):
+        s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
+        s.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'o')
+        s.save_source({'Channel': 'whatsapp', 'Address': 'picked@g.us', 'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'o')
+        s.save_source({'Channel': 'whatsapp', 'Address': 'off@g.us', 'ConnectorId': wa['ConnectorId'], 'Active': 0}, 'o')
+        s.set_connector_config(wa['ConnectorId'], {'notify_chat': 'me@s.whatsapp.net'})
+        self.assertEqual(wabridge.filter_policy(s, wa['ConnectorId']), {
+            'allDirect': True, 'jids': ['me@s.whatsapp.net', 'picked@g.us']})
 
     def test_an_off_or_external_whatsapp_card_does_not_start_a_local_bridge(self):
         s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
@@ -69,9 +78,12 @@ class BridgeManagerTests(unittest.TestCase):
              mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='', stderr='')) as run, \
              mock.patch.object(wabridge.subprocess, 'Popen', return_value=P()) as pop, mock.patch.object(wabridge.time, 'sleep'), \
              mock.patch('builtins.open', mock.mock_open()):
-            self.assertEqual(wabridge.start(force_install=True, wait=True)['phase'], 'running')
+            self.assertEqual(wabridge.start(force_install=True, wait=True,
+                             filter_policy={'allDirect': False, 'jids': ['picked@g.us']})['phase'], 'running')
         self.assertEqual(run.call_args[0][0][1:], ['install', '--no-audit', '--no-fund'])              # npm install first
         self.assertEqual(pop.call_args[0][0], ['node', 'bridge.mjs']); self.assertEqual(wabridge.state()['pid'], 4242)
+        self.assertEqual(json.loads(pop.call_args.kwargs['env']['WA_BRIDGE_FILTER']),
+                         {'allDirect': False, 'jids': ['picked@g.us']})
         self.assertIn('8977', wabridge.state()['detail'])
         # exits at once -> failed, with the log tail
         wabridge._STATE.update(phase='idle')
@@ -93,7 +105,7 @@ class BridgeManagerTests(unittest.TestCase):
         wa = next(x for x in server.store.list_connectors() if x['Type'] == 'whatsapp')
         with mock.patch.object(wabridge, 'start', return_value={'phase': 'installing', 'detail': 'npm install'}) as st:
             r = c_api.post(f"/api/connectors/{wa['ConnectorId']}/wa/bridge/start").json()
-        self.assertEqual(r['phase'], 'installing'); st.assert_called_once_with(False)
+        self.assertEqual(r['phase'], 'installing'); st.assert_called_once_with(False, filter_policy=mock.ANY)
         slack = next(x for x in server.store.list_connectors() if x['Type'] == 'slack')
         self.assertEqual(c_api.post(f"/api/connectors/{slack['ConnectorId']}/wa/bridge/start").status_code, 404)
         from taskuary import messengers

@@ -141,20 +141,23 @@ const META = {
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID; add * to take every direct chat)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
-       "Notifications and remote assistant — use your private Message yourself chat"]],
+       "Notifications and remote assistant — use your private Message yourself chat"],
+      ["Check assistant chat every N seconds", "poll_seconds", "30",
+       "Only WhatsApp polls faster; mail and the other connectors keep the global sync interval"]],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
     howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
       "2 - The bridge starts by itself once Node is there (first time it fetches its dependency, Baileys - a minute or two). 3 - The QR appears; on your phone: WhatsApp → Linked devices → Link a device → scan. The box turns green when the phone accepts.",
-      "Leave the bridge running (it survives closing the browser; a reboot stops it - the box starts it again when you open this card). Test here confirms the pairing and adds a catch-all source.",
-      "The catch-all covers DIRECT chats. Group chats are opt-in: add a group's JID under Sources and only that group comes in - groups you never picked stay out of the funnel.",
+      "Leave the bridge running (it survives closing the browser; a reboot stops it - the box starts it again when you open this card). Test confirms the pairing; it does not authorize any chat for you.",
+      "Nothing comes in until you enable it under Sources. Add * only if you deliberately want every DIRECT chat. Otherwise add exact chat JIDs. Groups are always opt-in, even when * is enabled.",
+      "WhatsApp links the whole account; its server does not offer per-chat subscriptions. Taskuary sends your active source list into Baileys so unapproved chats are acknowledged without decrypting their text or downloading media. WhatsApp may still show a linked-device sync notice after a reconnect, so the bridge backs off and pauses after repeated unstable reconnects instead of flooding your phone.",
       "Unofficial protocol (WhatsApp Web) - use a number you would risk; business-critical numbers belong on the official API."],
     // written FOR the agent: the machine-side work is its own; the phone is the owner's
     agent: ["Do NOT run node bridge.mjs yourself: it is a server and never returns - an agent that ran it in the foreground sat on it for five minutes. Taskuary starts it: POST {base}/api/connectors/{cid}/wa/bridge/start{hdr}. It installs the bridge's dependency when missing (a few minutes on a slow line) and launches the bridge detached.",
       "Poll GET {base}/api/connectors/{cid}/wa/status{hdr} every 5 seconds and read manager.phase: installing → starting → running; bridge becomes true when it answers. If phase is failed, read manager.detail - node missing means the owner installs Node 18+ from nodejs.org (the one install that is theirs); anything else, report it and stop.",
       "If connected is false: do NOT print the QR here (a terminal QR is too big to scan) and do NOT ask for a phone number. The card above this terminal draws the bridge's QR itself and redraws it as it rotates - tell the owner to scan it from the phone: WhatsApp > Linked devices > Link a device. Poll GET http://127.0.0.1:8977/status every 5 seconds until connected is true. Only if the owner SAYS they would rather type a code: ask for the number, restart the bridge with --phone <digits only>, and relay pairingCode from /status.",
-      "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}) - it confirms the pairing and adds the catch-all source: every DIRECT chat comes in; group chats only when their JID is added as a source.",
-      "Ask the owner whether every chat should come in or only specific ones. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Once specific chats exist, only those come in.",
+      "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}); it confirms pairing and authorizes nothing by itself.",
+      "Ask the owner whether every direct chat should come in or only specific ones. Add * only when they explicitly choose every direct chat. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Groups always require their exact JID.",
       "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
     fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
@@ -2265,6 +2268,7 @@ const WaPair = ({ conn, reload }) => {
   }, [conn.ConnectorId, reload, startBridge]);
   if (!st) return null;
   const phase = st.manager?.phase, busy = ["installing", "starting"].includes(phase);
+  const reconnect = st.reconnect || {};
   const stepNo = st.connected ? 4 : st.bridge === false ? (st.node ? 2 : 1) : 3;
   const StepLine = ({ n, label, state }) => (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
@@ -2300,9 +2304,14 @@ const WaPair = ({ conn, reload }) => {
             <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Start bridge</Button>
           )}
           <Typography variant="caption" sx={{ color: FAINT }}>
-            {st.connected ? "connected" : st.bridge === false ? "bridge not running" : "bridge up, not paired"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
+            {st.connected ? "connected" : reconnect.paused ? "automatic reconnect paused" : st.bridge === false ? "bridge not running" : "bridge up, not connected"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
           </Typography>
         </Box>
+        {reconnect.paused && reconnect.reason !== "logged out" && (
+          <Alert severity="warning" sx={{ mb: 1, fontSize: 12.5 }}>
+            The WhatsApp connection kept dropping, so Taskuary stopped retrying before WhatsApp could flood your phone with linked-device sync notices. Check the network, then click Restart bridge once.
+          </Alert>
+        )}
         {st.connected ? (
           <Box sx={{ mt: 0.5 }}>
             <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
@@ -2364,8 +2373,9 @@ const WaChats = ({ conn, mine, reload }) => {
     setGuideBusy(jid); setErr("");
     try {
       const roles = new Set(String(conn.Roles || "").split(",").filter(Boolean)); roles.add("notify");
+      const current = parse(conn.ConfigJson);
       await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Roles: [...roles].join(","),
-        ConfigJson: JSON.stringify({ ...parse(conn.ConfigJson), notify_chat: jid }) });
+        ConfigJson: JSON.stringify({ ...current, notify_chat: jid, poll_seconds: current.poll_seconds || 30 }) });
       await api.patch("/api/settings", { name: "phone_assistant", value: "1" });
       reload();
     } catch (e) { setErr(e?.response?.data?.detail || "could not enable the WhatsApp guide"); }

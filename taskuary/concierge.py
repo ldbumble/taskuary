@@ -149,6 +149,18 @@ SYSTEM = (
     "have it wrong is the one thing you must not shrug off.\n"
     "A question or a remark is not a decision: answer it and write no DECIDE line. A polite request is "
     "not a question: \"can you look into that server\" is a hand-off, so decide it.\n"
+    # "ignore" names the act and leaves out the part that lasts. Filing one mail and silencing a
+    # sender for ever are different acts, and the owner asked to be consulted on which (2026-09-04:
+    # "even without the button when you say ignore unless you say specific just for today it
+    # should ask what it should do with it in terms of memory").
+    '"Ignore it" and "not ours" name the act but not its SCOPE, and scope is the part that lasts. '
+    'Unless they already said which - "just this once", "just for today", "never again", "always", '
+    '"from this sender" - do not pick one: say in one line that you can file this one, remember the '
+    'kind, or silence the sender, and end with exactly OPTIONS: just this once | this kind from now '
+    'on | everything from this sender. This is the one ambiguity worth a question, because the wide '
+    'answers are the ones that quietly hide mail later. When they HAVE said which, decide it and '
+    'write no options line: this once is not_ours, the kind is not_ours_remember, the sender is '
+    'not_ours_sender.\n'
     "The thread you are given is the whole thread, the owner's own sent mail included. When it shows they "
     "already answered, say so as a fact. Only when the thread has no answer from them may you say the mail "
     "has not been read back yet - and then name the Sync button, never blame yourself for not seeing it.")
@@ -617,6 +629,18 @@ def parse_options(text: str) -> tuple[str, list]:
     return (text[:m.start()].strip(), opts if len(opts) >= 2 else [])
 
 
+def _verdict_why(item: dict) -> str:
+    """Triage's own reason, with the verdict word it opens with trimmed off - "triage filed it as
+    fyi - triage: fyi - an automated notification" says it twice (the owner, 2026-09-04: "ask we
+    processed as fyi because of x")."""
+    w = (item.get('why') or '').strip()
+    for pre in ('triage: fyi -', 'triage: fyi', 'triage:'):
+        if w.lower().startswith(pre):
+            w = w[len(pre):].lstrip(' -·')
+            break
+    return f' - {w}' if w else ''
+
+
 def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
     """No model: the facts in the same three beats - where from, what was done, what you need to do."""
     if not item:
@@ -632,9 +656,11 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""
         done = (f"the agent {item['summary']}" if item.get('summary') else
                 'triage judged it a reply to write' if item['kind'] == 'review' else 'an agent proposed an action' if item['kind'] == 'action' else
-                'a coding task with no agent on it yet' if item.get('coding') else 'nothing has been done with it yet' if item['kind'] in ('asked', 'todo') else 'triage filed it as fyi')
+                'a coding task with no agent on it yet' if item.get('coding') else 'nothing has been done with it yet' if item['kind'] in ('asked', 'todo')
+                else f'triage filed it as fyi{_verdict_why(item)}')
         need = ('approve the draft below, or redraft it' if item['kind'] == 'review' else 'say whether it may run' if item['kind'] == 'action' else
-                'reply, hand it to the coding agent, or say it is not ours' if item['kind'] in ('asked', 'todo') else 'nothing - read it if you like')
+                'reply, hand it to the coding agent, or say it is not ours' if item['kind'] in ('asked', 'todo')
+                else 'nothing has to happen - make it a task, tell me to ignore this sender, or move on')
         return f"{frm}. Since then: {done}. From you: {need}."
     if item['kind'] == 'agent':
         return f"{item.get('agent') or 'An agent'} on {item.get('ref') or item['title']} " + (f"asked: {item['tail'][-1]}" if item.get('asking') and item.get('tail') else 'stopped at its prompt') + ' - answer it below.'

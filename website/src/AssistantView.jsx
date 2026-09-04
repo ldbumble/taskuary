@@ -61,6 +61,13 @@ export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `re
   : r.AgentWaiting && r.TaskId ? `agent:${r.TaskId}` : r.Channel === "report" ? `report:${r.MessageId}` : `msg:${r.MessageId}`;
 
 // ── the pipe: the top of the rail ────────────────────────────────────────────────────────────
+// An assistant that has just woken up says hello like one (the owner, 2026-09-04: "it should be
+// good morning/afternoon or whatever it is and should say how can i help").
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
 function Pile({ pile, current, onPull }) {
   const items = pile?.items || [];
   // the one on the table sits at the TOP as CURRENT - it slides up there from wherever it was in the
@@ -597,14 +604,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {state && !shown.length && !busy && (
             <div className="tq-welcome">
               <TaskuaryMark size={30} />
-              <b>{items.length ? "Ready when you are" : "All done"}</b>
-              <span>{items.length ? waitingLine(ready) : "Nothing is waiting on you. Ask me anything, or set something up."}</span>
+              <b>{greeting()}</b>
+              <span>{items.length ? `How can I help? ${waitingLine(ready)}`
+                : "How can I help? Nothing is waiting on you - ask me anything, or set something up."}</span>
               <div className="tq-modes">
                 <button type="button" className="tq-chip primary" disabled={!ready.length} onClick={() => start(null)}
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">Walk me through my tasks</button>
                 <button type="button" className="tq-chip" disabled={!incoming(ready).length} onClick={() => start("mail")}
                   title="Only what people sent you - mail and chat">Just what came in</button>
-                <button type="button" className="tq-chip" onClick={setup}>Set something up</button>
+                <button type="button" className="tq-chip" onClick={setup}
+                  title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
               </div>
             </div>
           )}

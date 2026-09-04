@@ -1061,6 +1061,8 @@ class NotMineBody(BaseModel):
     note: str | None = None
     scope: str = 'sender'
     topic: str | None = None        # the owner's own wording for a 'subject' verdict's key
+class IgnoreSenderBody(BaseModel):
+    how: str = 'rule'               # 'rule' = an exclusion rule in Settings | 'memory' = a learned verdict
 
 NOT_MINE_SCOPES = ('subject', 'sender', 'sender_domain', 'global')
 
@@ -1197,6 +1199,34 @@ def not_mine_suggest(mid: int, scope: str = None, topic: str = None):
     topic = norm_subject((topic or '').strip())[:200] or _topic_key(m)
     return {'note': _not_mine_note(m, scope, topic), 'from': m.get('FromEmail'), 'scope': scope,
             'topic': topic}
+
+@app.post('/api/messages/{mid}/ignore-sender')
+def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks = None):
+    """"Ignore this sender" is two different acts, and the owner asked to be asked which
+    (2026-09-04: "shoudl I add it to exclusion rule in setting or just a memory").
+
+    rule    an exclusion rule (Settings -> Rules): the sender never reaches triage again, and
+            policy.apply_retroactively pulls their existing rows off the timeline too. The bigger
+            hammer, and reversible - switching the rule off puts the history back.
+    memory  a learned verdict: their mail keeps arriving and stays readable, but the classifier
+            reads the verdict on every later message like it. Nothing disappears.
+
+    Neither is the silent default, which is why the card offers both and the chat asks first.
+    """
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    em = (m.get('FromEmail') or '').lower().strip()
+    if not em: raise HTTPException(422, 'this message has no sender address to key a rule on')
+    if body.how == 'memory':
+        return {**not_mine(mid, NotMineBody(scope='sender'), background), 'how': 'memory', 'sender': em}
+    if body.how != 'rule': raise HTTPException(422, "how must be 'rule' or 'memory'")
+    pid = store.save_policy({'Name': f'Skip {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'skip',
+                             'Reason': f'the owner said to ignore mail from {em}', 'Active': 1}, ACTOR)
+    store.audit('policy', pid, 'create', ACTOR, detail={'from': em, 'message_id': mid, 'via': 'ignore-sender'})
+    saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
+    hidden = policy_engine.apply_retroactively(store, saved or {})
+    if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden})
+    return {'ok': True, 'how': 'rule', 'policyId': pid, 'affected': hidden, 'sender': em}
 
 def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
     try:

@@ -55,12 +55,13 @@ Send coding work to Claude Code, Codex, Gemini, Cursor, Copilot, or another CLI.
 Watch the terminal, answer questions, review changes, and use the built-in browser without
 losing the session.
 
-**Reports and workflows**
+**Describe a check. Let it run itself.**
 
-Describe a check in plain words and Taskuary builds it: read a folder of CSVs each morning, total
-the AP bills due in the next 30 days, count helpdesk tickets by day. Reports read and summarize -
-on a schedule, or on demand with Run now - and can come back with an AI summary. Workflows write
-data or keep state. Quiet checks stay silent, so you only hear about the one that failed.
+Say what you want watched in plain words and Taskuary builds it: read a folder of CSVs every
+morning, total the AP bills due in the next 30 days, count helpdesk tickets by day. Reports read
+and summarize, on a schedule or on demand, and can come back with an AI summary. Workflows write
+data and keep state. Quiet checks stay quiet, so the only one you hear about is the one that
+failed.
 
 **You stay in control**
 

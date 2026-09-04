@@ -21,6 +21,8 @@ Do not downgrade an under-specified system request. "Add the distribution spread
 
 Say `general` when there is nothing to type at a system, but thinking, reading or research would help: weigh an option, make sense of a thread, work out what to ask, get ready for something. It opens a **conversation with the assistant** - no agent touches a system, but the work is not left to the owner alone either.
 
+An **outage in somebody else's system** is `general`, not coding. "The payroll portal is down for everyone in Roanoke since 8am, people cannot clock in - who can look at this??" reads like the most urgent thing in the pipe, and it is; but the coding agent works inside a code checkout, so what it can actually do about a vendor's portal is nothing. It opened a session in an unrelated repository (the 2026-09-03 break test). The useful answer is who to tell, what to say and how urgently - which is the assistant's conversation. Coding is for systems this install holds the code or the credentials for.
+
 Say `task` when a person has to do it in the world and no amount of typing or thinking does it: a course to sit through, a form to physically sign, a meeting to attend, a box to move, a phone call somebody has to make, a decision only the owner can take. A vendor's training assignment falling due is the plain example - it is a real task, it is on the owner's plate, and no agent can sit the course. Say `task` too when the owner's past verdicts (the evidence below) say this kind of work is not for an agent.
 
 When you genuinely cannot tell, say coding: the agent looking and finding nothing is cheap, a job nobody started is not.

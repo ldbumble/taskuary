@@ -840,6 +840,79 @@ class WalkFromWordsTests(unittest.TestCase):
             self.assertIn(item['title'][:12], out['say'])                     # the facts, instead
 
 
+class PipeTruthTests(unittest.TestCase):
+    """D. What the pipe says is what is: one row per conversation, no ghost agents, and nothing in
+    it that says of itself that it could not run."""
+
+    def test_a_chat_opener_waits_for_the_ask_it_opens(self):
+        s = store()
+        with mock.patch.object(ingest, '_spawn'):
+            hey = arrive(s, subject='', body='hey', who='Yosef Adler', email='', channel='whatsapp',
+                         conv='w:yosef', hours=0, external_id='w:1', llm=brain('reply_only', None))
+        self.assertIsNone(hey['task_id'])                                  # no task, no drafted "Hey - what's up?"
+        self.assertEqual(hey['status'], 'filed')
+        self.assertEqual(s.list_reviews('pending'), [])
+        with mock.patch.object(ingest, '_spawn'):
+            ask = arrive(s, subject='', body='did the invoice for Oak Ridge go out?', who='Yosef Adler', email='',
+                         channel='whatsapp', conv='w:yosef', hours=0, external_id='w:2', llm=brain('reply_only', None))
+        self.assertTrue(ask['task_id'])                                    # the ASK is the task
+        self.assertIn('Oak Ridge', s.get_task(ask['task_id'])['Title'] + s.get_task(ask['task_id'])['Summary'])
+
+    def test_a_pending_draft_speaks_for_its_whole_thread(self):
+        s = store()
+        out = arrive(s, subject='Nightly export drops rows', body='Can you fix it?', who='Chana Klein',
+                     email='chana@ours.com', conv='c:export', hours=5, llm=brain('reply_only', None))
+        rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Fixed and pushed.')
+        arrive(s, subject='RE: Nightly export drops rows', body='Also keep two decimals.', who='Chana Klein',
+               email='chana@ours.com', conv='c:export', hours=1, llm=brain('fyi', None))
+        rows = [i for i in pile(s) if i.get('cid') == 'c:export']
+        self.assertEqual([i['kind'] for i in rows], ['review'])            # one row, and it is the draft
+        self.assertEqual(rows[0]['more'], 1)                               # ...which says how much it stands for
+
+    def test_a_stopped_agent_gives_the_task_back(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        s.update_task(tid, {'Status': 'in_progress'}, 'router')
+        c = TestClient(server.app)
+        live = mock.Mock(sid='s1', alive=True, label='coder', agent='coder', task_id=tid)
+        with mock.patch.object(server, 'store', s), mock.patch.object(server.hub_term, 'session_for', return_value=live), \
+             mock.patch.object(server.hub_term, 'close', return_value=True):
+            c.post(f'/api/tasks/{tid}/agent/stop')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            keys = [(i['key'], i['lane']) for i in funnel.build(s)['items']]
+        self.assertTrue(any(k == f'msg:{mid}' and lane != 'working' for k, lane in keys), keys)
+
+    def test_a_run_row_nobody_touched_is_not_an_agent_at_work(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        rid = s.start_run(tid, 'coder', 'fix it', 'owner')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            self.assertIn(tid, funnel.working_tids(s))                     # fresh: an agent really is on it
+            s._exec('UPDATE run SET StartedAt=?, UpdatedAt=? WHERE RunId=?', (ago(hours=3), ago(hours=3), rid))
+            self.assertNotIn(tid, funnel.working_tids(s))                  # three hours untouched: a corpse
+
+    def test_a_report_that_could_not_summarise_stays_off_the_pipe(self):
+        from taskuary.reports import NO_BRAIN
+        s = store()
+        m = s.add_message({'ExternalId': 'r:1', 'Channel': 'report', 'SourceName': 'Nightly export',
+                           'Subject': 'Nightly export — 12 rows', 'FromName': 'Nightly export', 'SentAt': ago(1),
+                           'BodyText': f'{NO_BRAIN} - raw data below)\n\nrow, row, row', 'Status': 'feed'})
+        s.add_route(m, None, 'feed', None, 'a report you set up', [], 'feed')
+        funnel.invalidate()
+        self.assertEqual([i for i in pile(s) if i['kind'] == 'report'], [])
+        self.assertTrue(s.get_message(m))                                  # still on the Timeline
+
+    def test_a_sweep_that_names_a_lane_writes_a_lane_rule(self):
+        s = store()
+        arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Chana Klein',
+               email='chana@ours.com', conv='c:f1', hours=2, llm=brain('fyi', None))
+        out = concierge.clear_matching(s, 'skip all the fyi from Chana, I do not need those')
+        self.assertEqual(out['cleared'], 1)
+        rule = funnel.mutes(s)[0]
+        self.assertEqual((rule.get('sender'), rule.get('lane'), rule.get('words')), ('chana@ours.com', 'fyi', []))
+        # ...and it means every fyi from her, not the mails with 'fyi' in the subject
+        self.assertTrue(funnel.muted(rule, {'email': 'chana@ours.com', 'lane': 'fyi', 'title': 'lunch on Thursday'}))
+        self.assertFalse(funnel.muted(rule, {'email': 'chana@ours.com', 'lane': 'asked', 'title': 'fyi about the audit'}))
+
+
 # ── the order things come out in, and the verdicts that never become work ────────────────────
 class WalkOrderTests(unittest.TestCase):
     """The pipe's whole claim is that the NEXT thing is the right thing. One pile with something in
@@ -1246,7 +1319,11 @@ class ApiActionsTests(unittest.TestCase):
             r = c.post(f'/api/tasks/{tid}/agent/stop')
         self.assertEqual(r.status_code, 200, r.text)
         self.assertTrue(close.called and r.json()['stopped'])
-        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')          # the task is untouched, by design
+        # the task is NOT closed - stopping an agent is not finishing the work - but it is no longer
+        # being worked either: 'in_progress' with no session held it in the pipe's working lane for
+        # ever, saying "agent working, nothing for you" (the 2026-09-03 break test)
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+        self.assertNotIn(tid, funnel.working_tids(s))
         self.assertTrue(any('Stopped the coder session' in (x['Body'] or '') for x in s.list_comments(tid)))
 
     def test_wrapping_up_files_the_report_and_closes_the_task(self):

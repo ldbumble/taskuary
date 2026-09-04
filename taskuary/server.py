@@ -3793,12 +3793,20 @@ def stop_task_agent(task_id: int):
     label = getattr(live, 'label', None) or getattr(live, 'agent', None) or 'agent'
     stopped = bool(hub_term.close(sid))
     if stopped:
+        # ...and the task is no longer being worked. Nothing moved it out of 'in_progress' and the
+        # run row stayed 'running', so the pipe showed "agent working" on a task with no session and
+        # nothing for the owner to do, for ever (the 2026-09-03 break test).
+        for r in store.list_runs(task_id):
+            if r.get('Status') == 'running': store.update_run(r['RunId'], {'Status': 'stopped'}, finished=True)
+        if task.get('Status') == 'in_progress':
+            store.update_task(task_id, {'Status': 'open'}, ACTOR)
         store.add_comment(task_id, ACTOR, 'human',
-                          f'Stopped the {label} session. The task remains {task.get("Status")}.')
+                          f'Stopped the {label} session. The task is open again - nobody is working it.'
+                          if task.get('Status') == 'in_progress' else f'Stopped the {label} session. The task remains {task.get("Status")}.')
         store.audit('terminal', task_id, 'stop', ACTOR,
                     detail={'sid': sid, 'agent': getattr(live, 'agent', None),
                             'taskStatus': task.get('Status')})
-    return {'stopped': stopped, 'taskStatus': task.get('Status')}
+    return {'stopped': stopped, 'taskStatus': (store.get_task(task_id) or {}).get('Status')}
 
 def _ws_ok(ws: WebSocket) -> bool:
     """The HTTP middleware never runs for a websocket, so the same three questions are asked here.

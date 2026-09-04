@@ -96,6 +96,9 @@ def muted(rule: dict, i: dict) -> bool:
     from .routing import tokens
     key = str(rule.get('sender') or '').lower()
     if key and key not in (str(i.get('email') or '').lower(), str(i.get('who') or '').lower()): return False
+    # a rule can name a LANE rather than words: "skip all the fyi from Chana" is every fyi she sends,
+    # not the mails with 'fyi' in the subject (2026-09-03)
+    if rule.get('lane'): return i.get('lane') == rule['lane'] and bool(key)
     words = [w for w in (rule.get('words') or []) if w]
     if not words: return bool(key)
     return like(words, set(tokens(f"{i.get('who') or ''} {i.get('email') or ''} {i.get('title') or ''}"))) >= min(2, len(words))
@@ -113,23 +116,41 @@ def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None
 
 
 # ── the producers: each reads one thing the hub holds ─────────────────────────────────────────
+def _feed_skip(r: dict) -> bool:
+    """Rows that are nobody asking anything: our own sends, withdrawn lines, an auto-reply, and
+    anything on a task that is over (unless a draft on it still waits for a yes)."""
+    if r.get('Direction') == 'out' or r.get('MsgStatus') == 'withdrawn' or r.get('Channel') == 'assistant': return True
+    if r.get('TaskStatus') in ('done', 'dropped') and r.get('ReviewStatus') != 'pending': return True
+    return bool(_OOO.match(str(r.get('Subject') or '')))
+
+
+def thread_speaker(rows: list) -> dict:
+    """Which row speaks for each conversation: {cid: MessageId}. A draft waiting for a yes speaks
+    whatever its age, then an agent parked on a question, then the newest line. Reviews and agents
+    used to be EXEMPT from the one-line-per-thread rule rather than winning it, so the older mail on
+    the same thread came up again as "asked you" - TQ-0002 twice after the wrap, Yosef three times
+    in the All list (the 2026-09-03 break test)."""
+    best = {}
+    for r in rows:
+        cid = r.get('ConversationId')
+        if not cid or _feed_skip(r): continue
+        rank = 2 if (r.get('ReviewStatus') == 'pending' and r.get('ReviewId')) else 1 if r.get('AgentWaiting') else 0
+        if cid not in best or rank > best[cid][0]: best[cid] = (rank, r['MessageId'])   # newest first, so ties keep the newest
+    return {cid: mid for cid, (_rank, mid) in best.items()}
+
+
 def from_feed(store, rows: list) -> list:
     out, agents, reviews, threads = [], set(), set(), {}
+    speaks, more = thread_speaker(rows), {}
     for r in rows:
-        if r.get('Direction') == 'out' or r.get('MsgStatus') == 'withdrawn' or r.get('Channel') == 'assistant': continue
-        if r.get('TaskStatus') in ('done', 'dropped') and r.get('ReviewStatus') != 'pending': continue
-        if _OOO.match(str(r.get('Subject') or '')): continue           # an auto-reply is nobody asking anything
-        # one line per conversation: rows come newest first, so the newest speaks for the thread
+        if _feed_skip(r): continue
+        # ONE line per conversation, and it says how much of the thread it stands for: two WhatsApp
+        # lines from the same person are one row, and the Timeline showing two of them read as the
+        # pipe having lost one (the owner, 2026-09-03)
         cid = r.get('ConversationId')
-        if cid and r.get('ReviewStatus') != 'pending' and not r.get('AgentWaiting'):
-            # one line per conversation, and it SAYS how much of the thread it stands for: two
-            # WhatsApp lines from the same person are one row, and the Timeline showing two of them
-            # read as the pipe having lost one (the owner, 2026-09-03)
-            if cid in threads:
-                held = threads[cid]                 # None when the thread's first row made no item at all
-                if held is not None: held['more'] = held.get('more', 0) + 1
-                continue
-            threads[cid] = None                     # filled in below, once the item exists
+        if cid and speaks.get(cid) != r['MessageId']:
+            more[cid] = more.get(cid, 0) + 1
+            continue
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
                     category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '')
@@ -148,14 +169,23 @@ def from_feed(store, rows: list) -> list:
                                  else ('a reply is drafted for you to send' if r.get('HasDraft') else 'a reply is owed - draft it with AI or write it'),
                              draft=bool(r.get('HasDraft')), summary=agent_found(store, r.get('TaskId')),
                              sig=hashlib.sha1(str(rv.get('DraftText') or '').encode()).hexdigest()[:10],   # the draft's fingerprint: a rewrite is news
-                             **base)); continue
+                             **base))
+            if cid: threads[cid] = out[-1]                 # the draft speaks for its thread
+            continue
         if r.get('AgentWaiting') and r.get('TaskId'):
             if r['TaskId'] in agents: continue
             agents.add(r['TaskId'])
             out.append(_item(f"agent:{r['TaskId']}", 'agent', 'blocked', r.get('Title') or subj, agent=r.get('Working') or 'agent',
-                             why=f"{r.get('Working') or 'the agent'} stopped and is waiting on you", **base)); continue
+                             why=f"{r.get('Working') or 'the agent'} stopped and is waiting on you", **base))
+            if cid: threads[cid] = out[-1]
+            continue
         base['working'] = r.get('Working') or ''             # an agent has it: build() lets these go, by name
         if r.get('Channel') == 'report':
+            # a run whose own first line says it could not summarise (no AI connector) is on the
+            # Timeline and nowhere else - three of them came out of the pipe, one per turn, on a
+            # fresh install's first day (the 2026-09-03 break test)
+            from .reports import NO_BRAIN
+            if NO_BRAIN in str(r.get('Preview') or ''): continue
             sid = report_source_id(store, r.get('SourceName'))
             bad = report_failed(store, sid, subj)
             out.append(_item(f"report:{r['MessageId']}", 'report', 'report', subj, bad=bad, source_id=sid,
@@ -177,7 +207,10 @@ def from_feed(store, rows: list) -> list:
             continue
         if cat == 'info':
             out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
-        if cid and cid in threads and threads[cid] is None and out: threads[cid] = out[-1]
+        if cid and out and threads.get(cid) is None: threads[cid] = out[-1]
+    for cid, n in more.items():                   # the rest of each thread, counted on the row that speaks for it
+        held = threads.get(cid)
+        if held is not None: held['more'] = held.get('more', 0) + n
     return out
 
 
@@ -391,11 +424,20 @@ def _aged_out(i: dict, now: datetime, hours: int) -> bool:
     return bool(when) and when < now - timedelta(hours=hours)
 
 
+RUN_STALE_MIN = 20        # a 'running' run row nobody has touched for this long is not working anything
+
 def working_tids(store) -> set:
-    """Tasks an agent has right now - a live session or a running headless run. Nothing about them is
-    the owner's to do until the agent stops."""
+    """Tasks an agent has right now - a live session, or a headless run that is actually running.
+    Nothing about them is the owner's to do until the agent stops.
+
+    A run row left at 'running' by a session that died used to be proof enough: TQ-0006 sat in the
+    working lane with no session and "nothing for you", and the outage task vanished from the pipe
+    altogether - not read, not offered, not findable (the 2026-09-03 break test). A row nobody has
+    touched for RUN_STALE_MIN is a corpse, not a worker."""
     from . import terminal as term
-    out = {r['TaskId'] for r in store.running_runs() if r.get('TaskId')}
+    fresh = (datetime.now() - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    out = {r['TaskId'] for r in store.running_runs()
+           if r.get('TaskId') and str(r.get('UpdatedAt') or r.get('StartedAt') or '') >= fresh}
     try:
         for t in term.live_sessions(tail=0):
             if not t.get('taskId'): continue
@@ -428,11 +470,23 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
     # an agent mid-job: nothing to do here yet, whatever the mail or the idea says about the task - so it
     # rides at the TOP of the pipe as 'in hand', and drops to the front when the agent stops or asks
     busy = working_tids(store)
+    live_tids = busy | {i['tid'] for i in items if i['kind'] == 'agent' and i.get('tid')}   # working, parked or asking: an agent is on it
+    stale_before = (now - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     # ...and a task whose STATUS says in_progress is in the middle of being worked, whether or not a
     # session is alive right now: the owner reads it that way ("it's in middle of working... it should
     # say working so it's not in funnel"), and it comes back to the front the moment the watcher moves
     # it to waiting or the agent asks (2026-09-03).
-    def held(tid): return bool(tid) and (tid in busy or (store.get_task(tid) or {}).get('Status') == 'in_progress')
+    # 'in_progress' means an agent is mid-job, and the owner reads it that way even between sessions
+    # ("it's in middle of working... it should say working so it's not in funnel"). But nobody moves
+    # the status back when a session DIES, so the status alone held a task in the working lane for
+    # ever: TQ-0006 sat there with no session and "nothing for you", and the outage task fell out of
+    # the pipe entirely (the 2026-09-03 break test). Mid-job is a live agent, or a task somebody has
+    # touched in the last RUN_STALE_MIN; anything older is abandoned, and comes back to the owner.
+    def mid_job(tid):
+        t = store.get_task(tid) or {}
+        if t.get('Status') != 'in_progress': return False
+        return tid in live_tids or str(t.get('UpdatedAt') or t.get('CreatedAt') or '') >= stale_before
+    def held(tid): return bool(tid) and (tid in busy or mid_job(tid))
     def in_hand(i): return i['kind'] not in ('agent', 'review', 'action') and (i.get('working') or held(i.get('tid')))
     # ...under the SAME key the parked agent will have (agent:<tid>), so shown-once and the page's live
     # row follow the task through stopping and starting instead of losing it at each change

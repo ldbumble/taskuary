@@ -822,6 +822,13 @@ def report_system(store, cfg: dict, charts: bool = False) -> str:
     return AI_SYSTEM + (CHART_SYSTEM if charts else '')
 
 
+# What a run says when its AI pass could not run at all. The raw data still files on the Timeline -
+# it is the report, and the owner may want it - but a row whose own first line says it could not do
+# the thing it exists for is not something to walk somebody through: three of them came out of the
+# pipe one per turn on a fresh install (the 2026-09-03 break test). funnel.from_feed reads this.
+NO_BRAIN = '(AI prompt set, but no active AI connector'
+
+
 def render_report(store, cfg: dict, llm=None):
     """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
     AI connector turn raw rows into the summary that lands on the timeline. The report may
@@ -851,7 +858,7 @@ def render_report(store, cfg: dict, llm=None):
             logger.warning(f'AI summary failed for report: {e}')
             return head, f'(AI summary failed: {str(e)[:200]})\n\n{summary}'
     if cfg.get('ai_prompt') and not llm:
-        return head, f'(AI prompt set, but no active AI connector - raw data below)\n\n{summary}'
+        return head, f'{NO_BRAIN} - raw data below)\n\n{summary}'
     return head, summary
 
 

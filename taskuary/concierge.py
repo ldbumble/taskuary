@@ -1005,23 +1005,35 @@ def _sender_for(store, words: list) -> str:
     return max(tally, key=tally.get) if tally else ''
 
 
+# "skip all the fyi from Chana and Dovid" names a LANE, not a subject. Read as subject words it
+# wrote "fyi from chana@ours.com" and "dovid from dovid@ours.com" - one rule about a word nobody
+# writes in a subject line, one about a man's own name (the 2026-09-03 break test).
+LANE_RULE_WORDS = {'fyi': 'fyi', 'fyis': 'fyi', 'report': 'report', 'reports': 'report'}
+
 def _rules_from(swept: list) -> list:
-    """One rule per sender, carrying the words that hit THEIR mail: [{'sender', 'words'}]. A sender
-    who was swept on their name alone gets a rule about them; everyone else needs their subject
-    words, so a rule can never quietly grow into "everything from this person"."""
-    by = {}
+    """One rule per sender: [{'sender', 'words'}] or [{'sender', 'lane'}]. A sender swept on their
+    name alone gets a rule about them; a sweep that named a LANE gets that lane from that sender;
+    everyone else needs their subject words, so a rule can never quietly grow into "everything from
+    this person"."""
+    by, lanes = {}, {}
     for x in swept:
         key = x['email'] or (x['who'] or '').lower()
         if not key: continue
         by.setdefault(key, set()).update(x['words'])
+        for w in x['words']:
+            if w in LANE_RULE_WORDS: lanes.setdefault(key, set()).add(LANE_RULE_WORDS[w])
     out = []
     for key, words in by.items():
-        subject = sorted(w for w in words if not any(w in part for part in re.split(r'[@.\s]+', key)))
+        if lanes.get(key):
+            out.append({'sender': key, 'lane': sorted(lanes[key])[0], 'words': []}); continue
+        own = set(re.split(r'[@.\s]+', key))
+        subject = sorted(w for w in words if w not in LANE_RULE_WORDS and not any(w in part for part in own))
         out.append({'sender': key, 'words': subject or sorted(words)})
     return out
 
 
 def _rule_words(rule: dict) -> str:
+    if rule.get('lane'): return f"every {rule['lane']} from {rule['sender']}"
     return f"{' '.join(rule['words'][:4])} from {rule['sender']}" if rule.get('sender') else ' '.join(rule['words'][:4])
 
 
@@ -1153,7 +1165,10 @@ def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, acto
             return {'say': say_, 'options': [], 'decision': None}
         say_ = (f"Split: {out['ref']} keeps \"{out['kept']}\" and {out['newRef']} is \"{out['title']}\". "
                 'Each is its own job now, so an agent sent at one only gets that one.'
-                if out.get('newRef') else "There is only one ask in that one - nothing to split.")
+                if out.get('newRef') else
+                ('I can only see one ask in that one' + (f" - {out['why']}" if out.get('why') else '')
+                 + '. Tell me the second job in your own words and I will make it, or open '
+                 + f"{out.get('ref') or 'the task'} and split it there. It stays on the table either way."))
         record(store, tid, 'assistant', say_)
         return {'say': say_, 'options': [], 'decision': {'verb': 'split', **out}}
     if words['verb'] == 'remember':
@@ -1248,8 +1263,12 @@ def split_item(store, item: dict, text: str, actor: str = 'owner') -> dict:
         new = ingest.split_message(store, item['mid'], actor)
         t = store.get_task(new) or {}
         return {'ref': None, 'kept': '', 'newRef': task_ref(new), 'taskId': new, 'title': t.get('Title') or ''}
-    prop = reshape.propose_split(store, tid, brain(store, fast=True))
-    if not prop.get('two') or not (prop.get('second') or {}).get('title'): return {'ref': task_ref(tid), 'kept': (store.get_task(tid) or {}).get('Title') or ''}
+    # NOT the fast brain: reading two jobs out of one mail is a judgement, and the two-sentence
+    # gear missed a mail that plainly carried two ("add Priya to the list" + "remove the Bulk
+    # Approve button") and answered "only one ask" (the 2026-09-03 break test)
+    prop = reshape.propose_split(store, tid, brain(store))
+    if not prop.get('two') or not (prop.get('second') or {}).get('title'):
+        return {'ref': task_ref(tid), 'kept': (store.get_task(tid) or {}).get('Title') or '', 'why': prop.get('why') or ''}
     new = reshape.split_task(store, tid, prop['second'], prop.get('first'), prop.get('move_message_ids') or [], actor)
     return {'ref': task_ref(tid), 'kept': (store.get_task(tid) or {}).get('Title') or '',
             'newRef': task_ref(new), 'taskId': new, 'title': (store.get_task(new) or {}).get('Title') or ''}

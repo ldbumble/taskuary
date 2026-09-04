@@ -263,6 +263,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             with _PENDING_LOCK: _PENDING[mid] = msg
             return {'status': 'queued', 'task_id': None, 'message_id': mid}
 
+    # a chat opener with nothing behind it yet: on the timeline, and no task, no draft, no agent.
+    # The line that follows it carries the ask, and the reader is shown this one as its opening.
+    if is_opener(msg):
+        mid = _land(store, msg, None, 'filed')
+        store.add_route(mid, None, 'file', None, 'an opening line on a chat - waiting for the ask it opens', [], 'triage')
+        logger.info(f"ingest: chat opener filed, waiting for the point - {(msg.get('body') or '')[:40]}")
+        return {'status': 'filed', 'task_id': None, 'message_id': mid}
     r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
     r = own_thread_only(store, msg, r)
     # ...and on a chat, the room it shares with the task is not a reason to join it
@@ -732,6 +739,22 @@ BURST_SECONDS = 120     # a line typed this soon after the last is the same sent
 
 def is_chat(msg: dict) -> bool:
     return str(msg.get('channel') or '').lower() in CHAT_CHANNELS
+
+
+# "hey" is not an ask. On WhatsApp it became a reply task with a drafted "Hey - what's up?", the
+# real question arrived two lines later and attached to it, and the pipe offered the GREETING for
+# approval (the 2026-09-03 break test). A chat opener waits for the sentence it opens: it is filed
+# on the timeline, and the next line - which exchange_lines hands the reader as context - is the ask.
+_OPENER = re.compile(r"^\s*(hi|hey+|hello+|yo|sup|hiya|morning|good (morning|afternoon|evening)|shalom|hey there|you there|u there"
+                     r"|quick (q|question)|got a (sec|second|minute|min)|are you (there|around|free)|can i ask you something"
+                     r"|knock knock|\W*)\W*$", re.I)
+
+def is_opener(msg: dict) -> bool:
+    """A chat line that opens a conversation and asks nothing - the greeting before the point."""
+    if not is_chat(msg): return False
+    body = ' '.join(str(msg.get('body') or '').split())
+    if not body or len(body) > 60: return False
+    return bool(_OPENER.match(body))
 
 
 def _secs(a: str, b: str) -> float:

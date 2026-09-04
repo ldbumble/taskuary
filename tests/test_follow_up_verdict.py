@@ -7,10 +7,18 @@ be hard coded. the triage should realize that"). So triage judges a follow-up li
 message, and an fyi verdict keeps it on the task for the chain and off the owner's pile.
 """
 import json, unittest
+from datetime import datetime, timedelta
 from unittest import mock
 
 from taskuary import funnel, ingest, terminal
 from taskuary.store import MemoryStore
+
+
+def ago(hours=0, minutes=0):
+    """The pipe is a WINDOW (funnel.HOURS_DEFAULT, 12h), not an archive: a wall-clock date here
+    passes until the run crosses 12h past it, then the ask ages out and a wrapup takes its row.
+    So every stamp is relative to the run - the same helper test_funnel.py uses."""
+    return (datetime.now() - timedelta(hours=hours, minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def store():
@@ -24,17 +32,17 @@ def opened(s, subject='PTO', body='Can you import pto for Aug 9 thru Aug 22?'):
     """The ask that started the task, its message on the thread, and the owner's own reply back."""
     t = s.create_task({'Title': subject.title(), 'Kind': 'coding', 'Status': 'waiting'}, 'o')
     s.add_message({'TaskId': t, 'ExternalId': 'x:ask', 'ConversationId': 'c1', 'Channel': 'email', 'Subject': subject,
-                   'FromName': 'Chana', 'FromEmail': 'chana@hrtgcs.com', 'SentAt': '2026-09-03 05:10:00',
+                   'FromName': 'Chana', 'FromEmail': 'chana@hrtgcs.com', 'SentAt': ago(hours=8),
                    'BodyText': body, 'Status': 'routed'})
     s.add_message({'TaskId': t, 'ExternalId': 'x:mine', 'ConversationId': 'c1', 'Channel': 'email', 'Subject': f'RE: {subject}',
-                   'FromName': 'You', 'FromEmail': 'owner@ours.com', 'SentAt': '2026-09-03 10:32:00',
+                   'FromName': 'You', 'FromEmail': 'owner@ours.com', 'SentAt': ago(hours=3),
                    'BodyText': 'Done. All PTO batches posted.', 'Status': 'context'})
     return t
 
 
 def reply(body='Thank you!', subject='RE: PTO'):
     return {'external_id': 'x:thanks', 'channel': 'email', 'conversation_id': 'c1', 'subject': subject,
-            'from_name': 'Chana', 'from_email': 'chana@hrtgcs.com', 'sent_at': '2026-09-03 13:12:00', 'body': body}
+            'from_name': 'Chana', 'from_email': 'chana@hrtgcs.com', 'sent_at': ago(hours=1), 'body': body}
 
 
 def brain(intent, why='because', kind=None):

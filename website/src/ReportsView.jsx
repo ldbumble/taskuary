@@ -982,6 +982,46 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </>
               )}
             </Box>
+
+            {/* MOVE IT UP IF. The third of the three conditional sections, beside "send it somewhere"
+                and "tell me when it looks wrong" - because the owner asked for it here, where the other
+                two conditions already are (2026-09-04: "we should add on bottom of reports and workflows,
+                what we should promote meaning the pipe should move it up if x happens").
+
+                The sentence IS the switch. There used to be a `triage` toggle in step 3 with this text
+                hidden behind it, and a toggle with no sentence behind it did nothing at all - the
+                classifier was reading a table of numbers with no idea which numbers would be bad
+                (triage.classify_intent(watch=)). Off by default, so none of the owner's seven reports
+                had one. A run that MATCHES becomes work and the pipe ranks it as work; a run that FAILS
+                is promoted whatever this says, since a check that cannot run says what it is. */}
+            <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
+                  MOVE IT UP IN THE PIPE IF (OPTIONAL)
+                </Typography>
+                <Switch size="small" checked={!!cfg.watch_for}
+                  onChange={(e) => setCfg({ ...cfg, watch_for: e.target.checked ? (cfg.watch_for || " ") : "", triage: e.target.checked })} />
+              </Box>
+              {!cfg.watch_for ? (
+                <Typography variant="caption" sx={{ color: FAINT }}>
+                  Off — every run is news on the Timeline and never interrupts you. A run that fails is
+                  still moved up.
+                </Typography>
+              ) : (
+                <>
+                  <TextField fullWidth multiline minRows={2} size="small" sx={{ bgcolor: "#fff", mt: 1, "& .MuiInputBase-root": { fontSize: 13 } }}
+                    label="what would be worth interrupting you for"
+                    placeholder="any row at all comes back — or: a unit is under 70, a bill over $10k, a vendor we have not paid before"
+                    value={cfg.watch_for.trim() === "" ? "" : cfg.watch_for}
+                    onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value, triage: !!e.target.value.trim() })} />
+                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                    Each run is judged against this sentence. A match becomes work and the pipe moves it up
+                    past the ordinary reports; anything else stays quiet. Say it in your own words — it is
+                    the only thing this report gets to say about its own verdict.
+                  </Typography>
+                </>
+              )}
+            </Box>
             <Box sx={{ mt: 1.5 }}><Button variant="contained" disableElevation onClick={() => setStep(1)}>Continue</Button></Box>
           </StepContent>
         </Step>
@@ -1039,35 +1079,14 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     ...(e.target.checked ? { every_minutes: "", daily_at: "", cron: "" } : {}) })} />
                 <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
               </Box>
-              {/* a report is informational by default. On, each run goes through triage like an inbound
-                  message and TRIAGE.md decides whether it is work - an agent's research can then be handed
-                  to the coding agent. A failed run is never triaged. */}
-              <Box sx={{ display: "flex", alignItems: "center", ml: { sm: 1 } }}
-                title="Send each run through triage like an inbound message. TRIAGE.md decides whether it becomes a task - so a report one agent researched can be handed to the coding agent. Off: informational, never a task.">
-                <Switch checked={!!cfg.triage} onChange={(e) => setCfg({ ...cfg, triage: e.target.checked })} />
-                <Typography variant="caption" sx={{ color: DIM }}>can become work (triage decides)</Typography>
-              </Box>
               <Button variant="contained" disableElevation onClick={save} disabled={!cfg.title}
                 title={cfg.title ? "" : `the ${workflow ? "workflow" : "report"} needs a title - step 1`}>Save {workflow ? "workflow" : "report"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
               Pick one. Everything blank = once a day, whenever the app is open.
             </Typography>
-            {/* WHAT WOULD BE WRONG. Without it the classifier reads a table of numbers with no idea
-                which numbers would be bad, so every run came out informational and the switch above
-                did nothing - see triage.classify_intent(watch=). */}
-            {!!cfg.triage && (
+            {!!cfg.watch_for && (
               <Box sx={{ mt: 1.25 }}>
-                <TextField fullWidth multiline minRows={2} size="small" value={cfg.watch_for || ""}
-                  onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value })}
-                  label="Why you run this, and what would be off"
-                  placeholder="flag a vendor we have not paid before, or a bill over $10k from a location we do not normally pay"
-                  sx={{ "& .MuiInputBase-root": { fontSize: 13 } }} />
-                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                  Triage judges each run against this. Something matching becomes a task and an agent
-                  looks into it; nothing matching stays informational. What it finds comes back to the
-                  Timeline — it is never sent to anyone unless you name a destination below.
-                </Typography>
                 <Box sx={{ display: "flex", gap: 1, mt: 1.25, flexWrap: "wrap", alignItems: "center" }}>
                   <TextField size="small" value={(cfg.deliver_findings || {}).to || ""}
                     onChange={(e) => setCfg({ ...cfg, deliver_findings: { ...(cfg.deliver_findings || { channel: "email" }), to: e.target.value } })}

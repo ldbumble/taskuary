@@ -8,7 +8,10 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 const cardsSrc = () => read("assistantCards.jsx");
 
 test("every lane the server knows has a word, a mark and a role the theme can colour", () => {
-  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "forgotten", "report", "fyi", "working"]);
+  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"]);
+  // a failed check is second only to an agent that is stuck, wears the oxblood `bad` role, and
+  // is NOT in the server's MUTED_LANES - a rule that quiets a chatty report cannot quiet it failing
+  assert.strictEqual(LANE_META.broken.role, "bad");
   for (const l of LANES) { assert.ok(LANE_META[l].word); assert.ok(LANE_META[l].mark); assert.ok("role" in LANE_META[l]); }
   // oxblood is spent on nothing but "this is on you": an agent waiting, a draft waiting for a yes
   assert.deepStrictEqual(LANES.filter((l) => LANE_META[l].role === "you"), ["blocked", "approve"]);

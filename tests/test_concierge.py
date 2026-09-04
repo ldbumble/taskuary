@@ -738,7 +738,9 @@ class ApiTests(unittest.TestCase):
             c = TestClient(server.app)
             pile = c.get('/api/funnel/pile').json()
             self.assertEqual([i['key'] for i in pile['items']], [f'review:{r}'])
-            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0])
+            # nine lanes now: 'broken' was added between approve and asked, so a failed check ranks
+            # above a person's ask instead of behind every report (funnel.LANES)
+            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0])
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r); self.assertIn('Dana wrote on email', nxt['say'])   # the facts, no model
             state = c.get('/api/concierge').json()

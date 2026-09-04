@@ -38,9 +38,9 @@ from loguru import logger
 from .store import task_ref
 from .assistant import _ts, _dt, _short, _gist, _agenda, _OOO
 
-LANES = ('blocked', 'time', 'approve', 'asked', 'forgotten', 'report', 'fyi', 'working')
+LANES = ('blocked', 'time', 'approve', 'broken', 'asked', 'forgotten', 'report', 'fyi', 'working')
 # the lane's one word on the card, and which role colours its dot (theme.jsx ROLES)
-LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
+LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
               'asked': ('asked you', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
               'working': ('agent working', 'working')}   # in hand: at the very top, nothing to do until the agent stops or asks
 SOON_MIN, ALERT_MIN = 120, 15     # a meeting inside two hours is time-sensitive; inside fifteen it interrupts
@@ -52,6 +52,15 @@ FEED_DAYS = 7
 # Drafts waiting for a yes and agents parked on a question ignore the window: they are on you
 # whenever they happened.
 HOURS_DEFAULT, MAX_DEFAULT = 12, 25
+# The assistant's OWN lines get a longer window than mail. A mail going quiet after twelve hours
+# is fine; its standing note that something is loose is the opposite - it is still true tomorrow,
+# and expiring it is how "TQ-0329 hasn't moved, Nechama asked for that file today" left the pipe
+# unseen (the owner, 2026-09-04: "ideas ... should come back every time assistant thinks of
+# something new"). Measured on the owner's own store: at 12h two of the 64 open ideas reach the
+# pipe, at 24h five, at 72h thirty-eight - so a day is the point where more becomes a flood
+# rather than a reminder. An idea whose facts change is re-said, which bumps LastSaid and brings
+# it back on its own; this window is only about how long an undecided one waits to be seen.
+IDEA_HOURS = 24
 # A failed run is named by convention: reports.py sends '<title> - FAILED' (reports.run_report_source
 # reads the same suffix back). Matching those words ANYWHERE in the subject called 'Process Error
 # Check - 0 rows' a failure, because the report's own name contains 'Error' (the owner, 2026-09-03:
@@ -116,7 +125,7 @@ def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None
             'preview': _gist(preview, 240), **extra}
 
 
-# ── the producers: each reads one thing the hub holds ─────────────────────────────────────────
+# â”€â”€ the producers: each reads one thing the hub holds â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _feed_skip(r: dict) -> bool:
     """Rows that are nobody asking anything: our own sends, withdrawn lines, an auto-reply, and
     anything on a task that is over (unless a draft on it still waits for a yes)."""
@@ -189,10 +198,19 @@ def from_feed(store, rows: list) -> list:
             if NO_BRAIN in str(r.get('Preview') or ''): continue
             sid = report_source_id(store, r.get('SourceName'))
             bad = report_failed(store, sid, subj)
-            out.append(_item(f"report:{r['MessageId']}", 'report', 'report', subj, bad=bad, source_id=sid,
-                             why='a report failed - the cause is in it' if bad else 'a report you set up landed', **base))
-            if cid and threads.get(cid) is None: threads[cid] = out[-1]
-            continue
+            # ...and a run the owner asked to be TOLD about is not news, it is work. When a report
+            # carries a "move it up if" sentence, triage judges the run against it and makes a task
+            # of a match (triage.classify_intent's `watch`) - but this branch filed every report row
+            # in the report lane regardless, so the promotion the owner had asked for stopped one
+            # step short of the pipe (2026-09-04). A matched run falls through and ranks as the work
+            # it now is; an ordinary run and a failure keep their own lanes.
+            if not bad and r.get('TaskId') and (r.get('NeedsYou') or r.get('Category') in ('coding', 'todo', 'action')):
+                base['source_id'] = sid
+            else:
+                out.append(_item(f"report:{r['MessageId']}", 'report', 'broken' if bad else 'report', subj, bad=bad, source_id=sid,
+                                 why='the check failed - the cause is in it' if bad else 'a report you set up landed', **base))
+                if cid and threads.get(cid) is None: threads[cid] = out[-1]
+                continue
         cat = r.get('Category') or ''
         if cat in _QUIET or r.get('TheirTurn') or r.get('AnsweredAt'): continue
         urgent = (r.get('Priority') or '') == 'urgent'
@@ -384,11 +402,14 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
     return out
 
 
-# ── the pile ─────────────────────────────────────────────────────────────────────────────────
+# â”€â”€ the pile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # the queue is a TIMELINE, oldest first inside each band - but what blocks work or has a clock on it
 # is promoted to the front, a PERSON asking you comes before the assistant's own follow-up lines,
 # those before reports, and fyi (nothing to do) is demoted to the back.
-_BAND = {'blocked': 0, 'time': 1, 'approve': 2, 'asked': 3, 'forgotten': 4, 'report': 5, 'fyi': 6, 'working': 9}
+# a failed check is promoted from 'report' (was 5, behind everything) to just under a drafted
+# reply: one click sends that reply, while a dead SQL host is real work - but both come before
+# a person's ask, because the check is a SYSTEM the owner asked to be told about
+_BAND = {'blocked': 0, 'time': 1, 'approve': 2, 'broken': 3, 'asked': 4, 'forgotten': 5, 'report': 6, 'fyi': 7, 'working': 9}
 
 
 def _order(items: list) -> list:
@@ -431,7 +452,8 @@ def knobs(store) -> tuple[int, int]:
 def _aged_out(i: dict, now: datetime, hours: int) -> bool:
     """Older than the owner's window is yesterday's - the pipe is what came in lately, not an archive.
     A meeting, a parked agent, a draft waiting for a yes: on you whenever they happened."""
-    if i['lane'] in ('blocked', 'time', 'approve', 'working'): return False
+    if i['lane'] in ('blocked', 'broken', 'time', 'approve', 'working'): return False
+    if i['kind'] == 'idea': hours = max(hours, IDEA_HOURS)      # ...and never shorter than a day
     when = _dt(i.get('since') or i.get('when'))
     return bool(when) and when < now - timedelta(hours=hours)
 

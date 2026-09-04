@@ -4,11 +4,12 @@
 // by ROLE (theme.jsx ROLES) so this file cannot drift from the palette.
 
 // the lanes, most urgent first - the order the server ranks the pile in
-export const LANES = ["blocked", "time", "approve", "asked", "forgotten", "report", "fyi", "working"];
+export const LANES = ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"];
 export const LANE_META = {
   blocked:   { word: "agent waiting", role: "you",     mark: "👋", hint: "an agent stopped and is waiting on you — it is blocking work" },
   time:      { word: "coming up",     role: "working", mark: "⏱",  hint: "a meeting inside two hours, or an urgent sender" },
   approve:   { word: "reply pending", role: "you",     mark: "✉️", hint: "a reply or an action is drafted and waits for you" },
+  broken:    { word: "a check failed", role: "bad",     mark: "🛠",  hint: "a report or workflow you set up could not run - the cause is in it" },
   asked:     { word: "asked you",     role: "working", mark: "🙋", hint: "a person asked you for something and nobody is on it" },
   forgotten: { word: "slipped",       role: "info",    mark: "🧵", hint: "the ask that slipped, the promise you made, the thread gone quiet" },
   report:    { word: "report",        role: "info",    mark: "📄", hint: "a report you set up landed, or an agent finished a job" },

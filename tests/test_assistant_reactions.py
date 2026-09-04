@@ -182,7 +182,7 @@ class ArrivalsTests(unittest.TestCase):
         funnel.invalidate()
         got = {i['title']: i for i in pile(s)}
         self.assertTrue(got['Nightly export — FAILED']['bad'])
-        self.assertIn('a report failed', got['Nightly export — FAILED']['why'])
+        self.assertIn('the check failed', got['Nightly export — FAILED']['why'])
 
     def test_a_meeting_inside_two_hours_is_time_sensitive_and_interrupts(self):
         s = store()

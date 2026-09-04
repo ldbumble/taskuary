@@ -164,7 +164,8 @@ class ReportFailedTests(unittest.TestCase):
         s.add_route(m, None, 'feed', None, 'a report you set up', [], 'feed')
         item = next(i for i in funnel.build(s)['items'] if i['kind'] == 'report')
         self.assertTrue(item['bad'])                     # the subject says nothing; the run says it failed
-        self.assertIn('a report failed', item['why'])
+        self.assertIn('the check failed', item['why'])
+        self.assertEqual(item['lane'], 'broken')         # ...and a check that cannot run is promoted, not filed
 
 
 class InHandTests(unittest.TestCase):
@@ -247,10 +248,48 @@ class LanesTests(unittest.TestCase):
         s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Process Error Check', 'Subject': 'Process Error Check FAILED',
                        'FromName': 'Process Error Check', 'SentAt': ago(1), 'BodyText': 'Could not open db', 'Status': 'feed'})
         keys = [(i['lane'], i['kind'], i['title']) for i in funnel.build(s)['items']]
+        # the failed run wears the 'broken' lane now (promoted from 'report', which sat behind
+        # everything) - but still UNDER both drafted replies, which is what this test is about
         self.assertEqual(keys, [('approve', 'review', 'Invoice question'), ('approve', 'review', 'Export still broken'),
-                                ('report', 'report', 'Process Error Check FAILED')])          # a timeline: 30h old before 5h old
+                                ('broken', 'report', 'Process Error Check FAILED')])          # a timeline: 30h old before 5h old
         report = funnel.build(s)['items'][-1]
         self.assertTrue(report['bad']); self.assertIn('failed', report['why'])
+
+    def test_a_failed_check_is_promoted_and_does_not_expire_while_it_is_still_failing(self):
+        """"Could not open a connection to SQL Server" needs no classifier - it says what it is. It
+        used to file in the 'report' lane, behind even a slipped thread, and then leave the pipe
+        entirely after twelve hours with the host still down (the owner, 2026-09-04: "pipe should
+        move it up as it's important if it says your sql server is down")."""
+        s = store()
+        s.add_message({'ExternalId': 'ok1', 'Channel': 'report', 'SourceName': 'Headcount', 'Subject': 'Headcount - 5 rows',
+                       'FromName': 'Headcount', 'SentAt': ago(1), 'BodyText': '5 rows', 'Status': 'feed'})
+        s.add_message({'ExternalId': 'bad1', 'Channel': 'report', 'SourceName': 'Process Error Check',
+                       'Subject': 'Process Error Check FAILED', 'FromName': 'Process Error Check',
+                       'SentAt': ago(hours=30), 'BodyText': 'Could not open a connection to SQL Server [53]', 'Status': 'feed'})
+        items = funnel.build(s)['items']
+        by = {i['title']: i for i in items}
+        self.assertEqual(by['Process Error Check FAILED']['lane'], 'broken')
+        self.assertEqual(by['Headcount - 5 rows']['lane'], 'report')            # a run that worked is still just news
+        # 30 hours old and still in the pipe, while the ordinary report beside it obeys the window
+        self.assertLess(funnel._BAND['broken'], funnel._BAND['report'])
+        self.assertLess(funnel._BAND['approve'], funnel._BAND['broken'])        # a drafted reply still outranks it
+        self.assertFalse(funnel._aged_out(by['Process Error Check FAILED'], datetime.now(), 12))
+        self.assertNotIn('broken', funnel.MUTED_LANES)   # a rule that quiets a report cannot quiet it FAILING
+
+    def test_an_assistant_line_waits_a_day_to_be_seen_not_twelve_hours(self):
+        """A mail going quiet after twelve hours is fine. The assistant's standing note that
+        something is LOOSE is the opposite - still true tomorrow - and expiring it is how "TQ-0329
+        hasn't moved, Nechama asked for that file today" left the pipe unseen."""
+        now = datetime.now()
+        idea = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=18)).strftime('%Y-%m-%d %H:%M:%S')}
+        mail = {'kind': 'fyi', 'lane': 'fyi', 'when': (now - timedelta(hours=18)).strftime('%Y-%m-%d %H:%M:%S')}
+        self.assertFalse(funnel._aged_out(idea, now, 12))    # the same age, a day's grace
+        self.assertTrue(funnel._aged_out(mail, now, 12))     # ...and the mail beside it goes
+        old = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=30)).strftime('%Y-%m-%d %H:%M:%S')}
+        self.assertTrue(funnel._aged_out(old, now, 12))      # a day, not for ever - 64 open ideas is a flood
+        # a window the owner widened himself is never narrowed by this
+        wide = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=40)).strftime('%Y-%m-%d %H:%M:%S')}
+        self.assertFalse(funnel._aged_out(wide, now, 48))
 
     def test_an_agent_waiting_on_you_comes_out_first_and_a_working_agent_is_not_on_you(self):
         s = store()

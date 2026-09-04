@@ -775,6 +775,71 @@ class AgentEndingsTests(unittest.TestCase):
         self.assertIn('nothing to wrap', out['say'])
 
 
+class WalkFromWordsTests(unittest.TestCase):
+    """C. The walk starts and continues from TYPED words, not only from buttons - and it never
+    claims to be somewhere it is not."""
+
+    def _three(self):
+        s = store()
+        with mock.patch.object(ingest, '_spawn'):
+            arrive(s, subject='Fix the export', body='Rows drop.', conv='c:b', hours=3, llm=brain('task', 'coding'))
+            arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Chana', email='chana@ours.com',
+                   conv='c:c', hours=2, llm=brain('fyi', None))
+            arrive(s, subject='FYI - lunch moved', body='Thursday now.', who='Chana', email='chana@ours.com',
+                   conv='c:d', hours=2, llm=brain('fyi', None))
+        return s
+
+    def test_next_and_done_with_nothing_on_the_table_bring_the_next_thing_up(self):
+        for words in ('next', 'done', 'walk me through my tasks', "what's next"):
+            s = self._three()
+            out = say(s, words, key=None)
+            self.assertIsNotNone(out.get('item'), words)                      # something came out of the pipe
+            self.assertIsNone(out.get('decision'), words)
+
+    def test_start_with_the_mail_walks_only_the_mail(self):
+        s = self._three()
+        out = say(s, 'start with the mail', key=None)
+        self.assertTrue(out['item']['mid'])
+
+    def test_a_verb_with_nothing_on_the_table_says_so_instead_of_claiming(self):
+        s = self._three()
+        for words in ('close it', 'approve', 'rerun it'):
+            out = say(s, words, key=None)
+            self.assertIsNone(out.get('decision'), words)
+            self.assertIn('Nothing is on the table', out['say'], words)
+
+    def test_words_land_on_an_fyi_batch_the_way_buttons_do(self):
+        s = self._three()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            first = concierge.surface(s, llm=None)                            # the coding ask
+            batch = concierge.surface(s, llm=None)                            # ...then the fyi, as a batch
+        self.assertTrue(batch['item']['key'].startswith('fyis:'))
+        for words, verb in (('next', 'next'), ('done', 'done'), ('not ours', 'done')):
+            out = say(s, words, key=batch['item']['key'])
+            self.assertEqual((out.get('decision') or {}).get('verb'), verb, words)
+
+    def test_a_new_chat_brings_a_waiting_agent_back(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        s.update_task(tid, {'Status': 'in_progress'}, 'router')
+        live = session(tid, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
+        agent = next(i for i in pile(s, live) if i['kind'] == 'agent')
+        funnel.settle(s, agent['key'], 'surfaced', 'owner')                   # shown in yesterday's chat
+        with mock.patch.object(terminal, 'live_sessions', return_value=live):
+            self.assertNotEqual((funnel.next_item(s) or {}).get('key'), agent['key'])
+            funnel.reset_walk(s)                                              # ...a new chat
+            self.assertEqual(funnel.next_item(s)['key'], agent['key'])        # the thing that blocks work comes first
+
+    def test_the_voice_never_says_it_cannot_see_the_queue(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        for excuse in ("I understand the role, but I don't have the queue data to walk you through.",
+                       "I'm in Claude Code, so I don't have access to the systems Taskuary would need.",
+                       'As an AI, I cannot access your pipe.'):
+            self.assertFalse(concierge.in_character(excuse), excuse)
+            out = say(s, 'what is this one again?', key=item['key'], model=excuse)
+            self.assertNotIn('Claude Code', out['say']); self.assertNotIn('queue data', out['say'])
+            self.assertIn(item['title'][:12], out['say'])                     # the facts, instead
+
+
 # ── the order things come out in, and the verdicts that never become work ────────────────────
 class WalkOrderTests(unittest.TestCase):
     """The pipe's whole claim is that the NEXT thing is the right thing. One pile with something in

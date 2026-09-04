@@ -1031,6 +1031,10 @@ class SQLiteStore:
         self._exec('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
                    'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
                    (key, status, until, note, by, _now()))
+    def clear_funnel_state(self, key):
+        """Forget one row's state entirely - it is new again. A new chat does this to an agent
+        that is still waiting on you: shown once yesterday is not an answer."""
+        self._exec('DELETE FROM funnel_state WHERE Key=?', (key,))
     def clear_funnel_states(self, statuses=('surfaced',)):
         """A new chat walks the pile afresh: what was merely SHOWN comes back; what the owner
         decided (done, later) stands."""

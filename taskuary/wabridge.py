@@ -47,6 +47,21 @@ def _listening() -> bool:
     except requests.RequestException: return False
 
 
+def filter_policy(store, connector_id: int) -> dict:
+    """The same allow-list used by Python ingestion, ready before Baileys receives offline messages.
+    Without this launch-time copy, a restarted bridge could acknowledge its pending queue before
+    the first poll had time to call /filter and lose messages from chats the owner did authorize."""
+    c = store.get_connector(int(connector_id)) or {}
+    try: cfg = json.loads(c.get('ConfigJson') or '{}')
+    except ValueError: cfg = {}
+    srcs = [s for s in store.list_sources() if s.get('Channel') == 'whatsapp'
+            and int(s.get('ConnectorId') or connector_id) == int(connector_id) and s.get('Address')]
+    exact = {str(s['Address']).strip() for s in srcs if str(s['Address']).strip() != '*'}
+    notify = str(cfg.get('notify_chat') or '').strip()
+    if notify: exact.add(notify)
+    return {'allDirect': any(str(s['Address']).strip() == '*' for s in srcs), 'jids': sorted(exact)}
+
+
 def start_configured(store) -> dict:
     """Start the managed bridge on app startup when WhatsApp is enabled.
 
@@ -66,12 +81,12 @@ def start_configured(store) -> dict:
         _set('running', f'already listening on http://127.0.0.1:{port()}', pid_on_port())
         out = state()
     else:
-        out = start()
+        out = start(filter_policy=filter_policy(store, c['ConnectorId']))
     logger.info(f'wa bridge startup: connector {c["ConnectorId"]}, {out.get("phase")}')
     return {**out, 'started': True, 'connectorId': c['ConnectorId']}
 
 
-def start(force_install: bool = False, wait: bool = False) -> dict:
+def start(force_install: bool = False, wait: bool = False, filter_policy: dict = None) -> dict:
     """Kick off install (if needed) + start on a worker thread and return at once; state() tells
     the rest. A second call while one runs is a no-op that reports the current phase. `wait` runs
     the work inline (tests, scripts) instead of on the thread."""
@@ -92,8 +107,10 @@ def start(force_install: bool = False, wait: bool = False) -> dict:
             _set('starting', 'node bridge.mjs')
             log = open(LOG, 'ab')
             kw = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, 'DETACHED_PROCESS', 0)} if os.name == 'nt' else {'start_new_session': True}
+            env = {**os.environ, 'WA_BRIDGE_TOKEN': token()}
+            if filter_policy is not None: env['WA_BRIDGE_FILTER'] = json.dumps(filter_policy, separators=(',', ':'))
             p = subprocess.Popen([node(), 'bridge.mjs'], cwd=str(DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                 env={**os.environ, 'WA_BRIDGE_TOKEN': token()}, **kw)
+                                 env=env, **kw)
             time.sleep(2.5)
             if p.poll() is not None:
                 tail = LOG.read_bytes()[-400:].decode('utf-8', 'replace') if LOG.exists() else ''
@@ -151,8 +168,8 @@ def stop() -> dict:
     return state()
 
 
-def restart(wait: bool = False) -> dict:
+def restart(wait: bool = False, filter_policy: dict = None) -> dict:
     """Stop whatever holds the port and start the bridge from the code on disk - the way a bridge
     picks up a newer bridge.mjs (an old one kept answering /status without the paired number)."""
     stop(); time.sleep(1.0)
-    return start(wait=wait)
+    return start(wait=wait, filter_policy=filter_policy)

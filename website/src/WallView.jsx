@@ -203,7 +203,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
             const wallRun = l || s, statusWork = l?.work || s.work;
             const waiting = isWaiting(wallRun);
             const wrapBusy = !!wrapping[s.sid], wrapError = wrapErrors[s.sid];
-            const who = s.cli || cliName(s.agent || "agent");
+            const who = s.agent || cliName(s.cli || "agent");
             return (
               <Box key={s.sid} data-wall-pane={s.sid}
                 sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,
@@ -282,7 +282,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
         </Box>
       )}
       <Confirm open={!!closing} title="Close this session?" confirmLabel="Close session"
-        text={`This stops ${closing?.cli || cliName(closing?.agent || "the agent")} now and removes its pane from the wall. The task stays open, and the session transcript stays with it.`}
+        text={`This stops ${closing?.agent || cliName(closing?.cli || "the agent")} now and removes its pane from the wall. The task stays open, and the session transcript stays with it.`}
         onClose={() => setClosing(null)} onConfirm={closeSession} />
     </Box>
   );

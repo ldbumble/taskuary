@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Taskuary is early—currently v0.3.3.2—and moving fast. The core funnel, review queue, agent
+Taskuary is early—currently v0.3.3.3—and moving fast. The core funnel, review queue, agent
 sessions, and reports pipeline are real and in daily use. Breaking changes remain possible
 before 1.0.
 

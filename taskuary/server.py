@@ -289,6 +289,21 @@ def _queued_info(q):
             'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
             'reason': q.get('Reason'), 'since': q.get('CreatedAt')}
 
+
+def _playbook_brief(task, books=None):
+    """The existing job description attached to a task, shaped for the work surfaces.
+
+    This deliberately is not an agent capability profile. A named worker can perform different
+    kinds of work; the task's playbook says which job it is doing this time.
+    """
+    slug = playbooks.of_task(task)
+    if not slug: return None
+    found = (books or {}).get(slug) if books is not None else playbooks.for_task(task)
+    uses = (found or {}).get('uses') or []
+    if isinstance(uses, str): uses = playbooks.uses_of(found or {})
+    return {'slug': slug, 'title': (found or {}).get('title') or slug.replace('-', ' '),
+            'uses': uses, 'missing': found is None}
+
 @app.get('/api/tasks')
 def tasks(status: str = None, active: bool = False):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
@@ -296,7 +311,9 @@ def tasks(status: str = None, active: bool = False):
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
     agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
-    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Session': hub_term.for_task(t['TaskId']),
+    books = {b['slug']: b for b in playbooks.list_all()}
+    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books),
+                      'Session': hub_term.for_task(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
                      for t in store.list_tasks(status, active_only=active)]}
@@ -358,7 +375,8 @@ def task_detail(task_id: int):
     # a session that has ended still leaves work to close out, so the page has to know one
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
-    return {**d, 'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
+    return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
+            'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             'session': hub_term.for_task(task_id, tail=3),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
@@ -2686,7 +2704,7 @@ def wa_bridge_start(cid: int, force_install: bool = False):
     c = store.get_connector(cid)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
     store.audit('connector', cid, 'wa_bridge_start', ACTOR)
-    return wabridge.start(force_install)
+    return wabridge.start(force_install, filter_policy=wabridge.filter_policy(store, cid))
 
 @app.post('/api/connectors/{cid}/wa/bridge/stop')
 def wa_bridge_stop(cid: int):
@@ -2701,7 +2719,7 @@ def wa_bridge_restart(cid: int):
     c = store.get_connector(cid)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
     store.audit('connector', cid, 'wa_bridge_restart', ACTOR)
-    return wabridge.restart()
+    return wabridge.restart(filter_policy=wabridge.filter_policy(store, cid))
 
 @app.get('/api/connectors/{cid}/wa/chats')
 def wa_chats(cid: int):
@@ -3178,6 +3196,47 @@ def cli_base(cmd) -> str:
     # both separators: a Windows path in a profile is still codex when the tests run on Linux CI
     return re.sub(r'\.(cmd|exe|bat|ps1)$', '', re.split(r'[\\/]', str(cmd or ''))[-1].lower())
 
+
+def _agent_work(store_, books=None):
+    """Existing work attached to each named worker: live task ownership and scheduled jobs.
+
+    Playbooks and report skills remain the source of truth. This is only a projection for the
+    agent card, so naming a worker does not create a second, competing skills system.
+    """
+    books = {b['slug']: b for b in playbooks.list_all()} if books is None else books
+    out = {a['Name']: {'tasks': [], 'reports': []} for a in store_.list_agents(active_only=False)}
+    for task in store_.list_tasks(active_only=True):
+        assignee = str(task.get('Assignee') or '')
+        if not assignee.startswith('agent:'): continue
+        name = assignee[6:].strip()
+        if not name: continue
+        out.setdefault(name, {'tasks': [], 'reports': []})['tasks'].append({
+            'taskId': task['TaskId'], 'ref': task_ref(task['TaskId']), 'title': task.get('Title') or '',
+            'status': task.get('Status') or 'open', 'playbook': _playbook_brief(task, books),
+        })
+
+    # An agent report may be the one flat source or one card in a multi-source report. Either way,
+    # the saved report already names the worker and skill; collect those declarations, do not infer
+    # expertise from prompts or invent a job title.
+    for source in store_.list_sources(active_only=False):
+        if source.get('Channel') != 'report': continue
+        try: cfg_ = json.loads(source.get('ConfigJson') or '{}')
+        except (TypeError, ValueError): continue
+        parts = [cfg_] if cfg_.get('type') == 'agent' else [
+            s for s in cfg_.get('sources') or [] if isinstance(s, dict) and s.get('type') == 'agent']
+        by_agent = {}
+        for part in parts:
+            name = str(part.get('agent') or cfg_.get('agent') or 'coder').strip()
+            skill = str(part.get('skill') or '').strip().lstrip('/')
+            if name: by_agent.setdefault(name, set()).update([skill] if skill else [])
+        for name, skills in by_agent.items():
+            out.setdefault(name, {'tasks': [], 'reports': []})['reports'].append({
+                'sourceId': source['SourceId'], 'title': cfg_.get('title') or source.get('Address') or 'Untitled report',
+                'kind': 'workflow' if cfg_.get('access') == 'write' else 'report',
+                'skills': sorted(skills), 'active': bool(source.get('Active')),
+            })
+    return out
+
 @app.get('/api/agents')
 def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles;
@@ -3198,7 +3257,8 @@ def agents():
     profs = hub_agents.profiles(store)
     return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {})} for a in rows],
             'config': cfg.get('agents', {}), 'default': head,
-            'models': {a['Name']: _models(a) for a in store.list_agents()}}
+            'models': {a['Name']: _models(a) for a in store.list_agents()},
+            'work': _agent_work(store)}
 
 @app.post('/api/agents/{name}/test')
 def agent_test(name: str):

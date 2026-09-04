@@ -22,6 +22,18 @@ def _wait(fn, secs=20):
 
 
 class SeedArgvTests(unittest.TestCase):
+    def test_a_named_worker_owns_the_task_it_opens(self):
+        server.store.upsert_agent('Atlas', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': os.getcwd()}))
+        tid = server.store.create_task({'Title': 'named worker task', 'Kind': 'coding'}, 'owner')
+        with mock.patch.object(terminal, 'Term') as T, \
+             mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']):
+            T.return_value = mock.Mock(sid='atlas1', cwd=os.getcwd())
+            try:
+                terminal.open_session(server.store, 'Atlas', tid)
+                self.assertEqual(server.store.get_task(tid)['Assignee'], 'agent:Atlas')
+            finally:
+                terminal.SESSIONS.pop('atlas1', None)
+
     def test_prompt_rides_the_command_line_when_the_cli_takes_one(self):
         """The fastest way to type a prompt is not to type it: claude/codex take it as an
         argument, gemini behind -i - the session starts WITH it, no echo dance, no boot

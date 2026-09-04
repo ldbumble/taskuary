@@ -19,7 +19,7 @@ import AgentWall from "./AgentWall.jsx";
 import { NO_REPO, planTask } from "./newTask.js";
 import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark, assignedAgent } from "./ui.jsx";
 
 // Not every ask is about a codebase - "what does this policy mean", "draft me a note", "prepare
 // me for this meeting". The task carries `repo:none`, which is the one answer the picker could
@@ -36,9 +36,9 @@ const elapsed = (since) => {
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 
-// WHICH agent is on the card, said out loud: a small legend sitting ON the border with the
-// CLI's name, in a hue from the app's own palette - subtle but distinct, never brand colors
-// that fight the theme. Live or running only; a finished run's card goes back to house style.
+// WHICH agent is on the card, said out loud: the stable profile name is the worker identity;
+// its underlying CLI only chooses the hue. Collapsing "Atlas" back to "claude" made several
+// separately named workers indistinguishable on the Board.
 const AGENT_HUES = { claude: "#7d9a7c", codex: "#6f8a6e", gemini: "#55697a",
                      cursor: "#6f8a6e", copilot: "#8a8276" };
 // 'coder' says nothing about which model family answers - resolve every display through
@@ -50,8 +50,8 @@ const agentBadge = (name, runStatus, isLive, cmds = {}) => {
   if (!isLive && runStatus !== "running") return null;
   const cmd = cliName(name, cmds);
   const hit = Object.entries(AGENT_HUES).find(([k]) => cmd.includes(k));
-  if (!hit) return name ? { word: String(name), color: "#867f74" } : null;
-  return { word: hit[0], color: hit[1] };
+  if (!name) return null;
+  return { word: String(name), cli: cmd, color: hit?.[1] || "#867f74" };
 };
 
 // A card's peephole into the running agent: the last couple of console lines, live - and the
@@ -439,7 +439,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                     position: "relative",
                     ...(badge ? { mt: 1.1, borderColor: `${badge.color}55` } : {}) }}>
                   {badge && (
-                    <Typography variant="caption" sx={{ ...mono, position: "absolute", top: -8, left: 10,
+                    <Typography variant="caption" title={`${badge.word} · ${badge.cli}`} sx={{ ...mono, position: "absolute", top: -8, left: 10,
                       px: 0.6, fontSize: 9, fontWeight: 700, lineHeight: "13px", letterSpacing: ".06em",
                       color: badge.color, bgcolor: PANEL, border: `1px solid ${badge.color}55`,
                       borderRadius: 1 }}>
@@ -450,9 +450,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                     <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700, fontSize: 10,
                       whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 12 }} />
-                    {String(t.Assignee || "").startsWith("agent:") && <TaskuaryMark size={12} />}
+                    {assignedAgent(t.Assignee) && !badge && <Chip size="small" icon={<TaskuaryMark size={10} />}
+                      label={assignedAgent(t.Assignee)} title={`${assignedAgent(t.Assignee)} owns this task`}
+                      sx={{ height: 15, fontSize: 8.5, bgcolor: "#e3e6e1", color: "#47654a",
+                        "& .MuiChip-label": { px: 0.55 }, "& .MuiChip-icon": { ml: 0.35 } }} />}
                     {t.RunStatus && (
-                      <Chip size="small" label={`${cliName(t.RunAgent, cmds) || "agent"} · ${t.RunStatus}`
+                      <Chip size="small" label={`${t.RunAgent || "agent"} · ${t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 15, fontSize: 8.5, fontWeight: 700, "& .MuiChip-label": { px: 0.7 },
                           bgcolor: t.RunStatus === "running" ? "#eae4d8" : t.RunStatus === "error" ? "#f0e2e4" : "#dfeade",
@@ -466,6 +469,19 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                     display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {t.Title}
                   </Typography>
+                  {t.Playbook && (
+                    <Typography variant="caption" title={t.Playbook.uses?.length ? `uses ${t.Playbook.uses.join(", ")}` : ""}
+                      sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontSize: 9.5, fontWeight: 650,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      Playbook · {t.Playbook.title}
+                    </Typography>
+                  )}
+                  {!t.Playbook && t.Source === "report" && t.SearchSources && (
+                    <Typography variant="caption" sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontSize: 9.5,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      Report · {String(t.SearchSources).split(",")[0]}
+                    </Typography>
+                  )}
                   {/* a held-back dispatch says so ON the card - who it waits for and why, readable
                       without hovering anything */}
                   {t.Queued && (

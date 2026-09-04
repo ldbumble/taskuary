@@ -1261,6 +1261,11 @@ class SQLiteStore:
     def start_run(self, task_id, agent_name, instruction, by):
         rid = self._exec('INSERT INTO run (TaskId,AgentName,Instruction,DispatchedBy,StartedAt) VALUES (?,?,?,?,?)',
                          (task_id, agent_name, instruction, by, _now()))
+        # Older/background executors still record a `run` instead of opening a terminal. They
+        # obey the same ownership contract: the configured profile name, not its underlying CLI,
+        # stays on the task before anyone sees the run as live.
+        if agent_name and (self.get_task(task_id) or {}).get('Assignee') != f'agent:{agent_name}':
+            self.update_task(task_id, {'Assignee': f'agent:{agent_name}'}, by)
         self._poke('run-tail', 'task-changed', task_id=task_id, run_id=rid)
         return rid
     def update_run(self, run_id, fields, finished=False):
@@ -1279,8 +1284,14 @@ class SQLiteStore:
     # likely collide (BehindTaskId) or every session slot is busy (NULL) - see blackboard.drain
     def enqueue_dispatch(self, task_id, behind, agent, reason, value=None, why=None):
         if self._one('SELECT 1 x FROM dispatchq WHERE TaskId=?', (task_id,)): return None
-        return self._exec('INSERT INTO dispatchq (TaskId,BehindTaskId,Agent,Reason,CreatedAt,Value,Floor,Why) VALUES (?,?,?,?,?,?,?,?)',
-                          (task_id, behind, agent, reason, _now(), value, value, why))
+        qid = self._exec('INSERT INTO dispatchq (TaskId,BehindTaskId,Agent,Reason,CreatedAt,Value,Floor,Why) VALUES (?,?,?,?,?,?,?,?)',
+                         (task_id, behind, agent, reason, _now(), value, value, why))
+        # Queued is already assigned work: waiting for a free desk must not look unowned. The
+        # profile name survives the queue and the eventual session, regardless of whether triage
+        # or the owner created the task.
+        if agent and (self.get_task(task_id) or {}).get('Assignee') != f'agent:{agent}':
+            self.update_task(task_id, {'Assignee': f'agent:{agent}'}, 'router')
+        return qid
     def queued_dispatches(self):
         # by value where one is set, arrival order among equals; an unranked (clear-mode) row
         # counts as the base value, so ranked and unranked queues interleave sensibly

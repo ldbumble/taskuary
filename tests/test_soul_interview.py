@@ -32,6 +32,19 @@ class TheSkillTests(unittest.TestCase):
         self.assertIn('unless the person', text)
         self.assertEqual(interview.TOTAL_QUESTIONS, 7)
 
+    def test_the_approval_gate_is_fixed_not_an_interview_choice(self):
+        text = interview.skill_text()
+        self.assertIn('approval gate is a system rule', text)
+        self.assertIn('Never ask the owner which outbound actions may bypass approval', text)
+        self.assertIn('SOUL.md cannot create an exception', text)
+
+    def test_people_and_project_routing_are_two_different_kinds_of_memory(self):
+        text = interview.skill_text()
+        self.assertIn('who the owner answers to', text)
+        self.assertIn('Message frequency is context, not proof', text)
+        self.assertIn('separate structured memory maintained by Taskuary', text)
+        self.assertIn("owner's explicit routing", text)
+
     def test_what_the_app_can_already_see_is_supplied_as_context(self):
         s = MemoryStore()
         s.set_setting('owner', 'Uri', 'o')
@@ -121,6 +134,44 @@ class WritingTests(unittest.TestCase):
         self.assertIn('SOUL.md', s.get_doc('soul') or '')
         receipt = next(a for a in s.list_audit('doc', 0) if a['Action'] == 'soul_interview')
         self.assertIn('adaptive', receipt['Detail'])
+
+    def test_write_cannot_erase_or_invent_managed_relationship_sections(self):
+        s = MemoryStore()
+        s.save_doc('soul', """# SOUL.md - the operator's document
+
+## Connected systems
+<!-- connections:start -->
+- stale generated line
+<!-- connections:end -->
+
+## Project relationships
+<!-- projects:start -->
+- stale generated relationship
+<!-- projects:end -->
+
+## Repository map
+- **noble/app**: Owner's routing note that must survive.
+""", 'owner')
+        pid = s.ensure_project('Noble', actor='owner')
+        s.upsert_project_link(pid, 'repository', 'noble/app', 'noble/app', 1, True, 'owner')
+        s.upsert_project_link(pid, 'email', 'rene@noble.example', 'Rene Gomez', .86, False, 'repo_choice')
+        made_up = """# SOUL.md - the operator's document
+
+New interview prose.
+
+## Project relationships
+- **Wrong** - invented by the model
+
+## Repository map
+- **wrong/repo**: invented by the model
+"""
+        interview.write(s, TRANSCRIPT, 'owner', llm=lambda *_a, **_k: made_up)
+        soul = s.get_doc('soul') or ''
+        self.assertIn('New interview prose.', soul)
+        self.assertIn('<!-- connections:start -->', soul)
+        self.assertIn("**noble/app**: Owner's routing note that must survive.", soul)
+        self.assertIn('Rene Gomez (email)', soul)
+        self.assertNotIn('invented by the model', soul)
 
 
 class OverTheApiTests(unittest.TestCase):

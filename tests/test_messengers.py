@@ -141,6 +141,23 @@ class WhatsAppTests(unittest.TestCase):
         got = {m['BodyText'] for m in s._rows("SELECT * FROM message WHERE Channel='whatsapp'")}
         self.assertEqual((n, got), (2, {'dm comes in', 'picked group comes in'}))
 
+    def test_poll_sets_the_baileys_pre_decryption_filter_before_reading(self):
+        s, c = self._store()
+        s.save_source({'Channel': 'whatsapp', 'Address': '4242@g.us',
+                       'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+        cfg = json.loads(c.get('ConfigJson') or '{}')
+        s.set_connector_config(c['ConnectorId'], {**cfg, 'notify_chat': 'me@s.whatsapp.net'})
+        c = s.get_connector_by_type('whatsapp', with_secret=True)
+        calls = []
+        def fake(_c, path, body=None):
+            calls.append((path, body))
+            return {'ok': True} if path == '/filter' else {'seq': 0, 'messages': []}
+        with mock.patch.object(messengers, '_wa', fake):
+            self.assertEqual(messengers.poll_whatsapp(s, c, s.list_sources(), llm=None), 0)
+        self.assertEqual(calls[0], ('/filter', {
+            'allDirect': True, 'jids': ['4242@g.us', 'me@s.whatsapp.net']}))
+        self.assertTrue(calls[1][0].startswith('/messages?after='))
+
     def test_the_pairing_qr_is_drawn_for_the_card_and_a_down_bridge_is_a_state(self):
         s, c = self._store()
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': False, 'me': '', 'qr': '2@abc,def,ghi', 'pairingCode': ''}):
@@ -173,6 +190,16 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(server.store, 'get_connector', return_value={**c, 'Type': 'whatsapp'}), \
              mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
             self.assertEqual(len(c_api.get(f"/api/connectors/{c['ConnectorId']}/wa/chats").json()['data']), 2)
+
+    def test_blocked_chat_is_discoverable_without_its_content(self):
+        s, c = self._store()
+        feed = {'seq': 0, 'messages': [], 'blockedChats': [
+            {'jid': 'new-group@g.us', 'group': True, 'last': 1755700300}]}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
+            rows = messengers.wa_chats(c)
+        self.assertEqual(rows[0]['jid'], 'new-group@g.us')
+        self.assertEqual((rows[0]['name'], rows[0]['n']), ('', 0))
+        self.assertIn('not authorized', rows[0]['snippet'])
 
     def test_the_bridge_being_down_reads_as_instructions_not_a_stack_trace(self):
         s, c = self._store()

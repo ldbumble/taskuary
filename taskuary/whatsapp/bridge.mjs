@@ -13,6 +13,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
+import { createChatGate, nextReconnect } from "./policy.mjs";
 
 // Voice notes are saved beside the bridge and handed to Taskuary as a PATH (same machine); it
 // transcribes them if a voice connector exists and files them with the reason if not. A
@@ -30,20 +31,66 @@ const MAX_KEPT = 500;
 let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = "", seq = 0;
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
 const taskuarySent = new Set();             // ids sent through localhost /send, never user prompts
+const chatGate = createChatGate();
+try {
+  if (process.env.WA_BRIDGE_FILTER) chatGate.configure(JSON.parse(process.env.WA_BRIDGE_FILTER));
+} catch (e) { console.error("invalid WA_BRIDGE_FILTER; keeping every chat closed:", e?.message || e); }
+let reconnectTimer = null, reconnectAttempt = 0, reconnectAt = 0, reconnectPaused = false;
+let openedAt = 0, lastDisconnect = "";
 
 const text = (m) => m.conversation || m.extendedTextMessage?.text
   || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
 const context = (m) => Object.values(m || {}).find((v) => v?.contextInfo)?.contextInfo;
 
+const reconnectStatus = () => ({
+  attempt: reconnectAttempt, paused: reconnectPaused, at: reconnectAt, reason: lastDisconnect
+});
+
+function scheduleReconnect(reason) {
+  if (reconnectTimer || reconnectPaused) return;
+  lastDisconnect = String(reason || "connection closed").slice(0, 160);
+  const decision = nextReconnect(reconnectAttempt, openedAt ? Date.now() - openedAt : 0);
+  openedAt = 0;
+  if (decision.paused) {
+    reconnectPaused = true;
+    reconnectAt = 0;
+    console.error(`automatic reconnect paused after ${reconnectAttempt} unstable attempts; restart the bridge when the connection is stable`);
+    return;
+  }
+  reconnectAttempt = decision.attempt;
+  reconnectAt = Date.now() + decision.delayMs;
+  console.log(`reconnecting in ${Math.ceil(decision.delayMs / 1000)}s (attempt ${reconnectAttempt})...`);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    reconnectAt = 0;
+    connect().catch((e) => {
+      console.error("reconnect failed:", e?.message || e);
+      scheduleReconnect(e?.message || e);
+    });
+  }, decision.delayMs);
+}
+
 async function connect() {
   const { state, saveCreds } = await useMultiFileAuthState("wa-auth");
-  sock = makeWASocket({ auth: state, printQRInTerminal: false, markOnlineOnConnect: false });
-  sock.ev.on("creds.update", saveCreds);
-  sock.ev.on("connection.update", async (u) => {
+  const thisSock = makeWASocket({
+    auth: state,
+    printQRInTerminal: false,
+    markOnlineOnConnect: false,
+    // Taskuary needs new messages, never a copy of the account. Specify both controls so a
+    // Baileys upgrade cannot silently change its defaults and download chat history.
+    syncFullHistory: false,
+    shouldSyncHistoryMessage: () => false,
+    // Ignored JIDs are acknowledged before decryption. Taskuary supplies the active source list.
+    shouldIgnoreJid: chatGate.shouldIgnore
+  });
+  sock = thisSock;
+  thisSock.ev.on("creds.update", saveCreds);
+  thisSock.ev.on("connection.update", async (u) => {
+    if (thisSock !== sock) return;
     if (u.qr) {
       qr = u.qr;
       if (PHONE && !state.creds.registered) {
-        pairingCode = await sock.requestPairingCode(PHONE.replace(/\D/g, ""));
+        pairingCode = await thisSock.requestPairingCode(PHONE.replace(/\D/g, ""));
         console.log(`pair by code: enter ${pairingCode} on your phone (Settings > Linked devices)`);
       } else {
         console.log("scan this QR from WhatsApp > Linked devices (also served at /status):\n");
@@ -53,18 +100,21 @@ async function connect() {
     }
     if (u.connection === "open") {
       connected = true; qr = ""; pairingCode = "";
-      me = sock.user?.name || sock.user?.id || "";
-      meJid = sock.user?.id || "";                       // 15551234567:12@s.whatsapp.net - the number is who the owner IS here
+      reconnectAt = 0; reconnectPaused = false; openedAt = Date.now();
+      me = thisSock.user?.name || thisSock.user?.id || "";
+      meJid = thisSock.user?.id || "";                   // 15551234567:12@s.whatsapp.net - the number is who the owner IS here
       console.log(`connected as ${me}`);
     }
     if (u.connection === "close") {
       connected = false;
       const code = u.lastDisconnect?.error?.output?.statusCode;
-      if (code !== DisconnectReason.loggedOut) { console.log("reconnecting…"); connect(); }
-      else console.log("logged out - delete ./wa-auth and pair again");
+      const why = u.lastDisconnect?.error?.message || `WhatsApp closed the socket${code ? ` (${code})` : ""}`;
+      if (code !== DisconnectReason.loggedOut) scheduleReconnect(why);
+      else { reconnectPaused = true; lastDisconnect = "logged out"; console.log("logged out - delete ./wa-auth and pair again"); }
     }
   });
-  sock.ev.on("messages.upsert", async ({ messages: ms, type }) => {
+  thisSock.ev.on("messages.upsert", async ({ messages: ms, type }) => {
+    if (thisSock !== sock) return;
     if (type !== "notify") return;                       // history syncs are not new work
     for (const m of ms) {
       const body = text(m.message || {}), quoted = text(context(m.message || {})?.quotedMessage || {});
@@ -82,7 +132,7 @@ async function connect() {
       const grab = async (node, fallbackMime, ext) => {
         if (!node || m.key.fromMe) return ["", ""];
         try {
-          const buf = await downloadMediaMessage(m, "buffer", {}, { reuploadRequest: sock.updateMediaMessage });
+          const buf = await downloadMediaMessage(m, "buffer", {}, { reuploadRequest: thisSock.updateMediaMessage });
           fs.mkdirSync(MEDIA_DIR, { recursive: true });
           const mt = String(node.mimetype || fallbackMime).split(";")[0];
           const file = path.join(MEDIA_DIR, `${m.key.id}.${ext(mt)}`);
@@ -117,10 +167,17 @@ http.createServer(async (req, res) => {
     if (req.headers.origin !== undefined) return json(res, 403, { error: "browsers may not call the bridge" });
     if (TOKEN && req.headers["x-bridge-token"] !== TOKEN) return json(res, 401, { error: "bridge token missing or wrong" });
     if (req.method === "GET" && url.pathname === "/status")
-      return json(res, 200, { connected, me, jid: meJid, qr, pairingCode, seq, kept: messages.length });
+      return json(res, 200, { connected, me, jid: meJid, qr, pairingCode, seq, kept: messages.length,
+        filter: chatGate.snapshot(), reconnect: reconnectStatus() });
+    if (req.method === "POST" && url.pathname === "/filter") {
+      const chunks = []; for await (const c of req) chunks.push(c);
+      const policy = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      return json(res, 200, { ok: true, filter: chatGate.configure(policy) });
+    }
     if (req.method === "GET" && url.pathname === "/messages") {
       const after = Number(url.searchParams.get("after") || 0);
-      return json(res, 200, { seq, messages: messages.filter((m) => m.seq > after) });
+      return json(res, 200, { seq, messages: messages.filter((m) => m.seq > after),
+        blockedChats: chatGate.blockedChats() });
     }
     // blue ticks for what the hub has already taken in - ids come back from /messages, and
     // the key we kept with them is what Baileys needs. Unknown ids (rotated out of the
@@ -155,4 +212,7 @@ http.createServer(async (req, res) => {
   } catch (e) { json(res, 500, { error: String(e?.message || e) }); }
 }).listen(PORT, "127.0.0.1", () => console.log(`bridge listening on http://127.0.0.1:${PORT}`));
 
-connect().catch((e) => { console.error("could not start:", e); process.exit(1); });
+connect().catch((e) => {
+  console.error("could not connect:", e?.message || e);
+  scheduleReconnect(e?.message || e);
+});

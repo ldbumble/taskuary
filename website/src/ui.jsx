@@ -33,6 +33,7 @@ import MicIcon from "@mui/icons-material/Mic";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
 import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/material";
 import { Logo, hasLogo } from "./logos.jsx";
+export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2 } from "./theme.jsx";
 
 // Taskuary actions wear Taskuary's actual product mark. The generic robot glyph suggested a

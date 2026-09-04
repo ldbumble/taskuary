@@ -17,12 +17,14 @@ SKILL_FILE = Path(__file__).parent / 'skills' / 'soul-interview' / 'SKILL.md'
 _LEGACY_LABELS = {
     'who': 'Who are you, and what is your work?',
     'work': 'What kind of work reaches you?',
-    'task': 'What may the assistant handle without asking?',
-    'never': 'What must never happen without you?',
+    'task': 'What kind of work is worth turning into a task?',
+    'never': 'Which ambiguities or sensitive situations need your judgment?',
     'people': 'Which people and relationships matter?',
     'systems': 'Which systems or sources of truth matter?',
     'voice': 'How should communication sound?',
 }
+
+_MANAGED_HEADINGS = ('## Connected systems', '## Project relationships', '## Repository map')
 
 
 def skill_text() -> str:
@@ -45,8 +47,33 @@ def _known(ctx: dict) -> str:
     bits = [f"Owner name on file: {ctx['owner'] or '(not set)'}",
             f"Connected sources: {', '.join(ctx['channels']) or 'none yet'}",
             f"Known repositories (mention only if relevant): {', '.join(ctx['repos']) or 'none'}",
-            f"Frequent correspondents: {'; '.join(ctx['writes_most']) or 'nothing ingested yet'}"]
+            f"Frequent correspondents (activity only; not proof of importance or authority): "
+            f"{'; '.join(ctx['writes_most']) or 'nothing ingested yet'}"]
     return 'WHAT TASKUARY ALREADY KNOWS (facts; do not contradict them):\n' + '\n'.join(bits)
+
+
+def _section(text: str, heading: str) -> str:
+    """One level-two section, through the next level-two heading or end of document."""
+    match = re.search(rf'(?ms)^{re.escape(heading)}[^\n]*\n.*?(?=^##\s|\Z)', str(text or ''))
+    return match.group(0).rstrip() if match else ''
+
+
+def _without_section(text: str, heading: str) -> str:
+    return re.sub(rf'(?ms)^\s*{re.escape(heading)}[^\n]*\n.*?(?=^##\s|\Z)', '', str(text or '')).strip()
+
+
+def _carry_managed_sections(current: str, drafted: str) -> str:
+    """Keep machine-maintained operational memory out of the model's authorship.
+
+    The interview rewrites the owner's prose. Connected systems and repository notes are updated
+    elsewhere, while project/person edges live in SQLite and are rendered after the save. A model
+    draft must therefore be unable to erase or fabricate any of those sections.
+    """
+    body = str(drafted or '')
+    for heading in _MANAGED_HEADINGS:
+        body = _without_section(body, heading)
+    carried = [_section(current, heading) for heading in ('## Connected systems', '## Repository map')]
+    return '\n\n'.join([body.rstrip()] + [block for block in carried if block]).strip()
 
 
 def _answers(value) -> list[dict]:
@@ -146,8 +173,14 @@ def draft(store, answers, llm=None) -> str:
 
 def write(store, answers, actor: str = 'owner', llm=None) -> str:
     """Draft, save, and audit an owner-controlled SOUL.md."""
-    body = draft(store, answers, llm)
+    body = _carry_managed_sections(store.get_doc('soul') or '', draft(store, answers, llm))
     store.save_doc('soul', body, actor)
+    # Structured project/person memory is not interview prose. Re-render it from the database
+    # after every interview, and refresh the carried connection block from current configuration.
+    from .docsync import sync_connections, sync_projects
+    sync_connections(store, actor)
+    sync_projects(store, actor)
+    body = store.get_doc('soul') or body
     transcript = _answers(answers)
     store.audit('doc', 0, 'soul_interview', actor,
                 detail={'answered': sum(bool(row['a']) for row in transcript),

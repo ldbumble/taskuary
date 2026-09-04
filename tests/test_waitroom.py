@@ -64,6 +64,32 @@ class PhaseTests(unittest.TestCase):
             t._idle = terminal.IDLE_WAITING + 30
             self.assertEqual(waitroom.state(s, tid)[0], 'working')
 
+    def test_a_partial_repaint_cannot_publish_a_stop(self):
+        """The rendered screen can briefly contain the bare prompt between two working frames.
+        One observation must never put the task in waiting-on-me or ring the hand raise."""
+        t = FakeTerm(1, idle=60, tail=['? for shortcuts'])
+        t.status_tail = lambda n=8: t._tail[-n:]
+        at = 100.0
+        self.assertEqual(terminal.stable_phase_of(t, at), 'working')
+        self.assertEqual(terminal.stable_phase_of(t, at + terminal.PHASE_DWELL - .1), 'working')
+        t._tail = ['Gallivanting… · thinking with high effort', 'esc to interrupt · for agents']
+        self.assertEqual(terminal.stable_phase_of(t, at + terminal.PHASE_DWELL + .1), 'working')
+        self.assertIsNone(t._phase_candidate)
+
+    def test_a_real_prompt_has_to_hold_then_publishes_once(self):
+        t = FakeTerm(1, idle=60, tail=['Done. Tests pass.', '? for shortcuts'])
+        t.status_tail = lambda n=8: t._tail[-n:]
+        at = 200.0
+        self.assertEqual(terminal.stable_phase_of(t, at), 'working')
+        self.assertEqual(terminal.stable_phase_of(t, at + terminal.PHASE_DWELL + .1), 'parked')
+        self.assertEqual(terminal.stable_phase_of(t, at + terminal.PHASE_DWELL + .2), 'parked')
+
+    def test_lifecycle_reads_the_rendered_screen_not_raw_repaint_fragments(self):
+        t = FakeTerm(1, idle=90, tail=['? for shortcuts'])
+        t.status_tail = lambda n=8: ['Gallivanting… · thinking with high effort',
+                                     'bypass permissions on · esc to interrupt · for agents']
+        self.assertEqual(terminal.stable_phase_of(t, 300.0), 'working')
+
 
 class QuestionTests(unittest.TestCase):
     def test_a_question_on_the_tail_is_a_question(self):

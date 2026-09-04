@@ -21,7 +21,7 @@ import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
@@ -117,6 +117,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const taskLoadSeq = useRef(0);
   const stale = (id) => selRef.current !== id;
   const { agents, models } = useAgents();
+  const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [nt, setNt] = useState({ Title: "", Summary: "", Kind: "task", Priority: "normal" });
@@ -209,6 +210,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0] }));
   }, [agents, run.agent]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
+  useEffect(() => {
+    const task = detail?.task;
+    if (!task || task.TaskId !== selected || !agents.length || pickerTask.current === task.TaskId) return;
+    pickerTask.current = task.TaskId;
+    const owned = assignedAgent(task.Assignee);
+    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : agents[0], model: "" }));
+  }, [selected, detail?.task, agents]);
   useEffect(() => { setRestartOpen(false); }, [selected]);
   useEffect(() => {
     // a LIVE SESSION counts as much as a headless run here: the header chip is derived from
@@ -472,6 +480,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     .sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt));
   const sourceMessage = [...storedMessages].reverse()
     .find((m) => m.Status !== "context" && m.Direction !== "out");
+  const workContext = t?.Playbook
+    ? `Playbook · ${t.Playbook.title}${t.Playbook.uses?.length ? ` · uses ${t.Playbook.uses.join(", ")}` : ""}`
+    : t?.Source === "report" && sourceMessage?.SourceName
+      ? `Report · ${sourceMessage.SourceName}` : "";
   const askSender = async () => {
     const text = senderQuestion.trim();
     if (!selected || !sourceMessage?.MessageId || !text || askingSender) return;
@@ -611,11 +623,21 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
                   <StateChip task={task} />
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
-                  {String(task.Assignee || "").startsWith("agent:") && <TaskuaryMark size={13} />}
+                  {assignedAgent(task.Assignee) && <Chip size="small" icon={<TaskuaryMark size={11} />}
+                    label={assignedAgent(task.Assignee)} title={`${assignedAgent(task.Assignee)} owns this task`}
+                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#e3e6e1", color: "#47654a",
+                      "& .MuiChip-icon": { ml: 0.45 } }} />}
                   <Box sx={{ flex: 1 }} />
                   <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(task.CreatedAt)}</Typography>
                 </Box>
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.4 }}>{task.Title}</Typography>
+                {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
+                  Playbook · {task.Playbook.title}
+                </Typography>}
+                {!task.Playbook && task.Source === "report" && task.SearchSources
+                  && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
+                    Report · {String(task.SearchSources).split(",")[0]}
+                  </Typography>}
                 {search && <Typography variant="caption" noWrap sx={{ color: FAINT, display: "block", mt: 0.2 }}>
                   {[task.Source, task.SearchSources, task.Summary].filter(Boolean).join(" · ")}
                 </Typography>}
@@ -690,6 +712,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 <Typography variant="caption" sx={{ color: FAINT, display: liveCodingSession ? "none" : "block", mt: 0.75 }}>
                   from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
                 </Typography>
+                {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontWeight: 650 }}>
+                  {workContext}
+                </Typography>}
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
@@ -786,12 +811,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
                           </Select>
                         </LabeledControl>
-                        <LabeledControl label="Owner">
-                          <Select value={t.Assignee || ""} onChange={(e) => patch({ Assignee: e.target.value })} sx={selSx}
-                            displayEmpty renderValue={(value) => value ? (value === "owner" ? "you" : value) : "unassigned"}>
+                        <LabeledControl label="Assigned to">
+                          <Select value={t.Assignee || ""} onChange={(e) => {
+                            const assignee = e.target.value, worker = assignedAgent(assignee);
+                            patch({ Assignee: assignee });
+                            if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
+                          }} sx={selSx}
+                            displayEmpty renderValue={assigneeLabel}>
                             <MenuItem value="" sx={{ fontSize: 12 }}>unassigned</MenuItem>
                             <MenuItem value="owner" sx={{ fontSize: 12 }}>you</MenuItem>
-                            {t.Assignee && t.Assignee !== "owner" && <MenuItem value={t.Assignee} sx={{ fontSize: 12 }}>{t.Assignee}</MenuItem>}
+                            {agents.map((name) => <MenuItem key={name} value={agentAssignee(name)} sx={{ fontSize: 12 }}>
+                              <TaskuaryMark size={12} />&nbsp; {name}
+                            </MenuItem>)}
+                            {t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee)
+                              && <MenuItem value={t.Assignee} sx={{ fontSize: 12 }}>{t.Assignee}</MenuItem>}
                           </Select>
                         </LabeledControl>
                         <Box sx={{ flex: 1 }} />

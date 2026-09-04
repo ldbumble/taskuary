@@ -63,6 +63,9 @@ async def _lifespan(_app):
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
 ACTOR = 'owner'
+# Attaching a terminal repaints it: the rendered replay, then the one-column wiggle's full redraw.
+# That output is ours, not the agent's, so idle() must not count it (Term.quiet_for).
+ATTACH_QUIET = 10
 
 
 from loguru import logger
@@ -3905,6 +3908,10 @@ async def terminal_ws(ws: WebSocket, sid: str):
         # RENDERED, not raw (terminal.replay_text): the raw bytes of a full-screen TUI replay as
         # debris in a fresh xterm, and the live repaint then appends to that debris. Flagged as a
         # REPLAY so the browser holds the curtain over it until the live screen is up.
+        # Attaching REPAINTS the screen - the replay below, then the wiggle's full redraw. None of
+        # that is the agent doing anything, and counting it as output reset idle(): a session parked
+        # on a dialog read as working again every time its card was opened (2026-09-03).
+        t.quiet_for(ATTACH_QUIET)
         if t.scrollback():
             snap = hub_term.replay_text(t)
             if snap: await send_frame({'type': 'out', 'replay': True, 'data': snap})

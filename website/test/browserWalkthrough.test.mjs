@@ -5,10 +5,15 @@ import { fileURLToPath } from "node:url";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
-test("a new walkthrough opens its task and describes the embedded browser", () => {
+test("a new walkthrough is offered as a link and never yanks the tab", () => {
   const view = read("AssistantView.jsx");
-  assert.match(view, /verb === "walkthrough"[\s\S]{0,500}onOpenTask\?\.\(d\.taskId\)/);
-  assert.match(view, /step-by-step walkthrough\. Its browser opens beside the assistant/);
+  // it used to navigate away the moment the owner asked for a walk-through, and sixty seconds
+  // later the walk-through's own session raised a hand at them from the tab they landed on
+  // (the 2026-09-03 break test). The receipt carries the ref; going there is their move.
+  const branch = view.slice(view.indexOf('verb === "walkthrough"'), view.indexOf('verb === "walkthrough"') + 500);
+  assert.doesNotMatch(branch, /onOpenTask/);
+  assert.match(branch, /ref: d\.ref/);
+  assert.match(view, /walkthrough\. Open it when you want to start; its browser opens beside the assistant/);
   const card = read("assistantCards.jsx");
   assert.match(card, />Open walkthrough<\/Button>/);
   assert.doesNotMatch(card.slice(card.indexOf("export function SetupCard")), /Hand it to the coding agent/);

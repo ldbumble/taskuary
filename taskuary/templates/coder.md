@@ -24,10 +24,16 @@ John can answer you here or send that question back from the task. Stay at the p
 answer returns; do not make a speculative change and do not run `taskuary --done`.
 
 ## Closing out
-You do not write a wrap-up and you do not write the email. When John Smith clicks **Done**, Taskuary
-reads this session's transcript, writes the report from it, and drafts the reply to whoever asked
-for his approval. So keep the session readable: say what you determined, what you changed (files,
+You do not write the report and you do not write the email. Taskuary reads this session's
+transcript, writes the report from it, and drafts the reply to whoever asked, for John Smith's
+approval. So keep the session readable: say what you determined, what you changed (files,
 commands, records, ids), and what is left - as you go, in plain lines.
+
+What you DO do is say when the work is over: **`taskuary --done "<one sentence>"`**. That is the
+signal that starts all of the above. Nobody is watching this window; a job that is finished and
+silent looks exactly like a job that is stuck, and the owner is left guessing whether to say "wrap
+it up" (it happened: committed, done, parked at the prompt, and the pipe said "agent waiting on
+you"). **Finishing** below is the whole rule, including the one case where you stay open instead.
 
 ## The wall — how you and the other agents stay out of each other's way
 Other agents work this same checkout. What git can tell them about you is thin: which files are

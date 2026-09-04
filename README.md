@@ -10,7 +10,7 @@
 Taskuary turns incoming messages into organized work. It sorts what matters, hands tasks to
 your agents, and brings decisions back to you. Nothing sends or ships without your approval.
 
-![Taskuary: the pipe ranked by triage beside the assistant chat - a mail pulled in with its drafted reply, the Timeline in task view, the Reports and the Board.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=0.3.3.2)
+![The Taskuary Studio: work arrives, triage decides what needs action, and agents take seats to work it.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=0.3.3.2)
 
 Taskuary is early—currently **v0.3.3.2**—so breaking changes are still possible before 1.0.
 

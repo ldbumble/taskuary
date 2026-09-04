@@ -126,13 +126,19 @@ class VersionTests(unittest.TestCase):
                         f'{taskuary.__version__} does not match pyproject {want}')
         self.assertEqual(c.get('/api/version').json()['version'], taskuary.__version__)
 
-    def test_the_readme_does_not_advertise_an_older_version(self):
+    def test_no_shipped_doc_advertises_an_older_version(self):
         """It said v0.2.0 through the whole of 0.2.1 - the same second-copy problem as
-        __init__.py, in the first thing anybody reads about the project."""
-        readme = (Path(__file__).parent.parent / 'README.md').read_text(encoding='utf-8')
-        # every component, or 'v0.3.2.1' reads as a stale 'v0.3.2' plus a stray '.1'
-        stale = {v for v in re.findall(r'v(\d+(?:\.\d+)+)', readme) if v != taskuary.__version__}
-        self.assertEqual(stale, set(), f'README still advertises {stale}; this is {taskuary.__version__}')
+        __init__.py, in the first thing anybody reads about the project. The README alone was
+        guarded, so docs/roadmap.md sat three releases behind at v0.3.2.9 while the README said
+        0.3.3.2 (the owner, 2026-09-04: "pypi version is wrong"). Both announce the number, so
+        both are checked. RELEASING.md and site/COPY.md are left out on purpose: their versions
+        are worked examples, not a claim about what is current."""
+        root = Path(__file__).parent.parent
+        for name in ('README.md', 'docs/roadmap.md'):
+            # every component, or 'v0.3.2.1' reads as a stale 'v0.3.2' plus a stray '.1'
+            stale = {v for v in re.findall(r'v(\d+(?:\.\d+)+)', (root / name).read_text(encoding='utf-8'))
+                     if v != taskuary.__version__}
+            self.assertEqual(stale, set(), f'{name} still advertises {stale}; this is {taskuary.__version__}')
 
 
 if __name__ == '__main__':

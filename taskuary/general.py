@@ -172,6 +172,25 @@ def dock_task(store, actor='owner') -> tuple[dict, bool]:
     return store.get_task(tid), True
 
 
+def retire_dock(store, actor='owner'):
+    """Close the current dock conversation so the next caller is handed a fresh one - what the
+    'New chat' button does, minus the live session there is none of in a just-started process.
+
+    A relaunch should open a NEW chat, not resume yesterday's (the owner, 2026-09-04: "after you
+    restart a new chat should be there not same chat"): the dock task id lives in settings, so
+    without this the same conversation - and the same model session - came back forever. A dock
+    nobody said anything in is left alone, or every launch would archive an empty guide task."""
+    raw = store.get_settings().get('assistant_dock_task_id')
+    task = store.get_task(int(raw)) if str(raw or '').isdigit() else None
+    if not (task and is_dock(task) and task.get('Status') not in ('done', 'dropped')): return None
+    if not history(store, task['TaskId']): return None
+    from . import concierge
+    store.update_task(task['TaskId'], {'Status': 'done'}, actor)
+    store.audit('task', task['TaskId'], 'archive_assistant_dock', actor)
+    store.set_setting(f"{concierge.SID_KEY}:{task['TaskId']}", '', actor)
+    return task['TaskId']
+
+
 def dock_snapshot(store) -> str:
     """A compact, live map of the surfaces the hovering assistant is meant to explain.
 

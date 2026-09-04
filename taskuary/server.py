@@ -52,6 +52,11 @@ async def _lifespan(_app):
     try: wabridge.start_configured(store)
     except Exception as e: logger.warning(f'wa bridge startup failed: {e}')
     catch_up_on_startup()          # defined below; resolved when the app actually starts
+    try:                           # a relaunch opens a NEW chat rather than resuming the last one
+        from . import funnel as _f
+        from .general import retire_dock
+        if retire_dock(store, ACTOR) is not None: _f.reset_walk(store)
+    except Exception as e: logger.warning(f'assistant dock retire failed: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table

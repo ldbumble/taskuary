@@ -537,7 +537,7 @@ def raised(store, days: float = 2) -> str:
     return '\n'.join(out) or '(the assistant raised nothing in this window)'
 
 
-def parse(text: str, cands: list, max_lines: int = MAX_LINES) -> list:
+def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     """The model's list, kept honest: a key it invents must be idea:*, a candidate key keeps its
     kind and its buttons, and the text is the model's when it gave one. Every line keeps its WHY -
     the hub's facts for a candidate (plus the model's read on them), the model's own for an idea -
@@ -767,7 +767,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
         from .llm import readable_images
         images = readable_images(store, _people_context(store)[1])
     text = llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {}))
-    return parse(text, cands, max_lines), _notes(text), user
+    return parse(store, text, cands, max_lines), _notes(text), user
 
 
 def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False) -> str:

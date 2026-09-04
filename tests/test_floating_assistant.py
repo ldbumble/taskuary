@@ -39,6 +39,25 @@ class FloatingAssistantTests(unittest.TestCase):
         self.assertEqual(fresh.json()['task']['TaskId'], again['TaskId'])
         self.assertEqual(general.history(store, again['TaskId']), [])
 
+    def test_a_restart_opens_a_new_chat_but_leaves_an_untouched_one_alone(self):
+        """A relaunch should not resume yesterday's conversation (the owner, 2026-09-04: "after you
+        restart a new chat should be there not same chat") - the dock id is a setting, so it used
+        to come back for ever. An empty dock survives, or every launch would leave a guide task."""
+        store = MemoryStore()
+        with mock.patch.object(server, 'store', store):
+            client = TestClient(server.app)
+            first = client.post('/api/assistant/dock').json()['task']
+            self.assertIsNone(general.retire_dock(store, 'owner'))                 # nothing said - kept
+            self.assertEqual(client.post('/api/assistant/dock').json()['task']['TaskId'], first['TaskId'])
+            store.add_comment(first['TaskId'], 'owner', general.USER_TYPE, 'Where are the July numbers?')
+            store.add_comment(first['TaskId'], 'assistant', general.ASSISTANT_TYPE, 'On the Board.')
+            self.assertEqual(general.retire_dock(store, 'owner'), first['TaskId'])  # a real chat is retired
+            after = client.post('/api/assistant/dock').json()['task']
+        self.assertEqual(store.get_task(first['TaskId'])['Status'], 'done')
+        self.assertNotEqual(after['TaskId'], first['TaskId'])
+        self.assertEqual(general.history(store, after['TaskId']), [])
+        self.assertIsNone(general.retire_dock(store, 'owner'))                     # the fresh one is empty too
+
     def test_new_chat_refuses_to_cut_off_an_answer_in_progress(self):
         store = MemoryStore()
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True):

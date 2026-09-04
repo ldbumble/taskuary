@@ -652,3 +652,17 @@ class WhatItReadsTests(unittest.TestCase):
         row = s.get_message(out['message_id'])
         self.assertEqual(row['Subject'], long[:90].rsplit(' ', 1)[0] + '… (+1 more)')
         self.assertEqual(out['reviewed']['people'], 1); self.assertIn('1 thread(s) of what people said', row['BodyText'])
+
+    def test_a_line_naming_a_task_carries_its_tid_and_the_model_pass_is_not_swallowed(self):
+        """parse() resolves "TQ-0001" to the task so the pipe can tell an agent already has the work
+        - and it reads the store to do that. For a day it was never handed one, and the NameError
+        died inside _run's broad `except Exception`, so every post fell back to the bare facts with
+        only a warning to show for it (the owner, 2026-09-04: "the model pass failed, posting the
+        facts alone - name 'store' is not defined"). Asserting `model` is what catches that."""
+        s = _store()
+        tid = s.create_task({'Title': 'July financials', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        self._chat(s, 'Priya Shah', 'can you please fill out the performance review?', hours=4)
+        out = assistant.run(s, force=True, llm=lambda *a, **k: json.dumps(
+            {'say': [{'key': 'idea:a', 'text': f'TQ-{tid:04d} July financials has not moved since Tuesday.', 'mid': None}]}))
+        self.assertTrue(out['reviewed']['model'])                                  # the pass ran; it did not fall back
+        self.assertEqual([l['action'].get('tid') for l in out['lines']], [tid])

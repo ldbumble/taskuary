@@ -26,14 +26,25 @@ Taskuary is early—currently **v0.3.3.2**—so breaking changes are still possi
 
 **One Timeline and Assistant**
 
-Mail, chats, issues, alerts, and reports appear on one Timeline and in one Assistant chat.
-Open any item to see its context, status, and available actions.
+Mail, chats, issues, alerts, reports, and agent runs land on one Timeline. Open any item for its
+context, status, and actions - or ask the Assistant, which works the same rail: it walks you
+through what needs you, pulls up a name or a subject when you mention it, and hands you the next
+thing one at a time. Filter the rail to just the pipe, everything, or only what needs you.
 
 ![Taskuary's unified work pipe and chat, populated only with fictional demo data.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-chat.png?v=0.3.3.2)
 
 **AI triage**
 
-Triage files routine updates, turns real requests into tasks, and puts urgent decisions first.
+Triage reads each message and decides what it *is*, not just who sent it: routine updates get
+filed, real requests become tasks, and an urgent decision goes to the front. Every verdict shows
+its reason, and you can overrule it.
+
+**An assistant that speaks up**
+
+It posts what it noticed onto the Timeline - a reply nobody answered, a task gone quiet, a report
+that failed, a meeting about to start - once each, with the evidence under it and the buttons on
+it. Its own ideas arrive the same way, and you turn one into a task, keep it as a note, or let it
+go.
 
 **Agents in your own repos**
 
@@ -44,17 +55,16 @@ Send coding work to Claude Code, Codex, Gemini, Cursor, Copilot, or another CLI.
 Watch the terminal, answer questions, review changes, and use the built-in browser without
 losing the session.
 
-**Scheduled checks**
+**Reports and workflows**
 
-Watch databases, files, APIs, cloud logs, reports, or agent skills. Quiet checks stay silent.
+Describe a check in plain words and Taskuary builds it: read a folder of CSVs each morning, total
+the AP bills due in the next 30 days, count helpdesk tickets by day. Reports read and summarize -
+on a schedule, or on demand with Run now - and can come back with an AI summary. Workflows write
+data or keep state. Quiet checks stay silent, so you only hear about the one that failed.
 
 **You stay in control**
 
 Replies and proposed actions wait in Review. You decide what sends, runs, closes, or gets dismissed.
-
-**Catches what slipped**
-
-Surface unanswered replies, upcoming meetings, quiet tasks, failed reports, and important changes.
 
 ## How work flows
 

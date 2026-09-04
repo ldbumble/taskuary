@@ -750,10 +750,16 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'google_sheets': _sheets_connection}
 
 
+# Report types whose data IS the store - they reach no further than the local database, so they
+# can neither be slow nor unreachable. Everything else dials out: a SQL box, an API, a share.
+# run_due_reports runs these FIRST for that reason, so keep the two uses of this list together.
+STORE_BACKED = ('digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
+                'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
+                'hub_search', 'hub_write', 'hub_vote', 'hub_comment')
+
+
 def resolve_cfg(store, cfg: dict) -> dict:
-    if cfg.get('type') in ('digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
-                           'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
-                           'hub_search', 'hub_write', 'hub_vote', 'hub_comment'):
+    if cfg.get('type') in STORE_BACKED:
         return {**cfg, 'store': store}   # their data IS the store (the agent's: its profile; the calendar's: the cards; the knowledge base: its index)
     conn = CONNECTION_OF.get(cfg.get('type'))
     if conn:
@@ -1239,15 +1245,41 @@ def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict
     return {'gate': 'auto', 'message_id': mid, 'sent': sent}
 
 
+def _own_data(src: dict) -> bool:
+    """Does this report read nothing but the store? An unknown type counts as dialling out, which
+    is the conservative half of the split - it waits behind the local ones rather than ahead."""
+    try: return (json.loads(src.get('ConfigJson') or '{}').get('type') or 'rest') in STORE_BACKED
+    except ValueError: return False
+
+
 def run_due_reports(store, startup: bool = False) -> int:
+    """Every due report, own-data ones FIRST and each one walled off from the others.
+
+    On a startup catch-up these run one after another, so a source that is merely unreachable used
+    to hold up everything behind it: a SQL Server that was not there spent 41 s in an ODBC login
+    timeout, and the owner's Morning digest and Assistant post - which read nothing but Taskuary's
+    own database - waited it out (the owner, 2026-09-04: the first item took ~3 minutes). Ordering
+    the local ones first means what they actually read lands while the dial-out ones take their time.
+
+    And one report may not cost the others their run. A failing executor files a FAILED row and
+    returns, but a runner that RAISES used to abort the whole loop, silently skipping every report
+    after it and leaving them un-touched so the next poll started over.
+    """
     from .llm import build_llm
     try: llm = build_llm(store)
     except Exception: llm = None
+    due = [s for s in store.list_sources() if s['Channel'] == 'report'
+           and is_due(json.loads(s.get('ConfigJson') or '{}'), s.get('LastPolledAt'), startup)]
     n = 0
-    for src in store.list_sources():
-        if src['Channel'] != 'report': continue
-        if is_due(json.loads(src.get('ConfigJson') or '{}'), src.get('LastPolledAt'), startup):
+    for src in sorted(due, key=lambda s: not _own_data(s)):
+        try:
             run_report_source(store, src, llm)
-            store.touch_source(src['SourceId'])
             n += 1
+        except Exception as e:
+            # touched anyway: a report that blew up must wait for its next slot like any other,
+            # or a poll every few minutes re-runs the broken one for ever
+            logger.warning(f"report {src.get('Address')} raised, skipping it and running the rest - {e}")
+        finally:
+            try: store.touch_source(src['SourceId'])
+            except Exception as e: logger.warning(f"could not touch source {src['SourceId']}: {e}")
     return n

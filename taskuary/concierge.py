@@ -81,8 +81,13 @@ _SAYS = (
     (re.compile(r"\b(not (my|our) (issue|problem|job|task|thing)|not (ours|mine)|nothing to do with (me|us)|let them (handle|deal|sort|do)"
                 r"|ignore (it|this)|leave it (alone|be)|drop it|no need to (respond|reply|answer))\b", re.I), 'not_ours'),
     (re.compile(r"\b(never|always) (again|file|ignore)|remember (this|that)|from now on\b", re.I), 'not_ours_remember'),
+    # "research" came out of this list: the other verbs here read as DIAGNOSING something that
+    # exists ("look into that server", "find out why the export drops rows"), but research is the
+    # word for reading about the WORLD - "can you research the Factor Elara gravel bike" opened a
+    # coding agent on a checkout (the owner, 2026-09-04). Left off the list it reaches the brain,
+    # which has the sentence and can tell a product from a production database.
     (re.compile(r"\b(send (it |this |that )?to (the )?(coding agent|coder|codex|claude|gemini|agent)|have the (coder|agent)|let the (coder|agent)|start the (coder|agent)|code it|(coder|codex|claude) (should|can) (review|look|fix|handle)"
-                r"|look into|investigate|dig into|find out|figure out|research|check (on |out )?(that|the|this|what|why|if)|ask (the |an )?(assistant|agent|coder) to)\b", re.I), 'coder'),
+                r"|look into|investigate|dig into|find out|figure out|check (on |out )?(that|the|this|what|why|if)|ask (the |an )?(assistant|agent|coder) to)\b", re.I), 'coder'),
     (re.compile(r"\b(i'?ll (do|take|handle) (it|this|that)|i will (do|take|handle) (it|this|that)|mine|leave it (to|with) me|(just )?make it a task|create a task|(add|put) (it|this) (on|to) my list)\b", re.I), 'mine'),
     # ENDING AN AGENT is not closing a task: "close the agent working" closed the item on the table
     # instead - a task the owner had not even asked about (2026-09-03). It comes first, so the words
@@ -137,6 +142,7 @@ SYSTEM = (
     "(hand it to the coding agent - put EVERYTHING the owner wants done after a colon, in their words: DECIDE: coder: find out "
     "why the bulk-approve fix from before did not stick, and create an admin login for X), mine (they will do it themselves), "
     "approve (send the drafted reply as it stands), not_ours_sender (the SENDER is noise - file everything from them from now on), "
+    "setup (reading, thinking or research with NO system to type at - Taskuary opens it as a conversation with the assistant: nothing is built, no repository is touched, and it can be handed to the coding agent later if it turns out something has to be), "
     "split (this arrival is TWO jobs - Taskuary breaks it in two, each with its own ref), "
     "setting (what they want is a SWITCH - Taskuary puts it in front of them to approve and never changes it itself), "
     "stop_agent (end the AGENT that is running - stopping a session is not closing a task, and never guess which: "
@@ -149,6 +155,16 @@ SYSTEM = (
     "have it wrong is the one thing you must not shrug off.\n"
     "A question or a remark is not a decision: answer it and write no DECIDE line. A polite request is "
     "not a question: \"can you look into that server\" is a hand-off, so decide it.\n"
+    # "can you research the Factor Elara gravel bike" opened a coding agent on a checkout (the
+    # owner, 2026-09-04), and before that a set-up did the same ("it doesn't need coding agent
+    # just a regular agent that will walk me through it"). The example above primes coder; this
+    # is the line that stops it generalising to everything phrased as a favour.
+    '...but coder and setup are not the same road, and the test is whether there is a SYSTEM to '
+    'type at. A repository, a server, a database, a query, a file, an error, a failing report: '
+    'coder. Reading about the world, comparing products, weighing an option, working out what to '
+    'ask, anything whose answer is a judgement rather than a change: setup. Never send reading '
+    'work to the coding agent because the sentence was polite - "can you research X" is a '
+    'walk-through, not a hand-off.\n'
     # "ignore" names the act and leaves out the part that lasts. Filing one mail and silencing a
     # sender for ever are different acts, and the owner asked to be consulted on which (2026-09-04:
     # "even without the button when you say ignore unless you say specific just for today it

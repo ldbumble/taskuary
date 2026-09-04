@@ -224,8 +224,8 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     report = resolution_text(rep)
     store.add_comment(tid, actor, 'human', 'Closed the session - wrapped up from what was on screen.')
     store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}')
-    # The compact result stays deliberately scannable. The transcript does not disappear behind
-    # that compression: preserve it as a Markdown artifact and link it from the same Agent work card.
+    # The compact result and final answer become the readable Markdown artifact. terminal.py has
+    # already filed the raw PTY stream for recovery; duplicating it here made the reader unusable.
     artifact = None
     try:
         from . import session_artifacts
@@ -283,7 +283,15 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
                                 'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
     # The report is intentionally compact UI copy. Draft from the complete final response (or
     # transcript fallback), so every question the session answered remains available here.
-    try: responder.write_draft(store, task_id, rid, complete_result or resolution_text(rep), 'coder')
+    try:
+        try: deliver = json.loads((held or {}).get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): deliver = {}
+        if deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
+            from . import outbox
+            outbox.redraft_review(store, store.get_review(rid),
+                                  complete_result or resolution_text(rep))
+        else:
+            responder.write_draft(store, task_id, rid, complete_result or resolution_text(rep), 'coder')
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
     # the ping that matters most: work FINISHED and its reply is sitting in Review on you
     if (store.get_settings().get('notify_level') or 'needs_me') != 'off':

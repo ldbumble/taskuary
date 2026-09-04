@@ -13,6 +13,27 @@ from . import spawn
 from .store import task_ref
 from .clis import preset_args
 
+_CLI_CHILDREN = set()
+_CLI_CHILDREN_LOCK = threading.Lock()
+
+
+def shutdown_cli_children():
+    """Stop headless CLI calls that are still running when Taskuary shuts down.
+
+    Normal calls remove themselves when their one-shot process exits. Keeping the live Popen
+    objects here gives the application lifespan a deterministic cleanup road instead of leaving
+    an invisible Claude/Codex process behind after the server is gone.
+    """
+    with _CLI_CHILDREN_LOCK:
+        children = list(_CLI_CHILDREN)
+        _CLI_CHILDREN.clear()
+    for child in children:
+        try:
+            if child.poll() is None: child.kill()
+        except Exception:
+            pass
+    return len(children)
+
 
 def _git(cwd, *args):
     try:
@@ -371,6 +392,13 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # to the saved profile, which is also used to open the interactive terminal TUI).
     is_codex = _cli_name(name) == 'codex' and bool(args) and args[0] in ('exec', 'e')
     if is_codex and '--json' not in args: args.append('--json')
+    # Same reasoning for the trust check: codex refuses to start outside a git repo with "Not
+    # inside a trusted directory and --skip-git-repo-check was not specified", and half of what
+    # this app asks a CLI runs in ~/.taskuary/scratch on purpose - the classifier, the drafter,
+    # STYLE.md generation - none of which is a checkout. Headlessly there is nobody to answer the
+    # trust prompt, so every one of those died before the model was reached (issue #34). The flag
+    # only relaxes WHERE codex may run; the sandbox flags decide what it may do.
+    if is_codex and '--skip-git-repo-check' not in args: args.append('--skip-git-repo-check')
     cmd = _resolve_cmd(name) + args
     # which model works it: profile default, or a per-run override from the UI. The flag
     # name is configurable because every CLI spells it differently (claude/codex: --model).
@@ -393,6 +421,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         p = spawn.popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, encoding='utf-8', errors='replace', cwd=cwd, shell=False,
                              env=env)
+        with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(p)
     except PermissionError as e:
         # which() found something that cannot be executed from here. "Not installed" sent people
         # off to reinstall a CLI that was already there; the reason is in denied_msg.
@@ -466,6 +495,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         p.wait()
     finally:
         killer.cancel()
+        with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(p)
     err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
     if p.returncode != 0:
         if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')

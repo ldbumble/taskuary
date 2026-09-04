@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   agentPhase, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
@@ -37,4 +39,14 @@ test("timeline exposes task state beside current agent or reply attention", () =
     { task: "waiting", agent: "needs you", reply: null });
   assert.deepEqual(timelinePhases({ TaskStatus: "done", ReviewStatus: "sent" }),
     { task: "done", agent: null, reply: "sent" });
+});
+
+test("terminal output never triggers whole-task HTTP refreshes", () => {
+  const source = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  assert.match(source, /pollWhileActive\(active, \(\) => loadDetail\(selected\), 3000\)/);
+  assert.doesNotMatch(source, /onLive\([^\n]*run-tail[^\n]*loadDetail/);
+  for (const file of ["ui.jsx", "FeedView.jsx", "BoardView.jsx", "WallView.jsx", "StudioView.jsx"]) {
+    const view = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");
+    assert.doesNotMatch(view, /onLive\([^\n]*run-tail/, `${file} must not turn terminal bytes into HTTP`);
+  }
 });

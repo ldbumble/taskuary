@@ -214,6 +214,10 @@ class Term:
                 threading.Thread(target=replace, daemon=True).start()
         if self.store and self.task_id:                   # whoever queued behind this session gets its turn
             from . import blackboard, waitroom
+            # A CLI can exit itself (quit, crash, rate-limit) without traveling through the HTTP
+            # close button. It no longer owns the task at that point: release stale running rows
+            # and put unfinished work back in the owner's pipe immediately.
+            release_task(self.store, self.task_id)
             blackboard.drain_later(self.store)
             waitroom.later(self.store)                    # ...and notes left for THIS agent reopen it
 
@@ -407,25 +411,47 @@ class Term:
     def phase(self) -> str: return stable_phase_of(self)
     def waiting(self) -> bool: return self.phase() == 'parked'
 
-    def info(self, tail=0):
+    def info(self, tail=0, details=True):
         # module functions, not methods: the tests' fakes (and any other stand-in) need only tail() and idle()
-        files, w = self.files(), getattr(self, 'witness', None)      # fakes in tests carry no witness
-        from . import browserview as _bv
         # Keep this module-level for the deliberately small terminal stand-ins used by the API
         # and hook tests; production Terms and fakes must go through the same state machine.
         phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
-        return {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
+        base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase, 'waiting': phase == 'parked',
-                'cmd': ' '.join(self.argv), 'files': files, 'browser': _bv.state(self.sid),
-                'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None,
-                **({'tail': self.tail(tail)} if tail else {})}
+                'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
+        if not details:
+            # Task lists need identity and lifecycle only. files() shells out to git and witness
+            # reconciliation walks that result; doing either on every Tasks/Board refresh made a
+            # two-session roster hold the entire API behind repository I/O.
+            return base
+        files, w = self.files(), getattr(self, 'witness', None)      # fakes in tests carry no witness
+        from . import browserview as _bv
+        return {**base, 'files': files, 'browser': _bv.state(self.sid),
+                'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None}
 
 
 def cli_of(argv) -> str:
     """'claude' for C:\\...\\claude.exe or claude.cmd - the CLI a session runs, whatever the profile is
     called. A profile named codex that runs claude showed 'codex' on the card next to a 'claude' badge."""
     return re.split(r'[\\/]', str((argv or [''])[0]))[-1].lower().rsplit('.', 1)[0] if argv else ''
+
+
+_LIGHT_INFO = {'sid', 'label', 'cwd', 'taskId', 'agent', 'cli', 'mode', 'alive', 'busy',
+               'started', 'idle', 'phase', 'waiting', 'cmd', 'provider', 'pick',
+               'connector_id', 'model', 'tail'}
+
+def _info(t, tail=0, details=True) -> dict:
+    """Call real sessions' lightweight path while remaining compatible with small adapters.
+
+    Session stand-ins and third-party session types predate the `details` keyword. Rich callers
+    keep the old exact call; a lightweight caller filters their old payload only when necessary.
+    """
+    if details: return t.info(tail)
+    try: return t.info(tail, details=False)
+    except TypeError as e:
+        if "unexpected keyword argument 'details'" not in str(e): raise
+        return {k: v for k, v in t.info(tail).items() if k in _LIGHT_INFO}
 
 
 def default_shell():
@@ -1341,6 +1367,16 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     # supposed to be the record of the day said nothing. Stamped at the session's own start.
     from . import ownwork
     ownwork.ensure(store, tid, term.started, f'{chosen} started here', actor)
+    # Starting a PTY is live state, not merely a database write. If the task was already marked
+    # in_progress there may be no update_task() below to wake the Assistant, and its three-second
+    # pile cache can still contain the old "nobody on it" row. Publish and invalidate at the point
+    # where the session unquestionably exists, whichever screen started it.
+    try:
+        from . import funnel as _funnel, live as _live
+        _funnel.invalidate()
+        _live.emit('task-changed', task_id=tid)
+    except Exception:
+        pass
     return {**term.info(), 'existing': False}
 
 
@@ -1429,11 +1465,11 @@ def phase_of(lines) -> str:
         if _PARKED.search(l): return 'parked'
     return 'unknown'
 
-def for_task(task_id, tail=0):
+def for_task(task_id, tail=0, details=True):
     """The live session working a task, if any - what makes a task 'agent working' even
     though no headless run exists."""
     t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
-    return t.info(tail) if t else None
+    return _info(t, tail, details) if t else None
 
 
 def screen(sid: str, lines: int = 32) -> dict | None:
@@ -1536,14 +1572,66 @@ def transcript_for(store, task_id) -> tuple:
     return (row.get('Text') or ''), (row.get('Agent') or 'coder'), row.get('Sid')
 
 
-def live_sessions(tail=3):
-    return [t.info(tail) for t in list(SESSIONS.values()) if t.alive]
+def live_sessions(tail=3, details=True):
+    return [_info(t, tail, details) for t in list(SESSIONS.values()) if t.alive]
 
 
 def close(sid):
     t = SESSIONS.pop(sid, None)
     if t: t.close()
     return bool(t)
+
+
+def release_task(store, task_id, actor='terminal', note=None) -> bool:
+    """Release unfinished work when its worker has really gone away.
+
+    Idempotence matters: an HTTP close and the PTY's EOF can observe the same ending. Only the
+    first caller that still sees ``in_progress`` changes state or writes the handoff comment.
+    """
+    task = store.get_task(task_id) or {}
+    if task.get('Status') != 'in_progress': return False
+    for run in store.list_runs(task_id):
+        if run.get('Status') == 'running':
+            store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
+    store.update_task(task_id, {'Status': 'open'}, actor)
+    store.add_comment(task_id, actor, 'agent', note or
+                      'The agent session ended. The task is open again - nobody is working it.')
+    return True
+
+
+def recover_after_restart(store) -> int:
+    """Clear persisted worker state that cannot survive a Taskuary process restart."""
+    # Sessions and headless-run threads are process-owned; none can be live before the new process
+    # has started one. Repair both halves so the Board never invents a worker from yesterday.
+    for run in store.running_runs():
+        store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
+    released = 0
+    for task in store.list_tasks(status='in_progress'):
+        released += int(release_task(store, task['TaskId'], 'startup',
+                                    'Taskuary restarted after the agent session ended. '
+                                    'The task is open again - nobody is working it.'))
+    return released
+
+
+def shutdown_sessions():
+    """Close every in-memory agent session during an orderly application shutdown."""
+    sessions = list(SESSIONS.items())
+    for sid, session in sessions:
+        SESSIONS.pop(sid, None)
+        try:
+            # Do this synchronously before process teardown. Waiting for a dying PTY's pump thread
+            # can lose the state transition when the interpreter exits immediately afterward.
+            if getattr(session, 'store', None) and getattr(session, 'task_id', None):
+                release_task(session.store, session.task_id, 'shutdown',
+                             'Taskuary closed the agent session. The task is open again - nobody is working it.')
+            # Shutdown is cleanup, not a new AI job. General task close normally mines useful
+            # learning, but launching a headless model while the process is exiting can only
+            # become an orphan itself.
+            if getattr(session, 'mode', '') == 'assistant': session.close(learn=False)
+            else: session.close()
+        except Exception as e:
+            logger.debug(f'could not close session {sid} during shutdown: {e}')
+    return len(sessions)
 
 
 KEEP_DEAD = 600     # an exited session stays listed this long so you can still read it
@@ -1557,6 +1645,6 @@ def reap():
         SESSIONS.pop(sid, None)
 
 
-def listing():
+def listing(details=True):
     reap()
-    return [t.info() for t in list(SESSIONS.values())]
+    return [_info(t, 0, details) for t in list(SESSIONS.values())]

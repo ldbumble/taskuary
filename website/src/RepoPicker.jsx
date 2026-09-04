@@ -89,9 +89,9 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
                 <Chip size="small" icon={<WarningAmberIcon sx={{ fontSize: 11 }} />} label="no local path"
                   sx={{ height: 16, fontSize: 9, bgcolor: "#dfeade", color: "#55697a" }} />
               )}
-              {on ? <CheckIcon sx={{ fontSize: 15, color: "#47654a" }} />
+              {on && r.has_path ? <CheckIcon sx={{ fontSize: 15, color: "#47654a" }} />
                 : <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.75 }} disabled={busy}
-                    onClick={() => choose(r)}>use this</Button>}
+                    onClick={() => choose(r)}>{on ? "set path" : "use this"}</Button>}
             </Box>
             {r.what && (
               <Typography variant="caption" sx={{ color: FAINT, display: "block", pl: 2.6, lineHeight: 1.35 }} noWrap>

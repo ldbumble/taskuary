@@ -99,6 +99,26 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual([c for _, _, c in roles if c], ['brief', 'todo', 'agent', 'agent', 'review'])   # closed is a status line, never a live card
         self.assertEqual([r for r, _, _ in roles].count('user'), 1)
 
+    def test_first_agent_started_after_a_quiet_watch_is_announced_and_carries_its_session(self):
+        """Opening Assistant with no sessions is still its first look; a later start is news."""
+        s = self.s
+        t = s.create_task({'Title': 'July financials', 'Kind': 'coding', 'Status': 'open'}, 'router')
+        m = s.add_message({'TaskId': t, 'ExternalId': 'x:financials', 'ConversationId': 'financials',
+                           'Channel': 'email', 'Subject': 'RE: July financials', 'FromName': 'Nechama',
+                           'SentAt': ago(minutes=30), 'BodyText': 'Please adjust these.', 'Status': 'routed'})
+        s.add_route(m, t, 'create', .9, 'a concrete ask', [], 'router')
+        with mock.patch.object(funnel, 'DWELL', 0), mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            self.assertEqual(funnel.pile(s, force=True)['events'], [])       # Assistant is already watching
+        live = [{'taskId': t, 'agent': 'coder', 'label': 'coder', 'sid': 'live123', 'mode': 'terminal',
+                 'started': ago(), 'idle': 1, 'waiting': False, 'tail': ['working on it']}]
+        s.update_task(t, {'Status': 'in_progress'}, 'owner')
+        with mock.patch.object(funnel, 'DWELL', 0), mock.patch('taskuary.terminal.live_sessions', return_value=live):
+            p = funnel.pile(s, force=True)
+        self.assertEqual([e['kind'] for e in p['events']], ['working'])
+        item = next(i for i in p['items'] if i.get('tid') == t)
+        self.assertEqual((item['key'], item['lane'], item['agent'], item['sid']),
+                         (f'agent:{t}', 'working', 'coder', 'live123'))
+
     def test_the_page_walks_the_same_loop(self):
         s = self.s
         t = s.create_task({'Title': 'Invoice question', 'Kind': 'coding', 'Status': 'waiting'}, 'router')

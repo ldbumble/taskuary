@@ -47,10 +47,27 @@ export const arrivals = (prevKeys, items) => {
 };
 export const keysOf = (items) => new Set((items || []).map((i) => i.key));
 
+// A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
+// coder has it. The task id is the stable identity across that hand-off.
+export const followsItem = (card, fresh) => !!(card && fresh && (fresh.key === card.key
+  || (fresh.tid && fresh.tid === card.tid && fresh.lane === "working")));
+export const currentItemFromPile = (current, pile) => {
+  if (!current) return null;
+  const items = pile?.items || [];
+  return (pile?.current?.key === current.key ? pile.current : null)
+    || items.find((i) => i.key === current.key)
+    || (current.tid ? items.find((i) => i.tid === current.tid && i.lane === "working") : null)
+    || null;
+};
+
 // The card under a line is decided by the item's KIND, never by the model. Every kind maps to
 // exactly one card so a reload draws the same conversation.
 export const cardFor = (item) => {
   if (!item) return null;
+  // A message becomes the agent's live work without becoming a different historical message.
+  // Lane is the current truth: once it is working, draw the agent controls instead of leaving the
+  // old "nobody on it" message card and its Start button on screen.
+  if (item.lane === "working" && item.tid) return "agent";
   switch (item.kind) {
     case "review": case "action": return "reply";
     case "agent": return "agent";

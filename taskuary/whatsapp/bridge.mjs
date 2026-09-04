@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
 import { createChatGate, nextReconnect } from "./policy.mjs";
+import { createChatRoster } from "./roster.mjs";
 
 // Voice notes are saved beside the bridge and handed to Taskuary as a PATH (same machine); it
 // transcribes them if a voice connector exists and files them with the reason if not. A
@@ -32,6 +33,7 @@ let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = 
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
 const taskuarySent = new Set();             // ids sent through localhost /send, never user prompts
 const chatGate = createChatGate();
+const chatRoster = createChatRoster();       // JIDs/names/recency only; never message bodies
 try {
   if (process.env.WA_BRIDGE_FILTER) chatGate.configure(JSON.parse(process.env.WA_BRIDGE_FILTER));
 } catch (e) { console.error("invalid WA_BRIDGE_FILTER; keeping every chat closed:", e?.message || e); }
@@ -104,6 +106,13 @@ async function connect() {
       me = thisSock.user?.name || thisSock.user?.id || "";
       meJid = thisSock.user?.id || "";                   // 15551234567:12@s.whatsapp.net - the number is who the owner IS here
       console.log(`connected as ${me}`);
+      // Baileys exposes every group this linked account is still participating in without a
+      // message-history download. This gives compose a real account roster even when a group has
+      // never been allowed into Taskuary's inbound timeline.
+      thisSock.groupFetchAllParticipating().then((groups) => {
+        if (thisSock !== sock) return;
+        chatRoster.replaceGroups(Object.values(groups || {}));
+      }).catch((e) => console.log("could not refresh WhatsApp group roster:", e?.message || e));
     }
     if (u.connection === "close") {
       connected = false;
@@ -113,10 +122,39 @@ async function connect() {
       else { reconnectPaused = true; lastDisconnect = "logged out"; console.log("logged out - delete ./wa-auth and pair again"); }
     }
   });
+  thisSock.ev.on("contacts.upsert", (contacts) => {
+    if (thisSock === sock) for (const contact of contacts || []) chatRoster.upsertContact(contact);
+  });
+  thisSock.ev.on("contacts.update", (contacts) => {
+    if (thisSock === sock) for (const contact of contacts || []) chatRoster.upsertContact(contact);
+  });
+  thisSock.ev.on("chats.upsert", (chats) => {
+    if (thisSock === sock) for (const chat of chats || []) chatRoster.upsertChat(chat);
+  });
+  thisSock.ev.on("chats.update", (chats) => {
+    if (thisSock === sock) for (const chat of chats || []) chatRoster.upsertChat(chat);
+  });
+  thisSock.ev.on("chats.delete", (jids) => {
+    if (thisSock === sock) chatRoster.remove(jids);
+  });
+  thisSock.ev.on("groups.upsert", (groups) => {
+    if (thisSock === sock) for (const group of groups || []) chatRoster.upsertChat(group);
+  });
+  thisSock.ev.on("groups.update", (groups) => {
+    if (thisSock === sock) for (const group of groups || []) chatRoster.upsertChat(group);
+  });
+  // Kept for Baileys configurations that permit a metadata/history sync. Taskuary's bridge has
+  // history sync disabled, and even here only chat/contact metadata is observed.
+  thisSock.ev.on("messaging-history.set", ({ chats = [], contacts = [] }) => {
+    if (thisSock !== sock) return;
+    for (const contact of contacts) chatRoster.upsertContact(contact);
+    for (const chat of chats) chatRoster.upsertChat(chat);
+  });
   thisSock.ev.on("messages.upsert", async ({ messages: ms, type }) => {
     if (thisSock !== sock) return;
     if (type !== "notify") return;                       // history syncs are not new work
     for (const m of ms) {
+      chatRoster.observeMessage(m);
       const body = text(m.message || {}), quoted = text(context(m.message || {})?.quotedMessage || {});
       if (!body && !m.message) continue;
       const am = m.message?.audioMessage, im = m.message?.imageMessage;
@@ -178,6 +216,13 @@ http.createServer(async (req, res) => {
       const after = Number(url.searchParams.get("after") || 0);
       return json(res, 200, { seq, messages: messages.filter((m) => m.seq > after),
         blockedChats: chatGate.blockedChats() });
+    }
+    if (req.method === "GET" && url.pathname === "/chats") {
+      const blocked = chatGate.blockedChats();
+      return json(res, 200, { chats: chatRoster.list(blocked).map((chat) => ({
+        ...chat, snippet: blocked.some((x) => x.jid === chat.jid)
+          ? "not opened - chat is not authorized" : ""
+      })) });
     }
     // blue ticks for what the hub has already taken in - ids come back from /messages, and
     // the key we kept with them is what Baileys needs. Unknown ids (rotated out of the

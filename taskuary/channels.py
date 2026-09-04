@@ -466,6 +466,57 @@ def _same_words(a: str, b: str, n: int = 160) -> bool:
     return bool(x) and x == y
 
 
+def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
+    """Resolve reply drafts made obsolete by a reply the owner sent in the native app.
+
+    A provider sync can land well after triage wrote its draft.  The draft belongs to the
+    inbound message it was written against, so an owner line later on that same conversation
+    is the missing verdict: the reply already went out.  Action approvals are deliberately
+    excluded -- sending a chat line cannot approve an unrelated proposed action.
+    """
+    conv, sent_at = sent.get('ConversationId'), sent.get('SentAt')
+    if not conv or not sent_at:
+        return []
+    stale = [rv for rv in store.list_reviews('pending')
+             if rv.get('TaskId') == tid and rv.get('Kind') != 'action'
+             and rv.get('ConversationId') == conv
+             and (not rv.get('SentAt') or rv['SentAt'] <= sent_at)]
+    if not stale:
+        return []
+
+    place = SENT_FROM.get(sent.get('Channel'), 'outside Taskuary')
+    for rv in stale:
+        store.decide_review(rv['ReviewId'], 'superseded', None, 'you',
+                            f'The owner replied {place}; this draft was not sent.')
+
+    # Treat this exactly like a successful send through Review.  Reply-only work closes, while
+    # owner-controlled work and a task whose coding agent is still running keep their safeguards.
+    if tid:
+        from . import verdicts
+        verdicts._settle_task_after_sent_reply(store, stale[0], 'you', True)
+
+    task = store.get_task(tid) if tid else {}
+    body = re.sub(r'\s+', ' ', sent.get('BodyText') or '').strip()
+    excerpt = f': "{body[:180]}"' if body else ''
+    if not tid:
+        subject = (store.get_message(stale[0].get('MessageId')) or {}).get('Subject') or 'this thread'
+        where = subject
+        state = ''
+    else:
+        where = f'TQ-{tid:04d}'
+        state = ' The task is still open because it has other work in progress.' \
+            if task.get('Status') not in ('done', 'dropped') else ' I marked the task done.'
+    from . import concierge, funnel, general
+    concierge.record(store, general.dock_task(store)[0]['TaskId'], 'assistant',
+                     f'You replied {place} on {where}{excerpt}. '
+                     f'I removed the unused draft; the reply was taken care of.{state}')
+    funnel.invalidate()
+    # The review transition already wakes the UI, but this final wake happens after the durable
+    # Assistant line was written, avoiding a race where an open chat fetched one write too early.
+    store._poke('feed-changed', 'task-changed', task_id=tid)
+    return stale
+
+
 def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) -> int:
     """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row and
     never becomes work: it rides INSIDE the thread as a 'context' message, which is what the
@@ -486,6 +537,8 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
                              'SourceLink': msg.get('source_link'), 'Status': 'context',
                              'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None})
+    sent = store.get_message(mid) or {}
+    retire_draft_answered_elsewhere(store, tid, sent)
     if not tid: return 1
     store.add_route(mid, tid, 'attach', None, why, [], 'router')
     # ...unless Taskuary is reading back its OWN send. That reply already has its line on the
@@ -745,7 +798,7 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
     issues_mode, prs_mode = gh_modes(src, file_only)
     if issues_mode == 'off' and prs_mode == 'off': return 0
     n = 0
-    from .github import list_items
+    from .github import body_images, list_items
     for i in reversed(list_items(tok, repo, since=since.astimezone().isoformat())):
         if TQ_ISSUE.match(i.get('title') or ''): continue
         is_pr = 'pull_request' in i
@@ -761,6 +814,10 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
             'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
             'conversation_id': f"gh:{repo}#{i['number']}", 'sent_at': _local(i.get('updated_at') or ''),
             'source_link': i.get('html_url'), 'source_name': repo,
+            # the screenshot IS the report: read it before the row exists, or the classifier
+            # judges an issue template whose headings are empty (see images_for_triage above)
+            'images': (body_images(tok, i.get('body') or '')
+                       if str(store.get_settings().get('vision_enabled') or '1') == '1' else []),
             'no_auto': not gh_auto_ok(src, i.get('author_association'))},
             llm=llm, file_only=mode == 'feed')
         n += out['status'] != 'duplicate'
@@ -897,7 +954,7 @@ def _poll_jobs(store, only=None):
         # tool-only card, a Sync that pulled nothing, and no error anywhere).
         phone_guide = (c['Type'] == 'whatsapp'
                        and store.get_settings().get('phone_assistant') == '1'
-                       and 'notify' in roles)
+                       and bool(_cfg(c).get('assistant_chat') or _cfg(c).get('notify_chat')))
         if (not roles & {'trigger', 'feed'} and not phone_guide
                 and not (c['Type'] == 'github' and _gh_explicit(store))
                 and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue

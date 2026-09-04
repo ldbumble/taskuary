@@ -119,16 +119,29 @@ class ArrivalsTests(unittest.TestCase):
         self.assertIsNotNone(rv, 'a reply task always enters the review queue')
         self.assertEqual([(i['kind'], i['lane'], i['draft']) for i in pile(s)], [('review', 'approve', False)])
 
-    def test_fyi_is_filed_and_marketing_never_reaches_the_pipe_at_all(self):
+    def test_fyi_and_marketing_are_filed_but_stay_unread_until_the_owner_clears_them(self):
         s = store()
         promo = arrive(s, subject='Monthly newsletter', body='News from us', who='Marketing',
                        email='news@vendor.com', llm=brain('fyi', None, 'a newsletter'))
         self.assertEqual((promo['status'], promo['task_id']), ('filed', None))
-        self.assertEqual(pile(s), [])                                   # a stranger's marketing: the Timeline keeps it, the pipe never sees it
+        self.assertEqual([(i['kind'], i['category']) for i in pile(s)], [('fyi', 'promo')])
         person = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Chana',
                         email='chana@ours.com', conv='c:fyi', hours=2, llm=brain('fyi', None, 'telling you something'))
         self.assertEqual(person['status'], 'filed')
-        self.assertEqual(lanes(s), [('fyi', 'fyi')])                    # a colleague's fyi does: one quiet line at the back
+        self.assertEqual(lanes(s), [('fyi', 'fyi'), ('fyi', 'fyi')])    # both are unread; the category still ranks/explains them
+
+        robot = arrive(s, subject='Backup completed', body='This is an automated notification.', who='System',
+                       email='noreply@vendor.com', conv='c:robot', hours=0, llm=brain('fyi', None, 'system notice'))
+        self.assertEqual(robot['status'], 'filed')
+        self.assertEqual([i['category'] for i in pile(s)], ['info', 'promo', 'automated'])
+
+    def test_an_assistant_timeline_post_is_unread_too(self):
+        s = store()
+        s.add_message({'ExternalId': 'assistant:1', 'ConversationId': 'assistant', 'Channel': 'assistant',
+                       'SourceName': 'Assistant', 'Subject': 'Gabi sent a new requirement', 'FromName': 'Assistant',
+                       'SentAt': ago(), 'BodyText': 'I would add this to the spec.', 'Status': 'feed'})
+        self.assertEqual([(i['kind'], i['category'], i['title']) for i in pile(s)],
+                         [('fyi', 'assistant', 'Gabi sent a new requirement')])
 
     def test_general_work_opens_a_conversation_and_starts_no_coder(self):
         s = store()
@@ -716,12 +729,24 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
         self.assertIsNone(concierge.decide_words('can you check if the report ran?'))
 
     def test_the_verbs_the_owner_kept_using(self):
-        for words, verb in (('skip it', 'skip'), ('delete it', 'archive'), ('archive it', 'archive'),
+        for words, verb in (('skip it', 'skip_choice'), ('delete it', 'archive'), ('archive it', 'archive'),
                             ('snooze it', 'later'), ('remind me tomorrow', 'skip'),
                             ('make the reply shorter', 'redraft'), ('forward it to Chana', 'forward'),
                             ('ask Chana to handle it', 'forward'), ('tell the agent yes', 'answer_agent'),
                             ('answer the agent: yes remove them', 'answer_agent')):
             self.assertEqual((concierge.decide_words(words) or {}).get('verb'), verb, words)
+
+    def test_skip_it_asks_once_or_forever_and_each_answer_has_a_distinct_verdict(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        ask = say(s, 'skip it', key=item['key'])
+        self.assertIsNone(ask['decision'])
+        self.assertEqual(ask['options'], ['Just this once', 'Forever for this kind'])
+        self.assertEqual(s.list_memories(), [])
+        self.assertEqual(say(s, 'Just this once', key=item['key'])['decision']['verb'], 'not_ours')
+
+        s2, tid2, mid2, item2 = ResponseTests()._asked()
+        self.assertEqual(say(s2, 'Forever for this kind', key=item2['key'])['decision']['verb'],
+                         'not_ours_remember')
 
     def test_yes_means_whatever_the_card_in_front_of_them_does(self):
         s, tid, rid, item = ResponseTests()._drafted()
@@ -808,14 +833,15 @@ class WalkFromWordsTests(unittest.TestCase):
             self.assertIsNone(out.get('decision'), words)
             self.assertIn('Nothing is on the table', out['say'], words)
 
-    def test_words_land_on_an_fyi_batch_the_way_buttons_do(self):
+    def test_words_land_on_the_fyi_batch_the_way_buttons_do(self):
         s = self._three()
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             first = concierge.surface(s, llm=None)                            # the coding ask
-            batch = concierge.surface(s, llm=None)                            # ...then the fyi, as a batch
-        self.assertTrue(batch['item']['key'].startswith('fyis:'))
-        for words, verb in (('next', 'next'), ('done', 'done'), ('not ours', 'done')):
-            out = say(s, words, key=batch['item']['key'])
+            card = concierge.surface(s, llm=None)                             # ...then the FYI handful
+        self.assertTrue(card['item']['key'].startswith('fyis:'))
+        self.assertEqual((card['item']['kind'], len(card['item']['items'])), ('fyis', 2))
+        for words, verb in (('next', 'next'), ('done', 'done')):
+            out = say(s, words, key=card['item']['key'])
             self.assertEqual((out.get('decision') or {}).get('verb'), verb, words)
 
     def test_a_new_chat_brings_a_waiting_agent_back(self):
@@ -1025,7 +1051,12 @@ class NeverWorkTests(unittest.TestCase):
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         self.assertIn('AI triage failed', s.message_routes(out['message_id'])[-1]['Reason'])
         self.assertIn('connector 500', s.get_settings().get('triage_last_error') or '')
-        self.assertEqual(pile(s), [])                                     # never assumed to be work
+        # A failed classifier must not invent work, but the arrival is still unread information.
+        # Filing/category is not a read receipt: it remains in the shared All/Unread inventory as
+        # an FYI explaining the connector failure until the owner reads or handles it.
+        items = pile(s)
+        self.assertEqual([(i['kind'], i['lane'], i.get('tid')) for i in items], [('fyi', 'fyi', None)])
+        self.assertIn('AI triage failed', items[0]['why'])
 
     def test_a_brain_that_answers_nonsense_files_it_rather_than_guessing(self):
         s = store()
@@ -1252,6 +1283,7 @@ class ApiActionsTests(unittest.TestCase):
         s = store(); out = self._ask(s); c = self.client(s)
         self.assertEqual(c.post(f"/api/messages/{out['message_id']}/file", json={'learn': False}).status_code, 200)
         self.assertEqual(s.get_message(out['message_id'])['Status'], 'ignored')   # the owner's own verdict on the thread
+        self.assertEqual(s.list_memories(active_only=True), [])                    # this once teaches nothing
         gone = s.get_task(out['task_id'])                                         # a task that existed only for
         self.assertTrue(gone is None or gone['Status'] in ('dropped', 'done'), gone)   # this mail is removed with it
         self.assertEqual(pile(s), [])                                             # and off the pile

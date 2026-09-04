@@ -14,8 +14,9 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { taskMatchesQuery } from "./taskSearch.js";
-import { filterForSelectedState } from "./taskFilter.js";
+import { completionTransition, filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
+import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -107,6 +108,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // same task made here fell back to guess_repo matching the words against SOUL.md's repo map -
   // right often enough to be trusted, and wrong silently when it was not.
   const [repos, setRepos] = useState([]);
+  const sessionAlive = !!detail?.session?.alive;
+  const hasRunningRun = (detail?.runs || []).some((r) => r.Status === "running");
+  const hasCoderReport = (detail?.comments || []).some((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
+  const hasTranscript = !!detail?.transcript;
+  const detailTaskStatus = detail?.task?.Status;
   useEffect(() => {
     api.get("/api/sources").then(({ data }) => setRepos(
       (data.data || []).filter((x) => x.Channel === "github" && x.Active).map((x) => x.Address)
@@ -222,14 +228,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     // a LIVE SESSION counts as much as a headless run here: the header chip is derived from
     // how long the pty has been quiet, so without re-asking it froze on whatever it said
     // when the task was opened - "needs you" over an agent that was mid-thought
-    const running = (detail?.runs || []).some((r) => r.Status === "running") || detail?.session?.alive;
-    if (detail?.session?.alive) sessionSettleUntil.current = Date.now() + 120000;
-    const filedReport = (detail?.comments || []).some((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
-    const settling = detail?.task?.Status === "in_progress" && !!detail?.transcript
-      && (filedReport || Date.now() < sessionSettleUntil.current);
+    const running = hasRunningRun || sessionAlive;
+    if (sessionAlive) sessionSettleUntil.current = Date.now() + 120000;
+    const settling = detailTaskStatus === "in_progress" && hasTranscript
+      && (hasCoderReport || Date.now() < sessionSettleUntil.current);
     if (!((running || wrapping || settling) && selected)) return undefined;
-    return onLive(["run-tail", "task-changed"], () => loadDetail(selected));
-  }, [detail, selected, loadDetail, wrapping]);
+
+    // Terminal bytes already travel over their own websocket. Turning each output frame into a
+    // task + waitroom fetch made switching and typing wait behind the terminal's own repaints.
+    // The surrounding lifecycle state only needs a calm check; the terminal remains fully live.
+    return pollWhileActive(active, () => loadDetail(selected), 3000);
+  }, [active, detailTaskStatus, hasCoderReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
 
   const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };
   const create = async () => {
@@ -311,8 +320,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [handoff, setHandoff] = useState(false);
   const [reshape, setReshape] = useState(false);
   const [repoPick, setRepoPick] = useState(false);
+  const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
   const [menuEl, setMenuEl] = useState(null);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setDiffOpen(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
   const loadDiff = useCallback(async (id) => {
@@ -346,7 +356,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const findTerm = useCallback(async (tid) => {
     if (!tid) { setTerm(null); return; }
     try {
-      const rows = (await api.get("/api/terminals")).data.data || [];
+      // Selecting a task only needs the session identity/lifecycle. Rich files + witness data is
+      // fetched by WorkStrip if the owner opens it; waiting on git here blocked the terminal pane.
+      const rows = (await api.get("/api/terminals", { params: { details: false } })).data.data || [];
       if (stale(tid)) return;
       // an exited session still holds its scrollback (they stay listed ~10 min), and that
       // transcript is exactly what Done and Pause need - dropping it left a task you could
@@ -364,10 +376,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     }
     catch (e) {
       const msg = e?.response?.data?.detail || "Could not start a terminal";
-      setErr(msg);
-      // the repo guard refused (right repo, no local path): the fix IS the picker, so open it
-      // here instead of sending the user off to read the error's directions
-      if (/no local path/i.test(msg)) setRepoPick(true);
+      // Both repo guards are questions: either the repo is known but its path is missing, or
+      // several checkouts exist and this task did not identify one confidently. Ask here, retain
+      // the attempted launch, and continue it as soon as the owner chooses.
+      if (/no local path|could not tell which checkout/i.test(msg)) {
+        setErr(""); setRepoPick(true); setResumeAfterRepo(body);
+      } else setErr(msg);
     }
   }, [loadDetail, loadTasks, onChanged]);
   const generalSession = useCallback((session) => setTerm(session), []);
@@ -412,7 +426,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const key = stateOf(row).key;
     const was = seenState.current;
     seenState.current = { id: selected, key };
-    if (was.id !== selected || was.key === key) return;   // new selection, or nothing moved
+    if (was.id === selected && was.key === key) return;   // nothing moved
+    // A closed task opened from a deep link or another tab must not sit under a highlighted
+    // In progress pill. New selections align the rail too; explicit filter clicks move the
+    // selection in `changeFilter` below, so this cannot make the pills snap back.
     const next = filterForSelectedState(filter, key);
     if (next !== filter) { setFilter(next); setOlder(false); }
   }, [active, selected, tasks, search, filter]);
@@ -423,17 +440,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // finished with. Closing a task is a statement that you are finished looking at it, so let go
   // of it and stay where the work is.
   const finish = async (status) => {
-    // Where they were is where they stay. Closing a task used to switch the list back to "live" and
-    // then follow the selection to the top - so finishing one in progress threw them into another
-    // bucket looking at the task they had just closed (the owner, 2026-09-03: "it should not take you
-    // to the done task but stay on in progress and move to next task"). The one to look at next is
-    // the one AFTER it in the list they are already reading.
-    const order = shown.map((x) => x.TaskId);
-    const at = order.indexOf(selected);
-    const next = order[at + 1] ?? order[at - 1] ?? null;
-    await api.patch(`/api/tasks/${selected}`, { Status: status });
-    seenState.current = { id: null, key: null };     // nothing for the follow effect to chase
-    onSelect(next);
+    // Mark task done always means "continue with the work still in progress", even when this task
+    // was opened from All/search. Choose from the complete live bucket rather than `shown`, which
+    // may be filtered or cut to today. Pre-record the state we are about to write: the server emits
+    // task-changed during the PATCH, and without this guard that event can make the effect above
+    // chase the closing task into Done before this continuation selects the next row.
+    const liveIds = (tasks || []).filter((x) => inBucket(x, "live")).map((x) => x.TaskId);
+    const transition = completionTransition(liveIds, selected, status);
+    const before = seenState.current;
+    seenState.current = transition.seen;
+    setFilter(transition.filter); setOlder(false); setQuery("");
+    try {
+      await api.patch(`/api/tasks/${selected}`, { Status: status });
+    } catch (e) {
+      seenState.current = before;
+      setErr(e?.response?.data?.detail || "Failed to finish task");
+      loadTasks();
+      return;
+    }
+    onSelect(transition.next);
     loadTasks(); onChanged?.();
   };
   // The desktop page is a master/detail workspace. Opening it with a populated list but no
@@ -444,6 +469,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => {
     if (active && !selected && firstShownId) onSelect(firstShownId);
   }, [active, selected, firstShownId, onSelect]);
+  const changeFilter = (next) => {
+    setFilter(next); setQuery(""); setOlder(false);
+    if (!next || !selected) return;
+    const row = (tasks || []).find((x) => x.TaskId === selected);
+    if (!row || inBucket(row, next)) return;
+    const replacement = (tasks || []).find((x) => inBucket(x, next))?.TaskId ?? null;
+    seenState.current = { id: null, key: null };
+    onSelect(replacement);
+  };
   // The report is identified by its durable marker, not the actor label. Named coding agents
   // appear as coder/claude/codex in the record; requiring ActorType === "agent" hid valid results.
   const report = [...(detail?.comments || [])].reverse().find((c) => {
@@ -528,7 +562,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
   });
-  const workspaceMode = agentWorkspaceMode({ isGeneral, session: term, wrapping, wrapped });
+  const hasGeneralHistory = (detail?.comments || []).some((c) =>
+    c.ActorType === "assistant_user" || c.ActorType === "assistant_agent");
+  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
+    || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
+  const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping, wrapped });
   const replyState = replyPhase(detail?.reviews || []);
   const startCodingAgent = async () => {
     if (!selected || startingAgent) return;
@@ -548,13 +586,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   const startGeneralAgent = async () => {
-    if (!selected || startingAgent || isGeneral) return;
+    if (!selected || startingAgent) return;
     const id = selected;
     setStartingAgent("general"); setErr("");
     try {
-      const tags = String(t.Tags || "").split(/[\s,]+/).filter(Boolean);
-      if (!tags.includes(ASK_TAG)) tags.push(ASK_TAG);
-      await api.patch(`/api/tasks/${id}`, { Kind: "general", Tags: tags.join(",") });
+      if (isGeneral) {
+        const { data } = await api.post(`/api/tasks/${id}/dispatch`, { kind: "general" });
+        if (!stale(id)) setTerm(data.session || null);
+      } else {
+        const tags = String(t.Tags || "").split(/[\s,]+/).filter(Boolean);
+        if (!tags.includes(ASK_TAG)) tags.push(ASK_TAG);
+        await api.patch(`/api/tasks/${id}`, { Kind: "general", Tags: tags.join(",") });
+      }
       if (!stale(id)) setRestartOpen(false);
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
@@ -583,7 +626,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 push it off the edge of a 340px panel again. */}
             <Box sx={{ flex: 1, minWidth: 0, overflowX: "auto", "&::-webkit-scrollbar": { display: "none" },
               scrollbarWidth: "none" }}>
-              <FilterPills value={search ? "" : filter} onChange={(next) => { setFilter(next); setQuery(""); }}
+              <FilterPills value={search ? "" : filter} onChange={changeFilter}
                 options={STATE_FILTERS.map((f) => ({ ...f,
                   n: !tasks ? null : f.key ? tasks.filter((x) => inBucket(x, f.key)).length : tasks.length }))} />
             </Box>
@@ -618,8 +661,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   boxShadow: selected === task.TaskId ? "0 1px 8px rgba(47,107,79,.14)" : "none",
                   transition: "border-color .12s, box-shadow .12s",
                   "&:hover": { borderColor: selected === task.TaskId ? stateOf(task).c.fg : "#d8cfbe" } }}>
-                <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
-                  <Typography variant="caption" sx={{ ...mono, color: "#55697a", fontWeight: 700 }}>{task.ref}</Typography>
+                <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", minWidth: 0 }}>
+                  <Typography variant="caption" sx={{ color: "#55697a",
+                    fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
+                    letterSpacing: ".015em", fontWeight: 750, fontSize: 12,
+                    whiteSpace: "nowrap", flexShrink: 0 }}>{task.ref}</Typography>
                   <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
                   <StateChip task={task} />
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
@@ -627,8 +673,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     label={assignedAgent(task.Assignee)} title={`${assignedAgent(task.Assignee)} owns this task`}
                     sx={{ height: 17, fontSize: 9.5, bgcolor: "#e3e6e1", color: "#47654a",
                       "& .MuiChip-icon": { ml: 0.45 } }} />}
-                  <Box sx={{ flex: 1 }} />
-                  <Typography variant="caption" sx={{ color: FAINT }}>{timeAgo(task.CreatedAt)}</Typography>
+                  <Box sx={{ flex: 1, minWidth: 0 }} />
+                  <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap", flexShrink: 0 }}>{timeAgo(task.CreatedAt)}</Typography>
                 </Box>
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.4 }}>{task.Title}</Typography>
                 {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
@@ -670,8 +716,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* one primary action, everything else behind one tidy menu - six buttons in a
                     row read as none of them mattering */}
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography sx={{ ...mono, color: "#55697a", fontWeight: 700,
-                    fontSize: liveCodingSession ? 11.5 : 12.5 }}>{detail.ref}</Typography>
+                  <Typography sx={{ color: "#41525f",
+                    fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
+                    letterSpacing: ".015em", fontWeight: 750,
+                    fontSize: liveCodingSession ? 12.5 : 13.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 650,
                     fontSize: liveCodingSession ? 13.5 : 15,
                     minWidth: { xs: 110, sm: 200 }, letterSpacing: "-.01em" }} noWrap>
@@ -851,22 +899,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   display: liveCodingSession ? "flex" : "block", alignItems: "center",
                   gap: liveCodingSession ? 1 : 0, flexWrap: "wrap" }}>
                   <Box sx={{ minWidth: 0, flex: liveCodingSession ? "0 1 auto" : "initial" }}>
-                    <WorkflowHeading number="2" title={liveCodingSession ? "Agent running" : "Agent work"}
+                    <WorkflowHeading number="2" title={`${term?.alive ? "Agent running" : "Agent work"}${term?.alive ? ` · ${term.provider || term.agent || "agent"}` : ""}`}
                     description={term?.alive
                       ? ""
                       : "Run, pause, stop, or restart an agent. None of these actions completes the task."}
                     chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" />
                   </Box>
-                  {liveCodingSession && (
+                  {term?.alive && (
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
-                      gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
-                      <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
+                      gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0, mt: liveCodingSession ? 0 : 1 }}>
+                      {liveCodingSession && <Button size="small" variant="contained" disableElevation onClick={() => setFeedOpen(true)}
                         sx={{ fontSize: 10.5, minHeight: 27, px: 1,
                           bgcolor: "#8a7a5c", "&:hover": { bgcolor: "#6b5f45" } }}>
                         {agentWaiting ? "Answer agent" : "Give new prompt"}{waitingN ? ` · ${waitingN} queued` : ""}
-                      </Button>
-                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
-                        onClick={() => setDiffOpen(true)}>Review changes</Button>
+                      </Button>}
+                      {liveCodingSession && <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
+                        onClick={() => setDiffOpen(true)}>Review changes</Button>}
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
                         onClick={wrapUp}>Finish agent run</Button>
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<PauseCircleIcon sx={{ fontSize: 14 }} />}
@@ -938,8 +986,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Box>
                     </Box>
                   )}
-                  {isGeneral && !term?.alive && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.8 }}>
-                    Send a message in the non-coding workspace below to start or restart its agent.
+                  {isGeneral && !generalStarted && (
+                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                        startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
+                        onClick={startGeneralAgent}>
+                        {startingAgent === "general" ? "Starting…" : "Send to agent"}
+                      </Button>
+                      <Typography variant="caption" sx={{ color: FAINT, ml: 1 }}>
+                        Starts the regular assistant with this task and its messages.
+                      </Typography>
+                    </Box>
+                  )}
+                  {isGeneral && generalStarted && !term?.alive && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.8 }}>
+                    Send a message in the workspace below to restart its agent.
                   </Typography>}
                 </Box>
                 {repoPick && (
@@ -949,11 +1009,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, flex: 1 }}>
                         Which repository is this about?
                       </Typography>
-                      <IconButton size="small" onClick={() => setRepoPick(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+                      <IconButton size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
                     </Box>
                     <RepoPicker taskId={selected} agent={term?.agent || run.agent || "coder"}
                       hasSession={!!term?.alive}
-                      onDone={() => { loadDetail(selected); loadTasks(); findTerm(selected); }} />
+                      onDone={(data) => {
+                        loadDetail(selected); loadTasks(); findTerm(selected);
+                        if (resumeAfterRepo && data?.repo) {
+                          const launch = resumeAfterRepo;
+                          setResumeAfterRepo(null); setRepoPick(false);
+                          openTerm({ ...launch, repo: data.repo, cwd: null });
+                        }
+                      }} />
                   </Box>
                 )}
                 {workspaceMode === "general" ? (

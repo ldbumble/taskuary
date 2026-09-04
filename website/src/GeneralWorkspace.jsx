@@ -463,14 +463,16 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       setConnectorId((old) => old || String(provider.id));
       setModel((old) => old || payload?.session?.model || provider.model || "");
     }
-    if (payload?.session) onSession?.(payload.session);
+    onSession?.(payload?.session || null);
     onBusyChange?.(!!payload?.session?.busy);
   }, [onBusyChange, onSession]);
 
   useEffect(() => {
     let live = true;
     setData(null); setError(""); setNotice(""); setAttachments([]); setNewChatBusy(false); setConfirmNewChat(false);
-    api.post(`/api/tasks/${task.TaskId}/assistant/session`, {}).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
+    // Looking at a general task is not sending it to an agent. Load saved state only; the first
+    // actual message (or an explicit Send to agent action) starts the regular agent.
+    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
   }, [accept, task.TaskId]);
 

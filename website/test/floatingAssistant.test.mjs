@@ -29,6 +29,14 @@ test("add shortcuts open the native new-task and new-report surfaces", () => {
   assert.match(read("ReportsView.jsx"), /value === "new"/);
 });
 
+test("deep links render their requested page before booting the hidden Assistant", () => {
+  const page = read("TaskHubPage.jsx");
+  assert.match(page, /#\(\?:task=\\d\+\|new-task\)/);
+  assert.match(page, /#report=/);
+  assert.match(page, /useState\(tab === "Assistant"\)/);
+  assert.match(page, /\{everAssistant && \(/);
+});
+
 test("the floating guide's AI choices render above the guide", () => {
   const source = read("GeneralWorkspace.jsx");
   const z = Number(source.match(/MenuProps=\{\{ sx: \{ zIndex: (\d+) \}/)?.[1] || 0);

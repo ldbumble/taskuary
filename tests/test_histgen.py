@@ -34,6 +34,13 @@ class HistgenTests(unittest.TestCase):
         self.assertEqual(histgen.cut_quoted('Yes.\nOn Mon, Aug 3, Sarah wrote:\n> hi'), 'Yes.')
         self.assertEqual(histgen.cut_quoted('plain\nreply'), 'plain\nreply')
 
+    def test_style_sample_keeps_the_signature_at_the_end_of_a_long_email(self):
+        body = 'Hello,\n\n' + ('detail ' * 200) + '\n\nBest,\nUri\nMFA Heritage\n555-0100'
+        sample = histgen.style_sample(body, 200)
+        self.assertLess(len(sample), 240)
+        self.assertTrue(sample.startswith('Hello,'))
+        self.assertIn('Best,\nUri\nMFA Heritage\n555-0100', sample)
+
     def test_triage_generates_into_marker_block(self):
         s = MemoryStore()
         with graph(SENT, INBOX), mock.patch('taskuary.llm.build_llm', return_value=fake_llm):

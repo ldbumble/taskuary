@@ -23,7 +23,6 @@
 .tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid #e1dcd5; border-left: 2px solid var(--edge, #d3ccc1); border-radius: 8px; padding: 3px 10px 4px; background: #fffdfb; cursor: pointer; transition: box-shadow .18s, border-color .18s; }
 .tq-pile-row .card:hover { border-color: #d8cfbe; border-left-color: var(--edge, #d3ccc1); box-shadow: 0 2px 8px rgba(47,107,79,.10); }
 .tq-pile-row.settling .card { border-style: dashed; }
-.tq-pile-row.shown .card { opacity: .62; border-style: dashed; }   /* shown once, still waiting on you - it comes round again */
 /* NEXT wears a ring in the working colour; CURRENT (on the table in the chat) the deeper one */
 .tq-pile-row.next .card { border-color: #7d9a7c; box-shadow: inset 0 0 0 1px #7d9a7c, 0 2px 10px rgba(47,107,79,.14); }
 .tq-pile-row.current { height: 54px; }
@@ -117,12 +116,12 @@
 .tq-compose { padding: 6px 20px 10px; border-top: 1px solid #e4e0d9; background: #fffdfb; }
 .tq-quick { display: flex; gap: 6px; flex-wrap: wrap; width: min(900px, 100%); margin: 0 auto 8px; }
 .tq-quick .tq-chip { padding: 3px 10px; font-size: 10.5px; }
-.tq-compose-box { width: min(900px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
-.tq-compose-box textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; }
+.tq-compose-box { width: min(900px, 100%); margin: 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
+.tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; }
 .tq-compose-box textarea::placeholder { color: #8f8b84; }
 /* the mic arrives wrapped in a Tooltip <span>; inline descender space under it lifted the
    icon above the emoji next door. Both controls are flex items of the same height now. */
-.tq-compose-box > span { display: flex; align-items: center; }
+.tq-compose-box > span { width: 34px; height: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: center; }
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
 .tq-compose-hint { margin: 5px auto 0; text-align: center; color: #a09b92; font: 9px/1.2 'IBM Plex Mono', Consolas, monospace; }

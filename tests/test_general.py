@@ -26,6 +26,22 @@ def connect_openai(store):
 
 
 class SharedSessionTests(unittest.TestCase):
+    def test_general_session_supports_the_shared_terminal_attach_quiet_contract(self):
+        store = MemoryStore(); tid = general_task(store)
+        session = general.GeneralSession(store, tid)
+        last = session.last
+        self.assertIsNone(session.quiet_for(10))
+        self.assertEqual(session.last, last)  # attaching a renderer is not agent activity
+
+    def test_general_session_can_attach_through_the_terminal_websocket(self):
+        store = MemoryStore(); tid = general_task(store)
+        session = general.GeneralSession(store, tid)
+        with mock.patch.dict(terminal.SESSIONS, {session.sid: session}, clear=True):
+            with TestClient(server.app).websocket_connect(f'/api/terminals/{session.sid}/ws') as ws:
+                first = ws.receive_json()
+        self.assertEqual(first['type'], 'out')
+        self.assertIn('Taskuary assistant', first['data'])
+
     def test_setup_walkthrough_uses_a_tool_cli_and_starts_its_own_browser(self):
         store = MemoryStore()
         store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({
@@ -145,6 +161,16 @@ class SharedSessionTests(unittest.TestCase):
         posts = store.lore_posts()
         self.assertEqual([(p['Title'], p['Author'], p['TaskId']) for p in posts],
                          [('Operations approves customer launch dates', 'assistant', tid)])
+
+    def test_archiving_the_global_chat_does_not_launch_a_hidden_closeout_agent(self):
+        store = MemoryStore(); task, _ = general.dock_task(store)
+        store.add_comment(task['TaskId'], 'owner', general.USER_TYPE, 'skip it')
+        store.add_comment(task['TaskId'], 'assistant', general.ASSISTANT_TYPE, 'Tomorrow, then.')
+        session = general.GeneralSession(store, task['TaskId'])
+        with mock.patch.object(llm, 'build_llm') as build:
+            session.close()
+        build.assert_not_called()
+        self.assertFalse(session.alive)
 
     def test_api_assistant_can_publish_a_hub_idea_without_showing_the_marker(self):
         store = MemoryStore(); tid = general_task(store)
@@ -416,6 +442,17 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual((result['wrap'], result['report']), ('done', 'The finished plan'))
         self.assertEqual(store.get_task(tid)['Status'], 'done')
         self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in store.list_comments(tid)))
+
+    def test_pause_closes_a_general_session_and_keeps_its_conversation(self):
+        store = MemoryStore(); tid = general_task(store); connect_openai(store)
+        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'The saved answer'):
+            session = general.start_session(store, tid); session.send_prompt('Work this through')
+            result = TestClient(server.app).post(f'/api/tasks/{tid}/pause', json={}).json()
+        self.assertEqual((result['pause'], result['note']), ('done', 'The saved answer'))
+        self.assertEqual(store.get_task(tid)['Status'], 'in_progress')
+        self.assertIsNone(general.session_for(tid))
+        self.assertEqual([m['role'] for m in general.history(store, tid)][:2], ['user', 'assistant'])
 
 
 class GeneralWaitroomTests(unittest.TestCase):

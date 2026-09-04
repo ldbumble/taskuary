@@ -16,11 +16,11 @@ order a sharp assistant would raise them:
 
 The queue itself is a TIMELINE, oldest first - the longer a thing has waited, the closer it is to
 the mouth - with the promoted lanes (an agent waiting, a meeting, a draft for your yes) jumping to the
-front and fyi (nothing to do) demoted to the back. New arrivals land on top and slide to their slot. The pile is UNREAD, the way an
-inbox is: showing an item in the chat is reading it, and read is gone (funnel_state 'surfaced'). What
-is still on the owner after that - a draft they skipped, an agent still parked - comes back on its
-own: the assistant's follow-up producers raise it again under a new key, or 'later' brings it back at
-its time. Anything an agent is working on has nothing for the owner to do and never enters. FYI and
+front and fyi (nothing to do) demoted to the back. New arrivals land on top and slide to their slot.
+This ranked pile is the feed's Unread view and the concierge walks the same items in the same order;
+All remains chronological history. A row leaves Unread once it is read or otherwise resolved.
+Anything an agent is working on remains visible at the bottom but is skipped by the concierge until
+the agent stops or asks. FYI and
 reports age out after a day; a draft waiting for a yes never does. No model is involved -
 the words on every item are the facts they came from, so what it says can always be checked -
 and the whole pile is recomputed on every look: a reply approved, a task closed or a meeting
@@ -66,12 +66,16 @@ IDEA_HOURS = 24
 # Check - 0 rows' a failure, because the report's own name contains 'Error' (the owner, 2026-09-03:
 # "that's not a fail, it says all clear?" - and the assistant said Next).
 _FAILED = re.compile(r'FAILED\s*$')                # reports.py writes '<title> - FAILED', and it shouts
-_QUIET = {'automated', 'promo', 'filed', 'ignored', 'feed', 'yours'}   # the Timeline keeps these; the pipe does not
-PILE_EVERY = 3                    # seconds: the pile is polled while the page is open
-_CACHE = {'at': 0.0, 'pile': None}
+# Triage's category is not a read receipt. An incoming newsletter, system notice, feed row, or
+# Assistant post may be low-value, but it still enters the unread inventory; this small set remains
+# only for converting a manually named historical row into a generic FYI card.
+_QUIET = {'filed', 'ignored', 'yours'}
+PILE_EVERY = 30                   # websocket writes invalidate it; this is only a disconnected-client safety net
+_CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0}
 _STATE = {}                        # tid -> 'working' | 'parked' | 'asking' | 'done' | 'idle', as last seen by the watcher
 _SEEN = {}                         # tid -> (state, first seen at) - a change must HOLD before it is news
-DWELL = 12.0                       # seconds a new state must survive (the pile is read every 3s)
+_WATCHED = [False]                 # first LOOK, even when there were no sessions; _STATE empty is not the same thing
+DWELL = 12.0                       # seconds a new state must survive before the watcher announces it
 _REPORT_SUMMARY = re.compile(r'(?im)^summary:\s*(.+)$')
 _LOCK = threading.Lock()
 
@@ -125,28 +129,53 @@ def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None
             'preview': _gist(preview, 240), **extra}
 
 
-# â”€â”€ the producers: each reads one thing the hub holds â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── the producers: each reads one thing the hub holds ─────────────────────────────────────────
 def _feed_skip(r: dict) -> bool:
     """Rows that are nobody asking anything: our own sends, withdrawn lines, an auto-reply, and
     anything on a task that is over (unless a draft on it still waits for a yes)."""
-    if r.get('Direction') == 'out' or r.get('MsgStatus') == 'withdrawn' or r.get('Channel') == 'assistant': return True
+    if r.get('Direction') == 'out' or r.get('MsgStatus') in ('withdrawn', 'ignored'): return True
     if r.get('TaskStatus') in ('done', 'dropped') and r.get('ReviewStatus') != 'pending': return True
     return bool(_OOO.match(str(r.get('Subject') or '')))
 
 
+def _assistant_wrapper(r: dict) -> bool:
+    """True for a generated Assistant digest whose durable ideas are surfaced separately.
+
+    Plain Assistant messages are real unread arrivals. A generated wrapper is only a container for
+    its ``ideas`` rows; showing both is the duplicate-Assistant regression from 2026-09-04.
+    """
+    if r.get('Channel') != 'assistant' or not r.get('Brief'): return False
+    try: return bool(json.loads(r['Brief']).get('ideas'))
+    except (TypeError, ValueError, json.JSONDecodeError): return False
+
+
+def _feed_group(r: dict):
+    """The one thing a feed row belongs to.
+
+    Once triage has attached messages to a task, that task is the boundary. A long WhatsApp room can
+    contain several different jobs, so grouping only by ConversationId both swallowed those jobs and
+    counted unrelated chat as ``+19`` on one task. Rows which do not have a task still group by their
+    ordinary mail/chat thread.
+    """
+    if r.get('TaskId'): return ('task', r['TaskId'])
+    if r.get('ConversationId'): return ('conversation', r['ConversationId'])
+    return None
+
+
 def thread_speaker(rows: list) -> dict:
-    """Which row speaks for each conversation: {cid: MessageId}. A draft waiting for a yes speaks
-    whatever its age, then an agent parked on a question, then the newest line. Reviews and agents
-    used to be EXEMPT from the one-line-per-thread rule rather than winning it, so the older mail on
-    the same thread came up again as "asked you" - TQ-0002 twice after the wrap, Yosef three times
-    in the All list (the 2026-09-03 break test)."""
+    """Which row speaks for each triaged task (or untriaged conversation): {group: MessageId}.
+
+    A draft waiting for a yes speaks whatever its age, then an agent parked on a question, then the
+    newest line. Reviews and agents used to be EXEMPT from the one-line rule rather than winning it,
+    so the older mail on the same task came up again as a separate ask.
+    """
     best = {}
     for r in rows:
-        cid = r.get('ConversationId')
-        if not cid or _feed_skip(r): continue
+        group = _feed_group(r)
+        if not group or _feed_skip(r) or _assistant_wrapper(r): continue
         rank = 2 if (r.get('ReviewStatus') == 'pending' and r.get('ReviewId')) else 1 if r.get('AgentWaiting') else 0
-        if cid not in best or rank > best[cid][0]: best[cid] = (rank, r['MessageId'])   # newest first, so ties keep the newest
-    return {cid: mid for cid, (_rank, mid) in best.items()}
+        if group not in best or rank > best[group][0]: best[group] = (rank, r['MessageId'])   # newest first, so ties keep the newest
+    return {group: mid for group, (_rank, mid) in best.items()}
 
 
 def from_feed(store, rows: list) -> list:
@@ -154,12 +183,18 @@ def from_feed(store, rows: list) -> list:
     speaks, more = thread_speaker(rows), {}
     for r in rows:
         if _feed_skip(r): continue
-        # ONE line per conversation, and it says how much of the thread it stands for: two WhatsApp
-        # lines from the same person are one row, and the Timeline showing two of them read as the
-        # pipe having lost one (the owner, 2026-09-03)
+        # Generated Assistant reports carry durable ideas. Those ideas are produced below as the
+        # actionable unread cards, one latest copy per idea; admitting the wrapper as a second FYI
+        # is what made the same Assistant line appear over and over. A plain Assistant message with
+        # no idea payload is still an ordinary unread arrival.
+        if _assistant_wrapper(r): continue
+        # ONE line per triaged task. Before triage makes a task, the conversation is the boundary.
+        # This lets seven messages combined onto TQ-0367 come out as one task with +7, without also
+        # swallowing every other job discussed later in the same WhatsApp room.
         cid = r.get('ConversationId')
-        if cid and speaks.get(cid) != r['MessageId']:
-            more[cid] = more.get(cid, 0) + 1
+        group = _feed_group(r)
+        if group and speaks.get(group) != r['MessageId']:
+            more[group] = more.get(group, 0) + 1
             continue
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
@@ -167,27 +202,41 @@ def from_feed(store, rows: list) -> list:
         subj = r.get('Subject') or r.get('Title') or ''
         if r.get('MsgStatus') == 'triaging':
             out.append(_item(f"msg:{r['MessageId']}", 'triaging', 'fyi', subj, why='just arrived - triage is deciding', settling=True, **base))
-            if cid and threads.get(cid) is None: threads[cid] = out[-1]
+            if group and threads.get(group) is None: threads[group] = out[-1]
             continue
         if r.get('ReviewStatus') == 'pending' and r.get('ReviewId'):
             if r['ReviewId'] in reviews: continue
             reviews.add(r['ReviewId'])
             action = r.get('ReviewKind') == 'action'
             rv = store.get_review(r['ReviewId']) or {}
+            # A review row is joined to the message the draft originally saw.  Keep that review
+            # at the front of its thread, but let its card speak with the newest inbound line on
+            # the task.  Otherwise the Assistant can truthfully have six newer Teams messages in
+            # SQLite and still show only the old "yes" that opened the draft.
+            latest = (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
+                      store.last_inbound_in(cid) if cid else None)
+            stale = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
+            if latest:
+                base.update(mid=latest.get('MessageId'), when=latest.get('SentAt'),
+                            who=latest.get('FromName') or latest.get('FromEmail') or who,
+                            preview=latest.get('BodyText') or base.get('preview'),
+                            channel=latest.get('Channel') or base.get('channel'))
+                subj = latest.get('Subject') or subj
             out.append(_item(f"review:{r['ReviewId']}", 'action' if action else 'review', 'approve', subj, rid=r['ReviewId'],
                              why='an agent proposed an action - it runs only if you say so' if action
                                  else ('a reply is drafted for you to send' if r.get('HasDraft') else 'a reply is owed - draft it with AI or write it'),
                              draft=bool(r.get('HasDraft')), summary=agent_found(store, r.get('TaskId')),
+                             stale=stale,
                              sig=hashlib.sha1(str(rv.get('DraftText') or '').encode()).hexdigest()[:10],   # the draft's fingerprint: a rewrite is news
                              **base))
-            if cid: threads[cid] = out[-1]                 # the draft speaks for its thread
+            if group: threads[group] = out[-1]                 # the draft speaks for its task/thread
             continue
         if r.get('AgentWaiting') and r.get('TaskId'):
             if r['TaskId'] in agents: continue
             agents.add(r['TaskId'])
             out.append(_item(f"agent:{r['TaskId']}", 'agent', 'blocked', r.get('Title') or subj, agent=r.get('Working') or 'agent',
                              why=f"{r.get('Working') or 'the agent'} stopped and is waiting on you", **base))
-            if cid: threads[cid] = out[-1]
+            if group: threads[group] = out[-1]
             continue
         base['working'] = r.get('Working') or ''             # an agent has it: build() lets these go, by name
         if r.get('Channel') == 'report':
@@ -209,26 +258,30 @@ def from_feed(store, rows: list) -> list:
             else:
                 out.append(_item(f"report:{r['MessageId']}", 'report', 'broken' if bad else 'report', subj, bad=bad, source_id=sid,
                                  why='the check failed - the cause is in it' if bad else 'a report you set up landed', **base))
-                if cid and threads.get(cid) is None: threads[cid] = out[-1]
+                if group and threads.get(group) is None: threads[group] = out[-1]
                 continue
         cat = r.get('Category') or ''
-        if cat in _QUIET or r.get('TheirTurn') or r.get('AnsweredAt'): continue
+        # A triage category is not a read receipt.  Filed/ignored/automated/promotional rows are
+        # still incoming rows; the owner's explicit funnel state is what later removes them.
+        if r.get('TheirTurn') or r.get('AnsweredAt'): continue
         urgent = (r.get('Priority') or '') == 'urgent'
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working')):   # a worked row is kept, tagged, and let go in build()
             out.append(_item(f"msg:{r['MessageId']}", 'todo', 'time' if urgent else 'asked', subj, coding=cat == 'coding',
                              why=('an urgent sender - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
-            if cid and threads.get(cid) is None: threads[cid] = out[-1]
+            if group and threads.get(group) is None: threads[group] = out[-1]
             continue
         if cat == 'review' or (r.get('NeedsYou') and cat not in ('info',)):
             out.append(_item(f"msg:{r['MessageId']}", 'asked', 'time' if urgent else 'asked', subj,
                              why=r.get('RouteReason') or 'a person asked you for something', **base))
-            if cid and threads.get(cid) is None: threads[cid] = out[-1]
+            if group and threads.get(group) is None: threads[group] = out[-1]
             continue
-        if cat == 'info':
-            out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
-        if cid and out and threads.get(cid) is None: threads[cid] = out[-1]
-    for cid, n in more.items():                   # the rest of each thread, counted on the row that speaks for it
-        held = threads.get(cid)
+        # Anything incoming which reached the Timeline and was not handled above is unread
+        # information.  Triage may label it automated/promo/feed/filed/assistant, but classifying
+        # it is not the same as the owner reading it.
+        out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
+        if group and out and threads.get(group) is None: threads[group] = out[-1]
+    for group, n in more.items():                 # the rest of each task/thread, counted on the row that speaks for it
+        held = threads.get(group)
         if held is not None: held['more'] = held.get('more', 0) + n
     return out
 
@@ -345,15 +398,16 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         try: a = json.loads(i.get('ActionJson') or '{}')
         except ValueError: a = {}
         if i.get('Kind') == 'prep': continue                      # the calendar lane already has the meeting itself
-        # the task it is about has closed: the line is over too, however the check that raised it ended
+        # A closed source task does NOT mean the Assistant post was read. The post may also name a
+        # separate follow-up or a pattern learned across several tasks (for example, recurring blank
+        # logins). It leaves Unread only through its own idea state, never as a side effect of closing
+        # the task it cited.
         m0 = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
         tid = a.get('tid') or m0.get('TaskId')
         if not tid and m0.get('ConversationId'):
             # the mail itself never joined the task, but its thread did: the thread's task is the fact
             try: tid = next((c.get('TaskId') for c in store.thread_messages(conversation_id=m0['ConversationId'], limit=12) if c.get('TaskId')), None)
             except Exception: tid = None
-        if tid and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'):
-            store.set_idea_status(i['IdeaId'], 'done', 'funnel'); continue
         # ...and a line about a thread the owner has since REPLIED on is over too - the reply is the follow-up
         from .assistant import sent_reply_for
         sent = sent_reply_for(store, {'action': a})
@@ -402,7 +456,7 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
     return out
 
 
-# â”€â”€ the pile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── the pile ─────────────────────────────────────────────────────────────────────────────────
 # the queue is a TIMELINE, oldest first inside each band - but what blocks work or has a clock on it
 # is promoted to the front, a PERSON asking you comes before the assistant's own follow-up lines,
 # those before reports, and fyi (nothing to do) is demoted to the back.
@@ -420,8 +474,12 @@ def _order(items: list) -> list:
 
 
 def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False) -> list:
-    """Read is gone: a surfaced item leaves the pile like a read mail leaves the unread count. It
-    is kept (marked) only for a lookup by key, so the chat can talk about it again."""
+    """Apply the owner's decisions to the assistant's work queue.
+
+    A surfaced row is read and the feed's Unread view removes it. Unresolved approvals and agent
+    questions still remain in this internal queue (marked surfaced) so the assistant can report
+    that work accurately without presenting it again as the next unread item.
+    """
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     out = []
     for i in items:
@@ -433,8 +491,8 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 # shown, but CHANGED since - the agent rewrote the draft, the question moved on: new again
                 if i.get('sig') and st.get('Note') and st['Note'] != i['sig']:
                     out.append(i); continue
-                # read is gone - except what is still on you: an agent parked on its question, a reply
-                # waiting for a yes. Those stay in the pipe (marked) and come round again after a while
+                # Read is gone from the ordinary queue. Only unresolved work that is still on the
+                # owner (a draft/approval or an agent question) remains addressable and marked.
                 if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working'): continue
                 i = i | {'surfaced': True, 'surfaced_at': st.get('At')}
         out.append(i)
@@ -495,15 +553,34 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
     items = [i for i in items if not (i['kind'] in ('asked', 'todo', 'fyi') and i.get('tid') in parked)]
     items += from_proposals(store, {i['rid'] for i in items if i.get('rid')})
     items += from_calendar(store, now)
-    used_mids = {i['mid'] for i in items if i.get('mid')}
-    used_tids = {i['tid'] for i in items if i.get('tid')}
-    used_cids = {i['cid'] for i in items if i.get('cid')}
+    # Only a row still inside the walk window may suppress a fresh Assistant follow-up about the
+    # same conversation. Once filed/automated mail was admitted to Unread, an old message could
+    # occupy used_cids here, hide this morning's follow-up, and then age out itself below—leaving
+    # neither one in the queue.
+    hours, _cap = knobs(store)
+    # Only a source row that is itself still unread can suppress an Assistant idea about the same
+    # message/task/thread. Previously a source row marked surfaced remained in `used_*` until the
+    # final state pass below; it hid the newer Assistant idea and was then removed itself, leaving
+    # neither one visible while Unread claimed All done.
+    states = store.funnel_states()
+    current = _apply_states([i for i in items if not _aged_out(i, now, hours)], states, now)
+    used_mids = {i['mid'] for i in current if i.get('mid')}
+    used_tids = {i['tid'] for i in current if i.get('tid')}
+    used_cids = {i['cid'] for i in current if i.get('cid')}
     items += from_forgotten(store, used_mids, used_tids, used_cids)
     # Closed is authoritative. The final report remains on the task, but a task the owner or agent
     # has closed is no longer work to walk through and must never be reintroduced into the funnel.
     # an agent mid-job: nothing to do here yet, whatever the mail or the idea says about the task - so it
     # rides at the TOP of the pipe as 'in hand', and drops to the front when the agent stops or asks
     busy = working_tids(store)
+    from . import terminal as term
+    # Keep the live session's identity on the working row. The message row used to change only its
+    # key/lane, so the Assistant knew something was in hand but its card still had no sid, tail or
+    # agent and rendered as "coding - nobody on it" after the coder was started from Tasks/Board.
+    try:
+        live_by_tid = {t['taskId']: t for t in term.live_sessions(tail=6) if t.get('taskId')}
+    except Exception:
+        live_by_tid = {}
     live_tids = busy | {i['tid'] for i in items if i['kind'] == 'agent' and i.get('tid')}   # working, parked or asking: an agent is on it
     stale_before = (now - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     # ...and a task whose STATUS says in_progress is in the middle of being worked, whether or not a
@@ -524,13 +601,20 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
     def in_hand(i): return i['kind'] not in ('agent', 'review', 'action') and (i.get('working') or held(i.get('tid')))
     # ...under the SAME key the parked agent will have (agent:<tid>), so shown-once and the page's live
     # row follow the task through stopping and starting instead of losing it at each change
-    items = [i | {'key': f"agent:{i['tid']}" if i.get('tid') else i['key'], 'lane': 'working',
-                  'why': f"{i.get('working') or 'an agent'} has it - nothing for you until it stops or asks"} if in_hand(i) else i for i in items]
+    def held_item(i):
+        if not in_hand(i): return i
+        live = live_by_tid.get(i.get('tid')) or {}
+        who = i.get('working') or live.get('agent') or live.get('label') or 'an agent'
+        return i | {'key': f"agent:{i['tid']}" if i.get('tid') else i['key'], 'lane': 'working',
+                    'why': f"{who} has it - nothing for you until it stops or asks",
+                    'working': who, 'agent': live.get('agent') or who,
+                    'sid': live.get('sid'), 'tail': live.get('tail') or [],
+                    'mode': live.get('mode') or 'terminal'}
+    items = [held_item(i) for i in items]
     # the wrap-up on a task an agent still holds is not a question yet either
     seen = set(); items = [i for i in items if not (i['key'] in seen or seen.add(i['key']))]
     hours, cap = knobs(store)
     items = [i for i in items if not _aged_out(i, now, hours)]
-    states = store.funnel_states()
     items = _apply_states(items, states, now, keep_surfaced)
     # The wrap-up is merged HERE, once the pile is what the owner has left: a task whose message they
     # have already read (or that triage filed as fyi - "Thank you!") is a task nobody closed, and the
@@ -562,18 +646,33 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
 def pile(store, force: bool = False) -> dict:
     """The pile, cached for a few seconds: it is polled while the page is open, and every look
     is a dozen queries."""
+    seen_generation = _CACHE.get('generation', 0)
     with _LOCK:
-        if not force and _CACHE['pile'] and time.time() - _CACHE['at'] < PILE_EVERY: return _CACHE['pile']
+        same_store = _CACHE.get('store') is store
+        # One websocket event wakes every open browser. If they all arrive while the first forced
+        # rebuild is running, that one result satisfies all of them; rebuilding once per tab is a
+        # thundering herd that can hold every other API request behind this lock for a minute. A
+        # cache from another Store is never interchangeable (tests and embedded callers can have
+        # an in-memory store beside the application store).
+        # Compare the cache generation we actually observed before waiting for the lock. Wall
+        # clock comparison (`cache_at >= requested_at`) is not a generation check: Windows can
+        # give two successive time.time() calls the same value, which made an immediate forced
+        # refresh return the old agent/message state.
+        refreshed_while_waiting = (same_store and force and _CACHE['pile']
+                                   and _CACHE.get('generation', 0) != seen_generation)
+        if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
+            return _CACHE['pile']
         events = announce(store)                       # the watcher speaks first: a transition changes the pile too
         p = build(store)
         p['alerts'] = alerts(store, p['items'])
         p['events'] = events
-        _CACHE.update(at=time.time(), pile=p)
+        _CACHE.update(at=time.time(), pile=p, store=store,
+                      generation=_CACHE.get('generation', 0) + 1)
         return p
 
 
-def invalidate(): _CACHE.update(at=0.0, pile=None); _SOURCES.update(at=0.0, by={})
-def forget_states(): _STATE.clear(); _SEEN.clear()
+def invalidate(): _CACHE.update(at=0.0, pile=None, store=None); _SOURCES.update(at=0.0, by={})
+def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False
 
 
 def agent_states(store) -> dict:
@@ -602,7 +701,11 @@ def announce(store, actor: str = 'assistant') -> list:
     working ('nothing for you, next'), stops and asks, or finishes. The first
     look only remembers - a restart must not narrate every session it finds. Returns the events."""
     now = agent_states(store)
-    first = not _STATE
+    # On a quiet first look `now` and _STATE are both empty. Keying "first" on _STATE therefore
+    # also suppressed the first agent that started later, which is precisely the transition the
+    # open Assistant must announce. Remember that a look happened independently of its contents.
+    first = not _WATCHED[0]
+    _WATCHED[0] = True
     events = []
     at = time.time()
     for tid, (state, agent) in now.items():
@@ -653,8 +756,7 @@ def came_in(i: dict) -> bool:
     line about a mail ('slipped') was not mail: the walk skipped the very row it had just marked NEXT,
     and the brief said "0 of them are mail" with five in the pipe (the owner, 2026-09-03)."""
     return bool(i.get('mid')) and (i.get('channel') or 'email') not in NOT_INCOMING
-FYI_BATCH = 4                              # fyi comes as a handful, not one at a time - there is nothing to do with each
-BLOCKED_AGAIN_MIN = 30                     # an agent still waiting comes out again this long after it was shown
+FYI_BATCH = 4                              # FYI has no action: the normal chat walk reads four together
 
 def _not_yet(i: dict) -> bool:
     """On the timeline, but nothing to say about it YET - the walk skips it and comes back.
@@ -670,18 +772,23 @@ def _not_yet(i: dict) -> bool:
     return i['kind'] == 'meeting' and i.get('mins') is not None and i['mins'] > ALERT_MIN
 
 
-def next_item(store, key: str = None, only: str = None) -> dict | None:
+def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
+              exclude: str = None) -> dict | None:
     """What comes out of the mouth: the named item (read or not - the chat may return to it), or
     the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
     not ready to be talked about."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
     if key: return next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None) or batch_item(store, key)
-    again = (datetime.now() - timedelta(minutes=BLOCKED_AGAIN_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    again = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working'
-             and not _not_yet(i)
-             and (not i.get('surfaced') or _ts(i.get('surfaced_at')) <= again)]
+             and not _not_yet(i) and i.get('key') != exclude
+             and (include_surfaced or not i.get('surfaced')
+                  or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]
     if only == 'mail': ready = [i for i in ready if came_in(i) or i['kind'] in INTERRUPTS]
-    return ready[0] if ready else None
+    # New arrivals still lead.  Once those are exhausted, a merely-shown row is walked normally:
+    # being put in the conversation never counted as the owner's decision, so it cannot make an
+    # unread row unreachable.
+    return next((i for i in ready if not i.get('surfaced')), ready[0] if ready else None)
 
 
 def batch_item(store, key: str) -> dict | None:
@@ -700,7 +807,7 @@ def batch_item(store, key: str) -> dict | None:
 
 def fyi_batch(store, first: dict) -> list:
     """The next few fyi's, the first included - what comes out together when the mouth reaches the fyi lane."""
-    ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] == 'fyi']
+    ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and not i.get('surfaced') and i['lane'] == 'fyi']
     return ([first] + [i for i in ready if i['key'] != first['key']])[:FYI_BATCH]
 
 
@@ -756,7 +863,7 @@ def reset_walk(store):
     An AGENT waiting on you is the exception to "read stays read": it is the one lane that blocks
     work, and having been shown it once in yesterday's chat is not an answer. A new chat surfaced
     two fyi about lunch while a coder sat parked on a question (the 2026-09-03 break test), because
-    a blocked row only comes round again after BLOCKED_AGAIN_MIN. It comes back with the new chat."""
+    a blocked row must come back with the new chat."""
     store.clear_funnel_states(('ack',))
     for k, st in store.funnel_states().items():
         if k.startswith('agent:') and st.get('Status') == 'surfaced': store.clear_funnel_state(k)

@@ -48,8 +48,9 @@ BREVITY = ('BE SHORT. Two or three sentences, under 60 words. Lead with the answ
 CHAT = ('This is CHAT (Teams/Slack), not email. NO greeting and NO sign-off or name at the end - '
         'the channel already says who you are. One short paragraph, written the way a person types '
         'in a chat window.')
-EMAIL = ('This is EMAIL. A brief greeting and the sign-off SOUL.md specifies are fine; nothing else '
-         'ceremonial.')
+EMAIL = ('This is EMAIL. Use the greeting, sign-off, and exact recurring signature STYLE.md '
+         'specifies; include the signature once, at the end. If STYLE.md has no learned signature, '
+         'use the sign-off SOUL.md specifies. Nothing else ceremonial.')
 
 # This line used to say "the owner will turn it into a task", and the model answered in kind:
 # a sentence about what someone ELSE would have to do. Say it the way a person would.
@@ -195,6 +196,10 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     """Write the draft and park it on its review, ready for approve / edit / no-reply."""
     text = draft_reply(store, task_id, llm, resolution, nudge)
     store.update_review_draft(review_id, text, None)
+    # The review now says exactly which inbound line this wording saw.  A later chat line makes
+    # that marker stale and approval stops rather than sending an answer to yesterday's context.
+    latest = store.last_inbound_on_task(task_id)
+    if latest: store.update_review_message(review_id, latest['MessageId'])
     logger.info(f'drafted reply for task {task_id} ({len(text)} chars)')
     return text
 
@@ -286,4 +291,5 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else out
     store.update_review_draft(review_id, out, None)
+    store.update_review_message(review_id, m['MessageId'])
     return out

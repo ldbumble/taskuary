@@ -52,6 +52,20 @@ class PostingTests(unittest.TestCase):
 
 
 class ReadingTests(unittest.TestCase):
+    def test_live_wall_hides_closed_session_notes_but_keeps_house_handoffs(self):
+        s = MemoryStore()
+        live = s.create_task({'Title': 'still working', 'Kind': 'coding'}, 'o')
+        closed = s.create_task({'Title': 'session ended', 'Kind': 'coding'}, 'o')
+        bb.post(s, 'live task note', 'working', 'codex', CWD, live)
+        bb.post(s, 'closed task note', 'done', 'claude', CWD, closed)
+        bb.post(s, 'shared operational note', 'blocked', 'you', '')
+        sessions = [{'taskId': live}]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=sessions):
+            bodies = [n['Body'] for n in bb.live_wall(s)]
+        self.assertIn('live task note', bodies)
+        self.assertIn('shared operational note', bodies)
+        self.assertNotIn('closed task note', bodies)
+
     def test_the_prompt_gets_a_pointer_and_the_newest_note_not_the_whole_wall(self):
         """A seed is typed into a TUI on one line; the transcript does not belong there."""
         s = MemoryStore()

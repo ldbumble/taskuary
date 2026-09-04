@@ -541,6 +541,16 @@ class GeneralSession:
     def untap(self, fn): self.taps = [item for item in self.taps if item is not fn]
     def scrollback(self): return ''.join(self.buf)
     def resize(self, rows, cols): self.rows, self.cols = int(rows), int(cols)
+    def quiet_for(self, _secs: float):
+        """Satisfy the shared terminal-session attach contract.
+
+        A coding PTY emits a full-screen repaint when it is attached or resized, so its
+        implementation temporarily excludes that output from activity tracking. A general
+        session only updates its stored dimensions and emits no repaint; there is therefore
+        nothing to suppress, but the websocket must still be able to treat both session types
+        uniformly.
+        """
+        return None
     def idle(self): return round(time.time() - self.last, 1)
     def files(self): return []
     def phase(self): return 'working' if self.busy else 'parked'
@@ -608,7 +618,8 @@ class GeneralSession:
                 self._input += ch; self._emit(ch)
 
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
-                    pick=None, trace=None, cancel=None, as_owner=True) -> str:
+                    pick=None, trace=None, cancel=None, as_owner=True,
+                    delivery_instructions: str = None) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (server._assistant_opens). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
@@ -632,6 +643,8 @@ class GeneralSession:
             if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
             if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
             system, user = _prompt(self.store, self.task_id)
+            if delivery_instructions:
+                system = f'{system}\n\n{str(delivery_instructions).strip()}'
             if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
             browser_tools, browser_env = False, None
             if self.browser_wanted and self.pick.startswith('cli:'):
@@ -694,6 +707,8 @@ class GeneralSession:
                 logger.info(f'assistant could not resume {self.cli_sid} on task {self.task_id}; starting a new one')
                 self.cli_sid = ''
                 system, user = _prompt(self.store, self.task_id)
+                if delivery_instructions:
+                    system = f'{system}\n\n{str(delivery_instructions).strip()}'
                 from . import handbook as hub
                 if self.pick.startswith('cli:'):
                     system = f'{system}\n\n{POST_LINE}'
@@ -775,14 +790,19 @@ class GeneralSession:
         c.set()
         return True
 
-    def close(self):
+    def close(self, learn=True):
         # Coding sessions already ask this at wrap. General sessions used to bypass that branch,
         # so everything the assistant learned about the business disappeared with the chat even
         # though the Hub explicitly holds more than technical facts. A session boundary is the
         # conservative time to ask once; duplicate close calls are no-ops, and learning can never
         # prevent the session itself from closing.
         was_alive = self.alive
-        if was_alive:
+        # The application-level dock is already offered the Hub publishing road on each turn.
+        # Mining it again on New chat launched a hidden Claude process for an ordinary archive;
+        # repeated New chats could overlap those minute-long closeout calls and make the next
+        # visible answer contend with work the owner never asked to run.
+        task = self.store.get_task(self.task_id)
+        if was_alive and learn and not is_dock(task):
             from . import handbook as hub
             transcript = conversation_text(self.store, self.task_id)
             if transcript and hub.enabled(self.store):
@@ -800,18 +820,20 @@ class GeneralSession:
             try: loop.call_soon_threadsafe(q.put_nowait, None)
             except RuntimeError: pass
 
-    def info(self, tail=0):
-        from . import browserview
-        return {'sid': self.sid, 'label': self.label, 'cwd': '', 'taskId': self.task_id,
+    def info(self, tail=0, details=True):
+        base = {'sid': self.sid, 'label': self.label, 'cwd': '', 'taskId': self.task_id,
                 'agent': self.agent, 'cli': 'taskuary', 'mode': self.mode, 'alive': self.alive,
-                'busy': self.busy, 'trace': list(self.trace), 'trace_revision': self.trace_revision,
+                'busy': self.busy,
                 'started': self.started, 'idle': self.idle(), 'phase': self.phase(),
                 'waiting': self.waiting(), 'cmd': f'{self.provider or "AI connector"} {self.model}'.strip(),
                 'provider': self.provider, 'pick': self.pick,
                 'connector_id': int(self.pick.split(':', 1)[1]) if self.pick.startswith('connector:') else None,
-                'model': self.model, 'files': [],
-                'browser': browserview.state(self.sid), 'work': None,
+                'model': self.model,
                 **({'tail': self.tail(tail)} if tail else {})}
+        if not details: return base
+        from . import browserview
+        return {**base, 'trace': list(self.trace), 'trace_revision': self.trace_revision,
+                'files': [], 'browser': browserview.state(self.sid), 'work': None}
 
 
 def session_for(tid: int):

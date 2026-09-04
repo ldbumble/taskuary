@@ -13,21 +13,37 @@ from loguru import logger
 _TASK_LINK = re.compile(r'\[([^\]]+)\]\(#task=\d+\)')
 _locks, _locks_guard = {}, threading.Lock()
 
+WHATSAPP_DELIVERY = """WHATSAPP TEXT-ONLY DELIVERY
+This answer is going to the owner's private WhatsApp self-chat, not the desktop interface.
+Make it self-contained and a little more explanatory than a desktop answer. The owner cannot see
+Taskuary's cards, buttons, hover details, or desktop-only links here, so never tell them to click or
+use one as if it were visible. Name the sender, subject or task, why it matters, its current state,
+and your recommended next step when those facts are relevant.
+
+For a walkthrough or decision, cover exactly one item, then give 2-4 short numbered choices and end
+with an explicit "Reply with" line containing natural-language examples they can type. Only offer
+replies that work as conversation turns, such as "draft a reply", "tell me more", "leave it for
+tomorrow", or "next". Do not imply that ordinary chat text sent, approved, or changed an external
+record. If an external action needs Taskuary's approval control, say plainly that it still needs
+approval and where the owner can complete it."""
+
 
 def _config(connector) -> dict:
     try: return json.loads((connector or {}).get('ConfigJson') or '{}')
     except (TypeError, ValueError): return {}
 
 
-def _roles(connector) -> set:
-    return {x.strip() for x in str((connector or {}).get('Roles') or '').split(',') if x.strip()}
+def chat_of(connector) -> str:
+    """The private guide chat. ``notify_chat`` is the backward-compatible old location."""
+    cfg = _config(connector)
+    return str(cfg.get('assistant_chat') or cfg.get('notify_chat') or '').strip()
 
 
 def connector_for_chat(store, jid: str, connector=None):
-    """The active WhatsApp notification connector that owns this private chat, if any."""
+    """The active WhatsApp connector that owns this private Assistant chat, if any."""
     rows = [connector] if connector else store.connectors_by_type('whatsapp', with_secret=True)
-    return next((c for c in rows if c and c.get('Active') and 'notify' in _roles(c)
-                 and str(_config(c).get('notify_chat') or '').strip() == str(jid or '').strip()), None)
+    return next((c for c in rows if c and c.get('Active')
+                 and chat_of(c) == str(jid or '').strip()), None)
 
 
 def enabled(store, jid: str, connector=None) -> bool:
@@ -92,7 +108,7 @@ def respond(store, jid: str, question: str, connector_id: int):
         store.audit('task', task['TaskId'], 'whatsapp_assistant_question', 'owner-whatsapp',
                     detail={'channel': 'whatsapp', 'chat': jid, 'chars': len(question)})
         session = general.start_session(store, task['TaskId'], actor='owner-whatsapp')
-        reply = session.send_prompt(question)
+        reply = session.send_prompt(question, delivery_instructions=WHATSAPP_DELIVERY)
         _send(store, jid, _phone_text(reply), connector_id)
     except Exception as e:
         logger.warning(f'WhatsApp guide could not answer: {e}')

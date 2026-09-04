@@ -184,6 +184,39 @@ class SeedEchoTests(unittest.TestCase):
 
 
 class TerminalTests(unittest.TestCase):
+    def test_shutdown_closes_every_session_without_starting_general_closeout_work(self):
+        coding = mock.Mock(mode='terminal')
+        assistant = mock.Mock(mode='assistant')
+        with mock.patch.dict(terminal.SESSIONS, {'code': coding, 'chat': assistant}, clear=True):
+            self.assertEqual(terminal.shutdown_sessions(), 2)
+            self.assertEqual(terminal.SESSIONS, {})
+        coding.close.assert_called_once_with()
+        assistant.close.assert_called_once_with(learn=False)
+
+    def test_shutdown_synchronously_releases_the_tasks_its_sessions_owned(self):
+        tid = server.store.create_task({'Title': 'survives app close', 'Kind': 'coding',
+                                        'Status': 'in_progress'}, 'owner')
+        session = mock.Mock(mode='terminal', store=server.store, task_id=tid)
+        with mock.patch.dict(terminal.SESSIONS, {'code': session}, clear=True):
+            terminal.shutdown_sessions()
+        self.assertEqual(server.store.get_task(tid)['Status'], 'open')
+        session.close.assert_called_once_with()
+
+    def test_restart_repairs_in_progress_tasks_and_running_rows_without_a_process(self):
+        # recover_after_restart repairs EVERY orphan on the store it is handed, and this one is the
+        # shared application store - so whatever the rest of the suite left in_progress is released
+        # too, and counting them is correct behaviour, not a leak. Asserting a flat 1 made this test
+        # a bet on file ordering: it passed alone and failed in the full run. Count the orphans that
+        # are already there and assert OUR task is the one more (release_task only declines a task
+        # that is not in_progress, so every row this finds does release).
+        already = len(server.store.list_tasks(status='in_progress'))
+        tid = server.store.create_task({'Title': 'left behind by old process', 'Kind': 'coding',
+                                        'Status': 'in_progress'}, 'owner')
+        rid = server.store.start_run(tid, 'coder', 'prompt', 'owner')
+        self.assertEqual(terminal.recover_after_restart(server.store), already + 1)
+        self.assertEqual(server.store.get_task(tid)['Status'], 'open')
+        self.assertEqual(server.store.get_run(rid)['Status'], 'stopped')
+
     def test_pty_streams_into_scrollback_and_dies(self):
         t = terminal.Term(ECHO, os.getcwd(), 'test')
         terminal.SESSIONS[t.sid] = t
@@ -212,21 +245,24 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
-    def test_first_resize_wiggles_the_pty_so_a_tui_repaints(self):
-        """Reattaching to a full-screen TUI (codex) replayed raw scrollback and showed smeared
-        blank bars - nothing told the CHILD to repaint. The first resize of every socket now
-        wiggles one column so ConPTY signals a window change and the TUI redraws whole."""
+    def test_same_size_reattach_hydrates_without_repainting_the_tui(self):
+        """The rendered replay already restores a same-size xterm. Resizing the CHILD anyway
+        made Codex redraw its whole conversation on every task switch, visibly from the top."""
         t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(8)'], os.getcwd(), 'test')
         terminal.SESSIONS[t.sid] = t
-        sizes = []
         try:
-            with mock.patch.object(t, 'resize', side_effect=lambda r, c_: sizes.append((r, c_))):
+            with mock.patch.object(t, 'resize') as resize:
                 with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
-                    ws.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
-                    ws.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
-                    ws.send_json({'type': 'in', 'data': ''})     # ordering fence: resizes processed
-                    self.assertTrue(_wait(lambda: len(sizes) >= 3))
-            self.assertEqual(sizes[:3], [(30, 99), (30, 100), (30, 100)])   # wiggle once, then honest sizes
+                    ws.send_json({'type': 'resize', 'rows': t.rows, 'cols': t.cols})
+                    frames = []
+                    for _ in range(10):
+                        frames.append(ws.receive_json())
+                        if frames[-1]['type'] == 'ready': break
+                    self.assertIn('ready', [f['type'] for f in frames])
+                    ws.send_json({'type': 'resize', 'rows': t.rows, 'cols': t.cols})
+                    ws.send_json({'type': 'in', 'data': ''})     # ordering fence: second resize processed
+                    time.sleep(.05)
+            resize.assert_not_called()
         finally:
             terminal.close(t.sid)
 
@@ -866,6 +902,19 @@ class DurableWrapTests(unittest.TestCase):
 
     def _task(self, title='reaped session task'):
         return c.post('/api/tasks', json={'Title': title, 'Kind': 'coding'}).json()['taskId']
+
+    def test_a_cli_that_exits_releases_its_in_progress_task(self):
+        tid = self._task('agent exited without wrapping')
+        server.store.update_task(tid, {'Status': 'in_progress'}, 'router')
+        t = terminal.Term(ECHO, os.getcwd(), 'coder', tid, 'coder', store=server.store)
+        terminal.SESSIONS[t.sid] = t
+        try:
+            self.assertTrue(_wait(lambda: not t.alive))
+            self.assertTrue(_wait(lambda: server.store.get_task(tid)['Status'] == 'open'))
+            self.assertTrue(any('task is open again' in (row.get('Body') or '')
+                                for row in server.store.list_comments(tid)))
+        finally:
+            terminal.SESSIONS.pop(t.sid, None)
 
     def test_the_transcript_outlives_the_pty_and_the_task_can_still_be_wrapped(self):
         tid = self._task()

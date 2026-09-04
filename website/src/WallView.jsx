@@ -36,7 +36,7 @@ const savedOrder = () => { try { const o = JSON.parse(localStorage.getItem(ORDER
 const savedH = (c) => { try { return Number(localStorage.getItem(hKey(c))) || 0; } catch { return 0; } };
 const storeH = (c, h) => { try { h ? localStorage.setItem(hKey(c), String(h)) : localStorage.removeItem(hKey(c)); } catch { /* private */ } };
 
-export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
+export default function WallView({ onOpenTask, onOpenReports, refresh = 0, active = true }) {
   const [sessions, setSessions] = useState(null);   // alive pty sessions with a task
   const [tasks, setTasks] = useState({});           // TaskId -> task row (title, ref)
   const [live, setLive] = useState({});             // TaskId -> {work, StartedAt, ...} from runs/live
@@ -64,13 +64,15 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0 }) {
     setSessions((current) => holdWrappingSessions(fresh, current, wrappingRef.current));
     setTasks(Object.fromEntries((tk.data.data || []).map((t) => [t.TaskId, t])));
   }, []);
-  useEffect(() => { load(); return onLive("task-changed", load); }, [load]);
-  useEffect(() => { if (refresh) load(); }, [refresh, load]);   // the Board just started a session: show it now
+  useEffect(() => { if (!active) return undefined; load(); return onLive("task-changed", load); }, [active, load]);
+  useEffect(() => { if (active && refresh) load(); }, [active, refresh, load]);   // the Board just started a session: show it now
   useEffect(() => {   // the work line (tool in hand, its list) arrives as run-tail, like the Board's
     const tick = () => api.get("/api/runs/live").then(({ data }) =>
       setLive(Object.fromEntries((data.data || []).map((r) => [r.TaskId, r])))).catch(() => {});
-    tick(); return onLive("run-tail", tick);
-  }, []);
+    if (!active) return undefined;
+    tick(); const id = setInterval(tick, 3000);
+    return () => clearInterval(id);
+  }, [active]);
 
   // keep `order` in step with what's alive: append new sids, drop the gone, honour drags
   const sids = useMemo(() => (sessions || []).map((s) => s.sid), [sessions]);

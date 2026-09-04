@@ -56,6 +56,10 @@ const deliveryTo = (review) => {
 const deliveryMeta = (review) => {
   try { return JSON.parse(review.Deliver || "null") || {}; } catch { return {}; }
 };
+const deliveryCc = (review) => {
+  const raw = deliveryMeta(review).cc;
+  return Array.isArray(raw) ? raw.filter(Boolean) : [];
+};
 
 const replyContext = (review) => {
   const channel = String(review.Channel || "").toLowerCase();
@@ -78,10 +82,11 @@ export default function ReviewView({ onOpenTask, onChanged }) {
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load reviews"); }
   }, [filter]);
   useEffect(() => { load(); }, [load]);
-  // Who else gets this answer. Held here and nowhere else: the copy list you can SEE on the card
-  // is the one that sends, and a reloaded page starts empty rather than quietly copying somebody
-  // you added an hour ago and forgot.
-  const [cc, setCc] = useState({});      // per review; the row itself is ui.jsx's CcRow
+  // Replies start empty. A new outbound email keeps the CC chosen in the composer inside Deliver,
+  // so it remains visible and editable when the draft reaches Review.
+  const [cc, setCc] = useState({});      // per-review edits; absent means use its saved delivery CC
+  const ccFor = (review) => Object.prototype.hasOwnProperty.call(cc, review.ReviewId)
+    ? cc[review.ReviewId] : deliveryCc(review);
 
   // Approving IS sending, so a send that failed has to say so HERE, the moment you click - it
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
@@ -91,7 +96,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
         { verb, final_text: verb === "approve" ? (edits[r.ReviewId] ?? reviewText(r)) : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposalPresentation(r) ? (cc[r.ReviewId] || []) : null });
+          cc: verb === "approve" && !proposalPresentation(r) ? ccFor(r) : null });
       if (data.send_error) setSendErr({ id: r.ReviewId, msg: data.send_error });
       load(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
@@ -169,6 +174,10 @@ export default function ReviewView({ onOpenTask, onChanged }) {
 
             {r.Status === "pending" && (
               <Box sx={{ mt: 0.5 }}>
+                {r.Stale && <Alert severity="warning" sx={{ mb: 1 }}>
+                  New messages arrived after this draft. Refresh the draft before sending it.
+                  {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}
+                </Alert>}
                 {!proposal && <Inbound r={r} />}
                 <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
                   <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 800,
@@ -177,7 +186,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     {proposal?.destination || replyContext(r)}
                   </Typography>
                 </Box>
-                {!proposal && <CcRow cc={cc[r.ReviewId] || []} setCc={(v) => setCc({ ...cc, [r.ReviewId]: v })}
+                {!proposal && <CcRow cc={ccFor(r)} setCc={(v) => setCc({ ...cc, [r.ReviewId]: v })}
                   channel={r.Channel} />}
                 <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
                   value={edits[r.ReviewId] ?? reviewText(r)}
@@ -208,11 +217,11 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     </Button>
                   ) : (
                     <Button size="small" variant="contained"
-                      disabled={busy === r.ReviewId || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
+                      disabled={busy === r.ReviewId || r.Stale || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
                       onClick={() => decide(r, "approve")}
                       title={`Sends this response to ${replyContext(r)}`}>
                       {busy === r.ReviewId ? "sending…"
-                        : (cc[r.ReviewId] || []).length ? `Approve & send, copying ${(cc[r.ReviewId] || []).length}`
+                        : ccFor(r).length ? `Approve & send, copying ${ccFor(r).length}`
                         : "Approve & send"}
                     </Button>
                   )}
@@ -223,7 +232,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                   <Button size="small" color="error" disabled={busy === r.ReviewId} onClick={() => decide(r, "reject")}>{proposal?.rejectLabel || "Reject"}</Button>
                   <Box sx={{ flex: 1 }} />
                   {!proposal && deliveryMeta(r).kind !== "zoho_invoice" && <Button size="small" disabled={busy === r.ReviewId} onClick={() => redraft(r)}>
-                    {busy === r.ReviewId ? <CircularProgress size={12} /> : r.DraftText ? "Redraft" : "Draft with AI"}
+                    {busy === r.ReviewId ? <CircularProgress size={12} /> : r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI"}
                   </Button>}
                 </Box>
                 {sendErr?.id === r.ReviewId && (

@@ -107,18 +107,18 @@ const Note = ({ n, onOpenTask }) => {
   );
 };
 
-export default function AgentWall({ onOpenTask, refresh }) {
+export default function AgentWall({ onOpenTask, refresh, active = true }) {
   const [rows, setRows] = useState(null);
   const [body, setBody] = useState("");
   const [kind, setKind] = useState("note");
   const [busy, setBusy] = useState(false);
-  const [all, setAll] = useState(false);      // composted days too, or just what still matters
+  const [all, setAll] = useState(false);      // durable history, or sessions alive right now
   const load = useCallback(async () => {
     try { setRows((await api.get("/api/board/notes", { params: { all } })).data.data || []); }
     catch { setRows([]); }
   }, [all]);
-  useEffect(() => { load(); }, [load, refresh]);
-  useEffect(() => { const t = setInterval(load, 10000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { if (active) load(); }, [active, load, refresh]);
+  useEffect(() => { if (!active) return undefined; const t = setInterval(load, 10000); return () => clearInterval(t); }, [active, load]);
 
   const post = async () => {
     if (!body.trim()) return;
@@ -165,7 +165,7 @@ export default function AgentWall({ onOpenTask, refresh }) {
           </Typography>
           {/* the older days are still here, folded - one summary each, per checkout */}
           <Button size="small" onClick={() => setAll((x) => !x)} sx={{ fontSize: 11, color: DIM, textTransform: "none" }}>
-            {all ? "just what still matters" : "show every note"}
+            {all ? "show live handoffs" : "show note history"}
           </Button>
           <Button size="small" variant="contained" disableElevation disabled={busy || !body.trim()} onClick={post}
             endIcon={<SendIcon sx={{ fontSize: 15 }} />}>Post</Button>

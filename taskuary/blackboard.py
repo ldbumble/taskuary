@@ -99,6 +99,22 @@ def wall(store, cwd: str = '', limit: int = 12) -> list:
     return store.notes(norm(cwd) if cwd else None, limit)
 
 
+def live_wall(store, cwd: str = '', limit: int = 60) -> list:
+    """Task notes for sessions alive now, plus the shared house lane.
+
+    Board notes are durable, but the UI calls this surface Live handoff. Filtering only at the
+    daily roll-up left notes from closed sessions looking current for hours (or indefinitely).
+    """
+    from . import terminal as term
+    try:
+        live_tids = {int(s['taskId']) for s in term.live_sessions(tail=0, details=False)
+                     if s.get('taskId')}
+    except Exception:
+        live_tids = set()
+    rows = store.notes(norm(cwd) if cwd else None, max(int(limit) * 5, 300))
+    return [n for n in rows if not n.get('TaskId') or int(n['TaskId']) in live_tids][:int(limit)]
+
+
 def house_wall(store, limit: int = 8) -> list:
     """The lane with no checkout in it: what the assistant chat and the owner leave for
     everyone. A chat has no repository, so this is the whole of its wall."""

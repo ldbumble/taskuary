@@ -140,8 +140,10 @@ const META = {
       "For a group, remind them to disable the bot's privacy mode (@BotFather > /setprivacy) or it will not see messages. Turn the connector on and say SETUP DONE."] },
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID; add * to take every direct chat)", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
+      ["Assistant chat JID", "assistant_chat", "15551234567@s.whatsapp.net",
+       "Your private Message yourself chat; this does not turn on ordinary Taskuary notifications"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
-       "Notifications and remote assistant — use your private Message yourself chat"],
+       "Only for the Notifications role — alerts and approval requests are separate from Assistant chat"],
       ["Check assistant chat every N seconds", "poll_seconds", "30",
        "Only WhatsApp polls faster; mail and the other connectors keep the global sync interval"]],
     secretLabel: null,
@@ -157,7 +159,7 @@ const META = {
       "Poll GET {base}/api/connectors/{cid}/wa/status{hdr} every 5 seconds and read manager.phase: installing → starting → running; bridge becomes true when it answers. If phase is failed, read manager.detail - node missing means the owner installs Node 18+ from nodejs.org (the one install that is theirs); anything else, report it and stop.",
       "If connected is false: do NOT print the QR here (a terminal QR is too big to scan) and do NOT ask for a phone number. The card above this terminal draws the bridge's QR itself and redraws it as it rotates - tell the owner to scan it from the phone: WhatsApp > Linked devices > Link a device. Poll GET http://127.0.0.1:8977/status every 5 seconds until connected is true. Only if the owner SAYS they would rather type a code: ask for the number, restart the bridge with --phone <digits only>, and relay pairingCode from /status.",
       "Run the connector Test (POST {base}/api/connectors/{cid}/test{hdr}); it confirms pairing and authorizes nothing by itself.",
-      "Ask the owner whether every direct chat should come in or only specific ones. Add * only when they explicitly choose every direct chat. For specific ones: have them (or someone) send a message in each wanted chat, then GET {base}/api/connectors/{cid}/wa/chats{hdr} and add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Groups always require their exact JID.",
+      "Ask the owner whether every direct chat should come in or only specific ones. Add * only when they explicitly choose every direct chat. GET {base}/api/connectors/{cid}/wa/chats{hdr} lists groups the paired account belongs to plus direct chats Taskuary or the bridge has seen; add each wanted JID with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"whatsapp\", \"Address\": \"<jid>\", \"ConnectorId\": {cid}, \"Active\": true}. Groups always require their exact JID.",
       "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
     fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
@@ -2352,14 +2354,13 @@ const WaPair = ({ conn, reload }) => {
   );
 };
 
-/* ── WhatsApp: the chats the bridge has seen, offered as sources. "Only this group" needs the
-   group's JID and there is no directory to browse - the JID appears the moment someone writes in
-   the chat. The catch-all covers direct chats; a group only comes in once its JID is added. ── */
+/* ── WhatsApp: the paired account's reachable roster, offered as sources. The catch-all covers
+   direct chats; a group only comes into Taskuary once its JID is explicitly added. ── */
 const WaChats = ({ conn, mine, reload }) => {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [guideBusy, setGuideBusy] = useState("");
-  const guideJid = String(parse(conn.ConfigJson).notify_chat || "");
+  const guideJid = String(parse(conn.ConfigJson).assistant_chat || parse(conn.ConfigJson).notify_chat || "");
   const load = useCallback(async () => {
     try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr(""); }
     catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
@@ -2372,10 +2373,9 @@ const WaChats = ({ conn, mine, reload }) => {
   const useForGuide = async (jid) => {
     setGuideBusy(jid); setErr("");
     try {
-      const roles = new Set(String(conn.Roles || "").split(",").filter(Boolean)); roles.add("notify");
       const current = parse(conn.ConfigJson);
-      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Roles: [...roles].join(","),
-        ConfigJson: JSON.stringify({ ...current, notify_chat: jid, poll_seconds: current.poll_seconds || 30 }) });
+      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId,
+        ConfigJson: JSON.stringify({ ...current, assistant_chat: jid, poll_seconds: current.poll_seconds || 30 }) });
       await api.patch("/api/settings", { name: "phone_assistant", value: "1" });
       reload();
     } catch (e) { setErr(e?.response?.data?.detail || "could not enable the WhatsApp guide"); }
@@ -2384,8 +2384,8 @@ const WaChats = ({ conn, mine, reload }) => {
   return (
     <Box sx={{ mb: 1.5, maxWidth: 620 }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-        Chats the bridge has seen since it started — <b>write something in the chat you want</b> (or have someone else), refresh,
-        and add it. Direct chats come in on their own; a <b>group</b> joins the funnel only when you add it here.
+        Chats reachable through this paired account. Groups are loaded from WhatsApp; direct chats appear once Taskuary or the
+        bridge has seen them. A <b>group</b> joins the funnel only when you add it here.
         <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
       </Typography>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75, p: 0.8, bgcolor: PANEL2, borderRadius: 1 }}>
@@ -2393,7 +2393,7 @@ const WaChats = ({ conn, mine, reload }) => {
         that floats on the desktop; its walkthrough may include private mail, tasks, reviews, and agent output. Groups cannot be used.
       </Typography>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
-      {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>nothing seen yet — send a message in a chat and refresh</Typography>}
+      {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
       {(rows || []).map((r) => (
         <Box key={r.jid} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5, borderBottom: `1px solid ${BORDER}` }}>
           <Chip size="small" label={r.group ? "group" : "chat"} sx={{ height: 18, fontSize: 10 }} />

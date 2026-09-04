@@ -12,11 +12,12 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import EventIcon from "@mui/icons-material/Event";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api.js";
-import { ChannelIcon, TaskuaryMark, cleanText } from "./ui.jsx";
+import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
 import { laneMeta, ageText } from "./funnelPile.js";
 import { TerminalPane } from "./TerminalView.jsx";
+import { RepoPicker } from "./RepoPicker.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -61,6 +62,42 @@ function FullText({ mid }) {
   );
 }
 
+// A task is the grouping boundary after triage. Fetching `/thread` here would pull the whole Teams
+// or WhatsApp room (and made TQ-0367 say +19); task detail tells us exactly which messages triage
+// combined. Context rows helped triage decide, but are not part of the grouped ask shown to the owner.
+function CombinedTaskText({ card }) {
+  const [doc, setDoc] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (!card?.tid) { setDoc({ messages: [] }); return () => { live = false; }; }
+    api.get(`/api/tasks/${card.tid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
+    return () => { live = false; };
+  }, [card?.tid, card?.mid]);
+  if (!card?.tid) return <FullText mid={card?.mid} />;
+  if (!doc) return <div className="tq-card-full">â€¦</div>;
+  if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
+  const messages = (doc.messages || []).filter((m) => String(m.Status || "") !== "context");
+  if (messages.length <= 1) return <FullText mid={card?.mid} />;
+  return (
+    <div className="tq-card-full">
+      <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 700 }}>
+        {messages.length} messages combined by triage â€” shown together
+      </div>
+      {messages.map((m, n) => {
+        const body = cleanText(m.BodyText || "");
+        return (
+          <div key={m.MessageId || n} style={{ padding: "7px 0", borderTop: n ? "1px solid #e2ddd4" : 0 }}>
+            <div className="tq-card-note" style={{ marginBottom: 3 }}>
+              {m.Direction === "out" ? "You" : (m.FromName || m.FromEmail || "Someone")}{m.SentAt ? ` Â· ${fmtDateTime(m.SentAt)}` : ""}
+            </div>
+            {looksMd(body) ? <Md text={body} /> : (body || "(empty)")}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // what every card shares: the source logo, the lane's word and dot, the title, the sub-line
 export function CardShell({ card, kicker, title, sub, children, err }) {
   const meta = laneMeta(card?.lane);
@@ -82,7 +119,9 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   const [text, setText] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
-  const [full, setFull] = useState(false);
+  // A draft on a grouped task must open with the whole grouped ask visible. Otherwise the owner is
+  // asked to approve an answer against only the latest of seven messages.
+  const [full, setFull] = useState(true);
   useEffect(() => {
     let live = true;
     api.get("/api/reviews", { params: { status: "pending" } }).then(({ data }) => {
@@ -90,13 +129,14 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       setRv((data.data || []).find((x) => x.ReviewId === card.rid) || { gone: true });
     }).catch((e) => live && setErr(errText(e)));
     return () => { live = false; };
-  }, [card.rid]);
+  }, [card.rid, card.mid]);
   const action = rv?.Kind === "action";
   const draft = () => {
     if (!action) return rv?.DraftText || "";
     try { const p = JSON.parse(rv.DraftText || ""); return p.text || `${p.action}${p.why ? ` — ${p.why}` : ""}`; } catch { return rv?.DraftText || ""; }
   };
   const value = text ?? draft();
+  const stale = rv?.Stale ?? card.stale;
   const who = rv ? (rv.FromName && rv.FromEmail ? `${rv.FromName} <${rv.FromEmail}>` : rv.FromName || rv.FromEmail || "them") : "";
   const decide = async (verb) => {
     setBusy(verb); setErr("");
@@ -109,7 +149,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   };
   const redraft = async () => {
     setBusy("redraft"); setErr("");
-    try { const { data } = await api.post(`/api/reviews/${card.rid}/draft`); setRv((r) => ({ ...r, DraftText: data.draft })); setText(null); }
+    try { const { data } = await api.post(`/api/reviews/${card.rid}/draft`); setRv((r) => ({ ...r, DraftText: data.draft, Stale: false })); setText(null); }
     catch (e) { setErr(errText(e)); }
     setBusy("");
   };
@@ -117,22 +157,23 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   return (
     <CardShell card={card} title={rv?.Subject || card.title} sub={rv ? (action ? "An agent proposed this. It runs only if you say so." : `To ${who}`) : "loading…"} err={err}>
       {rv?.Preview && !action && !full && <div className="tq-card-excerpt">{cleanText(rv.Preview).slice(0, 400)}</div>}
-      {full && card.mid && <FullText mid={card.mid} />}
+      {full && card.mid && <CombinedTaskText card={card} />}
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
           placeholder={action ? "" : "No draft yet — choose Draft with AI, or write it here"}
           sx={{ mt: 1, "& textarea": { fontSize: 12.5, lineHeight: 1.5 } }} />
       )}
+      {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}
       <div className="tq-card-actions">
         {action ? <>
           <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? "Running…" : "Run it"}</Button>
           <Button size="small" variant="outlined" disabled={!!busy} onClick={() => decide("reject")} sx={quiet}>Dismiss</Button>
         </> : <>
           {rv?.CanSend !== false && (
-            <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim()} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
+            <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || !!stale} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
               {busy === "approve" ? "Sending…" : "Approve & send"}</Button>
           )}
-          <Button size="small" variant="outlined" disabled={!!busy || !rv} startIcon={<RefreshRoundedIcon />} onClick={redraft} sx={quiet}>{busy === "redraft" ? "Drafting…" : rv?.DraftText ? "Redraft" : "Draft with AI"}</Button>
+          <Button size="small" variant="outlined" disabled={!!busy || !rv} startIcon={<RefreshRoundedIcon />} onClick={redraft} sx={quiet}>{busy === "redraft" ? "Drafting…" : stale ? "Refresh draft" : rv?.DraftText ? "Redraft" : "Draft with AI"}</Button>
           <Button size="small" variant="outlined" disabled={!!busy} onClick={() => decide("no_reply")} sx={{ ...quiet, ...faint }}>Dismiss</Button>
           {card.mid && <Button size="small" onClick={() => setFull((v) => !v)} sx={faint}>{full ? "Fold" : "Read what they wrote"}</Button>}
         </>}
@@ -149,7 +190,10 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [big, setBig] = useState(false);
-  const [live, setLive] = useState(true);      // the session's own screen, in the chat - type into it directly
+  // A hand-off is not the main Assistant doing the work. Keep the other agent's workspace folded
+  // unless the owner explicitly asks to see it; opening a regular API agent inline made the
+  // orchestration chat look as though it had silently changed identities.
+  const [live, setLive] = useState(false);
   const answer = async () => {
     if (!text.trim()) return;
     setBusy(true); setErr("");
@@ -200,7 +244,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
         <Button size="small" disabled={!!ending} onClick={() => finish(false)} sx={faint}
           title="End the session and leave the task open">{ending === "stop" ? "Stopping…" : "Just stop it"}</Button>
         <span className="sp" />
-        <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>Open the terminal</Button>
+        <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>Open agent workspace</Button>
       </div>
     </CardShell>
   );
@@ -340,6 +384,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   const [err, setErr] = useState("");
   const [notOurs, setNotOurs] = useState(false);
   const [sender, setSender] = useState(false);
+  const [repoAsk, setRepoAsk] = useState(null);
   // Shown, not offered. Clicking "Read it" to find out what a thing IS put a step in front of every
   // decision (the owner, 2026-09-04: "by default it should show the full email - not the full chain
   // ... don't want to have to click read it"). FullText fetches this ONE message, so it is the mail
@@ -352,20 +397,45 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
     setBusy("");
   };
   const asks = card.kind !== "fyi";
-  const coding = card.kind === "todo" && card.coding;
+  const suggestedKind = card.kind === "todo" && card.coding ? "coding" : "general";
+  const startAgent = async (agentKind) => {
+    setBusy("agent"); setErr("");
+    try {
+      const { data } = await api.post(`/api/messages/${card.mid}/dispatch`, {
+        kind: agentKind,
+      });
+      if (data.dispatch === "needs_repo") {
+        setRepoAsk({ taskId: data.taskId, agent: data.agent || "coder" });
+      } else {
+        setRepoAsk(null);
+        const who = agentKind === "coding" ? (data.agent || "the coding agent") : (data.agent || "the regular agent");
+        onDone?.(`${data.ref || "It"} is with ${who} now - I'll bring it back when it's done.`);
+      }
+    } catch (e) {
+      const msg = errText(e);
+      // Compatibility with an older server response when this card already knows its task.
+      if (card.tid && /could not tell which checkout|no local path/i.test(msg))
+        setRepoAsk({ taskId: card.tid, agent: "coder" });
+      else setErr(msg);
+    }
+    setBusy("");
+  };
   return (
-    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : coding ? "coding · nobody on it" : card.kind === "todo" ? "on your list" : "asked you"} title={card.title}
+    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : card.kind === "todo" ? "on your list" : "asked you"} title={card.title}
       sub={`${card.who || "someone"} · ${ageText(card.when)} ago`} err={err}>
       {!full && card.preview && <div className="tq-card-excerpt">{card.preview}</div>}
-      {full && card.mid && <FullText mid={card.mid} />}
+      {full && card.mid && <CombinedTaskText card={card} />}
       <div className="tq-card-actions">
         <Button size="small" variant="outlined" onClick={() => setFull((v) => !v)} sx={quiet}>{full ? "Fold" : "Read it"}</Button>
         {asks && <Button size="small" variant="contained" disableElevation disabled={!!busy} sx={primary}
           onClick={() => post("reply", `/api/messages/${card.mid}/reply`, { draft: true }, null,
             (d) => onSurface?.(d.reviewId ? `review:${d.reviewId}` : null, "Drafting a reply…"))}>{busy === "reply" ? "Drafting…" : "Reply"}</Button>}
-        <Button size="small" variant={coding ? "contained" : "outlined"} disableElevation disabled={!!busy} sx={coding ? primary : quiet}
-          onClick={() => post("code", `/api/messages/${card.mid}/dispatch`, {}, (d) => `${d.ref || "It"} is with the coding agent now - I'll bring it back when it's done.`)}>
-          {busy === "code" ? "Starting…" : coding ? "Start the coding agent" : "Send to the coding agent"}</Button>
+        <Button size="small" variant="outlined" disableElevation disabled={!!busy} sx={quiet}
+          title="Starts a CLI coding agent in a repository" onClick={() => startAgent("coding")}>
+          {busy === "agent" ? "Starting…" : "Coding agent"}</Button>
+        <Button size="small" variant="outlined" disableElevation disabled={!!busy} sx={quiet}
+          title="Starts a non-coding agent for reading, analysis, or other general work" onClick={() => startAgent("general")}>
+          {busy === "agent" ? "Starting…" : "Regular agent"}</Button>
         <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
           onClick={() => post("chat", `/api/messages/${card.mid}/chat`, {}, "Opened in a full workspace.", (d) => d.taskId && onOpenTask?.(d.taskId))}>Talk it through</Button>
         {/* On an fyi too: `asks` hid this, so the one road OFF an fyi that is actually work - turning
@@ -380,6 +450,14 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
         <Button size="small" disabled={!!busy} onClick={() => setSender((v) => !v)} sx={faint}>Ignore this sender…</Button>
         <Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
+      {repoAsk && (
+        <div className="tq-card-full" style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Which repository should the coding agent use?</div>
+          <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
+            onDone={(data) => { if (data?.repo) { setRepoAsk(null); startAgent("coding"); } }} />
+          <Button size="small" sx={faint} onClick={() => setRepoAsk(null)}>Not now</Button>
+        </div>
+      )}
       {sender && (
         <div className="tq-card-actions" style={{ marginTop: 6 }}>
           <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}

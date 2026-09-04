@@ -12,3 +12,19 @@ test("a restarted live session replaces the prior session-closed card", () => {
 test("the active wrap operation replaces the terminal until its result is ready", () => {
   assert.equal(agentWorkspaceMode({ session: { alive: true }, wrapping: "wrap" }), "wrapping");
 });
+
+test("a general task shows no assistant workspace until it was actually sent", () => {
+  assert.equal(agentWorkspaceMode({ isGeneral: true, generalStarted: false }), "empty");
+  assert.equal(agentWorkspaceMode({ isGeneral: true, generalStarted: true }), "general");
+});
+
+test("general-agent pause and finish states replace the conversation while they settle", () => {
+  assert.equal(agentWorkspaceMode({ isGeneral: true, generalStarted: true, wrapping: "pause" }), "wrapping");
+  assert.equal(agentWorkspaceMode({ isGeneral: true, generalStarted: true, wrapped: { note: "saved" } }), "wrapped");
+  assert.equal(agentWorkspaceMode({
+    isGeneral: true,
+    generalStarted: true,
+    session: { alive: true },
+    wrapped: { note: "an older run" },
+  }), "general");
+});

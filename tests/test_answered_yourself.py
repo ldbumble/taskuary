@@ -63,11 +63,13 @@ class AnsweringItYourself(unittest.TestCase):
         _line(self.s, 'You', 'and again', '2026-08-31 12:50:00', status='context')
         self.assertEqual(_row(self.s, self.mid)['AnsweredAt'], '2026-08-31 12:50:00')
 
-    def test_a_pending_draft_still_outranks_it(self):
-        """A decision nobody has taken is still on you, however the thread went on."""
+    def test_a_draft_created_after_sync_still_notices_you_already_answered(self):
+        """Worker ordering cannot resurrect a draft after the real-world reply already landed."""
         _line(self.s, 'You', 'sent this morning', '2026-08-31 12:44:00', status='context')
-        self.s.add_review({'MessageId': self.mid, 'Kind': 'draft_reply', 'Status': 'pending'})
-        self.assertEqual(_row(self.s, self.mid)['NeedsYou'], 1)
+        rid = self.s.add_review({'MessageId': self.mid, 'Kind': 'draft', 'Status': 'pending',
+                                 'Reason': 'needs a reply: question for you'})
+        self.assertEqual(self.s.get_review(rid)['Status'], 'superseded')
+        self.assertEqual(_row(self.s, self.mid)['NeedsYou'], 0)
 
     def test_an_inbound_reply_from_them_is_not_you_answering(self):
         """Only the owner's own lines are `context`. Priya writing again is not an answer."""
@@ -136,6 +138,47 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         ingest_outbound_mail(s, 'me@x.com', self._sent())
         self.assertEqual(len(s.list_messages(tid)), 2)                        # still on the thread
         self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
+
+    def test_a_whatsapp_reply_retires_the_unused_draft_and_says_so(self):
+        """Gabi answered in WhatsApp after Taskuary drafted a reply. The sync is the verdict:
+        never leave the old Approve button asking the owner to send a second answer."""
+        from taskuary import concierge, general
+        from taskuary.channels import ingest_own_message
+        s = _store()
+        mid = s.add_message({'ExternalId': 'wa-in', 'ConversationId': 'whatsapp:gabi',
+                             'Channel': 'whatsapp', 'SourceName': 'Gabi', 'Subject': 'Chat with Gabi',
+                             'FromName': 'Gabi', 'SentAt': '2026-09-04 12:30:00',
+                             'BodyText': 'Awesome. 2 pm works. Your house?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Reply to Gabi', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply',
+                            'Status': 'pending', 'DraftText': 'Yes, my house.'})
+
+        ingest_own_message(s, {'external_id': 'wa-out', 'conversation_id': 'whatsapp:gabi',
+                               'channel': 'whatsapp', 'source_name': 'Gabi', 'sent_at': '2026-09-04 12:36:00',
+                               'body': 'yes'}, 'your line in this chat - kept for context')
+
+        self.assertEqual(s.get_review(rid)['Status'], 'superseded')
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertEqual(_row(s, mid)['NeedsYou'], 0)
+        dock, _ = general.dock_task(s)
+        said = [m['text'] for m in concierge.history(s, dock['TaskId'])]
+        self.assertTrue(any('replied in WhatsApp' in x and 'reply was taken care of' in x for x in said))
+
+    def test_an_earlier_owner_line_does_not_retire_a_later_ask(self):
+        from taskuary.channels import ingest_own_message
+        s = _store()
+        mid = s.add_message({'ExternalId': 'wa-new-ask', 'ConversationId': 'whatsapp:gabi',
+                             'Channel': 'whatsapp', 'SourceName': 'Gabi', 'FromName': 'Gabi',
+                             'SentAt': '2026-09-04 12:30:00', 'BodyText': 'Your house?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Reply to Gabi', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply',
+                            'Status': 'pending', 'DraftText': 'Yes.'})
+        ingest_own_message(s, {'external_id': 'wa-old-out', 'conversation_id': 'whatsapp:gabi',
+                               'channel': 'whatsapp', 'source_name': 'Gabi', 'sent_at': '2026-09-04 12:20:00',
+                               'body': 'Earlier answer'}, 'your line in this chat - kept for context')
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')
 
 
 class TheBallIsInTheirCourt(unittest.TestCase):

@@ -58,7 +58,9 @@ def filter_policy(store, connector_id: int) -> dict:
             and int(s.get('ConnectorId') or connector_id) == int(connector_id) and s.get('Address')]
     exact = {str(s['Address']).strip() for s in srcs if str(s['Address']).strip() != '*'}
     notify = str(cfg.get('notify_chat') or '').strip()
+    assistant = str(cfg.get('assistant_chat') or '').strip()
     if notify: exact.add(notify)
+    if assistant: exact.add(assistant)
     return {'allDirect': any(str(s['Address']).strip() == '*' for s in srcs), 'jids': sorted(exact)}
 
 

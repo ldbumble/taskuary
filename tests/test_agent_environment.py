@@ -136,5 +136,33 @@ class APinnedPathThatMovedTests(unittest.TestCase):
                 agents._resolve_cmd('codex')
 
 
+class ARunOutsideACheckoutTests(unittest.TestCase):
+    """Most of what this app asks a CLI is not about a repo - the classifier, the drafter,
+    STYLE.md generation all run in ~/.taskuary/scratch on purpose. codex refuses to start there
+    ("Not inside a trusted directory and --skip-git-repo-check was not specified") and headlessly
+    there is nobody to answer its trust prompt, so the whole setup step died before the model was
+    reached (issue #34)."""
+    def _argv(self, profile):
+        with mock.patch.object(agents, '_resolve_cmd', return_value=['X']), \
+             mock.patch('taskuary.spawn.popen', side_effect=RuntimeError('stop')) as pop:
+            with self.assertRaises(RuntimeError): agents.run_cli(profile, 'hi', lambda *a: None)
+        return pop.call_args[0][0]
+
+    def test_codex_exec_is_allowed_to_run_where_there_is_no_git_repo(self):
+        argv = self._argv({'cmd': 'codex', 'args': ['exec', '--sandbox', 'read-only'], 'cwd': None})
+        self.assertIn('--skip-git-repo-check', argv)
+
+    def test_the_flag_is_not_repeated_when_the_profile_already_says_it(self):
+        argv = self._argv({'cmd': 'codex', 'args': ['exec', '--skip-git-repo-check']})
+        self.assertEqual(argv.count('--skip-git-repo-check'), 1)
+
+    def test_it_is_an_exec_flag_so_no_other_cli_and_no_tui_gets_it(self):
+        self.assertNotIn('--skip-git-repo-check', self._argv({'cmd': 'claude', 'args': ['-p']}))
+        # bare `codex` is the interactive TUI, which asks about trust itself
+        self.assertNotIn('--skip-git-repo-check', self._argv({'cmd': 'codex', 'args': ['--full-auto']}))
+        from taskuary import terminal
+        self.assertNotIn('--skip-git-repo-check', terminal.interactive_args(['exec', '--json']))
+
+
 if __name__ == '__main__':
     unittest.main()

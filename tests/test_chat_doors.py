@@ -16,6 +16,7 @@ import unittest
 from unittest import mock
 
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from taskuary import coder, general, selfclose, server
 from taskuary.store import MemoryStore
@@ -86,6 +87,74 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
         with mock.patch('taskuary.server.start_session', return_value={'sid': 'x'}):
             d = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder'}).json()
         self.assertEqual(_task(d['taskId'])['Kind'], 'coding')
+
+    def test_explicit_coding_choice_corrects_an_existing_general_task(self):
+        """The owner's button choice wins over a triage label that got the task wrong."""
+        mid = _msg('review the responsibilities', 'Please read the list I sent.')
+        tid = server.store.create_task({'Title': 'review it', 'Summary': 'Review this list',
+                                        'Kind': 'general'}, 'router')
+        server.store.attach_message(mid, tid)
+        session = mock.Mock(provider='Azure OpenAI', model='gpt-test')
+        session.info.return_value = {'sid': 'assistant-1', 'mode': 'assistant'}
+        with mock.patch.object(general, 'start_session', return_value=session) as regular, \
+             mock.patch.object(server, 'start_session', return_value={'sid': 'coding-1'}) as coding:
+            d = c.post(f'/api/messages/{mid}/dispatch',
+                       json={'agent': 'coder', 'kind': 'coding'}).json()
+        self.assertEqual((d['dispatch'], d['taskId']), ('session', tid))
+        self.assertEqual(_task(tid)['Kind'], 'coding')
+        coding.assert_called_once()
+        regular.assert_not_called()
+
+    def test_send_to_agent_can_promote_a_message_to_the_regular_agent(self):
+        mid = _msg('compare the options', 'Which one is better?')
+        session = mock.Mock(provider='Taskuary', model='gpt-test')
+        session.info.return_value = {'sid': 'assistant-2', 'mode': 'assistant'}
+        with mock.patch.object(general, 'start_session', return_value=session):
+            d = c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'general'}).json()
+        self.assertEqual(d['dispatch'], 'assistant')
+        self.assertEqual(_task(d['taskId'])['Kind'], 'general')
+        session.send_prompt.assert_called_once_with('Which one is better?')
+
+    def test_explicit_regular_choice_corrects_an_existing_coding_task(self):
+        mid = _msg('compare the responsibilities', 'Please review the list and explain the gaps.')
+        tid = server.store.create_task({'Title': 'review it', 'Summary': 'Explain the gaps',
+                                        'Kind': 'coding'}, 'router')
+        server.store.attach_message(mid, tid)
+        session = mock.Mock(provider='Azure OpenAI', model='gpt-test')
+        session.info.return_value = {'sid': 'assistant-3', 'mode': 'assistant'}
+        with mock.patch.object(general, 'start_session', return_value=session), \
+             mock.patch.object(server, 'start_session') as coding:
+            d = c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'general'}).json()
+        self.assertEqual((d['dispatch'], _task(tid)['Kind']), ('assistant', 'general'))
+        coding.assert_not_called()
+
+    def test_agent_type_cannot_change_under_a_live_session(self):
+        mid = _msg('already running', 'Do the work.')
+        tid = server.store.create_task({'Title': 'already running', 'Kind': 'general'}, 'router')
+        server.store.attach_message(mid, tid)
+        live = mock.Mock(alive=True, agent='assistant')
+        with mock.patch.object(server.hub_term, 'session_for', return_value=live):
+            r = c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'coding'})
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(_task(tid)['Kind'], 'general')
+
+    def test_unqualified_dispatch_is_rejected_instead_of_guessing_from_triage(self):
+        mid = _msg('review this', 'Please review the responsibilities list.')
+        r = c.post(f'/api/messages/{mid}/dispatch', json={})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn('Choose an agent type', r.text)
+
+    def test_an_uncertain_repo_asks_for_a_choice_and_keeps_the_new_task_id(self):
+        mid = _msg('security app account', 'the login screen is empty')
+        with mock.patch('taskuary.server.start_session',
+                        side_effect=HTTPException(422, 'I could not tell which checkout this belongs in')):
+            response = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder'})
+        self.assertEqual(response.status_code, 200)
+        d = response.json()
+        self.assertEqual(d['dispatch'], 'needs_repo')
+        self.assertEqual(d['agent'], 'coder')
+        self.assertEqual(_task(d['taskId'])['Kind'], 'coding')
+        self.assertIn('which checkout', d['reason'])
 
 
 class TheConversationWorks(unittest.TestCase):

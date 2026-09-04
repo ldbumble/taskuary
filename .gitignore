@@ -43,3 +43,7 @@ docs/design/**/*-and-stage.html
 # a seeded design canvas is a 2.5MB generated bundle - the .dc.html artboards are the source
 docs/design/**/timeline-*.html
 docs/break-test/probe_out.json
+
+# Claude Code: the project SKILLS are shared, the local settings are NOT - settings.local.json
+# holds this machine's hooks and a live owner token.
+.claude/settings.local.json

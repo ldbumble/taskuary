@@ -6,6 +6,10 @@ that buys it. The name **taskuary** is unclaimed on PyPI as of this writing.
 
 Everything below is done once. After that a release is a tag.
 
+> Cutting one: `.claude/skills/deploy/SKILL.md` is the operational version of this file -
+> the four places the version is written, the three test gates, and why the tag waits for
+> CI on the exact commit. `/deploy` runs it.
+
 ## One-time: Trusted Publishing
 
 No API token is ever created, copied, or stored — PyPI verifies the GitHub workflow's own

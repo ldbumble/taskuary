@@ -544,9 +544,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         row = store.get_agent(agent)
         if not row: raise ValueError(f'unknown agent: {agent}')
         profile = json.loads(row.get('Config') or '{}')
-        argv, label = agent_argv(profile, model), agent
+        label = agent
     else:
-        argv, label = default_shell(), 'shell'
+        label = 'shell'
     # A named repo with no path used to fall through to the agent's default folder, so a task about
     # one system opened a session in another and the agent edited the wrong tree in good faith.
     # Refuse instead: not starting is recoverable, working the wrong checkout is not.
@@ -578,6 +578,10 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         if len(paths) == 1: cwd = next(iter(paths.values()))
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
+    # WHICH CHECKOUT comes first, and only then which binary: resolving the CLI up here meant a box
+    # without it answered "'claude' not found on PATH" to a task whose real problem was that nothing
+    # said where it belonged - the wrong sentence, and the one the owner cannot act on.
+    argv = agent_argv(profile, model) if agent else default_shell()
     if agent:
         try: pretrust(cwd, ' '.join(str(a) for a in argv))     # no first-run dialog to park on
         except Exception as e: logger.debug(f'pretrust skipped: {e}')

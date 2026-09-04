@@ -10,7 +10,7 @@
 Taskuary turns incoming messages into organized work. It sorts what matters, hands tasks to
 your agents, and brings decisions back to you. Nothing sends or ships without your approval.
 
-![Taskuary: the pipe ranked by triage beside the assistant chat - a mail pulled in with its drafted reply, the Timeline in task view, the Reports and the Board.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif)
+![Taskuary: the pipe ranked by triage beside the assistant chat - a mail pulled in with its drafted reply, the Timeline in task view, the Reports and the Board.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=0.3.3.2)
 
 Taskuary is early—currently **v0.3.3.2**—so breaking changes are still possible before 1.0.
 
@@ -29,7 +29,7 @@ Taskuary is early—currently **v0.3.3.2**—so breaking changes are still possi
 Mail, chats, issues, alerts, and reports appear on one Timeline and in one Assistant chat.
 Open any item to see its context, status, and available actions.
 
-![Taskuary's unified work pipe and chat, populated only with fictional demo data.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-chat.png)
+![Taskuary's unified work pipe and chat, populated only with fictional demo data.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-chat.png?v=0.3.3.2)
 
 **AI triage**
 
@@ -62,7 +62,7 @@ Surface unanswered replies, upcoming meetings, quiet tasks, failed reports, and 
 
 Taskuary reads connected inboxes, separates tasks from noise, and shows the result on one Timeline.
 
-![The Timeline in task view: every message with its verdict, and the drafted reply waiting on you](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline-crop.png)
+![The Timeline in task view: every message with its verdict, and the drafted reply waiting on you](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline-crop.png?v=0.3.3.2)
 
 ### 2. An agent works on it
 
@@ -74,7 +74,7 @@ Tasks move from **Queued** to **Agent working**. The Board shows live progress a
 
 Finished work, draft replies, questions, and loose ends return for review. You decide what to send, change, snooze, or dismiss.
 
-![Taskuary assistant showing loose ends and suggested actions](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-assistant.png)
+![The assistant walking the pipe: the item on the table, its drafted reply, and Approve & send waiting on you](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-assistant.png?v=0.3.3.2)
 
 ## Install
 

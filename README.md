@@ -24,27 +24,27 @@ Taskuary is early—currently **v0.3.3.2**—so breaking changes are still possi
 
 ## What Taskuary can do
 
-**One Timeline and Assistant**
+**Connect every system. Keep control.**
 
-Mail, chats, issues, alerts, reports, and agent runs land on one Timeline. Open any item for its
-context, status, and actions - or ask the Assistant, which works the same rail: it walks you
-through what needs you, pulls up a name or a subject when you mention it, and hands you the next
-thing one at a time. Filter the rail to just the pipe, everything, or only what needs you.
+Bring your mail, chats, issue trackers, alerts, reports, and AI agents into one control center
+that runs on your machine. Every input lands on a single Timeline with its context, status, and
+available actions intact. Taskuary gives your tools one place to work together while you decide
+what can run, what can send, and what needs your attention.
 
 ![Taskuary's unified work pipe and chat, populated only with fictional demo data.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-chat.png?v=0.3.3.2)
 
-**AI triage**
+**Turn incoming work into tasks automatically**
 
-Triage reads each message and decides what it *is*, not just who sent it: routine updates get
-filed, real requests become tasks, and an urgent decision goes to the front. Every verdict shows
-its reason, and you can overrule it.
+AI triage reads every incoming item, understands what it means, and turns actionable requests
+into ready-to-run tasks. Routine updates are filed, questions get draft replies, and urgent
+decisions move to the front. Every choice comes with a reason, and you can change it at any time.
 
-**An assistant that speaks up**
+**Watch the work. Approve the outcome.**
 
-It posts what it noticed onto the Timeline - a reply nobody answered, a task gone quiet, a report
-that failed, a meeting about to start - once each, with the evidence under it and the buttons on
-it. Its own ideas arrive the same way, and you turn one into a task, keep it as a note, or let it
-go.
+Taskuary keeps the system moving and brings you in when your judgment matters. The Assistant
+speaks up when a reply is waiting, a task has gone quiet, a report has failed, or a meeting is
+about to start. Each update arrives once, with the evidence and next actions attached, so you can
+review the work, make the call, and approve what happens next.
 
 **Agents in your own repos**
 

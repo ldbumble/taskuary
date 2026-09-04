@@ -11,6 +11,14 @@ ME, DANA = 'owner@ours.com', 'dana@vendor.com'
 def _ago(days=0, hours=0): return (datetime.now() - timedelta(days=days, hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
 
 
+def _earlier_today():
+    """A stamp that is definitely TODAY and definitely past. An hour ago is YESTERDAY between
+    midnight and 01:00, which is when CI happened to run - "already ran today" then read as never
+    (2026-09-04 00:53 UTC)."""
+    now = datetime.now()
+    return max(now - timedelta(hours=1), now.replace(hour=0, minute=0, second=1)).strftime('%Y-%m-%d %H:%M:%S')
+
+
 def _store():
     s = MemoryStore()
     s.set_setting('calendar_enabled', '0', 't'); s.set_setting('owner_email', ME, 't')
@@ -119,11 +127,11 @@ class OnceADayTests(unittest.TestCase):
         cfg = {**self.CFG, 'daily_at': _slot_ahead()}
         self.assertTrue(reports.is_due(cfg, None, startup=True))                    # never run
         self.assertTrue(reports.is_due(cfg, _ago(days=1, hours=2), startup=True))   # yesterday's
-        self.assertFalse(reports.is_due(cfg, _ago(hours=1), startup=True))          # already today
+        self.assertFalse(reports.is_due(cfg, _earlier_today(), startup=True))       # already today
 
     def test_without_the_flag_every_launch_still_fires(self):
         cfg = {k: v for k, v in self.CFG.items() if k != 'once_per_day'} | {'daily_at': _slot_ahead()}
-        self.assertTrue(reports.is_due(cfg, _ago(hours=1), startup=True))                # the Assistant's cadence
+        self.assertTrue(reports.is_due(cfg, _earlier_today(), startup=True))             # the Assistant's cadence
 
     def test_the_daily_clock_still_fires_while_the_app_stays_open(self):
         due = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)

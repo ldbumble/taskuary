@@ -26,6 +26,20 @@ TEST_LINES = [
     (r'^(ok|FAIL)\s+\S+\s+[\d.]+s', 'go'),
     # dotnet: "Passed! - Failed: 0, Passed: 12"
     (r'(?:Passed|Failed)!\s*-\s*Failed:\s*(\d+),\s*Passed:\s*(\d+)', 'dotnet'),
+    # cargo: "test result: ok. 42 passed; 0 failed; 1 ignored"
+    (r'test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed', 'cargo'),
+    # maven/gradle surefire: "Tests run: 42, Failures: 0, Errors: 0, Skipped: 1" - errors
+    # count as failures the way pytest's do, because both mean the suite is not green
+    (r'Tests run: (\d+), Failures: (\d+), Errors: (\d+)', 'maven'),
+    # rspec: "42 examples, 0 failures" (and "1 example, 1 failure")
+    (r'(\d+) examples?, (\d+) failures?', 'rspec'),
+    # phpunit, both endings: "OK (42 tests, 108 assertions)" and
+    # "FAILURES! Tests: 42, Assertions: 108, Failures: 3"
+    (r'OK \((\d+) tests?, \d+ assertions?\)', 'phpunit'),
+    (r'FAILURES!\s*Tests: (\d+),.*?Failures: (\d+)', 'phpunit-red'),
+    # plain unittest: the count and the verdict are on separate lines, and the count alone
+    # is not a result - "Ran 42 tests" with no OK/FAILED after it is a run still going
+    (r'Ran (\d+) tests? in [\d.]+s\s+(OK|FAILED \([^)]*\))', 'unittest'),
 ]
 FAIL_WORDS = re.compile(r'\b(FAILED|FAIL|failed|error:|Error:|Traceback)\b')
 
@@ -47,6 +61,21 @@ def tests_from(text: str) -> dict:
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, nums[0])
         elif runner == 'dotnet':
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, 0)
+        elif runner == 'cargo':
+            passed, failed = nums[0], nums[1]
+        elif runner == 'maven':
+            # surefire's "Tests run" is the total, not the passes
+            passed, failed = nums[0] - nums[1] - nums[2], nums[1] + nums[2]
+        elif runner == 'rspec':
+            passed, failed = nums[0] - nums[1], nums[1]
+        elif runner == 'phpunit':
+            passed, failed = nums[0], 0
+        elif runner == 'phpunit-red':
+            runner, passed, failed = 'phpunit', nums[0] - nums[1], nums[1]
+        elif runner == 'unittest':
+            # the verdict line carries no total, so the count is the whole run and
+            # FAILED(...) only says it was not green
+            passed, failed = (nums[0], 0) if m.group(2) == 'OK' else (0, nums[0])
         else:
             passed, failed = (0, 0) if m.group(1) == 'ok' else (0, 1)
         return {'ran': True, 'runner': runner, 'passed': passed, 'failed': failed,

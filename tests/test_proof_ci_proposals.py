@@ -41,6 +41,42 @@ class ProofTests(unittest.TestCase):
         # the LAST run is the truth: a fixed suite must not report the earlier failure
         self.assertEqual(proof.tests_from('5 passed, 2 failed in 1s\n...\n7 passed in 2s')['failed'], 0)
 
+    def test_more_runners_report_their_own_numbers(self):
+        """Every runner's own summary line, with the numbers it actually prints."""
+        r = proof.tests_from('test result: ok. 42 passed; 0 failed; 1 ignored')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('cargo', 42, 0))
+        r = proof.tests_from('test result: FAILED. 39 passed; 3 failed; 0 ignored')
+        self.assertEqual((r['passed'], r['failed']), (39, 3))
+        # surefire counts the TOTAL, and its errors are failures
+        r = proof.tests_from('Tests run: 42, Failures: 2, Errors: 1, Skipped: 0')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('maven', 39, 3))
+        r = proof.tests_from('42 examples, 0 failures')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('rspec', 42, 0))
+        r = proof.tests_from('1 example, 1 failure')
+        self.assertEqual((r['passed'], r['failed']), (0, 1))
+        r = proof.tests_from('OK (42 tests, 108 assertions)')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 42, 0))
+        r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Failures: 3.')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 39, 3))
+        r = proof.tests_from('Ran 42 tests in 1.234s\n\nOK')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('unittest', 42, 0))
+        r = proof.tests_from('Ran 42 tests in 1.234s\n\nFAILED (failures=3)')
+        self.assertEqual((r['passed'], r['failed']), (0, 42))
+
+    def test_a_new_runner_named_without_numbers_is_not_a_result(self):
+        """The rule that keeps the gaps line trustworthy, held for the new runners."""
+        for said in ('I will run cargo test next',
+                     'running mvn test now',
+                     'rspec is the suite here',
+                     'phpunit will be run',
+                     'Ran 42 tests in 1.234s'):      # no verdict yet: still going
+            self.assertFalse(proof.tests_from(said)['ran'], said)
+
+    def test_the_last_run_wins_for_the_new_runners_too(self):
+        red = 'test result: FAILED. 39 passed; 3 failed'
+        green = 'test result: ok. 42 passed; 0 failed'
+        self.assertEqual(proof.tests_from(red + chr(10) + '...' + chr(10) + green)['failed'], 0)
+
     def test_merely_mentioning_pytest_is_not_a_result(self):
         self.assertFalse(proof.tests_from('I will now run pytest on the suite')['ran'])
         self.assertFalse(proof.tests_from('')['ran'])

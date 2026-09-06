@@ -1089,7 +1089,7 @@
       "requirement": "Remove decide_words() and other phrase/regex-based intent dispatch from",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::InterpretationTests, `tests/test_concierge.py`::DecisionTests (`concierge.decide_words` and its phrase tables are gone - `hasattr` pinned; the model interprets the words with the item, the pile and the conversation in front of it and answers with a DECIDE line or a clarifying OPTIONS line; without an AI connector nothing is decided and the chat says so)",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-122",
@@ -1098,7 +1098,7 @@
       "requirement": "Give every message the same conversational action interface. Replace the",
       "status": "implemented",
       "test": "`website/test/proposalCard.test.mjs` (the bottom suggestions Next / Done / Create task / Create agent / Reply are text sent through the same `send()` as typing; `website/test/funnelPile.test.mjs` pins that no chip settles or dispatches directly)",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-123",
@@ -1107,7 +1107,7 @@
       "requirement": "Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::ProposalTests (a decision becomes an `operations.propose` row - kind, exact target, parameters, label - and the chat says what WILL happen; a correction before the click revises the same proposal to a new version), `website/src/ProposalCard.jsx` (action, target, parameters, a specifically labelled button and Cancel)",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-124",
@@ -1116,7 +1116,7 @@
       "requirement": "Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::test_a_decision_is_a_proposal_the_owner_confirms_not_an_action_the_words_took, ::test_words_alone_decide_nothing_the_model_does, `tests/test_assistant_reactions.py` (every consequential response asserts nothing moved before the click; the button posts `/api/operations/{id}/execute` with the id and version, never a phrase)",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-125",
@@ -1125,7 +1125,7 @@
       "requirement": "Use one validated action execution path shared with other app entry points.",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::ProposalTests (one shared `server._run_operation` handler per kind - the same code the page's buttons run; stale version and changed context answer 409; a repeated click returns the first receipt without a second effect; a failing handler is reported as `error` and settles nothing; the receipt is written after execution), `website/test/proposalCard.test.mjs` (the walk moves only on a done that settles)",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-126",
@@ -1134,7 +1134,7 @@
       "requirement": "Preserve draft review/editing and explicit send approval within this model.",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::test_a_reply_request_drafts_at_once_and_sends_nothing, ::test_approve_is_confirmed_then_sent, ::test_a_decision_that_names_one_fyi_targets_that_entry_not_the_handful (a reply request is an immediate draft through the reply writer, no dispatch, nothing sent; sending still needs the approve proposal; naming one FYI of the handful targets that entry and its siblings stay unread)",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-127",
@@ -1143,7 +1143,7 @@
       "requirement": "Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py` (17 cases), `tests/test_concierge.py`, `tests/test_assistant_reactions.py` (103 cases re-pinned to the proposal model), `tests/test_lifecycle.py`, `website/test/proposalCard.test.mjs` (5 cases: parity, card facts, receipts, cancel)",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-128",
@@ -1152,7 +1152,7 @@
       "requirement": "Owner-approved navigation exception: an unambiguous request to move Next",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::test_next_moves_on_without_marking_closing_or_deferring (Next moves the walk and writes no read mark, close, deferral or memory; \"is the agent done?\" is answered, not acted on), `tests/test_assistant_reactions.py`::WalkFromWordsTests",
-      "commit": "945c666; local gates passed, CI pending"
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
     },
     {
       "id": "PW-129",
@@ -1357,45 +1357,45 @@
       "section": "Assistant presentation: actionable FYI summaries and full task context",
       "phase": "8",
       "requirement": "Present up to four FYIs together with a summary for each. Each entry is",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::FyiHandfulTests (four fyi come out together, each with its own model-written summary kept on the entry's shown-state so the pile's batch carries it; `POST /api/concierge/propose` on one entry makes the same `task.create_from_message` proposal the words would - kind task / coding / general, `settles` false - and executing it reaches that message only: its siblings stay `filed`, `surfaced`, and in Unread; Reply on an entry drafts at once and marks nothing), `website/test/fyiCard.test.mjs`",
+      "commit": "1fb5469; local gates passed, CI pending"
     },
     {
       "id": "PW-152",
       "section": "Assistant presentation: actionable FYI summaries and full task context",
       "phase": "8",
       "requirement": "For a single task item, show the full message/context and the task summary",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::SingleItemTests (the surfaced card carries tid/mid; `/api/tasks/{id}` gives the grouped non-context messages, the task Summary and the checklist; `concierge.facts` hands the model the combined bundle), `website/test/fyiCard.test.mjs` (CombinedTaskText renders the task summary with the checklist; the task card draws it too)",
+      "commit": "1fb5469; local gates passed, CI pending"
     },
     {
       "id": "PW-153",
       "section": "Assistant presentation: actionable FYI summaries and full task context",
       "phase": "8",
       "requirement": "Generate the assistant's explanation according to COUNSEL, removing the",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::CounselIntroductionTests (`INTRO_AI` on: the introduction is the model's with COUNSEL as the system voice; the \"three beats / name the button\" instruction is gone - code states only what the card holds; the facts line is the fallback for no AI, an out-of-character or off-subject answer), `tests/test_concierge.py`::BrainTests/FastLaneTests/ApiTests re-pinned",
+      "commit": "1fb5469; local gates passed, CI pending"
     },
     {
       "id": "PW-154",
       "section": "Assistant presentation: actionable FYI summaries and full task context",
       "phase": "8",
       "requirement": "Presenting either kind of card does not mark it read or handled and does",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::PresentingMarksNothingTests (a shown single item and a shown handful are `surfaced` only - still in Unread, task open, message untouched, no operation proposed or run, no receipt, no move)",
+      "commit": "1fb5469; local gates passed, CI pending"
     },
     {
       "id": "PW-155",
       "section": "Assistant presentation: actionable FYI summaries and full task context",
       "phase": "8",
       "requirement": "Test four-item FYI presentation, per-item action targeting, untouched sibling",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py` (8 cases), `website/test/fyiCard.test.mjs` (2 cases), `tests/test_concierge.py` and `tests/test_lifecycle.py` re-pinned to the COUNSEL introduction",
+      "commit": "1fb5469; local gates passed, CI pending"
     },
     {
       "id": "PW-156",

@@ -862,21 +862,21 @@ the task open after replying. Pending implementation/verification.
 Owner-approved: COUNSEL governs the explanation; code supplies verified context,
 card structure, and validated actions. Pending implementation.
 
-- [ ] <a id="pw-151"></a>**PW-151** Present up to four FYIs together with a summary for each. Each entry is
+- [x] <a id="pw-151"></a>**PW-151** Present up to four FYIs together with a summary for each. Each entry is
   individually selectable and offers Make task, Send to agent, and Reply for that
   specific item. Use the shared action paths, including general/coding choice
   and repository selection when needed; never apply an individual action to the
   entire batch or mark the other FYIs read as a side effect.
-- [ ] <a id="pw-152"></a>**PW-152** For a single task item, show the full message/context and the task summary
+- [x] <a id="pw-152"></a>**PW-152** For a single task item, show the full message/context and the task summary
   in its card, not only a truncated preview. If triage grouped a chain, preserve
   access to the whole grouped context in that presentation rather than silently
   showing only the latest message. Include the approved task checklist summary.
-- [ ] <a id="pw-153"></a>**PW-153** Generate the assistant's explanation according to COUNSEL, removing the
+- [x] <a id="pw-153"></a>**PW-153** Generate the assistant's explanation according to COUNSEL, removing the
   normal-path hardcoded introductions and competing behavioral instructions.
   Keep card structure, action validation, and factual error handling in code.
-- [ ] <a id="pw-154"></a>**PW-154** Presenting either kind of card does not mark it read or handled and does
+- [x] <a id="pw-154"></a>**PW-154** Presenting either kind of card does not mark it read or handled and does
   not automatically execute actions or advance the conversation.
-- [ ] <a id="pw-155"></a>**PW-155** Test four-item FYI presentation, per-item action targeting, untouched sibling
+- [x] <a id="pw-155"></a>**PW-155** Test four-item FYI presentation, per-item action targeting, untouched sibling
   read state, full task/chain context, task summary/checklist display, and COUNSEL
   use in the normal presentation path.
 

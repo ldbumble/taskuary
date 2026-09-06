@@ -2162,3 +2162,39 @@ effect is asserted"), `tests/test_report_order_and_research.py`, `tests/test_lif
 `website/test/proposalCard.test.mjs` (5 cases). Frontend: `website/src/ProposalCard.jsx`,
 `website/src/proposalCard.js`, `AssistantView.jsx` (the client-side verb switch is gone; rebuilt
 bundle). Backend evidence: `.codex-tmp/phase3-evidence/backend-8.1.log`.
+
+## Section 8.2 — a summary for each fyi, the whole context for a task, and COUNSEL's introduction
+
+Status: implemented and tested locally at `1fb5469`; remote CI pending on the pushed
+checkpoint. Section 8.1 is CI-verified (945c666/a80f039, CI run 34059392966 (all ten jobs passed)).
+Acceptance PW-151 to PW-155 implemented.
+
+The fyi handful (up to four, Unread order) used to get one model sentence for the lot and a
+truncated gist per row. Now the model answers with one numbered line per entry - the shape is
+code's, the words are COUNSEL's - and each entry carries its own summary (PW-151); the summary
+rides on the entry's `surfaced` funnel state, so the pile's own batch presentation keeps it across
+every refresh, and without a model each entry keeps its gist. Each entry offers Reply, Make task,
+Coding agent and Regular agent: Reply drafts at once through the reply writer (the PW-126
+exception) and marks nothing; the other three call `POST /api/concierge/propose` with the entry's
+own key, which makes exactly the proposal the words would (`concierge.propose_direct` →
+`propose_for`, `settles` false) and lands the same ProposalCard in the chat - confirmed, executed
+and receipted through the shared road of Section 8.1. Executing it reaches that message alone: its
+siblings stay filed, shown-not-read, and in Unread.
+
+A single task item's card now carries the whole grouped context (the non-context messages triage
+combined), the task's own summary and the approved checklist (PW-152): `CombinedTaskText` renders
+the task Summary beside the messages and the checklist, and the task card draws it too, not only
+the agent's finding. The model is handed the same bundle (`concierge.facts`).
+
+The introduction is the model's per COUNSEL (PW-153): `INTRO_AI` is on, the "three beats, two or
+three sentences, name the button" instruction is gone, and code states only what the card holds (a
+draft waiting for a yes, an agent parked on its question, a report read with the button). The
+facts line remains the fallback - no AI connector, a failed pass, an answer off the subject or out
+of character - which is factual error handling, not the normal path. Presenting either card marks
+nothing (PW-154): the state is `surfaced`, the item stays in Unread and on the table, the task and
+message are untouched, nothing is proposed or run, and the walk does not move.
+
+Tests: `tests/test_assistant_presentation.py` (8 cases), `website/test/fyiCard.test.mjs` (2 cases); `tests/test_concierge.py`,
+`tests/test_lifecycle.py` and `website/test/funnelPile.test.mjs` re-pinned. Frontend:
+`assistantCards.jsx` (FyisCard, CombinedTaskText, TaskCard), `AssistantView.jsx` (`proposeDirect`),
+rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.2.log`.

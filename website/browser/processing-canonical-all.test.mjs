@@ -46,15 +46,10 @@ const clickItem = async (page, itemId) => {
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
     return document.elementFromPoint(x, y)?.closest("[data-tq-open]") === current;
   }, { timeout: 10000 }, itemId);
-  const rows = await page.$$('[data-processing-item]');
-  for (const row of rows) {
-    if (await row.evaluate((node, wanted) => node.dataset.processingItem === wanted, itemId)) {
-      const target = await row.$("[data-tq-open]");
-      assert.ok(target, `${itemId} has no open target`);
-      await target.click(); return;
-    }
-  }
-  assert.fail(`canonical item ${itemId} was not rendered`);
+  const target = (await page.evaluateHandle((wanted) => [...document.querySelectorAll("[data-processing-item]")]
+    .find((node) => node.dataset.processingItem === wanted)?.querySelector("[data-tq-open]"), itemId)).asElement();
+  assert.ok(target, `canonical item ${itemId} has no rendered open target`);
+  await target.click();
 };
 
 const chooseOption = async (page, ariaLabel, label) => {
@@ -108,25 +103,28 @@ const expandWholeMessage = async (page) => {
 };
 
 const prepareCalendarPrep = async (page, label) => {
-  const titles = await page.$$(".tqPrepTitle");
-  for (const title of titles) {
-    if (await title.evaluate((node, wanted) => node.textContent.trim() === wanted, label)) {
-      await title.evaluate((node) => node.scrollIntoView({ block: "center" }));
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      const before = await title.boundingBox();
-      await title.hover();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      const after = await title.boundingBox();
-      assert.ok(before && after && Math.abs(before.y - after.y) < 1,
-        "hovering calendar prep must not expand its parent and move the click target");
-      assert.equal(await title.evaluate((node) => {
-        const rect = node.getBoundingClientRect();
-        return node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
-      }), true, "calendar prep must receive the physical click");
-      return title;
-    }
-  }
-  assert.fail(`calendar prep ${label} was not found`);
+  const before = await page.evaluate(async (wanted) => {
+    const title = [...document.querySelectorAll(".tqPrepTitle")].find((node) => node.textContent.trim() === wanted);
+    if (!title) return null;
+    title.scrollIntoView({ block: "center", behavior: "instant" });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rect = title.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  }, label);
+  assert.ok(before, `calendar prep ${label} was not found`);
+  await page.mouse.move(before.x, before.y);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const after = await page.evaluate((wanted) => {
+    const title = [...document.querySelectorAll(".tqPrepTitle")].find((node) => node.textContent.trim() === wanted);
+    if (!title) return null;
+    const rect = title.getBoundingClientRect();
+    const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+    return { x, y, hit: title.contains(document.elementFromPoint(x, y)) };
+  }, label);
+  assert.ok(after && Math.abs(before.y - after.y) < 1,
+    "hovering calendar prep must not expand its parent and move the click target");
+  assert.equal(after.hit, true, "calendar prep must receive the physical click");
+  return after;
 };
 
 const triggerAndWaitForResponse = async (page, label, predicate, trigger) => {
@@ -302,7 +300,7 @@ test("canonical All renders every root once with truthful details and frozen pag
     return url.pathname === `/api/processing/items/${seed.calendar.prep_item_id}/detail`
       && url.searchParams.get("kind") === "message"
       && url.searchParams.get("id") === String(seed.calendar.prep_message_id);
-  }, () => prepTarget.click()).catch(async (error) => {
+  }, () => page.mouse.click(prepTarget.x, prepTarget.y)).catch(async (error) => {
     console.log(JSON.stringify({ prepFailure: { expected: seed.calendar,
       traffic: traffic.slice(-20), errors, stage: (await stageContent(page)).slice(0, 1200),
       clicks: await page.evaluate(() => window.__prepClicks),

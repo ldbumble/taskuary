@@ -1862,3 +1862,31 @@ accepts `source: writing` so a writing instruction can be saved by hand.
 Tests: `tests/test_reply_sources.py` (7 cases); in the pre-existing `tests/test_reply_voice.py` (first-person voice) the standing-notes
 case moved to the PW-060 contract - a writing instruction rides, a triage verdict does not - with the reason noted. `tests/test_docs_flow.py`: the reply-path audit now expects the STYLE marker and a writing-note
 marker and forbids the LEARNED marker and the triage-verdict note, per PW-058/060. No frontend change.
+
+### Final reply-source compatibility and calendar test timing
+
+Merge `ff45b7a` preserves concurrent reply-source work through `2e92e2f`.
+Independent Astra compatibility review cleared exact message/review targeting,
+read/navigation preservation and document-content handling. The focused reply,
+All, navigation and ledger gate passed 54 tests plus 9 subtests in 9.05s.
+
+The merged freshness and Current/Next browser checks passed (3 scenarios in the
+four-scenario attempt). Calendar prep still failed its response wait. A subsequent
+fixture-only click/network trace proved no DOM click had occurred before the
+10-second timeout. The test started its response timer before expensive scrolling,
+layout checks and physical-hover preparation. Readiness now completes first; the
+same exact response listener is installed immediately before the physical click,
+with its unchanged 10-second limit and status/body/target assertions. The hover
+stability checks additionally retain the prep target's geometry and hit ownership.
+Astra independently cleared this distinction between readiness and response latency.
+The rerun result follows; previous failed attempts are not counted as passing gates.
+
+Final canonical browser gate passed: 1/1, 108.918s scenario / 112.004s process,
+with all 507 added fixture roots, frozen pagination, exact member/draft targeting,
+owner edits, Current preservation and calendar prep assertions intact. Test helpers
+now find exact rows in one browser evaluation instead of hundreds of sequential
+protocol round trips. Prep readiness uses physical pointer movement and stable
+geometry/hit tests; the unchanged 10-second response budget starts at its physical
+click. Both test changes passed independent Astra review. Packaged UI build passed
+in 12.08s and all 304 frontend tests passed in 1.894s. No retries, reduced fixture
+counts, relaxed assertions or increased timeouts were introduced.

@@ -211,7 +211,11 @@ class GapTests(unittest.TestCase):
         self.assertRegex(inbound(s)[0]['ExternalId'], r'^imap:[0-9a-f]{24}:v7:5$')
 
     def test_an_empty_new_epoch_durably_resets_the_old_cursor(self):
-        s, c = store_with({'imap_uid': 500, 'imap_uidvalidity': 7})
+        old_scope = imapmail._scope('imap.gmail.com', 993, 'me@myco.example', 'INBOX')
+        s, c = store_with({'imap_uid': 500, 'imap_uidvalidity': 7,
+                           'imap_uid_scope': old_scope, 'imap_uid_identity': 'legacy',
+                           'imap_retry_uids': {'scope': old_scope, 'uidvalidity': 7,
+                                               'identity': 'legacy', 'uids': [499]}})
         self.assertEqual(poll(s, c, FakeBox({}, validity=8)), 0)
         reset = cfg_of(s)
         self.assertEqual((reset['imap_uidvalidity'], reset['imap_uid']), (8, 0))
@@ -244,8 +248,12 @@ class SentTests(unittest.TestCase):
         self.assertIn(('Sent', '(UID 201:*)'), box.searches)
 
     def test_sent_empty_epoch_reset_is_atomic_and_later_reused_uid_arrives(self):
+        old_scope = imapmail._scope('imap.gmail.com', 993, 'me@myco.example', 'Sent')
         cfg = {'imap_uid': 10, 'imap_uidvalidity': 7,
-               'imap_sent_uid': 500, 'imap_sent_uidvalidity': 7}
+               'imap_sent_uid': 500, 'imap_sent_uidvalidity': 7,
+               'imap_sent_uid_scope': old_scope, 'imap_sent_uid_identity': 'legacy',
+               'imap_sent_retry_uids': {'scope': old_scope, 'uidvalidity': 7,
+                                        'identity': 'legacy', 'uids': [499]}}
         s, c = store_with(cfg)
         empty = FakeBox({}, sent={}, validity={'INBOX': 7, 'Sent': 8})
         self.assertEqual(poll(s, c, empty), 0)

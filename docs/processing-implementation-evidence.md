@@ -612,8 +612,8 @@ The original workspace was fast-forwarded; its README hash remains the preserved
 Status: integration in progress from CI-verified `7589b38`. This section does not
 depend on the still-pending Phase 1 read-policy answers or activate the canonical
 inventory. The owner assigned Phase 2 intake to Claude in parallel; its isolated
-handoff is in `processing/phase2-intake-poll`. Only the polling/settings commits
-are integrated here: `4591fcd` as `e7c47dc`, and `12c1a4e` as `2daacc6`.
+handoff is in `processing/phase2-intake-poll`. Initially, only the polling/settings
+commits were integrated: `4591fcd` as `e7c47dc`, and `12c1a4e` as `2daacc6`.
 Outlook/IMAP catch-up and full-chain work remain separate sections.
 
 The handoff introduces separate full/quick polling clocks, fresh-channel ordered
@@ -672,4 +672,24 @@ preserve that remote history and apply the reviewed polling corrections on top.
 The email catch-up code's presence on master is not acceptance: repeated-page
 completion, UIDVALIDITY identity, retry failures and concurrent settings updates
 remain review findings for the following email catch-up section. No live app
-restart or connector invocation has activated these changes in the owner's app.
+restart or connector invocation was performed by this integration.
+
+Reconciliation preserved remote `f244803` and replayed the reviewed corrections
+as `9425824`, `6dec327`, `e837543` and `a0629e4`. Only generated-asset renames
+conflicted; those were resolved to the reviewed source build and regenerated.
+The source/test difference from the pre-rebase tree is exactly the four concurrent
+email files (`channels.py`, `imapmail.py`, and their two catch-up test files).
+Those four files match origin/master byte-for-byte. Before reconciliation, the
+final polling tree passed 2436 backend tests plus 66 subtests (205.43 s, no skips)
+and all seven browser scenarios. Cumulative gates on the combined remote base
+follow; the email requirements remain unchecked until their review fixes land.
+
+Final combined-base gates passed: 2452 backend tests plus 66 subtests, 151 existing
+warnings, no skips (216.28 s); 281 frontend tests (1.533 s); packaged build exit 0
+(14.29 s), with no asset drift; all seven rendered-browser scenarios (209.356 s).
+First visibility/input were 2016/1500 ms; Tasks/Board/Reports 308/403/358 ms;
+terminal replay/input/reconnect 2312/97/887 ms, inside every existing ceiling.
+Astra verified the rebased polling source/tests/UI/assets are unchanged from the
+reviewed tree and retained the separate, pending email-catch-up review boundary.
+PW-001 through PW-005 are implemented; remote delivery/CI verification follows.
+Logs: ignored `.codex-tmp/poll-remote-base-*.log` in the integration checkout.

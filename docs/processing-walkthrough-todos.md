@@ -17,26 +17,33 @@ adding them does not change approval or completion status.
 Phase 0 infrastructure is CI-verified at `9bef568` (run 34012833267, all 10 jobs).
 Unchecked feature requirements below remain pending their own implementation gates.
 
-- [ ] <a id="pw-001"></a>**PW-001** Prevent slow AI triage and full-sync report execution from blocking fresh
+- [x] <a id="pw-001"></a>**PW-001** Prevent slow AI triage and full-sync report execution from blocking fresh
   chat intake. Review the synchronous poll loop and `_POLL_BUSY` scope together;
   preserve safe deduplication and ordered task routing when separating work.
   Source: `taskuary/server.py`, `poll_forever()` and `_poll_reports()`.
-- [ ] <a id="pw-002"></a>**PW-002** Account for chat fetches performed during a full sync in the fast-poll
+- [x] <a id="pw-002"></a>**PW-002** Account for chat fetches performed during a full sync in the fast-poll
   timestamps, so a redundant quick fetch does not immediately follow it. Define
   success/failure retry behavior explicitly.
   Source: `taskuary/server.py`, `_LAST_POLL` and `_QUICK_LAST`.
-- [ ] <a id="pw-003"></a>**PW-003** Expose the supported fast-poll interval consistently for Teams, Slack,
+- [x] <a id="pw-003"></a>**PW-003** Expose the supported fast-poll interval consistently for Teams, Slack,
   Telegram, and Discord, alongside the existing WhatsApp and iMessage fields.
   Keep the global interval in Settings; make connector-specific overrides clear.
   Source: `website/src/ConnectorsView.jsx` and `website/src/SettingsView.jsx`.
-- [ ] <a id="pw-004"></a>**PW-004** Correct polling labels/help text: WhatsApp's interval covers connector
+- [x] <a id="pw-004"></a>**PW-004** Correct polling labels/help text: WhatsApp's interval covers connector
   intake, not only assistant chat; other chat connectors also default to fast
   polling. Document missing/default, explicit zero, and global background-off
   semantics accurately, including iMessage's misleading blank-value guidance.
   Source: `website/src/ConnectorsView.jsx`, `taskuary/server.py::_quick_due()`.
-- [ ] <a id="pw-005"></a>**PW-005** Add regression tests for slow triage/report execution versus chat intake,
+- [x] <a id="pw-005"></a>**PW-005** Add regression tests for slow triage/report execution versus chat intake,
   full-sync/quick-sync overlap and timestamp bookkeeping, failed-fetch retries,
   interval overrides, disabled polling, and the settings labels/defaults.
+
+  Section 2.1: independent review cleared; combined-base regressions passed 2452
+  backend tests plus 66 subtests, 281 frontend tests, packaged build and all seven
+  real-browser scenarios. Delivery and exact-SHA CI are recorded in the
+  [implementation evidence](processing-implementation-evidence.md#section-21--independent-poll-scheduling-and-settings).
+  The email catch-up requirements below remain pending review fixes even though
+  another agent's original implementation is already on master.
 
 ## Email catch-up must not skip backlog
 

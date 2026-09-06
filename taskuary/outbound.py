@@ -325,6 +325,37 @@ def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
     return {'kind': 'reply', 'mode': 'reply_all' if mode == 'reply_all' else 'reply_to', 'to': to, 'cc': cc}
 
 
+UNKNOWN_ERRORS = (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, TimeoutError)
+
+
+def _rcpts(rows) -> list: return [str((r.get('emailAddress') or {}).get('address') or '').lower() for r in (rows or []) if isinstance(r, dict)]
+
+
+def reconcile_sent(store, msg: dict, body: str, since: str = None):
+    """Did an uncertain send actually go out? Asked of the provider (PW-144): for a Graph mailbox, the Sent Items of
+    the conversation since the attempt; the first mail whose text carries the reply's opening words is the receipt.
+    None when nothing is found or the provider cannot be asked - which is NOT proof of not sent."""
+    if str((msg or {}).get('Channel') or '').lower() != 'email': return None
+    ext = str(msg.get('ExternalId') or '')
+    if not ext.startswith('graph:'): return None
+    try:
+        box = msg.get('SourceName') or _mailbox(store)
+        tok = _graph_token(store, connector_id=_source_connector_id(store, 'email', box))
+        conv = msg.get('ConversationId')
+        params = {'$top': 10, '$orderby': 'sentDateTime desc', '$select': 'id,sentDateTime,bodyPreview,toRecipients,ccRecipients'}
+        if conv: params['$filter'] = f"conversationId eq '{conv}'"
+        r = requests.get(f'{GRAPH}/users/{box}/mailFolders/sentitems/messages', headers={'Authorization': f'Bearer {tok}'}, timeout=20, params=params)
+        if r.status_code >= 300: return None
+        head = ' '.join(str(body or '').split())[:60].lower()
+        for m in (r.json() or {}).get('value') or []:
+            if since and str(m.get('sentDateTime') or '') < since: continue
+            if head and head[:40] in ' '.join(str(m.get('bodyPreview') or '').split()).lower():
+                return {'channel': 'email', 'id': m.get('id'), 'to': _rcpts(m.get('toRecipients')), 'cc': _rcpts(m.get('ccRecipients')), 'reconciled': True}
+    except Exception as e:
+        logger.warning(f'could not reconcile an uncertain send: {e}')
+    return None
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""

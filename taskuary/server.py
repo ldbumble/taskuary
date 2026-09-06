@@ -1956,6 +1956,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     if not rv: raise HTTPException(404, 'review not found')
     from .verdicts import VERB2STATUS, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
     if body.verb in ('approve', 'edit') and rv.get('Kind') != 'action':
         try: _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
         except RuntimeError as e: raise HTTPException(503, str(e))

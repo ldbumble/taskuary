@@ -7,7 +7,23 @@ writes, a reject what should never have been drafted).
 import json
 from loguru import logger
 
-VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
+VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
+               'close_unsent': 'closed_unsent'}   # the owner's explicit close when sending is unavailable (PW-145) - never 'sent'
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _mark_delivery(store, rid: int, env: dict, state: str, attempted_at: str = None) -> None:
+    """The send's own state on the review's envelope: sent | failed | unknown (PW-144) - and when it was tried."""
+    env = dict(env or {}); env.setdefault('kind', 'reply')
+    env['delivery'] = state
+    if attempted_at: env['attempted_at'] = attempted_at
+    env['attempts'] = int(env.get('attempts') or 0) + (1 if state != 'sent' or attempted_at else 0)
+    try: store.set_review_envelope(rid, env)
+    except Exception as e: logger.debug(f'delivery mark skipped: {e}')
 
 
 def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
@@ -96,6 +112,18 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             if moved and not rv.get('Stale'): store.mark_review_stale(rid)
             return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
                     'send_error': 'New messages arrived after this draft was written - nothing was sent. Redraft it with the latest context and approve again.'}
+    # Close without sending (PW-145): the owner's own word that no reply will go out - the unsent draft stays,
+    # the closure and its reason are recorded, the reply obligation ends, and nothing here ever reads as Sent
+    if verb_in == 'close_unsent':
+        why = str(note or '').strip() or (outbound.send_block(store, (store.get_message(rv['MessageId']) or {}).get('Channel')) if rv.get('MessageId') else '') or 'the owner chose not to send a reply'
+        store.decide_review(rid, 'closed_unsent', rv.get('DraftText'), actor, why)
+        if rv.get('TaskId'):
+            store.add_comment(rv['TaskId'], actor, 'human', f'Closed without sending - no reply went out: {why}. The unsent draft is kept on the review.')
+            from . import selfclose
+            if not selfclose.stays_open(store, rv['TaskId']) and (store.get_task(rv['TaskId']) or {}).get('Status') not in ('done', 'dropped'):
+                store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
+        store.audit('review', rid, 'close_unsent', actor, detail={'why': why[:200]})
+        return {'ok': True, 'status': 'closed_unsent', 'sent': None, 'send_error': None}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
     if verb_in in ('approve', 'edit'):
         final = final_text if (final_text or '').strip() else rv.get('DraftText')
@@ -175,12 +203,44 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': send_err}
         # the recipients the owner reviewed (PW-064): the pinned envelope, unless this click named a CC list itself
         env = deliver if deliver.get('kind') == 'reply' else {}
+        # an earlier attempt whose delivery is UNKNOWN is reconciled with the provider before anything is sent
+        # again (PW-144): found = it went out, settle it; not found = the retry is safe
+        if env.get('delivery') == 'unknown':
+            found = outbound.reconcile_sent(store, msg, final, since=env.get('attempted_at'))
+            if found:
+                sent = found; _mark_delivery(store, rid, env, 'sent')
+                if rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', 'The earlier send did go out - confirmed with the provider; nothing was sent again.')
+                store.audit('review', rid, 'reconciled_sent', actor, detail={'id': found.get('id')})
+                _settle_task_after_sent_reply(store, rv, actor, True)
+                store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': True})
+                return {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None, 'delivery': 'reconciled'}
+        attempted_at = _now_iso()
         try:
             sent = outbound.reply_to_message(store, msg, final, to=env.get('to') or None, cc=cc if cc is not None else env.get('cc'))
             if rv.get('TaskId'):
                 copied = f", copied {', '.join(sent.get('cc') or [])}" if sent.get('cc') else ''
                 store.add_comment(rv['TaskId'], actor, 'human',
                                   f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}{copied}.")
+        except outbound.UNKNOWN_ERRORS as e:
+            # the provider did not answer: the mail may well have gone out. Delivery UNKNOWN is its own state
+            # (PW-144) - not a failure, not a send - reconciled now, and again before any retry
+            send_err = f'delivery unknown - the provider did not answer ({str(e)[:120]}); checking whether it went out before anything is retried'
+            logger.warning(f'reply send uncertain for review {rid}: {e}')
+            store.update_review_draft(rid, final, rv.get('RunId'))
+            _mark_delivery(store, rid, env, 'unknown', attempted_at)
+            found = outbound.reconcile_sent(store, msg, final, since=attempted_at)
+            if found:
+                _mark_delivery(store, rid, env, 'sent')
+                store.decide_review(rid, VERB2STATUS[verb], final, actor, note)
+                if rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f"Sent by email to {', '.join(found.get('to') or []) or 'the thread'} - confirmed with the provider after a slow answer.")
+                _settle_task_after_sent_reply(store, rv, actor, True)
+                store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': True, 'reconciled': True})
+                return {'ok': True, 'status': VERB2STATUS[verb], 'sent': found, 'send_error': None, 'delivery': 'reconciled'}
+            if rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], actor, 'human', 'DELIVERY UNKNOWN - the provider did not answer and the Sent folder does not show the reply yet. Nothing was retried; approve again to check and, only if it is not there, send once.')
+            store.unhold_review(rid, 'approved - delivery UNKNOWN: the provider did not answer; approve again to check the Sent folder and send only if it is not there')
+            store.audit('review', rid, 'delivery_unknown', actor, detail={'error': str(e)[:200]})
+            return {'ok': True, 'status': 'pending', 'sent': None, 'send_error': send_err, 'delivery': 'unknown'}
         except Exception as e:
             send_err = str(e)[:300]
             logger.warning(f'reply send failed for review {rid}: {send_err}')
@@ -189,6 +249,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             # an approved reply that never LEFT is not done: back to the queue wearing the
             # error, the approved text becomes the draft, approving again retries the send
             store.update_review_draft(rid, final, rv.get('RunId'))
+            _mark_delivery(store, rid, env, 'failed')
             store.unhold_review(rid, f'approved, but sending FAILED: {send_err} - fix the channel and approve again')
     if verb == 'no_reply' and rv.get('TaskId'):
         from . import selfclose
@@ -212,4 +273,4 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         if verb == 'edit': ev += f"\nDRAFT:\n{(rv.get('DraftText') or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
         if learn_async: learn_async(learn.learn_from, store, ev)
         else: learn.learn_from(store, ev)
-    return {'ok': True, 'status': 'pending' if send_err else VERB2STATUS[verb], 'sent': sent, 'send_error': send_err}
+    return {'ok': True, 'status': 'pending' if send_err else VERB2STATUS[verb], 'sent': sent, 'send_error': send_err, **({'delivery': 'failed'} if send_err else {})}

@@ -209,11 +209,9 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                   ) : r.CanSend === false ? (
                     <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
                       sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
-                      title={r.Channel === "github"
-                        ? "GitHub replies are off (GitHub card → Reply to issue/PR authors) — close this without sending"
-                        : "This channel can't be replied to — close this without sending"}
-                      onClick={() => decide(r, "no_reply")}>
-                      {busy === r.ReviewId ? "closing…" : "No response required"}
+                      title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task closes as your decision (PW-145).`}
+                      onClick={() => decide(r, "close_unsent")}>
+                      {busy === r.ReviewId ? "closing…" : "Close without sending"}
                     </Button>
                   ) : (
                     <Button size="small" variant="contained"

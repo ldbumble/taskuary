@@ -1066,6 +1066,12 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
                         if (frm.get('address') or '').lower() == s['Address'].lower():
                             return 0   # the mailbox's own mail (moved copies, self-sends) is never inbound work
+                        # a thread whose history was never completed here (new, stored before this feature, or a failed
+                        # attempt) is completed from the provider after the new mail lands - listed first, only the
+                        # missing bodies fetched, and never again once complete (chains.py, PW-009/010)
+                        from . import chains   # chains imports this module; the loop stays one-way at import time
+                        conv = m.get('conversationId')
+                        fresh_thread = bool(conv) and chains.needs_history(store, conv)
                         # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
                         # triage and handed to it - then saved once the message row exists
                         atts = []
@@ -1089,6 +1095,9 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                         # a duplicate is still mail the hub has read - the flag may just be
                         # older than the switch, and skipping it would strand those bold rows
                         if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
+                        if fresh_thread and out['status'] != 'duplicate':
+                            try: chains.refresh_outlook(store, tok, s['Address'], conv, before=_local(m.get('receivedDateTime') or ''))
+                            except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
                         return int(out['status'] != 'duplicate')
                     return take
                 # your replies ride along as CONTEXT: attached to the thread's task, visible on the

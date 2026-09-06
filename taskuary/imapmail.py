@@ -430,13 +430,16 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             body, atts = _body_and_attachments(msg)
             try: sent = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
             except Exception: sent = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            conv = (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None
+            from . import chains
+            fresh_thread = bool(conv) and chains.needs_history(store, conv)
             out = ingest_message(store, file_only=file_only, msg={
                 'external_id': f'imap:{user}:{uid}', 'channel': 'email',
                 'subject': _dec(msg.get('Subject')), 'body': body[:20000],
                 'from_name': frm_name or frm_addr, 'from_email': frm_addr,
                 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
                 # References threads replies the way Graph's conversationId does
-                'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
+                'conversation_id': conv,
                 'sent_at': sent, 'source_name': user,
                 'images': images_for_triage(store, atts)}, llm=llm)
             if atts and out.get('message_id') and out['status'] != 'duplicate':
@@ -445,6 +448,11 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             if read_it:
                 try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
                 except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
+            if fresh_thread and out['status'] != 'duplicate':
+                # the thread's history, completed once from INBOX and Sent (chains.py, PW-011); the poll's
+                # own mailbox selection is restored afterwards
+                try: chains.refresh_imap(store, M, user, conv, restore='INBOX', readonly=not read_it, before=sent)
+                except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
             return int(out['status'] != 'duplicate')
         def progress(uid):
             moved['imap_uid'] = uid; save()

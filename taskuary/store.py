@@ -489,6 +489,10 @@ class SQLiteStore:
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
                 self.cx.execute('ALTER TABLE task ADD COLUMN Checklist TEXT')
+            # how complete each email conversation is (chains.py, PW-010): listed at the provider, added
+            # here, and the error when it could not be completed - never guessed from what is stored
+            self.cx.execute('CREATE TABLE IF NOT EXISTS chain (ConversationId TEXT PRIMARY KEY, Channel TEXT, Mailbox TEXT, '
+                            'CheckedAt TEXT, Complete INTEGER, Listed INTEGER, Added INTEGER, Error TEXT)')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -1017,6 +1021,15 @@ class SQLiteStore:
         self.audit('message', row['MessageId'], 'withdrawn', actor, 'agent', {'external_id': external_id})
         return True
 
+    def set_chain_coverage(self, conversation_id: str, channel: str, mailbox: str, cov: dict):
+        self._exec('INSERT INTO chain (ConversationId, Channel, Mailbox, CheckedAt, Complete, Listed, Added, Error) VALUES (?,?,?,?,?,?,?,?) '
+                   'ON CONFLICT(ConversationId) DO UPDATE SET Channel=excluded.Channel, Mailbox=excluded.Mailbox, CheckedAt=excluded.CheckedAt, '
+                   'Complete=excluded.Complete, Listed=excluded.Listed, Added=excluded.Added, Error=excluded.Error',
+                   (conversation_id, channel, mailbox, _now(), 1 if cov.get('complete') else 0, int(cov.get('listed') or 0), int(cov.get('added') or 0), cov.get('error')))
+    def chain_coverage(self, conversation_id: str):
+        r = self._one('SELECT * FROM chain WHERE ConversationId=?', (conversation_id,))
+        if not r: return None
+        return {'complete': bool(r['Complete']), 'listed': r['Listed'], 'added': r['Added'], 'error': r['Error'], 'checked_at': r['CheckedAt']}
     def message_exists(self, external_id):
         return self._one('SELECT 1 x FROM message WHERE ExternalId=?', (external_id,)) is not None
     def add_message(self, fields):
@@ -1035,7 +1048,7 @@ class SQLiteStore:
         return self._one('SELECT * FROM message WHERE ExternalId=? ORDER BY MessageId DESC LIMIT 1', (external_id,))
     # ── what the hub knows about a sender / a topic (counsel.dossier, responder) ─────────────
     def messages_from(self, email, since, limit=8):
-        return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','skipped') AND SentAt>=? "
+        return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','history','skipped') AND SentAt>=? "
                           'ORDER BY SentAt DESC LIMIT ?', (email.lower(), since, limit))
     def own_replies_to(self, email, since, limit=5):
         """The owner's own words on this sender's threads - 'context' rows ride inside the chains."""
@@ -1044,7 +1057,7 @@ class SQLiteStore:
                           'ORDER BY SentAt DESC LIMIT ?', (since, email.lower(), limit))
     def recent_messages(self, since, limit=300):
         return self._rows("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
-                          "FROM message WHERE Status NOT IN ('context','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
+                          "FROM message WHERE Status NOT IN ('context','history','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
     def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
     # ── what the assistant's post reads (assistant.py) ────────────────────────────────────────
     def owner_last_words(self, since, before, limit=40):
@@ -1069,11 +1082,11 @@ class SQLiteStore:
         """The newest message on this task that somebody SENT us - never our own reply, never a
         report row. It is who a reply from this task goes to, which an item with no message of its
         own (an agent that finished, a wrap-up) had no way to name."""
-        return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','skipped') "
+        return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','history','skipped') "
                          "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' "
                          'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (task_id,))
     def last_inbound_in(self, conversation_id):
-        return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','skipped') AND IFNULL(Direction,'in')<>'out' "
+        return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','history','skipped') AND IFNULL(Direction,'in')<>'out' "
                          'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
     def task_for_conversation(self, conversation_id, subject=None):
         """The task this thread already belongs to - OPEN OR CLOSED. The router matches a reply
@@ -1651,8 +1664,8 @@ class SQLiteStore:
                     LEFT JOIN (SELECT * FROM review WHERE ReviewId IN
                       (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)) rv ON rv.MessageId=m.MessageId
                     LEFT JOIN (SELECT MessageId,COUNT(*) n FROM attachment GROUP BY MessageId) att ON att.MessageId=m.MessageId
-                    LEFT JOIN (SELECT TaskId,COUNT(*) n FROM message WHERE Status<>'context' GROUP BY TaskId) ch ON ch.TaskId=m.TaskId
-                    WHERE m.Status NOT IN ('context','skipped') ORDER BY m.MessageId'''
+                    LEFT JOIN (SELECT TaskId,COUNT(*) n FROM message WHERE Status NOT IN ('context','history') GROUP BY TaskId) ch ON ch.TaskId=m.TaskId
+                    WHERE m.Status NOT IN ('context','history','skipped') ORDER BY m.MessageId'''
                 feed_rows = [dict(r) for r in cur.execute(q).fetchall()]
                 from .categories import category_of, team_domains_of
                 team = team_domains_of(settings)
@@ -2534,7 +2547,7 @@ class SQLiteStore:
     SENT_UNANSWERED = """(rv.Status IN ('approved','edited','sent') AND rv.Kind <> 'action'
                          AND NOT EXISTS (SELECT 1 FROM message x
                                          WHERE x.ConversationId = m.ConversationId AND IFNULL(m.ConversationId,'') <> ''
-                                           AND x.Status NOT IN ('context','skipped') AND IFNULL(x.Direction,'in') <> 'out'
+                                           AND x.Status NOT IN ('context','history','skipped') AND IFNULL(x.Direction,'in') <> 'out'
                                            AND x.SentAt > IFNULL(rv.DecidedAt, rv.CreatedAt)))"""
     THEIR_TURN = ("(CASE WHEN m.TaskId IS NOT NULL AND IFNULL(t.Status,'') NOT IN ('done', 'dropped') "
                   f"AND (IFNULL({LAST_WORD_YOURS}, 0) = 1 OR {SENT_UNANSWERED}) THEN 1 ELSE 0 END)")
@@ -2575,12 +2588,12 @@ class SQLiteStore:
                     SELECT MessageId, COUNT(*) n FROM attachment GROUP BY MessageId
                 ) att ON att.MessageId=m.MessageId
                 LEFT JOIN (
-                    SELECT TaskId, COUNT(*) n FROM message WHERE Status<>'context' GROUP BY TaskId
+                    SELECT TaskId, COUNT(*) n FROM message WHERE Status NOT IN ('context','history') GROUP BY TaskId
                 ) ch ON ch.TaskId=m.TaskId
                 LEFT JOIN (
                     SELECT DISTINCT TaskId FROM run WHERE Status='running'
                 ) rn ON rn.TaskId=m.TaskId
-                WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped') '''
+                WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'history', 'skipped') '''
         p = [f'-{int(days)} days']
         if pending_only: q += f' AND {self.NEEDS_YOU}=1'
         # channel accepts a csv so the UI can filter by a CATEGORY (messages = email,

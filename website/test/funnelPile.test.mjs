@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, ageText, arrivals, cardFor, currentItemFromPile, departures, drawOrder, followsItem, keysOf, laneMeta, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, ageText, arrivals, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -62,6 +62,42 @@ test("a dispatched message follows its task into the live agent row", () => {
   assert.equal(followsItem(card, working), true);
   assert.equal(cardFor(working), "agent");
   assert.equal(followsItem(card, { key: "agent:999", tid: 999, lane: "working" }), false);
+});
+
+test("full display revisions replace completed pile responses and retain identical ones", () => {
+  const old = { rev: "legacy-same", display_revision: "display-1", items: [{ key: "a", preview: "old" }] };
+  const edited = { rev: "legacy-same", display_revision: "display-2", items: [{ key: "a", preview: "new" }] };
+  assert.equal(displayRevision(old), "display-1");
+  assert.equal(displayRevision({ rev: "legacy-only" }), "legacy-only");
+  assert.equal(refreshPilePresentation(old, { ...old }), old);
+  assert.equal(refreshPilePresentation(old, edited), edited);
+  assert.deepEqual(refreshPilePresentation(null, { items: [] }), { items: [] });
+});
+
+test("a changed Current presentation is a complete replacement so removed fields stay removed", () => {
+  const old = { key: "msg:44", lane: "approve", presentation_revision: "p1",
+    preview: "old excerpt", draft: true, tail: ["old question"], more: 3 };
+  const fresh = { key: "msg:44", lane: "asked", presentation_revision: "p2", title: "Fresh title" };
+  const fromPile = currentItemFromPile(old, { current: fresh, items: [] });
+  const replaced = refreshCurrentPresentation(old, fromPile);
+  assert.equal(currentPresentationChanged(old, fresh), true);
+  assert.equal(replaced, fresh);
+  assert.deepEqual(replaced, fresh);
+  assert.equal("preview" in replaced, false);
+  assert.equal("draft" in replaced, false);
+  assert.equal("tail" in replaced, false);
+  assert.equal("more" in replaced, false);
+  assert.equal(refreshCurrentPresentation(fresh, { ...fresh }), fresh);
+});
+
+test("an explicitly missing scoped Current cannot resurrect from a stale queue row", () => {
+  const current = { key: "msg:44", tid: 7, presentation_revision: "p1" };
+  assert.equal(currentItemFromPile(current, { current: null, items: [{ ...current, presentation_revision: "p2" }] }), null);
+  assert.equal(currentItemFromPile(current, { items: [{ ...current, presentation_revision: "p2" }] }).presentation_revision, "p2");
+  const working = { key: "agent:7", tid: 7, lane: "working", presentation_revision: "worker-p1" };
+  assert.equal(currentItemFromPile(current, { current: null, items: [working] }), working);
+  assert.equal(currentItemFromPile(current, { current: null, items: [{ ...working, tid: 8 }] }), null);
+  assert.equal(currentItemFromPile(current, { current: null, items: [{ ...working, lane: "blocked" }] }), null);
 });
 
 test("ages read as a person says them", () => {
@@ -127,7 +163,9 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // only process those?"). The one narrowing the walk takes is `only`, which is the "Just what
   // came in" button. If that ever changes, these two are where it has to be said out loud.
   const pileRequest = view.slice(view.indexOf('api.get("/api/funnel/pile"'), view.indexOf("setPile", view.indexOf('api.get("/api/funnel/pile"')));
-  assert.match(pileRequest, /currentRef\.current\?\.key \? \{ current: currentRef\.current\.key \}/);
+  // The pile lookup remains scoped to Current, with its key captured before the request so a
+  // superseded response cannot reconcile a newer Current selected while the request was pending.
+  assert.match(pileRequest, /requestedCurrentKey \? \{ current: requestedCurrentKey \}/);
   assert.doesNotMatch(pileRequest, /\b(cat|pick|channel|source)\b/);
   assert.match(view, /\{ key: body\.key, only: body\.only, include_surfaced: body\.include_surfaced, exclude: body\.exclude \}/);
   assert.doesNotMatch(view, /include_surfaced: true/); // a read row is not presented again by Next

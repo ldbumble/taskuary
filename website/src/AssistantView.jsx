@@ -28,7 +28,7 @@ import { onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
-import { ageText, arrivals, cardFor, currentItemFromPile, drawOrder, followsItem, keysOf, rowMeta, statusLine, topAlert } from "./funnelPile.js";
+import { ageText, arrivals, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, keysOf, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine, topAlert } from "./funnelPile.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
@@ -84,7 +84,7 @@ function Pile({ pile, current, onPull }) {
     setLanding(fresh);
     const t = setTimeout(() => setLanding(new Set()), 40);       // one frame above the pipe, then it falls to its slot
     return () => clearTimeout(t);
-  }, [pile?.rev]);                                                 // eslint-disable-line react-hooks/exhaustive-deps
+  }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
   // The NEXT pill has to be what the Next button will actually bring up. The server skips what an
   // agent has in hand and what this walk already showed (funnel.next_item); the pill did not, so a
   // coder parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
@@ -161,7 +161,9 @@ function Line({ m, live, actions, fresh }) {
   // the task identity across that rename; matching only the old key left a live coder displayed as
   // "nobody on it" until a new chat line happened to replace the card.
   const follows = live && followsItem(m.card, fresh);
-  const c = follows ? { ...m.card, ...fresh } : m.card;   // the live card follows the pile
+  // ``fresh`` is a complete presentation, not a patch. Exact replacement clears source fields
+  // that disappeared while retaining the durable conversation line and the card's local UI state.
+  const c = follows ? fresh : m.card;                     // the live card follows the pile
   const kind = c?.kind === "setup" ? "setup" : cardFor(c);
   const card = live && m.card && kind ? {
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
@@ -232,6 +234,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const pileFlight = useRef(false);
   const pileForcePending = useRef(false);
   const loadPileRef = useRef(null);
+  const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turn = useCallback(async (body) => {
@@ -267,10 +270,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // A closed task may have an older `agentdone` card in the transcript. It remains readable
     // history, but it is not live work and must not be restored as CURRENT in the pipe.
     const last = [...(data.messages || [])].reverse().find((m) => m.card && !["brief", "setup", "agentdone"].includes(m.card.kind));
+    currentRef.current = last?.card || null;
     setCurrent(last?.card?.key || null); setCurrentItem(last?.card || null);
     return data;
   }, []);
-  const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
   // A decision can schedule the next card a few hundred milliseconds later. Those callbacks
   // belong to the conversation that scheduled them: New chat must cancel them, or the archived
   // walk starts advancing inside the new blank conversation without the owner asking anything.
@@ -302,14 +305,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     pileFlight.current = true;
     const epoch = chatEpoch.current;
+    // The optional `current` response belongs to this exact key. A click can put B on the table
+    // while the request for A is in flight; that older response may still refresh the rail, but it
+    // must never replace or clear B.
+    const requestedCurrentKey = currentRef.current?.key || null;
     try {
       // the key we are holding rides along, so the server can say whether it is still a thing
       const { data } = await api.get("/api/funnel/pile", { params: {
-        ...(currentRef.current?.key ? { current: currentRef.current.key } : {}),
+        ...(requestedCurrentKey ? { current: requestedCurrentKey } : {}),
         ...(force ? { force: 1 } : {}),
       } });
       if (epoch !== chatEpoch.current || resettingRef.current) return;
-      setPile((p) => p?.rev === data.rev ? p : data);
+      setPile((p) => refreshPilePresentation(p, data));
       // Provider messages can arrive while this conversation is already open. The server writes
       // the resulting correction (for example, "you replied in WhatsApp; draft removed") into the
       // durable conversation, so read new turns on every freshness check -- not only when an agent
@@ -323,6 +330,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         return merged.messages;
       });
       if (data.events?.length) {
+        const eventCurrent = currentRef.current;
         // the watcher recorded its lines on the conversation: pick them up, and if one is about the item on
         // the table, the table clears and the walk moves on
         // ...and a line the WATCHER wrote puts its card on the table, exactly as surfacing one does.
@@ -330,9 +338,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // the very card sitting in the chat (the owner, 2026-09-03: "Don't show bottom prompt if it's
         // already in main chat").
         const put = [...fresh].reverse().find((x) => x.card && !["brief", "setup", "agentdone"].includes(x.card.kind));
-        if (put) { setCurrent(put.card.key); setCurrentItem(put.card); }
-        const hit = data.events.find((e) => currentRef.current && e.tid === currentRef.current.tid && e.kind !== "parked" && e.kind !== "asking");
-        if (hit) { setCurrent(null); setCurrentItem(null); deferInChat(() => surfaceRef.current?.(), 900); }
+        if (put) { currentRef.current = put.card; setCurrent(put.card.key); setCurrentItem(put.card); }
+        const hit = data.events.find((e) => eventCurrent && e.tid === eventCurrent.tid && e.kind !== "parked" && e.kind !== "asking");
+        if (hit) { currentRef.current = null; setCurrent(null); setCurrentItem(null); deferInChat(() => surfaceRef.current?.(), 900); }
         for (const e of data.events) if (e.kind === "done" || e.kind === "asking") speakRef.current?.(e.text);
       }
       // the item on the table is live: an agent that stops and starts again changes what its row and card say
@@ -340,6 +348,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // the table clears itself instead of showing a draft that is no longer waiting on anybody.
       {
         const cur = currentRef.current;
+        if ((cur?.key || null) !== requestedCurrentKey) return;
         // Starting from Tasks/Board changes msg:<mid> into agent:<tid>. The old key is correctly
         // absent, but the task is not gone: prefer its working row before clearing the table.
         const fresh = currentItemFromPile(cur, data);
@@ -353,14 +362,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: line }]);
             speakRef.current?.(line);
           }
-          if (newer || fresh.key !== cur.key || fresh.lane !== cur.lane || fresh.why !== cur.why || fresh.asking !== cur.asking
-              || fresh.stale !== cur.stale || fresh.sig !== cur.sig || fresh.sid !== cur.sid || fresh.agent !== cur.agent) {
-            const merged = { ...cur, ...fresh };
-            currentRef.current = merged;
-            setCurrent(merged.key);
-            setCurrentItem(merged);
+          const refreshed = refreshCurrentPresentation(cur, fresh);
+          if (newer || refreshed !== cur) {
+            currentRef.current = refreshed;
+            setCurrent(refreshed.key);
+            setCurrentItem(refreshed);
           }
         } else if (cur?.key && "current" in data && data.current === null) {
+          currentRef.current = null;
           setCurrent(null); setCurrentItem(null);
         }
       }
@@ -404,6 +413,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (data.exhausted) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     const card = data.item ? { ...data.item } : null;
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], card }]);
+    currentRef.current = card;
     if (card) { setCurrent(card.key); setCurrentItem(card); } else { setCurrent(null); setCurrentItem(null); }
     say(data.say); loadPile();
   }, [loadPile, say]);

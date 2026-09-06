@@ -47,6 +47,15 @@ export const arrivals = (prevKeys, items) => {
 };
 export const keysOf = (items) => new Set((items || []).map((i) => i.key));
 
+// ``rev`` is retained by the server for older clients, but it only described membership/lane.
+// New responses carry a full display revision, including complete cards and backing content.
+// Keeping this fallback lets the static demo and an older server continue to paint normally.
+export const displayRevision = (pile) => pile?.display_revision || pile?.rev || null;
+export const refreshPilePresentation = (current, fresh) => {
+  const revision = displayRevision(fresh);
+  return current && revision && displayRevision(current) === revision ? current : fresh;
+};
+
 // A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
 // coder has it. The task id is the stable identity across that hand-off.
 export const followsItem = (card, fresh) => !!(card && fresh && (fresh.key === card.key
@@ -54,11 +63,29 @@ export const followsItem = (card, fresh) => !!(card && fresh && (fresh.key === c
 export const currentItemFromPile = (current, pile) => {
   if (!current) return null;
   const items = pile?.items || [];
-  return (pile?.current?.key === current.key ? pile.current : null)
-    || items.find((i) => i.key === current.key)
+  // A server response scoped to Current is authoritative even when it says null. The one existing
+  // compatibility transition is a dispatched message becoming its task's working-agent row; that
+  // same-tid row is the accepted stable identity until shared canonical selection replaces it.
+  if (pile && Object.prototype.hasOwnProperty.call(pile, "current")) {
+    if (followsItem(current, pile.current)) return pile.current;
+    return current.tid ? items.find((i) => i.tid === current.tid && i.lane === "working") || null : null;
+  }
+  return items.find((i) => i.key === current.key)
     || (current.tid ? items.find((i) => i.tid === current.tid && i.lane === "working") : null)
     || null;
 };
+
+// A presentation revision covers the complete card and every backing input its lazy detail reads.
+// When it changes, use the server's complete replacement. Spreading over the old card would retain
+// fields that were deliberately removed, such as a cleared draft, preview, or agent tail.
+export const currentPresentationChanged = (current, fresh) => {
+  if (!current || !fresh) return current !== fresh;
+  if (current.presentation_revision && fresh.presentation_revision)
+    return current.presentation_revision !== fresh.presentation_revision;
+  return JSON.stringify(current) !== JSON.stringify(fresh);
+};
+export const refreshCurrentPresentation = (current, fresh) =>
+  currentPresentationChanged(current, fresh) ? fresh : current;
 
 // The card under a line is decided by the item's KIND, never by the model. Every kind maps to
 // exactly one card so a reload draws the same conversation.

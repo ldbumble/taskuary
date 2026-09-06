@@ -42,13 +42,14 @@ const Where = ({ card, onOpenTask, onTimeline }) => card?.tid
   : card?.mid ? <Button size="small" onClick={() => onTimeline?.(card.mid)} sx={faint}>On the Timeline</Button> : null;
 
 // the whole text, unfolded under the card on request - a report as markdown, a mail as it was written
-function FullText({ mid }) {
+function FullText({ mid, revision }) {
   const [doc, setDoc] = useState(null);
   useEffect(() => {
     let live = true;
+    setDoc(null);
     api.get(`/api/messages/${mid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
     return () => { live = false; };
-  }, [mid]);
+  }, [mid, revision]);
   if (!doc) return <div className="tq-card-full">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
   const body = cleanText(doc.BodyText || "");
@@ -70,14 +71,15 @@ function CombinedTaskText({ card }) {
   useEffect(() => {
     let live = true;
     if (!card?.tid) { setDoc({ messages: [] }); return () => { live = false; }; }
+    setDoc(null);
     api.get(`/api/tasks/${card.tid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
     return () => { live = false; };
-  }, [card?.tid, card?.mid]);
-  if (!card?.tid) return <FullText mid={card?.mid} />;
+  }, [card?.tid, card?.mid, card?.presentation_revision]);
+  if (!card?.tid) return <FullText mid={card?.mid} revision={card?.presentation_revision} />;
   if (!doc) return <div className="tq-card-full">â€¦</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
   const messages = (doc.messages || []).filter((m) => String(m.Status || "") !== "context");
-  if (messages.length <= 1) return <FullText mid={card?.mid} />;
+  if (messages.length <= 1) return <FullText mid={card?.mid} revision={card?.presentation_revision} />;
   return (
     <div className="tq-card-full">
       <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 700 }}>
@@ -129,7 +131,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       setRv((data.data || []).find((x) => x.ReviewId === card.rid) || { gone: true });
     }).catch((e) => live && setErr(errText(e)));
     return () => { live = false; };
-  }, [card.rid, card.mid]);
+  }, [card.rid, card.mid, card.presentation_revision]);
   const action = rv?.Kind === "action";
   const draft = () => {
     if (!action) return rv?.DraftText || "";
@@ -290,7 +292,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
   return (
     <CardShell card={card} kicker={card.bad ? "a report failed" : "a report landed"} title={card.title} sub={`${ageText(card.when)} ago`} err={err}>
       {card.bad && !full && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
-      {full && card.mid && <FullText mid={card.mid} />}
+      {full && card.mid && <FullText mid={card.mid} revision={card.presentation_revision} />}
       <div className="tq-card-actions">
         <Button size="small" variant="contained" disableElevation onClick={() => setFull((v) => !v)} sx={primary}>{full ? "Fold it" : "Read it"}</Button>
         {card.source_id && <Button size="small" variant="outlined" disabled={busy} onClick={rerun} sx={quiet}>{busy ? "Queuing…" : "Run it again"}</Button>}
@@ -320,15 +322,18 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
-  const show = async () => {
-    setOpen((o) => !o);
-    if (report !== null) return;
-    try {
-      const { data } = await api.get(`/api/tasks/${card.tid}`);
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    setReport(null);
+    api.get(`/api/tasks/${card.tid}`).then(({ data }) => {
+      if (!live) return;
       const rep = (data.comments || []).slice().reverse().find((c) => String(c.Body || "").startsWith("CODER REPORT") || String(c.Body || "").startsWith("HANDOVER NOTE"));
       setReport(rep ? rep.Body.replace(/^(CODER REPORT|HANDOVER NOTE)\s*/, "") : "No report was filed on this task.");
-    } catch (e) { setReport(errText(e)); }
-  };
+    }).catch((e) => live && setReport(errText(e)));
+    return () => { live = false; };
+  }, [open, card.tid, card.presentation_revision]);
+  const show = () => setOpen((o) => !o);
   return (
     <CardShell card={card} kicker="an agent finished" title={card.title} sub={`${card.who || "agent"} · ${ageText(card.when)} ago`} err={err}>
       {card.summary && !open && <div className="tq-card-excerpt">{card.summary}</div>}
@@ -544,7 +549,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline }) {
             <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Dig in</Button>
           </div>
           {open !== i.key && i.preview && <div className="tq-fyi-gist">{i.preview}</div>}
-          {open === i.key && i.mid && <FullText mid={i.mid} />}
+          {open === i.key && i.mid && <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} />}
         </div>
       ))}
       <div className="tq-card-actions">

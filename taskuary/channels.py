@@ -437,10 +437,11 @@ def source_folders(s: dict) -> list:
 MAIL_BATCH = 500   # one _mail_msgs call; _mail_folder keeps asking until a short batch comes back
 
 
-def _mail_msgs(tok, upn, since, folder='inbox', cap=MAIL_BATCH, inclusive=False, skip=0):
+def _mail_msgs(tok, upn, since, folder='inbox', cap=MAIL_BATCH, inclusive=False,
+               through=None, continuation=None, with_continuation=False):
     """One batch of a folder, OLDEST first: at most `cap` messages received after `since` - or from
-    it, with inclusive=True, which is how a continuation asks for the boundary second again (dedupe
-    drops the repeats); `skip` pages on within a second that holds a whole batch by itself."""
+    it, with inclusive=True, which is how a failed continuation safely replays its boundary second
+    (dedupe drops the repeats). Graph continuation URLs are opaque and are followed verbatim."""
     # folder-scoped - a bare /messages spans every folder including Sent Items, which made
     # the owner's own replies come back through the funnel as inbound work.
     # ...and PAGED: one page of the 25 newest, then a watermark stamped 'now', meant the
@@ -448,15 +449,30 @@ def _mail_msgs(tok, upn, since, folder='inbox', cap=MAIL_BATCH, inclusive=False,
     # mail every poll with nothing in any log (audit 2026-09-02). Newest-first with a cap had
     # the same hole one size up: the 501st-newest mail of a long absence was never fetched
     # once the watermark moved (PW-006) - so the batch is the OLDEST, and the caller continues.
-    url = f'{GRAPH}/users/{upn}/mailFolders/{folder}/messages'
-    params, out = {'$top': 50, '$orderby': 'receivedDateTime asc', '$select': MAIL_SELECT,
-                   '$filter': f"receivedDateTime {'ge' if inclusive else 'gt'} {since}", **({'$skip': skip} if skip else {})}, []
+    url = continuation or f'{GRAPH}/users/{upn}/mailFolders/{folder}/messages'
+    bounds = f"receivedDateTime {'ge' if inclusive else 'gt'} {since}"
+    if through: bounds += f' and receivedDateTime le {through}'
+    params, out = (None if continuation else {
+        '$top': 50, '$orderby': 'receivedDateTime asc', '$select': MAIL_SELECT, '$filter': bounds
+    }), []
+    seen_urls = set()
     while url and len(out) < cap:
+        if url in seen_urls:
+            raise RuntimeError(f'Graph repeated mail continuation for {folder}')
+        seen_urls.add(url)
         r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=30, params=params)
         r.raise_for_status(); j = r.json()
-        out += j.get('value') or []
+        page = j.get('value') or []
+        if len(out) + len(page) > cap:
+            raise RuntimeError(f'Graph mail page exceeded the remaining batch capacity for {folder}')
+        out += page
         url, params = j.get('@odata.nextLink'), None       # the nextLink carries the filter itself
-    return out[:cap]
+    if url in seen_urls:
+        raise RuntimeError(f'Graph repeated mail continuation for {folder}')
+    return (out, url) if with_continuation else out
+
+
+_MAIL_MSGS_IMPLEMENTATION = _mail_msgs
 
 
 def _mail_cursor(s: dict) -> dict:
@@ -466,31 +482,86 @@ def _mail_cursor(s: dict) -> dict:
     return dict(cur) if isinstance(cur, dict) else {}
 
 
-def _mail_folder(tok, s: dict, folder: str, since_iso: str, cursor: dict, handle, save) -> int:
+def _mail_config(s: dict) -> dict:
+    try: cfg = json.loads(s.get('ConfigJson') or '{}')
+    except ValueError: return {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _mail_identity(s: dict) -> dict:
+    cfg = _mail_config(s)
+    return {key: s.get(key) for key in ('LastPolledAt', 'Address', 'ConnectorId', 'Active', 'Channel')} | {
+        'folders': cfg.get('folders')}
+
+
+def _mail_cutoff() -> str:
+    return _utc(datetime.now().astimezone())
+
+
+class _MailSourceChanged(RuntimeError):
+    pass
+
+
+def _mail_progress(s: dict, requested_since: str = None) -> tuple[dict, dict]:
+    """Bound continuation state, or empty state when an owner/source edit made it stale."""
+    cfg = _mail_config(s)
+    cursor = cfg.get('mail_cursor') or {}
+    basis = cfg.get('mail_cursor_basis') or {}
+    try:
+        saved_since = datetime.fromisoformat(str(basis.get('since') or '').replace('Z', '+00:00'))
+        wanted_since = datetime.fromisoformat(str(requested_since or basis.get('since') or '').replace('Z', '+00:00'))
+        saved_through = datetime.fromisoformat(str(basis.get('through') or '').replace('Z', '+00:00'))
+        covers_requested_floor = saved_since <= wanted_since and saved_since <= saved_through
+    except (TypeError, ValueError):
+        covers_requested_floor = False
+    valid = (isinstance(cursor, dict)
+             and all(isinstance(k, str) and isinstance(v, str) for k, v in cursor.items())
+             and isinstance(basis, dict)
+             and all(basis.get(key) == value for key, value in _mail_identity(s).items())
+             and covers_requested_floor
+             and isinstance(basis.get('through'), str) and bool(basis['through']))
+    if not valid: return {}, {}
+    return dict(cursor), dict(basis)
+
+
+def _mail_folder(tok, s: dict, folder: str, since_iso: str, through: str,
+                 cursor: dict, handle, save) -> int:
     """Drain one folder oldest-first, batch by batch, until a short batch says it is exhausted.
 
     handle(m) takes each message not yet seen this poll and returns what it added. Between
     batches the folder's half-way point is kept in cursor[folder] (and saved through `save`),
     so a fetch that dies resumes from there instead of re-downloading - and the source's
     watermark, which the caller moves only when every folder finished, never steps over mail
-    nobody fetched. A whole batch inside ONE second cannot be continued by timestamp alone,
-    so the next batch skips past what that second already yielded."""
-    since, inclusive, skip, seen, n, stuck = cursor.get(folder) or since_iso, folder in cursor, 0, set(), 0, 0
+    nobody fetched. Within a run, batches follow Graph's opaque continuation URL. After a failed
+    run, the saved timestamp is replayed inclusively; no returned-row count is treated as Graph's
+    provider cursor."""
+    since = cursor.get(folder) or since_iso
+    inclusive = folder in cursor
+    continuation, seen, n = None, set(), 0
     while True:
-        batch = _mail_msgs(tok, s['Address'], since, folder=folder,
-                           **({'inclusive': True} if inclusive else {}), **({'skip': skip} if skip else {}))
+        try:
+            result = _mail_msgs(
+                tok, s['Address'], since, folder=folder, through=through,
+                **({'inclusive': True} if inclusive else {}), continuation=continuation,
+                with_continuation=True)
+        except TypeError as exc:
+            # Keep the small historical fake-store protocol used by embedders/tests. The real
+            # implementation above accepts the frozen bounds and opaque continuation contract.
+            if _mail_msgs is _MAIL_MSGS_IMPLEMENTATION or 'unexpected keyword argument' not in str(exc):
+                raise
+            result = (_mail_msgs(tok, s['Address'], since, folder=folder), None)
+        batch, continuation = result if isinstance(result, tuple) else (result, None)
         fresh = [m for m in batch if m['id'] not in seen]
         for m in fresh:
             seen.add(m['id']); n += handle(m)
-        if len(batch) < MAIL_BATCH: break
-        last = batch[-1]['receivedDateTime']
-        if inclusive and last == since:
-            skip += len(batch)                        # a full batch in one second: page on within it
-            stuck = stuck + 1 if not fresh else 0
-            if stuck >= 2:                            # the server ignored $skip - stop rather than spin
-                logger.warning(f"outlook {s['Address']} {folder}: cannot page past {since}; stopping here"); break
-        else: since, inclusive, skip = last, True, 0
-        cursor[folder] = since; save()
+        if not continuation: break
+        if not batch:
+            raise RuntimeError(f'Graph mail continuation made no progress for {folder}')
+        # This is a safe replay boundary, not a reconstructed Graph cursor. The current run
+        # follows `continuation`; a retry asks inclusively from this timestamp and dedupes.
+        since, inclusive = batch[-1]['receivedDateTime'], True
+        cursor[folder] = since
+        save()
     cursor.pop(folder, None); save()
     return n
 
@@ -1053,14 +1124,25 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
             since = _since(s, backfill_days)
             if c['Type'] == 'outlook':
                 since_iso = since.astimezone().isoformat()
-                cursor = _mail_cursor(s)
+                identity = _mail_identity(s)
+                cursor, basis = _mail_progress(s, since_iso)
+                if basis:
+                    cycle_since, through = basis['since'], basis['through']
+                else:
+                    cycle_since, through = since_iso, _mail_cutoff()
+                    basis = {**identity, 'since': cycle_since, 'through': through}
+                expect_fields = {key: identity[key]
+                                 for key in ('LastPolledAt', 'Address', 'ConnectorId', 'Active', 'Channel')}
+                expect_config = {'folders': identity['folders']}
                 def save():
-                    # re-read first: the owner may have changed the folder list while this ran
-                    row = store.get_source(s['SourceId']) or s
-                    try: cfg = json.loads(row.get('ConfigJson') or '{}')
-                    except ValueError: cfg = {}
-                    cfg = {k: v for k, v in cfg.items() if k != 'mail_cursor'} | ({'mail_cursor': dict(cursor)} if cursor else {})
-                    store.save_source({'SourceId': s['SourceId'], 'ConfigJson': json.dumps(cfg)}, 'poll')
+                    config_set = {'mail_cursor_basis': dict(basis)}
+                    config_remove = ['mail_cursor_skip', 'mail_cursor_marker']
+                    if cursor: config_set['mail_cursor'] = dict(cursor)
+                    else: config_remove.append('mail_cursor')
+                    if not store.patch_source_poll_state(
+                            s['SourceId'], config_set=config_set, config_remove=tuple(config_remove),
+                            expect_fields=expect_fields, expect_config=expect_config):
+                        raise _MailSourceChanged('source changed while Outlook catch-up was running')
                 def inbound(folder):
                     def take(m) -> int:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
@@ -1097,11 +1179,24 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                 folders = [('sentitems', lambda m: ingest_outbound_mail(store, s['Address'], m))] + [(f, inbound(f)) for f in source_folders(s)]
                 broken = []
                 for folder, handle in folders:
-                    try: n += _mail_folder(tok, s, folder, since_iso, cursor, handle, save)
+                    try:
+                        n += _mail_folder(tok, s, folder, cycle_since, through,
+                                          cursor, handle, save)
+                    except _MailSourceChanged as e:
+                        logger.warning(f"outlook {s['Address']} {folder}: {e}")
+                        broken.append(f'{folder}: {e}')
+                        break                           # disabled/retargeted source: make no more provider calls
                     except Exception as e:
                         logger.warning(f"outlook {s['Address']} {folder}: {e}"); broken.append(f'{folder}: {e}')
                 if broken:
                     errors += broken; continue     # the watermark waits for the folders that did not finish
+                if not store.patch_source_poll_state(
+                        s['SourceId'], config_remove=('mail_cursor', 'mail_cursor_skip',
+                                                      'mail_cursor_marker', 'mail_cursor_basis'),
+                        last_polled_at=_local(through), expect_fields=expect_fields,
+                        expect_config=expect_config):
+                    errors.append(f"{s['Address']}: source changed while Outlook catch-up was finishing")
+                continue                            # exact cutoff above replaces generic touch_source(now)
             elif c['Type'] == 'teams':
                 n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)
             elif c['Type'] == 'github':

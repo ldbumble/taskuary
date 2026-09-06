@@ -1010,15 +1010,15 @@ Owner-approved: use the same concise context structure for general and coding
 workers. Do not inject the full SOUL.md into every worker prompt. Pending
 implementation only; preserve required context and authorization boundaries.
 
-- [ ] <a id="pw-182"></a>**PW-182** Define shared AGENT.md operating rules for both worker kinds: task scope,
+- [x] <a id="pw-182"></a>**PW-182** Define shared AGENT.md operating rules for both worker kinds: task scope,
   honest tool/result reporting, asking when blocked, progress and completion
   reporting, and approval boundaries. CODER.md adds only coding-specific rules
   for repositories, editing, testing, and staging/committing changes.
-- [ ] <a id="pw-183"></a>**PW-183** Build one authoritative task brief containing task ID, objective, triage
+- [x] <a id="pw-183"></a>**PW-183** Build one authoritative task brief containing task ID, objective, triage
   checklist, explicit owner instructions, selected repository when applicable,
   latest complete substantive conversation context, and attachment references.
   Simplifying the prompt must not discard chain context or freshness checks.
-- [ ] <a id="pw-184"></a>**PW-184** Stop injecting the full SOUL.md into coding and general-worker prompts.
+- [x] <a id="pw-184"></a>**PW-184** Stop injecting the full SOUL.md into coding and general-worker prompts.
   Keep SOUL available to triage for people/project understanding and routing;
   carry only relevant facts and owner preferences into the worker task brief.
   Audit existing SOUL safety/approval constraints and preserve them in shared
@@ -1027,7 +1027,7 @@ implementation only; preserve required context and authorization boundaries.
   without duplicate or conflicting instruction blocks. Include writing style
   when the task requires it, not indiscriminately for every coding run. Keep
   lengthy supporting material accessible separately with clear references.
-- [ ] <a id="pw-186"></a>**PW-186** Add live coordination only when relevant active peers/notes exist, using
+- [x] <a id="pw-186"></a>**PW-186** Add live coordination only when relevant active peers/notes exist, using
   the approved run-scoped wall lifecycle. For a continuation, separately include
   this task's dated last result or pause handover; do not substitute historical
   shared wall notes or unrelated closed sessions.

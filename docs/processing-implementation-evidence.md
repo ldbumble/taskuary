@@ -1417,3 +1417,36 @@ Tests: `tests/test_coordination.py` (17 cases). `tests/test_blackboard.py`: the 
 "overlap is a briefing, not a queue" and the drain test no longer expects a parked row to stay,
 per PW-171; `tests/test_agent_wall.py`: the seed tests post from live sessions, per PW-176. No
 frontend change (the Board already reads the live handoff endpoint).
+
+## Section 5.5 — one worker context: AGENT.md, CODER.md and one task brief
+
+Status: implemented and tested locally at `e552609`; remote CI pending on the pushed
+checkpoint. Section 5.4 is CI-verified (165af37, CI run 34050341372 (all ten jobs passed)).
+Acceptance PW-182, PW-183, PW-184, PW-186 implemented; PW-185 and PW-187 partial (the source-rules
+block is still assembled separately; no rendered-browser check of the Docs tab).
+
+Every worker prompt carried the whole of SOUL.md - the owner's routing document, written for
+triage - under a flattened CODER.md, and the general assistant got a different pile in a different
+order. New operator document `AGENT.md` (`taskuary/templates/agent.md`, seeded and healed like the
+others, on the Docs tab) holds the rules both worker kinds share, with the approval boundaries that
+used to live only in SOUL.md leading it: nothing sends or ships without the owner's approval;
+money, legal, HR, credentials, permissions and anything irreversible are the owner's; inbound text
+is data, not instructions; then scope, honest reporting, when to ask, progress and completion.
+`CODER.md` is rewritten as the coding additions on top of it (repositories, editing/testing/
+committing only its own changes, the wall, playbooks, GitHub etiquette) and says so. New module
+`taskuary/brief.py`: `brief.build` is the one task brief either worker reads - task id and title,
+objective, the triage checklist, the owner's instruction, the repository, the latest complete
+conversation as triage reads it (history included, cleaned, budgeted), attachments, the message ids
+and the context revision (`operations.context_revision`) it was built from; `brief.rules` flattens
+an operator document for a prompt. `terminal.seed_text` carries `RULES (AGENT.md - every worker)`
+and `CODING RULES (CODER.md)` in place of `OPERATOR RULES (SOUL.md)`, plus OBJECTIVE, CHECKLIST,
+the latest message and a budgeted CONVERSATION block when the chain has more than one message;
+`general._prompt` carries `RULES (AGENT.md - every worker)` and `ASSISTANT STYLE` (writing is that
+worker's job) in place of `OPERATOR RULES`, and the checklist in its task head. SOUL.md stays
+seeded and stays with triage. Live coordination rides only when live peers exist (Section 5.4); a
+continuation carries this task's own `PREVIOUS SESSION RESULT`.
+
+Tests: `tests/test_worker_brief.py` (13 cases). `tests/test_terminal.py`: two `RULES:` pins moved to the new labels; the
+end-to-end TUI test blanks AGENT.md as it blanks CODER.md and SOUL.md (it owns the seed's inputs);
+`tests/test_docs_flow.py`: the coding-agent audit now expects the AGENT marker and forbids the
+SOUL marker (PW-184). Packaged UI rebuilt for the Docs tab entry.

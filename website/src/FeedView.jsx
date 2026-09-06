@@ -45,33 +45,11 @@ import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
 import { TerminalPane } from "./TerminalView.jsx";
+import { feedInteraction, feedViews } from "./feedViews.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once (lazyGeneral.js)
 
-// Two different dimensions, two controls: WHAT STATE it's in (everything vs needs me) and WHICH
-// KIND / SOURCE it came from - they combine (e.g. "needs me" + "email"). STATE gets semantic
-// colour: "needs me" is the one filter on this screen that names something being on you.
-const VIEW_FILTERS = [
-  { key: "", label: "everything", c: PILL_COLORS.pick },
-  { key: "pending", label: "needs me", c: PILL_COLORS.you },
-];
-// ...and on a PHONE the segmented control becomes one toggle pill with its count: the housing
-// scrolled there so only "everythin" showed, and the row had no room for two words twice (the
-// owner, 2026-09-01). The desktop keeps the segmented control exactly as it was.
-const NeedsMe = ({ on, n, onClick }) => (
-  <Box onClick={onClick} role="switch" aria-checked={on} title={on ? "showing only what is waiting on you — click for everything" : "show only what is waiting on you"}
-    sx={{ display: "inline-flex", alignItems: "center", gap: 0.65, height: 34, px: 1.35, borderRadius: 2, cursor: "pointer",
-      fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", userSelect: "none", transition: "all .15s",
-      bgcolor: on ? PILL_COLORS.you.bg : PANEL2, color: on ? PILL_COLORS.you.fg : DIM,
-      border: `1px solid ${on ? PILL_COLORS.you.bd : BORDER}`,
-      "&:hover": { color: on ? PILL_COLORS.you.fg : INK, borderColor: on ? PILL_COLORS.you.bd : "#d8cfbe" } }}>
-    needs me
-    {n > 0 && (
-      <Box component="span" sx={{ px: 0.6, py: 0.05, borderRadius: 99, fontSize: 10, fontWeight: 700, lineHeight: 1.5,
-        fontVariantNumeric: "tabular-nums", bgcolor: on ? "rgba(255,255,255,.7)" : ALERT, color: on ? PILL_COLORS.you.fg : "#fffdfb" }}>{n}</Box>
-    )}
-  </Box>
-);
+// All and Unread are the only Timeline views. Kind and source remain independent filters.
 // The pill row is a fixed set of CATEGORIES - it must not grow as connections do (a
 // pill per mailbox, repo, channel and report would be unreadable by connection five).
 // Everything narrower lives in one grouped picker: category -> channel -> connection.
@@ -499,19 +477,19 @@ const TodayStrip = () => {
 };
 
 // The rail can be the Assistant page's rail (AssistantView.jsx): `top` is its ranked Unread pipe and
-// `stage` is the Unread conversation. All/Needs me are review lists: they never mount that chat;
+// `stage` is the Unread conversation. All is a review list: it never mounts that chat;
 // each row opens by itself on the right. A card's "open on the Timeline" (#msg=) still pins its row.
 // On a phone the chat and the rail take turns: `railOnNarrow` says which one is up.
 export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
-  // Unread alone owns the conversational walk. All and Needs me are deliberately one-item review
-  // surfaces even if the parent still has its chat selected from the previous tab.
+  // Unread alone owns the conversational walk. All is deliberately a one-item review surface even
+  // if the parent still has its chat selected from the previous tab.
   const [view, setView] = useState(top ? "unread" : "");
-  const unreadView = view === "unread";
-  const visibleStage = unreadView ? stage : null;
-  const chatMode = unreadView && rowMode === "chat" && !!onPull;
+  const interaction = feedInteraction(view, rowMode, !!onPull);
+  const visibleStage = interaction.showChatStage ? stage : null;
+  const chatMode = interaction.pullRowIntoChat;
   const railShown = !narrow || !visibleStage || railOnNarrow;
   const stageShown = !narrow || (!!visibleStage && !railOnNarrow);
   const [calSel, setCalSel] = useState(null);        // a meeting opened from the coming-up band
@@ -580,7 +558,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
   // Unread is the ranked live pipe supplied by the Assistant; All is chronological history.
-  const views = top ? [{ key: "unread", label: "unread", c: PILL_COLORS.pick }, { key: "", label: "all", c: PILL_COLORS.pick }, VIEW_FILTERS[1]] : VIEW_FILTERS;
+  const views = feedViews(!!top).map((entry) => ({ ...entry, c: PILL_COLORS.pick }));
   const [openFolds, setOpenFolds] = useState(() => new Set());   // conversations unfolded by hand
   const [cat, setCat] = useState("");                // broad content family; exact choices live in the source picker
   const [pick, setPick] = useState("");              // "" all in category | "channel:x" | "src:channel:name"
@@ -600,7 +578,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // pick narrows to one channel or one named connection inside it
   const fparams = useCallback(() => {
     const chans = channelsForCategory(cat, Object.keys(srcByChannel));
-    const p = { ...(view === "pending" ? { pending_only: true } : {}) };
+    const p = {};
     if (pick.startsWith("src:")) {
       const [, ch, ...rest] = pick.split(":");
       p.channel = ch; p.source = rest.join(":");
@@ -610,7 +588,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       p.channel = chans.join(",");
     }
     return p;
-  }, [view, cat, pick, srcByChannel]);
+  }, [cat, pick, srcByChannel]);
 
   // Every channel is a CATEGORY; the picker next to it narrows to one actual connection —
   // this mailbox, this repo, this Slack channel, this report.
@@ -819,6 +797,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const pinned = useRef(false);
   const [pinnedOn, setPinnedOn] = useState(false);
   const setPinned = (v) => { pinned.current = v; setPinnedOn(v); };
+  // Switching between All and Unread closes any row detail without re-fetching the unchanged All
+  // inventory. The Assistant owns Current separately, so this cannot advance or clear the walk.
+  useEffect(() => {
+    clearTimeout(hoverTimer.current);
+    pinned.current = false; setPinnedOn(false); setSel(null); setCalSel(null); setEditText("");
+  }, [view]);
   const drill = async (row, quiet = false) => {
     if (quiet && pinned.current && sel?.MessageId === row.MessageId) return;   // pinned outranks hover
     if (!quiet) clearTimeout(hoverTimer.current);
@@ -1029,7 +1013,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const todayMeetings = timelineMeetings.filter((e) => localDay(e.start) === today).length;
   const stats = [{ label: "in today", n: todays.length + todayMeetings, f: "" }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
-    ...(narrow ? [] : [{ label: "needs me", n: (rows || []).filter(needsYou).length, f: "pending", hot: true }]),
     { label: "info", n: todays.filter((r) => r.Category === "info").length, f: "" },
     { label: "promo", n: todays.filter((r) => r.Category === "promo").length, f: "" },
     { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
@@ -1065,10 +1048,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {/* wraps: on a phone the pickers and New drop to a second row as one group, under the
               pill, instead of the whole row scrolling sideways */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: "wrap" }}>
-            {narrow && !top
-              ? <NeedsMe on={view === "pending"} n={(rows || []).filter(needsYou).length}
-                  onClick={() => setView(view === "pending" ? "" : "pending")} />
-              : <FilterPills options={views} value={view} onChange={setView} />}
+            <Box role="group" aria-label="Feed views" sx={{ display: "inline-flex", maxWidth: "100%" }}>
+              <FilterPills options={views} value={view} onChange={setView} />
+            </Box>
             {/* on a phone the pickers take a full second line and New sits beside the pill; from md
                 up the three share one line, right-aligned */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: { md: "auto" }, minWidth: 0,
@@ -1274,9 +1256,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                     const held = open && pinnedOn;
                     return (
                       <React.Fragment key={r.MessageId}>
-                        {/* the calendar is filtered like everything else. "needs me" means work waiting on
-                            you, and a meeting is never that - it sat in the list regardless, so a
-                            filter that should have shown three rows showed four. */}
+                        {/* Calendar rows follow the same kind/source filters as the rest of All. */}
                         {!view && !cat && !pick && meetingsAt(day, items, i).map((e, j) => (
                           <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
                             preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); openRow(p); }}

@@ -163,8 +163,11 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   const feed = read("FeedView.jsx");
   assert.match(feed, /useState\(top \? "unread" : ""\)/);   // the Assistant rail opens on unread
   assert.match(feed, /view === "unread" \? \(typeof top/);     // ranked pipe, not historical rows
-  assert.match(feed, /const visibleStage = unreadView \? stage : null/); // All/Needs me never keep the chat on the right
-  assert.match(feed, /const chatMode = unreadView && rowMode === "chat"/); // their rows open one at a time instead
+  // PW107 supersedes only the third Needs me surface with exactly All + Unread. The existing
+  // All/detail and Unread/chat assertions follow the interaction helper where that logic moved.
+  assert.match(feed, /feedViews\(!!top\)/);
+  assert.match(feed, /const visibleStage = interaction\.showChatStage \? stage : null/);
+  assert.match(feed, /const chatMode = interaction\.pullRowIntoChat/);
   assert.match(feed, /\) : visibleStage \|\| \(/);                    // no selection shows the review placeholder, not chat history
   assert.match(feed, /label: "Assistant discussion"/);               // task-bound walkthrough turns remain readable in All
   assert.match(feed, /"concierge_user", "concierge_assistant"/);      // distinct from an agent's own working conversation

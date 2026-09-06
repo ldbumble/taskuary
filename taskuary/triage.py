@@ -31,7 +31,7 @@ FIELDS = {
         'you, or that only you can answer, is still yours however many colleagues are on the thread. Absent '
         'fields mean nobody else has spoken, which is not evidence either way.',
     'exchange':
-        'exchange is the recent back-and-forth on this thread or in this chat room, oldest first, with the '
+        'exchange is the recent back-and-forth on this thread or in this chat room, oldest first - each message\'s own words once, quoted copies and signatures removed - with the '
         'owner\'s own lines marked "you" - a chat line quotes nothing and a mail reply may quote nothing '
         'either, so it is the only reliable way to know what a bare "nope, new one" or "she wants them back '
         'on" is answering. It is CONTEXT: judge the message in body and nothing else. A line that answers '
@@ -165,13 +165,23 @@ _CONTACT = _re.compile(r'^\s*(phone|tel|mobile|cell|fax|office|direct|email|e-?m
                        r'|^\s*\+?[\d(][\d\s().x' + _DASH + r']{6,}$'
                        r'|^[^@\s]+@[^@\s]+\.[a-z]{2,}\s*$', _re.I)
 _KEEP_MIN = 30          # never trim a message down past this - when in doubt, keep
+# the corporate wrapper AROUND a body, not the sender's words: the external-mail banner and the
+# "you don't often get email" hint (one pattern for every surface - assistant.py imports it)
+_BANNER = _re.compile(r"(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|"
+                      r"\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)", _re.I)
+# footer clutter: a mail client's stamp, a newsletter's unsubscribe strip - whole lines made of these
+_CLUTTER_BIT = (r"(sent from my [\w ]+|get outlook for (ios|android)|sent via [\w ]+|unsubscribe( here| from this list)?|"
+                r"manage (your )?(email )?preferences|view (this )?(email )?in (your )?browser|update your preferences|opt out)")
+_CLUTTER = _re.compile(r'^\s*(' + _CLUTTER_BIT + r')(\s*[|·•\-]\s*' + _CLUTTER_BIT + r')*\s*\.?\s*$', _re.I)
+BODY_BUDGET = 6000      # the current body reaches the model whole up to this; a cut is disclosed, never silent
+EXCHANGE_BUDGET = 12000
 NL = chr(10)
 
 
 def strip_boilerplate(text: str) -> str:
     """The words the sender actually typed: the legal footer and the signature block go,
     everything before them stays byte-for-byte."""
-    lines = (text or '').splitlines()
+    lines = [l for l in _BANNER.sub('', text or '').splitlines() if not _CLUTTER.match(l)]
     # 1. the legal footer: from the first legalese line to the end
     for i, l in enumerate(lines):
         if _LEGAL.search(l) and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN:
@@ -189,6 +199,38 @@ def strip_boilerplate(text: str) -> str:
         lines.pop()
     out = NL.join(lines).rstrip()
     return out if out.strip() else (text or '')
+
+
+# a quoted copy of an earlier mail inside a reply - only when its words are ALREADY in the chain
+_QUOTE_HEAD = _re.compile(r'^\s*(on .{6,160} wrote:\s*$|-{2,}\s*original message\s*-{2,}|-{2,}\s*forwarded message\s*-{2,}|_{5,}\s*$)', _re.I)
+_MAIL_HDR = _re.compile(r'^\s*(from|sent|to|cc|subject|date):\s', _re.I)
+
+
+def _norm_line(l: str) -> str: return _re.sub(r'\W+', ' ', str(l).lower()).strip()
+
+
+def dedupe_quoted(body: str, priors) -> str:
+    """Each message's own words once (PW-028). A quoted block - '> ' lines, or everything under an
+    'On ... wrote:' / 'Original Message' / 'Forwarded message' head - is dropped only when its lines
+    are already in `priors` (the cleaned bodies of the chain so far); unique forwarded material and
+    a quote of something the chain does not hold stay, and inline answers keep their own lines with
+    the quoted questions they answer removed. The stored message is never edited."""
+    known = {_norm_line(l) for p in priors for l in str(p or '').splitlines() if _norm_line(l)}
+    lines, out, i = str(body or '').splitlines(), [], 0
+    while i < len(lines):
+        l = lines[i]
+        if l.lstrip().startswith('>'):
+            inner = l.lstrip()[1:].strip()
+            if inner and _norm_line(inner) not in known: out.append(inner)
+            i += 1; continue
+        head = _QUOTE_HEAD.match(l) or (_re.match(r'^\s*from:\s', l, _re.I) and i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I))
+        if head:
+            rest = [x for x in lines[i + 1:] if not _MAIL_HDR.match(x)]
+            subst = [_norm_line(x.lstrip('> ').strip()) for x in rest if _norm_line(x)]
+            if subst and sum(1 for x in subst if x in known) >= max(1, int(0.6 * len(subst))): break   # a copy of what the chain holds
+            out.extend(x.lstrip('> ') if x.lstrip().startswith('>') else x for x in rest); break        # unique material: kept, minus the header lines
+        out.append(l); i += 1
+    return '\n'.join(out).rstrip()
 
 
 RELATIONSHIPS = ('new', 'continues', 'answers', 'uncertain')
@@ -332,7 +374,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                **(thread or {}),
                                **({'project_context': project} if project else {}),
                                **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]} if candidates is not None else {}),
-                               'body': strip_boilerplate(str(msg.get('body') or ''))[:1500]})
+                               **({'body_truncated': True} if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET else {}),
+                               'body': strip_boilerplate(str(msg.get('body') or ''))[:BODY_BUDGET]})
+            if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET:
+                system += ('\n\nbody_truncated: the message was longer than the context budget and its end was cut. '
+                           'If the verdict could depend on what you did not see, say so in your reason.')
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '
                            'screenshot of the error IS the request. Read them before deciding.')

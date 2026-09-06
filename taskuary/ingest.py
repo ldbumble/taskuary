@@ -982,12 +982,19 @@ def is_ours(m: dict) -> bool:
             or str(m.get('FromName') or '').strip().lower() == 'you')
 
 
-def exchange_lines(store, msg: dict, limit: int = 12, chars: int = 300) -> list:
-    """The last lines of this conversation as a person scrolling up would read them - theirs and
-    OURS, oldest last, each marked with who said it. The owner's own half was in the database all
-    along and no classifier was ever shown it, which is why triage read every chat line as if it
-    had arrived out of nowhere."""
-    out = []
+def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> list:
+    """The conversation as a person scrolling up would read it - theirs and OURS, oldest first,
+    each marked with who said it, each message's own words once. The owner's own half was in the
+    database all along and no classifier was ever shown it, which is why triage read every chat
+    line as if it had arrived out of nowhere.
+
+    It used to be twelve lines of 300 characters, silently (PW-026). Now every message's cleaned,
+    de-quoted words are kept whole under a character budget (triage.EXCHANGE_BUDGET); when the
+    budget is exceeded the OLDEST go first and the first line says how many were dropped - the
+    model is never left to assume it saw the whole thread."""
+    from .triage import strip_boilerplate, dedupe_quoted, EXCHANGE_BUDGET
+    budget = EXCHANGE_BUDGET if budget is None else budget
+    out, priors = [], []
     for m in store.thread_messages(msg.get('conversation_id'), msg.get('subject'), limit=limit):
         # ...never the line being judged, and never the ones AFTER it. Under deferred() a whole
         # poll is on the timeline as 'triaging' before any of it is judged, so without this the
@@ -995,9 +1002,14 @@ def exchange_lines(store, msg: dict, limit: int = 12, chars: int = 300) -> list:
         if m.get('Status') == 'skipped' or (msg.get('_mid') and m['MessageId'] == msg['_mid']): continue
         if msg.get('sent_at') and str(m.get('SentAt') or '') > str(msg['sent_at']): continue
         who = 'you' if is_ours(m) else (m.get('FromName') or m.get('FromEmail') or 'them')
-        from .triage import strip_boilerplate
-        body = ' '.join(strip_boilerplate(str(m.get('BodyText') or '')).split())[:chars]
+        clean = strip_boilerplate(str(m.get('BodyText') or ''))
+        body = ' '.join(dedupe_quoted(clean, priors).split())
+        priors.append(clean)
         if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}")
+    dropped = 0
+    while len(out) > 1 and sum(len(l) for l in out) > budget:
+        out.pop(0); dropped += 1
+    if dropped: out.insert(0, f'… {dropped} earlier message{"s" if dropped != 1 else ""} not shown (context budget) - the thread is longer than what follows')
     return out
 
 

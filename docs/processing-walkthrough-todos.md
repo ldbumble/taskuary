@@ -734,18 +734,18 @@ Owner-approved: successful action handlers automatically record owner changes
 that differ from triage. The assistant does not independently write correction
 memory from conversational interpretation. Pending implementation/verification.
 
-- [ ] <a id="pw-129"></a>**PW-129** After a confirmed owner action succeeds, compare its outcome with the
+- [x] <a id="pw-129"></a>**PW-129** After a confirmed owner action succeeds, compare its outcome with the
   relevant triage verdict and record any correction as learning evidence without
   a second memory confirmation. Use the same handler behavior across assistant
   confirmations, Tasks, and All timeline detail; do not depend on the UI entry point.
-- [ ] <a id="pw-130"></a>**PW-130** Record source/message or grouped-item identity, triage verdict/revision,
+- [x] <a id="pw-130"></a>**PW-130** Record source/message or grouped-item identity, triage verdict/revision,
   relevant context, the owner's change, and the successful action identity.
   Cover FYI -> task, general -> coding, and reply-needed -> dismissed as unnecessary.
   Deferring until tomorrow or merely discussing an item is not by itself a triage
   correction. Cancelled/failed actions write no correction evidence; retries must
   not duplicate it. Make successful actions' correction recording recoverable
   if persistence fails, without repeating the underlying action.
-- [ ] <a id="pw-131"></a>**PW-131** Preserve the distinction between correction evidence, explicit learned
+- [x] <a id="pw-131"></a>**PW-131** Preserve the distinction between correction evidence, explicit learned
   preferences, and deterministic exclusions. A correction informs fresh triage;
   it must not force future verdicts or silently create a permanent sender rule.
   Explicit preference/rule requests use their own confirmed action handlers.
@@ -753,7 +753,7 @@ memory from conversational interpretation. Pending implementation/verification.
   task-related assistant/user discussion, proposals, and action outcomes rather
   than relying on browser-only receipts. Keep history separate from learned memory:
   saving a conversation does not make every turn a standing preference.
-- [ ] <a id="pw-133"></a>**PW-133** When an FYI later becomes a task, link its earlier relevant discussion and
+- [x] <a id="pw-133"></a>**PW-133** When an FYI later becomes a task, link its earlier relevant discussion and
   correction history to that task. Show it in Assistant discussion/history in
   task/All detail. Preserve per-item attribution for FYI batches; do not copy
   unrelated sibling discussion onto every task or lose history before task creation.

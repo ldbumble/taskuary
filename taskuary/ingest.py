@@ -406,6 +406,11 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     # not a verdict carried forward (it used to file the reply before any model saw it)
     ruled = thread_ruling(store, msg)
     if ruled: notes = [ruled] + notes
+    # the owner's past corrections on this sender or topic: evidence beside the notes, never a rule (PW-131)
+    try:
+        from . import operations
+        notes = notes + operations.evidence_lines(store, msg)
+    except Exception as e: logger.debug(f'correction evidence skipped: {e}')
     thread = others_on_thread(store, msg, mine)
     candidates = chat_candidates(store, msg) if is_chat(msg) else None
     repos = repo_candidates(store)
@@ -1208,6 +1213,9 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink'),
                              **({'Assignee': assignee} if assignee else {})}, actor)
     store.attach_message(mid, tid)
+    # what was said about THIS message before it was work travels with it (operations.py, PW-133)
+    from . import operations
+    operations.link_discussion(store, tid, [mid])
     store.add_route(mid, tid, 'create', None,
                     f"promoted by the owner - {'theirs to do' if assignee else 'to hand it to an agent'}", [], actor)
     store.audit('task', tid, 'create_from_message', actor, detail={'message_id': mid, 'subject': title})

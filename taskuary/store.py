@@ -517,6 +517,16 @@ class SQLiteStore:
             # here, and the error when it could not be completed - never guessed from what is stored
             self.cx.execute('CREATE TABLE IF NOT EXISTS chain (ConversationId TEXT PRIMARY KEY, Channel TEXT, Mailbox TEXT, '
                             'CheckedAt TEXT, Complete INTEGER, Listed INTEGER, Added INTEGER, Error TEXT)')
+            # shared operations (operations.py, PW-129..134): a proposal with its confirmation version and the
+            # context it was judged on, its one execution and real outcome; correction EVIDENCE keyed to the
+            # operation (never a memory note or a rule); discussion kept against the source item and its task
+            self.cx.execute('CREATE TABLE IF NOT EXISTS operation (OpId TEXT PRIMARY KEY, Kind TEXT, TargetKind TEXT, TargetId INTEGER, '
+                            'ParamsJson TEXT, Actor TEXT, ContextRevision TEXT, Version INTEGER, Status TEXT, OutcomeJson TEXT, Error TEXT, '
+                            'Evidence TEXT, Verdict TEXT, VerdictRouteId INTEGER, CreatedAt TEXT, UpdatedAt TEXT, ExecutedAt TEXT)')
+            self.cx.execute('CREATE TABLE IF NOT EXISTS correction (Id INTEGER PRIMARY KEY, OpId TEXT UNIQUE, MessageId INTEGER, TaskId INTEGER, '
+                            'Sender TEXT, Topic TEXT, Verdict TEXT, VerdictRouteId INTEGER, Change TEXT, ContextJson TEXT, CreatedAt TEXT)')
+            self.cx.execute('CREATE TABLE IF NOT EXISTS discussion (Id INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER, Actor TEXT, '
+                            'Body TEXT, OpId TEXT, CreatedAt TEXT)')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -1157,6 +1167,46 @@ class SQLiteStore:
         r = self._one('SELECT * FROM chain WHERE ConversationId=?', (conversation_id,))
         if not r: return None
         return {'complete': bool(r['Complete']), 'listed': r['Listed'], 'added': r['Added'], 'error': r['Error'], 'checked_at': r['CheckedAt']}
+    # operations, correction evidence and discussion (operations.py)
+    OP_COLS = ('OpId', 'Kind', 'TargetKind', 'TargetId', 'ParamsJson', 'Actor', 'ContextRevision', 'Version', 'Status', 'OutcomeJson',
+               'Error', 'Evidence', 'Verdict', 'VerdictRouteId', 'ExecutedAt')
+    def add_operation(self, fields: dict) -> str:
+        self._insert('operation', fields, self.OP_COLS, {'CreatedAt': _now(), 'UpdatedAt': _now()}); return fields['OpId']
+    def get_operation(self, op_id: str): return self._one('SELECT * FROM operation WHERE OpId=?', (op_id,))
+    def update_operation(self, op_id: str, fields: dict):
+        d = {k: v for k, v in fields.items() if k in self.OP_COLS and k != 'OpId'} | {'UpdatedAt': _now()}
+        self._exec(f"UPDATE operation SET {', '.join(k + '=?' for k in d)} WHERE OpId=?", [*d.values(), op_id])
+    def operations_for(self, task_id: int = None, message_ids: list = ()) -> list:
+        conds, args = [], []
+        if task_id: conds.append("(TargetKind='task' AND TargetId=?)"); args.append(task_id)
+        if message_ids: conds.append(f"(TargetKind='message' AND TargetId IN ({','.join('?' * len(message_ids))}))"); args += list(message_ids)
+        if not conds: return []
+        return self._rows(f"SELECT * FROM operation WHERE {' OR '.join(conds)} ORDER BY CreatedAt, rowid", args)
+    def operations_pending_evidence(self) -> list: return self._rows("SELECT * FROM operation WHERE Status='done' AND Evidence='pending' ORDER BY rowid")
+    def add_correction(self, fields: dict) -> int:
+        return self._insert('correction', fields, ('OpId', 'MessageId', 'TaskId', 'Sender', 'Topic', 'Verdict', 'VerdictRouteId', 'Change', 'ContextJson'),
+                            {'CreatedAt': _now()})
+    def corrections(self, message_id: int = None, task_id: int = None, sender: str = None, topic: str = None, limit: int = 200) -> list:
+        conds, args = [], []
+        if message_id: conds.append('MessageId=?'); args.append(message_id)
+        if task_id: conds.append('TaskId=?'); args.append(task_id)
+        if sender: conds.append('lower(Sender)=?'); args.append(str(sender).lower())
+        if topic: conds.append('Topic=?'); args.append(topic)
+        where = ('WHERE ' + ' OR '.join(conds)) if conds else ''
+        return self._rows(f'SELECT * FROM correction {where} ORDER BY Id DESC LIMIT ?', [*args, limit])[::-1]
+    def add_discussion(self, fields: dict) -> int:
+        return self._insert('discussion', fields, ('MessageId', 'TaskId', 'Actor', 'Body', 'OpId'), {'CreatedAt': _now()})
+    def discussion(self, task_id: int = None, message_id: int = None) -> list:
+        conds, args = [], []
+        if task_id: conds.append('TaskId=?'); args.append(task_id)
+        if message_id: conds.append('MessageId=?'); args.append(message_id)
+        if not conds: return []
+        return self._rows(f"SELECT * FROM discussion WHERE {' OR '.join(conds)} ORDER BY Id", args)
+    def link_discussion(self, task_id: int, message_ids: list) -> int:
+        if not message_ids: return 0
+        with self.lock:
+            cur = self.cx.execute(f"UPDATE discussion SET TaskId=? WHERE TaskId IS NULL AND MessageId IN ({','.join('?' * len(message_ids))})", [task_id, *message_ids])
+            self.cx.commit(); return cur.rowcount
     def message_exists(self, external_id):
         return self._one('SELECT 1 x FROM message WHERE ExternalId=?', (external_id,)) is not None
     def add_message(self, fields):

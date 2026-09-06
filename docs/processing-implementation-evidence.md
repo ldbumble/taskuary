@@ -1260,6 +1260,7 @@ partial. Delivery is a normal master push preserving upstream `e665df7`; exact-S
 remote CI verification is pending. No live restart, live data modification, or
 production connector testing was performed.
 
+
 ### Section 2.2 delivered and CI verified
 
 Normal master delivery `8247d81232bb56f51db8fb7bb39e0be3e8fc8e8b` passed
@@ -1362,3 +1363,41 @@ ledger entries. PW-101/102/103/106/109 remain partial because canonical Unread/r
 shared filtering/priority and Current/Next adoption are separate pending work.
 Browser-control redesign remains review-pending. Normal master push and exact-SHA
 remote CI verification follow; no live restart or production connector testing occurred.
+
+## Section 4.1 — shared operations, correction evidence and durable discussion
+
+Status: implemented and tested locally at `1461a13`; remote CI pending on the pushed
+checkpoint. Section 2.4 is CI-verified (3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)).
+Acceptance PW-129, PW-130, PW-131, PW-133 implemented; PW-132 and PW-134 partial (the assistant
+conversation does not yet write its turns through `operations.discuss`, and UI interaction coverage
+waits on the Phase 8 confirmation box).
+
+New module `taskuary/operations.py` - the proposed-action contract from
+`processing-state-contracts.md`: a proposal has an immutable id, exact target and parameters, the
+context revision it was judged on (`context_revision`: the messages on the thread or task and how
+each stands) and a confirmation version that every edit bumps. `execute` is one shared path: a
+repeated confirmation returns the first receipt and runs nothing; a stale version or a changed
+context is refused for review; a handler failure is reported as `error` (retryable) and teaches
+nothing; a cancelled proposal never runs. On success the operation is compared with triage's
+verdict (read the way the panel reads it: the newest route, then the task kind) and a difference
+is recorded as correction EVIDENCE in a new `correction` table keyed to the operation - FYI to
+task, general to coding, reply-needed to dismissed; deferral, discussion and an unchanged answer
+record nothing; `task`/`general` count as one triage answer. Evidence persistence that fails marks
+the operation `pending` and `recover_evidence` writes it later without repeating the action.
+Evidence is not a memory note and not a policy (PW-131); `ingest` adds `operations.evidence_lines`
+beside the owner's notes so fresh triage weighs it as dated evidence.
+
+Entry points record the same operation through `operations.record_direct`: `/mine`, `/chat`,
+`/dispatch` (message), `/not-coding`, `/not-a-task`, `/file`, and the shared task dispatch when an
+explicit kind differs from the task's. A direct record is skipped while a proposal is being carried
+out, so one action is one receipt. New endpoints: `POST /api/operations` (propose),
+`GET/PATCH/DELETE /api/operations/{id}` (read, edit = new version, cancel),
+`POST /api/operations/{id}/execute` (confirm by id and version; 409 when stale or cancelled),
+`GET /api/tasks/{id}/history` and `GET /api/messages/{id}/history` (discussion, operations with
+outcomes, corrections - oldest first), `POST /api/tasks|messages/{id}/discussion`.
+Discussion rows are kept against the source message and its task; `ingest.task_from_message` links
+that message's earlier discussion onto the task it becomes, by identity (PW-133).
+
+Tests: `tests/test_operations.py` (20 cases). No frontend change; the Phase 8 confirmation box and history panel consume
+these endpoints. Packaged assets unchanged.
+

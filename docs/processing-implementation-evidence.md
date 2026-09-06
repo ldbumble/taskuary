@@ -2364,3 +2364,31 @@ Agent workspace inline presentation is untouched.
 Tests: `tests/test_chat_proposals.py`::HandoffTests (3 cases), `website/test/handoff.test.mjs` (2 cases). Frontend: `proposalCard.js`
 (`isHandoff`, `afterExecute.handoff` / `.repo`), `ProposalCard.jsx`, `AssistantView.jsx`, rebuilt
 bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.4.log`.
+
+## Section 9.1 — blank New chat, read-only paginated history, retention on its own clock
+
+Status: implemented and tested locally at `2463532`; remote CI pending on the pushed
+checkpoint. Section 8.4 is CI-verified (672e904/5ad1d03, CI run 34062011407 (all jobs passed)).
+Acceptance PW-156 to PW-161 implemented.
+
+`concierge.chats()` used to be the cleanup: listing past chats marked anything older than a
+hardcoded twenty days `dropped` on the way past. The list is now read-only and paged (PW-157):
+`GET /api/concierge/chats?limit&before` returns newest-first with a `next` cursor, opening a chat
+writes nothing, and the Past chats panel offers "Earlier chats". New chat (PW-156) archives the
+guide task as done with its rows intact, opens a blank conversation that waits for the owner, and
+touches neither read state nor any source or task.
+
+Retention is one scheduled lifecycle operation (`taskuary/retention.py`, PW-158): a
+`chat_keep_days` setting (fifteen by default, Settings → Assistant → "Keep past chats (days)"),
+`retention.tick` once a day from start-up and from the sync timer beside the wall roll-up - never
+from a history read - and `retention.cleanup` removes only ARCHIVED guide chats whose last row is
+older than the cutoff: the open chat is never archived and so never eligible, and real tasks are not
+guide tasks. What a chat said about a task was mirrored onto that task as it was said
+(`concierge.record_related`), a promoted FYI's discussion travelled onto its task, operation
+receipts and correction evidence are keyed to their targets, the agent's report and the approved
+review live on the task, and memories and rules are their own rows - none of it lives on the archive
+(PW-159/160).
+
+Tests: `tests/test_chat_retention.py` (5 cases), `website/test/chatRetention.test.mjs` (2 cases). Frontend:
+`AssistantView.jsx` (cursor paging), `SettingsView.jsx` (the knob), rebuilt bundle. Backend
+evidence: `.codex-tmp/phase3-evidence/backend-9.1.log`.

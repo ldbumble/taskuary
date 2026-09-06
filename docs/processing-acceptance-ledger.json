@@ -1215,7 +1215,7 @@
       "requirement": "Keep the delegated task visible in Unread as Working; do not settle it as",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::HandoffTests (a started dispatch is receipted \"is on it - moving on\" and the page advances without a settle post - the message key is never marked done and the task shows as the `agent:<tid>` Working row; a `needs_repo` dispatch raises `operations.Halt`, the proposal stays `error` with that outcome, the item stays in the pile and the same confirmation runs again after the choice; a failed start and a cancel keep the item), `website/test/handoff.test.mjs` (`afterExecute.handoff` / `.repo`, the card's RepoPicker)",
-      "commit": "672e904; local gates passed, CI pending"
+      "commit": "672e904; 672e904/5ad1d03, CI run 34062011407 (all jobs passed)"
     },
     {
       "id": "PW-136",
@@ -1224,7 +1224,7 @@
       "requirement": "Test successful handoff advances once, retains the working task in Unread,",
       "status": "implemented",
       "test": "`tests/test_chat_proposals.py`::HandoffTests (3 cases: started hand-off advances once and the working task stays in Unread; repository choice keeps the item and the resumed confirmation runs the dispatch once; failed start and cancel keep the item), `website/test/handoff.test.mjs` (2 cases). Agent workspace inline presentation is untouched",
-      "commit": "672e904; local gates passed, CI pending"
+      "commit": "672e904; 672e904/5ad1d03, CI run 34062011407 (all jobs passed)"
     },
     {
       "id": "PW-137",
@@ -1402,54 +1402,54 @@
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "New chat archives the current conversation, resets chat/Current, and opens",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::NewChatTests (`POST /api/assistant/dock/new` archives the guide task as done with its rows intact, opens a blank one with no turn of its own, leaves every read state and the source/task untouched, and never runs retention), `website/test/chatRetention.test.mjs` (New chat posts the archive and calls no surface/turn)",
+      "commit": "2463532; local gates passed, CI pending"
     },
     {
       "id": "PW-157",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Listing/opening earlier chats is read-only and paginated. Remove the",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::HistoryIsReadOnlyTests (`concierge.chats` has no cutoff and writes nothing - a forty-day-old chat still lists; `GET /api/concierge/chats?limit&before` pages newest-first with a `next` cursor; opening one writes nothing; `CHATS_KEPT_DAYS` is gone), `website/test/chatRetention.test.mjs` (the panel pages with the cursor and offers \"Earlier chats\")",
+      "commit": "2463532; local gates passed, CI pending"
     },
     {
       "id": "PW-158",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Implement automatic retention cleanup as a separate scheduled lifecycle",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::RetentionTests (`retention.py`: `chat_keep_days` setting, default 15, owner override, nonsense falls back; `retention.tick` runs once a day from start-up and the sync timer, never from a history read; the boundary is the last chat row against the cutoff), Settings \u2192 Assistant \u2192 \"Keep past chats (days)\"",
+      "commit": "2463532; local gates passed, CI pending"
     },
     {
       "id": "PW-159",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Preserve task-linked discussion, confirmed actions, agent results, and send",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (mirrored task discussion, a promoted FYI's linked discussion, the operation receipt, the agent's report and the approved review all remain readable on the task after the archive is removed)",
+      "commit": "2463532; local gates passed, CI pending"
     },
     {
       "id": "PW-160",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Keep correction memory and saved rules on independent lifecycles. Chat",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (memories, mutes and correction evidence untouched by cleanup - retention removes the guide task and its rows only)",
+      "commit": "2463532; local gates passed, CI pending"
     },
     {
       "id": "PW-161",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Test New chat archives without deletion or auto-walk, history reads do not",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py` (5 cases: archive without deletion or auto-walk; read-only paginated history; 15-day default, override, exact boundary; open chat and real tasks never touched, once-a-day tick; preserved task history, promoted FYI discussion, agent results, send outcomes, evidence and rules), `website/test/chatRetention.test.mjs` (2 cases)",
+      "commit": "2463532; local gates passed, CI pending"
     },
     {
       "id": "PW-162",

@@ -891,22 +891,22 @@ cleanup is independent of New chat and viewing history. Pending implementation;
 retention duration is configurable in Settings, defaulting to 15 days. Cleanup
 deletes expired chat archives, not task-linked history or learned state.
 
-- [ ] <a id="pw-156"></a>**PW-156** New chat archives the current conversation, resets chat/Current, and opens
+- [x] <a id="pw-156"></a>**PW-156** New chat archives the current conversation, resets chat/Current, and opens
   a blank conversation awaiting owner input. It must not trigger retention
   deletion, change source/task read state, or automatically start a walkthrough.
-- [ ] <a id="pw-157"></a>**PW-157** Listing/opening earlier chats is read-only and paginated. Remove the
+- [x] <a id="pw-157"></a>**PW-157** Listing/opening earlier chats is read-only and paginated. Remove the
   hardcoded CHATS_KEPT_DAYS cutoff/status mutation from concierge.chats(); do not
   hide or mark old conversations dropped as a side effect of a history request.
-- [ ] <a id="pw-158"></a>**PW-158** Implement automatic retention cleanup as a separate scheduled lifecycle
+- [x] <a id="pw-158"></a>**PW-158** Implement automatic retention cleanup as a separate scheduled lifecycle
   operation with a chat retention setting defaulting to 15 days, not the existing
   hardcoded 20-day cutoff.
-- [ ] <a id="pw-159"></a>**PW-159** Preserve task-linked discussion, confirmed actions, agent results, and send
+- [x] <a id="pw-159"></a>**PW-159** Preserve task-linked discussion, confirmed actions, agent results, and send
   outcomes for the life of the task, accessible in All/task history after the chat
   archive expires. FYI discussion linked when it becomes a task is task history
   too. Ensure retained records do not depend on a deleted archive for readability.
-- [ ] <a id="pw-160"></a>**PW-160** Keep correction memory and saved rules on independent lifecycles. Chat
+- [x] <a id="pw-160"></a>**PW-160** Keep correction memory and saved rules on independent lifecycles. Chat
   deletion must not erase learning evidence, learned preferences, or exclusions.
-- [ ] <a id="pw-161"></a>**PW-161** Test New chat archives without deletion or auto-walk, history reads do not
+- [x] <a id="pw-161"></a>**PW-161** Test New chat archives without deletion or auto-walk, history reads do not
   mutate state, old retained chats remain accessible through pagination, and
   retention cleanup runs independently and only removes policy-eligible records.
   Test the 15-day default, configured overrides, and the retention cutoff boundary.

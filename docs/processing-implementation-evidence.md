@@ -2187,3 +2187,86 @@ All nine final browser scenarios passed (456.35s), including the extended shared
 507-root/filter/Walk/New chat case (64.37s). Packaged terminal replay remained
 responsive (visible 2000ms, input 101ms, reconnect 828ms). Concurrent origin a80f039
 adds Phase 8.1 confirmed actions; integration compatibility gates follow before push.
+## Section 8.1 — the assistant interprets, proposes, and acts only on a confirmed proposal
+
+Status: implemented and tested locally at `945c666`; remote CI pending on the pushed
+checkpoint. Section 7.5 is CI-verified (d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)).
+Acceptance PW-121 to PW-128 implemented.
+
+A phrase table (`concierge.decide_words`, its `_SAYS` regexes, the assent/hold/asking guards and
+the subject guard `named_elsewhere`) read the owner's sentence and the page carried the verb out on
+the spot; "not ours" about the wrong card deleted a finished task. All of it is gone. The model
+interprets the words with the item on the table, the pile and the conversation in front of it
+(PW-121): a question is answered, a subject named is pulled in, an uncertain target or agent kind
+is a clarifying OPTIONS line, and a decision is a DECIDE line - with `ON:` and the words that name
+it when the decision is about a different item. Without an AI connector nothing is decided and the
+chat says so. The bottom suggestions (Next, Done, Create task, Create agent, Reply) are text sent
+through the same `send()` as typing (PW-122); the Done/Later/Tomorrow chips that settled directly
+are gone.
+
+A consequential decision is a PROPOSAL (PW-123): `concierge.propose_for` writes one
+`operations.propose` row - kind, exact target, parameters, a label for its button - and the chat
+says what WILL happen ("Nothing has been started - confirm below, or tell me what to change"). A
+correction before the click revises the same proposal (a new confirmation version); a different
+decision cancels the one on the table. `ProposalCard.jsx` shows action, target and parameters with
+one specifically labelled button and Cancel. Nothing runs on the words (PW-124): the button posts
+the structured proposal by id and version to `POST /api/operations/{id}/execute`, and the eleven
+new kinds (`task.create_from_text`, `task.setup`, `message.archive`, `item.settle`,
+`review.approve`, `agent.answer`, `agent.stop`, `report.rerun`, `memory.remember`, `task.split`,
+`pipe.clear`) each run through `server._run_operation` - the same handlers the page's own buttons
+run (PW-125). A stale version or moved context answers 409, a repeated click is the first receipt
+with no second effect, a failing handler is reported as `error` and settles nothing, and the receipt
+(`concierge.receipt`) is written into the chat after execution with what the handler reported: the
+sweep's count and rules, the split's halves, the new task's ref. `task.complete` now runs the same
+close the PATCH road does (draft dismissed, agent stopped), and "done" on a parked agent proposes
+it. Failed and cancelled proposals leave the item on the table; the walk moves only on a success
+that settles it.
+
+Two exceptions the owner approved: a reply request drafts at once through the reply writer, no
+dispatch, nothing sent, the item not marked (PW-126) - sending still needs the approve proposal;
+and Next moves the walk without a read mark, a close, a deferral or a memory (PW-128). "Is the
+agent done?" is a question and is answered. Naming one FYI of the handful targets that entry and
+its siblings stay unread (PW-126).
+
+Tests: `tests/test_chat_proposals.py` (17 cases), `tests/test_concierge.py` and `tests/test_assistant_reactions.py` (103
+cases, re-pinned from "the words decide" to "the model names it, the click carries it out, the
+effect is asserted"), `tests/test_report_order_and_research.py`, `tests/test_lifecycle.py`,
+`website/test/proposalCard.test.mjs` (5 cases). Frontend: `website/src/ProposalCard.jsx`,
+`website/src/proposalCard.js`, `AssistantView.jsx` (the client-side verb switch is gone; rebuilt
+bundle). Backend evidence: `.codex-tmp/phase3-evidence/backend-8.1.log`.
+
+## Section 8.2 — a summary for each fyi, the whole context for a task, and COUNSEL's introduction
+
+Status: implemented and tested locally at `1fb5469`; remote CI pending on the pushed
+checkpoint. Section 8.1 is CI-verified (945c666/a80f039, CI run 34059392966 (all ten jobs passed)).
+Acceptance PW-151 to PW-155 implemented.
+
+The fyi handful (up to four, Unread order) used to get one model sentence for the lot and a
+truncated gist per row. Now the model answers with one numbered line per entry - the shape is
+code's, the words are COUNSEL's - and each entry carries its own summary (PW-151); the summary
+rides on the entry's `surfaced` funnel state, so the pile's own batch presentation keeps it across
+every refresh, and without a model each entry keeps its gist. Each entry offers Reply, Make task,
+Coding agent and Regular agent: Reply drafts at once through the reply writer (the PW-126
+exception) and marks nothing; the other three call `POST /api/concierge/propose` with the entry's
+own key, which makes exactly the proposal the words would (`concierge.propose_direct` →
+`propose_for`, `settles` false) and lands the same ProposalCard in the chat - confirmed, executed
+and receipted through the shared road of Section 8.1. Executing it reaches that message alone: its
+siblings stay filed, shown-not-read, and in Unread.
+
+A single task item's card now carries the whole grouped context (the non-context messages triage
+combined), the task's own summary and the approved checklist (PW-152): `CombinedTaskText` renders
+the task Summary beside the messages and the checklist, and the task card draws it too, not only
+the agent's finding. The model is handed the same bundle (`concierge.facts`).
+
+The introduction is the model's per COUNSEL (PW-153): `INTRO_AI` is on, the "three beats, two or
+three sentences, name the button" instruction is gone, and code states only what the card holds (a
+draft waiting for a yes, an agent parked on its question, a report read with the button). The
+facts line remains the fallback - no AI connector, a failed pass, an answer off the subject or out
+of character - which is factual error handling, not the normal path. Presenting either card marks
+nothing (PW-154): the state is `surfaced`, the item stays in Unread and on the table, the task and
+message are untouched, nothing is proposed or run, and the walk does not move.
+
+Tests: `tests/test_assistant_presentation.py` (8 cases), `website/test/fyiCard.test.mjs` (2 cases); `tests/test_concierge.py`,
+`tests/test_lifecycle.py` and `website/test/funnelPile.test.mjs` re-pinned. Frontend:
+`assistantCards.jsx` (FyisCard, CombinedTaskText, TaskCard), `AssistantView.jsx` (`proposeDirect`),
+rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.2.log`.

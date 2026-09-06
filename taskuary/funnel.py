@@ -516,6 +516,8 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 # owner (a draft/approval or an agent question) remains addressable and marked.
                 if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working'): continue
                 i = i | {'surfaced': True, 'surfaced_at': st.get('At')}
+                # an fyi's shown-state note is the summary the assistant wrote for it (PW-151); a sig'd item's note is its sig
+                if i.get('lane') == 'fyi' and not i.get('sig') and st.get('Note'): i = i | {'summary': st['Note']}
         out.append(i)
     return out
 
@@ -902,19 +904,22 @@ def item_for_key(store, key: str) -> dict | None:
 
 VERBS = ('surfaced', 'done', 'later', 'skip', 'ack')
 
-def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None) -> dict:
+def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
     default). skip: back tomorrow morning. surfaced: shown in this walk. ack: an alert was seen."""
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member
-        out = [settle(store, k, verb, by, hours, note) for k in key[5:].split(',') if k]
+        out = [settle(store, k, verb, by, hours, note, expected_context=expected_context) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     until = None
     if verb == 'later': until = (datetime.now() + timedelta(hours=hours or LATER_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
     if verb == 'skip':
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')
-    store.set_funnel_state(key, verb, by, until, note)
+    if expected_context is None:
+        store.set_funnel_state(key, verb, by, until, note)
+    else:
+        store.set_funnel_state(key, verb, by, until, note, expected_context=expected_context)
     invalidate()
     return {'key': key, 'verb': verb, 'until': until}
 

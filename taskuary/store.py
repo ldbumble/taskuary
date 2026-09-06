@@ -224,6 +224,8 @@ CREATE TABLE IF NOT EXISTS processing_read_defer (
   Status TEXT NOT NULL, Until TEXT, At TEXT NOT NULL, By TEXT);
 CREATE INDEX IF NOT EXISTS idx_processing_read_defer_entity
   ON processing_read_defer(TargetEntityKind,TargetLocalId);
+CREATE TABLE IF NOT EXISTS processing_display_summary (
+  Key TEXT PRIMARY KEY, ContextRevision TEXT NOT NULL, Summary TEXT NOT NULL);
 -- Raw writes and canonical identity reconciliation advance independently.  A newly
 -- widened database starts pending even when its old rows predate the triggers.
 CREATE TABLE IF NOT EXISTS processing_reconcile_state (
@@ -1357,7 +1359,7 @@ class SQLiteStore:
     # ── the pipe (funnel.py): surfaced / done / later, per item key ─────────────────────────
     def funnel_states(self) -> dict:
         return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
-    def set_funnel_state(self, key, status, by='owner', until=None, note=None):
+    def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None):
         from . import processing_reads
         stamp = _now()
         with self.lock:
@@ -1377,13 +1379,20 @@ class SQLiteStore:
                             self._processing_validate_settlement_census(cur, stamp)
                             clean = True
                         iid, kind, local_id = target
+                        verified_picture = None
+                        if not calendar and expected_context is not None:
+                            from .processing_projection import processing_projection
+                            verified_picture = processing_projection(cur, iid)
+                            if (not isinstance(expected_context, dict)
+                                    or expected_context.get(iid) != verified_picture['context_revision']):
+                                raise ValueError('processing context changed since confirmation was proposed')
                         if status == 'done':
                             if calendar:
                                 current_units = [dict(entity_kind='calendar', local_id=key, fingerprint='identity-v1')]
                                 deferred_keys = [key]
                             else:
                                 from .processing_projection import processing_projection
-                                picture = processing_projection(cur, iid)
+                                picture = verified_picture or processing_projection(cur, iid)
                                 current_units = processing_reads.units(picture['view'])
                                 deferred_keys = [d['key'] for d in picture['view']['processing_read']['deferrals']]
                             processing_reads.record(cur, current_units,
@@ -1392,6 +1401,15 @@ class SQLiteStore:
                                 cur.execute('DELETE FROM processing_read_defer WHERE Key=?', (deferred_key,))
                         else:
                             self._processing_write_defer(cur, key, target, status, until, stamp, by)
+                if version and status == 'surfaced' and note:
+                    target = self._processing_read_target(cur, key)
+                    if target:
+                        from .processing_projection import processing_projection
+                        picture = processing_projection(cur, target[0])
+                        cur.execute('''INSERT INTO processing_display_summary (Key,ContextRevision,Summary)
+                            VALUES (?,?,?) ON CONFLICT(Key) DO UPDATE SET
+                            ContextRevision=excluded.ContextRevision,Summary=excluded.Summary''',
+                            (key, picture['context_revision'], str(note)))
                 cur.execute('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
                     'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
                     (key, status, until, note, by, stamp))

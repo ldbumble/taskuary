@@ -100,6 +100,12 @@ def card_for(store, item, compact, live_state, now):
                 source=row.get('SourceName') or compact['source'], status=row.get('MsgStatus') or compact['status'], order_band=funnel._band(card))
     card.pop('surfaced', None)
     card.pop('surfaced_at', None)
+    if card['lane'] == 'fyi' and not card.get('sig'):
+        summaries = [r for r in view.get('processing_summaries', [])
+                     if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')
+                     and r.get('Key') in [card['key'], *card['aliases']]]
+        if summaries:
+            card['summary'] = next((r for r in summaries if r['Key'] == card['key']), summaries[-1])['Summary']
     card['actionable'] = bool(unread and not card['deferred'] and not card.get('settling')
                               and card['lane'] != 'working' and not funnel._not_yet(card))
     return card

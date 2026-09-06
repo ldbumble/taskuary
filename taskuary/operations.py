@@ -31,6 +31,18 @@ KINDS = {
     'task.reopen':              ('task', (), None),
     'task.defer':               ('task', ('until',), None),
     'preference.exclude_sender': ('message', ('scope',), None),
+    # ...and what the assistant's chat can put in front of the owner (concierge.PROPOSALS, PW-123)
+    'task.create_from_text':    ('text', ('kind', 'text'), None),
+    'message.archive':          ('message', (), 'dismissed'),
+    'item.settle':              ('item', ('key', 'verb'), None),
+    'review.approve':           ('review', (), None),
+    'agent.answer':             ('task', ('text',), None),
+    'agent.stop':               ('task', (), None),
+    'report.rerun':             ('source', (), None),
+    'memory.remember':          ('memory', ('note',), None),
+    'task.split':               ('task', ('text',), None),
+    'pipe.clear':               ('pipe', ('text',), None),
+    'task.setup':               ('text', ('text',), None),
 }
 # triage's `task` and `general` are one answer for this comparison (work, no coder); `coding` is another
 SAME = {frozenset(('task', 'general'))}
@@ -76,7 +88,8 @@ def _verdict(store, target_kind: str, target_id: int) -> tuple:
     if target_kind == 'message':
         m = store.get_message(target_id)
         return verdict_of_message(store, m) if m else ('', None)
-    return verdict_of_task(store, target_id)
+    if target_kind == 'task': return verdict_of_task(store, target_id)
+    return ('', None)
 
 
 def context_revision(store, target_kind: str, target_id: int) -> str:
@@ -86,6 +99,10 @@ def context_revision(store, target_kind: str, target_id: int) -> str:
         m = store.get_message(target_id) or {}
         rows = store.thread_messages(m.get('ConversationId'), m.get('Subject'), limit=500) if m.get('ConversationId') else [m]
         basis = [(r.get('MessageId'), r.get('Status'), r.get('TaskId')) for r in rows]
+    elif target_kind == 'review':
+        rv = store.get_review(target_id) or {}
+        return context_revision(store, 'task', rv['TaskId']) if rv.get('TaskId') else ''
+    elif target_kind != 'task': return ''              # a memory, a sweep, a report rerun: nothing to go stale against
     else:
         t = store.get_task(target_id) or {}
         basis = [(r.get('MessageId'), r.get('Status')) for r in store.list_messages(target_id)] + [t.get('Kind'), t.get('Status')]
@@ -118,9 +135,27 @@ def _check(kind: str, params: dict):
     if missing: raise ValueError(f'{kind} needs {", ".join(missing)}')
 
 
+def _processing_context(store, params):
+    keys = str(params.get('key') or '')
+    keys = keys[5:].split(',') if keys.startswith('fyis:') else [keys]
+    result = {}
+    with store._processing_read() as cur:
+        from .processing_projection import processing_projection
+        for key in keys:
+            target = store._processing_read_target(cur, key)
+            if target:
+                iid = target[0]
+                result[iid] = processing_projection(cur, iid)['context_revision']
+            elif key.startswith('processing:'):
+                raise ValueError('The proposed item is no longer available')
+    return result
+
+
 def propose(store, kind: str, target_id: int, params: dict = None, actor: str = 'owner') -> dict:
     """A proposal: validated before anything is written, judged against the target as it stands now."""
     params = dict(params or {}); _check(kind, params)
+    if kind == 'item.settle' and store.processing_reads_active():
+        params['processing_context'] = _processing_context(store, params)
     tk = KINDS[kind][0]
     verdict, route_id = _verdict(store, tk, target_id)
     oid = uuid.uuid4().hex[:12]
@@ -141,6 +176,8 @@ def revise(store, op_id: str, params: dict, actor: str = 'owner') -> dict:
     if not op: raise ValueError('no such proposal')
     if op['Status'] not in ('proposed', 'error'): raise ValueError(f"a {op['Status']} proposal cannot be edited")
     params = dict(params or {}); _check(op['Kind'], params)
+    if op['Kind'] == 'item.settle' and store.processing_reads_active():
+        params['processing_context'] = _processing_context(store, params)
     store.update_operation(op_id, {'ParamsJson': json.dumps(params), 'Version': int(op['Version']) + 1, 'Actor': actor})
     return get(store, op_id)
 
@@ -164,6 +201,10 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
     if op['Status'] == 'done': return {**_public(op), 'duplicate': True}
     if int(version) != int(op['Version']):
         return _stale(op, f"the proposal was edited since (it is now version {op['Version']}) - confirm the current one")
+    params = json.loads(op.get('ParamsJson') or '{}')
+    if op['Kind'] == 'item.settle' and store.processing_reads_active():
+        if 'processing_context' not in params or _processing_context(store, params) != params['processing_context']:
+            return _stale(op, 'The item changed since this was proposed. Review it again before confirming.')
     if op.get('ContextRevision') and context_revision(store, op['TargetKind'], op['TargetId']) != op['ContextRevision']:
         return _stale(op, 'the context changed since this was proposed - review it again before confirming')
     _running.op = op_id

@@ -514,11 +514,58 @@ def _run_operation(op: dict, background: BackgroundTasks):
         store.update_task(tid, {'Kind': str(p.get('kind'))}, ACTOR); return {'kind': p.get('kind')}
     if kind == 'task.not_a_task': return not_a_task(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
     if kind == 'task.complete':
+        # the same close the PATCH road does: the pending draft is dismissed and the agent on it is stopped
+        from . import concierge
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
-        store.update_task(tid, {'Status': 'done'}, ACTOR); return {'status': 'done'}
+        return {'status': 'done', 'already': not concierge.close_task(store, tid, ACTOR)}
     if kind == 'task.reopen':
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
         store.update_task(tid, {'Status': 'open'}, ACTOR); return {'status': 'open'}
+    # the assistant's proposals (concierge.PROPOSALS): each runs the same code the page's own button runs
+    if kind == 'task.create_from_text':
+        from . import concierge
+        return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'))
+    if kind == 'task.setup':
+        from . import concierge
+        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR)
+    if kind == 'message.archive': return file_message(mid, NotATaskBody(learn=False, archive=True), background)
+    if kind == 'preference.exclude_sender': return not_mine(mid, NotMineBody(scope=str(p.get('scope') or 'sender')), background)
+    if kind == 'item.settle':
+        from . import funnel, verdicts
+        verb = str(p.get('verb') or 'done')
+        out = funnel.settle(store, str(p.get('key')), verb, ACTOR, p.get('hours'),
+                            expected_context=p.get('processing_context'))
+        # done on a task-backed item means the TASK is done: its pending draft is dismissed and it closes
+        if verb == 'done' and p.get('kind') != 'agent':
+            rv = store.get_review(int(p['rid'])) if p.get('rid') else None
+            if rv and rv.get('Status') in ('pending', 'held'): verdicts.decide(store, rv, 'no_reply', None, 'handled - the owner said so', ACTOR)
+            t = store.get_task(int(p['tid'])) if p.get('tid') else None
+            if t and t.get('Status') not in ('done', 'dropped'): store.update_task(int(p['tid']), {'Status': 'done'}, ACTOR); out['closed'] = int(p['tid'])
+        return out
+    if kind == 'review.approve':
+        if not store.get_review(tid): raise HTTPException(404, 'review not found')
+        out = decide(tid, DecideBody(verb='approve'), background)
+        if not out.get('ok'): raise RuntimeError(out.get('send_error') or 'the reply was not sent')
+        return out
+    if kind == 'agent.answer': return waitroom_add(tid, {'text': str(p.get('text') or 'yes')})
+    if kind == 'agent.stop': return _wrap_task(tid, True) if p.get('wrap') else stop_task_agent(tid)
+    if kind == 'report.rerun': return report_rerun(tid)
+    if kind == 'memory.remember':
+        from . import concierge
+        return {'memoryId': concierge.remember_fact(store, str(p.get('note') or ''), ACTOR)}
+    if kind == 'task.split':
+        from . import concierge, funnel
+        item = (funnel.next_item(store, p['key']) if p.get('key') else None) or {'tid': tid, 'key': p.get('key')}
+        return concierge.split_item(store, item, str(p.get('text') or ''), ACTOR)
+    if kind == 'pipe.clear':
+        from . import concierge
+        out = concierge.clear_matching(store, str(p.get('text') or ''), ACTOR, hint=str(p.get('hint') or ''))
+        # a standing RULE already keeps these out of the pipe; a sender-wide verdict on top of it would reach
+        # everything that person ever sends, which is not what "don't need these" means
+        if out.get('remember') and out.get('mid') and not out.get('rules'):
+            try: not_mine(int(out['mid']), NotMineBody(scope='sender'), background)
+            except Exception as e: logger.warning(f'the sweep happened but the sender was not silenced: {e}')
+        return out
     raise HTTPException(501, f'{kind} has no shared handler yet')
 
 @app.post('/api/operations')
@@ -550,6 +597,10 @@ def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTa
     op = operations.get(store, oid)
     if not op: raise HTTPException(404, 'no such proposal')
     out = operations.execute(store, oid, body.version, lambda: _run_operation(op, background), ACTOR)
+    # the receipt is the fact of what happened, in the chat, after it happened (PW-125)
+    from . import concierge
+    try: concierge.receipt(store, out, ACTOR)
+    except Exception as e: logger.debug(f'no receipt recorded for {oid}: {e}')
     if out['status'] in ('stale', 'cancelled'): raise HTTPException(409, out.get('error') or out['status'])
     return out
 
@@ -2719,6 +2770,15 @@ def concierge_say(body: ConciergeSayBody):
         out = concierge.say(store, body.text, body.key, actor=ACTOR)
         if freshness.get('newer'): out['context_update'] = _context_update_line(freshness)
         return out
+    except ValueError as e: raise HTTPException(422, str(e))
+
+class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None
+
+@app.post('/api/concierge/propose')
+def concierge_propose(body: ConciergeProposeBody):
+    """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
+    from . import concierge
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str

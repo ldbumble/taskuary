@@ -102,9 +102,13 @@ def processing_projection(cur, item_id, *, live_state=None):
         for row in _rows_for(cur, 'review', column, values):
             reviews[row['ReviewId']] = row
     runs = _rows_for(cur, 'run', 'TaskId', task_ids)
-    states = _rows_for(cur, 'funnel_state', 'Key', [
+    state_keys = [
         row['Value'] for row in aliases if row['Namespace'] == 'legacy_funnel'
-    ])
+    ] + ['processing:' + row[0] for row in cur.execute('''WITH RECURSIVE roots(id) AS (
+        SELECT ItemId FROM processing_item WHERE ItemId=?
+        UNION SELECT p.ItemId FROM processing_item p JOIN roots r ON p.RedirectItemId=r.id)
+        SELECT id FROM roots''', (item_id,))]
+    states = _rows_for(cur, 'funnel_state', 'Key', state_keys)
     settings = {row['Name']: row['Value'] for row in cur.execute('''SELECT Name,Value FROM setting
         WHERE Name IN ('funnel_hours','funnel_mutes','feed_days','team_domains','owner_email') ORDER BY Name''')}
     view = dict(member_ids=member_ids, messages=messages, tasks=tasks,
@@ -114,6 +118,7 @@ def processing_projection(cur, item_id, *, live_state=None):
                 reviews=[reviews[key] for key in sorted(reviews)], runs=runs,
                 routes=_rows_for(cur, 'route', 'MessageId', message_ids),
                 legacy_states=states, settings=settings, aliases=aliases,
+                processing_summaries=_rows_for(cur, 'processing_display_summary', 'Key', state_keys),
                 worker_attention_available=live_state is not None,
                 worker_attention=sorted((dict(row) for row in (live_state or ())
                     if str(row.get('taskId', row.get('task_id'))) in set(map(str, task_ids))),

@@ -325,7 +325,8 @@ def test_canonical_done_supersedes_retained_legacy_deferral(db):
 
 
 def test_active_concierge_done_accepts_its_own_discussion_without_expanding_members(db, monkeypatch):
-    from taskuary import concierge, funnel, general, terminal
+    from fastapi.testclient import TestClient
+    from taskuary import concierge, funnel, general, server, terminal
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [])
     monkeypatch.setattr(funnel, '_agenda', lambda store: [])
     tid = db.create_task({'Title': 'Synthetic task', 'Kind': 'general'}, 'fixture')
@@ -336,14 +337,28 @@ def test_active_concierge_done_accepts_its_own_discussion_without_expanding_memb
     members = list(db.cx.execute('SELECT * FROM processing_member'))
     funnel.invalidate()
     try:
-        response = concierge.say(db, 'done', key=key, actor='fixture')
-        assert response['decision']['verb'] == 'done'
+        response = concierge.say(db, 'done', key=key, actor='fixture',
+                                 llm=lambda *args, **kwargs: 'I can mark it handled.\nDECIDE: done')
+        proposal = response['proposal']
+        assert response['decision'] is None
+        assert proposal['kind'] == 'item.settle' and proposal['params']['key'] == key
+        assert db.get_task(tid)['Status'] == 'open'
+        assert processing_reads.state(picture(db, mid), NOW)['unread']
+        assert not db.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
         assert db.processing_reconcile_status()['pending']
         assert db.cx.execute("SELECT 1 FROM comment WHERE TaskId=? AND ActorType='concierge_user'", (tid,)).fetchone()
-        concierge.act(db, key, response['decision']['verb'], actor='fixture')
-        assert not db.processing_reconcile_status()['pending']
+        monkeypatch.setattr(server, 'store', db)
+        client = TestClient(server.app)
+        confirmed = client.post(f"/api/operations/{proposal['id']}/execute", json={'version': proposal['version']})
+        assert confirmed.status_code == 200, confirmed.text
+        assert confirmed.json()['status'] == 'done'
+        assert db.get_task(tid)['Status'] == 'done'
         assert not processing_reads.state(picture(db, mid), NOW)['unread']
         assert list(db.cx.execute('SELECT * FROM processing_member')) == members
+        receipts = [tuple(row) for row in db.cx.execute('SELECT * FROM processing_read_receipt')]
+        repeated = client.post(f"/api/operations/{proposal['id']}/execute", json={'version': proposal['version']})
+        assert repeated.status_code == 200 and repeated.json()['duplicate']
+        assert [tuple(row) for row in db.cx.execute('SELECT * FROM processing_read_receipt')] == receipts
     finally:
         funnel.invalidate()
 
@@ -382,3 +397,78 @@ def test_calendar_historical_and_explicit_receipts_ignore_later_display(db):
     db.set_funnel_state(fresh, 'surfaced')
     assert db.processing_calendar_states()[fresh] == {'read': True}
     assert db.processing_calendar_states()[old]['read']
+
+
+def test_display_summary_refresh_is_bound_to_context_and_never_reads(db):
+    mid = message(db)
+    activate(db)
+    key = 'processing:' + item_id(db, mid)
+    before = picture(db, mid)
+    db.set_funnel_state(key, 'surfaced', note='Synthetic model summary')
+    fresh = picture(db, mid)
+    expected = dict(Key=key, ContextRevision=before['context_revision'], Summary='Synthetic model summary')
+    assert fresh['view']['processing_summaries'] == [expected]
+    assert db.funnel_states()[key]['Note'] == expected['Summary']
+    assert processing_reads.state(fresh, NOW)['unread']
+    assert not db.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
+    assert fresh['context_revision'] == before['context_revision']
+    assert fresh['view_revision'] != before['view_revision']
+    writes = db.cx.total_changes
+    assert picture(db, mid)['view']['processing_summaries'] == [expected]
+    assert db.cx.total_changes == writes
+    db._exec('UPDATE message SET BodyText=? WHERE MessageId=?', ('Changed substantive source', mid))
+    changed = picture(db, mid)
+    assert changed['view']['processing_summaries'] == [expected], 'old summary remains auditable'
+    assert changed['context_revision'] != expected['ContextRevision'], 'consumer must drop stale summary'
+    assert processing_reads.state(changed, NOW)['unread']
+
+
+def test_display_summary_reopens_by_exact_legacy_alias_without_adding_a_receipt(db):
+    mid = message(db)
+    activate(db)
+    key = f'msg:{mid}'
+    db.set_funnel_state(key, 'surfaced', note='Alias-specific summary')
+    path = db.cx.execute('PRAGMA database_list').fetchone()[2]
+    peer = SQLiteStore(path)
+    try:
+        read = picture(peer, mid)
+        assert read['view']['processing_summaries'] == [dict(Key=key,
+            ContextRevision=read['context_revision'], Summary='Alias-specific summary')]
+        assert processing_reads.state(read, NOW)['unread']
+    finally:
+        peer.cx.close()
+
+
+def test_confirmation_context_is_checked_inside_receipt_writer_transaction(db):
+    tid = db.create_task({'Title': 'Confirmed subject'}, 'fixture')
+    mid = message(db, task=tid)
+    activate(db)
+    original = picture(db, mid)
+    key = 'processing:' + original['item_id']
+    expected = {original['item_id']: original['context_revision']}
+    # The worker may have reconciled new arrivals before the old confirmation is clicked.
+    second = message(db, 'Arrived after proposal', task=tid)
+    db.reconcile_processing_membership(fixed_now=NOW)
+    assert item_id(db, second) == original['item_id']
+    with pytest.raises(ValueError, match='context changed'):
+        db.set_funnel_state(key, 'done', expected_context=expected)
+    assert key not in db.funnel_states()
+    assert not db.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
+    current = picture(db, mid)
+    db.set_funnel_state(key, 'done', expected_context={current['item_id']: current['context_revision']})
+    assert not processing_reads.state(picture(db, mid), NOW)['unread']
+
+
+def test_confirmation_rejects_missing_root_and_in_place_source_change_without_reading(db):
+    mid = message(db)
+    activate(db)
+    original = picture(db, mid)
+    key = 'processing:' + original['item_id']
+    with pytest.raises(ValueError, match='context changed'):
+        db.set_funnel_state(key, 'done', expected_context={})
+    db._exec('UPDATE message SET BodyText=? WHERE MessageId=?', ('Changed after precheck', mid))
+    with pytest.raises(ValueError, match='context changed'):
+        db.set_funnel_state(key, 'done', expected_context={original['item_id']: original['context_revision']})
+    assert db.processing_reconcile_status()['pending'], 'failed confirmation does not accept the pending census'
+    assert key not in db.funnel_states()
+    assert not db.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()

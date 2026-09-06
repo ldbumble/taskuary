@@ -637,7 +637,7 @@ or starting-within-15-minutes calendar events; agent input/approval; other actio
 tasks and finished results; FYIs; working agents. Within each band use triage priority,
 then oldest activity first. This resolves the historical middle-band/tie-break review
 notes below. Section 1.7 implements runtime ordering with cumulative and rendered
-browser tests; canonical Unread/read-state cutover remains pending. Delivery and
+browser tests; Section 1.8 implements canonical Unread/read-state cutover. Delivery and
 CI evidence is recorded in processing-implementation-evidence.md.
 
 Ordering clarification approved during the detailed walkthrough:
@@ -692,33 +692,33 @@ Owner-approved: supersedes the earlier assistant per-message action menus and
 immediate execution of typed commands. Requests are conversational; execution is
 through a concrete confirmation box. Pending implementation, not a runtime change.
 
-- [ ] <a id="pw-121"></a>**PW-121** Remove decide_words() and other phrase/regex-based intent dispatch from
+- [x] <a id="pw-121"></a>**PW-121** Remove decide_words() and other phrase/regex-based intent dispatch from
   assistant messages. Use AI with Current, conversation, and verified task/source
   context to interpret the request. Ask for clarification when intent, target,
   scope, agent type, or repository is uncertain; do not guess a consequential action.
-- [ ] <a id="pw-122"></a>**PW-122** Give every message the same conversational action interface. Replace the
+- [x] <a id="pw-122"></a>**PW-122** Give every message the same conversational action interface. Replace the
   assistant's sprawling per-message action menus with bottom prompt examples such
   as Next, Done, Create task, Create agent, and Reply. Clicking a suggestion submits
   text through the same AI path as typing; it must not directly execute an action.
   Preserve the funnel layout, Current/Next indicators, and promotions approved above.
-- [ ] <a id="pw-123"></a>**PW-123** Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing
+- [x] <a id="pw-123"></a>**PW-123** Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing
   exactly what will happen: action, target, and relevant parameters (for example,
   task, agent kind, repository, and instructions; or recipient and draft for a send).
   Offer a specifically labelled execution button and Cancel. Allow conversational
   corrections before confirmation; edits must update the proposal being confirmed.
-- [ ] <a id="pw-124"></a>**PW-124** Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no
+- [x] <a id="pw-124"></a>**PW-124** Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no
   requested action executes merely because the AI interpreted it or the
   user submitted text. The confirmation button submits the structured action,
   not a phrase sent back through the interpreter. Explanation and clarification
   do not themselves mutate task, read, memory, or agent state.
-- [ ] <a id="pw-125"></a>**PW-125** Use one validated action execution path shared with other app entry points.
+- [x] <a id="pw-125"></a>**PW-125** Use one validated action execution path shared with other app entry points.
   Code retains schemas, permissions, target/freshness checks, and safe execution;
   COUNSEL governs interpretation and conversation. Bind confirmation to the exact
   proposal and context revision, reject stale/changed proposals for review, and
   prevent duplicate execution from repeated clicks. Report actual success/error,
   never success before execution. Failed/cancelled actions must not settle Current
   or advance the walk.
-- [ ] <a id="pw-126"></a>**PW-126** Preserve draft review/editing and explicit send approval within this model.
+- [x] <a id="pw-126"></a>**PW-126** Preserve draft review/editing and explicit send approval within this model.
   Owner-approved exception: an explicit reply/draft request immediately generates
   the editable draft, without a preliminary Draft reply confirmation. Clarify an
   ambiguous target or instruction first. This uses the reply writer, not a worker
@@ -728,12 +728,12 @@ through a concrete confirmation box. Pending implementation, not a runtime chang
   Selecting an FYI to act on targets only that entry, not its whole batch. The FYI
   actions described below are capabilities through this conversational proposal
   flow, not a requirement to retain separate immediate-action menus.
-- [ ] <a id="pw-127"></a>**PW-127** Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,
+- [x] <a id="pw-127"></a>**PW-127** Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,
   exact target/parameter display, correction/cancel, no execution before clicking
   for confirmation-required actions, immediate drafting without send or dispatch,
   stale confirmation, duplicate clicks, failed execution, and per-FYI isolation.
 
-- [ ] <a id="pw-128"></a>**PW-128** Owner-approved navigation exception: an unambiguous request to move Next
+- [x] <a id="pw-128"></a>**PW-128** Owner-approved navigation exception: an unambiguous request to move Next
   immediately selects the next eligible shared-Unread item without confirmation,
   marking read, closing a task, or writing a deferral/memory. Interpret intent
   through AI, not keyword matching; bottom suggestions submit ordinary text.
@@ -866,21 +866,21 @@ the task open after replying. Pending implementation/verification.
 Owner-approved: COUNSEL governs the explanation; code supplies verified context,
 card structure, and validated actions. Pending implementation.
 
-- [ ] <a id="pw-151"></a>**PW-151** Present up to four FYIs together with a summary for each. Each entry is
+- [x] <a id="pw-151"></a>**PW-151** Present up to four FYIs together with a summary for each. Each entry is
   individually selectable and offers Make task, Send to agent, and Reply for that
   specific item. Use the shared action paths, including general/coding choice
   and repository selection when needed; never apply an individual action to the
   entire batch or mark the other FYIs read as a side effect.
-- [ ] <a id="pw-152"></a>**PW-152** For a single task item, show the full message/context and the task summary
+- [x] <a id="pw-152"></a>**PW-152** For a single task item, show the full message/context and the task summary
   in its card, not only a truncated preview. If triage grouped a chain, preserve
   access to the whole grouped context in that presentation rather than silently
   showing only the latest message. Include the approved task checklist summary.
-- [ ] <a id="pw-153"></a>**PW-153** Generate the assistant's explanation according to COUNSEL, removing the
+- [x] <a id="pw-153"></a>**PW-153** Generate the assistant's explanation according to COUNSEL, removing the
   normal-path hardcoded introductions and competing behavioral instructions.
   Keep card structure, action validation, and factual error handling in code.
-- [ ] <a id="pw-154"></a>**PW-154** Presenting either kind of card does not mark it read or handled and does
+- [x] <a id="pw-154"></a>**PW-154** Presenting either kind of card does not mark it read or handled and does
   not automatically execute actions or advance the conversation.
-- [ ] <a id="pw-155"></a>**PW-155** Test four-item FYI presentation, per-item action targeting, untouched sibling
+- [x] <a id="pw-155"></a>**PW-155** Test four-item FYI presentation, per-item action targeting, untouched sibling
   read state, full task/chain context, task summary/checklist display, and COUNSEL
   use in the normal presentation path.
 

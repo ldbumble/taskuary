@@ -85,9 +85,14 @@ function CombinedTaskText({ card }) {
   const list = (doc.checklist || []).length ? (
     <div className="tq-card-note" style={{ marginTop: 7, whiteSpace: "pre-wrap" }}>{checklistMarkdown(doc.checklist)}</div>
   ) : null;
-  if (messages.length <= 1) return <>{<FullText mid={card?.mid} revision={card?.presentation_revision} />}{list}</>;
+  // the task's own summary sits with its full context (PW-152) - not only the truncated preview
+  const summary = doc.task?.Summary && doc.task.Summary.trim() !== String(doc.task.Title || "").trim() ? (
+    <div className="tq-card-note" style={{ marginBottom: 7 }}><b>The task:</b> {doc.task.Summary}</div>
+  ) : null;
+  if (messages.length <= 1) return <>{summary}{<FullText mid={card?.mid} revision={card?.presentation_revision} />}{list}</>;
   return (
     <div className="tq-card-full">
+      {summary}
       <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 700 }}>
         {messages.length} messages combined by triage â€” shown together
       </div>
@@ -532,6 +537,7 @@ export function TaskCard({ card, onDone, onOpenTask }) {
   return (
     <CardShell card={card} kicker="the task you asked about" title={card.title} sub={card.why} err={err}>
       {card.summary && <div className="tq-card-excerpt">{card.summary}</div>}
+      {card.tid && <CombinedTaskText card={card} />}
       <TextField fullWidth multiline minRows={1} maxRows={4} value={text} onChange={(e) => setText(e.target.value)}
         placeholder="Tell the agent on this task something — it is typed in when it next stops"
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); tell(); } }} sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />
@@ -543,12 +549,27 @@ export function TaskCard({ card, onDone, onOpenTask }) {
   );
 }
 
-// a handful of fyi's: who said what, read any in place, dig into one, or let them all go
-export function FyisCard({ card, onDone, onSurface, onTimeline }) {
+// a handful of fyi's: a summary for each; read any in place; act on ONE of them through the same proposal
+// road the words take (PW-151) - never on the handful, never marking its siblings - or let them all go
+export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   const [open, setOpen] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
   const items = card.items || [];
+  // a reply is the one immediate road (PW-126): the draft is written now, nothing is sent, nothing is marked
+  const reply = async (i) => {
+    setBusy(i.key); setErr("");
+    try { const { data } = await api.post(`/api/messages/${i.mid}/reply`, { draft: true }); onSurface?.(data.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
+    catch (e) { setErr(errText(e)); }
+    setBusy("");
+  };
+  const propose = async (verb, i) => {
+    setBusy(i.key); setErr("");
+    try { await onPropose?.(verb, i.key); } catch (e) { setErr(errText(e)); }
+    setBusy("");
+  };
   return (
-    <CardShell card={card} kicker={`${items.length} fyi · nothing to do`} title={null}>
+    <CardShell card={card} kicker={`${items.length} fyi · nothing to do`} title={null} err={err}>
       {items.map((i) => (
         <div key={i.key} className="tq-fyi">
           <div className="tq-fyi-row">
@@ -557,8 +578,16 @@ export function FyisCard({ card, onDone, onSurface, onTimeline }) {
             <Button size="small" onClick={() => setOpen((o) => (o === i.key ? null : i.key))} sx={faint}>{open === i.key ? "Fold" : "Read"}</Button>
             <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Dig in</Button>
           </div>
-          {open !== i.key && i.preview && <div className="tq-fyi-gist">{i.preview}</div>}
+          {open !== i.key && (i.summary || i.preview) && <div className="tq-fyi-gist">{i.summary || i.preview}</div>}
           {open === i.key && i.mid && <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} />}
+          {i.mid && (
+            <div className="tq-card-actions" style={{ marginTop: 2 }}>
+              <Button size="small" disabled={!!busy} onClick={() => reply(i)} sx={faint}>Reply</Button>
+              <Button size="small" disabled={!!busy} onClick={() => propose("mine", i)} sx={faint}>Make task</Button>
+              <Button size="small" disabled={!!busy} onClick={() => propose("coder", i)} sx={faint}>Coding agent</Button>
+              <Button size="small" disabled={!!busy} onClick={() => propose("regular_agent", i)} sx={faint}>Regular agent</Button>
+            </div>
+          )}
         </div>
       ))}
       <div className="tq-card-actions">

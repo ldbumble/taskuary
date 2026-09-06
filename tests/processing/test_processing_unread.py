@@ -77,6 +77,21 @@ def test_display_and_next_do_not_read_but_done_updates_shared_subset(store):
     assert {r['item_id'] for r in all_rows if r['row']['Unread']} == {r['processing_id'] for r in unread['items']}
 
 
+def test_fyi_summary_survives_refresh_but_is_dropped_when_its_source_changes(store):
+    mid = add(store, 'Summary subject')
+    _, initial = both(store)
+    key = initial['items'][0]['key']
+    funnel.settle(store, key, 'surfaced', note='Summary of the original source')
+    _, refreshed = both(store)
+    assert refreshed['items'][0]['summary'] == 'Summary of the original source'
+    assert refreshed['items'][0]['unread']
+    store._exec('UPDATE message SET BodyText=? WHERE MessageId=?', ('New substantive information', mid))
+    _, changed = both(store)
+    assert changed['items'][0].get('summary') != 'Summary of the original source'
+    assert changed['items'][0]['unread']
+    assert not store.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
+
+
 def test_pre_cutover_fyi_current_resolves_its_exact_legacy_member_aliases(store):
     first = add(store, 'First preserved FYI')
     second = add(store, 'Second preserved FYI')
@@ -88,6 +103,22 @@ def test_pre_cutover_fyi_current_resolves_its_exact_legacy_member_aliases(store)
     assert [i['mid'] for i in restored['items']] == [first, second]
     assert all(i['processing_id'] for i in restored['items'])
     assert capture_selection(store, exclude=legacy_key).selected is None
+    assert list(store.cx.iterdump()) == before
+
+
+def test_confirmed_done_rejects_new_context_instead_of_reading_unseen_arrival(store):
+    from taskuary import operations
+    tid = store.create_task({'Title': 'Confirmed target', 'Status': 'open'}, 'test')
+    add(store, 'Original confirmed source', tid=tid)
+    _, pile = both(store)
+    key = pile['items'][0]['key']
+    proposal = operations.propose(store, 'item.settle', tid, {'key': key, 'verb': 'done', 'tid': tid})
+    add(store, 'Unseen arrival after proposal', tid=tid)
+    both(store)
+    before = list(store.cx.iterdump())
+    result = operations.execute(store, proposal['id'], proposal['version'],
+                                lambda: pytest.fail('stale proposal cannot run its handler'))
+    assert result['status'] == 'stale'
     assert list(store.cx.iterdump()) == before
 
 

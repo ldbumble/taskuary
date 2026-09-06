@@ -1791,7 +1791,7 @@
       "requirement": "Replace assistant idea direct feed-route classification with shared triage",
       "status": "implemented",
       "test": "`tests/test_ideas_triage.py`::SharedVerdictTests (shared verdict with evidence, report and linked-task/worker context; identity by idea key; pending and error states; retry on the next say)",
-      "commit": "3045452; local gates passed, CI pending"
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
     },
     {
       "id": "PW-200",
@@ -1800,7 +1800,7 @@
       "requirement": "Use the resulting classification and importance for canonical Unread order,",
       "status": "implemented",
       "test": "`tests/test_ideas_triage.py` (verdict drives the pile lane; actionable ideas open work through the shared intake with kind defaults; ideas about active work create nothing; generated claims complete nothing; no second ranking)",
-      "commit": "3045452; CI pending"
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
     },
     {
       "id": "PW-201",
@@ -1809,7 +1809,7 @@
       "requirement": "Preserve the existing opt-in report triage capability: configured reports",
       "status": "implemented",
       "test": "`tests/test_report_triage.py` (opt-in report triage unchanged: off = informational, on = the brain decides, a failed run is never triaged); workflow triggers and worker events untouched",
-      "commit": "3045452; CI pending"
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
     },
     {
       "id": "PW-202",
@@ -1818,7 +1818,7 @@
       "requirement": "Test informational/actionable/urgent ideas, linked active work, duplicate",
       "status": "partial: duplicate report runs and urgent ideas covered by re-say identity and lane tests; no rendered-browser check",
       "test": "`tests/test_ideas_triage.py` (8 cases) with `tests/test_report_triage.py`",
-      "commit": "3045452; CI pending"
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
     },
     {
       "id": "PW-203",
@@ -1843,18 +1843,18 @@
       "section": "Separate configured workflows from incoming-request procedures",
       "phase": "10",
       "requirement": "Keep incoming-request procedure matching in unified triage (for example,",
-      "status": "pending",
-      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_procedure_selection.py` (procedure selected in the one verdict; kind stays the model's own; a PTO request is a general task with its procedure and no coder); `test_playbooks.py` updated",
+      "commit": "b461668; local gates passed, CI pending"
     },
     {
       "id": "PW-206",
       "section": "Separate configured workflows from incoming-request procedures",
       "phase": "10",
       "requirement": "Deliver the selected procedure to either worker kind through the shared",
-      "status": "pending",
-      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the selected procedure reaches coding and general workers through the shared brief; direct workflow runs are PW-203/204",
+      "test": "`tests/test_procedure_selection.py` (general prompt and coding brief carry the same playbook block)",
+      "commit": "b461668; CI pending"
     },
     {
       "id": "PW-207",

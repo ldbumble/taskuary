@@ -895,3 +895,22 @@ triage stays the opt-in it was (`reports.run_report_source`), and worker events 
 
 Tests: `tests/test_ideas_triage.py` (8 cases) and the existing `tests/test_report_triage.py`. No existing assertion changed.
 No frontend change; packaged assets unchanged.
+
+## Section 3.10 — procedure selection in triage, without forced coding
+
+Status: implemented and tested locally at `b461668`; remote CI pending on the pushed
+checkpoint. Section 3.9 is CI-verified (3045452, CI run 34041808201 (all ten jobs passed)).
+Acceptance PW-205 implemented; PW-206 partial (procedure delivery to both worker kinds through
+the shared brief; direct workflow runs are PW-203/PW-204, Phase 10).
+
+A playbook match used to force `kind='coding'` in the classifier, so a PTO request whose saved
+procedure is a general job started a coding session in some checkout. The selected procedure now
+rides on the task as its `playbook:` tag whatever the kind; the kind is the model's own (general by
+default), and `general._prompt` carries the same `playbooks.seed_block` that seeds a coding session,
+so either worker kind receives the procedure through one task-brief structure.
+
+Tests: `tests/test_procedure_selection.py` (3 cases); `tests/test_playbooks.py` has one expectation moved to the approved contract with
+the reason noted. No frontend change; packaged assets unchanged. This closes the Phase 3 scope
+listed in the plan (fresh evaluation, chat association, error/retry, general default, summary and
+checklist, project/repository evidence, incoming procedures, assistant ideas and opt-in report
+triage); the partial rows above name what waits on the Phase 2 chain merge (PW-009 to PW-015).

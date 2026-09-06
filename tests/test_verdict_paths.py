@@ -108,15 +108,18 @@ class NotATaskTests(unittest.TestCase):
             # unread because of something the owner said about an earlier line
             self.assertNotEqual(later['status'], 'filed', f'{hours}h later')
 
-    def test_an_email_thread_stays_ruled_for_life(self):
+    def test_an_email_threads_ruling_is_evidence_the_classifier_reads(self):
+        """Until PW-020 (2026-09-06) an email thread stayed ruled for life: every later reply was
+        filed unread. Now the reply is read, with the ruling in the prompt, and the model decides."""
         conv = 'AAQkADNj-email-thread-1'
         first = push(1, conv=conv, about='pct', channel='email', from_email='dwhitfield@client.example')
         c.post(f"/api/messages/{first['message_id']}/file")
         asked = []
         later = push(2, conv=conv, about='pct', channel='email', from_email='dwhitfield@client.example', subject='Re: Collection %',
-                     sent_at=stamp(days=10), calls=asked)
+                     sent_at=stamp(days=10), calls=asked, intent='fyi')
         self.assertEqual((later['status'], later['task_id']), ('filed', None))
-        self.assertEqual(asked, [])
+        self.assertEqual(len(asked), 1)                              # judged, not decided by the old ruling
+        self.assertIn('triage: fyi', feed_row(later['message_id'])['RouteReason'])
 
     def test_the_task_level_not_a_task_still_writes_the_verdict_down(self):
         """It records the ruling (and used to write nothing at all for a chat) - it just no

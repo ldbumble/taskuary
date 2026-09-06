@@ -90,20 +90,17 @@ class OwnerSaidItTests(unittest.TestCase):
         self.assertEqual([l['status'] for l in learnedgraph.lines(s.get_doc('learned')) if 'refund' in l['text']], ['proposed'])
 
 
-class SettledEvidenceTests(unittest.TestCase):
-    def test_unanimous_verdicts_are_declared_settled(self):
-        notes = ['2026-08-26: "Re: Refund - A" - NOT OURS: other people\'s work', '2026-08-25: "Refund approved" - NOT OURS: no task']
-        self.assertEqual(triage._agreement(notes), ('NOT OURS', 2))
-        self.assertEqual(triage._agreement(notes[:1]), ())                                # one is not a pattern
-        self.assertEqual(triage._agreement(notes + ['2026-08-27: "x" - NOT A TASK: filed']), ())   # they disagree
-        self.assertEqual(triage._agreement(['Priya handles AR stuff.']), ())                # free text is advice
-
-    def test_the_prompt_says_settled(self):
+class VerdictEvidenceTests(unittest.TestCase):
+    """Unanimous verdicts used to be declared SETTLED (triage._agreement) and ordered the model's
+    answer. PW-025 (2026-09-06) removed the order: the verdicts stay in the prompt as dated
+    evidence, and the model weighs them against what the new message actually asks."""
+    def test_the_prompt_shows_the_verdicts_and_orders_nothing(self):
         seen = {}
-        def llm(sys_, usr_, **k): seen['sys'] = sys_; return '{"intent": "fyi", "why": "settled"}'
-        triage.classify_intent({'from_email': 'a@b.c', 'subject': 'Re: Refund', 'body': 'thanks'}, llm=llm,
-                               notes=['2026-08-26: "Refund" - NOT OURS: x', '2026-08-25: "Refund" - NOT OURS: y'])
-        self.assertIn('SETTLED BY YOUR OWNER: all 2 past verdicts', seen['sys'])
+        def llm(sys_, usr_, **k): seen['sys'] = sys_; return '{"intent": "fyi", "why": "same refund thread"}'
+        notes = ['2026-08-26: "Refund" - NOT OURS: x', '2026-08-25: "Refund" - NOT OURS: y']
+        triage.classify_intent({'from_email': 'a@b.c', 'subject': 'Re: Refund', 'body': 'thanks'}, llm=llm, notes=notes)
+        self.assertNotIn('SETTLED BY YOUR OWNER', seen['sys'])
+        for n in notes: self.assertIn(n, seen['sys'])
 
 
 class NotCodingTests(unittest.TestCase):

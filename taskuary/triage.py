@@ -191,21 +191,6 @@ def strip_boilerplate(text: str) -> str:
     return out if out.strip() else (text or '')
 
 
-# The owner's three verdict marks do not mean the same thing, and lumping them together said
-# the wrong one out loud: "NOT A CODING TASK" is the button for real work that stays on their
-# list (server.not_coding), and two of those on a topic used to settle it as fyi - deleting an
-# obligation the owner had just confirmed was theirs. Now the mark carries its own answer, and
-# `general` is the verdict this whole exception exists for, so it is the likeliest to pile up.
-_VERDICT_MARK = re.compile(r'\b(NOT A CODING TASK|NOT OURS|NOT A TASK)\b')
-SETTLED_INTENT = {'NOT A CODING TASK': 'task'}          # everything else settles as fyi
-
-def _agreement(notes) -> tuple:
-    """(verdict, n) when two or more retrieved notes carry a verdict mark and they all agree;
-    () otherwise. The owner's own free-text notes carry no mark and stay advice."""
-    marks = [m.group(1) for n in notes for m in [_VERDICT_MARK.search(n or '')] if m]
-    return (marks[0], len(marks)) if len(marks) >= 2 and len(set(marks)) == 1 else ()
-
-
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
@@ -259,21 +244,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # When EVERY retrieved verdict says the same thing, that is not a hint to weigh - a
                 # refund thread with two NOT OURS on file still opened a reply task while the model
                 # "judged likeness". No topic is named here: it counts the verdicts it was handed.
-                agree = _agreement(notes)
-                if agree:
-                    # WHICH verdict was settled decides what it settles TO. "Not a coding task" is
-                    # the owner keeping the work and taking the agent off it - answering fyi there
-                    # drops a job they had just claimed.
-                    settled = ('Answer task with kind task - no exceptions, and never fyi. The owner has '
-                               'already ruled that work like this is theirs and that no agent works it; what is '
-                               'settled is WHO does it, not whether it needs doing.'
-                               if SETTLED_INTENT.get(agree[0]) == 'task' else
-                               'Answer fyi - no exceptions. A question in the message does not reopen it: mail on a '
-                               'settled topic always asks somebody something, and that somebody is whoever does this '
-                               'work - not the owner, who is copied on it.')
-                    system += (f'\n\nSETTLED BY YOUR OWNER: all {agree[1]} past verdicts on this sender or topic say '
-                               f'{agree[0]}. {settled} The owner reads the timeline and will say so if a thread has '
-                               'become theirs.')
+                # ...and never as an ORDER. Two agreeing verdicts used to become "SETTLED BY YOUR
+                # OWNER ... no exceptions", which decided the new message unread - a refund thread
+                # that this time asked the owner something was filed like all the others. The owner's
+                # requirement (PW-025): past evaluations are history the model weighs, and only an
+                # explicit standing policy (policy.py) decides without reading.
                 system += ('\n\nEVIDENCE - verdicts the owner gave on earlier mail that looks related '
                            '(pulled by sender and by topic; each names the sender and subject it was given on). '
                            'Judge how alike THIS message really is: the same sender asking the same kind of '

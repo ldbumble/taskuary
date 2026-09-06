@@ -166,14 +166,12 @@ class ConsistencyTests(unittest.TestCase):
             self.assertNotIn(leak, src, leak)
 
 
-class SettledVerdictTests(unittest.TestCase):
-    """The owner's three verdict marks do not mean the same thing.
-
-    "Not a coding task" is the button for real work they are KEEPING - server.not_coding writes
-    NOT A CODING TASK and takes the agent off. Two of those on a topic used to settle it as fyi
-    along with NOT OURS and NOT A TASK, which drops a job the owner had just claimed. It is also
-    the mark most likely to pile up now, since general is the exception this all exists for.
-    """
+class VerdictMarksAreEvidenceTests(unittest.TestCase):
+    """The owner's verdict marks - NOT A CODING TASK, NOT OURS, NOT A TASK - reach the classifier
+    as dated evidence and nothing more. Two agreeing marks used to become an order ("SETTLED BY
+    YOUR OWNER ... no exceptions"), which decided a new message unread; PW-025 (2026-09-06)
+    replaces the order with the evidence the model already had. The marks still differ in
+    meaning, and the EVIDENCE lines carry each one verbatim for the model to weigh."""
     def _system_for(self, notes):
         from taskuary.triage import classify_intent
         seen = {}
@@ -186,27 +184,13 @@ class SettledVerdictTests(unittest.TestCase):
     def _notes(self, mark, n=2):
         return [f'2026-08-{20 + i}: "Thing {i}" from a@b.c - {mark}: because' for i in range(n)]
 
-    def test_not_a_coding_task_settles_as_work_you_keep(self):
-        s = self._system_for(self._notes('NOT A CODING TASK'))
-        self.assertIn('Answer task with kind task', s)
-        self.assertIn('never fyi', s)
-
-    def test_the_other_two_still_settle_as_fyi(self):
-        for mark in ('NOT OURS', 'NOT A TASK'):
+    def test_agreeing_marks_are_shown_verbatim_and_order_nothing(self):
+        for mark in ('NOT A CODING TASK', 'NOT OURS', 'NOT A TASK'):
             s = self._system_for(self._notes(mark))
-            self.assertIn('Answer fyi - no exceptions', s, mark)
-            self.assertNotIn('kind general', s, mark)
-
-    def test_marks_that_disagree_settle_nothing(self):
-        from taskuary.triage import _agreement
-        self.assertEqual(_agreement(['x - NOT OURS: a', 'y - NOT A CODING TASK: b']), ())
-        self.assertEqual(_agreement(['x - NOT OURS: a']), ())              # one is not agreement
-        self.assertEqual(_agreement(['just a note the owner typed', 'another one']), ())
-
-    def test_the_longer_mark_wins_the_match(self):
-        """NOT A CODING TASK must not be read as a NOT A TASK with words around it."""
-        from taskuary.triage import _agreement
-        self.assertEqual(_agreement(self._notes('NOT A CODING TASK'))[0], 'NOT A CODING TASK')
+            self.assertIn('EVIDENCE', s, mark)
+            for n in self._notes(mark): self.assertIn(n, s, mark)
+            self.assertNotIn('SETTLED BY YOUR OWNER', s, mark)
+            self.assertNotIn('no exceptions', s, mark)
 
 
 if __name__ == '__main__':

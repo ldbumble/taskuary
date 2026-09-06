@@ -398,6 +398,10 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                                        f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                                        subject=msg.get('subject') or '',
                                        source=msg.get('source_name') or '')
+    # the owner's ruling on this very thread leads the evidence; it is history the model weighs,
+    # not a verdict carried forward (it used to file the reply before any model saw it)
+    ruled = thread_ruling(store, msg)
+    if ruled: notes = [ruled] + notes
     thread = others_on_thread(store, msg, mine)
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
     # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
@@ -492,18 +496,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 '(the rest did not fit)' if notes_left else '')
     if r['decision'] == 'attach':
         tid = r['task_id']
-        # ...unless the owner has already ruled on this kind of mail. A live agent session is
-        # the one exception: it asked a question on this thread and the answer is arriving, so
-        # the round trip outranks a standing verdict about the topic.
+        # No ruling on the thread decides here any more: an owner's earlier "not ours" on this
+        # conversation used to file every later reply unread (PW-020). It reaches the model below
+        # as evidence (judge), and the model says what THIS message is.
         busy = any(x['Status'] == 'running' for x in store.list_runs(tid))
-        ruled = '' if busy else ruled_on_thread(store, msg)
-        if ruled:
-            mid = _land(store, msg, None, 'filed')
-            store.add_route(mid, None, 'file', None,
-                            f'you already ruled on this conversation, so it did not join {task_ref(tid)}: "{ruled[:200]}"',
-                            [], 'memory')
-            logger.info(f'ingest: filed by your ruling on the thread instead of attaching to {task_ref(tid)}')
-            return {'status': 'filed', 'task_id': None, 'message_id': mid}
         # A reply INHERITS the task's kind and nothing used to ask what it actually says, so
         # "Thank you!" on an open coding task read as "asked you" in the pipe. Triage judges it
         # like any other message (the owner, 2026-09-03: "the triage should realize that"); an
@@ -535,21 +531,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             except Exception as e:
                 logger.warning(f'answer_to_agent failed for task {tid}: {e}')
     else:
-        # The one verdict that decides without a model: you already ruled on THIS email THREAD.
-        # A chat carries nothing forward - a room is a relationship, not a topic, and "nothing to
-        # do here" is about the line it was said on. Everything else you have
-        # ever said - about a sender, about a topic - reaches the classifier below as EVIDENCE,
-        # with the sender and subject it was given on, and the model judges how alike this
-        # message really is. The owner's call (2026-08-27): a topic rule that decided
-        # mechanically ("veto") was too blunt - it could not tell a new refund thread from a
-        # refund thread that this time was asking him something.
-        ruled = ruled_on_thread(store, msg)
-        if ruled:
-            mid = _land(store, msg, None, 'filed')
-            store.add_route(mid, None, 'file', None,
-                            f'you already ruled on this conversation, so no task was opened: "{ruled[:200]}"', [], 'memory')
-            logger.info(f"ingest: filed by your ruling on the thread - {msg.get('subject') or ''}")
-            return {'status': 'filed', 'task_id': None, 'message_id': mid}
+        # Nothing the owner said before decides here without a model. A ruling on THIS thread used
+        # to (ingest.ruled_on_thread, until PW-020): every later reply on a dismissed email thread
+        # was filed unread, so a thread that came back asking the owner something never reached
+        # triage. It is evidence now, like every other verdict - shown to the classifier with the
+        # sender and subject it was given on (judge), and the model judges how alike THIS message
+        # really is. Only a saved policy (above) and a feed connection still decide mechanically.
         # AI-gated triage: without an active AI connector, nothing becomes a task on its
         # own - messages FILE onto the timeline (visible, promotable by hand) instead of
         # heuristics spraying tasks for every automated notification. Heuristics still
@@ -844,18 +831,16 @@ def owner_addresses(store) -> set:
             if s.get('Channel') == 'email' and s.get('Address')}
 
 
-def ruled_on_thread(store, msg: dict) -> str:
-    """The owner's own "this is not work" on THIS email thread, if they gave one - the route
-    reason they left, so the timeline can quote what decided it. Same thread = same topic for
-    life; a chat id is a relationship, not a topic, so a chat ruling decides nothing about the
-    next line (see store.owner_verdict_on_thread). This is the only verdict that decides
-    without a model:
-    a verdict about a person or a topic is EVIDENCE for the classifier (relevant_notes), because
-    the same topic can arrive asking something new, and only a reader can tell."""
+def thread_ruling(store, msg: dict) -> str:
+    """The owner's own "this is not work" on an earlier message of THIS email thread, phrased as
+    one more piece of evidence for the classifier - never a decision (PW-020/021). A chat id is a
+    relationship, not a topic, so a chat ruling says nothing about the next line
+    (store.owner_verdict_on_thread); an email thread is a topic, and what the owner said about
+    it is worth knowing when reading the reply - but a thread that now asks something new is new."""
     on_thread = store.owner_verdict_on_thread(msg.get('conversation_id'), msg.get('sent_at'),
                                               sender=msg.get('from_email') or msg.get('from_name'),
                                               channel=msg.get('channel'))
-    return f'you already ruled on this conversation: {on_thread}' if on_thread else ''
+    return f'On this very conversation you ruled earlier: "{on_thread}" - weigh whether this message changes that' if on_thread else ''
 
 
 def own_thread_only(store, msg: dict, r: dict) -> dict:

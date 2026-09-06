@@ -1065,7 +1065,9 @@ class NeverWorkTests(unittest.TestCase):
         reason = s.message_routes(out['message_id'])[-1]['Reason']
         self.assertIn('could not read as a verdict', reason)
 
-    def test_a_thread_the_owner_already_ruled_on_never_comes_back_as_work(self):
+    def test_a_thread_the_owner_already_ruled_on_is_read_again_with_the_ruling_as_evidence(self):
+        # until PW-020 (2026-09-06) the ruling filed every later reply unread ("already ruled");
+        # now the reply reaches triage with the ruling in front of the model, and the model decides
         s = store()
         with mock.patch.object(ingest, '_spawn'):
             first = arrive(s, subject='Resident refund - Mrs Garnett', conv='c:refund', hours=6,
@@ -1073,13 +1075,18 @@ class NeverWorkTests(unittest.TestCase):
         c = TestClient(server.app)
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             c.post(f"/api/messages/{first['message_id']}/file", json={'learn': True})
+        seen = {}
+        def judged(system, user, **kw):
+            seen['sys'] = system
+            return '{"intent": "fyi", "why": "a nudge on a thread the owner filed"}'
         again = ingest.ingest_message(s, {'external_id': 'x:again', 'channel': 'email', 'conversation_id': 'c:refund',
                                           'subject': 'RE: Resident refund - Mrs Garnett', 'from_name': 'Rivka',
                                           'from_email': 'rivka@ours.com', 'sent_at': ago(0),
-                                          'body': 'Any update on the approval?'}, llm=brain('task', 'coding'))
+                                          'body': 'Any update on the approval?'}, llm=judged)
         self.assertEqual((again['status'], again['task_id']), ('filed', None))
+        self.assertIn('on this very conversation you ruled earlier', seen['sys'].lower())
         reason = s.message_routes(again['message_id'])[-1]['Reason']
-        self.assertIn('already ruled', reason)
+        self.assertIn('triage: fyi', reason); self.assertNotIn('already ruled', reason)
 
     def test_a_playbook_instance_is_tagged_so_the_agent_works_it_that_way(self):
         s = store()

@@ -50,15 +50,17 @@ class AddressingTests(unittest.TestCase):
         self.assertEqual(ingest.own_addresses(s), {'me@ours.com'})
         self.assertEqual(ingest.owner_addresses(s), {'me@ours.com', 'devteam-logs@ours.com'})
 
-    def test_settled_verdicts_leave_no_question_shaped_exit(self):
+    def test_agreeing_verdicts_are_evidence_the_model_weighs_not_an_order(self):
+        # until PW-025 (2026-09-06) two agreeing verdicts became "SETTLED ... Answer fyi - no
+        # exceptions", so a refund thread that this time asked the owner something was filed unread
         seen = {}
-        def llm(sys_, usr_, **k): seen['sys'] = sys_; return '{"intent": "fyi", "why": "settled"}'
+        def llm(sys_, usr_, **k): seen['sys'] = sys_; return '{"intent": "reply_only", "why": "asks when the check was mailed"}'
         notes = ['2026-08-25: "resident refund request" - NOT OURS: other people\'s work', '2026-08-26: "resident refund request approved" - NOT OURS: other people\'s work']
-        triage.classify_intent({'from_email': 'r@ours.com', 'subject': 'Re: Resident Refund Request Approved - Doe', 'body': 'Can you advise when the check was mailed?'}, llm=llm, notes=notes)
-        self.assertIn('SETTLED BY YOUR OWNER: all 2 past verdicts', seen['sys'])
-        self.assertIn('Answer fyi', seen['sys']); self.assertIn('A question in the message does not reopen it', seen['sys'])
-        self.assertNotIn('NEW and specific', seen['sys']); self.assertNotIn('exception is', seen['sys'])   # settled means settled
-        self.assertIn('no exceptions', seen['sys'])
+        out = triage.classify_intent({'from_email': 'r@ours.com', 'subject': 'Re: Resident Refund Request Approved - Doe', 'body': 'Can you advise when the check was mailed?'}, llm=llm, notes=notes)
+        self.assertEqual(out['intent'], 'reply_only')
+        self.assertNotIn('SETTLED BY YOUR OWNER', seen['sys']); self.assertNotIn('no exceptions', seen['sys'])
+        self.assertIn('EVIDENCE', seen['sys'])
+        for n in notes: self.assertIn(n, seen['sys'])
 
     def test_the_keyword_pass_never_decides_a_cc_by_itself(self):
         """It used to: a quiet cc was FILED as fyi by keyword, before any model saw it. But plenty

@@ -1,6 +1,7 @@
 """Verdicts are EVIDENCE the classifier weighs, not rules that decide (owner's call, 2026-08-27):
-the same topic can arrive asking something new, and only a reader can tell. The one verdict that
-still decides without a model is a ruling on THIS conversation (ingest.ruled_on_thread).
+the same topic can arrive asking something new, and only a reader can tell. A ruling on THIS
+conversation used to be the one verdict that still decided without a model (ingest.ruled_on_thread);
+since PW-020 (2026-09-06) it is evidence too - shown first, and the model reads the reply.
 
 Earlier history, kept for the record - "I wrote this a bunch and the system is not learning it."
 
@@ -103,17 +104,26 @@ class AttachRespectsTheVerdictTests(unittest.TestCase):
         s = _store(VERDICT); tid = self._thread(s)
         self.assertEqual(self._arrive(s)['task_id'], tid)
 
-    def test_a_ruling_on_the_conversation_stops_the_message_joining_the_task(self):
+    def test_a_ruling_on_the_conversation_no_longer_stops_the_message_joining_the_task(self):
+        """It did until PW-020: the reply was filed unread with "already ruled". Now it joins the
+        thread's task and triage reads it, with the ruling shown as evidence."""
         s = _store(VERDICT); tid = self._thread(s)
         first = self._arrive(s, ext='e0b')
         s.set_message_status(first['message_id'], 'ignored')
         s.add_route(first['message_id'], None, 'ignore', None, 'not ours - resident refunds are not our task', [], 'owner')
-        out = self._arrive(s, ext='e2', frm='another@regencyhealthrehab.com')
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
-        row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
-        self.assertEqual(row['NeedsYou'], 0)
-        self.assertIn('already ruled on this conversation', row['RouteReason'])
-        self.assertIn(f'TQ-{tid:04d}', row['RouteReason'])         # and which task it did not join
+        seen = {}
+        def llm(sys_, usr_, **kw):
+            seen['sys'] = sys_
+            return '{"intent": "fyi", "why": "more paperwork on a thread the owner ruled on"}'
+        out = ingest.ingest_message(s, {'external_id': 'e2', 'channel': 'email', 'from_email': 'another@regencyhealthrehab.com',
+                                        'subject': 'Re: Resident Refund Request - PAYNE, MICHAEL', 'conversation_id': 'thread-1',
+                                        'body': 'Attached is a new transaction history.'}, llm=llm)
+        # an fyi follow-up stays on the thread's task for the chain, off the owner's pile - the
+        # existing follow-up contract; what changed is that the model was asked at all
+        self.assertEqual((out['status'], out['task_id']), ('filed', tid))
+        self.assertIn(f'kept on TQ-{tid:04d}', s.message_routes(out['message_id'])[-1]['Reason'])
+        self.assertIn('resident refunds are not our task', seen['sys'])
+        self.assertIn('on this very conversation you ruled earlier', seen['sys'].lower())
 
     def test_a_live_agent_session_still_gets_its_answer(self):
         """The agent asked a question on this thread and the reply is arriving. A standing
@@ -318,19 +328,33 @@ class ThreadVerdictTests(unittest.TestCase):
                     'not ours - Priya will take care of this one. She is responsible for AR stuff.', [], 'owner')
         return s
 
-    def test_the_askers_follow_up_on_the_same_thread_is_filed(self):
-        s = self._ruled()
-        out = self._arrive(s, 'c2')
+    def test_the_askers_follow_up_on_the_same_thread_is_read_with_the_ruling_as_evidence(self):
+        """Until PW-020 this was filed on sight ("already ruled"). The owner's requirement: a thread
+        that comes back asking something is read again; the ruling is what the model is told."""
+        s = self._ruled(); seen = {}
+        def llm(sys_, usr_, **kw):
+            seen['sys'] = sys_
+            return '{"intent": "fyi", "why": "Priya has this one"}'
+        out = ingest.ingest_message(s, {'external_id': 'c2', 'channel': 'email', 'from_email': 'dwhitfield@client.example',
+                                        'conversation_id': self.CONV, 'subject': 'Re: Collection %',
+                                        'body': 'Why does the percentage stay the same if I exclude those payers?'}, llm=llm)
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
         self.assertEqual(row['NeedsYou'], 0)
-        self.assertIn('Priya will take care of this one', row['RouteReason'])
-        self.assertNotIn('not ours - not ours', row['RouteReason'])
+        self.assertIn('triage: fyi', row['RouteReason']); self.assertNotIn('already ruled', row['RouteReason'])
+        self.assertIn('Priya will take care of this one', seen['sys'])
 
-    def test_the_colleagues_answer_on_the_thread_is_filed_too(self):
+    def test_a_follow_up_that_asks_the_owner_something_new_opens_work_again(self):
         s = self._ruled()
-        out = self._arrive(s, 'c3', frm='priya@corp.example')
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        out = self._arrive(s, 'c2')                    # REPLY: the model reads a question for the owner
+        self.assertEqual(out['status'], 'created')
+
+    def test_the_colleagues_answer_on_the_thread_is_read_too(self):
+        s = self._ruled(); seen = []
+        out = ingest.ingest_message(s, {'external_id': 'c3', 'channel': 'email', 'from_email': 'priya@corp.example',
+                                        'conversation_id': self.CONV, 'subject': 'Re: Collection %', 'body': 'Here is how it is computed.'},
+                                    llm=lambda *a, **k: seen.append(1) or '{"intent": "fyi", "why": "Priya answering"}')
+        self.assertEqual((out['status'], out['task_id']), ('filed', None)); self.assertEqual(seen, [1])
 
     def test_a_new_thread_from_the_same_sender_is_still_the_classifiers_call(self):
         """The sender-scoped half keeps its meaning: a person ruled out on one thread can still
@@ -339,13 +363,18 @@ class ThreadVerdictTests(unittest.TestCase):
         out = self._arrive(s, 'c4', conv='AAQk-something-else', subject='Budget upload failing')
         self.assertEqual(out['status'], 'created')
 
-    def test_nothing_to_do_said_by_the_owner_rules_the_thread_too(self):
+    def test_nothing_to_do_said_by_the_owner_is_evidence_on_the_thread_too(self):
         """"Nothing to do here" / "Not a task - just conversation" is the verdict the owner gives
-        most, and it teaches nothing about the sender on purpose - but said on a thread it is
-        still a ruling on THAT thread (tests/test_verdict_paths.py has the whole story)."""
-        s = MemoryStore()
+        most, and it teaches nothing about the sender on purpose - said on a thread it is shown to
+        the model when the thread continues (tests/test_verdict_paths.py has the whole story)."""
+        s = MemoryStore(); seen = {}
         first = self._arrive(s, 'c5', subject='Collection %')
         s.delete_task(first['task_id'])
         s.add_route(first['message_id'], None, 'ignore', None, 'nothing to do - filed by the owner, nothing learned', [], 'owner')
-        out = self._arrive(s, 'c6')
+        def llm(sys_, usr_, **kw):
+            seen['sys'] = sys_
+            return '{"intent": "fyi", "why": "still nothing to do"}'
+        out = ingest.ingest_message(s, {'external_id': 'c6', 'channel': 'email', 'from_email': 'dwhitfield@client.example',
+                                        'conversation_id': self.CONV, 'subject': 'Re: Collection %', 'body': 'Just closing the loop.'}, llm=llm)
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        self.assertIn('nothing to do - filed by the owner', seen['sys'])

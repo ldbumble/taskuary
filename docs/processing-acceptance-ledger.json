@@ -711,7 +711,7 @@
       "requirement": "Remove `store.known_sender()` / \"has written before\" as an authorization",
       "status": "implemented",
       "test": "`tests/test_sender_trust.py`::RulesTests (prior incoming mail is not trust even when the table knows the address; `store.known_sender` stays for the first-time-sender policy only and is out of `senders.known`)",
-      "commit": "6c560b9; local gates passed, CI pending"
+      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
     },
     {
       "id": "PW-080",
@@ -720,7 +720,7 @@
       "requirement": "Retain verified Sent Items evidence that the receiving mailbox previously",
       "status": "implemented",
       "test": "`tests/test_sender_trust.py` (verified Sent Items evidence allows and names the reason; the reason is shown on the task; a verified hit is remembered per mailbox and address; a failed lookup is not trust, is said on the task, is not a stranger verdict and is not remembered as no)",
-      "commit": "6c560b9; local gates passed, CI pending"
+      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
     },
     {
       "id": "PW-081",
@@ -729,7 +729,7 @@
       "requirement": "Expose same-domain trust and non-email-channel trust behavior explicitly in",
       "status": "implemented",
       "test": "`tests/test_sender_trust.py`::RulesTests::test_each_rule_has_a_switch, ::SettingsTests (own-domain, Sent Items and chat-channel trust are three visible switches with defaults; no incoming-history option exists)",
-      "commit": "6c560b9; local gates passed, CI pending"
+      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
     },
     {
       "id": "PW-082",
@@ -738,7 +738,7 @@
       "requirement": "Apply the configured sender-trust contract consistently to coding and",
       "status": "implemented",
       "test": "`tests/test_sender_trust.py`::BothKindsTests (the configured trust gates coding and general alike; a hold affects the unattended start only - intake, triage and the task are untouched)",
-      "commit": "6c560b9; local gates passed, CI pending"
+      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
     },
     {
       "id": "PW-083",
@@ -747,61 +747,61 @@
       "requirement": "Add tests for prior incoming-only history remaining untrusted, verified sent",
       "status": "partial: incoming-only history, verified sent history, each disabled rule, same-domain and chat settings, failed lookups, mailbox scoping and both worker kinds covered; the live Graph/IMAP Sent Items queries are exercised only through the existing fakes",
       "test": "`tests/test_sender_trust.py` (11 cases)",
-      "commit": "6c560b9; local gates passed, CI pending"
+      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
     },
     {
       "id": "PW-084",
       "section": "Agent capacity counting",
       "phase": "5",
       "requirement": "Owner-approved: count all live coding/general agent sessions toward the",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_dispatch_retries.py`::CapacityTests (every live session counts - working, idle at its prompt, a general session; an ended one does not; a capacity wait is not an attempt)",
+      "commit": "6ed0301; local gates passed, CI pending"
     },
     {
       "id": "PW-085",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "Owner-approved: allow at most two automatic retries after the initial",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_dispatch_retries.py`::RetryTests (three attempts with backoff 30s then 120s; attempts, last error and next-attempt time persisted on the queue row; a restart only re-arms the timer)",
+      "commit": "6ed0301; local gates passed, CI pending"
     },
     {
       "id": "PW-086",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "Configuration, missing repository/worker, and permission failures should",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_dispatch_retries.py` (configuration, missing repository/worker and permission failures are \"needs you\" at once; capacity waits consume nothing)",
+      "commit": "6ed0301; local gates passed, CI pending"
     },
     {
       "id": "PW-087",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "After retry exhaustion, retain the task and dispatch error visibly but stop",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: after exhaustion the task and its error stay, automatic attempts stop, and `POST /api/tasks/{id}/dispatch/retry` and `DELETE /api/tasks/{id}/dispatch` exist with the state on the task list; the task-view buttons and the attention pipeline entry are Phase 8 surfaces",
+      "test": "`tests/test_dispatch_retries.py`::OwnerControlsTests",
+      "commit": "6ed0301; local gates passed, CI pending"
     },
     {
       "id": "PW-088",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "Schedule due retries without depending solely on an unrelated session ending;",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_dispatch_retries.py` (due retries are scheduled by timer, not by an unrelated session ending; capacity and guards rechecked; other queued tasks proceed; a bookkeeping failure after the session started is reconciled, never duplicated)",
+      "commit": "6ed0301; local gates passed, CI pending"
     },
     {
       "id": "PW-089",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "Test transient recovery, exactly three failed attempts, persisted backoff",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: transient recovery, exactly three failed attempts, persisted backoff, permanent errors, manual retry/cancel, waiting without consuming attempts, partial-start reconciliation and other tasks continuing are covered; a real process restart is simulated by re-arming from the persisted rows",
+      "test": "`tests/test_dispatch_retries.py` (13 cases); `tests/test_blackboard.py` has one step moved to the PW-085 contract with the reason noted",
+      "commit": "6ed0301; local gates passed, CI pending"
     },
     {
       "id": "PW-090",

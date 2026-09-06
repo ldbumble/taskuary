@@ -1357,3 +1357,32 @@ kinds through `ingest.auto_start_ok` (Section 5.1).
 
 Tests: `tests/test_sender_trust.py` (11 cases). `tests/test_core.py`'s stranger walk still passes: the owner's own words on
 the stranger's thread are verified sent evidence for that mailbox.
+
+## Section 5.3 — capacity counting and bounded startup retries
+
+Status: implemented and tested locally at `6ed0301`; remote CI pending on the pushed
+checkpoint. Section 5.2 is CI-verified (6c560b9, CI 34049592998 74bf868 (all ten jobs passed)).
+Acceptance PW-084, PW-085, PW-086, PW-088 implemented; PW-087 and PW-089 partial (the Retry/Cancel
+task-view buttons and the attention-pipeline entry are Phase 8 surfaces; a real process restart is
+simulated by re-arming from the persisted rows).
+
+`blackboard.live_count` is the one capacity number: every live session, whatever it is doing -
+working, idle at its prompt, stopped at an approval, coding or general - until its process ends;
+`ingest._auto_code`, `ingest._auto_general` and the queue drain all read it. The dispatch queue row
+carries the retry budget (`Attempts`, `LastError`, `NextAt`, `State` waiting|retrying|failed):
+`blackboard.record_failure` counts one failed start wherever it happened (the drain or a direct
+auto-start, which used to write one line and never try again), says on the task what happened and
+what comes next ("... (attempt 1 of 3) - retrying in 30s" / "Agent could not start - needs you: ..."),
+and schedules the retry by timer (`drain_later`) rather than waiting for an unrelated session to end;
+`blackboard.schedule_due` re-arms the earliest persisted retry at startup, so a backoff in progress
+when the app closed neither vanishes nor restarts from zero. Configuration failures (an unknown
+agent, a missing repository or worker, a permission problem - `blackboard.is_permanent`) fail at
+once without consuming blind retries; a capacity wait consumes nothing. The drain skips rows that
+are exhausted or not yet due so the others proceed, and a failure raised after the session exists is
+reconciled as a started task with a bookkeeping note, never counted as a failed launch or started
+twice. Owner controls: `POST /api/tasks/{id}/dispatch/retry` (a fresh bounded cycle, tried now) and
+`DELETE /api/tasks/{id}/dispatch` (the pending start goes; the task stays); `/api/tasks` exposes
+`Queued.state/attempts/lastError/nextAt`.
+
+Tests: `tests/test_dispatch_retries.py` (13 cases). `tests/test_blackboard.py`: the failed-start test now makes the row due before
+the second drain, because a failed start backs off (PW-085). No frontend change.

@@ -448,7 +448,7 @@ Pending implementation only.
 
 ## Agent capacity counting
 
-- [ ] <a id="pw-084"></a>**PW-084** Owner-approved: count all live coding/general agent sessions toward the
+- [x] <a id="pw-084"></a>**PW-084** Owner-approved: count all live coding/general agent sessions toward the
   shared capacity limit, including sessions idle at a prompt or stopped waiting
   for user approval/input. Waiting for approval does not free a slot. Distinguish
   these live sessions from terminated sessions; do not implement an actively-
@@ -456,11 +456,11 @@ Pending implementation only.
 
 ## Dispatch queue startup failure
 
-- [ ] <a id="pw-085"></a>**PW-085** Owner-approved: allow at most two automatic retries after the initial
+- [x] <a id="pw-085"></a>**PW-085** Owner-approved: allow at most two automatic retries after the initial
   startup attempt (three attempts total) for transient startup failures, with
   bounded backoff. Persist attempt count, last error, and next-attempt time so
   restarts or repeated queue checks cannot reset the budget or bypass backoff.
-- [ ] <a id="pw-086"></a>**PW-086** Configuration, missing repository/worker, and permission failures should
+- [x] <a id="pw-086"></a>**PW-086** Configuration, missing repository/worker, and permission failures should
   immediately become "Agent could not start - needs you" rather than consume
   blind automatic retries. Capacity waits and dependency waits are not failures
   and must not consume the retry budget.
@@ -468,7 +468,7 @@ Pending implementation only.
   automatic attempts. Offer "Retry" (an explicit new bounded attempt cycle) and
   "Cancel queued start" (remove pending dispatch without deleting/completing the
   task). Make the failure available to the owner's attention pipeline.
-- [ ] <a id="pw-088"></a>**PW-088** Schedule due retries without depending solely on an unrelated session ending;
+- [x] <a id="pw-088"></a>**PW-088** Schedule due retries without depending solely on an unrelated session ending;
   use the shared capacity limits and dispatch guards, recheck live sessions before
   launch, and let other eligible tasks proceed. Distinguish an actual launch failure
   from bookkeeping failure after a session already started; never duplicate it.

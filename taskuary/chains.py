@@ -18,6 +18,14 @@ GRAPH_LIST_SELECT = 'id,receivedDateTime,from,conversationId'
 MAX_PAGES = 200              # 10,000 messages of one conversation - a listing beyond this is a provider fault, not a thread
 
 
+class IMAPIdentityError(RuntimeError):
+    """The poll's captured folder identity changed while its chain was being read."""
+
+
+class IMAPRestoreError(RuntimeError):
+    """A chain lookup could not prove that it restored the poll's selected folder."""
+
+
 def list_ids_graph(tok: str, upn: str, conversation_id: str) -> list:
     """Every message of a conversation across the mailbox's folders - ids and metadata only. Listing
     is how gaps are found; it never carries a body (PW-010)."""
@@ -99,25 +107,48 @@ def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before:
 
 def _imap_search(M, box: str, root: str, readonly: bool = True) -> list:
     typ, _d = M.select(box if box == 'INBOX' else f'"{box}"', readonly=readonly)
-    if typ != 'OK': return []
+    if typ != 'OK': raise RuntimeError(f'SELECT {box} returned {typ}: {_d}')
     typ, data = M.uid('search', None, f'(OR HEADER Message-ID "{root}" HEADER References "{root}")')
-    if typ != 'OK': return []
+    if typ != 'OK': raise RuntimeError(f'SEARCH {box} returned {typ}: {data}')
     return sorted(int(x) for x in (data[0] or b'').split())
 
 
-def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonly: bool = True, before: str = None) -> dict:
+def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonly: bool = True,
+                 before: str = None, folder_identity=None, protected=None,
+                 protected_after=None) -> dict:
     """Complete one IMAP conversation - the thread keyed by its root Message-ID, through References -
-    across INBOX and the Sent folder; the owner's own mail is `context`, the rest `history`."""
-    from .imapmail import sent_folder, _dec, _hdr_addrs, _body_and_attachments
-    added, seen = 0, 0
+    across INBOX and the Sent folder; the owner's own mail is `context`, the rest `history`.
+
+    The poll supplies its exact folder identity and protects every Inbox UID it still owns. That
+    keeps history retrieval from duplicating a scoped row or swallowing pending work as history.
+    """
+    from .imapmail import sent_folder, _dec, _hdr_addrs, _body_and_attachments, _external_id, _validity
+    protected = {str(box): {int(uid) for uid in uids}
+                 for box, uids in dict(protected or {}).items()}
+    protected_after = {str(box): int(uid) for box, uid in dict(protected_after or {}).items()}
+    added, seen, fatal = 0, 0, None
     try:
-        boxes = [('INBOX', f'imap:{user}:')]
+        boxes = [('INBOX', False)]
         sent = sent_folder(M)
-        if sent: boxes.append((sent, f'imap-sent:{user}:'))
-        for box, prefix in boxes:
-            for uid in _imap_search(M, box, root):
+        if sent: boxes.append((sent, True))
+        for box, is_sent in boxes:
+            # Historical discovery is always read-only. The owner's mark-read switch applies to
+            # arriving Inbox work, never to old context fetched for a chain.
+            uids = _imap_search(M, box, root, readonly=True)
+            identity = None
+            if folder_identity:
+                try:
+                    identity = folder_identity(is_sent, box, _validity(M), tuple(uids))
+                except Exception as e:
+                    raise IMAPIdentityError(f'IMAP folder identity changed while reading {box}') from e
+            for uid in uids:
                 seen += 1
-                ext = f'{prefix}{uid}'
+                if (uid in protected.get(box, set())
+                        or (box in protected_after and uid > protected_after[box])):
+                    continue
+                ext = (_external_id(is_sent, user, uid, scope=identity['scope'],
+                                    validity=identity.get('validity'), mode=identity['mode'])
+                       if identity else f'{"imap-sent" if is_sent else "imap"}:{user}:{uid}')
                 if store.message_exists(ext): continue
                 typ, parts = M.uid('fetch', str(uid), '(RFC822)')
                 if typ != 'OK' or not parts or parts[0] is None: continue
@@ -129,11 +160,30 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                 added += _keep(store, root, ext, {'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_name': name or addr,
                                                   'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when}, user, before)
         cov = {'complete': True, 'listed': seen, 'added': added, 'error': None}
+    except IMAPIdentityError as e:
+        fatal = e
+        cov = {'complete': False, 'listed': seen, 'added': added, 'error': str(e)[:200]}
     except Exception as e:
         logger.warning(f'chains: could not complete {root} from {user}: {e}')
         cov = {'complete': False, 'listed': seen, 'added': added, 'error': str(e)[:200]}
-    finally:
-        try: M.select(restore, readonly=readonly)
-        except Exception: pass
+    restore_error = None
+    try:
+        typ, detail = M.select(restore, readonly=readonly)
+        if typ != 'OK':
+            restore_error = IMAPRestoreError(f'SELECT {restore} returned {typ}: {detail}')
+        elif folder_identity:
+            try:
+                folder_identity(False, restore, _validity(M), ())
+            except Exception as e:
+                restore_error = IMAPRestoreError(
+                    f'{restore} identity changed while restoring after chain retrieval: {e}')
+    except Exception as e:
+        restore_error = IMAPRestoreError(f'SELECT {restore} failed: {e}')
+    if restore_error:
+        cov = {'complete': False, 'listed': seen, 'added': added, 'error': str(restore_error)[:200]}
     store.set_chain_coverage(root, 'email', user, cov)
+    if restore_error:
+        raise restore_error
+    if fatal:
+        raise fatal
     return cov

@@ -642,6 +642,22 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
         if folder['cursor'] != initial_cursor:
             selected_uids = _uids(M, folder['cursor'], max(backfill_days, 1))
         last_uid = folder['cursor']
+        protected_inbox = set(selected_uids) | set(folder['holes'])
+        inbox_frontier = max({last_uid, *protected_inbox})
+        def chain_folder_identity(sent, box, validity, _chain_uids):
+            if not sent:
+                # The active drain closure owns this exact epoch. Re-preparing it after a
+                # mid-drain UIDVALIDITY change would leave that closure stale.
+                if (validity is not None and folder['validity'] is not None
+                        and int(validity) != int(folder['validity'])):
+                    raise RuntimeError('INBOX UIDVALIDITY changed during chain retrieval')
+                return folder
+            # Prepare Sent from the same complete pending set poll_sent will use. Restricting
+            # legacy attribution to this chain's matching UIDs could switch a legacy folder to
+            # scoped IDs merely because its existing evidence belongs to another conversation.
+            sent_uids = _uids(M, _number(cfg.get('imap_sent_uid')) or 0,
+                              max(backfill_days, 1))
+            return prepare(True, box, validity, sent_uids)
         def read(uid) -> int:
             msg, body, atts = _fetch_message(M, uid)
             try:
@@ -676,8 +692,11 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             if fresh_thread and out['status'] != 'duplicate':
                 # the thread's history, completed once from INBOX and Sent (chains.py, PW-011); the poll's
                 # own mailbox selection is restored afterwards
-                try: chains.refresh_imap(store, M, user, conv, restore='INBOX', readonly=not read_it, before=sent_at)
-                except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
+                chains.refresh_imap(
+                    store, M, user, conv, restore='INBOX', readonly=not read_it, before=sent_at,
+                    folder_identity=chain_folder_identity,
+                    protected={'INBOX': protected_inbox},
+                    protected_after={'INBOX': inbox_frontier})
             return int(out['status'] != 'duplicate')
         def progress(uid, holes):
             checkpoint({folder['keys']['uid']: uid,

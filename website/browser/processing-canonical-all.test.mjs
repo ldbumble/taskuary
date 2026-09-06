@@ -55,6 +55,17 @@ const chooseSource = (page, label) => chooseOption(page, "Timeline source", labe
 
 const rowIds = (page) => page.$$eval("[data-processing-item]", (rows) => rows.map((row) => row.dataset.processingItem));
 
+const stageContent = (page) => page.$eval("[data-tq-timeline-stage]", (stage) => [
+  stage.innerText,
+  ...[...stage.querySelectorAll("input, textarea")].map((node) => node.value),
+].join("\n"));
+
+const waitForStageMarker = (page, marker) => page.waitForFunction((wanted) => {
+  const stage = document.querySelector("[data-tq-timeline-stage]");
+  return stage && [stage.innerText, ...[...stage.querySelectorAll("input, textarea")].map((node) => node.value)]
+    .join("\n").includes(wanted);
+}, { timeout: 10000 }, marker);
+
 async function drainCanonicalAll(page, minimum) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const ids = await rowIds(page);
@@ -110,9 +121,8 @@ test("canonical All renders every root once with truthful details and frozen pag
     seed.grouped.member_count, "the grouped root must expose its complete canonical member count");
 
   await clickItem(page, seed.grouped.item_id);
-  await page.waitForFunction((marker) => document.querySelector("[data-tq-timeline-stage]")?.innerText.includes(marker),
-    { timeout: 10000 }, seed.grouped.sibling_draft_marker);
-  const latestStage = await page.$eval("[data-tq-timeline-stage]", (node) => node.innerText);
+  await waitForStageMarker(page, seed.grouped.sibling_draft_marker);
+  const latestStage = await stageContent(page);
   assert.equal(latestStage.includes(seed.grouped.selected_draft_marker), false,
     "the older member draft must not leak into the default latest-member detail");
   assert.equal(automaticWrites().length, writesAtAll, "opening exact message detail must not write state");
@@ -125,9 +135,8 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.equal((await rowIds(page)).filter((id) => id === seed.grouped.item_id).length, 1,
     "source filtering must retain the root once and target its matching member");
   await clickItem(page, seed.grouped.item_id);
-  await page.waitForFunction((marker) => document.querySelector("[data-tq-timeline-stage]")?.innerText.includes(marker),
-    { timeout: 10000 }, seed.grouped.full_body_marker);
-  const olderStage = await page.$eval("[data-tq-timeline-stage]", (node) => node.innerText);
+  await waitForStageMarker(page, seed.grouped.full_body_marker);
+  const olderStage = await stageContent(page);
   assert.ok(olderStage.includes(seed.grouped.selected_draft_marker), "the filtered member's exact draft must be visible");
   assert.equal(olderStage.includes(seed.grouped.sibling_draft_marker), false, "the latest sibling draft must not leak into older detail");
 

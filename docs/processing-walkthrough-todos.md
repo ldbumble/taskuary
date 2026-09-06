@@ -783,14 +783,14 @@ The assistant should relay an agent's question and the owner's answer seamlessly
   targets/answers, then use the approved confirmation box to show the exact answer
   and destination before Send to agent. Keep ordinary input separate from tool
   permission/approval requests; approval must use the worker's supported mechanism.
-- [ ] <a id="pw-139"></a>**PW-139** Bind delivery to the specific outstanding request and run, never merely the
+- [x] <a id="pw-139"></a>**PW-139** Bind delivery to the specific outstanding request and run, never merely the
   task's newest session. Reject resolved/stale requests and changed runs, prevent
   duplicate delivery, and never forward to a replacement worker silently.
 - [ ] <a id="pw-140"></a>**PW-140** Use a supported reply/control path per worker integration; lifecycle hooks
   alone do not provide reliable answer delivery. Verify each integration's input
   and approval capabilities. Keep Open agent workspace as a fallback if direct
   delivery is unsupported, disconnected, or cannot be confirmed.
-- [ ] <a id="pw-141"></a>**PW-141** Distinguish queued, delivered, and resumed/working states. Do not report
+- [x] <a id="pw-141"></a>**PW-141** Distinguish queued, delivered, and resumed/working states. Do not report
   "Told the agent" from HTTP success alone. Persist the question, confirmed answer,
   and delivery outcome in the task discussion; preserve recoverable pending state
   across reconnects without duplicate sends.
@@ -1214,7 +1214,7 @@ Owner-approved: coding and general workers publish one shared status model using
 explicit events. Pending implementation; no hooks or provider integration changed
 during this walkthrough.
 
-- [ ] <a id="pw-222"></a>**PW-222** Model Working, Input needed (with the unanswered question), Approval needed
+- [x] <a id="pw-222"></a>**PW-222** Model Working, Input needed (with the unanswered question), Approval needed
   (with the specific pending action), and Finished (assigned work has a result
   ready for review). Finished does not itself close the task. Track failures,
   disconnections, and owner-stopped runs separately, never as successful completion.
@@ -1231,12 +1231,12 @@ during this walkthrough.
   Provide explicit request_input and finish_work tools (or equivalent validated
   structured signals). Derive approval status from the actual approval gate,
   not generated prose. Apply equivalent semantic signals to coding workers.
-- [ ] <a id="pw-226"></a>**PW-226** Separate response/turn completion from work completion. Require an explicit
+- [x] <a id="pw-226"></a>**PW-226** Separate response/turn completion from work completion. Require an explicit
   result or question to establish Finished or Input needed; a quiet terminal,
   bare prompt, end-of-response event, or process exit is not sufficient proof.
   Missing status signals should be identified as unknown/disconnected as appropriate,
   not guessed as a question, successful finish, or indefinitely active work.
-- [ ] <a id="pw-227"></a>**PW-227** Persist and reconcile events by task/run/turn and request IDs. Deduplicate
+- [x] <a id="pw-227"></a>**PW-227** Persist and reconcile events by task/run/turn and request IDs. Deduplicate
   notifications, reject stale events from old runs, and handle reconnects and
   out-of-order delivery. All UI surfaces and the assistant consume the same state.
   Answering one request must not clear other outstanding approval/input requests.

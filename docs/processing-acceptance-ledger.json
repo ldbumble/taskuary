@@ -450,7 +450,7 @@
       "requirement": "Select an item first, then validate its freshness, including automatic",
       "status": "implemented",
       "test": "`tests/test_freshness_walk.py`::SelectThenValidateTests (Next without a key picks, refreshes that item's source - every channel of an FYI batch once - and re-picks when the pile moved; the reservation path raises a stale navigation so the client re-captures; a quiet source is a no-op)",
-      "commit": "af2f15f; local gates passed, CI pending"
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-051",
@@ -459,7 +459,7 @@
       "requirement": "On newly relevant inbound or owner-sent activity, reevaluate the updated",
       "status": "implemented",
       "test": "`tests/test_freshness_walk.py`::SupersedeTests (a new ask on a task with a pending draft marks it behind and redrafts that same review when triage says a reply is still owed - never a second review, never a second task; an fyi line leaves it alone) plus `tests/test_freshness.py`",
-      "commit": "af2f15f; local gates passed, CI pending"
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-052",
@@ -468,7 +468,7 @@
       "requirement": "When new messages are detected on the item being discussed/surfaced, notify",
       "status": "partial: the notice is its own stream event before the assistant's answer, once per new revision, says the new lines went through triage, and never repeats on a quiet poll or re-render; it is emitted after the refresh completed rather than at detection, because the poll waits for the triage of what it fetched",
       "test": "`tests/test_freshness_walk.py`::NoticeTests",
-      "commit": "af2f15f; local gates passed, CI pending"
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-053",
@@ -477,7 +477,7 @@
       "requirement": "Tell the owner when new activity changes the item being discussed. If the",
       "status": "implemented",
       "test": "`tests/test_freshness_walk.py`::SupersedeTests::test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so (the sync retires the draft as superseded; the notice says it was answered and nothing is to send; a newer ask still goes through triage)",
-      "commit": "af2f15f; local gates passed, CI pending"
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-054",
@@ -504,7 +504,7 @@
       "requirement": "Add regression tests for email/chat refresh, Next without a key, FYI batches,",
       "status": "partial: email/chat refresh, Next without a key, FYI batches, new activity before surfacing and during generation, external owner replies, subsequent asks, refresh failures, unchanged-context no-op, stale approval, draft version markers and no duplicate work are covered; a concurrent sync racing an action is covered only through the revision recheck",
       "test": "`tests/test_freshness_walk.py` (9 cases) plus `tests/test_freshness.py` (9) and `tests/test_chat_freshness.py`",
-      "commit": "af2f15f; local gates passed, CI pending"
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-057",
@@ -513,7 +513,7 @@
       "requirement": "Test that the new-message/retriage notice arrives before the triage result,",
       "status": "partial: the notice precedes the assistant's answer, is not duplicated on polling or re-render, and a failed refresh is an error event rather than a fresh answer; the notice does not precede the triage result itself (see PW-052)",
       "test": "`tests/test_freshness_walk.py`::NoticeTests",
-      "commit": "af2f15f; local gates passed, CI pending"
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-058",
@@ -1231,9 +1231,9 @@
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Receive structured input/approval-needed events from worker integrations,",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: structured input/approval events carry task, run, request id, question and choices and are served by `GET /api/tasks/{id}/worker`; the attention-item presentation and the bottom-strip notification are Phase 8 surfaces",
+      "test": "`tests/test_worker_events.py`::ApiTests",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-138",
@@ -1249,9 +1249,9 @@
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Bind delivery to the specific outstanding request and run, never merely the",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::AnswerBindingTests (an answer is bound to the request and its run; delivered once; a second click is resolved; a changed run is stale and never forwarded; a dead run is disconnected)",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-140",
@@ -1267,9 +1267,9 @@
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Distinguish queued, delivered, and resumed/working states. Do not report",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::AnswerBindingTests (queued/delivered/failed outcomes recorded in the task discussion; \"delivered\" is never claimed from HTTP success alone - the delivery call must succeed)",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-142",
@@ -1996,25 +1996,25 @@
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Model Working, Input needed (with the unanswered question), Approval needed",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::EventModelTests (Working, Input needed with the question, Approval needed with the action, Finished with the result - which closes nothing - Failed, Disconnected and Stopped, each derived from explicit events; an idle prompt is unknown and raises no hand)",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-223",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Integrate Claude Code lifecycle/tool hooks for prompt submission, permission",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: Claude Code hooks are wired for UserPromptSubmit (Working), AskUserQuestion (Input needed with the exact question and choices), Notification permission prompts (Approval needed, observed not granted) and Stop (the response ended, never a finish); the installed hook set is not yet validated against the CLI version",
+      "test": "`tests/test_worker_events.py`::ProducersTests",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-224",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Integrate Codex App Server structured turn lifecycle, approval, and user-input",
-      "status": "pending",
+      "status": "pending: Codex App Server integration not started; Codex sessions still report through the rollout witness and the terminal",
       "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
       "commit": "pending"
     },
@@ -2023,27 +2023,27 @@
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Emit regular API-agent lifecycle events directly from the execution loop.",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the assistant's turns record Working; explicit request_input/finish_work signals for API workers are not yet provided",
+      "test": "`tests/test_worker_events.py` (general sessions record working through `GeneralSession.send_prompt`)",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-226",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Separate response/turn completion from work completion. Require an explicit",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::EventModelTests::test_a_response_ending_is_not_a_finish, ::test_a_dead_session_with_no_finish_is_disconnected_not_finished_and_an_idle_one_raises_no_hand",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-227",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Persist and reconcile events by task/run/turn and request IDs. Deduplicate",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py` (events persisted by task, run and request id; replays and duplicate open requests rejected; a run that is not the task's live one is ignored; answering one request leaves the others open)",
+      "commit": "353d083; local gates passed, CI pending"
     },
     {
       "id": "PW-228",

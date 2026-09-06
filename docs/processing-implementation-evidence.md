@@ -1532,3 +1532,35 @@ in place) and the notice now says it was answered and nothing is to send.
 Tests: `tests/test_freshness_walk.py` (9 cases) and `website/test/contextNotice.test.mjs` (2 checks). Frontend: `AssistantView.jsx`
 renders the `context_update` stream event as it arrives - before the answer - and does not show the
 done payload's copy a second time; packaged UI rebuilt.
+
+## Section 6.1 — one worker status model from explicit events; answers bound to the request
+
+Status: implemented and tested locally at `353d083`; remote CI pending on the pushed
+checkpoint. Section 5.8 is CI-verified (af2f15f, CI run 34052218971 (all ten jobs passed)).
+Acceptance PW-222, PW-226, PW-227, PW-139, PW-141 implemented; PW-223, PW-225, PW-137 partial;
+PW-224 (Codex App Server) not started.
+
+A session's status was read off its screen: a bare prompt meant "stopped and waiting on you", a
+quiet terminal meant a question, and every consumer disagreed with the next. New module
+`taskuary/workerstate.py` derives a worker's state from explicit, persisted events (new
+`worker_event` table: task, run/session id, kind, request id, text, choices, source, event id):
+Working, Input needed (with the unanswered question and its choices), Approval needed (with the
+pending action), Finished (an explicit result - it closes nothing by itself), Failed, Disconnected,
+Stopped, or unknown. A response ending (`turn_end`) is not a finish; a dead session with no finish
+is disconnected; an idle prompt with no event raises no hand. Events are deduplicated by event id
+and by open request, and a run that is not the task's live one is ignored (a restart or headless
+worker with no live session becomes the current run). `workerstate.answer` binds the owner's
+answer to the exact outstanding request and its run: looked up across every run, delivered once
+(`terminal.type_into` for a CLI, `send_prompt` for the assistant), refused as resolved, stale (the
+run changed - never forwarded to a replacement) or disconnected (no live worker: open the
+workspace), failed when the delivery raised; each outcome is written into the task discussion.
+Producers: Claude Code hooks (`hooks._events`: UserPromptSubmit, AskUserQuestion, permission
+Notification - now installed as a fourth hook - and Stop), `taskuary --done` (`selfclose.declare`
+records Finished with the result), the assistant's `send_prompt` (Working), and the owner's Stop
+(`/api/tasks/{id}/agent/stop` records Stopped). Endpoints: `GET /api/tasks/{id}/worker` and
+`POST /api/tasks/{id}/worker/answer` (409 resolved/stale, 422 disconnected/failed).
+
+The funnel, the hand-raise and the task list still read the terminal's latched phase; switching
+those consumers to this model is Section 6.2.
+
+Tests: `tests/test_worker_events.py` (13 cases). No frontend change.

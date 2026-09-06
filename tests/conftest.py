@@ -5,7 +5,8 @@ config and opens SQLite at import time.  The guards below are deliberately test-
 code does not gain a pytest switch and a unit test can still replace a guarded boundary with its
 own fake.  Real local services are reachable only after a test registers its ephemeral port.
 """
-import os, shutil, socket, sys, tempfile, uuid
+import os, shutil, socket, subprocess, sys, tempfile, uuid
+from contextlib import asynccontextmanager
 from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
@@ -18,7 +19,8 @@ from urllib.parse import urlsplit
 _TEST_ROOT = Path(tempfile.mkdtemp(prefix='taskuary_pytest_')).resolve()
 _TASKUARY_HOME = _TEST_ROOT / 'taskuary'
 _USER_HOME = _TEST_ROOT / 'user'
-for _path in (_TASKUARY_HOME, _USER_HOME):
+_TEMP_HOME = _TEST_ROOT / 'tmp'
+for _path in (_TASKUARY_HOME, _USER_HOME, _TEMP_HOME):
     _path.mkdir(parents=True, exist_ok=True)
 os.environ.update({
     'TASKUARY_HOME': str(_TASKUARY_HOME),
@@ -27,7 +29,13 @@ os.environ.update({
     'USERPROFILE': str(_USER_HOME),
     'XDG_CONFIG_HOME': str(_USER_HOME / '.config'),
     'XDG_DATA_HOME': str(_USER_HOME / '.local' / 'share'),
+    'APPDATA': str(_USER_HOME / 'AppData' / 'Roaming'),
+    'LOCALAPPDATA': str(_USER_HOME / 'AppData' / 'Local'),
+    'CODEX_HOME': str(_USER_HOME / '.codex'),
+    'CLAUDE_CONFIG_DIR': str(_USER_HOME / '.claude'),
+    'TMP': str(_TEMP_HOME), 'TEMP': str(_TEMP_HOME), 'TMPDIR': str(_TEMP_HOME),
 })
+tempfile.tempdir = str(_TEMP_HOME)
 os.environ.pop('TASKUARY_ALLOW_TEST_HOME', None)
 os.environ.pop('TASKUARY_DEMO', None)
 
@@ -67,10 +75,6 @@ def _blocked(kind, target):
     raise AssertionError(f'P0-ISOLATION blocked unmocked {kind}: {target}')
 
 
-def pytest_configure(config):
-    config.addinivalue_line('markers', 'allow_test_worker: allow a disposable Python worker child')
-
-
 @pytest.fixture
 def allow_test_port():
     """Register a harness-owned loopback port for real HTTP in one test."""
@@ -87,6 +91,7 @@ def allow_test_port():
 def isolated_process_env(tmp_path):
     """Build a distinct environment for a browser/CLI fixture subprocess before it imports."""
     made = 0
+    ports = []
     def build(*, port=None):
         nonlocal made
         made += 1
@@ -96,13 +101,17 @@ def isolated_process_env(tmp_path):
         env = os.environ.copy()
         env.update({'TASKUARY_HOME': str(home / 'taskuary'), 'TASKUARY_TEST_HOME': str(home / 'taskuary'),
                     'HOME': str(user), 'USERPROFILE': str(user),
-                    'XDG_CONFIG_HOME': str(user / '.config'), 'XDG_DATA_HOME': str(user / '.local' / 'share')})
+                    'XDG_CONFIG_HOME': str(user / '.config'), 'XDG_DATA_HOME': str(user / '.local' / 'share'),
+                    'APPDATA': str(user / 'AppData' / 'Roaming'), 'LOCALAPPDATA': str(user / 'AppData' / 'Local'),
+                    'CODEX_HOME': str(user / '.codex'), 'CLAUDE_CONFIG_DIR': str(user / '.claude')})
         env.pop('TASKUARY_ALLOW_TEST_HOME', None)
         if port is not None:
             _ALLOWED_PORTS.add(int(port))
+            ports.append(int(port))
             env['TASKUARY_API'] = f'http://127.0.0.1:{int(port)}'
         return env
-    return build
+    yield build
+    for port in ports: _ALLOWED_PORTS.discard(port)
 
 
 @pytest.fixture(scope='session')
@@ -141,6 +150,10 @@ def isolated_runtime_boundaries():
     real_term_init = terminal.Term.__init__
     real_hook_install = hooks.install
     real_free_port = __import__('taskuary.desktop', fromlist=['free_port']).free_port
+    real_socket = socket.socket
+    real_popen = subprocess.Popen
+    real_run = subprocess.run
+    real_lifespan = server.app.router.lifespan_context
 
     def guarded_request(self, method, url, *args, **kwargs):
         if _local_allowed(url): return real_request(self, method, url, *args, **kwargs)
@@ -158,8 +171,7 @@ def isolated_runtime_boundaries():
 
     def guarded_hooks(cwd, *args, **kwargs):
         path = Path(cwd).resolve()
-        temp = Path(tempfile.gettempdir()).resolve()
-        try: path.relative_to(temp)
+        try: path.relative_to(_TEST_ROOT)
         except ValueError:
             _SAFETY_EVENTS.append(('checkout hook write', str(path)))
             return False
@@ -170,15 +182,74 @@ def isolated_runtime_boundaries():
         _ALLOWED_PORTS.add(port)
         return port
 
+    class GuardedSocket(real_socket):
+        """Register sockets this suite binds and refuse every other outbound connection."""
+        def bind(self, address):
+            result = super().bind(address)
+            try:
+                host, _requested = address[:2]
+                bound_host, bound_port = self.getsockname()[:2]
+                if str(host).lower() in ('127.0.0.1', 'localhost', '::1'):
+                    _ALLOWED_PORTS.add(int(bound_port))
+            except (TypeError, ValueError, OSError):
+                pass
+            return result
+
+        def connect(self, address):
+            try: host, port = address[:2]
+            except (TypeError, ValueError): return _blocked('socket connection', address)
+            if str(host).lower() in ('127.0.0.1', 'localhost', '::1') and int(port) in _ALLOWED_PORTS:
+                return super().connect(address)
+            return _blocked('socket connection', address)
+
+        def connect_ex(self, address):
+            try: host, port = address[:2]
+            except (TypeError, ValueError): return _blocked('socket connection', address)
+            if str(host).lower() in ('127.0.0.1', 'localhost', '::1') and int(port) in _ALLOWED_PORTS:
+                return super().connect_ex(address)
+            return _blocked('socket connection', address)
+
+    def allowed_process(argv) -> bool:
+        command = argv if isinstance(argv, (list, tuple)) else [argv]
+        first = str(command[0] if command else '')
+        try:
+            if Path(first).resolve() == Path(sys.executable).resolve(): return True
+        except OSError:
+            pass
+        return Path(first).name.lower() in ('git', 'git.exe')
+
+    def guarded_popen(argv, *args, **kwargs):
+        if allowed_process(argv): return real_popen(argv, *args, **kwargs)
+        return _blocked('subprocess', argv)
+
+    def guarded_run(argv, *args, **kwargs):
+        if allowed_process(argv): return real_run(argv, *args, **kwargs)
+        return _blocked('subprocess', argv)
+
     def stopped(name):
         def no_op(*_args, **_kwargs):
             _SAFETY_EVENTS.append(('lifespan boundary', name))
             return False
         return no_op
 
+    @asynccontextmanager
+    async def safe_lifespan(app):
+        # Preserve the production lifespan itself, including cleanup, but replace only the four
+        # background integration starters while entering it.  Their direct unit tests still call
+        # the real functions outside this narrow context.
+        with mock.patch.object(wabridge, 'start_configured', stopped('WhatsApp bridge')), \
+             mock.patch.object(server, 'catch_up_on_startup', stopped('startup catch-up')), \
+             mock.patch.object(server, 'poll_forever', stopped('poll scheduler')), \
+             mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')):
+            async with real_lifespan(app):
+                yield
+
     with ExitStack() as patches:
         patches.enter_context(mock.patch.object(requests.sessions.Session, 'request', guarded_request))
         patches.enter_context(mock.patch.object(urllib.request, 'urlopen', guarded_urlopen))
+        patches.enter_context(mock.patch.object(socket, 'socket', GuardedSocket))
+        patches.enter_context(mock.patch.object(subprocess, 'Popen', guarded_popen))
+        patches.enter_context(mock.patch.object(subprocess, 'run', guarded_run))
         patches.enter_context(mock.patch.object(imaplib, 'IMAP4_SSL', side_effect=lambda *a, **k: _blocked('IMAP connection', a[0] if a else '')))
         patches.enter_context(mock.patch.object(smtplib, 'SMTP', side_effect=lambda *a, **k: _blocked('SMTP connection', a[0] if a else '')))
         patches.enter_context(mock.patch.object(smtplib, 'SMTP_SSL', side_effect=lambda *a, **k: _blocked('SMTP connection', a[0] if a else '')))
@@ -186,10 +257,7 @@ def isolated_runtime_boundaries():
         patches.enter_context(mock.patch.object(terminal.Term, '__init__', guarded_term_init))
         patches.enter_context(mock.patch.object(hooks, 'install', guarded_hooks))
         patches.enter_context(mock.patch.object(browserview, 'start', stopped('browser launch')))
-        patches.enter_context(mock.patch.object(wabridge, 'start_configured', stopped('WhatsApp bridge')))
-        patches.enter_context(mock.patch.object(server, 'catch_up_on_startup', stopped('startup catch-up')))
-        patches.enter_context(mock.patch.object(server, 'poll_forever', stopped('poll scheduler')))
-        patches.enter_context(mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')))
+        patches.enter_context(mock.patch.object(server.app.router, 'lifespan_context', safe_lifespan))
         patches.enter_context(mock.patch('taskuary.desktop.free_port', safe_free_port))
         yield
 

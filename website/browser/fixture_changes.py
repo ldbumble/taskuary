@@ -18,6 +18,7 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/ordering',
         '/api/fixture/processing/unread-activate',
         '/api/fixture/processing/unread-arrivals',
+        '/api/fixture/processing/sync-phase',
         '/api/fixture/processing/canonical-all',
         '/api/fixture/processing/canonical-arrival',
         '/api/fixture/processing/canonical-emit',
@@ -34,6 +35,30 @@ def install_processing_changes(app, store):
     demo.refuse = fixture_refuse
     from website.browser.fixture_canonical import install_canonical_changes
     install_canonical_changes(app, store)
+
+    sync_token = [None]
+
+    @app.post('/api/fixture/processing/sync-phase')
+    def sync_phase(body: dict):
+        from taskuary import server
+        phases = {'fetching': 'reading synthetic sources', 'triaging': 'processing synthetic messages',
+                  'checking': 'checking synthetic work', 'running_reports': 'running synthetic reports', 'idle': ''}
+        if set(body) != {'phase'} or body['phase'] not in phases:
+            raise HTTPException(422, 'one fixed synthetic phase is required')
+        phase = body['phase']
+        if phase == 'idle':
+            if sync_token[0] is not None:
+                server._status_end(store, sync_token[0])
+                sync_token[0] = None
+                server._POLL_BUSY.release()
+        else:
+            if sync_token[0] is None:
+                if not server._POLL_BUSY.acquire(blocking=False):
+                    raise HTTPException(409, 'fixture sync already owned')
+                sync_token[0] = server._status_begin(store, 'full', phases[phase])
+            server._status_progress(store, sync_token[0], phases[phase], phase=phase)
+            store.set_setting('triage_last_error', 'Synthetic triage error remains visible', 'fixture')
+        return {'phase': phase}
 
     @app.post('/api/fixture/processing/unread-activate')
     def activate_unread(body: dict):

@@ -34,7 +34,7 @@ def _rows_for(cur, table, column, ids):
         part = ids[offset:offset + 400]
         rows.extend(dict(row) for row in cur.execute(
             f'SELECT * FROM {table} WHERE {column} IN ({",".join("?" for _ in part)})', part))
-    return sorted(rows, key=lambda row: json.dumps(row, sort_keys=True))
+    return rows if len(rows) < 2 else sorted(rows, key=lambda row: json.dumps(row, sort_keys=True))
 
 
 def processing_projection(cur, item_id, *, live_state=None):

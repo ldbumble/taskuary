@@ -4244,7 +4244,8 @@ def _visible_status(owners):
     if not owners: return {'state': 'idle'}
     full = [x for x in owners.values() if x['lane'] == 'full']
     chosen = max(full or list(owners.values()), key=lambda x: x['seq'])
-    return {'state': 'running', 'what': chosen['what'], 'at': chosen['at']}
+    return {'state': 'running', 'what': chosen['what'], 'at': chosen['at'],
+            'phase': chosen['phase'], 'lane': chosen['lane']}
 
 
 def _status_write(target_store, owners):
@@ -4256,18 +4257,19 @@ def _status_begin(target_store, lane, what):
     with _STATUS_LOCK:
         _STATUS_SEQ[0] += 1
         owners = _STATUS_OWNERS.setdefault(id(target_store), {})
-        owners[token] = {'store': target_store, 'lane': lane, 'what': what,
+        owners[token] = {'store': target_store, 'lane': lane, 'what': what, 'phase': 'fetching',
                          'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
                          'seq': _STATUS_SEQ[0]}
         _status_write(target_store, owners)
     return token
 
 
-def _status_progress(target_store, token, what):
+def _status_progress(target_store, token, what, *, phase=None):
     with _STATUS_LOCK:
         owners = _STATUS_OWNERS.get(id(target_store), {})
         if token not in owners: return
         owners[token]['what'] = what
+        if phase is not None: owners[token]['phase'] = phase
         owners[token]['at'] = datetime.now().isoformat(sep=' ', timespec='seconds')
         _status_write(target_store, owners)
 
@@ -4579,13 +4581,21 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             try:
                 with ingest_mod.deferred():
                     added = poll_channels(target_store, backfill_days, progress=_say, only=types) if types else 0
+                if types:
+                    # This is completion of the available full-lane fetch attempt,
+                    # not proof every source succeeded. Connector errors stay intact.
+                    # The scheduling clock above remains the attempt's start time.
+                    target_store.set_setting('ingest_last_fetch_completed_at', str(time.time()), 'system')
             finally:
                 # A full pass IS a chat attempt (PW-002). Stamp before releasing its connector
                 # claims, so the quick clock cannot enter the release-to-stamp gap and duplicate it.
                 now = time.time()
                 for t in types:
                     if t in CHAT_CONNECTORS: _QUICK_LAST[t] = now
-        def _left(n): _status_progress(target_store, status, f'{what} · triaging' + (f' · {n} left' if n else ''))
+        def _left(n): _status_progress(target_store, status, f'{what} · processing messages' + (f' · {n} left' if n else ''), phase='triaging')
+        # Drain progress runs after a judgement finishes. Publish the phase before
+        # submitting so even the first slow judgement cannot still say "reading".
+        _left(0)
         try:
             ticket = _drain_worker(target_store).submit(progress=_left)
             ticket.wait()                   # full sync/reports retain their established sequencing
@@ -4594,6 +4604,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             logger.warning(f'deferred triage drain failed: {e}')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
+        _status_progress(target_store, status, what, phase='checking')
         try:
             from . import ci
             ci.poll(target_store)
@@ -4605,6 +4616,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             blackboard.roll_daily(target_store)
         except Exception as e:
             logger.warning(f'the wall roll-up failed: {e}')
+        _status_progress(target_store, status, what, phase='running_reports')
         run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         return added
     finally:
@@ -4763,9 +4775,14 @@ def ingest_status():
     # hardcoded "every 10 min" that stayed on screen after somebody set the interval to 0
     try: every = int(store.get_settings().get('poll_minutes') or 0)
     except (TypeError, ValueError): every = 10
+    try:
+        fetched_at = float(store.get_settings().get('ingest_last_fetch_completed_at'))
+        if not 0 < fetched_at < float('inf'): fetched_at = None
+    except (TypeError, ValueError): fetched_at = None
     # and the clock itself: when the last full poll ran and when the next is due, so the caption
     # can count down instead of asserting a cadence nobody could check
     return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
+            'lastFetchCompletedAt': fetched_at,
             'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
             # the brain's last failure, until it answers again - shown in the caption, not buried in rows
             'triageError': store.get_settings().get('triage_last_error') or '',

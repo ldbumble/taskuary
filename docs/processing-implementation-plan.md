@@ -8,6 +8,10 @@ detailed acceptance record; this plan supplies dependencies, ownership, and gate
 
 ## Delivery contract
 
+Owner update, 2026-09-06: stop the specialist sub-agents and have the lead finish
+the remaining fixes directly. This supersedes the multi-agent assignment rules
+below for subsequent work; regression, browser, preservation, and delivery gates remain.
+
 Implement one reviewable section, add its tests, integrate and review, run the
 cumulative gates, commit and push, verify remote CI, then move to the next section.
 Phases below may require several such sections; they are not giant single commits.

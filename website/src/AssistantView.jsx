@@ -108,7 +108,9 @@ function Pile({ pile, current, onPull }) {
     : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
   return (
     <div className="tq-pile" data-tq-keep>
-      {!drawn.length ? (
+      {!pile ? (
+        <div className="tq-pile-empty" role="status"><b>Loading your items…</b>Your list has not finished loading.</div>
+      ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : (
         <div className="tq-pile-stack" style={{ height: drawn.reduce((h, i) => h + (i.current ? CUR_H : ROW_H), 0) }}>
@@ -770,7 +772,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         <Box sx={{ width: 30, height: 30, borderRadius: 2, background: "linear-gradient(90deg, #55697a, #7d9a7c)", display: "grid", placeItems: "center", flexShrink: 0 }}><TaskuaryMark size={22} /></Box>
-        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : statusLine(items, busy)}</span></div>
+        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : !pile ? "Loading your items…" : statusLine(items, busy)}</span></div>
         <div className="grow" />
         <StageMode mode={stageMode} setMode={setStageMode} />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>

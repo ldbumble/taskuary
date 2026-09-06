@@ -313,6 +313,9 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_processing_alias_entity ON processing_alias(EntityKind, LocalId, RetiredAt)',
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_relation_active ON processing_relation(FromEntityKind, FromLocalId, ToEntityKind, ToLocalId, Kind) WHERE RetiredAt IS NULL',
     'CREATE INDEX IF NOT EXISTS idx_processing_redirect ON processing_item(RedirectItemId)',
+    'CREATE INDEX IF NOT EXISTS idx_processing_evidence_item ON processing_legacy_evidence(ItemId, EvidenceId)',
+    'CREATE INDEX IF NOT EXISTS idx_processing_evidence_entity ON processing_legacy_evidence(EntityKind, LocalId, EvidenceId)',
+    'CREATE INDEX IF NOT EXISTS idx_processing_context_item ON processing_context_snapshot(ItemId, MigrationVersion)',
     'CREATE INDEX IF NOT EXISTS idx_connector_type ON connector(Type, ConnectorId)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_batch_source ON invoice_batch(SourceId, Period)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_item_batch ON invoice_item(BatchId, Status)',
@@ -1812,7 +1815,7 @@ class SQLiteStore:
         if local_id is not None: q += ' AND LocalId=?'; p.append(str(local_id))
         return [self._processing_evidence_row(r) for r in self._rows(q + ' ORDER BY EvidenceId', p)]
 
-    def _processing_snapshot_cursor(self, cur, resolved, *, live_state=None, lineage=None, item=None):
+    def _processing_snapshot_cursor(self, cur, resolved, *, live_state=None, lineage=None, item=None, include_history=True):
         """Build the public item picture inside a caller-owned read transaction."""
         from .processing_projection import processing_projection
         if item is None:
@@ -1837,6 +1840,9 @@ class SQLiteStore:
                 (member['EntityKind'], member['LocalId'])).fetchall():
                 aliases_by_id[row['AliasId']] = dict(row)
         aliases = [aliases_by_id[key] for key in sorted(aliases_by_id)]
+        if not include_history:
+            return {'item': item, 'item_history': item_history, 'members': members,
+                    'aliases': aliases, **processing_projection(cur, resolved, live_state=live_state)}
         evidence_by_id = {r['EvidenceId']: r for r in cur.execute(
             f"SELECT * FROM processing_legacy_evidence WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY EvidenceId",
             lineage).fetchall()}
@@ -1876,7 +1882,7 @@ class SQLiteStore:
             if not resolved: return None
             return self._processing_snapshot_cursor(cur, resolved, live_state=live_state)
 
-    def processing_inventory_snapshot(self, *, fixed_now, live_state=None):
+    def processing_inventory_snapshot(self, *, fixed_now, live_state=None, include_history=True):
         """Read the complete, non-activating canonical inventory from one SQLite snapshot.
 
         This reports gaps in explicit membership but never allocates identity, infers read or
@@ -1886,8 +1892,9 @@ class SQLiteStore:
             raise ValueError('fixed_now must be a non-empty string')
         as_of = fixed_now
         frozen_live = None if live_state is None else copy.deepcopy(tuple(live_state))
+        from .processing_projection import _worker_attention
         worker_rows = [] if frozen_live is None else sorted(
-            (dict(row) for row in frozen_live),
+            (_worker_attention(row) for row in frozen_live),
             key=lambda row: json.dumps(row, ensure_ascii=False, sort_keys=True,
                                        separators=(',', ':'), allow_nan=False))
         worker_payload = {'available': frozen_live is not None, 'rows': worker_rows}
@@ -1896,6 +1903,15 @@ class SQLiteStore:
             separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
         with self._processing_read() as cur:
+            cache_key = (self.cx.total_changes, cur.execute('PRAGMA data_version').fetchone()[0], worker_revision)
+            cached = getattr(self, '_processing_runtime_inventory_cache', None)
+            if not include_history and cached is not None and cached[0] == cache_key:
+                snapshot = copy.deepcopy(cached[1])
+                snapshot['as_of'] = as_of
+                snapshot.pop('snapshot_revision', None)
+                snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(snapshot, ensure_ascii=False,
+                    sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+                return snapshot
             item_rows = [dict(r) for r in cur.execute(
                 'SELECT * FROM processing_item ORDER BY ItemId').fetchall()]
             roots = {row['ItemId']: row for row in item_rows if row['RedirectItemId'] is None}
@@ -1905,7 +1921,7 @@ class SQLiteStore:
                 if resolved in lineage_by_root: lineage_by_root[resolved].append(row['ItemId'])
             items = [self._processing_snapshot_cursor(
                 cur, item_id, live_state=frozen_live,
-                lineage=lineage_by_root[item_id], item=roots[item_id])
+                lineage=lineage_by_root[item_id], item=roots[item_id], include_history=include_history)
                 for item_id in sorted(roots)]
 
             member_count = cur.execute('''SELECT COUNT(*) FROM processing_member pm
@@ -1947,6 +1963,12 @@ class SQLiteStore:
         snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
             snapshot, ensure_ascii=False, sort_keys=True,
             separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+        if not include_history:
+            # The payload is independent of the query clock; consumers apply history,
+            # deferrals and calendar eligibility using as_of on every read. Any local
+            # write, external SQLite commit or substantive worker change invalidates.
+            with self.lock:
+                self._processing_runtime_inventory_cache = (cache_key, copy.deepcopy(snapshot))
         return snapshot
 
     @staticmethod

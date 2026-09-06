@@ -44,6 +44,13 @@ Unchecked feature requirements below remain pending their own implementation gat
   [implementation evidence](processing-implementation-evidence.md#section-21--independent-poll-scheduling-and-settings).
   The email catch-up review corrections and final gates are recorded below.
 
+  Sync-progress follow-up: distinguish source fetching, message processing,
+  background checks, and reports; keep rows and triage errors visible throughout.
+  Observe completion through a cancellable status fallback even if live events
+  are missed. A timeout or elapsed three minutes must never imply completion.
+  Completed fetch timestamps describe finished checks, not successful delivery
+  from every source. Implementation and acceptance evidence are recorded separately.
+
 ## Email catch-up must not skip backlog
 
 - [x] <a id="pw-006"></a>**PW-006** Outlook: `_mail_msgs()` reads newest-first and stops at its default 500
@@ -625,6 +632,8 @@ the read-state transition remain pending.
   historical read-state preservation, and updates with unchanged keys/lanes.
 
 Section 1.8 implementation now unifies these views and preserves historical reads.
+Delivered to master at `2a58cdd`; CI run `34061662272` passed all ten jobs after
+the browser-only retry. The exact source-filter assertion also passed locally.
 The full backend gate passed 2934 tests plus 76 subtests; all nine rendered browser
 scenarios passed. These checkboxes record implementation/local acceptance; remote
 delivery and exact-SHA CI are recorded separately. See

@@ -336,7 +336,7 @@ class AllInventory:
                 raise AllError('processing_query_invalid', 'Invalid page cursor or changed query', 422) from None
         if lease_id is None:
             snapshot = store.processing_inventory_snapshot(
-                fixed_now=fixed_now or datetime.now().isoformat(), live_state=live_state)
+                fixed_now=fixed_now or datetime.now().isoformat(), live_state=live_state, include_history=False)
             rows, coverage, counts = compact_inventory(snapshot, query)
             lease_id = uuid.uuid4().hex
             lease = {'created': self.clock(), 'query': query_revision, 'items': rows,

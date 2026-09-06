@@ -11,11 +11,15 @@ export const syncStatusDelay = ({ running = false, nextAt = null, now = Date.now
 // One face for the sync clock, so the Timeline's caption and the pipe's chip can never disagree
 // about when the mail was last read. `lastAt` is a real Date (built from the SERVER's clock, not
 // from parsing a UTC string as local time - that read "in 3h" on an east-coast box).
-export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false } = {}) => {
+export const syncPhaseLabel = phase => ({ fetching: 'Reading sources', triaging: 'Organizing',
+  checking: 'Checking updates', running_reports: 'Running reports' }[phase] || 'Syncing');
+
+export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false, checked = false, started = false } = {}) => {
   if (busy) return what && !terse ? what : "syncing…";
   if (!every) return terse ? "sync off" : "background sync off";
   const at = lastAt ? lastAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—";
-  if (terse) return `synced ${at}`;
+  const verb = started ? 'check started' : checked ? 'checked' : 'synced';
+  if (terse) return `${verb} ${at}`;
   const nxt = nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`;
-  return `synced ${at}${nxt}`;
+  return `${verb} ${at}${nxt}`;
 };

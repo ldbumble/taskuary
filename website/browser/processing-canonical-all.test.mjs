@@ -344,7 +344,15 @@ test("canonical All renders every root once with truthful details and frozen pag
   await chooseSource(page, seed.grouped.source_nonrepresentative);
   await page.waitForFunction((itemId, mid) => [...document.querySelectorAll("[data-processing-item]")]
     .find((node) => node.dataset.processingItem === itemId)?.dataset.processingTarget === `message:${mid}`,
-    { timeout: 10000 }, seed.grouped.item_id, seed.grouped.message_ids[0]);
+    { timeout: 10000 }, seed.grouped.item_id, seed.grouped.message_ids[0]).catch(async error => {
+      console.error(JSON.stringify({ filterReturn: await page.evaluate(itemId => ({
+        source: document.querySelector('[aria-label="Timeline source"]')?.textContent,
+        category: document.querySelector('[aria-label="Timeline category"]')?.textContent,
+        row: [...document.querySelectorAll('[data-processing-item]')].find(n => n.dataset.processingItem === itemId)?.dataset,
+        text: document.body.innerText.slice(-5000),
+      }), seed.grouped.item_id), traffic: traffic.slice(-20) }));
+      throw error;
+    });
   await clickItem(page, seed.grouped.item_id);
   const replySelector = '[data-tq-timeline-stage] textarea[placeholder="Type your reply, or generate a draft with AI"]';
   await page.waitForSelector(replySelector, { visible: true, timeout: 10000 });

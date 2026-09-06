@@ -2343,3 +2343,44 @@ including the new clock-versus-worker-facts regression. Rendered freshness passe
 Current exclusion, retained email filter, and previous members remaining unread.
 Remote CI is pending on the delivery commit; it runs the cumulative suite and all
 nine browser scenarios. Sync progress work remains next, after this delivery gate.
+
+## Sync progress and large-inventory loading follow-up
+
+Section 1.8 was delivered at `2a58cdd54200b8b9705c96be32008cd8ccf1c72c`.
+CI `34061662272` passed all ten jobs. The first browser attempt had one source-picker
+exact-target timeout; the unchanged complete canonical-All case passed locally in
+101.18 s, and the browser-only exact-SHA retry passed. Diagnostics now record the
+selected source, rendered target and recent requests if that timeout recurs.
+
+The owner subsequently requested stopping specialist agents; the remaining agent
+was interrupted and the lead continued directly. Sync now publishes fetching,
+triaging (before the first slow judgement), checking and running_reports without
+changing lock ownership or quick-poll sequencing. The UI keeps rows and errors
+visible, uses a bounded cancellable status reader, and never treats three elapsed
+minutes or a failed status request as completion. The last completed full fetch
+attempt is a separate timestamp; it is not a promise every connector succeeded.
+The prior attempt-start clock and next-sync schedule remain available.
+
+Live startup diagnosis used read-only HTTP and SQL: health/static assets responded,
+but canonical All exceeded both 8 s and 30 s request timeouts. Roughly 4,500 roots
+were repeatedly reading complete migration archives. Query plans confirmed full
+scans of legacy evidence and archived context. Three lookup indexes were applied
+as bounded online maintenance: 0 application rows changed, 0.094 s, no restart.
+No messages, receipts, deferrals or documents were edited. An isolated temporary
+SQLite backup was profiled with socket/subprocess access denied and removed on exit;
+no source contents or secrets were printed. Full-history profiling took 24.58 s
+(including profiler overhead). Current-only runtime snapshots took 4.188 s initially
+and 2.046 s unchanged for 4,586 roots. Runtime cache invalidates on local writes,
+external SQLite commits and worker changes; query time and deferrals remain fresh.
+Full audit snapshots/details remain available unchanged. Missing data while loading
+is explicitly loading, never "All done"; count and sync controls remain present.
+
+Local checks to date: 329 frontend tests; 391 processing regressions before the added
+cache-specific case; two index/cache regressions verify identical compact inventory,
+no full history scan, defensive copies, time refresh and local/external invalidation.
+The full backend run had 2,972 passes plus 76 subtests and one existing banner assertion
+failure; the caption was made compatible without changing that assertion, then the
+exact failure plus projection/read regressions passed (31 tests). The new real-browser
+sync scenario passed in 27.98 s after fixing the fixture's guarded WebSocket inheritance.
+It now also exercises a deliberately delayed initial list, history and next-sync values.
+Final combined regression, rendered, push and CI results remain pending.

@@ -21,7 +21,8 @@ import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { fadeBand } from "./timelineFade.js";
-import { syncFace, syncStatusDelay } from "./syncTiming.js";
+import { syncFace, syncPhaseLabel } from "./syncTiming.js";
+import { observeSync } from "./syncObserver.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
 import { timelineDayLabel } from "./timelineDay.js";
@@ -739,13 +740,16 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     finally { busyMore.current = false; }
   }, [view, cat, pick, srcByChannel, fparams, noMore, load, canonicalUnread]);
 
-  // Sync = trigger a real mailbox/Teams ingest server-side, then TRACK its actual state
-  // (/ingest/status) instead of guessing with a fixed wait - the button stays "Updating"
-  // and the list shows loading until the server says the poll finished.
-  const [syncing, setSyncing] = useState(false);   // a sync YOU started - the list dims for it
+  // Sync tracks the server's actual stage. Rows remain readable throughout;
+  // elapsed time and lost live events cannot manufacture completion.
+  const [syncing, setSyncing] = useState(false);   // an owner-started check awaiting status
   const [bgSync, setBgSync] = useState(false);     // the startup catch-up - rows stay readable
   const [syncWhat, setSyncWhat] = useState("");
+  const [syncPhase, setSyncPhase] = useState("");
+  const [syncUnknown, setSyncUnknown] = useState(false);
+  const syncObserver = useRef(null);
   const [lastSync, setLastSync] = useState(null);
+  const [syncStarted, setSyncStarted] = useState(false);
   const [every, setEvery] = useState(10);            // the server's cadence, not a guess
   // the server's clock, as an offset from OUR clock: nextPollAt is its time, so the countdown
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
@@ -764,7 +768,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     if (data.everyMinutes != null) setEvery(data.everyMinutes);
     const pollAt = Number(data.lastPollAt) || null;
     const completedBetweenChecks = seenPollAt.current != null && pollAt != null && pollAt > seenPollAt.current;
-    if (pollAt) setLastSync(new Date(Date.now() - (data.now - pollAt) * 1000));
+    const finishedAt = Number(data.lastFetchCompletedAt) || null;
+    const clockAt = finishedAt || pollAt;
+    if (clockAt) setLastSync(new Date(Date.now() - (data.now - clockAt) * 1000));
+    setSyncStarted(!finishedAt && !!pollAt);
     if (pollAt) seenPollAt.current = pollAt;
     nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
     setTriageErr(data.triageError || "");
@@ -773,13 +780,16 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // advancing is how a sub-second automatic poll still gets a visible receipt
     const running = data.status?.state === "running" || data.ingest?.state === "running";
     const what = data.status?.what || data.ingest?.what || "";
+    setSyncUnknown(false);
+    setSyncPhase(data.status?.phase || "");
     if (running) {
       clearTimeout(completionTimer.current);
-      setBgSync(true); setSyncWhat(what); load(rowsLen.current);
+      setBgSync(true); setSyncWhat(what);
+      if (!wasRunning.current) load(rowsLen.current);
     } else if (wasRunning.current) {
       setBgSync(false); setSyncWhat(""); load(rowsLen.current);
     } else if (completedBetweenChecks) {
-      setBgSync(true); setSyncWhat("timeline refreshed"); load(rowsLen.current);
+      setBgSync(true); setSyncWhat("check finished"); load(rowsLen.current);
       clearTimeout(completionTimer.current);
       completionTimer.current = setTimeout(() => { setBgSync(false); setSyncWhat(""); }, 900);
     }
@@ -790,38 +800,23 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // gated on `active`: the Timeline stays mounted behind another tab, and coming back
     // re-asks at once. Hidden windows stay subscribed via onLive but do not refetch.
     if (!active) return undefined;
-    let alive = true;
-    api.get("/api/ingest/status").then(({ data }) => { if (alive) applyStatus(data); }).catch(() => {});
-    const stop = onLive("feed-changed", (ev) => {
-      if (!alive) return;
-      if (ev.ingest) applyStatus({ ingest: ev.ingest, status: ev.ingest });
-      api.get("/api/ingest/status").then(({ data }) => { if (alive) applyStatus(data); }).catch(() => {});
+    const observer = observeSync({
+      read: () => api.get("/api/ingest/status", { timeout: 10000 }).then(({ data }) => data),
+      changed: applyStatus,
+      failed: () => setSyncUnknown(true),
+      subscribe: refresh => onLive("feed-changed", refresh),
     });
-    return () => { alive = false; stop(); clearTimeout(completionTimer.current); };
+    syncObserver.current = observer;
+    return () => { observer.stop(); syncObserver.current = null; clearTimeout(completionTimer.current); };
   }, [applyStatus, active]);
   useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
   const syncNow = useCallback(async (silent) => {
+    if (syncUnknown) { await syncObserver.current?.refresh(); return; }
     if (!silent) setSyncing(true);
-    try { await api.post("/api/ingest/poll"); } catch { /* poll failures surface in Connections */ }
-    const t0 = Date.now();
-    const settle = async () => { await load(rowsLen.current); setSyncing(false); setLastSync(new Date()); };
-    const check = async () => {
-      try {
-        const { data } = await api.get("/api/ingest/status");
-        if (data.status?.state === "running" && Date.now() - t0 < 180000) {
-          setSyncWhat(data.status.what || "");
-          // stop DIMMING the moment there is something real to look at: rows land oldest
-          // first, one at a time, and a half-faded list behind a spinner hides exactly the
-          // thing you pressed the button to watch
-          setSyncing(false); setBgSync(true);
-          await load(rowsLen.current);
-          setTimeout(check, 2000); return;
-        }
-      } catch { /* fall through and settle */ }
-      setSyncWhat(""); setBgSync(false); settle();
-    };
-    setTimeout(check, 1500);
-  }, [load]);
+    try { await api.post("/api/ingest/poll"); }
+    catch { setSyncUnknown(true); }
+    await syncObserver.current?.refresh();
+  }, [syncUnknown]);
 
   useEffect(() => {
     setRows(null); rowsLen.current = 0; setNoMore(false);
@@ -1377,9 +1372,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               ))}
             </Box>
           )}
+          {!rows && <Typography variant="caption" sx={{ color: FAINT, textAlign: "center", fontSize: 10.5 }}>Loading item counts…</Typography>}
           {/* a brain that errors on every call used to look like slow triage: rows parked on
               "triaging…" and nothing saying why. The last error stays until it answers again. */}
-          {triageErr && !syncing && !bgSync && (
+          {triageErr && (
             <Typography variant="caption" noWrap title={triageErr} sx={{ color: ALERT_INK, fontWeight: 700, fontSize: 10.5 }}>
               triage brain failing — {triageErr}
             </Typography>
@@ -1402,19 +1398,20 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               appears to describe the sync line beneath it. */}
           <Box sx={{ minHeight: 20, display: "flex", justifyContent: "center", alignItems: "center", gap: 0.25 }}>
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
-              {syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn })}
+              {syncUnknown ? "Sync status unavailable — rechecking" : syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted })}
             </Typography>
-            <Button size="small" variant="text" disabled={syncing || bgSync} onClick={() => syncNow(false)}
+            <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
               startIcon={<SyncIcon data-tq-sync-icon sx={{ fontSize: 12,
                 color: syncing || bgSync ? ACCENT : "inherit",
-                ...(syncing || bgSync ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
+                ...(!syncUnknown && (syncing && !bgSync || bgSync && (!syncPhase || syncPhase === "fetching"))
+                  ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
               sx={{ minWidth: 0, minHeight: { xs: 30, md: 20 }, py: 0, px: { xs: 1, md: 0.6 }, ml: 0.35, fontSize: 10.5,
                 lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
                 "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
                 "&.Mui-disabled": { color: DIM, opacity: 1 },
                 "& .MuiButton-startIcon": { mr: 0.35 }, "&:hover": { bgcolor: PANEL2 } }}>
-              {syncing || bgSync ? "Syncing" : "Sync now"}
+              {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : "Sync now"}
             </Button>
           </Box>
           {/* The heading is also navigation: choose any day already in this Timeline and the
@@ -1459,7 +1456,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           } }}>
           <FunnelBar onOpenTask={onOpenTask} active={active} />
           {view === "unread" ? (typeof top === "function" ? top({ openByMid }) : top) : (
-          <Box sx={{ position: "relative", opacity: syncing ? 0.55 : 1, transition: "opacity .25s" }}>
+          <Box sx={{ position: "relative" }}>
             {syncing && (
               <Box sx={{ position: "absolute", inset: 0, zIndex: 4, display: "flex",
                 alignItems: "flex-start", justifyContent: "center", pointerEvents: "none" }}>

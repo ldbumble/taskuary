@@ -115,7 +115,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None):
     from . import funnel, terminal
     now = now or datetime.now()
     live_state = terminal.live_sessions(tail=6) if live_state is None else live_state
-    snapshot = store.processing_inventory_snapshot(fixed_now=now.isoformat(), live_state=live_state)
+    snapshot = store.processing_inventory_snapshot(fixed_now=now.isoformat(), live_state=live_state, include_history=False)
     rows, coverage, counts = processing_all.compact_inventory(snapshot, query_for(store, only, history=not include_read), include_excluded=include_read)
     by_id = {item['item_id']: item for item in snapshot['items']}
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now) for row in rows]

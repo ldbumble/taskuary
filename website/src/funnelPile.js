@@ -3,7 +3,7 @@
 // Pure and dependency-free so it runs under bare node (test/funnelPile.test.mjs); colour is named
 // by ROLE (theme.jsx ROLES) so this file cannot drift from the palette.
 
-// the lanes, most urgent first - the order the server ranks the pile in
+// Presentation lanes; the server supplies the five attention bands and item order.
 export const LANES = ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"];
 export const LANE_META = {
   blocked:   { word: "agent waiting", role: "you",     mark: "👋", hint: "an agent stopped and is waiting on you — it is blocking work" },
@@ -14,7 +14,7 @@ export const LANE_META = {
   forgotten: { word: "slipped",       role: "info",    mark: "🧵", hint: "the ask that slipped, the promise you made, the thread gone quiet" },
   report:    { word: "report",        role: "info",    mark: "📄", hint: "a report you set up landed, or an agent finished a job" },
   fyi:       { word: "fyi",           role: null,      mark: "👀", hint: "a person told you something — read it or don't" },
-  working:   { word: "agent working", role: "working", mark: "⚙️", hint: "an agent has it — nothing for you until it stops or asks; it drops to the front then" },
+  working:   { word: "agent working", role: "working", mark: "⚙️", hint: "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input" },
 };
 export const laneMeta = (lane) => LANE_META[lane] || LANE_META.fyi;
 
@@ -233,13 +233,16 @@ export const statusLine = (items, busy) => {
   return `${n} in the pipe${you ? ` · ${you} on you` : ""}`;
 };
 
-// the pinned "by the way" bar: the first unacknowledged alert that OUTRANKS what is on the table -
-// a meeting or an agent always does; a draft for your yes only while you are on something lesser
-const BAND = { blocked: 0, time: 1, approve: 2, asked: 3, forgotten: 4, report: 5, fyi: 6, working: 9 };
+// New cards and alerts carry the server's band. Old persisted cards use the same
+// five-band fallback until their current presentation is refreshed.
+const BAND = { blocked: 2, time: 1, approve: 2, broken: 3, asked: 3, forgotten: 3, report: 3, fyi: 4, working: 5 };
+const attentionBand = (item) => {
+  if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
+  if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 3;
+  return BAND[item?.lane] ?? 3;
+};
 export const topAlert = (alerts, acked, current = null, shown = null) => {
-  const band = current ? (BAND[current.lane] ?? 3) : 5;
-  // ...and never about something already drawn in the conversation: its own card is on screen, with
-  // its own buttons, so a bar under it saying the same thing is noise (2026-09-03)
+  const band = current ? attentionBand(current) : 5;
   return (alerts || []).find((a) => !acked.has(a.key) && a.item !== current?.key && !shown?.has(a.item)
-    && (a.kind === "meeting" || a.kind === "agent" || (BAND[a.lane] ?? 3) < band)) || null;
+    && attentionBand(a) < band) || null;
 };

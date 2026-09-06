@@ -129,7 +129,7 @@ test("the by-the-way bar shows the first alert nobody has put down - and only wh
   assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "x", lane: "fyi" }).key, "alert:c");   // on an fyi: the draft outranks it
   assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "x", lane: "approve" }), null);      // on another draft: it does not
   assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "c", lane: "approve" }), null);      // it IS the one on the table
-  assert.strictEqual(topAlert(alerts.slice(1, 2), new Set(), { key: "x", lane: "blocked" }).key, "alert:b");   // an agent always interrupts
+  assert.strictEqual(topAlert(alerts.slice(1, 2), new Set(), { key: "x", lane: "blocked" }), null);   // equal owner-wait bands do not interrupt
   assert.strictEqual(topAlert(alerts, new Set(["alert:a", "alert:b", "alert:c"])), null);
   assert.strictEqual(topAlert(null, new Set()), null);
 });
@@ -242,4 +242,13 @@ test("a few kinds say more than their lane does", async () => {
   assert.equal(rowMeta({ kind: "report", lane: "report" }).word, laneMeta("report").word);
   assert.equal(rowMeta({ kind: "fyi", lane: "fyi" }).word, "fyi");
   assert.equal(rowMeta(null).word, "fyi");
+});
+
+test("alerts consume shared bands and cannot displace time-critical Current with an agent wait", () => {
+  const wait = { key: "alert:agent", item: "agent", kind: "agent", lane: "blocked", order_band: 2 };
+  const urgent = { key: "alert:urgent", item: "urgent", kind: "asked", lane: "time", order_band: 1 };
+  assert.equal(topAlert([wait], new Set(), { key: "now", kind: "idea", lane: "asked", order_band: 1 }), null);
+  assert.equal(topAlert([wait, urgent], new Set(), { key: "now", lane: "approve", order_band: 2 }), urgent);
+  assert.equal(topAlert([wait], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), wait);
+  assert.equal(topAlert([urgent], new Set(), { key: "now", lane: "fyi" }, new Set(["urgent"])), null);
 });

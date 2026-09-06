@@ -570,7 +570,7 @@ Section 1.6 integrates canonical All roots, source-member selection, compact fro
 pagination beyond 500 items, explicit coverage errors, and full detail via read-only
 GETs for messages and standalone tasks/ideas/reviews. Its reconciliation and detail lifecycle
 preserve legacy reads, documents and exact draft targets. Local gates and independent
-review passed at `d75d45e`; delivery CI is pending in Section 1.6 evidence. Shared Unread/read/filter/priority and
+review passed; integration `1f7118e` is CI-verified (run 34056568028, all ten jobs passed). Shared Unread/read/filter/priority and
 Current/Next adoption remain pending, so PW-101/102/103/106/109 remain unchecked.
 
 Section 1.6 integration preserves concurrent Phase 7 completion and approval changes.
@@ -632,7 +632,9 @@ Execution clarification approved 2026-09-06: use five bands: urgent requests/cur
 or starting-within-15-minutes calendar events; agent input/approval; other actionable
 tasks and finished results; FYIs; working agents. Within each band use triage priority,
 then oldest activity first. This resolves the historical middle-band/tie-break review
-notes below; implementation remains pending its Phase 1 tests and CI evidence.
+notes below. Section 1.7 implements runtime ordering with cumulative and rendered
+browser tests; canonical Unread/read-state cutover remains pending. Delivery and
+CI evidence is recorded in processing-implementation-evidence.md.
 
 Ordering clarification approved during the detailed walkthrough:
 - [ ] <a id="pw-110"></a>**PW-110** Put genuinely immediate/time-critical items first (a current calendar

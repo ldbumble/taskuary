@@ -20,7 +20,7 @@ PAGE_SCHEMA = "taskuary.processing.inventory.page.v1"
 CURSOR_VERSION = 1
 MAX_PAGE_LIMIT = 500
 
-_PRIORITY_RANK = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
+from .processing_order import PRIORITY_RANK as _PRIORITY_RANK, attention_band
 _SIGNAL_BAND = {
     "urgent_request": 1,
     "owner_input": 2,
@@ -288,7 +288,8 @@ def _normalize_attention(value: Any, as_of: tuple[int, ...], as_of_aware: bool) 
     if not qualifying:
         return {"state": "unknown", "band": None, "signals": signals,
                 "diagnostics": [*diagnostics, "attention_unknown"]}
-    selected_band = next(band for band in (1, 2, 5, 3, 4) if band in qualifying)
+    selected_band = attention_band(urgent=1 in qualifying, owner_wait=2 in qualifying,
+                                   working=5 in qualifying, actionable=3 in qualifying)
     if selected_band == 5 and any(band in qualifying for band in (3, 4)):
         diagnostics.append("working_suppresses_non_owner_attention")
     return {"state": "known", "band": selected_band, "signals": signals,

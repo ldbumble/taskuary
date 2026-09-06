@@ -908,8 +908,8 @@
       "phase": "1",
       "requirement": "Use one canonical item/identity/context representation for All, Unread,",
       "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
-      "commit": "d75d45e; delivery CI pending (canonical All only)"
+      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
+      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
     },
     {
       "id": "PW-102",
@@ -917,8 +917,8 @@
       "phase": "1",
       "requirement": "All sorts by time (newest first). Unread selects the unread subset and",
       "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
-      "commit": "d75d45e; delivery CI pending (canonical All only)"
+      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
+      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
     },
     {
       "id": "PW-103",
@@ -926,8 +926,8 @@
       "phase": "1",
       "requirement": "Remove Unread-only age windows, category exclusions, and silent caps that",
       "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
-      "commit": "d75d45e; delivery CI pending (canonical All only)"
+      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
+      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
     },
     {
       "id": "PW-104",
@@ -953,8 +953,8 @@
       "phase": "1",
       "requirement": "Replace the incomplete pipeline revision/update comparison: changes to",
       "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
-      "commit": "d75d45e; delivery CI pending (canonical All only)"
+      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
+      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
     },
     {
       "id": "PW-107",
@@ -980,35 +980,35 @@
       "phase": "1",
       "requirement": "Test All/Unread item parity (after read filtering), time versus status order,",
       "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
-      "commit": "d75d45e; delivery CI pending (canonical All only)"
+      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
+      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
     },
     {
       "id": "PW-110",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Put genuinely immediate/time-critical items first (a current calendar",
-      "status": "partial: internal inventory mechanics only",
-      "test": "Section 1.3 inventory model/store/integration tests; runtime adoption pending",
-      "commit": "162afbc; all ten CI jobs passed (internal foundation only)"
+      "status": "partial: runtime five-band ordering tested; canonical Unread cutover pending",
+      "test": "Section 1.7 ordering/agent transitions/calendar boundaries, cumulative backend/frontend, rendered arrival order and Current preservation; independent review passed",
+      "commit": "Section 1.7; local gates passed, remote CI pending"
     },
     {
       "id": "PW-111",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Put tasks actively worked by either coding or general agents in band 5,",
-      "status": "partial: internal inventory mechanics only",
-      "test": "Section 1.3 inventory model/store/integration tests; runtime adoption pending",
-      "commit": "162afbc; all ten CI jobs passed (internal foundation only)"
+      "status": "partial: runtime five-band ordering tested; canonical Unread cutover pending",
+      "test": "Section 1.7 ordering/agent transitions/calendar boundaries, cumulative backend/frontend, rendered arrival order and Current preservation; independent review passed",
+      "commit": "Section 1.7; local gates passed, remote CI pending"
     },
     {
       "id": "PW-112",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Test coding/general working placement, transitions to owner-waiting, and",
-      "status": "partial: internal inventory mechanics only",
-      "test": "Section 1.3 inventory model/store/integration tests; runtime adoption pending",
-      "commit": "162afbc; all ten CI jobs passed (internal foundation only)"
+      "status": "partial: runtime five-band ordering tested; canonical Unread cutover pending",
+      "test": "Section 1.7 ordering/agent transitions/calendar boundaries, cumulative backend/frontend, rendered arrival order and Current preservation; independent review passed",
+      "commit": "Section 1.7; local gates passed, remote CI pending"
     },
     {
       "id": "PW-113",

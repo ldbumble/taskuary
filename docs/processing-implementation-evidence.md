@@ -2067,3 +2067,50 @@ This includes every prior All assertion plus physical Cancel/recovery, exact new
 message detail hydration, preserved owner wording beside the persisted refreshed
 draft, and exactly one intercepted approval attempt. Local gates and independent
 review are complete; remote exact-SHA CI remains the delivery gate.
+
+Section 1.6 delivered: `1f7118ecb7007bfd9c84892e2a741dd3cb054fa5` is on
+origin/master. CI run 34056568028 passed all ten jobs, including the six Python
+platform/version combinations, full browser suite, packaged UI parity, Docker and
+Windows executable. Shared Unread/read transitions remain separate pending work.
+
+## Section 1.7 - approved five-band ordering
+
+Implementation in progress after the successful Section 1.6 remote gate. Funnel,
+legacy feed rank and raw inventory facts share the same five-band/priority rules.
+Lane labels retain their UI/action semantics. Sorts use saved priority, oldest
+activity (including fractional timestamps), then stable legacy key; canonical key
+adoption remains part of the Unread cutover. Working coding/general agents remain
+last, owner waits second, urgent requests and exact current/within-15-minute events
+first. A future meeting remains visible but scheduled; its mere existence is not
+urgent. Saved actionable urgent ideas are promoted, and a report failure uses the
+same persisted run/subject fact in both feed and funnel. No read, mute, cap or
+Current mutation is introduced by ranking.
+
+The ordering section also carries its server band to cards and existing alerts;
+the UI no longer lets an equal-band agent wait override another wait, or override
+an urgent Current. Notification producer eligibility stays unchanged: promoting an
+idea in Unread does not introduce an additional unsolicited notification category.
+An initial cumulative gate found only an obsolete blocked-before-all-drafts
+expectation (2890 passed, one failed, plus 76 subtests). Its two exact sequence
+assertions now require the older draft before the newer agent wait in shared band 2;
+all five walkthrough steps remain. Focused contracts passed 140 tests (4.56s), the
+ordering/funnel/navigation group passed 119 (4.35s), frontend passed 313 (1.436s),
+and the packaged build passed (12.50s). Final cumulative/backend browser runs are
+in progress; the earlier failed gate is not counted as acceptance.
+
+Final Section 1.7 local evidence: cumulative backend passed 2901 tests plus 76
+subtests (241.40s). The browser suite passed six scenarios and exposed two issues:
+a named older Current fell outside the ordinary 400-row feed lookup after arrivals,
+and the new ordering assertion sampled before all four fixture arrivals rendered.
+Named Current lookup now bypasses only the source-page cap; default queue/age/read
+policies remain unchanged. An independent SQLite regression proves the same pending
+review survives 405 arrivals without any database write while default cap 3 remains.
+The browser waits for all four arrivals without removing any earlier assertion.
+Rerunning canonical All and both selection scenarios passed all three (204.16s),
+covering the two failures and the prior New chat race. The other six earlier passing
+scenarios remain applicable. Focused follow-ups passed 161 tests (card contract),
+191 tests (Current lookup), and the independent 405-arrival regression. Astra
+independently cleared these changes; root reviewed the added regression. Sol's
+implementation slots were unavailable due to usage limits, so root integrated the
+bounded follow-ups. No live app restart, connector test, or historical read change.
+Remote exact-SHA CI remains the delivery gate for this section.

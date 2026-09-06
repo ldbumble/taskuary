@@ -321,8 +321,8 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(by['Process Error Check FAILED']['lane'], 'broken')
         self.assertEqual(by['Headcount - 5 rows']['lane'], 'report')            # a run that worked is still just news
         # 30 hours old and still in the pipe, while the ordinary report beside it obeys the window
-        self.assertLess(funnel._BAND['broken'], funnel._BAND['report'])
-        self.assertLess(funnel._BAND['approve'], funnel._BAND['broken'])        # a drafted reply still outranks it
+        self.assertEqual(funnel._band(by['Process Error Check FAILED']), funnel._band(by['Headcount - 5 rows']))
+        self.assertLess(funnel._band({'lane': 'approve'}), funnel._band(by['Process Error Check FAILED']))  # a drafted reply still outranks it
         self.assertFalse(funnel._aged_out(by['Process Error Check FAILED'], datetime.now(), 12))
         self.assertNotIn('broken', funnel.MUTED_LANES)   # a rule that quiets a report cannot quiet it FAILING
 
@@ -555,7 +555,7 @@ class LanesTests(unittest.TestCase):
         s.upsert_idea({'key': 'cold:TQ-0009', 'kind': 'cold', 'text': 'TQ-0009 has sat quiet', 'sig': 'y', 'action': {'tid': 9}}, ago(days=3))
         self.assertEqual(funnel.build(s)['items'], [])
 
-    def test_a_persons_ask_comes_before_follow_up_lines_and_reports_and_fyi_is_last(self):
+    def test_middle_band_uses_saved_priority_then_oldest_and_fyi_is_last(self):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         m = mail(s, 'Team note', who='Lee', email='lee@ours.com', body='FYI all good.', hours=9, status='filed', conv='n1')
@@ -568,7 +568,9 @@ class LanesTests(unittest.TestCase):
         t2 = s.create_task({'Title': 'Draft', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         m2 = mail(s, 'Newest ask', hours=1, tid=t2)
         s.add_review({'TaskId': t2, 'MessageId': m2, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})   # newest, but promoted
-        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review', 'todo', 'idea', 'report', 'fyi'])   # a person's ask before the assistant's line before a report
+        # Approved five bands replace the old asked > forgotten > report sub-ranking.
+        # The task has saved normal priority; report/idea have unknown priority and sort oldest first.
+        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review', 'todo', 'report', 'idea', 'fyi'])
 
     def test_marketing_mail_is_still_unread_until_the_owner_handles_it(self):
         s = store()
@@ -636,7 +638,7 @@ class FeedUnreadTests(unittest.TestCase):
         urgent = mail(s, 'Production is down', tid=task)
         by_id = {r['MessageId']: r for r in s.feed()}
         self.assertEqual(by_id[urgent]['UnreadRank'], 1)
-        self.assertEqual(by_id[fyi]['UnreadRank'], 7)
+        self.assertEqual(by_id[fyi]['UnreadRank'], 4)
 
     def test_repeated_assistant_posts_follow_the_latest_idea_and_read_state(self):
         s = store()
@@ -665,13 +667,13 @@ class FeedUnreadTests(unittest.TestCase):
                  'idle': 2, 'waiting': False, 'tail': ['working']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
-            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 8, 'codex'))
+            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 5, 'codex'))
             self.assertEqual(row['FunnelKey'], f'agent:{task}')
             self.assertIsNone(funnel.next_item(s))
         waving = [dict(live[0], idle=200, waiting=True, tail=['Which region should I use?'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=waving):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
-            self.assertEqual((row['Unread'], row['UnreadRank']), (1, 0))
+            self.assertEqual((row['Unread'], row['UnreadRank']), (1, 2))
             self.assertEqual(funnel.next_item(s)['key'], f'agent:{task}')
 
 

@@ -1021,7 +1021,7 @@ class WalkOrderTests(unittest.TestCase):
         parked = session(agent, idle=200, waiting=True, tail=['Drop the old rows? (y/n)'])
         with mock.patch.object(terminal, 'live_sessions', return_value=parked):
             self.assertEqual([i['lane'] for i in funnel.build(s)['items']],
-                             ['blocked', 'approve', 'asked', 'report', 'fyi'])
+                             ['approve', 'blocked', 'asked', 'report', 'fyi'])
             # …and one at a time out of the mouth, in that order, each one read as it is shown
             seen = []
             for _ in range(5):
@@ -1029,7 +1029,7 @@ class WalkOrderTests(unittest.TestCase):
                 if not out.get('item'): break
                 seen.append(out['item']['lane'])
                 funnel.settle(s, out['item']['key'], 'done', 'owner')
-        self.assertEqual(seen, ['blocked', 'approve', 'asked', 'report', 'fyi'])
+        self.assertEqual(seen, ['approve', 'blocked', 'asked', 'report', 'fyi'])
 
     def test_start_with_what_came_in_walks_only_what_a_person_sent(self):
         s = store()

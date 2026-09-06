@@ -1,35 +1,12 @@
-"""The pipe: everything that could need the owner, as ONE ranked pile the assistant walks them through.
+"""The shared displayed funnel and captured assistant selection.
 
-Triage judges each message as it arrives; the Timeline shows them in the order they came. Neither
-says what to look at NEXT. This does. It reads what the hub already knows - the feed with triage's
-verdicts on it, the pending reviews, the live agents parked on a question, the calendar, the
-assistant's own open lines and the follow-ups nobody chased - and sorts it into lanes, in the
-order a sharp assistant would raise them:
+Five attention bands promote urgent requests/current or imminent calendar events,
+then owner input/approval, other actionable work/results, FYIs, and working agents.
+Saved triage priority and oldest activity order each band; stable keys break ties.
+Presentation lanes remain available for their existing controls and status copy.
 
-    blocked    an agent stopped and is waiting on you - it is blocking work, so it comes out first
-    time       a meeting inside two hours, an urgent sender
-    approve    a reply or an action drafted and waiting for your yes
-    asked      a person asked you for something and nobody is on it
-    forgotten  the ask that slipped, the promise you made, the thread that went quiet
-    report     a report you set up landed; an open task needs its final close decision
-    fyi        a person told you something; read it or don't
-
-The queue itself is a TIMELINE, oldest first - the longer a thing has waited, the closer it is to
-the mouth - with the promoted lanes (an agent waiting, a meeting, a draft for your yes) jumping to the
-front and fyi (nothing to do) demoted to the back. New arrivals land on top and slide to their slot.
-This ranked pile is the feed's Unread view and the concierge walks the same items in the same order;
-All remains chronological history. A row leaves Unread once it is read or otherwise resolved.
-Anything an agent is working on remains visible at the bottom but is skipped by the concierge until
-the agent stops or asks. FYI and
-reports age out after a day; a draft waiting for a yes never does. No model is involved -
-the words on every item are the facts they came from, so what it says can always be checked -
-and the whole pile is recomputed on every look: a reply approved, a task closed or a meeting
-passed leaves the pile by itself. The only memory is funnel_state: what this walk has already
-surfaced, what the owner marked done, what they pushed back and until when.
-
-The concierge (concierge.py) pulls from the mouth. Alerts are the same facts with a clock on
-them - a meeting in fifteen minutes, an agent that just asked - and interrupt whatever the
-conversation is on.
+This ordering activation preserves the existing read, age, mute and capacity rules
+until the separate canonical Unread/read-state cutover. All remains chronological.
 """
 import hashlib, json, re, threading, time
 from datetime import datetime, timedelta
@@ -38,13 +15,14 @@ from loguru import logger
 from .store import task_ref
 from .assistant import _ts, _dt, _short, _gist, _agenda, _OOO
 from .funnel_presentation import present as _present
+from .processing_order import attention_band, priority_rank
 
 LANES = ('blocked', 'time', 'approve', 'broken', 'asked', 'forgotten', 'report', 'fyi', 'working')
 # the lane's one word on the card, and which role colours its dot (theme.jsx ROLES)
 LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
               'asked': ('asked you', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
-              'working': ('agent working', 'working')}   # in hand: at the very top, nothing to do until the agent stops or asks
-SOON_MIN, ALERT_MIN = 120, 15     # a meeting inside two hours is time-sensitive; inside fifteen it interrupts
+              'working': ('agent working', 'working')}   # visible in band 5 until the agent stops or asks
+SOON_MIN, ALERT_MIN = 120, 15     # calendar visibility window; exact fifteen-minute attention boundary
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
@@ -126,7 +104,7 @@ def lane_index(lane: str) -> int: return LANES.index(lane) if lane in LANES else
 def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None, tid=None, rid=None,
           channel='', category='', preview='', **extra) -> dict:
     return {'key': key, 'kind': kind, 'lane': lane, 'title': _short(title, 140) or '(no subject)', 'who': _short(who, 60),
-            'when': _ts(when), 'since': _ts(since or when), 'why': _short(why, 220), 'mid': mid, 'tid': tid,
+            'when': _ts(when), 'since': _ts(since or when), 'sort_at': str(since or when or ''), 'why': _short(why, 220), 'mid': mid, 'tid': tid,
             'ref': task_ref(tid) if tid else None, 'rid': rid, 'channel': channel, 'category': category,
             'preview': _gist(preview, 240), **extra}
 
@@ -200,7 +178,8 @@ def from_feed(store, rows: list) -> list:
             continue
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
-                    category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '')
+                    category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '',
+                    priority=r.get('Priority'))
         subj = r.get('Subject') or r.get('Title') or ''
         if r.get('MsgStatus') == 'triaging':
             out.append(_item(f"msg:{r['MessageId']}", 'triaging', 'fyi', subj, why='just arrived - triage is deciding', settling=True, **base))
@@ -248,7 +227,7 @@ def from_feed(store, rows: list) -> list:
             from .reports import NO_BRAIN
             if NO_BRAIN in str(r.get('Preview') or ''): continue
             sid = report_source_id(store, r.get('SourceName'))
-            bad = report_failed(store, sid, subj)
+            bad = r['ReportFailed'] if 'ReportFailed' in r else report_failed(store, sid, subj)
             # ...and a run the owner asked to be TOLD about is not news, it is work. When a report
             # carries a "move it up if" sentence, triage judges the run against it and makes a task
             # of a match (triage.classify_intent's `watch`) - but this branch filed every report row
@@ -266,7 +245,7 @@ def from_feed(store, rows: list) -> list:
         # A triage category is not a read receipt.  Filed/ignored/automated/promotional rows are
         # still incoming rows; the owner's explicit funnel state is what later removes them.
         if r.get('TheirTurn') or r.get('AnsweredAt'): continue
-        urgent = (r.get('Priority') or '') == 'urgent'
+        urgent = priority_rank(r.get('Priority')) == 0
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working')):   # a worked row is kept, tagged, and let go in build()
             out.append(_item(f"msg:{r['MessageId']}", 'todo', 'time' if urgent else 'asked', subj, coding=cat == 'coding',
                              why=('an urgent sender - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
@@ -365,13 +344,13 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
             # choices - the card shows that, not four lines of screen
             from .workerstate import request_line
             out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
-                             tid=tid, agent=agent, asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
+                             tid=tid, agent=agent, priority=task.get('Priority'), since=req.get('at') or t.get('started'), asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
                              mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
                              why=request_line(agent, req)))
             continue
         asking = waitroom.looks_like_question(tail)
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
-                         tid=tid, agent=agent, asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
+                         tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
                          why=f'{agent} asked you something' if asking else f'{agent} stopped and is waiting on you'))
     return out
 
@@ -392,14 +371,14 @@ def from_proposals(store, used_rids: set) -> list:
 def from_calendar(store, now: datetime) -> list:
     out = []
     for e in _agenda(store):
-        st, en = _dt(e.get('start')), _dt(e.get('end')) or _dt(e.get('start'))
-        if not st or (en and en < now): continue
+        st, en = _activity_time(e.get('start')), _activity_time(e.get('end')) or _activity_time(e.get('start'))
+        if not st or (en and en <= now): continue
         mins = int((st - now).total_seconds() // 60)
         if mins > SOON_MIN: continue
         who = [w for w in (e.get('who') or []) if w]
         key = f"meeting:{str(e.get('start') or '')[:16]}:{_short(e.get('subject'), 40)}"
         out.append(_item(key, 'meeting', 'time', e.get('subject') or 'the meeting', who=', '.join(who[:3]), when=e.get('start'),
-                         mins=mins, event={k: e.get(k) for k in ('start', 'end', 'subject', 'who', 'where', 'about', 'join', 'organizer')},
+                         mins=mins, calendar_ready=(st - now).total_seconds() <= ALERT_MIN * 60, event={k: e.get(k) for k in ('start', 'end', 'subject', 'who', 'where', 'about', 'join', 'organizer')},
                          why=('starting now' if mins <= 0 else f'in {mins} min') + (f" with {', '.join(w.split()[0] for w in who[:3])}" if who else '')))
     return out
 
@@ -452,7 +431,8 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
             if ref and store.get_task(int(ref.group(1))): tid = a['tid'] = int(ref.group(1))
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
-                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why))
+                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'),
+                         urgent_request=tri.get('intent') in ('task', 'reply_only') and priority_rank(tri.get('priority')) == 0))
     return out
 
 
@@ -475,27 +455,43 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
         found = agent_found(store, tid)
         when = (sent.get('DecidedAt') or sent.get('CreatedAt')) if sent else own.get('SentAt')
         out.append(_item(f"wrap:{tid}", 'wrapup', 'report', t.get('Title'), who='you', when=when, tid=tid, summary=found,
-                         mid=reply_to(store, tid),
+                         mid=reply_to(store, tid), priority=t.get('Priority'),
                          sent=_short(sent.get('FinalText') or sent.get('DraftText') if sent else own.get('BodyText'), 200),
                          why='the reply went out' + (' and the agent finished' if found else '') + ' - the task is still open'))
     return out
 
 
 # ── the pile ─────────────────────────────────────────────────────────────────────────────────
-# the queue is a TIMELINE, oldest first inside each band - but what blocks work or has a clock on it
-# is promoted to the front, a PERSON asking you comes before the assistant's own follow-up lines,
-# those before reports, and fyi (nothing to do) is demoted to the back.
-# a failed check is promoted from 'report' (was 5, behind everything) to just under a drafted
-# reply: one click sends that reply, while a dead SQL host is real work - but both come before
-# a person's ask, because the check is a SYSTEM the owner asked to be told about
-_BAND = {'blocked': 0, 'time': 1, 'approve': 2, 'broken': 3, 'asked': 4, 'forgotten': 5, 'report': 6, 'fyi': 7, 'working': 9}
+# Lanes retain presentation/state semantics; the shared five bands own ordering.
+_BAND = {'blocked': 2, 'time': 1, 'approve': 2, 'broken': 3, 'asked': 3,
+         'forgotten': 3, 'report': 3, 'fyi': 4, 'working': 5}
+
+
+def _band(item):
+    lane = item.get('lane')
+    if item.get('kind') == 'meeting':
+        return attention_band(urgent=not _not_yet(item), actionable=True)
+    return attention_band(urgent=lane == 'time' or (lane == 'asked' and bool(item.get('urgent_request'))),
+                          owner_wait=lane in ('blocked', 'approve'),
+                          working=lane == 'working', actionable=lane in ('broken', 'asked', 'forgotten', 'report'))
+
+
+def _activity_time(value):
+    """Stored-local compatibility, retaining subseconds and explicit offsets."""
+    try:
+        stamp = datetime.fromisoformat(str(value or '').replace('Z', '+00:00'))
+        return stamp.astimezone().replace(tzinfo=None) if stamp.tzinfo else stamp
+    except ValueError:
+        return None
 
 
 def _order(items: list) -> list:
-    """Next-first: the promoted bands, then everything else oldest first, fyi last. A meeting sorts
-    by when it starts, soonest first."""
-    def k(i): return (_BAND.get(i['lane'], 3), i.get('when') if i['kind'] == 'meeting' else (i.get('since') or i.get('when') or ''))
-    return sorted(items, key=k)
+    """Five bands, saved triage priority, oldest stored-local activity, stable key."""
+    def key(item):
+        activity = _activity_time(item.get('sort_at') or item.get('since') or item.get('when'))
+        return (_band(item), priority_rank(item.get('priority')), activity is None,
+                activity or datetime.max, str(item.get('key') or ''))
+    return sorted(items, key=key)
 
 
 def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False) -> list:
@@ -568,8 +564,11 @@ def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
 def build(store, now: datetime = None, keep_surfaced: bool = False,
           reconcile: bool = True, live_state=_LIVE_UNSET) -> dict:
     now = now or datetime.now()
-    rows = (store.feed(limit=400, days=FEED_DAYS) if live_state is _LIVE_UNSET
-            else store.feed(limit=400, days=FEED_DAYS, live_state=live_state))
+    # Explicit Current/named-item lookup must not lose its subject behind the
+    # ordinary transport cap. Its existing history/read/grouping rules still apply.
+    feed_limit = -1 if keep_surfaced else 400
+    rows = (store.feed(limit=feed_limit, days=FEED_DAYS) if live_state is _LIVE_UNSET
+            else store.feed(limit=feed_limit, days=FEED_DAYS, live_state=live_state))
     items = from_feed(store, rows)
     # the live session knows more about a parked agent than its feed row does (its last lines,
     # whether it asked) - so its item replaces the row's
@@ -665,7 +664,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     queue, shelf = [i for i in items if i['lane'] != 'working'], [i for i in items if i['lane'] == 'working']
     hidden = max(0, len(queue) - cap) if not keep_surfaced else 0
     if hidden: queue = queue[:cap]
-    items = queue + shelf                                        # what an agent has rides above the cap, always visible
+    items = [i | {'order_band': _band(i)} for i in queue + shelf]  # same band for rendered cards and alerts
     rev = hashlib.sha1('|'.join(f"{i['key']}:{i['lane']}:{int(bool(i.get('settling')))}" for i in items).encode()).hexdigest()[:12] + f':{hidden}:{len(quiet)}'
     return {'rev': rev, 'items': items, 'hidden': hidden, 'muted': len(quiet),
             'rules': [str(r.get('why') or ' '.join(r.get('words') or []))[:120] for r in rules],
@@ -818,7 +817,9 @@ def _not_yet(i: dict) -> bool:
     before like a agent in middel of working"). alerts() already drew this line at ALERT_MIN; the
     walk did not.
     """
-    return i['kind'] == 'meeting' and i.get('mins') is not None and i['mins'] > ALERT_MIN
+    if i['kind'] != 'meeting': return False
+    if 'calendar_ready' in i: return not i['calendar_ready']
+    return i.get('mins') is not None and i['mins'] > ALERT_MIN
 
 
 def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
@@ -930,7 +931,7 @@ def alerts(store, items: list = None) -> list:
     out = []
     for i in items:
         if i.get('surfaced'): continue                                 # already on, or past, the table
-        if i['kind'] == 'meeting' and i.get('mins', 999) <= ALERT_MIN:
+        if i['kind'] == 'meeting' and not _not_yet(i):
             when = 'is starting now' if i['mins'] <= 0 else f"starts in {i['mins']} min"
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'meeting', 'lane': i['lane'],
                         'text': f"{i['title']} {when}" + (f" with {i['who']}" if i.get('who') else '')})
@@ -946,15 +947,18 @@ def alerts(store, items: list = None) -> list:
             what = ('reply is waiting for your yes' if i['kind'] == 'review' else 'proposed action is waiting for your yes' if i['kind'] == 'action'
                     else f"urgent: {i['title']}")
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': i['kind'], 'lane': i['lane'], 'text': f"{who}{what}"})
-    return [a for a in out if (states.get(a['key']) or {}).get('Status') != 'ack']
+    bands = {i['key']: _band(i) for i in items}
+    return [a | {'order_band': bands.get(a['item'], 3)} for a in out
+            if (states.get(a['key']) or {}).get('Status') != 'ack']
 
 
 def more_urgent(items: list, current_key: str = None) -> list:
     """What waits in a promoted lane while the owner is on something lesser - for the assistant to
     mention in a clause, and for the page to raise as a by-the-way."""
     cur = next((i for i in items if i['key'] == current_key), None)
-    band = _BAND.get(cur['lane'], 3) if cur else 3
-    return [i for i in items if not i.get('surfaced') and not i.get('settling') and _BAND.get(i['lane'], 3) < band and i['key'] != current_key]
+    band = _band(cur) if cur else 3
+    return [i for i in items if not i.get('surfaced') and not i.get('settling')
+            and not _not_yet(i) and _band(i) < band and i['key'] != current_key]
 
 
 def summary(items: list, coming: bool = True) -> str:

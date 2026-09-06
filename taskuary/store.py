@@ -3085,23 +3085,11 @@ class SQLiteStore:
             # Sorting Unread is not a second triage. These are only the durable fields written by
             # the one route decision, plus live agent state. All remains chronological; Unread uses
             # this band to promote what blocks work or needs the owner.
-            if r.get('AgentWaiting'):
-                rank = 0
-            elif (r.get('Priority') or '').lower() == 'urgent':
-                rank = 1
-            elif r.get('ReviewStatus') == 'pending':
-                rank = 2
-            elif r.get('Channel') == 'report' and str(r.get('Subject') or '').rstrip().endswith('FAILED'):
-                rank = 3
-            elif r.get('NeedsYou'):
-                rank = 4
-            elif r.get('Channel') == 'report':
-                rank = 6
-            elif r.get('Working'):
-                rank = 8
-            else:
-                rank = 7
-            r['UnreadRank'] = rank
+            from .processing_order import feed_band
+            if r.get('Channel') == 'report':
+                from .funnel import report_failed, report_source_id
+                r['ReportFailed'] = report_failed(self, report_source_id(self, r.get('SourceName')), r.get('Subject') or '')
+            r['UnreadRank'] = feed_band(r)
         # the SQL filter matched before live sessions were known; a row a working agent just took off
         # you must not sit in "needs me" wearing a chip that says otherwise
         if pending_only: rows = [r for r in rows if r.get('NeedsYou')]

@@ -180,6 +180,29 @@ test("PW-118 rejects a changed captured Next without advancing Current or retryi
       "restoring tagged passive history must retain the explicit owner subject");
     assert.deepEqual(await activeCard(), originalControls, 'restored controls must still target Current');
     assert.equal(writes.length, beforeWrites + 2, "passive notice and reload must not navigate");
+    const ordering = await request(h, "/api/fixture/processing/ordering", "POST", {});
+    await page.waitForFunction((wanted) => document.querySelector('.tq-pile-row.next .card b')?.textContent.trim() === wanted,
+      { timeout: 15000 }, ordering.titles.urgent);
+    assert.equal(await title(page, "current"), currentAfterRetry, "urgent promotion cannot replace Current");
+    const expectedOrder = [ordering.titles.urgent, ordering.titles.high, ordering.titles.old, ordering.titles.new];
+    await page.waitForFunction((wanted) => {
+      const titles = [...document.querySelectorAll('.tq-pile-row .card b')].map(n => n.textContent.trim());
+      return wanted.every(label => titles.includes(label));
+    }, { timeout: 15000 }, expectedOrder);
+    const orderedTitles = await page.$$eval('.tq-pile-row .card b', nodes => nodes.map(n => n.textContent.trim()));
+    for (const label of expectedOrder) assert.ok(orderedTitles.includes(label), `${label} must be visible`);
+    assert.deepEqual(orderedTitles.filter(label => expectedOrder.includes(label)), expectedOrder,
+      "Unread must show bands, saved priority, then oldest activity");
+    assert.equal(writes.length, beforeWrites + 2, "arrival reordering cannot advance the chat");
+    const orderedResponse = page.waitForResponse(r => new URL(r.url()).pathname === "/api/concierge/stream"
+      && r.status() === 200, { timeout: 15000 });
+    const nextControl = (await page.evaluateHandle(() => [...document.querySelectorAll("button")]
+      .find(n => n.textContent.trim() === "Next" && !n.disabled))).asElement();
+    assert.ok(nextControl);
+    await Promise.all([orderedResponse, nextControl.click()]);
+    await page.waitForFunction((wanted) => document.querySelector('.tq-pile-row.current .card b')?.textContent.trim() === wanted,
+      { timeout: 15000 }, ordering.titles.urgent);
+    assert.equal(writes.length, beforeWrites + 3, "one physical Next gesture advances exactly once");
     assert.deepEqual(errors, []);
     assert.deepEqual(page.fixtureEscapes, []);
   } finally {

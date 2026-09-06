@@ -15,6 +15,7 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/draft',
         '/api/fixture/processing/context',
         '/api/fixture/processing/background',
+        '/api/fixture/processing/ordering',
         '/api/fixture/processing/canonical-all',
         '/api/fixture/processing/canonical-arrival',
         '/api/fixture/processing/canonical-emit',
@@ -101,3 +102,24 @@ def install_processing_changes(app, store):
             'SentAt': sent.isoformat(sep=' '), 'BodyText': body['body'],
         })
         return {'ok': True, 'message_id': mid}
+
+    @app.post('/api/fixture/processing/ordering')
+    def ordering_arrivals(body: dict):
+        if body:
+            raise HTTPException(422, 'this fixed ordering fixture accepts only an empty object')
+        from taskuary import funnel
+        now = datetime.now()
+        titles = {}
+        for name, priority, minutes in (('urgent', 'urgent', 1), ('high', 'high', 2),
+                                        ('old', 'normal', 60), ('new', 'normal', 3)):
+            title = 'ORDERING ' + name.upper()
+            tid = store.create_task({'Title': title, 'Kind': 'general', 'Status': 'open', 'Priority': priority}, 'fixture')
+            store.add_message({'TaskId': tid, 'Channel': 'email', 'Status': 'routed',
+                               'ExternalId': 'ordering:' + name, 'SourceName': 'ordering@example.test',
+                               'FromEmail': 'sender@example.test', 'FromName': 'Ordering fixture',
+                               'Subject': title, 'BodyText': 'Please handle this synthetic request.',
+                               'SentAt': (now - timedelta(minutes=minutes)).isoformat(' ')})
+            titles[name] = title
+        funnel.invalidate()
+        store._poke('feed-changed')
+        return {'titles': titles}

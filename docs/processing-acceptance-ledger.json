@@ -53,8 +53,8 @@
       "phase": "2",
       "requirement": "Outlook: `_mail_msgs()` reads newest-first and stops at its default 500",
       "status": "implemented",
-      "test": "`tests/test_mail_catchup.py` (1050/600-mail backlogs, resume after a dead batch, same-second boundary, Sent Items, dead folder)",
-      "commit": "a26feeb; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "`tests/test_mail_catchup.py`; atomic checkpoint and Sync-now API preservation tests; opaque Graph pages, replay, cutoffs, owner edits and loops",
+      "commit": "36a1edf (reviewed email integration); Section 2.2 cumulative gates and delivery in implementation evidence"
     },
     {
       "id": "PW-007",
@@ -62,8 +62,8 @@
       "phase": "2",
       "requirement": "Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and",
       "status": "implemented",
-      "test": "`tests/test_imap_catchup.py` (80 pending UIDs oldest-first, abort at 140 then resume, one unreadable UID, Sent gap)",
-      "commit": "09bfd6a; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "`tests/test_imap_catchup.py`; atomic checkpoint and Sync-now API reopen tests; oldest-first drain, durable failed-UID retries, epochs and exact historical identities",
+      "commit": "36a1edf (reviewed email integration); Section 2.2 cumulative gates and delivery in implementation evidence"
     },
     {
       "id": "PW-008",
@@ -71,8 +71,8 @@
       "phase": "2",
       "requirement": "Gmail/IMAP: the date search window can exclude mail received during a long",
       "status": "implemented",
-      "test": "`tests/test_imap_catchup.py` (two-week gap under a 3-day window, first import bounded, UIDVALIDITY change, no validity)",
-      "commit": "09bfd6a; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "`tests/test_imap_catchup.py`; long Inbox/Sent gaps, bounded bootstrap, empty resets, missing/changed UIDVALIDITY and interrupted legacy first import",
+      "commit": "36a1edf (reviewed email integration); Section 2.2 cumulative gates and delivery in implementation evidence"
     },
     {
       "id": "PW-009",

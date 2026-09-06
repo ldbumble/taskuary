@@ -767,7 +767,7 @@ Tests changed with explanation, none weakened: `test_not_coding.py` (keyword-kin
 classes rewritten to the general default), `test_urgent_and_handoff.py` (one kind expectation),
 `test_kind_dispatch.py` (prompt tie-break wording). New: `tests/test_reply_always_drafts.py` (14 cases), `sendState.test.mjs` (3).
 Frontend and packaged-build results are in the commit message; full backend and CI below.
-Delivery `3dc3a5ea53d4b1701314cc5df0699fff4f5f8f39` passed all ten jobs in
+Earlier Section 2.1 polling delivery `3dc3a5ea53d4b1701314cc5df0699fff4f5f8f39` passed all ten jobs in
 [CI run 34037292146](https://github.com/ldbumble/taskuary/actions/runs/34037292146).
 The original workspace was fast-forwarded from the concurrently delivered `f244803`;
 its only user change remains README.md with preserved SHA-256
@@ -810,3 +810,57 @@ skip position can count scanned items beyond the returned message rows.
 The Outlook correction must use complete provider continuation URLs and retain
 requests-level failure/continuity regressions. Source:
 [Microsoft Graph list messages](https://learn.microsoft.com/en-us/graph/api/user-list-messages?view=graph-rest-1.0).
+
+### Final source review and concurrent-base integration
+
+The final email source checkpoint is `36a1edf`, rebased onto Claude's concurrent
+triage checkpoint `162d33e`. Astra Extra High verified all eleven email commits
+remain equivalent to the pre-rebase source and cleared compatibility with the new
+triage error handling. This review covers email integration, not blanket Phase 3
+acceptance. Both authors' evidence entries were retained during the append conflict.
+
+Outlook now follows complete opaque Graph continuation URLs, preserves complete
+provider pages, detects continuation loops across batches, and freezes a cutoff
+until every selected folder completes. Restart replays the saved timestamp
+inclusively instead of trusting a mutable provider offset. Checkpoint provenance
+and atomic conditional merges preserve owner configuration changes and rewinds.
+
+IMAP uses mailbox-scope/UIDVALIDITY identities and durable retry holes. Failed
+FETCH, parse, SELECT, SEARCH and Sent operations remain visible failures; later
+successes cannot erase a skipped UID. Empty epoch resets, missing UIDVALIDITY,
+unknown-to-known epochs, and attributable legacy rows from an interrupted first
+import are covered. Ambiguous historical account ownership is not guessed.
+The original unreadable-UID test retains its delivered-row and high-cursor checks;
+it now additionally requires a visible partial failure and an exact-once healthy
+retry, replacing the previous silent-success return expectation.
+
+Root API tests exercise real Sync-now routing with synthetic Graph HTTP pages and
+an IMAP server fixture, including failure visibility, durable retry after reopening
+the disposable database, watermark safety, final feed visibility, and exact old
+message/read/document preservation. Store tests cover actual concurrent SQLite
+writers, failed compare-and-set zero writes, detached input and atomic rollback.
+No live data, app restart, or production connector is used.
+
+Frontend on the combined base: 283 passed (1.509 s); packaged build exited 0
+(16.27 s) with no generated-asset drift. The first cumulative browser attempt
+missed the unchanged 1,500 ms input limit at 1,737 ms while full backend regression
+ran concurrently. Final backend/browser results and delivery follow below; this
+source-review entry alone is not the final gate.
+
+Combined-base backend gate completed: `python -m pytest -q -ra --tb=short`
+passed 2,535 tests plus 71 subtests (150 warnings, no skips) in 231.75 s.
+The first browser run finished 5/7 in 239.888 s; its second failure was a launch/
+connect failure for its unique disposable Edge profile. Inspection found no
+remaining process using that profile; no process cleanup was necessary. Resource
+contention is the working explanation, not a proven product regression. Both
+failures passed early in the full browser-only rerun (input 780 ms); final result
+is still pending below. Logs are in `.codex-tmp/mail-remote-base-*.log`.
+
+Final browser-only cumulative gate passed all seven scenarios in 198.575 s with
+no skips and unchanged assertions/limits. First-visible/input timings were
+1,176/780 ms; Tasks/Board/Reports navigation was 267/300/272 ms. Terminal replay,
+input emission and reconnect were 2,048/105/1,091 ms. No source changes were needed
+between failed concurrent and successful isolated runs. The final packaged assets
+match upstream, and the original workspace's only dirty file remains README.md
+with the previously recorded SHA-256. PW-006 through PW-008 now have matching
+TODO and Markdown/JSON ledger evidence. Exact delivery CI will be recorded after push.

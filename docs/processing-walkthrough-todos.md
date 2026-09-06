@@ -42,8 +42,7 @@ Unchecked feature requirements below remain pending their own implementation gat
   backend tests plus 66 subtests, 281 frontend tests, packaged build and all seven
   real-browser scenarios. Delivery and exact-SHA CI are recorded in the
   [implementation evidence](processing-implementation-evidence.md#section-21--independent-poll-scheduling-and-settings).
-  The email catch-up requirements below remain pending review fixes even though
-  another agent's original implementation is already on master.
+  The email catch-up review corrections and final gates are recorded below.
 
 ## Email catch-up must not skip backlog
 
@@ -58,6 +57,14 @@ Unchecked feature requirements below remain pending their own implementation gat
   absence even when its UID exceeds the saved cursor. Make established-cursor
   catch-up cover the full gap; distinguish initial-import limits from catch-up.
   Test both Inbox and Sent with long absences and more than 25 new messages.
+
+  Section 2.2: independently reviewed corrections are integrated at `36a1edf`
+  with Claude's concurrent triage changes. Final regressions passed 2,535 backend
+  tests plus 71 subtests, 283 frontend tests, packaged build, and all seven real
+  browser scenarios. The first browser run's two failures and unchanged successful
+  rerun are retained in the [implementation evidence](processing-implementation-evidence.md#section-22--email-catch-up-without-skipped-backlog),
+  together with delivery and exact-SHA CI. Historical messages, read state and
+  custom documents are checked through real Sync-now API tests on disposable data.
 
 ## Full email conversation context
 

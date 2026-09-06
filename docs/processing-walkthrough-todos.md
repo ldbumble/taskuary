@@ -1287,19 +1287,19 @@ Owner-approved: saved agent result -> refresh the source conversation -> reasses
 whether a reply is still needed -> draft from the result and current context ->
 owner approval. Pending implementation.
 
-- [ ] <a id="pw-235"></a>**PW-235** Apply the approved freshness and unified reevaluation rules after work
+- [x] <a id="pw-235"></a>**PW-235** Apply the approved freshness and unified reevaluation rules after work
   finishes, before generating its reply. Detect owner replies sent externally and
   changed requests; do not assume the original ask is still outstanding or draft
   a stale completion claim. If refresh fails, show the unresolved freshness state.
-- [ ] <a id="pw-236"></a>**PW-236** Reuse the applicable held review rather than duplicating it. Generate the
+- [x] <a id="pw-236"></a>**PW-236** Reuse the applicable held review rather than duplicating it. Generate the
   reply from the saved final result and verified current conversation, recording
   the context revision used. Preserve the completed worker result independently
   of draft generation success and keep a failed draft visibly retryable.
-- [ ] <a id="pw-237"></a>**PW-237** Bring coder.finish() into line with the approved always-draft rule: when
+- [x] <a id="pw-237"></a>**PW-237** Bring coder.finish() into line with the approved always-draft rule: when
   a reply is needed, unsupported/disabled sending must not suppress the draft.
   Hide Send and explain why it is unavailable; retain backend send restrictions.
   Outbound sending remains subject to owner approval, not agent completion.
-- [ ] <a id="pw-238"></a>**PW-238** Test changed requests, already-sent external replies, unchanged chains,
+- [x] <a id="pw-238"></a>**PW-238** Test changed requests, already-sent external replies, unchanged chains,
   refresh/drafting failures, held-review reuse, unsupported send channels, and
   repeated completion events without duplicate drafts or automatic sending.
 

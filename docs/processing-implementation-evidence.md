@@ -1669,3 +1669,35 @@ Decision recorded: a clarification is the one send that does not end the task - 
 not answer - so the task stays `waiting` (the existing `_settle_task_after_sent_reply` rule).
 
 Tests: `tests/test_send_outcomes.py` (8 cases). Frontend: `website/src/ReviewView.jsx` (verb + title only; rebuilt bundle).
+
+## Section 7.4 — completion-to-reply freshness: refresh, reassess, then draft
+
+Status: implemented and tested locally at `ecabef1`; remote CI pending on the pushed
+checkpoint. Section 7.3 is CI-verified (3459868/9c6017e, CI run 34054847136 (all ten jobs passed)).
+Acceptance PW-235 to PW-238 implemented.
+
+The agent's result became a reply the moment the session closed, written against the ask as it
+stood when the work began. `coder.finish` now refreshes the source conversation first through
+`coder.REFRESH`, the hook the server installs over `_refresh_chat_context` (the same gate the
+Assistant and approvals use, incremental, connector-typed), and `coder.freshen` says where the ask
+stands: fresh; changed (a newer inbound message - the review is pinned to it, the reason says the
+thread moved on, and the drafting source carries the newest message so the reply answers what is
+asked now); answered (`coder.answered_elsewhere`: the owner's own line newer than the newest inbound
+message - a comment says so, a held draft is retired as no_reply, the task closes, nothing is drafted);
+unresolved (the refresh failed - the draft is written from the saved result and marked stale with the
+reason, so Send waits for a refresh that succeeds); or unchecked when no refresh is installed, which
+is never called fresh. `raise_reply` reuses the held triage draft, else the pending review an earlier
+completion event raised, so a repeated completion rewrites one review and never sends; the draft is
+written from the saved final result and the current thread with its context revision pinned by
+`responder.draft_for_review`, and the saved result survives a failed draft, which stays retryable.
+
+The always-draft rule (PW-237): a channel that cannot carry the reply no longer suppresses it.
+`finish` and `wrap` return `can_send` and `send_block` alongside `drafting`; the review is raised, the
+task waits, the Review page hides Send with the reason and offers Close without sending (Section 7.3).
+Only a row nobody sent - a report, work started here, the assistant's own post (`coder.no_one_behind`)
+- drafts nothing; a report whose card names a findings target still delivers there. The pins in
+`tests/test_reply_channels.py` and `tests/test_api.py` that said "GitHub replies off closes clean with
+no draft" were rewritten to this rule.
+
+Tests: `tests/test_completion_freshness.py` (11 cases), `tests/test_reply_channels.py` (3 pins rewritten), `tests/test_api.py` (1 pin
+rewritten). No frontend change.

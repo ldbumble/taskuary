@@ -719,10 +719,21 @@ def comment(task_id: int, body: TextBody):
     store.add_comment(task_id, ACTOR, 'human', body.body)
     return {'ok': True}
 
+NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not exist|choose one', re.I)
+
+
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    return _dispatch_task_to_its_agent(task_id, body, background)
+    try:
+        return _dispatch_task_to_its_agent(task_id, body, background)
+    except HTTPException as e:
+        # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
+        # DECISION for the owner, shown as a visible choice, never a session in some other checkout (PW-095)
+        if e.status_code == 422 and NEEDS_REPO.search(str(e.detail or '')):
+            return {'dispatch': 'needs_repo', 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
+                    'ref': task_ref(task_id), 'reason': str(e.detail or '')}
+        raise
 
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again
@@ -1409,7 +1420,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         reason = str(e.detail or '')
         # This is a decision, not a failed action. The message may only just have become a task,
         # so return its id and let the card ask which repo before resuming the same dispatch.
-        if e.status_code == 422 and re.search(r'could not tell which checkout|no local path', reason, re.I):
+        if e.status_code == 422 and NEEDS_REPO.search(reason):
             return {'dispatch': 'needs_repo', 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise

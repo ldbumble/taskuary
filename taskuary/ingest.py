@@ -541,6 +541,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
+        if follow and follow.get('checklist'):
+            # a later message that asks for something new adds boxes; nothing moves or unticks, and the
+            # change is said on the task rather than made silently (PW-076)
+            added = store.merge_task_checklist(tid, follow['checklist'], 'triage')
+            if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
         if follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not store.pending_review(tid):
             # a fresh question on an existing task is reply-needed there: one pending review for
             # this message, drafted at once, whatever the channel can carry (PW-043)
@@ -636,11 +641,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         f = draft_task_fields(msg, urgent=pol['action'] == 'escalate', kind=intent.get('kind'))
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
         from . import playbooks as _pb
+        # the verdict's own title/summary lead (PW-074); the router's subject/body cut is the fallback
+        if intent.get('title'): f['title'] = intent['title']
+        if intent.get('summary'): f['summary'] = intent['summary']
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                  'SourceRef': msg.get('source_link'),
                                  **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
+        if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
         mid = _land(store, msg, tid, 'routed')
         # the same-day lines this one continues or answers that had no task yet join the task it opens:
         # the fyi that opened a subject belongs with the ask that followed it (PW-031)

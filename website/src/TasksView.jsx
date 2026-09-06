@@ -1,7 +1,7 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
   Drawer, IconButton, InputAdornment, Link, MenuItem, Select, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -14,6 +14,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { taskMatchesQuery } from "./taskSearch.js";
+import { progressLine } from "./checklist.js";
 import { completionTransition, filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
@@ -804,6 +805,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                             {taskAsk}
                           </Typography>
+                        )}
+                        {/* the checklist triage drew from the ask (PW-075): boxes are progress on the list,
+                            never task completion - closing the task stays the owner's separate decision */}
+                        {(detail?.checklist || []).length > 0 && (
+                          <Box sx={{ mt: 0.75, maxWidth: 900 }}>
+                            {detail.checklist.map((i) => (
+                              <Box key={i.id} sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
+                                <Checkbox size="small" checked={!!i.done} sx={{ p: 0.25 }}
+                                  onChange={async (e) => {
+                                    try { await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: e.target.checked }); loadDetail(t.TaskId); }
+                                    catch { /* the list reloads on the next refresh */ }
+                                  }} />
+                                <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.7 }}>
+                                  {i.text}
+                                </Typography>
+                              </Box>
+                            ))}
+                            <Typography variant="caption" sx={{ color: FAINT, pl: 0.5 }}>{progressLine(detail.checklist)}</Typography>
+                          </Box>
                         )}
                         {/* the rest of what they said, in order - indented so it reads as the same
                             person continuing rather than as separate business */}

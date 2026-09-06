@@ -17,6 +17,7 @@ import { Md, looksMd } from "./md.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
 import { laneMeta, ageText } from "./funnelPile.js";
 import { sendBlockLine, draftState } from "./sendState.js";
+import { checklistMarkdown } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 
@@ -80,7 +81,11 @@ function CombinedTaskText({ card }) {
   if (!doc) return <div className="tq-card-full">â€¦</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
   const messages = (doc.messages || []).filter((m) => String(m.Status || "") !== "context");
-  if (messages.length <= 1) return <FullText mid={card?.mid} revision={card?.presentation_revision} />;
+  // the same checklist the task page shows (PW-075), read-only here: ticking is done on the task
+  const list = (doc.checklist || []).length ? (
+    <div className="tq-card-note" style={{ marginTop: 7, whiteSpace: "pre-wrap" }}>{checklistMarkdown(doc.checklist)}</div>
+  ) : null;
+  if (messages.length <= 1) return <>{<FullText mid={card?.mid} revision={card?.presentation_revision} />}{list}</>;
   return (
     <div className="tq-card-full">
       <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 700 }}>
@@ -97,6 +102,7 @@ function CombinedTaskText({ card }) {
           </div>
         );
       })}
+      {list}
     </div>
   );
 }

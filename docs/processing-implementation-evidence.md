@@ -864,3 +864,19 @@ between failed concurrent and successful isolated runs. The final packaged asset
 match upstream, and the original workspace's only dirty file remains README.md
 with the previously recorded SHA-256. PW-006 through PW-008 now have matching
 TODO and Markdown/JSON ledger evidence. Exact delivery CI will be recorded after push.
+
+### Second concurrent-base reconciliation
+
+Before push, origin/master advanced to `85267a0` with Claude's always-draft and
+general-default section (`8b89e26`). Email commits were replayed again; only the
+append-only evidence conflicted, and both sections were preserved. Integrated
+source is now `221a506` (documentation `5c5253f`); prior `36a1edf` gate results above
+remain explicitly associated with the earlier triage base. New-base frontend
+passed 286 tests (1.406 s), and packaged build exited 0 (14.84 s) without asset
+drift. Backend and browser cumulative gates are being repeated before delivery.
+
+The `85267a0`-based integration passed 2,548 backend tests plus 71 subtests
+(150 warnings, no skips) in 213.23 s, and all seven browser scenarios in 197.227 s.
+Before delivery, master advanced again to `b03445b` with Claude's same-day chat
+relationship changes (`78c6dd1`). These passed results remain tied to the draft
+base; the next integration gate must include the newer chat change.

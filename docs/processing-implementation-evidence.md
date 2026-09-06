@@ -1067,3 +1067,27 @@ the isolated input scenario; 184.990 s for the other six). Frontend/build remain
 the byte-identical 290-test, 12.25 s build recorded above. Before push, concurrent
 master advanced to `ffd9938` with assistant-idea triage; integrate that source and
 retain these results as the prior-base gate, not final-SHA verification.
+## Section 3.9 — assistant ideas enter the shared triage
+
+Status: implemented and tested locally at `3045452`; remote CI pending on the pushed
+checkpoint. Section 3.8 is CI-verified (f327a8b, CI run 34041465044 (all ten jobs passed)).
+Acceptance PW-199, PW-200, PW-201 implemented; PW-202 partial (no rendered-browser check).
+
+The assistant's post kept its fixed 'feed' route and its ideas surfaced through an assistant-only
+lane, never judged. `assistant.triage_ideas` now gives every newly said idea the shared triage
+verdict - by the triage brain, not the assistant's model - with `idea_context` (the originating
+report, the task it names with its status, whether a worker has it) in the same payload every
+message gets; the verdict is recorded on the idea (`action.triage`: intent, kind, why, linked task)
+and survives a re-say with the same facts (`store.upsert_idea` keeps it), so an idea is judged once
+per set of facts. An actionable idea about no active task opens work through `ingest.ingest_message`
+with the verdict it already has (`_verdict` rides on the message, so no second model call), which
+applies the general default kind, checklist, repository and startup rules of the shared intake;
+an idea about active work records the verdict and creates nothing, and a generated claim completes
+nothing. A failure is recorded as an error the next check retries; no brain leaves it pending. The
+pile's idea lane comes from the verdict (fyi, asked, or the failure said), and an idea whose work
+was opened ranks through that task row, not a second card. `_recent` and the producers never read
+Channel 'assistant' rows back in as arrivals, so generated output cannot retrigger itself. Report
+triage stays the opt-in it was (`reports.run_report_source`), and worker events are untouched.
+
+Tests: `tests/test_ideas_triage.py` (8 cases) and the existing `tests/test_report_triage.py`. No existing assertion changed.
+No frontend change; packaged assets unchanged.

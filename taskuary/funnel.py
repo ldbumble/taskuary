@@ -422,6 +422,14 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
             continue
         if a.get('mid') in used_mids or (a.get('tid') and a['tid'] in used_tids): continue
         lane = 'report' if a.get('section') == 'systems' else 'forgotten'
+        # the shared verdict decides the lane (PW-200): fyi is fyi, an ask is an ask, a failed verdict says so;
+        # an idea whose work was opened leaves this lane for the task row it opened (used_tids below)
+        tri = a.get('triage') or {}
+        why = a.get('why') or 'the assistant raised this'
+        if tri.get('error'): why = f"triage failed ({tri['error']}) - the next check retries; {why}"
+        elif tri.get('pending'): why = f'awaiting triage (no AI connector); {why}'
+        elif tri.get('intent') == 'fyi': lane = 'fyi'
+        elif tri.get('intent') in ('task', 'reply_only'): lane = 'asked'
         m = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
         cid = m.get('ConversationId')
         if cid and (cid in used_cids or cid in seen_cids): continue     # one line per conversation
@@ -434,7 +442,7 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
             if ref and store.get_task(int(ref.group(1))): tid = a['tid'] = int(ref.group(1))
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
-                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=a.get('why') or 'the assistant raised this'))
+                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why))
     return out
 
 

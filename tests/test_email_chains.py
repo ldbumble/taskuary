@@ -120,10 +120,12 @@ class PollHookTests(unittest.TestCase):
 
     def test_a_failed_completion_is_retried_on_the_next_mail_of_the_thread(self):
         s, sid = outlook_store()
-        from datetime import datetime, timezone
-        d, e = gmail(3, T0 + timedelta(minutes=3)), gmail(4, datetime.now(timezone.utc) + timedelta(minutes=1))   # e lands after the watermark moved to now
+        d, e = gmail(3, T0 + timedelta(minutes=3)), gmail(4, T0 + timedelta(hours=2))
         fake = FakeThreadGraph([gmail(i, T0 + timedelta(minutes=i)) for i in range(4)] + [e], fail=True)
-        with mock.patch.object(chains, 'list_ids_graph', fake.list_ids), mock.patch.object(chains, 'fetch_graph', fake.fetch):
+        with mock.patch.object(chains, 'list_ids_graph', fake.list_ids), mock.patch.object(chains, 'fetch_graph', fake.fetch), \
+             mock.patch.object(channels, '_mail_cutoff', side_effect=[
+                 (T0 + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                 (T0 + timedelta(hours=3)).strftime('%Y-%m-%dT%H:%M:%SZ')]):
             poll(s, FakeGraph({'inbox': [d]}))
             self.assertFalse(chains.coverage(s, CONV)['complete'])
             fake.fail = False
@@ -131,11 +133,13 @@ class PollHookTests(unittest.TestCase):
         self.assertTrue(chains.coverage(s, CONV)['complete']); self.assertEqual(sorted(fake.fetched), ['g-0', 'g-1', 'g-2'])
 
     def test_a_later_reply_in_the_listing_is_left_for_the_poll_to_triage(self):
-        from datetime import datetime, timezone
         s, sid = outlook_store()
-        d, e = gmail(3, T0 + timedelta(minutes=3)), gmail(4, datetime.now(timezone.utc) + timedelta(minutes=1))
+        d, e = gmail(3, T0 + timedelta(minutes=3)), gmail(4, T0 + timedelta(hours=2))
         fake = FakeThreadGraph([gmail(i, T0 + timedelta(minutes=i)) for i in range(3)] + [d, e])   # E is already at the provider
-        with mock.patch.object(chains, 'list_ids_graph', fake.list_ids), mock.patch.object(chains, 'fetch_graph', fake.fetch):
+        with mock.patch.object(chains, 'list_ids_graph', fake.list_ids), mock.patch.object(chains, 'fetch_graph', fake.fetch), \
+             mock.patch.object(channels, '_mail_cutoff', side_effect=[
+                 (T0 + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                 (T0 + timedelta(hours=3)).strftime('%Y-%m-%dT%H:%M:%SZ')]):
             poll(s, FakeGraph({'inbox': [d]}))
             self.assertEqual({r['ExternalId']: r['Status'] for r in s.thread_messages(CONV)}.get('graph:g-4'), None)   # not swallowed as history
             poll(s, FakeGraph({'inbox': [d, e]}))

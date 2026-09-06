@@ -57,6 +57,22 @@ class FakeGraph:
             self.continuations[next_link] = remainder
         return (batch, next_link) if with_continuation else batch
 
+    def history_get(self, url, headers=None, timeout=None, params=None):
+        """Actual chain hooks use a separate metadata/body endpoint from folder polling."""
+        rows = [m for mails in self.folders.values() for m in mails]
+        query = (params or {}).get('$filter', '')
+        if query.startswith("conversationId eq '"):
+            conv = query[len("conversationId eq '"):-1]
+            payload = {'value': [{k: m[k] for k in ('id', 'receivedDateTime', 'from', 'conversationId')}
+                                 for m in rows if m.get('conversationId') == conv]}
+        else:
+            gid = url.rsplit('/', 1)[-1]
+            payload = next((m for m in rows if m['id'] == gid), None)
+            if payload is None: raise AssertionError(f'unexpected fixture history request: {url}')
+        response = mock.Mock(); response.raise_for_status = lambda: None
+        response.json.return_value = payload
+        return response
+
 
 def outlook_store(folders=('inbox',)):
     s = MemoryStore()
@@ -72,6 +88,7 @@ def outlook_store(folders=('inbox',)):
 
 def poll(s, fake, backfill_days=0):
     with mock.patch.object(channels, 'graph_token', return_value='T'), mock.patch.object(channels, '_mail_msgs', fake), \
+         mock.patch.object(channels.requests, 'get', fake.history_get), \
          mock.patch.object(channels, '_body', side_effect=lambda m: m['body']['content']), mock.patch.object(channels, '_addrs', return_value=[]):
         return channels.poll_channels(s, backfill_days=backfill_days)
 
@@ -227,6 +244,8 @@ class CatchUpTests(unittest.TestCase):
             def __init__(self, rows, fail_cursor=False):
                 self.rows, self.fail_cursor, self.failed = rows, fail_cursor, False
             def __call__(self, url, headers=None, timeout=None, params=None):
+                if (params or {}).get('$filter', '').startswith("conversationId eq '"):
+                    return FakeGraph({'inbox': self.rows}).history_get(url, headers, timeout, params)
                 folder = 'sentitems' if 'sentitems' in url else 'inbox'
                 offset = 0 if params is not None else int(url.rsplit('/', 1)[-1])
                 if folder == 'inbox' and offset == 500 and self.fail_cursor and not self.failed:

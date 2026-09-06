@@ -2270,3 +2270,76 @@ Tests: `tests/test_assistant_presentation.py` (8 cases), `website/test/fyiCard.t
 `tests/test_lifecycle.py` and `website/test/funnelPile.test.mjs` re-pinned. Frontend:
 `assistantCards.jsx` (FyisCard, CombinedTaskText, TaskCard), `AssistantView.jsx` (`proposeDirect`),
 rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.2.log`.
+
+## Section 8.3 — background updates go to one strip and never advance the conversation
+
+Status: implemented and tested locally at `42d0d16`; remote CI pending on the pushed
+checkpoint. Section 8.2 is CI-verified (1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)).
+Acceptance PW-165 to PW-170 implemented.
+
+The watcher (`funnel.announce`) used to write every agent transition into the chat as an assistant
+line, an asking agent with a card, and the page narrated a newer message on Current as a line of its
+own. Now an unsolicited update is a NOTICE on the one bottom strip (PW-165): a working or finished
+agent is kept as a `notice:<tid>` funnel-state row (`funnel.notify` / `funnel.notices`) folded into
+the pile's `alerts`, and nothing is written into the chat by the watcher; a parked or asking agent is
+the pile's own alert and is never kept twice; a newer message on Current raises a page-side notice
+and refreshes the presentation passively, the subject unchanged. The strip's queue
+(`pendingAlerts`) keeps every notice pending whatever is on the table, shows "+N more", and keeps the
+pile's own outranking rule for its alerts; the strip stays until Open or Later (PW-166): Open is the
+owner's own navigation to the item (`surface`), Later marks only the notice `ack` - no item state, the
+task untouched - a newer fact about the same task replaces the older notice, and `reset_walk` drops
+put-down notices so a new chat does not raise them again.
+
+`loadPile` holds no scheduled `surface()`, no `deferInChat` and writes no turn (PW-168/169): polling,
+live events and tab activation refresh the pile only; a Current the server says is gone is cleared
+without a replacement being discussed; the working event no longer nudges "let's go to the next
+thing". The approval-time material-change dialog of Section 7.5 is an action-blocking validation
+and is untouched.
+
+Tests: `tests/test_assistant_notifications.py` (5 cases), `website/test/notificationStrip.test.mjs` (3 cases); `tests/test_funnel.py`,
+`tests/test_lifecycle.py`, `tests/processing/test_processing_selection.py` and the live-chat line
+pin re-pinned. Frontend: `funnelPile.js` (`pendingAlerts`), `AssistantView.jsx` (notices, strip,
+`ack`), rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.3.log`.
+
+### Section 1.8 integration with concurrent Sections 8.1–8.3
+
+Local integration retains Claude's confirmed proposals, per-FYI summaries, full task
+context, and notification strip through `cb63bf7`. Canonical summaries are bound to
+the substantive context revision and dropped from presentation when that context
+changes. Confirmed Done freezes the canonical context and checks it again inside
+each root's receipt transaction, preventing unseen arrivals from being read by an
+old confirmation. FYI batches still settle separate roots in separate transactions;
+batch-wide atomicity is not claimed. Typed Next retains Current until guarded
+selection captures its exclusion, so display-only unread semantics cannot reselect
+that same Current immediately.
+
+The full pre-merge Section 1.8 gate above remains the cumulative baseline. Focused
+compatibility checks for concurrent changes passed: 554 backend tests (41.65 s),
+13 shared-Unread tests including stale-summary presentation (4.59 s), then 453
+processing/notification/funnel/lifecycle/idea tests (31.65 s). Frontend: 324 tests
+(3.41 s); packaged build: 12.64 s. Current/Next rendered safety: 2 passed (76.31 s).
+Astra independently reviewed the integration seams and implemented the isolated
+physical typed-Next browser regression; the integration lead reviewed its fixture
+and assertions. The original checkout retains only the owner's README change,
+with its previously recorded SHA256 unchanged. No live app restart or production
+connector was used. Final rendered and exact remote CI results follow separately.
+
+The first post-8.3 rendered attempt failed in shared fixture setup because it waited
+for the superseded background chat cards. The setup now checks each seeded waiting
+agent's exact pile/alert identity, a drained event queue, and unchanged complete chat
+history. Existing interaction assertions were preserved. This is an explicit fixture
+contract update for the accepted notification-strip behavior, not a skipped test.
+
+The physical typed-Next check also exposed volatile native `idle` seconds entering
+canonical presentation revisions. The regression requires clock-only advancement
+to preserve a waiting-agent selection, while changed waiting state, question,
+output, session, and crossing the legacy idle threshold still invalidate it. This
+fix preserves the stale-selection guard rather than retrying a rejected navigation.
+
+Final local integration acceptance: 556 focused backend tests passed (40.44 s),
+including the new clock-versus-worker-facts regression. Rendered freshness passed
+(22.20 s); the 507-root unified All/Unread scenario with physical typed Next passed
+(63.47 s; 66.56 s including harness). It verifies one guarded advance, exact prior
+Current exclusion, retained email filter, and previous members remaining unread.
+Remote CI is pending on the delivery commit; it runs the cumulative suite and all
+nine browser scenarios. Sync progress work remains next, after this delivery gate.

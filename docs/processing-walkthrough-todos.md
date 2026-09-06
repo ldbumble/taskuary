@@ -939,31 +939,31 @@ Owner-approved: never move on by itself. Background updates may refresh the
 current item and notify the owner, but must not switch the subject or initiate
 Next. Pending implementation.
 
-- [ ] <a id="pw-165"></a>**PW-165** Owner-approved notification placement: unsolicited updates use a single
+- [x] <a id="pw-165"></a>**PW-165** Owner-approved notification placement: unsolicited updates use a single
   bottom strip, whether about Current or another item. Do not also append automatic
   chat messages/cards for the same event. This supersedes the earlier proposal
   to insert Current-item updates inline automatically; passive status/context
   refresh still occurs without changing the conversation subject.
-- [ ] <a id="pw-166"></a>**PW-166** Keep the strip until Open, Later, or resolution; do not rely on a timed
+- [x] <a id="pw-166"></a>**PW-166** Keep the strip until Open, Later, or resolution; do not rely on a timed
   disappearing toast as the only notification. Open explicitly brings the
   relevant item/update into chat. Later acknowledges/dismisses the notification,
   not the underlying unread item or task. Neither arrival nor dismissal switches
   Current automatically. Multiple events must remain accessible without losing
   pending notifications or duplicating them across notification surfaces.
-- [ ] <a id="pw-167"></a>**PW-167** Test no automatic chat insertion for Current and non-Current updates,
+- [x] <a id="pw-167"></a>**PW-167** Test no automatic chat insertion for Current and non-Current updates,
   strip persistence, Open/Later/resolution behavior, duplicate events, and retained
   unread state. Keep the separately approved approval-time material-change popup:
   that is an action-blocking validation dialog, not an unsolicited notification.
 
-- [ ] <a id="pw-168"></a>**PW-168** Remove event-driven clearing/replacement of Current and scheduled surface()
+- [x] <a id="pw-168"></a>**PW-168** Remove event-driven clearing/replacement of Current and scheduled surface()
   calls from AssistantView.loadPile(). A worker starting/finishing or another
   background event is not permission to advance. Keep relevant notifications
   separate from Current and offer a switch instead of silently switching.
-- [ ] <a id="pw-169"></a>**PW-169** Only explicit owner navigation/actions may advance under their agreed
+- [x] <a id="pw-169"></a>**PW-169** Only explicit owner navigation/actions may advance under their agreed
   behavior; do not infer an instruction to advance from polling, reconnects,
   newly merged historical cards, or model commentary. If Current becomes invalid,
   clear it without automatically discussing a replacement.
-- [ ] <a id="pw-170"></a>**PW-170** Test updates on Current, unrelated urgent arrivals, delayed event delivery,
+- [x] <a id="pw-170"></a>**PW-170** Test updates on Current, unrelated urgent arrivals, delayed event delivery,
   tab activation, and reconnects: no unsolicited Next calls, subject replacement,
   or duplicate assistant turns.
 

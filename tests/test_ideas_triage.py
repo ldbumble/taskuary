@@ -11,12 +11,14 @@ the assistant never reads its own generated rows back in as new arrivals. Report
 opt-in it was.
 """
 import json, unittest
+from datetime import datetime, timedelta
 from unittest import mock
 
 from taskuary import assistant, funnel, terminal
 from taskuary.store import MemoryStore
 
-STAMP = '2026-09-06 09:00:00'
+# relative, never a clock time: the pile keeps the last twelve hours, so a fixed 09:00 failed CI every evening
+STAMP = (datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def idea(s, key, text, action=None, kind='idea'):

@@ -312,7 +312,7 @@ def test_working_or_settling_only_capture_is_pending_and_never_claims_all_done()
     assert "triaged" in out["say"]
 
 
-def test_watcher_cards_keep_readable_history_with_explicit_background_provenance():
+def test_watcher_events_write_no_chat_card_and_explicit_cards_carry_no_background_flag():
     value = store()
     tid = value.create_task({
         "Title": "Import census", "Kind": "coding", "Status": "in_progress",
@@ -332,11 +332,11 @@ def test_watcher_cards_keep_readable_history_with_explicit_background_provenance
          mock.patch("taskuary.terminal.live_sessions", return_value=asking):
         events = funnel.announce(value)
 
-    assert events[0]["card"]["background_event"] is True
+    assert events[0]["kind"] == "asking" and events[0]["card"] is None          # a strip notice, never a chat card (PW-165)
     dock = general.dock_task(value)[0]
-    history = concierge.history(value, dock["TaskId"])
-    assert history[-1]["card"]["background_event"] is True
-    assert history[-1]["card"]["kind"] == "agent"
+    assert concierge.history(value, dock["TaskId"]) == []                     # the watcher wrote nothing into the chat
 
-    explicit = concierge.card_for(events[0]["card"])
+    with mock.patch("taskuary.terminal.live_sessions", return_value=asking):
+        explicit = concierge.card_for(funnel.next_item(value, f"agent:{tid}", include_surfaced=True) or {})
+    assert explicit.get("kind") == "agent"
     assert "background_event" not in explicit

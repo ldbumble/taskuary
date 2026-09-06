@@ -39,9 +39,25 @@ def install_processing_changes(app, store):
     def activate_unread(body: dict):
         if body:
             raise HTTPException(422, 'empty fixture input required')
-        from taskuary import funnel, terminal
+        from taskuary import concierge, funnel, terminal
         from taskuary.processing_startup import initialize
         result = initialize(store, live_state=terminal.live_sessions(tail=6))
+        # This explicit disposable-fixture activation supplies one deterministic
+        # model decision; every other prompt keeps the normal offline demo voice.
+        # Exercise the real say/decision/guarded-next path without a model service.
+        def fixture_brain(target_store, **kwargs):
+            if target_store is not store:
+                raise RuntimeError('synthetic navigation model belongs to the fixture store')
+            fallback = demo.brain()
+
+            def model(system, user, **options):
+                if 'The owner says: Next' in str(user).splitlines():
+                    return 'Next.\nDECIDE: next'
+                return fallback(system, user, **options)
+
+            return model
+
+        concierge.brain = fixture_brain
         funnel.invalidate()
         return result
 

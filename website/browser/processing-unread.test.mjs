@@ -72,6 +72,61 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
     const button = document.querySelector('button[aria-label^="New chat"]');
     return button && !button.disabled && !document.querySelector('.tq-typing');
   }, { timeout: 20000 });
+  const previousCard = (await request(h, '/api/concierge')).messages
+    .toReversed().find(message => message.card?.key && !message.card.background_event)?.card;
+  assert.ok(previousCard?.key, 'Walk must have persisted its exact Current card');
+  const previousMembers = previousCard.kind === 'fyis' ? previousCard.items.map(item => item.key) : [previousCard.key];
+  assert.ok(previousMembers.length && previousMembers.every(key => key.startsWith('processing:')));
+  const nextRequests = [];
+  const observeTurn = req => {
+    const path = new URL(req.url()).pathname;
+    if (req.method() === 'POST' && path.startsWith('/api/concierge/')) {
+      nextRequests.push({ path, body: JSON.parse(req.postData() || '{}') });
+    }
+  };
+  page.on('request', observeTurn);
+  const isTurn = (response, mode) => {
+    const req = response.request();
+    const path = new URL(response.url()).pathname;
+    return req.method() === 'POST' && (path === `/api/concierge/${mode}`
+      || (path === '/api/concierge/stream' && JSON.parse(req.postData() || '{}').mode === mode));
+  };
+  const [said, advanced] = await Promise.all([
+    page.waitForResponse(response => isTurn(response, 'say'), { timeout: 20000 }),
+    page.waitForResponse(response => isTurn(response, 'next'), { timeout: 20000 }),
+    (async () => {
+      await page.click('.tq-compose textarea');
+      await page.type('.tq-compose textarea', 'Next');
+      await page.keyboard.press('Enter');
+    })(),
+  ]);
+  const completedTurn = async response => {
+    const text = await response.text();
+    assert.equal(response.status(), 200, text);
+    return new URL(response.url()).pathname === '/api/concierge/stream'
+      ? text.trim().split('\n').map(line => JSON.parse(line)).findLast(event => event.type === 'done')
+      : JSON.parse(text);
+  };
+  assert.equal((await completedTurn(said)).decision?.verb, 'next', 'the fixture must exercise the model decision path');
+  const nextResult = await completedTurn(advanced);
+  assert.ok(nextResult?.item?.key, 'typed Next must land an item');
+  assert.notEqual(nextResult.item.key, previousCard.key, 'typed Next advances past the still-unread Current');
+  const nextBody = JSON.parse(advanced.request().postData());
+  assert.equal(nextBody.exclude, previousCard.key, 'Current survives until the guarded Next captures its exclusion');
+  assert.equal(nextBody.expected_next_key, nextResult.item.key);
+  assert.equal(JSON.parse(nextBody.only.slice(5)).channel, 'email', 'typed Next keeps the shared category filter');
+  const nextMembers = nextResult.item.kind === 'fyis' ? nextResult.item.items : [nextResult.item];
+  assert.ok(nextMembers.every(item => !previousMembers.includes(item.key)), 'the previous FYI members are excluded too');
+  await page.waitForFunction(title => document.querySelector('.tq-pile-row.current .card b')?.textContent.trim() === title,
+    { timeout: 20000 }, nextMembers[0].title);
+  await page.waitForFunction(() => !document.querySelector('.tq-typing'), { timeout: 20000 });
+  page.off('request', observeTurn);
+  assert.equal(nextRequests.filter(turn => turn.path === '/api/concierge/say' || turn.body.mode === 'say').length, 1);
+  assert.equal(nextRequests.filter(turn => turn.path === '/api/concierge/next' || turn.body.mode === 'next').length, 1,
+    'one typed Next performs exactly one guarded advance');
+  const afterNext = await request(h, '/api/funnel/pile');
+  for (const key of previousMembers) assert.equal(afterNext.items.find(item => item.key === key)?.unread, true,
+    'moving Current must not mark the previous item read');
   await page.click('button[aria-label^="New chat"]');
   await page.waitForFunction(() => !document.querySelector('.tq-pile-row.current'), { timeout: 20000 });
   await page.waitForNetworkIdle({ idleTime: 200, timeout: 20000 });

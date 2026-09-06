@@ -14,6 +14,18 @@ def _pick(row, fields):
     return {field: row[field] for field in fields if field in row}
 
 
+def _worker_attention(row):
+    # Elapsed idle seconds are a clock, not changed content. Preserve the
+    # existing threshold-based waiting fact before removing that clock so a
+    # real working/waiting transition still changes the view and selection.
+    from .terminal import IDLE_WAITING
+    row = dict(row)
+    if row.get('waiting') is None:
+        row['waiting'] = (row.get('idle') or 0) >= IDLE_WAITING
+    row.pop('idle', None)
+    return row
+
+
 def _rows_for(cur, table, column, ids):
     ids = sorted(set(ids), key=str)
     rows = []
@@ -120,7 +132,7 @@ def processing_projection(cur, item_id, *, live_state=None):
                 legacy_states=states, settings=settings, aliases=aliases,
                 processing_summaries=_rows_for(cur, 'processing_display_summary', 'Key', state_keys),
                 worker_attention_available=live_state is not None,
-                worker_attention=sorted((dict(row) for row in (live_state or ())
+                worker_attention=sorted((_worker_attention(row) for row in (live_state or ())
                     if str(row.get('taskId', row.get('task_id'))) in set(map(str, task_ids))),
                     key=lambda row: json.dumps(row, sort_keys=True)))
     from .processing_reads import project as read_projection

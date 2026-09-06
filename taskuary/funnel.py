@@ -775,7 +775,7 @@ def announce(store, actor: str = 'assistant') -> list:
         ref, title = task_ref(tid), _short(t.get('Title'), 80)
         if state == 'working' and was in (None, 'idle', 'parked', 'asking'):
             events.append({'tid': tid, 'ref': ref, 'kind': 'working', 'agent': agent,
-                           'text': f"{agent} is working on {ref} ({title}) - nothing for you there now. Let's go to the next thing."})
+                           'text': f"{agent} is working on {ref} ({title}) - nothing for you there now."})
         elif state in ('parked', 'asking') and was in ('working', 'idle', None):   # stopped - or found already parked
             events.append({'tid': tid, 'ref': ref, 'kind': state, 'agent': agent,
                            'text': f"{agent} {'asked you something' if state == 'asking' else 'stopped and is waiting on you'} on {ref} ({title})."})
@@ -786,17 +786,35 @@ def announce(store, actor: str = 'assistant') -> list:
     if state_dropped := [tid for tid in _STATE if _STATE[tid][0] == 'done']:
         for tid in state_dropped: _STATE.pop(tid, None), _SEEN.pop(tid, None)   # said once; a closed task is not watched again
     if events:
-        from . import concierge
+        # an unsolicited update is a NOTICE for the bottom strip (PW-165) - never a line or a card the watcher
+        # writes into the chat by itself. It stays until the owner opens it or puts it down (PW-166). A parked or
+        # asking agent is already an alert of the pile's own, so it is not kept twice; a newer fact about the
+        # same task replaces the older notice, so nothing repeats unless the facts changed.
         for e in events:
-            card = None
-            if e['kind'] in ('parked', 'asking'):
-                item = next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == f"agent:{e['tid']}" or f"agent:{e['tid']}" in i.get('aliases', [])), None)
-                card = concierge.card_for(_present_one(store, item)) if item else None
-                if card: card['background_event'] = True
-            concierge.record(store, concierge.general.dock_task(store)[0]['TaskId'], 'assistant', e['text'], card)
-            e['card'] = card
+            e['card'] = None
+            store.clear_funnel_state(f"notice:{e['tid']}")
+            if e['kind'] in ('working', 'done'): notify(store, e, actor)
         invalidate()
     return events
+
+
+def notify(store, e: dict, by: str = 'assistant'):
+    """One notice per task, kept on the funnel state (PW-166): Later marks it `ack`, a new fact rewrites it."""
+    store.set_funnel_state(f"notice:{e['tid']}", 'notice', by, None, json.dumps({k: v for k, v in e.items() if k != 'card'}))
+
+
+def notices(store, states: dict = None) -> list:
+    """The strip's own notices: the watcher's events, in the shape of an alert, until Open or Later."""
+    states = states if states is not None else store.funnel_states()
+    out = []
+    for k, st in states.items():
+        if not k.startswith('notice:') or st.get('Status') != 'notice' or not st.get('Note'): continue
+        try: e = json.loads(st['Note'])
+        except ValueError: continue
+        working = e.get('kind') == 'working'
+        out.append({'key': k, 'item': f"{'agent' if working else 'task'}:{e.get('tid')}", 'kind': e.get('kind'), 'lane': 'working' if working else 'report',
+                    'text': e.get('text') or '', 'notice': True, 'order_band': 3, 'at': st.get('At'), 'tid': e.get('tid'), 'ref': e.get('ref')})
+    return sorted(out, key=lambda a: str(a.get('at') or ''))
 
 
 MAIL_KINDS = ('review', 'action', 'asked', 'todo', 'fyi')
@@ -932,6 +950,9 @@ def reset_walk(store):
     work, and having been shown it once in yesterday's chat is not an answer. A new chat surfaced
     two fyi about lunch while a coder sat parked on a question (the 2026-09-03 break test), because
     a blocked row must come back with the new chat."""
+    # ...but a notice the owner put down stays down: a new chat does not raise a finished agent again (PW-166)
+    for k, st in store.funnel_states().items():
+        if k.startswith('notice:') and st.get('Status') == 'ack': store.clear_funnel_state(k)
     store.clear_funnel_states(('ack',))
     for k, st in store.funnel_states().items():
         if k.startswith('agent:') and st.get('Status') == 'surfaced': store.clear_funnel_state(k)
@@ -963,8 +984,9 @@ def alerts(store, items: list = None) -> list:
                     else f"urgent: {i['title']}")
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': i['kind'], 'lane': i['lane'], 'text': f"{who}{what}"})
     bands = {i['key']: _band(i) for i in items}
-    return [a | {'order_band': bands.get(a['item'], 3)} for a in out
-            if (states.get(a['key']) or {}).get('Status') != 'ack']
+    return ([a | {'order_band': bands.get(a['item'], 3)} for a in out
+             if (states.get(a['key']) or {}).get('Status') != 'ack']
+            + notices(store, states))                                  # the watcher's own, kept until Open or Later
 
 
 def more_urgent(items: list, current_key: str = None) -> list:

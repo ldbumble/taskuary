@@ -202,6 +202,47 @@ def test_working_to_waiting_uses_same_root_and_never_writes_read_state(store, ag
     assert list(store.cx.iterdump()) == before
 
 
+def test_waiting_selection_ignores_idle_clock_but_retains_worker_facts(store, monkeypatch):
+    tid = store.create_task({'Title': 'Stable waiting worker', 'Kind': 'general', 'Status': 'open'}, 'test')
+    add(store, 'Waiting worker source', tid=tid, status='routed')
+    both(store)
+    now = datetime.now()
+    base = {'taskId': tid, 'agent': 'codex', 'sid': 'isolated-waiter',
+            'started': now.timestamp(), 'waiting': True, 'phase': 'parked',
+            'idle': 100, 'tail': ['Waiting for approval'],
+            'request': {'request_id': 'question-1', 'kind': 'input_needed',
+                        'text': 'Approve the change?', 'choices': ['yes', 'no'], 'at': now.isoformat()}}
+    worker = dict(base)
+    monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [dict(worker)])
+    monkeypatch.setattr(terminal, 'asking_lines', lambda sid, lines: [])
+    before = list(store.cx.iterdump())
+    initial = capture_selection(store, now=now)
+    assert initial.selected['tid'] == tid and initial.selected['lane'] == 'blocked'
+    worker['idle'] = 101
+    elapsed = capture_selection(store, now=now)
+    assert elapsed.revision == initial.revision
+    assert elapsed.selected['view_revision'] == initial.selected['view_revision']
+    assert elapsed.selected['presentation_revision'] == initial.selected['presentation_revision']
+    for changed in ({'waiting': False}, {'phase': 'working'},
+                    {'request': base['request'] | {'text': 'Approve the revised change?'}},
+                    {'tail': ['Different substantive output']}, {'sid': 'replacement-session'}):
+        worker.clear()
+        worker.update(base | changed)
+        assert capture_selection(store, now=now).revision != initial.revision, changed
+    worker.clear()
+    worker.update(base)
+    worker.pop('waiting')
+    assert capture_selection(store, now=now).revision == initial.revision
+    worker['idle'] = terminal.IDLE_WAITING - 1
+    working = capture_selection(store, now=now)
+    assert working.selected is None and working.pending['working'] == 1
+    worker['idle'] = terminal.IDLE_WAITING
+    waiting = capture_selection(store, now=now)
+    assert waiting.selected['key'] == initial.selected['key']
+    assert waiting.revision != working.revision
+    assert list(store.cx.iterdump()) == before
+
+
 def test_startup_backup_contains_legacy_reads_and_owner_documents(tmp_path):
     import sqlite3
     from pathlib import Path

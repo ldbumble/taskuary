@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+
 // Stabilize only the owned demo startup before processing interaction assertions.
 export const waitForDemoReplays = async (harness, timeout = 30000) => {
   const deadline = Date.now() + timeout;
@@ -23,20 +25,40 @@ export const settleDemoWatcher = async (harness, sessions, timeout = 20000) => {
   let state = null;
   let lastPile = null;
   let settled = false;
+  assert.ok(sessions.length && sessions.every(row => Number.isInteger(row.TaskId)),
+    'watcher readiness requires the exact seeded replay tasks');
+  const readHistory = async () => {
+    const response = await fetch(`${harness.fixtureApi}/api/concierge`, { headers });
+    if (!response.ok) throw new Error(`demo watcher history failed: ${response.status}`);
+    const snapshot = await response.json();
+    assert.ok(Array.isArray(snapshot.messages), 'demo history must return its complete message array');
+    return snapshot;
+  };
+  const initialHistory = (await readHistory()).messages;
+  const waitingInPileAndStrip = (snapshot) => {
+    assert.ok(Array.isArray(snapshot.items) && Array.isArray(snapshot.alerts) && Array.isArray(snapshot.events),
+      'demo pile must expose items, strip alerts, and transition events');
+    return sessions.every(session => snapshot.items.some(item => item.tid === session.TaskId
+      && item.kind === 'agent' && item.lane === 'blocked'
+      && snapshot.alerts.some(alert => alert.item === item.key && alert.kind === 'agent' && alert.lane === 'blocked')));
+  };
   while (Date.now() < deadline) {
     const pileResponse = await fetch(`${harness.fixtureApi}/api/funnel/pile?force=1`, { headers });
     if (!pileResponse.ok) throw new Error(`demo watcher snapshot failed: ${pileResponse.status}`);
     lastPile = await pileResponse.json();
-    const stateResponse = await fetch(`${harness.fixtureApi}/api/concierge`, { headers });
-    if (!stateResponse.ok) throw new Error(`demo watcher history failed: ${stateResponse.status}`);
-    state = await stateResponse.json();
-    const announced = new Set((state.messages || []).flatMap((turn) => turn.card?.key?.startsWith("agent:")
-      ? [Number(turn.card.tid)] : []));
-    if (sessions.every((row) => announced.has(row.TaskId))) {
+    state = await readHistory();
+    assert.deepEqual(state.messages, initialHistory, 'watcher observations must not append unsolicited chat turns');
+    // Waiting agents already own alerts derived from their exact pile keys. The
+    // watcher no longer manufactures chat cards for these passive transitions.
+    // Match keys rather than prefixes so legacy and canonical identities both work.
+    if (waitingInPileAndStrip(lastPile)) {
       const drainedResponse = await fetch(`${harness.fixtureApi}/api/funnel/pile?force=1`, { headers });
+      if (!drainedResponse.ok) throw new Error(`demo watcher drain failed: ${drainedResponse.status}`);
       const drained = await drainedResponse.json();
       lastPile = drained;
-      if (drainedResponse.ok && !(drained.events || []).length) {
+      state = await readHistory();
+      assert.deepEqual(state.messages, initialHistory, 'draining notices must leave chat history untouched');
+      if (waitingInPileAndStrip(drained) && !drained.events.length) {
         settled = true;
         break;
       }
@@ -47,6 +69,8 @@ export const settleDemoWatcher = async (harness, sessions, timeout = 20000) => {
     throw new Error(`demo watcher did not settle its replay transitions: ${JSON.stringify({
       taskIds: sessions.map((row) => row.TaskId),
       messages: state?.messages || [],
+      agents: (lastPile?.items || []).filter(item => item.kind === 'agent'),
+      alerts: lastPile?.alerts || [],
       events: lastPile?.events || [],
     })}`);
   }

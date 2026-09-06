@@ -30,7 +30,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { SUGGESTIONS, afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
-import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
@@ -226,6 +226,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
   const [acked, setAcked] = useState(() => new Set());
+  const [notices, setNotices] = useState([]);           // the page's own strip notices: a newer message on Current (PW-165)
   const [chatsOpen, setChatsOpen] = useState(false);
   const [chats, setChats] = useState([]);
   const [chatsLoading, setChatsLoading] = useState(false);
@@ -369,8 +370,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (epoch !== chatEpoch.current || resettingRef.current) return;
       setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
       if (data.events?.length) {
-        // Watcher turns stay readable and audible. Background activity is never permission to
-        // choose, replace, clear, or advance the conversation subject.
+        // The watcher's word is a strip notice the server keeps (PW-165/166) and, here, a spoken line.
+        // Background activity is never permission to choose, replace, clear, or advance the subject.
         for (const e of data.events) if (e.kind === "done" || e.kind === "asking") speakRef.current?.(e.text);
       }
       // the item on the table is live: an agent that stops and starts again changes what its row and card say
@@ -385,11 +386,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         if (fresh) {
           const newer = fresh.mid && cur.mid && fresh.mid !== cur.mid;
           if (newer) {
+            // an update about Current is a strip notice (PW-165), never a line the chat writes by itself; the
+            // context refresh below is passive and the subject does not change
             const preview = String(fresh.preview || "").replace(/\s+/g, " ").trim().slice(0, 180);
             const line = `New message from ${fresh.who || "someone"} arrived on ${fresh.ref || fresh.title || "this thread"}`
-              + (preview ? `: “${preview}”` : "") + ". I refreshed the context."
+              + (preview ? `: “${preview}”` : "") + ". The context is refreshed."
               + (fresh.rid ? " The earlier draft is now out of date; redraft it before sending." : "");
-            setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: line }]);
+            const key = `notice:msg:${fresh.mid}`;
+            setNotices((n) => [...n.filter((x) => x.key !== key), { key, item: cur.key, kind: "update", lane: cur.lane, text: line, notice: true, local: true }]);
             speakRef.current?.(line);
           }
           const refreshed = refreshCurrentPresentation(cur, fresh);
@@ -457,7 +461,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const canAdvance = canAdvanceSelection(pile, ready, only.current);
   // an alert about something already IN the conversation is noise: the card is right there
   const shownKeys = useMemo(() => new Set(msgs.slice(-8).map((m) => m.card?.key).filter(Boolean)), [msgs]);
-  const alert = useMemo(() => topAlert(pile?.alerts, acked, currentItem, shownKeys), [pile, acked, currentItem, shownKeys]);
+  const pending = useMemo(() => pendingAlerts([...(pile?.alerts || []), ...notices], acked, currentItem, shownKeys), [pile, notices, acked, currentItem, shownKeys]);
+  const alert = pending[0] || null;
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
   const landed = useCallback((data) => {
@@ -669,10 +674,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
+  // Later puts the NOTICE down, not the item or the task behind it; Open is the owner's own navigation to it
+  // (PW-166) - the one road by which a background update ever reaches the table
   const ack = async (a, go) => {
     setAcked((s) => new Set([...s, a.key]));
-    api.post("/api/funnel/settle", { key: a.key, verb: "ack" }).catch(() => {});
-    if (go) surface(a.item, `Show me — ${a.text}`);
+    if (!a.local) api.post("/api/funnel/settle", { key: a.key, verb: "ack" }).catch(() => {});
+    if (go) surface(a.item, `Open — ${a.text}`);
   };
   const openChats = async () => {
     setChatsOpen(true); setChatsLoading(true);
@@ -692,7 +699,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : null;
     currentRef.current = null;
     selectionRef.current = null;
-    setMsgs([]); setText(""); setWork([]); setErr(""); setAcked(new Set());
+    setMsgs([]); setText(""); setWork([]); setErr(""); setAcked(new Set()); setNotices([]);
     setOld(null); setChatsOpen(false); setCurrent(null); setCurrentItem(null);
     setState((s) => s ? { ...s, messages: [] } : s);
     try {
@@ -830,10 +837,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {err && <Typography sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}</Typography>}
         </div>
       </div>
+      {/* ONE bottom strip for every unsolicited update (PW-165), kept until Open or Later (PW-166); the rest of
+          the queue waits behind it and comes up as each is put down */}
       {alert && !old && (
         <div className="tq-btw" role="status">
-          <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{current ? " Finish this one and say next, or switch now." : ""}</div>
-          <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{current ? "Switch to it" : "Show me"}</button>
+          <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{pending.length > 1 ? ` (+${pending.length - 1} more)` : ""}</div>
+          <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{alert.item === current ? "Open the update" : current ? "Switch to it" : "Open"}</button>
           <button type="button" className="tq-chip" onClick={() => ack(alert, false)}>Later</button>
         </div>
       )}

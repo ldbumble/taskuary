@@ -161,3 +161,27 @@ going forward (owner response 2026-09-06).
 Five ordering bands and oldest-first activity tie direction are resolved by the
 owner's second response on 2026-09-06, as specified above.
 Browser-control ownership and UI remain unreviewed and excluded from implementation.
+
+## Section 1.6 All consumer boundary
+
+All adopts canonical membership independently of canonical Unread/read migration.
+One displayed root represents all exact task/message/review members; independent
+ideas retain their own roots and explicit relations. A source filter selects any
+matching displayed member and binds detail/reply actions to that exact member.
+Standalone task/idea/review details are available; `assistant:dock` infrastructure
+and message-only context/history/skipped roots do not create rail entries. Calendar
+continues through the existing separate adapter, with prep shown once under its event.
+
+This consumer explicitly retains stored local wall-clock newest-first display order,
+unknown timestamps last and stable item IDs for ties. It does not activate the pure
+priority ordering adapter or infer UTC for old naive timestamps. The current common
+history interval uses local insertion time, preserving newly ingested old mail.
+Counts are filtered presented roots, with canonical root/tombstone/not-presented
+counts separate. Frozen compact leases bind the query and expire after 120 seconds;
+expired or unavailable coverage is explicit, never a successfully empty response.
+
+Membership reconciliation is an owned background lifecycle with atomic generations;
+GETs remain read-only. Detail rejects pending membership and moved exact members,
+hydrates full content only on selection, and preserves owner draft edits on refresh.
+The only transcript payload is prior-session metadata, not terminal text. No read
+receipts, exclusions, Current/Next selection or browser-control policy change here.

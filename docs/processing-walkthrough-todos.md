@@ -566,6 +566,13 @@ when its conversation changes. Legacy eligibility, canonical consumer adoption,
 durable read/current cutover and historical untagged watcher provenance remain
 pending; related requirements are still partial. See Section 1.5 evidence.
 
+Section 1.6 integrates canonical All roots, source-member selection, compact frozen
+pagination beyond 500 items, explicit coverage errors, and full detail via read-only
+GETs for messages and standalone tasks/ideas/reviews. Its reconciliation and detail lifecycle
+preserve legacy reads, documents and exact draft targets. Local gates and independent
+review passed at `d75d45e`; delivery CI is pending in Section 1.6 evidence. Shared Unread/read/filter/priority and
+Current/Next adoption remain pending, so PW-101/102/103/106/109 remain unchecked.
+
 - [ ] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
   and assistant selection, including messages, reports, assistant posts/ideas,
   and agent work/attention items. Preserve legitimate task/thread grouping and

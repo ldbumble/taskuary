@@ -907,27 +907,27 @@
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Use one canonical item/identity/context representation for All, Unread,",
-      "status": "partial",
-      "test": "Section 1.1: tests/processing model/store/projection/foundation; cumulative gates recorded. Shared consumer adoption pending.",
-      "commit": "81981b8 (foundation only)"
+      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
+      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
+      "commit": "d75d45e; delivery CI pending (canonical All only)"
     },
     {
       "id": "PW-102",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "All sorts by time (newest first). Unread selects the unread subset and",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
+      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
+      "commit": "d75d45e; delivery CI pending (canonical All only)"
     },
     {
       "id": "PW-103",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Remove Unread-only age windows, category exclusions, and silent caps that",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
+      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
+      "commit": "d75d45e; delivery CI pending (canonical All only)"
     },
     {
       "id": "PW-104",
@@ -952,9 +952,9 @@
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Replace the incomplete pipeline revision/update comparison: changes to",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
+      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
+      "commit": "d75d45e; delivery CI pending (canonical All only)"
     },
     {
       "id": "PW-107",
@@ -979,9 +979,9 @@
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Test All/Unread item parity (after read filtering), time versus status order,",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
+      "test": "Section 1.6 membership, All API/lifecycle and rendered 507-root tests; cumulative 2677 backend plus 71 subtests, 298 frontend, eight browser scenarios; Astra cleared",
+      "commit": "d75d45e; delivery CI pending (canonical All only)"
     },
     {
       "id": "PW-110",

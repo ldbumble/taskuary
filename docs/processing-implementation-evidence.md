@@ -775,8 +775,8 @@ its only user change remains README.md with preserved SHA-256
 
 ## Section 2.2 — email catch-up without skipped backlog
 
-Status: reviewed source `32d014b` passed all final local gates. Remote delivery CI
-is pending and will be recorded below. Work began from CI-verified `3dc3a5e`. PW-006 through
+Status: accepted. Reviewed source `32d014b` was delivered as `8247d81`; all ten
+remote CI jobs passed (run 34044710317), as recorded below. Work began from CI-verified `3dc3a5e`. PW-006 through
 PW-008 form one TODO section with independent Outlook and IMAP assignments and
 one integration/review/regression/delivery gate. Claude's original Outlook/IMAP
 commits are already on master; this section resolves their independent review
@@ -1259,3 +1259,106 @@ TODO and both ledgers now reference this source. Full-chain gaps remain explicit
 partial. Delivery is a normal master push preserving upstream `e665df7`; exact-SHA
 remote CI verification is pending. No live restart, live data modification, or
 production connector testing was performed.
+
+### Section 2.2 delivered and CI verified
+
+Normal master delivery `8247d81232bb56f51db8fb7bb39e0be3e8fc8e8b` passed
+[CI run 34044710317](https://github.com/ldbumble/taskuary/actions/runs/34044710317):
+all ten jobs succeeded, including six OS/Python backend combinations, rendered
+browser tests, frontend build, Docker and Windows executable. The tested head SHA
+was verified exactly. The original worktree was fast-forwarded with only the owner's
+README edit remaining and its recorded SHA-256 unchanged. No live app was restarted.
+Section 1.6 proceeds from this accepted checkpoint; unresolved read policies and
+browser-control redesign remain pending.
+
+## Section 1.6 — canonical All consumer
+
+Status: local gates and independent review passed at `d75d45e`; delivery CI pending.
+Base `8247d81`; membership worker `5e810b8` integrated as `59951a9` after Astra
+review. Sol owns bounded membership/UI implementation; Astra independently reviews
+the service, lifecycle, fixture, tests and UI seams. Partial targets remain
+PW-101/102/103/106/109; this section does not activate canonical Unread/read policy.
+
+The explicit background reconciler performs an uncapped, atomic census and detects
+external SQL changes through generations. Read getters never allocate identities.
+All presents one canonical root, including standalone tasks/ideas/reviews, with
+source filters matching any displayed member. Compact pagination leases freeze the
+root set across arrivals and bind filters/history interval/order. Expired leases
+require refresh; pending coverage is explicit. Full detail binds the selected
+message and draft, rejects a dirty/moved target, preserves finalized owner text,
+and includes checklist/history, artifacts and small worker lifecycle metadata.
+
+The disposable socket-isolated browser fixture adds 507 roots without clearing
+demo records or held Current, plus a controlled later arrival and synthetic calendar.
+Real SQLite tests verify exact frozen-page completeness, preserved owner state,
+read-only detail access, pending generation rejection, external-write notification,
+session availability, dangling parents and projection changes. The earlier hover
+race browser test adds the canonical detail URL to its existing request matcher;
+all its previous endpoints, assertions and limits remain. Final gate results follow.
+
+### Integration checks and corrections
+
+The first cumulative backend run passed 2,667 tests plus 71 subtests and found two
+integration failures: the private fixture's namespace import and an exact write-count
+assertion now affected by the durable generation trigger. The import was corrected;
+the test now verifies the one source write plus one trigger write, then separately
+asserts selection performs zero writes. The next cumulative run passed 2,676 tests
+plus 71 subtests in 212.88 s. Final review subsequently required preserving legacy
+detail collection order; the adversarial real-HTTP test compares message/comment/
+route/run/artifact ordering with the existing task-detail API and checks newest
+report/reply/diff selection. All 40 focused integration cases pass after that fix.
+
+UI worker `aaa5558` plus `f8bbe828`/`640f285` address stale requests, pagination
+ownership, speculative fetch failures and current hash-navigation closures. Node22
+frontend tests passed 298; the packaged build exited 0 in 12.96 s. Astra cleared
+the final source and tests. The first rendered canonical scenario failed because
+the assertion read `innerText` for a textarea draft; diagnostic HTTP evidence showed
+the exact latest message/review and no sibling draft. The test is being corrected
+to inspect rendered form-control values, retaining all identity assertions.
+The second rendered attempt reached the draft assertions and found fixture setup
+timing: the mounted page had fetched its source/calendar options before synthetic
+seeding. The fixture sequence will reload those options while verifying held Current
+is preserved; production source discovery behavior is unchanged.
+The next attempt reached older-member selection; its full-body assertion needed the
+existing Message tab rather than Summary. The test now navigates the rendered tabs
+to check the full source tail, then returns to Summary for owner draft editing.
+The disclosure itself is also exercised; full content is intentionally behind the
+existing "show the whole message" control. With those navigation corrections the
+rendered test passed draft isolation/edit preservation, source/category filters,
+standalone details and the complete frozen census/arrival assertions. It then found
+a real existing gap: ComingUp did not pass prep rows or their open callback into
+MeetingRow. The bounded repair also cancels the meeting hover timer on explicit
+prep clicks, so it cannot replace the requested detail. The browser gate verifies
+the exact prep message opens once and stays selected without automatic writes.
+
+Final reviewed backend source passed 2,677 tests plus 71 subtests in 187.97 s,
+with 150 warnings and no skips; warnings include the pre-existing FakeScreencast
+test shutdown warnings and Pydantic deprecations. Frontend tests passed 298 in
+1.475 s before the final ComingUp repair; final UI/build/browser results follow.
+After rebuilding, an older-member click missed while a source-menu overlay covered
+its center. The trace recorded the exact target, a failed center hit-test, no detail
+request and an empty stage. The browser helper now waits for stable visible geometry
+and an exact hit-test before its physical click, retaining the same assertions and
+timeouts. This matches the previously accepted freshness fixture correction.
+
+### Final Section 1.6 local gates
+
+Reviewed runtime `d75d45ef46101e470fa93498f6e2fefb78b140da` passed the complete
+backend suite (2,677 tests plus 71 subtests, 187.97 s), final frontend suite
+(298 tests, 1.458 s), and packaged build (exit 0, 12.21 s). Final fixture/All/lifecycle
+and ledger checks passed 21 cases after adding exact calendar prep IDs. All eight
+rendered browser scenarios passed without skips or weakened earlier assertions:
+
+- Canonical All: 74.385 s; complete 507-new-root frozen census, exact member/draft/
+  full-body selection, owner edit preservation, standalone details, filters, arrival,
+  ignored/muted visibility, exact calendar prep/stability, and unchanged Current.
+- Existing P0: 34.790 s process duration; cold visibility/input 1,851/471 ms.
+- Remaining six earlier scenarios: 176.515 s process duration; terminal visibility/
+  input/reconnect 1,790/76/749 ms. Freshness, captured Next and All/Unread preservation
+  assertions remain intact.
+
+Astra cleared the final source, adversarial tests, fixture interactions and all 267
+ledger entries. PW-101/102/103/106/109 remain partial because canonical Unread/read,
+shared filtering/priority and Current/Next adoption are separate pending work.
+Browser-control redesign remains review-pending. Normal master push and exact-SHA
+remote CI verification follow; no live restart or production connector testing occurred.

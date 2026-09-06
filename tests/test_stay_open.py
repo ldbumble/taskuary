@@ -80,16 +80,18 @@ class TheJudgeIsRefusedButNotTheAgent(unittest.TestCase):
         self.assertTrue(out['closed'])
         w.assert_called_once()
 
-    def test_taskuary_done_files_but_does_not_close_a_stay_open_session(self):
+    def test_taskuary_done_closes_the_run_but_not_the_task_on_a_stay_open_session(self):
         """The old rule was "it SAID it was finished, so it is". TQ-0297 (2026-09-01) closed under the
-        owner mid-review that way. A session the owner opened to sit in is theirs to end: the agent's
-        verdict lands on the task, the session stays at its prompt, nothing wraps."""
+        owner mid-review that way. A session the owner opened to sit in is theirs to end - the TASK is.
+        Since PW-232 the agent's explicit word still closes its own RUN and saves its result (coder.wrap
+        with close=False); the task's closure never happens here."""
         s = MemoryStore()
         tid = _task(s, selfclose.STAY_TAG)
-        with mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w:
+        with mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w,              mock.patch('taskuary.coder.wrap', return_value={'wrap': 'done', 'artifacts': []}) as run_wrap:
             out = selfclose.declare(s, tid, 'fixed the export', 'coder')
-        self.assertFalse(out['closed']); self.assertTrue(out['held'])
-        w.assert_not_called()
+        self.assertFalse(out['closed']); self.assertTrue(out['closed_run'])
+        w.assert_not_called(); run_wrap.assert_called_once()
+        self.assertEqual(run_wrap.call_args.kwargs.get('close'), False)
         self.assertIn('The agent says it is finished: fixed the export', [c['Body'] for c in s.list_comments(tid)])
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')      # untouched: still theirs
 

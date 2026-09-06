@@ -575,6 +575,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
+        # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
+        # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
+        behind = store.pending_review(tid, kind='draft')
+        if behind:
+            store.mark_review_stale(behind['ReviewId'])
+            if follow and follow.get('intent') == 'reply_only' and not follow.get('degraded'):
+                store.update_review_message(behind['ReviewId'], mid)
+                store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it and is being rewritten from the latest context.')
+                _spawn(_auto_draft, store, tid, behind['ReviewId'])
         if follow and follow.get('checklist'):
             # a later message that asks for something new adds boxes; nothing moves or unticks, and the
             # change is said on the task rather than made silently (PW-076)

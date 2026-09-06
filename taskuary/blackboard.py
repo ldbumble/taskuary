@@ -385,7 +385,9 @@ def drain(store):
     from . import terminal as term, rank
     from .ingest import auto_sessions
     from datetime import datetime
-    if not _DRAINING.acquire(blocking=False): return
+    # a drain in flight elsewhere (a session ending, a retry timer) must not make THIS one vanish - a lost
+    # drain is a task that waits for an unrelated event; wait briefly for the lock instead
+    if not _DRAINING.acquire(timeout=2.0): return
     try:
         now = datetime.now().isoformat(sep=' ', timespec='seconds')
         qs = store.queued_dispatches()

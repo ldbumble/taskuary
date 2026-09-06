@@ -173,10 +173,12 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
         # both absent and unmentioned
         system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes)
     from .triage import strip_boilerplate
-    thread = '\n\n'.join(
-        f"--- {'YOU' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail'))}"
-        f" · {m.get('SentAt')} · {m.get('Channel')}\n{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}"
-        for m in store.list_messages(task_id)[-6:])
+    # the writer reads the same assembled conversation triage reads (PW-054): the whole chain, history
+    # included, cleaned and de-quoted under one budget, with the cut said out loud - not the last six
+    # messages chopped at 4,000 characters each and nothing said about the rest
+    from .ingest import exchange_lines
+    lines = exchange_lines(store, {'conversation_id': last.get('ConversationId'), 'subject': last.get('Subject'), 'sent_at': None})
+    thread = '\n\n'.join(lines) if lines else f"--- {last.get('FromName') or last.get('FromEmail')} · {last.get('SentAt')} · {last.get('Channel')}\n{strip_boilerplate(str(last.get('BodyText') or ''))[:4000]}"
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     if nudge: user += f'\n\n--- WHY YOU ARE WRITING AGAIN (the assistant\'s note to you, not for the reader)\n{nudge}'
@@ -194,12 +196,17 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
 
 def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
     """Write the draft and park it on its review, ready for approve / edit / no-reply."""
+    # what this wording is ABOUT is fixed before the model runs (PW-048): a line that lands during
+    # generation was not in its input, so it is never labelled as seen - the draft is marked behind instead
+    from . import operations
+    saw = store.last_inbound_on_task(task_id)
+    revision = operations.message_revision(store, task_id)
     text = draft_reply(store, task_id, llm, resolution, nudge)
     store.update_review_draft(review_id, text, None)
-    # The review now says exactly which inbound line this wording saw.  A later chat line makes
-    # that marker stale and approval stops rather than sending an answer to yesterday's context.
-    latest = store.last_inbound_on_task(task_id)
-    if latest: store.update_review_message(review_id, latest['MessageId'])
+    if saw: store.pin_review_context(review_id, saw['MessageId'], revision)
+    if operations.message_revision(store, task_id) != revision:
+        store.mark_review_stale(review_id)
+        logger.info(f'draft for task {task_id} is behind the thread already - a line landed while it was written')
     logger.info(f'drafted reply for task {task_id} ({len(text)} chars)')
     return text
 

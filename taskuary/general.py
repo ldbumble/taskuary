@@ -301,7 +301,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     detail = store.task_detail(tid) or {}
     task = detail.get('task') or {}
     dock = is_dock(task)
-    soul = _cut(store.doc('soul') or '', 4_000)
+    # SOUL.md stays with triage (PW-184); the worker reads AGENT.md - the rules both kinds share, with the
+    # approval boundaries SOUL.md used to carry - and, because this work is writing, the assistant's voice
+    from . import brief as _brief
+    agent_rules = _cut(_brief.rules(store, 'agent', 4_000), 4_000)
     counsel = _cut(store.doc('counsel') or '', 3_000)
     # What is CERTIFIED about the company's own systems. Without it the assistant writes a
     # plausible ERP query, gets a plausible number, and states it with the confidence of a
@@ -315,7 +318,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         "something, or changed a record unless a tool actually did it. Ask when a necessary fact is "
         "missing. Do not turn this into a coding task or instruct a coding CLI.\n\n"
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
-        + f"OPERATOR RULES\n{_cut(soul, 4_000)}\n\nASSISTANT STYLE\n{_cut(counsel, 3_000)}"
+        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{_cut(counsel, 3_000)}"
     )
     # the procedure triage selected for this job rides here exactly as it rides in a coding brief
     # (playbooks.seed_block) - one task-brief structure for either worker kind (PW-206)
@@ -379,8 +382,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
     if sources and selfclose.mode(store) != 'off': system = system + '\n\n' + selfclose.CHAT_LINE
+    md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
     head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
-            f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n\n"
+            f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n"
+            + (f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else '') + "\n"
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
             + (hub_context.strip() + '\n\n' if hub_context else ''))
@@ -636,6 +641,10 @@ class GeneralSession:
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
         self.busy, self.last = True, time.time()
+        try:
+            from . import workerstate as ws
+            ws.record(self.store, self.task_id, self.sid, 'working', source='api')
+        except Exception: pass
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
         self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]

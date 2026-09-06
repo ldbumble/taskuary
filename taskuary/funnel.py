@@ -358,8 +358,18 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         if t.get('sid') and live_state is _LIVE_UNSET:
             try: tail = [x for x in term.asking_lines(t['sid'], 4)] or tail
             except Exception as e: logger.debug(f'funnel: no rendered screen for {t.get("sid")} - {e}')
-        asking = waitroom.looks_like_question(tail)
         agent = t.get('agent') or t.get('label') or 'agent'
+        req = t.get('request') or None
+        if req:
+            # the worker said what it needs (workerstate.py, PW-228): the exact question or action, its kind and
+            # choices - the card shows that, not four lines of screen
+            from .workerstate import request_line
+            out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
+                             tid=tid, agent=agent, asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
+                             mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
+                             why=request_line(agent, req)))
+            continue
+        asking = waitroom.looks_like_question(tail)
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
                          why=f'{agent} asked you something' if asking else f'{agent} stopped and is waiting on you'))

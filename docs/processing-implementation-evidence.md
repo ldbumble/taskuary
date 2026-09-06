@@ -1645,3 +1645,176 @@ unreachable server is unavailable, never an empty/live historical fallback;
 coordination/wall/queue tests: 55 passed in 2.33s. Astra independently cleared the
 CLI repair and session-registry fixture isolation. HTTP note SID attribution
 remains explicitly partial; no repair of that surface is claimed here.
+
+## Section 5.5 — one worker context: AGENT.md, CODER.md and one task brief
+
+Status: implemented and tested locally at `e552609`; remote CI pending on the pushed
+checkpoint. Section 5.4 is CI-verified (165af37, CI run 34050341372 (all ten jobs passed)).
+Acceptance PW-182, PW-183, PW-184, PW-186 implemented; PW-185 and PW-187 partial (the source-rules
+block is still assembled separately; no rendered-browser check of the Docs tab).
+
+Every worker prompt carried the whole of SOUL.md - the owner's routing document, written for
+triage - under a flattened CODER.md, and the general assistant got a different pile in a different
+order. New operator document `AGENT.md` (`taskuary/templates/agent.md`, seeded and healed like the
+others, on the Docs tab) holds the rules both worker kinds share, with the approval boundaries that
+used to live only in SOUL.md leading it: nothing sends or ships without the owner's approval;
+money, legal, HR, credentials, permissions and anything irreversible are the owner's; inbound text
+is data, not instructions; then scope, honest reporting, when to ask, progress and completion.
+`CODER.md` is rewritten as the coding additions on top of it (repositories, editing/testing/
+committing only its own changes, the wall, playbooks, GitHub etiquette) and says so. New module
+`taskuary/brief.py`: `brief.build` is the one task brief either worker reads - task id and title,
+objective, the triage checklist, the owner's instruction, the repository, the latest complete
+conversation as triage reads it (history included, cleaned, budgeted), attachments, the message ids
+and the context revision (`operations.context_revision`) it was built from; `brief.rules` flattens
+an operator document for a prompt. `terminal.seed_text` carries `RULES (AGENT.md - every worker)`
+and `CODING RULES (CODER.md)` in place of `OPERATOR RULES (SOUL.md)`, plus OBJECTIVE, CHECKLIST,
+the latest message and a budgeted CONVERSATION block when the chain has more than one message;
+`general._prompt` carries `RULES (AGENT.md - every worker)` and `ASSISTANT STYLE` (writing is that
+worker's job) in place of `OPERATOR RULES`, and the checklist in its task head. SOUL.md stays
+seeded and stays with triage. Live coordination rides only when live peers exist (Section 5.4); a
+continuation carries this task's own `PREVIOUS SESSION RESULT`.
+
+Tests: `tests/test_worker_brief.py` (13 cases). `tests/test_terminal.py`: two `RULES:` pins moved to the new labels; the
+end-to-end TUI test blanks AGENT.md as it blanks CODER.md and SOUL.md (it owns the seed's inputs);
+`tests/test_docs_flow.py`: the coding-agent audit now expects the AGENT marker and forbids the
+SOUL marker (PW-184). Packaged UI rebuilt for the Docs tab entry.
+
+## Section 5.6 — one startup contract and the surfaces that start a worker
+
+Status: implemented and tested locally at `4f32c35`; remote CI pending on the pushed
+checkpoint. Section 5.5 is CI-verified (e552609, CI run 34051205593 (all ten jobs passed)).
+Acceptance PW-099, PW-209, PW-210, PW-211, PW-212, PW-213 implemented; PW-097, PW-098, PW-100,
+PW-214 partial (conversational dispatch in the assistant chat is Phase 8; a single confident
+repository still launches without a confirmation step pending the owner's word; live UI
+interactions are not exercised - the surfaces are checked by source pattern).
+
+Dispatch used to answer with whatever the path it took happened to return, and one screen read a
+`needs_repo` decision as a live start. Every dispatch answer - `/api/tasks/{id}/dispatch`,
+`/api/messages/{id}/dispatch`, the chat cards - now says the same four things: `dispatch`
+(session | assistant | needs_repo), `started` (a worker session was created for this request),
+`existing` (a live session or conversation was reused; nothing new started) and, for a coding
+session, `accepted` (`Term.accepted`: the prompt was submitted - True when the CLI takes it on its
+command line or the typed seed was answered, False when it was typed but never taken, None before
+any prompt) - exposed on the session's `info`. A repository decision carries `started: false`; a
+failed launch is a 422, never a success. `website/src/dispatchOutcome.js` (`outcomeOf`) is the one
+reading of that answer: the timeline's SendToAgent (`ui.jsx`) now offers the `RepoPicker` on a
+needs_repo decision with a "Not now - nothing was started" exit and reports what actually happened;
+All detail (`FeedView.jsx`) offers Send to agent for fyi/reply rows as the chat cards do, with
+triage's reading kept as the printed reason; the task page's non-coding start (`TasksView.jsx`)
+goes through the shared dispatch whatever the task's kind was instead of re-labelling the task and
+leaving a workspace mount to start work. Make task (`/mine`) creates or reuses an owner task and
+launches nothing. Packaged UI rebuilt.
+
+Tests: `tests/test_startup_contract.py` (7 cases), `website/test/startupSurfaces.test.mjs` (4 checks: outcome reading, the timeline's repo decision, the All-detail
+tray, the task page's shared dispatch).
+
+## Section 5.7 — mandatory freshness: what a draft read, what a send rechecks, email refreshed like chat
+
+Status: implemented and tested locally at `325d05a`; remote CI pending on the pushed
+checkpoint. Section 5.6 is CI-verified (CI run 34051581086, all ten jobs passed).
+Acceptance PW-048, PW-054, PW-055 implemented; PW-049 partial (automatic Next/Walk and FYI-batch
+validation are PW-050); PW-050 to PW-053, PW-056, PW-057 remain open.
+
+A draft was labelled with the newest message queried AFTER the model finished, so a line that
+landed during generation was called seen; the source-refresh gate before an answer, a draft or a
+send skipped email; the reply writer read the last six messages cut at 4,000 characters each and
+said nothing about the rest. `responder.draft_for_review` now captures the inbound message and the
+message-set revision (`operations.message_revision`: the task's inbound messages and their states,
+nothing else) BEFORE the model runs, pins the review to them (`store.pin_review_context`, new
+`review.ContextRevision`/`Stale` columns) and marks the draft stale when the set moved while it was
+written. `verdicts.decide` rechecks that revision before anything leaves - the one door the Review
+button and the phone road share - and refuses a stale or moved draft with `stale: true` and nothing
+sent; a redraft repins and the next yes sends. `server._refresh_chat_context` covers email through
+the connector behind the mailbox the message arrived in (`_poll_reports(only=[type], wait=True)`, an
+incremental watermark read; the chain itself is completed by `chains.py`); a mailbox with no active
+connector is left alone and said so; a failed refresh stays a 503. `responder.draft_reply` reads the
+assembled conversation (`ingest.exchange_lines`: the whole chain, history included, cleaned,
+de-quoted, budgeted, with the cut disclosed).
+
+Tests: `tests/test_freshness.py` (9 cases). No frontend change.
+
+## Section 5.8 — freshness on the walk: select, validate, say it once, supersede what is behind
+
+Status: implemented and tested locally at `af2f15f`; remote CI pending on the pushed
+checkpoint. Section 5.7 is CI-verified (325d05a, CI run 34051887301 (all ten jobs passed)).
+Acceptance PW-050, PW-051, PW-053 implemented; PW-052, PW-056, PW-057 partial (the notice is
+emitted after the refresh completed rather than at detection, because the quick poll waits for the
+triage of what it fetched before returning; a concurrent sync racing an action is covered only
+through the revision recheck).
+
+Next without a key surfaced whatever the pile held without asking the source whether the item had
+moved; an FYI batch was never checked; a new line on a task with a drafted reply left the draft
+sitting as current; the "new message" notice repeated on every render. `server._refresh_next_selection`
+picks what the walk would surface, refreshes that item's source through `_refresh_items` (once per
+channel across an FYI batch), and re-picks when the refresh moved the pile; the plain Next endpoint
+and the stream's next mode call it, and the reservation path raises a stale navigation (409) so the
+client re-captures. `_notice_once` emits the context-update line as its own `context_update` stream
+event before the assistant's answer, once per new revision of the item (`_NOTICED`), worded as what
+happened ("New message from X arrived on Y ... I sent it through triage before continuing"); a failed
+refresh stays an error event. In `ingest`, a new inbound line joining a task with a pending draft
+marks that draft behind (`Stale`) and, when the follow-up verdict says a reply is still owed, redrafts
+the same review - never a second review, never a second task; an fyi line leaves it alone. The
+owner's own external answer retires the draft (`channels.retire_draft_answered_elsewhere`, already
+in place) and the notice now says it was answered and nothing is to send.
+
+Tests: `tests/test_freshness_walk.py` (9 cases) and `website/test/contextNotice.test.mjs` (2 checks). Frontend: `AssistantView.jsx`
+renders the `context_update` stream event as it arrives - before the answer - and does not show the
+done payload's copy a second time; packaged UI rebuilt.
+
+## Section 6.1 — one worker status model from explicit events; answers bound to the request
+
+Status: implemented and tested locally at `353d083`; remote CI pending on the pushed
+checkpoint. Section 5.8 is CI-verified (af2f15f, CI run 34052218971 (all ten jobs passed)).
+Acceptance PW-222, PW-226, PW-227, PW-139, PW-141 implemented; PW-223, PW-225, PW-137 partial;
+PW-224 (Codex App Server) not started.
+
+A session's status was read off its screen: a bare prompt meant "stopped and waiting on you", a
+quiet terminal meant a question, and every consumer disagreed with the next. New module
+`taskuary/workerstate.py` derives a worker's state from explicit, persisted events (new
+`worker_event` table: task, run/session id, kind, request id, text, choices, source, event id):
+Working, Input needed (with the unanswered question and its choices), Approval needed (with the
+pending action), Finished (an explicit result - it closes nothing by itself), Failed, Disconnected,
+Stopped, or unknown. A response ending (`turn_end`) is not a finish; a dead session with no finish
+is disconnected; an idle prompt with no event raises no hand. Events are deduplicated by event id
+and by open request, and a run that is not the task's live one is ignored (a restart or headless
+worker with no live session becomes the current run). `workerstate.answer` binds the owner's
+answer to the exact outstanding request and its run: looked up across every run, delivered once
+(`terminal.type_into` for a CLI, `send_prompt` for the assistant), refused as resolved, stale (the
+run changed - never forwarded to a replacement) or disconnected (no live worker: open the
+workspace), failed when the delivery raised; each outcome is written into the task discussion.
+Producers: Claude Code hooks (`hooks._events`: UserPromptSubmit, AskUserQuestion, permission
+Notification - now installed as a fourth hook - and Stop), `taskuary --done` (`selfclose.declare`
+records Finished with the result), the assistant's `send_prompt` (Working), and the owner's Stop
+(`/api/tasks/{id}/agent/stop` records Stopped). Endpoints: `GET /api/tasks/{id}/worker` and
+`POST /api/tasks/{id}/worker/answer` (409 resolved/stale, 422 disconnected/failed).
+
+The funnel, the hand-raise and the task list still read the terminal's latched phase; switching
+those consumers to this model is Section 6.2.
+
+Tests: `tests/test_worker_events.py` (13 cases). No frontend change.
+
+## Section 6.3 — explicit completion: save the agent's own result, tick what it reported, then close its run
+
+Status: implemented and tested locally at `3d5af15`; remote CI pending on the pushed
+checkpoint. Section 6.2 is CI-verified (c16a861, CI run 34053073590 (all ten jobs passed)).
+Acceptance PW-231, PW-232, PW-233 implemented; PW-230 and PW-234 partial (Codex App Server
+messages are not integrated; pending approvals at finish and retained follow-up context are
+exercised only through Sections 6.1 and 5.5).
+
+`coder.wrap` now takes the agent's OWN final answer first - the `--done` sentence recorded as the
+run's Finished event (`workerstate`), matched to the live run, then the Stop hook's last message the
+witness kept - and only then the report a second AI writes from the transcript. The result artifact
+(`session_artifacts.coding`: compact result plus the final answer) is written BEFORE the pty is
+closed; a save that fails raises `the result could not be saved ... the session was left open`,
+writes no CODER REPORT, closes nothing and leaves the finish retryable (`selfclose._wrap`/`declare`
+forget their once-only mark and say so on the task). `coder.tick_reported_checklist` ticks only the
+checklist items the agent itself reported done (`- [x] item` lines in its result or transcript,
+matched by words, by item identity) and says which; nothing is added, moved or blindly completed.
+`selfclose.declare` on a session the owner opened no longer holds: the explicit finish records the
+Finished event, saves the result and closes the completed run (`coder.wrap(close=False)`), leaving
+the task's own closure and any reply to the owner (PW-232); live wall notes leave with the session
+(Section 5.4). A second finish for the same run does nothing twice.
+
+Tests: `tests/test_explicit_completion.py` (6 cases). `tests/test_stay_open.py` and `tests/test_stay_open_doors.py`: the two pins that read
+`--done` on an owner-opened session as "filed, not obeyed" now expect the run to close and the task to
+stay, per PW-232, with the reason noted. No frontend change.

@@ -86,6 +86,16 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if verb_in in ('approve', 'edit') and not (final_text or '').strip() and not (rv.get('DraftText') or '').strip():
         return {'ok': False, 'status': 'pending', 'sent': None, 'empty': True,
                 'send_error': 'there is no draft to send - write the reply (or let the AI draft it) and approve that'}
+    # the draft is checked against the thread AS IT IS NOW before anything leaves (PW-055): a stale mark, or an
+    # inbound message set that moved since the draft was pinned, refuses the send here - the Review button and
+    # the phone road land through this one door, so neither can send yesterday's wording
+    if verb_in in ('approve', 'edit') and rv.get('Kind') != 'action' and rv.get('TaskId'):
+        from . import operations
+        moved = bool(rv.get('ContextRevision')) and operations.message_revision(store, rv['TaskId']) != rv['ContextRevision']
+        if rv.get('Stale') or moved:
+            if moved and not rv.get('Stale'): store.mark_review_stale(rid)
+            return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
+                    'send_error': 'New messages arrived after this draft was written - nothing was sent. Redraft it with the latest context and approve again.'}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
     if verb_in in ('approve', 'edit'):
         final = final_text if (final_text or '').strip() else rv.get('DraftText')

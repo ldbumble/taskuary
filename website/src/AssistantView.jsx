@@ -244,6 +244,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const pileForcePending = useRef(false);
   const loadPileRef = useRef(null);
   const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
+  const noticedRef = useRef(null);      // the context notice the stream already showed this turn
   const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
   const selectionRef = useRef(null);
   const selectionContractSeen = useRef(false);
@@ -279,6 +280,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         const error = new Error(ev.error || "The assistant could not answer.");
         error.code = ev.code; error.detail = ev.detail;
         throw error;
+      }
+      // the thread moved while we were about to speak (PW-052): said now, before the answer, once
+      if (ev.type === "context_update" && ev.say) {
+        setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: ev.say }]);
+        noticedRef.current = ev.say;
       }
       // only real work shows under the dots - a command, a read, a call - never the CLI's own housekeeping
       if (ev.type === "tool_call" && !/^(ToolSearch|TodoWrite|TaskCreate|TaskUpdate|TaskList|Skill)$/.test(ev.name || ""))
@@ -537,10 +543,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t }]);
     try {
       const data = await turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null });
-      if (data.context_update) {
+      if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);
         say(data.context_update);
       }
+      noticedRef.current = null;
       if (data.item) landed(data);                       // the words pointed at something: it is on the table now
       else {
         setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [] }]); say(data.say);

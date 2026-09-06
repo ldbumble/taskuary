@@ -273,7 +273,7 @@ Before the assistant surfaces or acts on an item, refresh its source context;
 new activity requires fresh triage before choosing the next action. This is a
 pending change, not a guarantee provided by the current implementation.
 
-- [ ] <a id="pw-048"></a>**PW-048** Capture the exact input message IDs/context revision at task evaluation
+- [x] <a id="pw-048"></a>**PW-048** Capture the exact input message IDs/context revision at task evaluation
   and draft generation. In `draft_for_review()`, do not label the generated draft
   with a "latest" message queried after the model finishes: a message arriving
   during generation was not necessarily in its input. Save the version actually
@@ -283,11 +283,11 @@ pending change, not a guarantee provided by the current implementation.
   well as chats; `_refresh_chat_context()` currently skips email. Use incremental
   source retrieval plus the approved thread-history merge, not repeated downloads
   of the entire chain.
-- [ ] <a id="pw-050"></a>**PW-050** Select an item first, then validate its freshness, including automatic
+- [x] <a id="pw-050"></a>**PW-050** Select an item first, then validate its freshness, including automatic
   Next/Walk without an explicit key and every item in an FYI batch. Rebuilding the
   pipeline from the database alone is not a source refresh. Reconcile selection
   after fresh triage so Current/Next and the assistant refer to the same item.
-- [ ] <a id="pw-051"></a>**PW-051** On newly relevant inbound or owner-sent activity, reevaluate the updated
+- [x] <a id="pw-051"></a>**PW-051** On newly relevant inbound or owner-sent activity, reevaluate the updated
   context and supersede stale drafts/verdicts. Route according to the fresh result:
   FYI, reply-needed, or work-needed. Do not blindly redraft or start another agent;
   respect chat same-day grouping and reuse existing tasks/sessions as appropriate.
@@ -298,13 +298,13 @@ pending change, not a guarantee provided by the current implementation.
   verdict as current. Emit this notice once per newly detected context revision,
   not repeatedly on every poll/render, and only claim retriage started when it did.
   Follow up with the fresh result, or a visible error/retry if evaluation fails.
-- [ ] <a id="pw-053"></a>**PW-053** Tell the owner when new activity changes the item being discussed. If the
+- [x] <a id="pw-053"></a>**PW-053** Tell the owner when new activity changes the item being discussed. If the
   owner already answered externally, suppress the obsolete reply and explain
   that it was answered; fresh triage must still consider any subsequent new ask.
-- [ ] <a id="pw-054"></a>**PW-054** Use the assembled substantive chain for drafting as well as triage; remove
+- [x] <a id="pw-054"></a>**PW-054** Use the assembled substantive chain for drafting as well as triage; remove
   the silent last-six-message/4000-character-per-message draft-context boundary.
   Reuse cleaned, deduplicated history and disclose any unavoidable context limits.
-- [ ] <a id="pw-055"></a>**PW-055** Recheck the evaluated version before committing an action. Require renewed
+- [x] <a id="pw-055"></a>**PW-055** Recheck the evaluated version before committing an action. Require renewed
   approval for a changed draft; never send obsolete wording or launch duplicate
   work because sync and user action raced. If source refresh fails, expose that
   failure rather than claim the context is current or proceed with stale actions.
@@ -525,7 +525,7 @@ after startup fails. Pending implementation only.
   a confident guess or single configured repository must not bypass this manual
   confirmation step. Keep automatic dispatch governed by the separately approved
   triage-selection and uncertainty rules.
-- [ ] <a id="pw-099"></a>**PW-099** Preserve the selected item, agent/model, and instructions while choosing;
+- [x] <a id="pw-099"></a>**PW-099** Preserve the selected item, agent/model, and instructions while choosing;
   persist the confirmed repository on the task and validate its local path before
   launch. Cancelling the picker must not start a session. Reconcile any existing
   live session explicitly rather than silently launching a duplicate or replacing it.
@@ -790,14 +790,14 @@ The assistant should relay an agent's question and the owner's answer seamlessly
   targets/answers, then use the approved confirmation box to show the exact answer
   and destination before Send to agent. Keep ordinary input separate from tool
   permission/approval requests; approval must use the worker's supported mechanism.
-- [ ] <a id="pw-139"></a>**PW-139** Bind delivery to the specific outstanding request and run, never merely the
+- [x] <a id="pw-139"></a>**PW-139** Bind delivery to the specific outstanding request and run, never merely the
   task's newest session. Reject resolved/stale requests and changed runs, prevent
   duplicate delivery, and never forward to a replacement worker silently.
 - [ ] <a id="pw-140"></a>**PW-140** Use a supported reply/control path per worker integration; lifecycle hooks
   alone do not provide reliable answer delivery. Verify each integration's input
   and approval capabilities. Keep Open agent workspace as a fallback if direct
   delivery is unsupported, disconnected, or cannot be confirmed.
-- [ ] <a id="pw-141"></a>**PW-141** Distinguish queued, delivered, and resumed/working states. Do not report
+- [x] <a id="pw-141"></a>**PW-141** Distinguish queued, delivered, and resumed/working states. Do not report
   "Told the agent" from HTTP success alone. Persist the question, confirmed answer,
   and delivery outcome in the task discussion; preserve recoverable pending state
   across reconnects without duplicate sends.
@@ -1017,15 +1017,15 @@ Owner-approved: use the same concise context structure for general and coding
 workers. Do not inject the full SOUL.md into every worker prompt. Pending
 implementation only; preserve required context and authorization boundaries.
 
-- [ ] <a id="pw-182"></a>**PW-182** Define shared AGENT.md operating rules for both worker kinds: task scope,
+- [x] <a id="pw-182"></a>**PW-182** Define shared AGENT.md operating rules for both worker kinds: task scope,
   honest tool/result reporting, asking when blocked, progress and completion
   reporting, and approval boundaries. CODER.md adds only coding-specific rules
   for repositories, editing, testing, and staging/committing changes.
-- [ ] <a id="pw-183"></a>**PW-183** Build one authoritative task brief containing task ID, objective, triage
+- [x] <a id="pw-183"></a>**PW-183** Build one authoritative task brief containing task ID, objective, triage
   checklist, explicit owner instructions, selected repository when applicable,
   latest complete substantive conversation context, and attachment references.
   Simplifying the prompt must not discard chain context or freshness checks.
-- [ ] <a id="pw-184"></a>**PW-184** Stop injecting the full SOUL.md into coding and general-worker prompts.
+- [x] <a id="pw-184"></a>**PW-184** Stop injecting the full SOUL.md into coding and general-worker prompts.
   Keep SOUL available to triage for people/project understanding and routing;
   carry only relevant facts and owner preferences into the worker task brief.
   Audit existing SOUL safety/approval constraints and preserve them in shared
@@ -1034,7 +1034,7 @@ implementation only; preserve required context and authorization boundaries.
   without duplicate or conflicting instruction blocks. Include writing style
   when the task requires it, not indiscriminately for every coding run. Keep
   lengthy supporting material accessible separately with clear references.
-- [ ] <a id="pw-186"></a>**PW-186** Add live coordination only when relevant active peers/notes exist, using
+- [x] <a id="pw-186"></a>**PW-186** Add live coordination only when relevant active peers/notes exist, using
   the approved run-scoped wall lifecycle. For a continuation, separately include
   this task's dated last result or pause handover; do not substitute historical
   shared wall notes or unrelated closed sessions.
@@ -1161,21 +1161,21 @@ Owner-approved: dispatch submits the task brief, records the live worker, and
 updates the timeline. Merely opening/viewing a workspace must not claim that an
 agent is working. Pending implementation.
 
-- [ ] <a id="pw-209"></a>**PW-209** Apply that startup contract to coding and general workers: distinguish
+- [x] <a id="pw-209"></a>**PW-209** Apply that startup contract to coding and general workers: distinguish
   workspace/session creation from accepted work submission, publish consistent
   live-state updates, and retain duplicate-start protection. Failures or pending
   repository selection must not be reported as successful starts.
-- [ ] <a id="pw-210"></a>**PW-210** Verify equivalent Make task and Send to agent behavior across All timeline
+- [x] <a id="pw-210"></a>**PW-210** Verify equivalent Make task and Send to agent behavior across All timeline
   detail, Unread/chat cards, and Tasks. Make task creates/reuses an owner task
   without launching a worker; Send to agent uses explicit worker choice and the
   shared dispatch contract, including required repository confirmation.
-- [ ] <a id="pw-211"></a>**PW-211** Audit finding: All detail's SendToAgent is hidden for unconverted
+- [x] <a id="pw-211"></a>**PW-211** Audit finding: All detail's SendToAgent is hidden for unconverted
   FYI/reply_only rows by the codeless guard in FeedView.jsx. Resolve this mismatch
   with chat cards, which expose manual agent dispatch for those items.
-- [ ] <a id="pw-212"></a>**PW-212** Audit finding: ui.jsx SendToAgent treats a successful HTTP response with
+- [x] <a id="pw-212"></a>**PW-212** Audit finding: ui.jsx SendToAgent treats a successful HTTP response with
   dispatch='needs_repo' as a live start; unlike assistantCards.jsx, it has no
   repository-selection branch. Handle the decision state without success claims.
-- [ ] <a id="pw-213"></a>**PW-213** Audit finding: TasksView.startGeneralAgent dispatches existing general
+- [x] <a id="pw-213"></a>**PW-213** Audit finding: TasksView.startGeneralAgent dispatches existing general
   tasks, but switching another kind only patches Kind/ask tags. Unify explicit
   dispatch instead of relying on workspace mount behavior to initiate work.
 - [ ] <a id="pw-214"></a>**PW-214** Test the actual All-detail buttons and matching chat/Tasks actions: owner
@@ -1221,7 +1221,7 @@ Owner-approved: coding and general workers publish one shared status model using
 explicit events. Pending implementation; no hooks or provider integration changed
 during this walkthrough.
 
-- [ ] <a id="pw-222"></a>**PW-222** Model Working, Input needed (with the unanswered question), Approval needed
+- [x] <a id="pw-222"></a>**PW-222** Model Working, Input needed (with the unanswered question), Approval needed
   (with the specific pending action), and Finished (assigned work has a result
   ready for review). Finished does not itself close the task. Track failures,
   disconnections, and owner-stopped runs separately, never as successful completion.
@@ -1238,12 +1238,12 @@ during this walkthrough.
   Provide explicit request_input and finish_work tools (or equivalent validated
   structured signals). Derive approval status from the actual approval gate,
   not generated prose. Apply equivalent semantic signals to coding workers.
-- [ ] <a id="pw-226"></a>**PW-226** Separate response/turn completion from work completion. Require an explicit
+- [x] <a id="pw-226"></a>**PW-226** Separate response/turn completion from work completion. Require an explicit
   result or question to establish Finished or Input needed; a quiet terminal,
   bare prompt, end-of-response event, or process exit is not sufficient proof.
   Missing status signals should be identified as unknown/disconnected as appropriate,
   not guessed as a question, successful finish, or indefinitely active work.
-- [ ] <a id="pw-227"></a>**PW-227** Persist and reconcile events by task/run/turn and request IDs. Deduplicate
+- [x] <a id="pw-227"></a>**PW-227** Persist and reconcile events by task/run/turn and request IDs. Deduplicate
   notifications, reject stale events from old runs, and handle reconnects and
   out-of-order delivery. All UI surfaces and the assistant consume the same state.
   Answering one request must not clear other outstanding approval/input requests.
@@ -1273,15 +1273,15 @@ implementation; task closure and outbound sending remain separate decisions.
   the reply text; regular workers already receive the response directly.
   Match the answer to the correct run/turn and explicit work-finished signal:
   Stop, final_answer, and turn completion alone do not prove the task is finished.
-- [ ] <a id="pw-231"></a>**PW-231** Persist the final Markdown result, evidence/artifact references, and reported
+- [x] <a id="pw-231"></a>**PW-231** Persist the final Markdown result, evidence/artifact references, and reported
   completed/remaining checklist items on the task before closing the worker.
   Preserve item identities and do not blindly mark the entire checklist complete.
   Keep the original final answer even if an optional compact summary is generated.
-- [ ] <a id="pw-232"></a>**PW-232** Replace the manual-start stay-open veto for explicit successful completion.
+- [x] <a id="pw-232"></a>**PW-232** Replace the manual-start stay-open veto for explicit successful completion.
   Close only the completed run, release capacity, remove its live wall notes, and
   publish one result-ready event. Retain history and continuation identifiers for
   follow-up; never terminate a shared provider service or unrelated runs.
-- [ ] <a id="pw-233"></a>**PW-233** If result persistence fails, do not discard the session or claim successful
+- [x] <a id="pw-233"></a>**PW-233** If result persistence fails, do not discard the session or claim successful
   finalization. Make persistence/finalization retryable and idempotent; duplicate
   finish hooks must not duplicate artifacts, drafts, or completion notifications.
 - [ ] <a id="pw-234"></a>**PW-234** Test automatic and manually started workers, matching final-answer capture,

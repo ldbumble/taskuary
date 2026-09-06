@@ -2384,7 +2384,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   {handed ? "Typed into the session" : `Tell ${onIt.agent} this`}</TrayBtn>
               )}
               {onIt && sel.TaskId && <TellAgentButton taskId={sel.TaskId} />}
-              {!onIt && !codeless && !held && (
+              {/* fyi/reply rows can still be sent to an agent by hand, as the chat cards allow (PW-211); triage's
+                  reading stays printed above as the reason it was not sent automatically */}
+              {!onIt && !held && (
                 <SendToAgent messageId={sel.MessageId} subject={sel.Subject} taskKind={sel.TaskKind}
                   onOpenTask={onOpenTask} />
               )}

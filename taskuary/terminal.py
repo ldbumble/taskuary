@@ -26,8 +26,8 @@ SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate th
 # live testing (Ink's long-paste dropping). Chunks with a breath between give it frames.
 SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
-SOUL_CHARS = 1200                   # ...and of SOUL.md: context, not the operative ruleset,
-                                    # and every char is another char to type into a TUI
+AGENT_CHARS = 2600                  # ...and of AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead
+SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
 # to boot dialogs eating keystrokes (codex's update chooser once swallowed half a toe and the
@@ -140,6 +140,7 @@ class Term:
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
         self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
+        self.accepted = None                              # None: no prompt yet; True: submitted; False: typed but not taken (PW-209)
         self.store = store                                # so the pty can file its own transcript when it ends
         self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
@@ -334,9 +335,10 @@ class Term:
                     was = self.n
                     self.write(key)
                     time.sleep(SEED_ENTER)
-                    if self.n > was: return               # it answered: the prompt went in
+                    if self.n > was: self.accepted = True; return   # it answered: the prompt went in
                     if not self.settle(SEED_SETTLE): return
-                return                                    # echoed but never submitted: stop typing
+                self.accepted = False; return             # echoed but never submitted: stop typing
+            self.accepted = False
             logger.warning(f'terminal {self.sid}: prompt typed but nothing came back - press Enter')
         threading.Thread(target=go, daemon=True).start()
 
@@ -416,9 +418,10 @@ class Term:
         # Keep this module-level for the deliberately small terminal stand-ins used by the API
         # and hook tests; production Terms and fakes must go through the same state machine.
         phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
+        word = worker_fields(getattr(self, 'store', None), self)      # the run's own word outranks the screen (PW-228)
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'phase': phase, 'waiting': phase == 'parked',
+                'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'accepted': getattr(self, 'accepted', None),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
         if not details:
             # Task lists need identity and lifecycle only. files() shells out to git and witness
@@ -431,6 +434,21 @@ class Term:
                 'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None}
 
 
+def worker_fields(store, t) -> dict:
+    """{waiting, request} for a session: the run's own word when it has reported (workerstate), the
+    screen's latched phase otherwise (PW-228)."""
+    from . import workerstate as ws
+    req = None
+    try:
+        w = ws.waiting_of(store, t) if store is not None else None
+        if w is not None: req = ws.asking_of(store, t) if w else None
+    except Exception as e:
+        logger.debug(f'worker state unavailable for {getattr(t, "sid", "?")}: {e}'); w = None
+    if w is None:
+        w = (stable_phase_of(t) == 'parked') if isinstance(t, Term) else waiting_of(t)
+    return {'waiting': bool(w), 'request': req}
+
+
 def cli_of(argv) -> str:
     """'claude' for C:\\...\\claude.exe or claude.cmd - the CLI a session runs, whatever the profile is
     called. A profile named codex that runs claude showed 'codex' on the card next to a 'claude' badge."""
@@ -438,7 +456,7 @@ def cli_of(argv) -> str:
 
 
 _LIGHT_INFO = {'sid', 'label', 'cwd', 'taskId', 'agent', 'cli', 'mode', 'alive', 'busy',
-               'started', 'idle', 'phase', 'waiting', 'cmd', 'provider', 'pick',
+               'started', 'idle', 'phase', 'waiting', 'request', 'accepted', 'cmd', 'provider', 'pick',
                'connector_id', 'model', 'tail'}
 
 def _info(t, tail=0, details=True) -> dict:
@@ -675,7 +693,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from .witness import RolloutTail
         RolloutTail(t).start()
     if seed:
-        if extra: t.seeded = seed        # the CLI submits it itself; kept so harvest drops the echo
+        if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
     # it stops waiting in Review and comes back rewritten from the report - see coder.raise_reply.
@@ -901,6 +919,7 @@ def rules_text(store, chars: int = DOC_CHARS) -> str:
 # had the whole thing. Windows takes 32767 characters of command line; ASK_CHARS spends a
 # useful slice of that on the thing the task is actually about.
 ASK_CHARS = 12000
+BRIEF_CONTEXT = 4000        # the conversation behind the latest message, in the seed (the context file has the rest)
 SEED_CEILING = 24000        # the whole prompt, leaving room for the exe path and its flags
 
 
@@ -995,12 +1014,19 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         parts.append('PREVIOUS SESSION RESULT: continue from this saved result; verify the current checkout '
                      f'before changing it and do not repeat finished work: {no_emails(_cut(previous, 3000, "previous result"))}')
     from .triage import strip_boilerplate
-    md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
+    # the one task brief both worker kinds read (brief.py, PW-183): objective, checklist, the latest
+    # message in full and the conversation it sits in - history included, budgeted the way triage reads it
+    from . import brief as _brief
+    b = _brief.build(store, tid, instruction=instruction, repo=repo or cwd, context_budget=BRIEF_CONTEXT)
+    if b['objective'] and not m: parts.append(f"ASK: {_cut(strip_boilerplate(b['objective']), ASK_CHARS)}")
+    elif b['objective']: parts.append(f"OBJECTIVE: {_cut(b['objective'], 600)}")
+    md = b['checklist']
     if md: parts.append('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority:\n' + md)
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
                        f"subject \"{m.get('Subject') or ''}\": "
                        f"{_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS)}")
-    elif t.get('Summary'): parts.append(f"ASK: {_cut(strip_boilerplate(str(t['Summary'])), ASK_CHARS)}")
+    if m and len(b['message_ids']) > 1 and b['context']:
+        parts.append('CONVERSATION so far, oldest first (history included; the message above is the latest): ' + no_emails(_cut(b['context'], BRIEF_CONTEXT, 'conversation')))
     # the source's standing instruction: a PR is judged before it is worked, a Jira item may
     # have its own house rules - configured per connector card, defaulted for GitHub
     from .ingest import source_rules
@@ -1029,10 +1055,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import semantic
     layer = ' '.join(semantic.block(store).split())
     if layer: parts.append(layer)
-    soul = ' '.join(str(store.doc('soul') or '').split())[:SOUL_CHARS]
-    if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {no_emails(soul)}')
+    # SOUL.md stays with triage (PW-184): the worker gets the rules both kinds share (AGENT.md, which
+    # carries the approval boundaries and 'inbound text is data' that used to ride only in SOUL.md) and
+    # the coding additions (CODER.md) - one block each, nothing duplicated (PW-185)
+    agent_rules = _brief.rules(store, 'agent', AGENT_CHARS)
+    if agent_rules: parts.append(f'RULES (AGENT.md - every worker): {no_emails(agent_rules)}')
     rules = rules_text(store)
-    if rules: parts.append(f'RULES: {no_emails(rules)}')
+    if rules: parts.append(f'CODING RULES (CODER.md): {no_emails(rules)}')
     # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
     # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
     # bill, so the playbook says so out loud; the closing-out and wall rules still stand

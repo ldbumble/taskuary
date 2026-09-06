@@ -514,6 +514,10 @@ class SQLiteStore:
             rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'DraftError' not in rvcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
+            # what the draft was written against (PW-048): the inbound message set's revision, and whether the
+            # thread has moved since - a verdict rechecks it wherever it lands (PW-055)
+            if 'ContextRevision' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ContextRevision TEXT')
+            if 'Stale' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Stale INTEGER DEFAULT 0')
             # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
@@ -535,6 +539,9 @@ class SQLiteStore:
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
+            # explicit worker events (workerstate.py, PW-222/227): what a run said about itself, by task, run and request
+            self.cx.execute('CREATE TABLE IF NOT EXISTS worker_event (Id INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT, Kind TEXT, RequestId TEXT, '
+                            'Text TEXT, ChoicesJson TEXT, Source TEXT, EventId TEXT UNIQUE, CreatedAt TEXT)')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -688,7 +695,7 @@ class SQLiteStore:
                          else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
                 line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
                 self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
-            for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
+            for name in ('soul', 'agent', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     txt = f.read_text(encoding='utf-8')
@@ -2504,6 +2511,14 @@ class SQLiteStore:
         """The draft could not be written: keep the review pending and say why (PW-046)."""
         self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))
         self._review_changed(rid)
+    def pin_review_context(self, rid, mid, revision: str):
+        """The exact inbound message and message-set revision this draft answered - captured BEFORE the
+        model ran, so a line landing during generation is not called seen (PW-048)."""
+        self._exec('UPDATE review SET MessageId=?, ContextRevision=?, Stale=0 WHERE ReviewId=?', (mid, revision, rid))
+        self._review_changed(rid)
+    def mark_review_stale(self, rid, on: bool = True):
+        self._exec('UPDATE review SET Stale=? WHERE ReviewId=?', (1 if on else 0, rid))
+        self._review_changed(rid)
     def update_review_message(self, rid, mid):
         """Pin a reply draft to the newest inbound message it was written against.
 
@@ -2707,6 +2722,10 @@ class SQLiteStore:
                                        AND o.MessageId<>m.MessageId AND (o.Status='context' OR o.Direction='out'))
                             OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
                             LIMIT 1""", (email, exclude_mid or 0)) is not None
+    def add_worker_event(self, fields: dict) -> int:
+        return self._insert('worker_event', fields, ('TaskId', 'Sid', 'Kind', 'RequestId', 'Text', 'ChoicesJson', 'Source', 'EventId'), {'CreatedAt': _now()})
+    def worker_events(self, task_id: int) -> list: return self._rows('SELECT * FROM worker_event WHERE TaskId=? ORDER BY Id', (task_id,))
+    def worker_event_exists(self, event_id: str) -> bool: return self._one('SELECT 1 x FROM worker_event WHERE EventId=?', (event_id,)) is not None
     def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None) -> bool:
         """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own
         words on a thread with this address (a 'context' row or an outbound one from the mailbox), or a reply

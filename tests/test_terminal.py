@@ -546,7 +546,8 @@ class TerminalTests(unittest.TestCase):
                   'REPO: northwind/Census', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
                   'Do NOT create GitHub issues']:
             self.assertIn(s, seed)
-        self.assertIn('RULES:', seed)                                   # CODER.md rides along
+        self.assertIn('CODING RULES (CODER.md)', seed)                  # CODER.md rides along (PW-185: one labelled block)
+        self.assertIn('RULES (AGENT.md', seed)                          # ...on top of the rules every worker shares (PW-182)
         self.assertIn('Work ONLY in the repository', seed)
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
 
@@ -667,7 +668,7 @@ class TerminalTests(unittest.TestCase):
         # fake_tui reads stdin in CANONICAL mode: macOS caps a line at 1024 bytes and drops the
         # overflow at the tty layer. Real TUIs are raw-mode (no cap) - so trim what only bloats
         # this test's prompt, and assert it fits, or the failure mode is invisible.
-        saved = {n: server.store.get_doc(n) for n in ('coder', 'soul')}
+        saved = {n: server.store.get_doc(n) for n in ('agent', 'coder', 'soul')}   # AGENT.md rides in the seed too (PW-182)
         for n in saved: server.store.save_doc(n, '', 'test')
         # ...and the wall, the owner's standing notes, the semantic layer, and the CONTEXT FILE
         # line below. Every one of them is real prompt content that grows with whatever other
@@ -1175,7 +1176,7 @@ class SeedCompletenessTests(unittest.TestCase):
         loses the tail of a paragraph."""
         s, tid = self._task('z' * 200000)
         seed = terminal.seed_text(s, tid)
-        for must in ('WHAT TO DO', 'Do NOT push', 'RULES:'):
+        for must in ('WHAT TO DO', 'Do NOT push', 'CODING RULES (CODER.md)', 'RULES (AGENT.md'):   # PW-185 labels
             self.assertIn(must, seed, must)
 
     def test_the_NEWEST_message_is_the_ask(self):

@@ -12,7 +12,7 @@ from pathlib import Path
 from loguru import logger
 
 MARK = '/api/hooks/claude'
-EVENTS = ('PostToolUse', 'Stop', 'UserPromptSubmit')
+EVENTS = ('PostToolUse', 'Stop', 'UserPromptSubmit', 'Notification')   # Notification carries permission prompts (PW-223)
 
 
 def base_url() -> str:
@@ -66,6 +66,29 @@ def wanted(store, profile: dict) -> bool:
     return 'claude' in cmd and (store.get_settings().get('agent_hooks', '1') == '1')
 
 
+def _events(t, p: dict) -> None:
+    """The hook as a worker event (workerstate.py): a prompt submitted is Working; AskUserQuestion is Input
+    needed with the exact question and choices; a permission notification is Approval needed with the action;
+    Stop is the response ending - never a finish (PW-226). Nothing here is inferred from the screen."""
+    from . import workerstate as ws
+    st = getattr(t, 'store', None)
+    if not st or not getattr(t, 'task_id', None): return
+    ev, tid, sid = str(p.get('hook_event_name') or ''), t.task_id, t.sid
+    try:
+        if ev == 'UserPromptSubmit': ws.record(st, tid, sid, 'working', source='hook')
+        elif ev == 'PostToolUse' and str(p.get('tool_name') or '') == 'AskUserQuestion':
+            for q in (p.get('tool_input') or {}).get('questions') or []:
+                text = str(q.get('question') or '').strip()
+                if not text: continue
+                choices = [str(o.get('label') or o) for o in (q.get('options') or []) if str(o.get('label') if isinstance(o, dict) else o).strip()]
+                ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=choices, source='hook')
+        elif ev == 'Notification' and 'permission' in str(p.get('notification_type') or p.get('message') or '').lower():
+            text = str(p.get('message') or 'Claude needs your permission').strip()
+            ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
+        elif ev == 'Stop': ws.record(st, tid, sid, 'turn_end', text=str(p.get('last_assistant_message') or '')[:4000], source='hook')
+    except Exception as e: logger.debug(f'worker event from hook skipped: {e}')
+
+
 def receive(payload: dict) -> dict:
     """A hook fired: find the session it belongs to (same checkout, Claude, most recently active
     unless already bound to this claude session id) and hand its observations to the witness."""
@@ -84,6 +107,7 @@ def receive(payload: dict) -> dict:
         if not free: return {'bound': False}
         t = max(free, key=lambda x: x.last); t.ext_id = sid
     for n in witness.claude_notes(payload): t.witness.note(n)
+    _events(t, payload)
     # ...and the one hook that is not just an observation: Stop means the agent has finished
     # TALKING, which is the closest thing a pty ever gives us to "the run is over". Whether it
     # actually is over is selfclose's judgement, on its own thread - a hook has three seconds

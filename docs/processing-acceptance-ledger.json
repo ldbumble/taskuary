@@ -430,90 +430,90 @@
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Capture the exact input message IDs/context revision at task evaluation",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::DraftPinsWhatItReadTests (the review is pinned to the inbound message and message-set revision captured before the model ran; a line landing during generation marks the draft stale instead of being called seen)",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-049",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Apply a shared source-freshness check before assistant surfacing, discussion,",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the shared refresh gate now covers email through the mailbox's connector (incremental watermark poll; the chain is completed by chains.py, never re-downloaded) before an answer, draft, approval or dispatch about it; automatic Next/Walk and FYI-batch validation are PW-050",
+      "test": "`tests/test_freshness.py`::EmailRefreshTests plus `tests/test_chat_freshness.py`",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-050",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Select an item first, then validate its freshness, including automatic",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SelectThenValidateTests (Next without a key picks, refreshes that item's source - every channel of an FYI batch once - and re-picks when the pile moved; the reservation path raises a stale navigation so the client re-captures; a quiet source is a no-op)",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-051",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "On newly relevant inbound or owner-sent activity, reevaluate the updated",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SupersedeTests (a new ask on a task with a pending draft marks it behind and redrafts that same review when triage says a reply is still owed - never a second review, never a second task; an fyi line leaves it alone) plus `tests/test_freshness.py`",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-052",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "When new messages are detected on the item being discussed/surfaced, notify",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the notice is its own stream event before the assistant's answer, once per new revision, says the new lines went through triage, and never repeats on a quiet poll or re-render; it is emitted after the refresh completed rather than at detection, because the poll waits for the triage of what it fetched",
+      "test": "`tests/test_freshness_walk.py`::NoticeTests",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-053",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Tell the owner when new activity changes the item being discussed. If the",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SupersedeTests::test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so (the sync retires the draft as superseded; the notice says it was answered and nothing is to send; a newer ask still goes through triage)",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-054",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Use the assembled substantive chain for drafting as well as triage; remove",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::WriterReadsTheChainTests (the reply writer reads the assembled, de-quoted, budgeted conversation - history included - and the cut is disclosed; the last-six/4,000-character boundary is gone)",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-055",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Recheck the evaluated version before committing an action. Require renewed",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::SendRechecksTests (a verdict rechecks the message-set revision wherever it lands - the Review button and the phone road - and refuses a stale or moved draft without sending; a redraft repins and the next yes sends; a failed source refresh is a 503, never \"current\")",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-056",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Add regression tests for email/chat refresh, Next without a key, FYI batches,",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: email/chat refresh, Next without a key, FYI batches, new activity before surfacing and during generation, external owner replies, subsequent asks, refresh failures, unchanged-context no-op, stale approval, draft version markers and no duplicate work are covered; a concurrent sync racing an action is covered only through the revision recheck",
+      "test": "`tests/test_freshness_walk.py` (9 cases) plus `tests/test_freshness.py` (9) and `tests/test_chat_freshness.py`",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-057",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Test that the new-message/retriage notice arrives before the triage result,",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the notice precedes the assistant's answer, is not duplicated on polling or re-render, and a failed refresh is an error event rather than a fresh answer; the notice does not precede the triage result itself (see PW-052)",
+      "test": "`tests/test_freshness_walk.py`::NoticeTests",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
     },
     {
       "id": "PW-058",
@@ -871,36 +871,36 @@
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Use a consistent pre-launch repository picker on the task page, timeline",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the pre-launch repository picker now exists on the task page, the chat cards and the timeline row, preselecting the suggestion with its reason (`/api/tasks/{id}/repos`); conversational dispatch in the assistant chat is Phase 8",
+      "test": "`website/test/startupSurfaces.test.mjs` (the timeline offers the picker on a needs_repo decision) plus `website/test/repoChoice.test.mjs`",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-098",
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Cover personal-task/general-to-coding corrections and manual coding dispatch;",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: a manual coding dispatch or a general-to-coding correction that cannot name its checkout is a visible choice on every surface, never a session elsewhere; a confident single configured repository still launches without the step (owner decision pending on the confirmation step for that case)",
+      "test": "`tests/test_startup_contract.py`::TaskDispatchTests, ::MessageDispatchTests",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-099",
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Preserve the selected item, agent/model, and instructions while choosing;",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py` (persisted selection reaches startup), `tests/test_startup_contract.py` (a live session is reported existing, never duplicated; cancel starts nothing - the picker's Not now)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-100",
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Add tests for all three UI entry points, conversational coding requests,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: dispatch contract and repository decision covered on the API for the task page, timeline and chat paths; source-pattern checks for the three surfaces; live UI interaction not exercised",
+      "test": "`tests/test_startup_contract.py` (7 cases), `website/test/startupSurfaces.test.mjs` (4 checks)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-101",
@@ -1231,9 +1231,9 @@
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Receive structured input/approval-needed events from worker integrations,",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: structured input/approval events carry task, run, request id, question and choices and are served by `GET /api/tasks/{id}/worker`; the attention-item presentation and the bottom-strip notification are Phase 8 surfaces",
+      "test": "`tests/test_worker_events.py`::ApiTests",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-138",
@@ -1249,9 +1249,9 @@
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Bind delivery to the specific outstanding request and run, never merely the",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::AnswerBindingTests (an answer is bound to the request and its run; delivered once; a second click is resolved; a changed run is stale and never forwarded; a dead run is disconnected)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-140",
@@ -1267,18 +1267,18 @@
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Distinguish queued, delivered, and resumed/working states. Do not report",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::AnswerBindingTests (queued/delivered/failed outcomes recorded in the task discussion; \"delivered\" is never claimed from HTTP success alone - the delivery call must succeed)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-142",
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Test general/coding question relay, multiple waiting agents, request/run",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: general/coding relay through the request binding, request/run identity, duplicate clicks, stale runs, disconnected workers and delivery failure are covered by `tests/test_worker_events.py`; restart recovery and visible confirmation of worker acceptance in the UI are open",
+      "test": "`tests/test_worker_events.py`, `tests/test_worker_surfaces.py`",
+      "commit": "c16a861; c16a861, CI run 34053073590 (all ten jobs passed)"
     },
     {
       "id": "PW-143",
@@ -1539,7 +1539,7 @@
       "requirement": "Remove automatic deferral behind another task solely because of likely file",
       "status": "implemented",
       "test": "`tests/test_coordination.py`::AdvisoryOverlapTests (likely overlap starts the task with a briefing in both the immediate and the ranked/queued path; an old overlap dependency no longer blocks; capacity still queues)",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-172",
@@ -1548,7 +1548,7 @@
       "requirement": "Before startup, give the agent current same-checkout peer task IDs, agent",
       "status": "implemented",
       "test": "`tests/test_coordination.py`::BriefingTests (peer ids, agent identities, task summaries, touched files, what the live session said, the coordination rule and own-changes-only staging)",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-173",
@@ -1557,7 +1557,7 @@
       "requirement": "Refresh coordination context as peers start, change work, or stop. Closed",
       "status": "partial: the briefing and every wall surface read the live selection at the moment they are built, and closed sessions never masquerade as ownership; a push-style refresh into a running agent is not wired (an agent re-reads with `taskuary --board`)",
       "test": "`tests/test_coordination.py`::BriefingTests::test_a_closed_sessions_note_is_not_current_ownership, ::LiveWallTests",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-174",
@@ -1566,7 +1566,7 @@
       "requirement": "If AI overlap assessment is absent, uncertain, or fails, still provide the",
       "status": "implemented",
       "test": "`tests/test_coordination.py`::BriefingTests::test_no_assessment_is_not_no_overlap (the factual briefing rides without a model; \"not assessed\" is said, never read as no overlap)",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-175",
@@ -1575,7 +1575,7 @@
       "requirement": "Test similar tasks launching when capacity permits, both dispatch modes,",
       "status": "partial: both dispatch modes, advisory reaching the seed, retained capacity queuing and removal of obsolete blockers without duplicate starts are covered; the retry limit interplay is covered by `tests/test_dispatch_retries.py`",
       "test": "`tests/test_coordination.py` (17 cases); `tests/test_blackboard.py` two tests moved to the PW-171 contract with the reason noted",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-176",
@@ -1584,7 +1584,7 @@
       "requirement": "Explicitly remove the deliberate closed-session wall-note injection from",
       "status": "implemented",
       "test": "`tests/test_coordination.py`::LiveWallTests::test_every_surface_reads_the_same_live_selection (the seed carries live notes only, none when none are live); `tests/test_agent_wall.py` seed tests moved to live sessions with the reason noted",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-177",
@@ -1593,7 +1593,7 @@
       "requirement": "Apply the same removal explicitly to general-assistant context:",
       "status": "implemented",
       "test": "`tests/test_coordination.py`::LiveWallTests::test_the_general_prompt_carries_live_house_notes_only (a closed chat's house note is out; the owner's guidance stays)",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-178",
@@ -1620,7 +1620,7 @@
       "requirement": "Retain ended-run notes in task/run history, explicitly historical and not",
       "status": "implemented",
       "test": "`tests/test_coordination.py`::LiveWallTests::test_history_keeps_ended_run_notes_and_marks_them_historical (`blackboard.history` / `GET /api/board/notes?all=1` flag each note live or historical; owner guidance is separate from run coordination)",
-      "commit": "165af37; local gates passed, CI pending"
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
     },
     {
       "id": "PW-181",
@@ -1636,54 +1636,54 @@
       "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
       "phase": "5",
       "requirement": "Define shared AGENT.md operating rules for both worker kinds: task scope,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::RulesDocumentsTests (AGENT.md: scope, honest reporting, when to ask, progress and completion, approval boundaries; CODER.md is only the coding additions and says what it is stacked on; both on the Docs tab)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-183",
       "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
       "phase": "5",
       "requirement": "Build one authoritative task brief containing task ID, objective, triage",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::OneBriefTests (`brief.build`: task id, objective, checklist, instruction, repository, the whole chain with history, attachments, message ids and the context revision; both workers read it)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-184",
       "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
       "phase": "5",
       "requirement": "Stop injecting the full SOUL.md into coding and general-worker prompts.",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::NoBlanketSoulTests (no SOUL.md in either worker prompt; the approval boundaries and \"inbound text is data\" moved into AGENT.md and lead it; SOUL.md still seeded for triage)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-185",
       "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
       "phase": "5",
       "requirement": "Consolidate relevant source rules, playbook guidance, and saved preferences",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: one labelled block each for AGENT.md and CODER.md, the procedure block and the standing notes; writing style rides only in the general prompt; lengthy material stays in the context file - the source-rules block is still assembled separately",
+      "test": "`tests/test_worker_brief.py`::ScopedExtrasTests::test_no_duplicate_rule_blocks, ::NoBlanketSoulTests",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-186",
       "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
       "phase": "5",
       "requirement": "Add live coordination only when relevant active peers/notes exist, using",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::ScopedExtrasTests (no OTHER AGENTS or THE WALL paragraph without live peers; a continuation carries this task's own last result)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-187",
       "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
       "phase": "5",
       "requirement": "Test both worker kinds for shared rules, coding-only additions, absence of",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: shared rules, coding-only additions, absence of blanket SOUL injection, retained approval constraints, complete fresh context and scoped live/continuation information are covered for both kinds; a rendered-browser check of the Docs tab is not",
+      "test": "`tests/test_worker_brief.py` (13 cases); `tests/test_terminal.py` (2 labels) and `tests/test_docs_flow.py` (SOUL marker now forbidden in the seed) moved to the PW-184/185 contract with the reason noted",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-188",
@@ -1879,54 +1879,54 @@
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Apply that startup contract to coding and general workers: distinguish",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_startup_contract.py` (dispatch answers say dispatch/started/existing/accepted on every door; a reused session is existing not started; a repository decision is never a start; a failed launch is 422; `Term.accepted` records prompt submission)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-210",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Verify equivalent Make task and Send to agent behavior across All timeline",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_startup_contract.py`::MessageDispatchTests::test_make_task_creates_or_reuses_an_owner_task_and_launches_nothing plus the shared dispatch contract for Send to agent",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-211",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Audit finding: All detail's SendToAgent is hidden for unconverted",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (All detail offers Send to agent for fyi/reply rows; triage's reading stays as the printed reason)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-212",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Audit finding: ui.jsx SendToAgent treats a successful HTTP response with",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (ui.jsx SendToAgent reads `outcomeOf(data)`, offers the RepoPicker on needs_repo and never reports it as a start)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-213",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Audit finding: TasksView.startGeneralAgent dispatches existing general",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (TasksView non-coding start goes through `/api/tasks/{id}/dispatch` whatever the kind; no Kind/ask-tag patch)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-214",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Test the actual All-detail buttons and matching chat/Tasks actions: owner",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: API behaviour for owner task creation without startup, coding/general launch, missing-repo handling, already-live sessions and errors is covered; the surfaces are checked by source pattern and the packaged UI is rebuilt; live UI interactions are not exercised",
+      "test": "`tests/test_startup_contract.py`, `website/test/startupSurfaces.test.mjs`",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
       "id": "PW-215",
@@ -1996,25 +1996,25 @@
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Model Working, Input needed (with the unanswered question), Approval needed",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::EventModelTests (Working, Input needed with the question, Approval needed with the action, Finished with the result - which closes nothing - Failed, Disconnected and Stopped, each derived from explicit events; an idle prompt is unknown and raises no hand)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-223",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Integrate Claude Code lifecycle/tool hooks for prompt submission, permission",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: Claude Code hooks are wired for UserPromptSubmit (Working), AskUserQuestion (Input needed with the exact question and choices), Notification permission prompts (Approval needed, observed not granted) and Stop (the response ended, never a finish); the installed hook set is not yet validated against the CLI version",
+      "test": "`tests/test_worker_events.py`::ProducersTests",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-224",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Integrate Codex App Server structured turn lifecycle, approval, and user-input",
-      "status": "pending",
+      "status": "pending: Codex App Server integration not started; Codex sessions still report through the rollout witness and the terminal",
       "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
       "commit": "pending"
     },
@@ -2023,36 +2023,36 @@
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Emit regular API-agent lifecycle events directly from the execution loop.",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the assistant's turns record Working; explicit request_input/finish_work signals for API workers are not yet provided",
+      "test": "`tests/test_worker_events.py` (general sessions record working through `GeneralSession.send_prompt`)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-226",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Separate response/turn completion from work completion. Require an explicit",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::EventModelTests::test_a_response_ending_is_not_a_finish, ::test_a_dead_session_with_no_finish_is_disconnected_not_finished_and_an_idle_one_raises_no_hand",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-227",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Persist and reconcile events by task/run/turn and request IDs. Deduplicate",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py` (events persisted by task, run and request id; replays and duplicate open requests rejected; a run that is not the task's live one is ignored; answering one request leaves the others open)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-228",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Keep Working visible in Unread without injecting it into chat. Promote",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the funnel, the hand-raise, a session's info and the task list read the worker's own word first - an open request is the hand with its exact question or action and choices, a working run raises none however quiet its screen, the same event is never announced twice; a run that never reported keeps the screen heuristic; finished results as a result row (rather than blocked work) wait on Section 6.3",
+      "test": "`tests/test_worker_surfaces.py` (7 cases)",
+      "commit": "c16a861; c16a861, CI run 34053073590 (all ten jobs passed)"
     },
     {
       "id": "PW-229",
@@ -2068,45 +2068,45 @@
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Capture the agent's actual final answer directly, rather than requiring a",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the agent's own final answer is captured directly - the `--done` sentence recorded as the run's Finished event, then the Stop hook's last message - and matched to the run; Codex App Server agentMessage items are not integrated (PW-224)",
+      "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests::test_the_final_answer_is_the_agents_own_and_matched_to_the_run",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-231",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Persist the final Markdown result, evidence/artifact references, and reported",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests (the Markdown result with the final answer and the report land before the run closes; only checklist items the agent reported done are ticked, by identity; nothing blindly completed)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-232",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Replace the manual-start stay-open veto for explicit successful completion.",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py`::ExplicitFinishTests (an explicit finish closes the completed run even when the owner opened it, saves the result, publishes one Finished event and leaves the task's closure to the owner; live wall notes leave with the session)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-233",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "If result persistence fails, do not discard the session or claim successful",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py` (a save that fails raises before the session is closed, writes no report, claims nothing and is retryable; a second finish for the same run does nothing twice)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-234",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Test automatic and manually started workers, matching final-answer capture,",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: automatic and owner-opened workers, final-answer capture, save-before-close ordering, incomplete checklist entries, duplicate finishes and persistence failures are covered; pending approvals at finish and retained follow-up context are exercised only through Sections 6.1/5.5",
+      "test": "`tests/test_explicit_completion.py` (6 cases)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-235",

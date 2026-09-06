@@ -91,6 +91,24 @@ test("PW-106 refreshes same-ID source and drafts while preserving Current and ow
   });
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForSelector(".tq-pile-row .card", { timeout: 15000 });
+  // Pile rows land from the same point. A selector is visible during that animation even though
+  // the cards still overlap, so a physical click on the requested handle can hit its neighbour.
+  // Require two animation frames with the exact card stationary under its own centre, then
+  // reacquire the handle in case React replaced it while the pile settled.
+  await page.waitForFunction((title) => {
+    const card = [...document.querySelectorAll(".tq-pile-row .card")]
+      .find((node) => node.querySelector("b")?.textContent.trim() === title);
+    if (!card) return false;
+    const rect = card.getBoundingClientRect();
+    const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+    const inViewport = rect.width > 0 && rect.height > 0 && x >= 0 && y >= 0
+      && x < window.innerWidth && y < window.innerHeight;
+    const hit = inViewport && document.elementFromPoint(x, y)?.closest(".tq-pile-row .card") === card;
+    const geometry = [rect.x, rect.y, rect.width, rect.height].join(":");
+    const prior = window.__tqFreshnessClickTarget;
+    window.__tqFreshnessClickTarget = { card, geometry };
+    return !!hit && prior?.card === card && prior.geometry === geometry;
+  }, { polling: "raf", timeout: 15000 }, target.title);
   const cards = await page.$$(".tq-pile-row .card");
   let picked = false;
   for (const card of cards) {

@@ -1,5 +1,7 @@
 """PW-101/PW-103/PW-106/PW-109 non-activating processing inventory gates."""
 import contextlib
+import threading
+from unittest import mock
 
 from taskuary.store import SQLiteStore
 
@@ -81,6 +83,97 @@ def test_empty_inventory_reports_uncatalogued_raw_entities_without_allocating(tm
     assert picture['snapshot_revision'] != store.processing_inventory_snapshot(
         fixed_now='2026-09-06 12:00:01')['snapshot_revision']
     assert dump_owner_tables(store) == before
+    store.cx.close()
+
+
+def test_display_history_filters_before_projection_and_caches_until_a_write(tmp_path):
+    store = SQLiteStore(str(tmp_path / 'display-window.db'))
+    recent = add_message(store, subject='Recent')
+    old = add_message(store, subject='Old')
+    source = store.save_source({'Channel': 'email', 'Address': 'fixture-account', 'Active': 1}, 'fixture')
+    store._exec("UPDATE message SET CreatedAt='2020-01-01 12:00:00',SentAt='2020-01-01 12:00:00' WHERE MessageId=?", (old,))
+    store.reconcile_processing_membership()
+
+    complete = store.processing_inventory_snapshot(fixed_now=NOW, live_state=[], display_only=True)
+    assert {mid for item in complete['items'] for mid in item['member_ids']} == {
+        f'message:{recent}', f'message:{old}'}
+
+    store._processing_display_cache = {}
+    with mock.patch.object(store, '_processing_snapshot_cursor', wraps=store._processing_snapshot_cursor) as projection:
+        first = store.processing_inventory_snapshot(
+            fixed_now=NOW, live_state=[], display_only=True, history_days=14)
+        calls = projection.call_count
+        assert [mid for item in first['items'] for mid in item['member_ids']] == [f'message:{recent}']
+        second = store.processing_inventory_snapshot(
+            fixed_now='2026-09-06 12:00:01', live_state=[], display_only=True, history_days=14)
+        assert projection.call_count == calls
+        assert second['items'] == first['items']
+        assert second['snapshot_revision'] != first['snapshot_revision']
+
+        store.touch_source(source)
+        store.patch_source_poll_state(source, config_set={'watermark': 'next'}, last_polled_at=NOW)
+        store.processing_inventory_snapshot(
+            fixed_now='2026-09-06 12:00:01', live_state=[], display_only=True, history_days=14)
+        assert projection.call_count == calls
+
+        store.set_setting('owner_name', 'Cache invalidation', 'fixture')
+        store.processing_inventory_snapshot(
+            fixed_now='2026-09-06 12:00:02', live_state=[], display_only=True, history_days=14)
+        assert projection.call_count > calls
+    store.cx.close()
+
+
+def test_cached_display_read_does_not_wait_for_the_writer_connection_lock(tmp_path):
+    store = SQLiteStore(str(tmp_path / 'display-cache-lock.db'))
+    add_message(store, subject='Cached while syncing')
+    store.reconcile_processing_membership()
+    store.processing_inventory_snapshot(
+        fixed_now=NOW, live_state=[], display_only=True, history_days=14)
+    finished = threading.Event()
+    failures = []
+
+    def read_cached():
+        try:
+            store.processing_inventory_snapshot(
+                fixed_now=NOW, live_state=[], display_only=True, history_days=14)
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            finished.set()
+
+    with store.lock:  # stand in for a poll currently writing through the shared connection
+        thread = threading.Thread(target=read_cached)
+        thread.start()
+        assert finished.wait(0.5)
+    thread.join()
+    assert failures == []
+    store.cx.close()
+
+
+def test_display_cache_ignores_terminal_tail_ticks_but_not_waiting_transitions(tmp_path):
+    store = SQLiteStore(str(tmp_path / 'display-worker-cache.db'))
+    task = store.create_task({'Title': 'Live worker'}, 'fixture')
+    add_message(store, task=task, subject='Live worker message')
+    store.reconcile_processing_membership()
+    first_worker = [{'taskId': task, 'agent': 'coder', 'waiting': False,
+                     'tail': ['first frame'], 'phase': 'working'}]
+    next_frame = [{'taskId': task, 'agent': 'coder', 'waiting': False,
+                   'tail': ['different frame'], 'phase': 'working'}]
+    waiting = [{'taskId': task, 'agent': 'coder', 'waiting': True,
+                'tail': ['different frame'], 'phase': 'waiting'}]
+
+    with mock.patch.object(store, '_processing_snapshot_cursor', wraps=store._processing_snapshot_cursor) as projection:
+        store.processing_inventory_snapshot(
+            fixed_now=NOW, live_state=first_worker, display_only=True, history_days=14)
+        calls = projection.call_count
+        store.processing_inventory_snapshot(
+            fixed_now=NOW, live_state=next_frame, display_only=True, history_days=14)
+        assert projection.call_count == calls
+        first_waiting = store.processing_inventory_snapshot(
+            fixed_now=NOW, live_state=waiting, display_only=True, history_days=14)
+        assert projection.call_count == calls
+        assert first_waiting['worker_input_revision'] != store.processing_inventory_snapshot(
+            fixed_now=NOW, live_state=next_frame, display_only=True, history_days=14)['worker_input_revision']
     store.cx.close()
 
 

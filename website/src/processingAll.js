@@ -86,6 +86,44 @@ export function compactProcessingRow(item) {
   };
 }
 
+// Unread already arrives as the canonical pile. FeedView needs a small row envelope only for
+// its date/count header and for exact-message deep links when "Task" mode is selected; fetching
+// the entire canonical All inventory again duplicated the most expensive read on page load.
+export function unreadProcessingRows(pile) {
+  if (!object(pile) || pile.canonical !== true || !Array.isArray(pile.items)) return null;
+  return pile.items.flatMap((item) => {
+    if (!object(item) || typeof item.processing_id !== "string" || !item.processing_id
+        || !Array.isArray(item.member_ids)) return [];
+    const target = item.mid != null ? { kind: "message", id: item.mid }
+      : item.idea != null ? { kind: "idea", id: item.idea }
+        : item.rid != null ? { kind: "review", id: item.rid }
+          : item.tid != null ? { kind: "task", id: item.tid } : null;
+    if (!target) return [];
+    return [{
+      ProcessingItemId: item.processing_id,
+      ProcessingMemberIds: [...item.member_ids],
+      ContextRevision: text(item.context_revision),
+      ViewRevision: text(item.view_revision),
+      AllSnapshotRevision: text(pile.rev),
+      OpenTarget: target,
+      MessageId: item.mid ?? null,
+      TaskId: item.tid ?? null,
+      ReviewId: item.rid ?? null,
+      IdeaId: item.idea ?? null,
+      SentAt: item.when || item.since || "",
+      Subject: item.title || "",
+      FromName: item.who || "",
+      Preview: item.preview || item.summary || "",
+      Channel: item.channel || "",
+      SourceName: item.source || "",
+      Category: item.category || "",
+      MsgStatus: item.status || "",
+      ProcessingCounts: { members: item.member_ids.length },
+      Unread: item.unread ? 1 : 0,
+    }];
+  });
+}
+
 function validatePage(payload) {
   if (!object(payload) || payload.schema_version !== PROCESSING_ALL_SCHEMA) {
     throw new TypeError("unsupported canonical All response");

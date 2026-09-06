@@ -301,7 +301,8 @@ def compact_inventory(snapshot, query, *, include_excluded=False):
     rows.sort(key=lambda row: (0, tuple(-v for v in _time_key(row['activity_at'])), row['item_id'])
               if _time_key(row['activity_at']) else (1, (), row['item_id']))
     today = [row for row in rows if (_stamp(row['activity_at']) or datetime.min).date() == now.date()]
-    return rows, coverage, {'total': len(rows), 'canonical_roots': len(snapshot['items']),
+    return rows, coverage, {'total': len(rows),
+                            'canonical_roots': coverage.get('canonical_item_count', len(snapshot['items'])),
                             'tombstones': tombstones, 'not_presented': hidden,
                             'today': len(today), 'today_info': sum(r['category'] == 'info' for r in today),
                             'today_promo': sum(r['category'] == 'promo' for r in today),
@@ -336,7 +337,8 @@ class AllInventory:
                 raise AllError('processing_query_invalid', 'Invalid page cursor or changed query', 422) from None
         if lease_id is None:
             snapshot = store.processing_inventory_snapshot(
-                fixed_now=fixed_now or datetime.now().isoformat(), live_state=live_state, include_history=False)
+                fixed_now=fixed_now or datetime.now().isoformat(), live_state=live_state,
+                display_only=True, history_days=query['days'])
             rows, coverage, counts = compact_inventory(snapshot, query)
             lease_id = uuid.uuid4().hex
             lease = {'created': self.clock(), 'query': query_revision, 'items': rows,

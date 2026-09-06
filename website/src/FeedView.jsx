@@ -53,7 +53,7 @@ import { feedInteraction, feedViews } from "./feedViews.js";
 import {
   appendProcessingPage, firstProcessingPage, fullProcessingRow, isCoveragePending, isSnapshotExpired,
   processingAllParams, processingDetailPath, processingErrorMessage, processingMessageDetail, processingRefreshCandidate,
-  processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage,
+  processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage, unreadProcessingRows,
 } from "./processingAll.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once (lazyGeneral.js)
@@ -545,9 +545,16 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       // Measure once after the rows/layout change. Reading every group's bounding box on every
       // wheel frame made Chromium synchronously lay out the whole rail while it was scrolling.
       const railTop = rail.getBoundingClientRect().top;
-      dayLayout.current = Object.entries(dayRefs.current).flatMap(([day, el]) => el
-        ? [{ day, top: el.getBoundingClientRect().top - railTop + rail.scrollTop }]
-        : []).sort((a, b) => a.top - b.top);
+      // All has one wrapper per chronological day. Unread is a ranked pile, so the same day can
+      // occur in several places; read the day carried by every pile row and let whichever row is
+      // currently crossing the dock own the label.
+      dayLayout.current = (view === "unread"
+        ? [...rail.querySelectorAll(".tq-pile-row[data-tq-day]")].map((el) => ({
+            day: el.dataset.tqDay, top: el.getBoundingClientRect().top - railTop + rail.scrollTop,
+          }))
+        : Object.entries(dayRefs.current).flatMap(([day, el]) => el
+          ? [{ day, top: el.getBoundingClientRect().top - railTop + rail.scrollTop }]
+          : [])).sort((a, b) => a.top - b.top);
       dayLayoutDirty.current = false; dayLayoutAt.current = rail.scrollHeight;
     }
     const edge = rail.scrollTop + 1;
@@ -559,7 +566,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       cur = entry.day; lastTop = entry.top;
     }
     setCurDay((was) => cur || was);
-  }, []);
+  }, [view]);
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;
     let raf = 0;
@@ -572,6 +579,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
+  const rowsByView = useRef({ unread: null, all: null });
   // All consumes one compact row per canonical root. The opaque cursor belongs to one frozen
   // snapshot; Unread continues to use the accepted Assistant pile and legacy message lookup.
   const allPage = useRef(null);
@@ -579,6 +587,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const allLegacyFallback = useRef(false);
   const setView = (next) => {
     allRequest.current += 1; detailEpoch.current += 1; want.current = null;
+    const cached = rowsByView.current[next === "unread" ? "unread" : "all"];
+    if (cached) { setRows(cached); rowsLen.current = cached.length; }
     setViewState(next);
   };
   // Unread is the ranked live pipe supplied by the Assistant; All is chronological history.
@@ -646,7 +656,20 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     try {
       const desired = Math.max(span || 0, PAGE);
       const limit = processingTransportLimit(desired);
-      if (!view || canonicalUnread) {
+      // Assistant owns Unread and supplies its canonical pile. On the first render that prop is
+      // still null while /api/funnel/pile is in flight; fetching the legacy feed here starts a
+      // second, obsolete database walk (and source discovery can start it again). Wait for the
+      // one authoritative response instead of competing with it under the store lock.
+      if (view === "unread" && top && !unreadInventory) return;
+      if (view === "unread" && canonicalUnread) {
+        const batch = unreadProcessingRows(unreadInventory) || [];
+        allPage.current = null; allLegacyFallback.current = false;
+        rowsByView.current.unread = batch;
+        setRows(batch); rowsLen.current = batch.length;
+        setNoMore(true); setAllFallbackNotice(""); setErr("");
+        return;
+      }
+      if (!view) {
         try {
           const { data } = await api.get("/api/processing/all", {
             params: processingAllParams({ category: cat, pick, discovered: Object.keys(srcByChannel), limit }),
@@ -663,6 +686,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           }
           page.rows = page.rows.map((row) => ({ ...row, AllLoadGeneration: request }));
           allPage.current = page; allLegacyFallback.current = false;
+          rowsByView.current.all = page.rows;
           setRows(page.rows); rowsLen.current = page.rows.length;
           setNoMore(page.nextCursor == null); setAllFallbackNotice(""); setErr("");
           return;
@@ -679,6 +703,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           const batch = takeFeed(res, etagRef);
           if (batch == null) return;
           allPage.current = null; allLegacyFallback.current = true;
+          rowsByView.current.all = batch;
           setRows(batch); rowsLen.current = batch.length;
           setNoMore(batch.length < limit);
           setAllFallbackNotice("Canonical grouping is still finishing; showing the legacy Timeline temporarily.");
@@ -700,7 +725,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     } catch (e) {
       if (request === allRequest.current) setErr(processingErrorMessage(e, "Failed to load the feed"));
     }
-  }, [view, cat, pick, srcByChannel, fparams, canonicalUnread]);
+  }, [view, cat, pick, srcByChannel, fparams, canonicalUnread, unreadInventory, top]);
 
   // Infinite scroll: append the next page when the bottom sentinel shows.
   const loadMore = useCallback(async () => {
@@ -708,7 +733,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     busyMore.current = true;
     const request = allRequest.current;
     try {
-      if ((!view || canonicalUnread) && !allLegacyFallback.current) {
+      if (!view && !allLegacyFallback.current) {
         const frozen = allPage.current;
         if (!frozen?.nextCursor) { setNoMore(true); return; }
         try {
@@ -738,7 +763,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       if (request === allRequest.current) setErr(processingErrorMessage(e, "Failed to load more"));
     }
     finally { busyMore.current = false; }
-  }, [view, cat, pick, srcByChannel, fparams, noMore, load, canonicalUnread]);
+  }, [view, cat, pick, srcByChannel, fparams, noMore, load]);
 
   // Sync tracks the server's actual stage. Rows remain readable throughout;
   // elapsed time and lost live events cannot manufacture completion.
@@ -785,7 +810,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     if (running) {
       clearTimeout(completionTimer.current);
       setBgSync(true); setSyncWhat(what);
-      if (!wasRunning.current) load(rowsLen.current);
     } else if (wasRunning.current) {
       setBgSync(false); setSyncWhat(""); load(rowsLen.current);
     } else if (completedBetweenChecks) {
@@ -804,7 +828,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       read: () => api.get("/api/ingest/status", { timeout: 10000 }).then(({ data }) => data),
       changed: applyStatus,
       failed: () => setSyncUnknown(true),
-      subscribe: refresh => onLive("feed-changed", refresh),
+      subscribe: refresh => onLive(["feed-changed", "ingest-status"], refresh),
     });
     syncObserver.current = observer;
     return () => { observer.stop(); syncObserver.current = null; clearTimeout(completionTimer.current); };
@@ -819,7 +843,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   }, [syncUnknown]);
 
   useEffect(() => {
-    setRows(null); rowsLen.current = 0; setNoMore(false);
+    // Keep the last complete rail painted while a view/filter/sync refresh is in flight. Clearing
+    // it here made every background sync erase the Timeline and made Unread -> All look broken
+    // for the full database request.
+    setNoMore(false);
     allPage.current = null; allLegacyFallback.current = false;
     etagRef.current = "";                        // a new filter is not the same page
     detailEpoch.current += 1; want.current = null;
@@ -1193,13 +1220,21 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       for (const m of e.rows) memberOf.set(m.MessageId, e.tid);
     }
   }
-  const shownDay = dayEntries.some(([day]) => day === curDay) ? curDay : (dayEntries[0]?.[0] || "");
+  // The clock/date dock is useful even when Unread is genuinely empty. A blank Select made the
+  // whole date line disappear in exactly the state where the owner needs to know the page is
+  // current, so today is the honest empty-inventory label.
+  const today = new Date().toLocaleDateString("sv-SE");
+  const shownDay = dayEntries.some(([day]) => day === curDay) ? curDay : (dayEntries[0]?.[0] || today);
+  const dateEntries = dayEntries.length ? dayEntries : [[today, []]];
   const jumpToDay = (day) => {
     dateJump.current = day;
     clearTimeout(dateJumpTimer.current);
     setCurDay(day);
     requestAnimationFrame(() => {
-      const rail = railRef.current, group = dayRefs.current[day];
+      const rail = railRef.current;
+      const group = view === "unread"
+        ? [...(rail?.querySelectorAll(".tq-pile-row[data-tq-day]") || [])].find((el) => el.dataset.tqDay === day)
+        : dayRefs.current[day];
       if (!rail || !group) return;
       const top = rail.scrollTop + group.getBoundingClientRect().top - rail.getBoundingClientRect().top;
       rail.scrollTo({ top: Math.max(0, top - 4), behavior: "smooth" });
@@ -1221,7 +1256,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const availableChannels = [...new Set([...Object.keys(srcByChannel), ...(rows || []).map((r) => r.Channel)])];
   const pickerChannels = availablePickerChannels(cat, availableChannels);
 
-  const today = new Date().toLocaleDateString("sv-SE");
   const todays = (view === 'unread' && unreadInventory?.canonical
     ? (unreadInventory.items || []).map(i => ({ SentAt: i.when, Category: i.category, MsgStatus: i.status }))
     : (rows || [])).filter((r) => localDay(r.SentAt) === today);
@@ -1425,7 +1459,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               minWidth: 0, maxWidth: "100%", height: 22, textAlign: "center", cursor: "pointer",
               "& .MuiSelect-select": { py: 0, pl: 2, pr: "22px !important", textAlign: "center" },
               "&:hover": { color: ACCENT } }}>
-            {dayEntries.map(([day]) => (
+            {dateEntries.map(([day]) => (
               <MenuItem key={day} value={day} sx={{ ...mono, fontSize: 11.5 }}>{fmtDay(day)}</MenuItem>
             ))}
           </Select>
@@ -1454,7 +1488,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             borderColor: `${BORDER} !important`, borderLeftColor: "var(--tq-row-edge) !important",
             boxShadow: "none !important", transition: "none !important", cursor: "default",
           } }}>
-          <FunnelBar onOpenTask={onOpenTask} active={active} />
+          {!top && <FunnelBar onOpenTask={onOpenTask} active={active} />}
           {view === "unread" ? (typeof top === "function" ? top({ openByMid }) : top) : (
           <Box sx={{ position: "relative" }}>
             {syncing && (

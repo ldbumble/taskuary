@@ -26,7 +26,7 @@ def query_for(store, only=None, *, history=True):
     return processing_all.normalize_query(filters.get('channel'), filters.get('source'), days if history else 36500)
 
 
-def card_for(store, item, compact, live_state, now):
+def card_for(store, item, compact, live_state, now, states=None):
     from . import funnel
     from .processing_reads import state
 
@@ -98,8 +98,11 @@ def card_for(store, item, compact, live_state, now):
                 unread=unread, deferred=bool(read.get('deferred')), defer_until=read.get('defer_until'),
                 more=max(0, compact['counts'].get('messages', 0) - 1),
                 source=row.get('SourceName') or compact['source'], status=row.get('MsgStatus') or compact['status'], order_band=funnel._band(card))
-    card.pop('surfaced', None)
-    card.pop('surfaced_at', None)
+    # shown-but-not-read exists only for the lanes that wait on a yes: the mark keeps Next from bouncing
+    # straight back to a draft it just introduced (everything else shown is read - the receipt says so)
+    card.pop('surfaced', None); card.pop('surfaced_at', None)
+    shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
+    if shown and card['lane'] in ('approve', 'blocked'): card.update(surfaced=True, surfaced_at=shown.get('At'))
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')
@@ -111,14 +114,26 @@ def card_for(store, item, compact, live_state, now):
     return card
 
 
-def build(store, *, now=None, live_state=None, include_read=False, only=None):
+def build(store, *, now=None, live_state=None, include_read=False, only=None,
+          full_history=False):
     from . import funnel, terminal
     now = now or datetime.now()
     live_state = terminal.live_sessions(tail=6) if live_state is None else live_state
-    snapshot = store.processing_inventory_snapshot(fixed_now=now.isoformat(), live_state=live_state, include_history=False)
-    rows, coverage, counts = processing_all.compact_inventory(snapshot, query_for(store, only, history=not include_read), include_excluded=include_read)
+    query = query_for(store, only, history=not full_history)
+    snapshot = store.processing_inventory_snapshot(
+        fixed_now=now.isoformat(), live_state=live_state, display_only=True,
+        history_days=query['days'])
+    rows, coverage, counts = processing_all.compact_inventory(
+        snapshot, query, include_excluded=include_read)
     by_id = {item['item_id']: item for item in snapshot['items']}
-    cards = [card_for(store, by_id[row['item_id']], row, live_state, now) for row in rows]
+    # an Assistant digest post is only the container for its ideas, which are cards of their own; showing
+    # both is the duplicate-Assistant regression of 2026-09-04, back on 2026-09-06 under the canonical roots
+    def wrapper(row):
+        shown = set(row['display_message_ids'])
+        return shown and all(funnel._assistant_wrapper(m) for m in by_id[row['item_id']]['view'].get('messages', []) if m['MessageId'] in shown)
+    rows = [row for row in rows if not wrapper(row)]
+    states = store.funnel_states()
+    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states) for row in rows]
     cards = [card for card in cards if include_read or card['unread']]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)

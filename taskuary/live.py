@@ -1,15 +1,15 @@
 """Push the Timeline, Board and Studio instead of making them guess.
 
 The UI used to ask every few seconds. A WebSocket the terminal already speaks carries
-feed-changed / task-changed / run-tail, and the views refetch only when something
+feed-changed / ingest-status / task-changed / run-tail, and the views refetch only when something
 actually moved. emit() is safe from any thread (the poll, a click, a pty byte).
 Many writes in one gulp coalesce: forty new mail rows are one feed-changed, not forty.
 """
 import asyncio, threading
 from loguru import logger
 
-FEED, TASK, RUN = 'feed-changed', 'task-changed', 'run-tail'
-KINDS = (FEED, TASK, RUN)
+FEED, INGEST, TASK, RUN = 'feed-changed', 'ingest-status', 'task-changed', 'run-tail'
+KINDS = (FEED, INGEST, TASK, RUN)
 
 _loop = None
 _clients = set()
@@ -18,7 +18,7 @@ _pending = {}          # kind -> payload (last writer wins for that kind)
 _timers = {}           # kind -> Timer
 # run-tail is a screen you watch, so it can wait a beat to fold pty bursts; the other two
 # are "something landed" and should reach the tab before the next glance.
-_DELAY = {RUN: 0.25, FEED: 0.08, TASK: 0.08}
+_DELAY = {RUN: 0.25, FEED: 0.08, INGEST: 0.08, TASK: 0.08}
 
 
 def bind(loop):

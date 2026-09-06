@@ -26,7 +26,7 @@ import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
-import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { SUGGESTIONS, afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
@@ -82,9 +82,38 @@ function greeting() {
 
 function Pile({ pile, current, onPull }) {
   const items = pile?.items || [];
+  // A full account can return dozens of canonical rows together. Painting that entire stack in
+  // one React commit leaves the rail blank until the browser has laid out every card. On the
+  // first successful load, put the first row down immediately and admit one more per animation
+  // frame. Later live refreshes retain the established stack and use the arrival animation below.
+  const firstLoad = useRef(null);
+  const [revealed, setRevealed] = useState(1);
+  useEffect(() => {
+    if (!pile) return undefined;
+    const revision = displayRevision(pile) || "loaded";
+    if (firstLoad.current !== null) {
+      firstLoad.current = revision;
+      setRevealed(items.length);
+      return undefined;
+    }
+    firstLoad.current = revision;
+    setRevealed(Math.min(1, items.length));
+    if (items.length <= 1) return undefined;
+    let frame = 0;
+    const addOne = () => {
+      setRevealed((count) => {
+        const next = Math.min(items.length, count + 1);
+        if (next < items.length) frame = requestAnimationFrame(addOne);
+        return next;
+      });
+    };
+    frame = requestAnimationFrame(addOne);
+    return () => cancelAnimationFrame(frame);
+  }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
+  const visibleItems = items.slice(0, revealed);
   // the one on the table sits at the TOP as CURRENT - it slides up there from wherever it was in the
   // pile (same key, same element), and a task named in the chat lands there from nowhere
-  const drawn = [...(current ? [{ ...current, current: true }] : []), ...drawOrder(items).filter((i) => i.key !== current?.key)];
+  const drawn = [...(current ? [{ ...current, current: true }] : []), ...drawOrder(visibleItems).filter((i) => i.key !== current?.key)];
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());
   useEffect(() => {
@@ -109,7 +138,7 @@ function Pile({ pile, current, onPull }) {
   return (
     <div className="tq-pile" data-tq-keep>
       {!pile ? (
-        <div className="tq-pile-empty" role="status"><b>Loading your items…</b>Your list has not finished loading.</div>
+        <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>Loading timeline</b>Reading what arrived and what still needs you.</div>
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : (
@@ -124,7 +153,8 @@ function Pile({ pile, current, onPull }) {
             const loud = i.lane === "blocked" || i.lane === "time";
             const promoted = loud || i.lane === "approve";           // triage moved it up: the little arrow says so
             return (
-              <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
+              <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}
+                style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
                 <span className="when">{fmtTime12(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
                 <span className="rail"><i style={{ background: role }} /></span>
                 <div className="card" onClick={() => !i.settling && !i.current && onPull(i.key, `Show me “${i.title}”`)}
@@ -433,7 +463,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return request;
   }, []);
   useEffect(() => { loadPileRef.current = loadPile; }, [loadPile]);
-  const sharedFilter = useRef(null);
+  // FeedView's initial filter is the unfiltered JSON object below. Treat that as the
+  // starting state instead of a change: otherwise mount starts the normal cached read,
+  // then immediately queues a forced second rebuild for the exact same scope.
+  const sharedFilter = useRef("{}");
   const inventoryFilterChanged = useCallback((filter) => {
     if (sharedFilter.current === filter) return;
     sharedFilter.current = filter;

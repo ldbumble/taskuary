@@ -682,8 +682,11 @@ filter. Implemented in Section 1.8.
   Next is the owner's explicit request to move on, not a side effect of starting
   or resuming the walkthrough. Test repeat Walk clicks preserve Current.
 - [x] <a id="pw-116"></a>**PW-116** Replace next_item()'s surfaced-based exclusion and preference for unshown
-  items with selection from the canonical ordered Unread dataset. Being shown in
-  chat does not make an item read, handled, or ineligible for subsequent selection.
+  items with selection from the canonical ordered Unread dataset. REVISED by the owner
+  2026-09-06: an item put in the chat IS read - it leaves Unread and is not selected
+  again. Only later/skip keep it unread, until their time. A reply or agent waiting on
+  the owner's yes is the one exception: shown, it stays in Unread, marked, and Next
+  returns to it after a while rather than straight away.
 - [x] <a id="pw-117"></a>**PW-117** Skip working agents, deferred items, and pending-triage items for automatic
   chat selection. Working agents remain visible in Unread and become eligible
   when input/approval or a finished result requires attention.
@@ -747,7 +750,8 @@ through a concrete confirmation box. Pending implementation, not a runtime chang
 
 - [x] <a id="pw-128"></a>**PW-128** Owner-approved navigation exception: an unambiguous request to move Next
   immediately selects the next eligible shared-Unread item without confirmation,
-  marking read, closing a task, or writing a deferral/memory. Interpret intent
+  closing a task, or writing a deferral/memory (the item it leaves was already read
+  when it was shown - owner revision 2026-09-06, see PW-116). Interpret intent
   through AI, not keyword matching; bottom suggestions submit ordinary text.
   Questions such as "is the agent done?" must not trigger completion. Test Next
   navigation without mutation and context-sensitive questions versus commands.
@@ -890,8 +894,9 @@ card structure, and validated actions. Pending implementation.
 - [x] <a id="pw-153"></a>**PW-153** Generate the assistant's explanation according to COUNSEL, removing the
   normal-path hardcoded introductions and competing behavioral instructions.
   Keep card structure, action validation, and factual error handling in code.
-- [x] <a id="pw-154"></a>**PW-154** Presenting either kind of card does not mark it read or handled and does
-  not automatically execute actions or advance the conversation.
+- [x] <a id="pw-154"></a>**PW-154** Presenting either kind of card does not mark it handled and does not
+  automatically execute actions or advance the conversation. REVISED by the owner
+  2026-09-06: presenting DOES mark it read (PW-116); handled still needs the owner.
 - [x] <a id="pw-155"></a>**PW-155** Test four-item FYI presentation, per-item action targeting, untouched sibling
   read state, full task/chain context, task summary/checklist display, and COUNSEL
   use in the normal presentation path.

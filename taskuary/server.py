@@ -2569,14 +2569,19 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
     from .funnel_selection import capture_selection, SelectionUnavailable
     from .processing_navigation import fields
     try:
-        watched = funnel.pile(store, force)
-        capture = capture_selection(store, only=only, include_surfaced=include_surfaced, exclude=exclude)
+        # funnel.pile owns invalidation and single-flight across open tabs. Capture navigation
+        # from that exact cached pile; capture_selection accepts it specifically so this endpoint
+        # does not rebuild canonical membership a second time.
+        cached = funnel.pile(store, force=force) if only is None else None
+        events = (cached.get('events') or []) if cached is not None else funnel.announce(store)
+        capture = capture_selection(store, only=only, include_surfaced=include_surfaced,
+                                    exclude=exclude, pile=cached)
     except SelectionUnavailable as error:
         raise HTTPException(503, error.detail) from error
     except processing_all.AllError as error:
         raise HTTPException(error.status, error.detail) from error
     p = {**capture.pile, **fields(store, capture),
-         'alerts': funnel.alerts(store, capture.pile['items']), 'events': watched.get('events', [])}
+         'alerts': funnel.alerts(store, capture.pile['items']), 'events': events}
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
@@ -4265,6 +4270,7 @@ QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 s
 DRAIN_WAIT = 45                 # the context gate's patience for its lines to be judged (the old lock wait)
 CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
 CHAT_POLL_SECONDS = 30
+CONTEXT_FRESH_SECONDS = 60
 _FETCHING = {}                  # connector type -> lane reading it right now
 _FETCH_CV = threading.Condition()
 _STATUS_LOCK = threading.Lock()
@@ -4439,6 +4445,9 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
                   if c.get('Active') and str(c.get('Type') or '').lower() in types]
     if not types or not connectors:
         return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0, 'channel': channel}
+    if _recently_fetched(types):
+        return {'polled': False, 'newer': False, 'before': before, 'after': before,
+                'added': 0, 'channel': channel, 'fresh': True}
     added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True)
     if added is False:
         raise RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
@@ -4586,6 +4595,14 @@ def quick_forever():
 # the global clock). The quick pass polls ONLY those connectors and runs no reports or CI.
 _QUICK_LAST = {}
 _QUICK_TIMER = threading.local()
+
+
+def _recently_fetched(types) -> bool:
+    """Whether every requested provider completed a fetch within the context grace period."""
+    now = time.time()
+    return bool(types) and all(
+        now - _QUICK_LAST.get(str(provider).lower(), 0) <= CONTEXT_FRESH_SECONDS
+        for provider in types)
 
 
 def _poll_on_quick_clock(types):

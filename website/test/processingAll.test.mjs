@@ -15,6 +15,7 @@ import {
   processingSelectionKey,
   processingTransportLimit,
   rowOwnsMessage,
+  unreadProcessingRows,
 } from "../src/processingAll.js";
 
 const item = (id, target = { kind: "message", id: 7 }, extra = {}) => ({
@@ -71,6 +72,23 @@ test("one compact row retains canonical identity and adapts each truthful target
     assert.equal(row.Attachments, 2);
     assert.equal(row[`${kind[0].toUpperCase()}${kind.slice(1)}Id`], 9);
   }
+});
+
+test("canonical Unread reuses its pile envelope instead of fetching All again", () => {
+  const rows = unreadProcessingRows({ canonical: true, rev: "pile-rev", items: [{
+    key: "processing:root-a", processing_id: "root-a",
+    member_ids: ["message:7", "task:2"], context_revision: "context-a", view_revision: "view-a",
+    mid: 7, tid: 2, when: "2026-09-06 09:30:00", title: "Unread title", who: "Dana",
+    preview: "Unread preview", channel: "email", source: "owner@example.test",
+    category: "info", status: "filed", unread: true,
+  }] });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].ProcessingItemId, "root-a");
+  assert.deepEqual(rows[0].ProcessingMemberIds, ["message:7", "task:2"]);
+  assert.deepEqual(rows[0].OpenTarget, { kind: "message", id: 7 });
+  assert.equal(rows[0].SentAt, "2026-09-06 09:30:00");
+  assert.equal(rows[0].Unread, 1);
+  assert.equal(unreadProcessingRows({ canonical: false, items: [] }), null);
 });
 
 test("frozen pages concatenate once and reject mixed leases or duplicate roots", () => {

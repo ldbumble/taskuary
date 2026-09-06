@@ -59,22 +59,67 @@ def test_uncapped_shared_inventory_keeps_categories_pending_and_old_provider_arr
     assert len(capture.member_keys) == 4
 
 
-def test_display_and_next_do_not_read_but_done_updates_shared_subset(store):
+def test_shown_in_chat_is_read_and_leaves_unread_and_next(store):
+    """The owner's rule (2026-09-06): once an item has been put in the chat it is read, period.
+    Only later/skip keep it unread, until their time."""
     add(store, 'First FYI')
     add(store, 'Second FYI')
     _, unread = both(store)
-    first = unread['items'][0]
-    funnel.settle(store, first['key'], 'surfaced', note='shown in chat')
-    _, displayed = both(store)
-    assert len(displayed['items']) == 2
-    assert capture_selection(store).member_keys[0] == first['key']
-    before = list(store.cx.iterdump())
-    capture_selection(store, exclude=first['key'])
-    assert list(store.cx.iterdump()) == before
-    funnel.settle(store, first['key'], 'done')
-    all_rows, unread = both(store)
-    assert len(all_rows) == 2 and len(unread['items']) == 1
-    assert {r['item_id'] for r in all_rows if r['row']['Unread']} == {r['processing_id'] for r in unread['items']}
+    first, second = unread['items'][0], unread['items'][1]
+    funnel.settle(store, first['key'], 'surfaced', read=True)
+    all_rows, displayed = both(store)
+    assert [i['key'] for i in displayed['items']] == [second['key']]
+    assert capture_selection(store).member_keys[0] == second['key']
+    assert {r['item_id']: r['row']['Unread'] for r in all_rows} == {first['processing_id']: 0, second['processing_id']: 1}
+    assert [r[0] for r in store.cx.execute("SELECT DISTINCT Origin FROM processing_read_receipt")] == ['surfaced']
+    # the legacy write (no read flag) still only marks: historical fixtures and direct callers are unchanged
+    funnel.settle(store, second['key'], 'surfaced')
+    _, still = both(store)
+    assert [i['key'] for i in still['items']] == [second['key']]
+
+
+def test_later_keeps_it_unread_until_its_time_then_it_comes_back(store):
+    add(store, 'Sleep on it')
+    _, unread = both(store)
+    key = unread['items'][0]['key']
+    funnel.settle(store, key, 'later', hours=2)
+    _, now = both(store)
+    assert now['items'] == []
+    later = funnel.build(store, now=datetime.now() + timedelta(hours=3), reconcile=False, live_state=[])
+    assert [i['key'] for i in later['items']] == [key] and later['items'][0]['unread']
+    assert not store.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
+
+
+def test_shown_approval_stays_unread_but_marked_so_next_does_not_bounce_back(store):
+    tid = store.create_task({'Title': 'Waiting on a yes'}, 'fixture')
+    mid = add(store, 'Please reply', tid=tid, status='routed')
+    rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'Draft'})
+    add(store, 'Plain FYI')
+    _, unread = both(store)
+    approve = next(i for i in unread['items'] if i.get('rid') == rid)
+    assert approve['lane'] == 'approve'
+    funnel.settle(store, approve['key'], 'surfaced', read=approve['lane'] not in ('approve', 'blocked'))
+    _, shown = both(store)
+    kept = next(i for i in shown['items'] if i.get('rid') == rid)
+    assert kept['unread'] and kept['surfaced'] and kept['surfaced_at']
+    assert capture_selection(store).selected['key'] != approve['key'], 'just shown: Next moves to the FYI'
+    assert not store.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
+
+
+def test_assistant_digest_post_does_not_duplicate_its_own_idea(store):
+    """The old funnel hid an Assistant digest whose ideas are cards of their own (the 2026-09-04
+    duplicate-Assistant regression). The canonical Unread must do the same."""
+    import json
+    stamp = datetime.now().isoformat(' ')
+    mid = add(store, 'End of day checkup fired on its own', channel='assistant', status='feed')
+    idea = store.upsert_idea({'key': 'idea:eod', 'kind': 'idea', 'text': 'End of day checkup fired on its own',
+                              'action': {'type': 'message', 'mid': mid, 'section': 'systems'}}, stamp)
+    store.set_ideas_message([idea['IdeaId']], mid)
+    store.set_brief(mid, json.dumps({'ideas': [{'id': idea['IdeaId']}]}))
+    add(store, 'A plain Assistant note', channel='assistant', status='feed')
+    _, unread = both(store)
+    kinds = sorted((i['kind'], i['title']) for i in unread['items'])
+    assert kinds == [('fyi', 'A plain Assistant note'), ('idea', 'End of day checkup fired on its own')], kinds
 
 
 def test_fyi_summary_survives_refresh_but_is_dropped_when_its_source_changes(store):
@@ -260,3 +305,41 @@ def test_startup_backup_contains_legacy_reads_and_owner_documents(tmp_path):
     assert not funnel.build(s, live_state=[])['items']
     assert initialize(s, live_state=[]) == {'status': 'already_active'}
     s.cx.close()
+
+
+def test_window_and_full_history_snapshots_stay_cached_side_by_side(store):
+    """One click alternates the Unread window with the named-item history lookup; a single-entry
+    cache made each evict the other, so every build was cold (2026-09-06: "why does this take 15 seconds")."""
+    add(store, 'Recent')
+    store.reconcile_processing_membership()
+    now = datetime.now()
+    processing_unread.build(store, now=now, live_state=[])
+    processing_unread.build(store, now=now, live_state=[], include_read=True, full_history=True)
+    assert len(store._processing_display_cache) == 2
+    calls = []
+    orig = store.processing_inventory_snapshot
+    def spy(**kw):
+        before = dict(store._processing_display_cache); out = orig(**kw)
+        calls.append(dict(store._processing_display_cache) == before); return out
+    store.processing_inventory_snapshot = spy
+    processing_unread.build(store, now=now, live_state=[])
+    processing_unread.build(store, now=now, live_state=[], include_read=True, full_history=True)
+    assert calls == [True, True], 'both windows were served from the cache'
+
+
+def test_named_lookup_reads_the_unread_window_first_and_only_then_the_whole_history(store):
+    recent = add(store, 'Recent named item')
+    old = add(store, 'Ancient named item', sent='2020-01-01 09:00:00')
+    store._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', ('2020-01-01 09:00:00', old))
+    store.reconcile_processing_membership()
+    windows = []
+    orig = store.processing_inventory_snapshot
+    def spy(**kw): windows.append(kw.get('history_days')); return orig(**kw)
+    store.processing_inventory_snapshot = spy
+    item = funnel.next_item(store, f'msg:{recent}')
+    assert item and item['mid'] == recent
+    assert windows and all(w < 36500 for w in windows), windows
+    windows.clear()
+    item = funnel.next_item(store, f'msg:{old}')
+    assert item and item['mid'] == old
+    assert 36500 in windows

@@ -290,7 +290,7 @@ class LiveSocketTests(unittest.TestCase):
         finally:
             live.detach(dummy)
 
-    def test_ingest_status_pokes_the_timeline(self):
+    def test_ingest_status_pokes_the_clock_without_claiming_the_feed_changed(self):
         tab, s = _Tab(), MemoryStore()
         async def once():
             live.bind(asyncio.get_running_loop())
@@ -300,11 +300,12 @@ class LiveSocketTests(unittest.TestCase):
                 live.flush()
                 for _ in range(20):
                     await asyncio.sleep(0)
-                    if any(m.get('type') == 'feed-changed' for m in tab.sent): break
+                    if any(m.get('type') == 'ingest-status' for m in tab.sent): break
             finally:
                 live.reset()
         _run(once())
-        self.assertIn('feed-changed', [m['type'] for m in tab.sent])
+        self.assertIn('ingest-status', [m['type'] for m in tab.sent])
+        self.assertNotIn('feed-changed', [m['type'] for m in tab.sent])
 
     def test_a_run_pokes_the_studio(self):
         tab, s = _Tab(), MemoryStore()

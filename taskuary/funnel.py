@@ -564,12 +564,14 @@ def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
 
 
 def build(store, now: datetime = None, keep_surfaced: bool = False,
-          reconcile: bool = True, live_state=_LIVE_UNSET) -> dict:
+          reconcile: bool = True, live_state=_LIVE_UNSET,
+          full_history: bool = False) -> dict:
     now = now or datetime.now()
     if getattr(store, 'processing_reads_active', lambda: False)():
         from .processing_unread import build as shared_build
         return shared_build(store, now=now, include_read=keep_surfaced,
-                            live_state=None if live_state is _LIVE_UNSET else live_state)
+                            live_state=None if live_state is _LIVE_UNSET else live_state,
+                            full_history=full_history)
     # Explicit Current/named-item lookup must not lose its subject behind the
     # ordinary transport cap. Its existing history/read/grouping rules still apply.
     feed_limit = -1 if keep_surfaced else 400
@@ -855,6 +857,9 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     if key:
         item = next((i for i in build(store, keep_surfaced=True)['items']
                      if i['key'] == key or key in i.get('aliases', [])), None)
+        if item is None and getattr(store, 'processing_reads_active', lambda: False)():
+            item = next((i for i in build(store, keep_surfaced=True, full_history=True)['items']
+                         if i['key'] == key or key in i.get('aliases', [])), None)
         return _present_one(store, item) or batch_item(store, key)
     if getattr(store, 'processing_reads_active', lambda: False)():
         return capture_selection(store, only=only, exclude=exclude).selected
@@ -922,12 +927,13 @@ def item_for_key(store, key: str) -> dict | None:
 
 VERBS = ('surfaced', 'done', 'later', 'skip', 'ack')
 
-def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None) -> dict:
+def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
-    default). skip: back tomorrow morning. surfaced: shown in this walk. ack: an alert was seen."""
+    default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
+    it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen."""
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member
-        out = [settle(store, k, verb, by, hours, note, expected_context=expected_context) for k in key[5:].split(',') if k]
+        out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     until = None
     if verb == 'later': until = (datetime.now() + timedelta(hours=hours or LATER_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
@@ -935,9 +941,9 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')
     if expected_context is None:
-        store.set_funnel_state(key, verb, by, until, note)
+        store.set_funnel_state(key, verb, by, until, note, read=read)
     else:
-        store.set_funnel_state(key, verb, by, until, note, expected_context=expected_context)
+        store.set_funnel_state(key, verb, by, until, note, expected_context=expected_context, read=read)
     invalidate()
     return {'key': key, 'verb': verb, 'until': until}
 

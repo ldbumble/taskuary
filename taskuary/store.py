@@ -497,6 +497,8 @@ class SQLiteStore:
         self.cx.execute('PRAGMA busy_timeout=5000')
         self._snap_hold = 0
         self._snap_cache = None
+        self._processing_display_cache = {}
+        self._processing_ignored_writes = 0
         self._writes = 0
         with self.lock:
             self.cx.executescript(SCHEMA)
@@ -894,6 +896,10 @@ class SQLiteStore:
                                 [*values, row_id])
                 self.cx.commit()
                 self._writes += 1
+                # Watermarks and poll checkpoints do not participate in a processing item.
+                # A successful no-op sync can update many of them; counting those writes as
+                # Timeline content changes makes the next read rebuild the entire projection.
+                self._processing_ignored_writes += 1
                 return True
             except BaseException:
                 self.cx.rollback()
@@ -910,6 +916,7 @@ class SQLiteStore:
             # Any durable feed/task change invalidates that cache before the websocket wakes the
             # views: new provider messages stay immediate without every open tab rebuilding it.
             if any(k in ('feed-changed', 'task-changed') for k in kinds):
+                self._processing_display_cache = {}
                 from . import funnel
                 funnel.invalidate()
             from . import live
@@ -1363,7 +1370,7 @@ class SQLiteStore:
     # ── the pipe (funnel.py): surfaced / done / later, per item key ─────────────────────────
     def funnel_states(self) -> dict:
         return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
-    def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None):
+    def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None, read=False):
         from . import processing_reads
         stamp = _now()
         with self.lock:
@@ -1405,6 +1412,14 @@ class SQLiteStore:
                                 cur.execute('DELETE FROM processing_read_defer WHERE Key=?', (deferred_key,))
                         else:
                             self._processing_write_defer(cur, key, target, status, until, stamp, by)
+                if version and status == 'surfaced' and read:
+                    # shown in the chat IS read (the owner, 2026-09-06): the receipt is the same one an
+                    # explicit done writes, minus lifting a deferral - later/skip still hold it back
+                    target = self._processing_read_target(cur, key)
+                    if target:
+                        from .processing_projection import processing_projection
+                        processing_reads.record(cur, processing_reads.units(processing_projection(cur, target[0])['view']),
+                                                version=version, at=stamp, by=by, origin='surfaced')
                 if version and status == 'surfaced' and note:
                     target = self._processing_read_target(cur, key)
                     if target:
@@ -1816,7 +1831,8 @@ class SQLiteStore:
         if local_id is not None: q += ' AND LocalId=?'; p.append(str(local_id))
         return [self._processing_evidence_row(r) for r in self._rows(q + ' ORDER BY EvidenceId', p)]
 
-    def _processing_snapshot_cursor(self, cur, resolved, *, live_state=None, lineage=None, item=None, include_history=True):
+    def _processing_snapshot_cursor(self, cur, resolved, *, live_state=None, lineage=None, item=None,
+                                    include_history=True, display_only=False):
         """Build the public item picture inside a caller-owned read transaction."""
         from .processing_projection import processing_projection
         if item is None:
@@ -1826,6 +1842,24 @@ class SQLiteStore:
         else:
             item = dict(item)
         lineage = list(lineage) if lineage is not None else self._processing_lineage(cur, resolved)
+        # All and Unread need the current projection plus the old root ids that remain valid
+        # aliases. They do not consume the captured migration evidence/context history. Loading
+        # those large JSON records for every root made a five-row Timeline request materialize
+        # and hash tens of megabytes before it could draw anything. Keep the complete snapshot as
+        # the default contract; display inventory opts into this deliberately smaller envelope.
+        if display_only:
+            projection = processing_projection(cur, resolved, live_state=live_state)
+            return {
+                'item': item,
+                'item_history': [{'ItemId': item_id} for item_id in lineage],
+                'members': [],
+                'member_history': [],
+                'aliases': list(projection.get('view', {}).get('aliases', [])),
+                'relations': [],
+                'legacy_evidence': [],
+                'context_history': [],
+                **projection,
+            }
         item_history = [dict(r) for r in cur.execute(
             f"SELECT * FROM processing_item WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY CreatedAt,ItemId",
             lineage).fetchall()]
@@ -1883,7 +1917,8 @@ class SQLiteStore:
             if not resolved: return None
             return self._processing_snapshot_cursor(cur, resolved, live_state=live_state)
 
-    def processing_inventory_snapshot(self, *, fixed_now, live_state=None, include_history=True):
+    def processing_inventory_snapshot(self, *, fixed_now, live_state=None, display_only=False,
+                                      history_days=None, include_history=True):
         """Read the complete, non-activating canonical inventory from one SQLite snapshot.
 
         This reports gaps in explicit membership but never allocates identity, infers read or
@@ -1891,6 +1926,9 @@ class SQLiteStore:
         """
         if not isinstance(fixed_now, str) or not fixed_now:
             raise ValueError('fixed_now must be a non-empty string')
+        if history_days is not None and (isinstance(history_days, bool) or not isinstance(history_days, int)
+                                         or not 0 <= history_days <= 36500):
+            raise ValueError('history_days must be between 0 and 36500')
         as_of = fixed_now
         frozen_live = None if live_state is None else copy.deepcopy(tuple(live_state))
         from .processing_projection import _worker_attention
@@ -1902,17 +1940,70 @@ class SQLiteStore:
         worker_revision = hashlib.sha256(json.dumps(
             worker_payload, ensure_ascii=False, sort_keys=True,
             separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+        if display_only and frozen_live is not None:
+            frozen_live = tuple(copy.deepcopy(worker_rows))
 
-        with self._processing_read() as cur:
-            cache_key = (self.cx.total_changes, cur.execute('PRAGMA data_version').fetchone()[0], worker_revision)
-            cached = getattr(self, '_processing_runtime_inventory_cache', None)
-            if not include_history and cached is not None and cached[0] == cache_key:
-                snapshot = copy.deepcopy(cached[1])
+        def apply_workers(snapshot):
+            """Overlay volatile worker facts without re-reading every canonical DB root."""
+            if not display_only:
+                return snapshot
+            from .processing import processing_view_revision
+            available = frozen_live is not None
+            for item in snapshot['items']:
+                view = item['view']
+                tids = {str(task['TaskId']) for task in view.get('tasks', [])}
+                attention = sorted((copy.deepcopy(row) for row in worker_rows
+                                    if str(row.get('taskId', row.get('task_id'))) in tids),
+                                   key=lambda row: json.dumps(row, sort_keys=True))
+                if (view.get('worker_attention_available') != available
+                        or view.get('worker_attention', []) != attention):
+                    view['worker_attention_available'] = available
+                    view['worker_attention'] = attention
+                    item['view_revision'] = processing_view_revision(item['context_revision'], view)
+            snapshot['worker_attention_available'] = available
+            snapshot['worker_input_revision'] = worker_revision
+            return snapshot
+
+        # Current projections are pure functions of database content, the history window and the
+        # supplied native-worker observation. Reuse that work across Unread and All until a local
+        # write changes the database. Do not consult PRAGMA data_version on the shared writer
+        # connection here: that made a cache HIT wait behind a running sync's SQLite lock. The
+        # membership reconciler turns supported external inserts into a local generation change;
+        # rebuilding merely because a timer ticked would recreate the periodic loading bug.
+        # Include the date because the history cutoff moves at midnight even if nothing was written.
+        display_cache_key = None
+        if display_only:
+            display_cache_key = (history_days, frozen_live is not None,
+                                 self._writes - self._processing_ignored_writes,
+                                 as_of[:10])
+            cached = self._processing_display_cache.get(display_cache_key)
+            if cached is not None:
+                snapshot = apply_workers(copy.deepcopy(cached))
                 snapshot['as_of'] = as_of
                 snapshot.pop('snapshot_revision', None)
-                snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(snapshot, ensure_ascii=False,
-                    sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+                snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
+                    snapshot, ensure_ascii=False, sort_keys=True,
+                    separators=(',', ':'), allow_nan=False).encode()).hexdigest()
                 return snapshot
+
+        # The expensive relational projection is database-only. Worker telemetry is overlaid
+        # afterwards, so a changing terminal tail re-hashes its one owned item instead of issuing
+        # the queries for every item in the Timeline again.
+        projection_live = ([] if frozen_live is not None else None) if display_only else frozen_live
+        with self._processing_read() as cur:
+            cache_key = None
+            if not display_only and not include_history:
+                cache_key = (self.cx.total_changes,
+                             cur.execute('PRAGMA data_version').fetchone()[0], worker_revision)
+                cached = getattr(self, '_processing_runtime_inventory_cache', None)
+                if cached is not None and cached[0] == cache_key:
+                    snapshot = copy.deepcopy(cached[1])
+                    snapshot['as_of'] = as_of
+                    snapshot.pop('snapshot_revision', None)
+                    snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
+                        snapshot, ensure_ascii=False, sort_keys=True,
+                        separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+                    return snapshot
             item_rows = [dict(r) for r in cur.execute(
                 'SELECT * FROM processing_item ORDER BY ItemId').fetchall()]
             roots = {row['ItemId']: row for row in item_rows if row['RedirectItemId'] is None}
@@ -1920,10 +2011,53 @@ class SQLiteStore:
             for row in item_rows:
                 resolved = self._processing_follow(cur, row['ItemId'])
                 if resolved in lineage_by_root: lineage_by_root[resolved].append(row['ItemId'])
+            selected_roots = set(roots)
+            if display_only and history_days is not None:
+                # The HTTP history window must constrain the expensive projection, not merely
+                # slice its result. Previously a 14-day, 100-row All page projected every one of
+                # 4,590 roots before pagination, which blanked the rail for seconds. A root with
+                # any message can only be represented by an in-window, non-history message;
+                # message-less roots use the same task/idea/review timestamps as compact_inventory.
+                try:
+                    cutoff = datetime.fromisoformat(fixed_now.replace('Z', '+00:00')) - timedelta(days=history_days)
+                    if cutoff.tzinfo is not None: cutoff = cutoff.astimezone().replace(tzinfo=None)
+                except ValueError:
+                    raise ValueError('fixed_now must be an ISO timestamp') from None
+
+                def in_window(value):
+                    if not value: return True       # compact_inventory deliberately retains unknown dates
+                    try:
+                        stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                        if stamp.tzinfo is not None: stamp = stamp.astimezone().replace(tzinfo=None)
+                        return stamp >= cutoff
+                    except ValueError:
+                        return True
+
+                message_roots = {self._processing_follow(cur, row[0]) for row in cur.execute(
+                    '''SELECT DISTINCT ItemId FROM processing_member
+                       WHERE RetiredAt IS NULL AND EntityKind='message' ''')}
+                selected_roots = set()
+                sources = (
+                    ('message', 'message', 'MessageId', 'source.CreatedAt',
+                     "AND (source.Status IS NULL OR source.Status NOT IN ('context','history','skipped'))"),
+                    ('task', 'task', 'TaskId', 'source.CreatedAt', ''),
+                    ('review', 'review', 'ReviewId', 'source.CreatedAt', ''),
+                    ('idea', 'idea', 'IdeaId', 'COALESCE(source.LastSaid,source.FirstSeen)', ''),
+                )
+                for kind, table, column, stamp_expr, extra in sources:
+                    for row in cur.execute(f'''SELECT DISTINCT pm.ItemId,{stamp_expr} ActivityAt
+                        FROM processing_member pm JOIN {table} source
+                          ON pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
+                        WHERE pm.RetiredAt IS NULL {extra}''', (kind,)).fetchall():
+                        root = self._processing_follow(cur, row['ItemId'])
+                        if root not in roots or (kind != 'message' and root in message_roots):
+                            continue
+                        if in_window(row['ActivityAt']): selected_roots.add(root)
             items = [self._processing_snapshot_cursor(
-                cur, item_id, live_state=frozen_live,
-                lineage=lineage_by_root[item_id], item=roots[item_id], include_history=include_history)
-                for item_id in sorted(roots)]
+                cur, item_id, live_state=projection_live,
+                lineage=lineage_by_root[item_id], item=roots[item_id],
+                include_history=include_history, display_only=display_only)
+                for item_id in sorted(selected_roots)]
 
             member_count = cur.execute('''SELECT COUNT(*) FROM processing_member pm
                 JOIN processing_item pi ON pi.ItemId=pm.ItemId
@@ -1941,9 +2075,9 @@ class SQLiteStore:
             completed = [r[0] for r in cur.execute('''SELECT Version FROM processing_migration
                 WHERE Completion='complete' ORDER BY Version''').fetchall()]
             coverage = {
-                'canonical_item_count': len(items),
-                'visible_item_count': sum(bool(item['members']) for item in items),
-                'tombstone_item_count': sum(not item['members'] for item in items),
+                'canonical_item_count': len(roots),
+                'visible_item_count': sum(bool(item['member_ids']) for item in items),
+                'tombstone_item_count': sum(not item['member_ids'] for item in items),
                 'member_count': member_count,
                 'uncatalogued': uncatalogued,
                 'completed_baselines': completed,
@@ -1958,13 +2092,23 @@ class SQLiteStore:
             'as_of': as_of,
             'items': items,
             'coverage': coverage,
-            'worker_attention_available': frozen_live is not None,
+            'worker_attention_available': projection_live is not None,
             'worker_input_revision': worker_revision,
         }
+        if history_days is not None: snapshot['history_days'] = history_days
+        if display_cache_key is not None:
+            current_key = (history_days, frozen_live is not None,
+                           self._writes - self._processing_ignored_writes,
+                           as_of[:10])
+            if current_key == display_cache_key:
+                # Unread and an explicit named-history lookup alternate in one chat walk.
+                # Keep both current windows warm; substantive writes clear the whole cache.
+                self._processing_display_cache[display_cache_key] = copy.deepcopy(snapshot)
+        snapshot = apply_workers(snapshot)
         snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
             snapshot, ensure_ascii=False, sort_keys=True,
             separators=(',', ':'), allow_nan=False).encode()).hexdigest()
-        if not include_history:
+        if not display_only and not include_history:
             # The payload is independent of the query clock; consumers apply history,
             # deferrals and calendar eligibility using as_of on every read. Any local
             # write, external SQLite commit or substantive worker change invalidates.
@@ -2832,7 +2976,9 @@ class SQLiteStore:
             self._exec(f"UPDATE source SET {','.join(f'{c}=?' for c in cols)} WHERE SourceId=?", [fields[c] for c in cols] + [sid])
             return sid
         return self._insert('source', fields, SOURCE_COLS)
-    def touch_source(self, sid): self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+    def touch_source(self, sid):
+        self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+        self._processing_ignored_writes += 1
     def patch_source_poll_state(self, source_id, *, config_set=None, config_remove=(),
                                 last_polled_at=_POLL_UNSET, expect_fields=None, expect_config=None):
         """Atomically checkpoint source progress; False means the captured source changed."""
@@ -2930,6 +3076,7 @@ class SQLiteStore:
         """Just the config JSON - how the pollers keep their watermark (Telegram's update
         offset, the WhatsApp bridge's sequence) without touching secrets or roles."""
         self._exec('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps(cfg), cid))
+        self._processing_ignored_writes += 1
     def patch_connector_poll_state(self, connector_id, *, config_set=None, config_remove=(),
                                    expect_fields=None, expect_config=None):
         """Atomically merge only poll-owned config keys while checking mailbox identity."""
@@ -2939,15 +3086,26 @@ class SQLiteStore:
     def touch_connector(self, cid, error=None):
         if error: self._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', (error[:500], cid))
         else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))
+        self._processing_ignored_writes += 1
     def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
         if name == 'ingest_status':
+            # This setting is an ephemeral progress clock. It is intentionally absent from every
+            # processing projection, so do not make it invalidate otherwise reusable DB work.
+            self._processing_ignored_writes += 1
+        else:
+            self._processing_display_cache = {}
+        if name == 'ingest_status':
             try: extra = json.loads(value) if isinstance(value, str) else {}
             except (TypeError, ValueError): extra = {}
-            self._poke('feed-changed', ingest=extra if isinstance(extra, dict) else {})
+            # Progress is a clock/status change, not a new Timeline item. Treating every
+            # "reading Outlook" / "triaging" update as feed-changed made each open Assistant
+            # rebuild the complete canonical inventory over and over for one sync. Message and
+            # task writes already emit their own feed-changed events.
+            self._poke('ingest-status', ingest=extra if isinstance(extra, dict) else {})
     def last_report(self, title):
         """The previous filed run of a report, by title - its shape anchors the next run (reports.run_agent).
         Failed runs and outbound copies do not count: a table of refusals is not a structure to keep."""

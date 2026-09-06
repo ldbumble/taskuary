@@ -150,40 +150,46 @@ def _batch(first: dict, ready: list[dict]) -> tuple[dict, tuple[str, ...]]:
 
 
 def capture_selection(store, *, only=None, include_surfaced=False,
-                      exclude=None, now: datetime | None = None) -> SelectionCapture:
+                      exclude=None, now: datetime | None = None, pile=None) -> SelectionCapture:
     """Capture the current automatic selection without watcher or reconciliation writes."""
     from . import funnel
     from . import terminal
 
     captured_now = now or datetime.now()
     scope = _scope(only=only, include_surfaced=include_surfaced, exclude=exclude)
-    try:
-        live_state = copy.deepcopy(terminal.live_sessions(tail=6))
-    except Exception as error:
-        raise SelectionUnavailable() from error
-    for worker in live_state:
-        waiting = (worker.get("waiting") if worker.get("waiting") is not None
-                   else (worker.get("idle") or 0) >= terminal.IDLE_WAITING)
-        if not waiting or not worker.get("sid"):
-            continue
+    if pile is None:
         try:
-            rendered = [str(line).strip() for line in terminal.asking_lines(worker["sid"], 4)
-                        if str(line).strip()]
-        except Exception:
-            rendered = []
-        if rendered:
-            worker["tail"] = rendered
-    if getattr(store, 'processing_reads_active', lambda: False)():
-        from .processing_unread import build
-        from .processing_all import AllError
-        try:
-            pile = funnel.present(store, build(store, now=captured_now, live_state=live_state, only=only))
-        except AllError as error:
-            raise SelectionUnavailable(str(error)) from error
+            live_state = copy.deepcopy(terminal.live_sessions(tail=6))
+        except Exception as error:
+            raise SelectionUnavailable() from error
+        for worker in live_state:
+            waiting = (worker.get("waiting") if worker.get("waiting") is not None
+                       else (worker.get("idle") or 0) >= terminal.IDLE_WAITING)
+            if not waiting or not worker.get("sid"):
+                continue
+            try:
+                rendered = [str(line).strip() for line in terminal.asking_lines(worker["sid"], 4)
+                            if str(line).strip()]
+            except Exception:
+                rendered = []
+            if rendered:
+                worker["tail"] = rendered
+        if getattr(store, 'processing_reads_active', lambda: False)():
+            from .processing_unread import build
+            from .processing_all import AllError
+            try:
+                pile = funnel.present(store, build(store, now=captured_now, live_state=live_state, only=only))
+            except AllError as error:
+                raise SelectionUnavailable(str(error)) from error
+        else:
+            pile = funnel.present(store, funnel.build(
+                store, now=captured_now, reconcile=False, live_state=live_state
+            ))
     else:
-        pile = funnel.present(store, funnel.build(
-            store, now=captured_now, reconcile=False, live_state=live_state
-        ))
+        # The HTTP read path already owns funnel.pile's invalidation-aware single-flight cache.
+        # Capture selection from that exact pile instead of rebuilding canonical membership a
+        # second time. A detached presentation keeps cache callers from mutating one another.
+        pile = funnel.present(store, copy.deepcopy(pile))
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
     first = next((item for item in ready if not item.get("surfaced")),

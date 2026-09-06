@@ -1352,7 +1352,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                 try: _remember_sid(store, tid, llm)
                 except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
             # shown is not read (PW-154): the state is `surfaced`, and it carries the entry's own summary
-            for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n))
+            for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n), read=True)
             set_current(store, tid, card['key'], actor)
             record_related(store, tid, card, 'assistant', say, card)
         return {'item': card, 'say': say, 'options': [], 'left': len(p['items']) - len(batch)}
@@ -1375,7 +1375,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         if remember_llm:
             try: _remember_sid(store, tid, llm)
             except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
-        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'))
+        # in the chat = read (the owner, 2026-09-06). A reply or agent waiting on a yes is not read by being
+        # shown: it stays in Unread, marked, and Next returns to it after a while (funnel_selection)
+        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=item['lane'] not in ('approve', 'blocked'))
         set_current(store, tid, item['key'], actor)                          # on the table, written down (PW-162)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''), card_for(item))
     return {'item': item, 'say': say, 'options': options, 'left': len(p['items']) - 1}

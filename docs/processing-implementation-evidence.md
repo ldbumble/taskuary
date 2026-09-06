@@ -1150,3 +1150,36 @@ the actual post-Walk Next marker before unchanged count/title/advance assertions
 No rejection retry, timeout increase, production code change, or alteration of
 the dedicated stale/passive browser scenarios is permitted. Final reviewed patch
 and browser gates are recorded after integration.
+## Section 2.4 — incremental full email chains
+
+Status: implemented and tested locally at `3293a6e`; remote CI pending on the pushed
+checkpoint. Section 3.10 is CI-verified (b461668, CI run 34042162189 (all ten jobs passed)).
+Acceptance PW-009, PW-010, PW-011, PW-015 implemented; PW-012, PW-013, PW-014 partial (see the
+ledger rows for what is not covered: attachment associations on fetched history, a refresh at
+assistant context assembly time, archived-folder and attachment cases in a fake). The Phase 3
+rows that waited on this merge - PW-016, PW-021, PW-026, PW-030 - are now implemented.
+
+New module `taskuary/chains.py`. A conversation whose history was never completed here (newly
+encountered, stored before this feature, or a failed attempt) is completed from the provider
+after its new mail lands: the thread is LISTED first (Graph `/messages?$filter=conversationId`
+with pagination, ids and metadata only; IMAP `HEADER Message-ID/References` search across INBOX
+and the Sent folder), and only the messages the store does not hold have their bodies fetched,
+once. Fetched history lives on the conversation as `history` rows (the owner's own sent mail as
+`context`) with `TaskId` NULL: never a task, never in the feed or Unread counts, never routed or
+re-triaged, and read state at the provider is untouched. Coverage is recorded per conversation in a
+new `chain` table (`store.set_chain_coverage` / `chain_coverage`); `ingest.exchange_lines` opens
+with a disclosure line when the last attempt failed, so an incomplete thread is never presented as
+the whole. Poll hooks in `channels.py` (Outlook) and `imapmail.py` (IMAP) call the refresh after
+the new mail's own ingest, guarded so a provider failure never fails the poll; the IMAP refresh
+restores the poll's mailbox selection.
+
+Tests: `tests/test_email_chains.py` (12 cases: known chain listed not refetched, missing history fetched once and kept as
+history/context, same-subject other conversation never merged, failed retrieval recorded and
+disclosed, poll hook once per thread, gap-only retrieval on a known thread, retry after failure,
+a later reply already at the provider left for the poll to triage, listing pagination without
+bodies, a listing that keeps pointing at the same page cannot hang the poll, a wholesale-mocked
+transport yields nothing, IMAP INBOX + Sent by References). Two defects the full suite surfaced
+and the tests now pin: history stops at the mail being judged (a newer reply was being swallowed
+as history and never triaged), and the Graph listing walk is bounded (an unbounded next-link loop
+ran a test process to 16 GB). Test-side: FakeBox in
+`tests/test_imap_catchup.py` learned HEADER searches. No frontend change; packaged assets unchanged.

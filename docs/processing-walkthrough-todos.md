@@ -73,17 +73,17 @@ email connector by merging newly fetched messages with stored history. Do not
 download or duplicate the entire chain on every reply. Fetch only missing history.
 This is pending implementation, not a claim that current intake does this.
 
-- [ ] <a id="pw-009"></a>**PW-009** Keep incremental polling for discovering new mail. Store each new message
+- [x] <a id="pw-009"></a>**PW-009** Keep incremental polling for discovering new mail. Store each new message
   once and link it to existing thread records before context-dependent triage/task
   routing. For A -> B -> C already stored, receiving D must reuse A/B/C, not
   download their bodies again or copy their content into D.
-- [ ] <a id="pw-010"></a>**PW-010** Track thread-history coverage and unresolved message references. Retrieve
+- [x] <a id="pw-010"></a>**PW-010** Track thread-history coverage and unresolved message references. Retrieve
   missing history when a thread is newly encountered or has gaps; listing provider
   thread IDs/metadata to discover gaps is distinct from re-fetching stored bodies.
   Include
   inbound and sent messages across accessible relevant folders, regardless of
   read status or the incremental polling window; follow pagination to completion.
-- [ ] <a id="pw-011"></a>**PW-011** Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider
+- [x] <a id="pw-011"></a>**PW-011** Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider
   conversation/thread IDs to the mailbox/account; use Gmail native thread IDs
   where available and Message-ID/References/In-Reply-To relationships for generic
   IMAP. Preserve those headers for matching; do not merge unrelated mail merely
@@ -98,7 +98,7 @@ This is pending implementation, not a claim that current intake does this.
   archived messages, multi-page chains, attachments, duplicate fetches, unrelated
   same-subject mail, later replies, and retrieval failures. Verify triage and task
   context use the retrieved chain without altering historical read state.
-- [ ] <a id="pw-015"></a>**PW-015** Test incremental merging explicitly: D joins stored A/B/C without repeated
+- [x] <a id="pw-015"></a>**PW-015** Test incremental merging explicitly: D joins stored A/B/C without repeated
   body downloads or duplicate records; D referencing absent C retrieves the
   missing history. Repeated polls must remain idempotent, with complete context
   assembled from individual records rather than a copied chain per message.
@@ -108,7 +108,7 @@ This is pending implementation, not a claim that current intake does this.
 Owner-approved change: remove fuzzy task matching for email. This is pending
 implementation; current `routing.route()` still scores email subjects/senders/body.
 
-- [ ] <a id="pw-016"></a>**PW-016** Email: link new messages by actual conversation identity, merge missing
+- [x] <a id="pw-016"></a>**PW-016** Email: link new messages by actual conversation identity, merge missing
   chain records, and use the conversation's existing task association. Do not
   attach unrelated threads based on subject, sender, or body similarity. Missing
   thread identity must not fall back to fuzzy automatic attachment.
@@ -132,7 +132,7 @@ chain. An old message/chain evaluation must not determine the new verdict.
   `store.owner_verdict_on_thread()` from both existing-task and new-task intake
   paths. An earlier owner `ignore` must not cause a new reply to be filed without
   fresh evaluation, whether or not an agent run is recorded as running.
-- [ ] <a id="pw-021"></a>**PW-021** Merge the new message into its chain before evaluation. Evaluate the latest
+- [x] <a id="pw-021"></a>**PW-021** Merge the new message into its chain before evaluation. Evaluate the latest
   message in full conversation context, without carrying over an old FYI/ignore
   verdict or using that verdict as a presumption about the new message. Retain old
   decisions as history, not as an automatic suppression rule.
@@ -153,7 +153,7 @@ chain. An old message/chain evaluation must not determine the new verdict.
   "Answer fyi - no exceptions" instruction). Repeated past evaluations must not
   force the verdict on new activity. Keep explicitly configured standing policies
   separate from historical message judgments.
-- [ ] <a id="pw-026"></a>**PW-026** Replace `exchange_lines()`'s 12-message/300-character excerpt dependency
+- [x] <a id="pw-026"></a>**PW-026** Replace `exchange_lines()`'s 12-message/300-character excerpt dependency
   with the approved assembled email-chain context. Audit downstream payload cuts
   too: `classify_intent()` currently truncates the cleaned current body to 1500
   characters. Preserve substantive requests and replies throughout the chain;
@@ -171,7 +171,7 @@ chain. An old message/chain evaluation must not determine the new verdict.
 - [x] <a id="pw-029"></a>**PW-029** Apply the same cleaning/context contract across email connectors. Extend
   existing `strip_boilerplate()` where appropriate rather than creating divergent
   per-connector cleaners.
-- [ ] <a id="pw-030"></a>**PW-030** Add regression tests for historical-verdict unanimity versus a new request,
+- [x] <a id="pw-030"></a>**PW-030** Add regression tests for historical-verdict unanimity versus a new request,
   chains longer than 12 messages, substantive text beyond existing character cuts,
   signatures/disclaimers/banners, quoted duplication, unique forwarded material,
   inline answers, and preserved original messages. Assert the actual model payload

@@ -79,72 +79,72 @@
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Keep incremental polling for discovering new mail. Store each new message",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_email_chains.py` (a known chain is listed, not refetched; D joins stored A/B/C; polls stay incremental)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-010",
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Track thread-history coverage and unresolved message references. Retrieve",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_email_chains.py` (coverage per conversation; listing is ids/metadata only and follows pagination; missing history fetched once; a failed attempt is retried on the next mail)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-011",
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_email_chains.py` (Graph by conversationId scoped to the mailbox; IMAP by root Message-ID through References across INBOX and Sent; same-subject mail on another conversation is never merged)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-012",
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Preserve individual messages, chronology, sender/recipient metadata, and",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: chronology, sender/recipients and the owner-vs-others identity are kept on history rows; attachment associations for fetched history are not kept yet",
+      "test": "`tests/test_email_chains.py` (history opens no task, is not an arrival, is never Unread)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-013",
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Refresh the selected thread before assistant/agent context is assembled,",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the chain is completed at intake and an incomplete or failed retrieval is disclosed in the exchange; a refresh at assistant/agent context assembly time is not wired",
+      "test": "`tests/test_email_chains.py` (failed retrieval recorded and disclosed, never presented as complete)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-014",
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Test across email connectors: old roots outside the watermark, sent replies,",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: old roots outside the watermark, sent replies, multi-page listing, duplicate fetches, unrelated same-subject mail, later replies and retrieval failures covered; attachments and archived-folder cases are not exercised by a fake",
+      "test": "`tests/test_email_chains.py` (12 cases) plus `tests/test_imap_catchup.py` FakeBox HEADER search",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-015",
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Test incremental merging explicitly: D joins stored A/B/C without repeated",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_email_chains.py` (D joins A/B/C without body downloads; D on a thread with absent C retrieves only C; repeated polls list once and add nothing)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-016",
       "section": "Routing: email identity versus chat intent",
       "phase": "2/3",
       "requirement": "Email: link new messages by actual conversation identity, merge missing",
-      "status": "partial: identity-only joining; merging missing chain records is PW-009+",
-      "test": "`tests/test_email_identity_routing.py` (identical subjects stay separate; a genuine reply reuses its thread; no identity means new work; tracker items keep their own identity)",
-      "commit": "b03fa29; b03fa29, CI run 34041128872 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "`tests/test_email_identity_routing.py` (identity joining) plus `tests/test_email_chains.py` (missing chain records merged from the provider)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-017",
@@ -187,9 +187,9 @@
       "section": "Fresh evaluation for each new message",
       "phase": "3",
       "requirement": "Merge the new message into its chain before evaluation. Evaluate the latest",
-      "status": "partial: evaluated in stored thread context; full-chain merge pending PW-009+",
-      "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides)",
-      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides) plus `tests/test_email_chains.py` (the chain is completed before the new mail is judged in stored context)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-022",
@@ -232,9 +232,9 @@
       "section": "Clean, complete context for AI triage",
       "phase": "3",
       "requirement": "Replace `exchange_lines()`'s 12-message/300-character excerpt dependency",
-      "status": "partial: budgeted whole-message exchange with disclosed cuts; the assembled email-chain merge is PW-009+",
-      "test": "`tests/test_clean_context.py`::ExchangeBudgetTests, ::PayloadTests (20-message chain whole, 2,400-character message whole, oldest dropped with disclosure, body budget disclosed)",
-      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "`tests/test_clean_context.py`::ExchangeBudgetTests, ::PayloadTests plus `tests/test_email_chains.py` (exchange assembled from individual chain records; incomplete history disclosed)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-027",
@@ -268,9 +268,9 @@
       "section": "Clean, complete context for AI triage",
       "phase": "3",
       "requirement": "Add regression tests for historical-verdict unanimity versus a new request,",
-      "status": "partial: chain-merge cases wait for PW-009+",
-      "test": "`tests/test_clean_context.py` (14 cases) plus `test_fresh_evaluation.py::NoForcedVerdictTests`",
-      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "`tests/test_clean_context.py` (14 cases), `test_fresh_evaluation.py::NoForcedVerdictTests` plus `tests/test_email_chains.py` (chain-merge cases)",
+      "commit": "3293a6e; local gates passed, CI pending"
     },
     {
       "id": "PW-031",
@@ -1845,7 +1845,7 @@
       "requirement": "Keep incoming-request procedure matching in unified triage (for example,",
       "status": "implemented",
       "test": "`tests/test_procedure_selection.py` (procedure selected in the one verdict; kind stays the model's own; a PTO request is a general task with its procedure and no coder); `test_playbooks.py` updated",
-      "commit": "b461668; local gates passed, CI pending"
+      "commit": "b461668; b461668, CI run 34042162189 (all ten jobs passed)"
     },
     {
       "id": "PW-206",
@@ -1854,7 +1854,7 @@
       "requirement": "Deliver the selected procedure to either worker kind through the shared",
       "status": "partial: the selected procedure reaches coding and general workers through the shared brief; direct workflow runs are PW-203/204",
       "test": "`tests/test_procedure_selection.py` (general prompt and coding brief carry the same playbook block)",
-      "commit": "b461668; CI pending"
+      "commit": "b461668; b461668, CI run 34042162189 (all ten jobs passed)"
     },
     {
       "id": "PW-207",

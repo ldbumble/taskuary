@@ -68,6 +68,12 @@ class FakeBox:
             elif m := re.fullmatch(r'\(SINCE (\d{2}-[A-Za-z]{3}-\d{4})\)', crit):
                 day = datetime.strptime(m.group(1), '%d-%b-%Y').date()
                 hits = [u for u, (_raw, when) in msgs.items() if when.date() >= day]
+            elif m := re.fullmatch(r'\(OR HEADER Message-ID "([^"]+)" HEADER References "([^"]+)"\)', crit):
+                import email as _email
+                def _has(raw):
+                    hdr = _email.message_from_bytes(raw)
+                    return m.group(1) in str(hdr.get('Message-ID') or '') or m.group(2) in str(hdr.get('References') or '')
+                hits = [u for u, (raw, _when) in msgs.items() if _has(raw)]
             else: raise AssertionError(f'unexpected search {crit}')
             return 'OK', [' '.join(str(u) for u in sorted(hits)).encode()]
         if cmd == 'fetch':

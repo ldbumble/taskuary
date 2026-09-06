@@ -661,6 +661,9 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     'sent_at': sent_at, 'source_name': user}
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
+            conv = incoming['conversation_id']
+            from . import chains
+            fresh_thread = bool(conv) and chains.needs_history(store, conv)
             incoming['images'] = images_for_triage(store, atts)
             out = ingest_message(store, file_only=file_only, msg=incoming, llm=llm)
             existing = store.message_by_external(ext_id) if not out.get('message_id') else None
@@ -670,6 +673,11 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             if read_it:
                 try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
                 except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
+            if fresh_thread and out['status'] != 'duplicate':
+                # the thread's history, completed once from INBOX and Sent (chains.py, PW-011); the poll's
+                # own mailbox selection is restored afterwards
+                try: chains.refresh_imap(store, M, user, conv, restore='INBOX', readonly=not read_it, before=sent_at)
+                except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
             return int(out['status'] != 'duplicate')
         def progress(uid, holes):
             checkpoint({folder['keys']['uid']: uid,

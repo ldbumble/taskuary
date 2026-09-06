@@ -117,6 +117,14 @@ const clickCalendarPrep = async (page, label) => {
   assert.fail(`calendar prep ${label} was not found`);
 };
 
+const triggerAndWaitForResponse = async (page, label, predicate, trigger) => {
+  const expected = page.waitForResponse(predicate, { timeout: 10000 }).catch((error) => {
+    throw new Error(`${label} response did not arrive: ${error.message}`, { cause: error });
+  });
+  const [response] = await Promise.all([expected, trigger()]);
+  return response;
+};
+
 async function drainCanonicalAll(page, minimum) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const ids = await rowIds(page);
@@ -212,12 +220,11 @@ test("canonical All renders every root once with truthful details and frozen pag
   await draftBox.focus();
   await page.keyboard.down("Control"); await page.keyboard.press("A"); await page.keyboard.up("Control");
   await page.keyboard.type(ownerDraft);
-  const refreshedDetail = page.waitForResponse((response) => new URL(response.url()).pathname
-    === `/api/processing/items/${seed.grouped.item_id}/detail`, { timeout: 10000 });
-  await request(harness, "/api/fixture/processing/draft", "POST", {
-    review_id: seed.grouped.selected_review_id, body: "backend changed while owner typed",
-  });
-  const refreshedResponse = await refreshedDetail;
+  const refreshedResponse = await triggerAndWaitForResponse(page, "draft refresh", (response) =>
+    new URL(response.url()).pathname === `/api/processing/items/${seed.grouped.item_id}/detail`, () =>
+    request(harness, "/api/fixture/processing/draft", "POST", {
+      review_id: seed.grouped.selected_review_id, body: "backend changed while owner typed",
+    }));
   await refreshedResponse.buffer();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.waitForFunction((wanted) => [...document.querySelectorAll("textarea")]
@@ -270,14 +277,12 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.ok(body.includes(seed.calendar.upcoming), "the unfiltered All calendar banner must retain an upcoming event");
   assert.ok(body.includes(seed.calendar.started), "the unfiltered All calendar banner must retain a started event");
   assert.equal(body.split(seed.calendar.prep).length - 1, 1, "calendar prep must render once under its event");
-  const prepDetail = page.waitForResponse((response) => {
+  const prepResponse = await triggerAndWaitForResponse(page, "calendar prep detail", (response) => {
     const url = new URL(response.url());
     return url.pathname === `/api/processing/items/${seed.calendar.prep_item_id}/detail`
       && url.searchParams.get("kind") === "message"
       && url.searchParams.get("id") === String(seed.calendar.prep_message_id);
-  }, { timeout: 10000 });
-  await clickCalendarPrep(page, seed.calendar.prep);
-  const prepResponse = await prepDetail;
+  }, () => clickCalendarPrep(page, seed.calendar.prep));
   assert.equal(prepResponse.status(), 200, "calendar prep must open its exact canonical message target");
   await prepResponse.buffer();
   await waitForStageMarker(page, `Prep: ${seed.calendar.prep}`);

@@ -128,6 +128,34 @@ def style_feedback(store, note: str, actor: str = 'owner') -> bool:
     return True
 
 
+# a quoted sign-off may span lines (Best, / name / company); an unquoted one is the rest of its line
+_SIGN_QUOTED = re.compile(r'(?:sign[- ]?off|signature)\s*:\s*"([^"]+)"', re.I | re.S)
+_SIGN_LINE = re.compile(r'^\s*-?\s*(?:sign[- ]?off|signature)\s*:\s*(.+?)\s*$', re.I | re.M)
+
+
+def signature_for(store) -> str:
+    """The owner's email signature: the `email_signature` setting when set, else the `Sign off:` / `Signature:`
+    line in STYLE.md (quotes stripped, literal newlines honoured). '' when neither says anything (PW-065)."""
+    sig = str(store.get_settings().get('email_signature') or '').strip()
+    if sig: return sig.replace('\\n', '\n')
+    doc = store.doc('style') or ''
+    q = _SIGN_QUOTED.search(doc)
+    if q: return q.group(1).strip().replace('\\n', '\n')
+    m = _SIGN_LINE.search(doc)
+    if not m: return ''
+    return m.group(1).strip().strip('"\'').replace('\\n', '\n').strip()
+
+
+def with_signature(text: str, sig: str) -> str:
+    """Append the signature once - not when the text already ends with it (the model signed, or the owner did)."""
+    text = str(text or '').rstrip()
+    if not sig or not text: return text
+    first = sig.strip().splitlines()[0].strip().lower()
+    tail = text[-max(400, len(sig) + 40):].lower()
+    if sig.strip().lower() in tail or (first and first in tail and sig.strip().splitlines()[-1].strip().lower() in tail): return text
+    return text + '\n\n' + sig.strip()
+
+
 def style_doc(store) -> str:
     """STYLE.md as prompts read it: comments and template placeholders stripped, owner tokens
     rendered - and empty until the doc says something REAL (headers alone are not a style),
@@ -233,6 +261,14 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     saw = store.last_inbound_on_task(task_id)
     revision = operations.message_revision(store, task_id)
     text = draft_reply(store, task_id, llm, resolution, nudge)
+    if saw and str(saw.get('Channel') or '').lower() == 'email':
+        # the signature rides in the draft the owner reviews, once (PW-065); the recipients it will go to are pinned
+        # with it, Reply all by default (PW-063/064) - an envelope the owner already set is kept
+        text = with_signature(text, signature_for(store))
+        from . import outbound as _ob
+        if not store.review_envelope(review_id):
+            env = _ob.reply_envelope(store, saw)
+            if env: store.set_review_envelope(review_id, env)
     store.update_review_draft(review_id, text, None)
     if saw: store.pin_review_context(review_id, saw['MessageId'], revision)
     if operations.message_revision(store, task_id) != revision:
@@ -318,7 +354,11 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     system += calendar + history_block(store, m) + knowledge.block(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
-    out = (strip_signoff(out) or out) if chat else out
+    out = (strip_signoff(out) or out) if chat else with_signature(out, signature_for(store))
+    if not chat and not store.review_envelope(review_id):
+        from . import outbound as _ob
+        env = _ob.reply_envelope(store, m)
+        if env: store.set_review_envelope(review_id, env)
     store.update_review_draft(review_id, out, None)
     store.update_review_message(review_id, m['MessageId'])
     return out

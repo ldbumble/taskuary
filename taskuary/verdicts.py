@@ -131,7 +131,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if deliver.get('kind') == 'zoho_invoice' and verb in ('reject', 'no_reply') and deliver.get('item_id'):
         from . import invoice_workflow
         invoice_workflow.mark_skipped(store, int(deliver['item_id']))
-    if final and deliver:
+    if final and deliver and deliver.get('kind') != 'reply':
         try:
             if deliver.get('kind') == 'zoho_invoice':
                 from . import invoice_workflow, scopes, zoho
@@ -173,8 +173,10 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             store.unhold_review(rid, f'approved, but it cannot be sent from here: {block}')
             store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': False, 'blocked': block})
             return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': send_err}
+        # the recipients the owner reviewed (PW-064): the pinned envelope, unless this click named a CC list itself
+        env = deliver if deliver.get('kind') == 'reply' else {}
         try:
-            sent = outbound.reply_to_message(store, msg, final, cc=cc)
+            sent = outbound.reply_to_message(store, msg, final, to=env.get('to') or None, cc=cc if cc is not None else env.get('cc'))
             if rv.get('TaskId'):
                 copied = f", copied {', '.join(sent.get('cc') or [])}" if sent.get('cc') else ''
                 store.add_comment(rv['TaskId'], actor, 'human',

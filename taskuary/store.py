@@ -2375,6 +2375,20 @@ class SQLiteStore:
         """The draft could not be written: keep the review pending and say why (PW-046)."""
         self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))
         self._review_changed(rid)
+    def review_envelope(self, rid) -> dict:
+        try: d = json.loads((self.get_review(rid) or {}).get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        return d if d.get('kind') == 'reply' else {}
+    def set_review_envelope(self, rid, env: dict):
+        """The recipients this draft will go to, kept with it so approval sends exactly what was reviewed (PW-064).
+        An outbound review's own delivery envelope is never overwritten."""
+        cur = (self.get_review(rid) or {}).get('Deliver')
+        try: existing = json.loads(cur or '{}') or {}
+        except (TypeError, ValueError): existing = {}
+        if existing and existing.get('kind') != 'reply': return False
+        self._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps(env), rid))
+        self._review_changed(rid)
+        return True
     def pin_review_context(self, rid, mid, revision: str):
         """The exact inbound message and message-set revision this draft answered - captured BEFORE the
         model ran, so a line landing during generation is not called seen (PW-048)."""

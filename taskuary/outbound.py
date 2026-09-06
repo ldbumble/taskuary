@@ -298,6 +298,33 @@ def send_targets(store) -> list:
     ]} for ch, tos in seen.items()]
 
 
+def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
+    """Who an email reply goes to (PW-063): Reply all by default - the sender (or the message's Reply-To),
+    the original To and CC participants, the sending mailbox's own addresses excluded, deduplicated case-
+    insensitively, never a BCC - or Reply to: the sender alone. None for anything that is not email."""
+    if str((msg or {}).get('Channel') or '').lower() != 'email': return None
+    from .ingest import owner_addresses, own_addresses
+    try: rec = json.loads(msg.get('RecipientsJson') or '{}') or {}
+    except (TypeError, ValueError): rec = {}
+    try: meta = json.loads(msg.get('MailMetaJson') or '{}') or {}
+    except (TypeError, ValueError): meta = {}
+    own = {str(msg.get('SourceName') or '').lower()} | {a.lower() for a in owner_addresses(store)} | {a.lower() for a in own_addresses(store)}
+    own.discard('')
+    sender = str(meta.get('reply_to') or msg.get('FromEmail') or '').strip().lower()
+    def clean(seq, skip):
+        out = []
+        for a in seq or []:
+            a = str(a or '').strip().lower()
+            if a and '@' in a and a not in own and a not in skip and a not in out: out.append(a)
+        return out
+    to = [sender] if sender else []
+    if mode == 'reply_all':
+        to += clean(rec.get('to'), set(to))
+        cc = clean(rec.get('cc'), set(to))
+    else: cc = []
+    return {'kind': 'reply', 'mode': 'reply_all' if mode == 'reply_all' else 'reply_to', 'to': to, 'cc': cc}
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""

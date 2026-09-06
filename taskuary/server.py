@@ -4051,7 +4051,7 @@ def quick_forever():
             except (TypeError, ValueError): mins = 10
             if mins > 0:
                 quick = _quick_due()
-                if quick: _poll_reports(0, what='syncing', only=quick)
+                if quick: _poll_on_quick_clock(quick)
         except Exception as e:
             logger.warning(f'chat poll failed: {e}')
         time.sleep(QUICK_TICK)
@@ -4061,6 +4061,16 @@ def quick_forever():
 # to the 30-second clock; poll_seconds can make one slower (or explicitly zero to leave it only on
 # the global clock). The quick pass polls ONLY those connectors and runs no reports or CI.
 _QUICK_LAST = {}
+_QUICK_TIMER = threading.local()
+
+
+def _poll_on_quick_clock(types):
+    """Mark only this scheduler call for a due recheck without changing the public call shape."""
+    _QUICK_TIMER.active = True
+    try:
+        return _poll_reports(0, what='syncing', only=types)
+    finally:
+        _QUICK_TIMER.active = False
 
 def _quick_due() -> list:
     due = []
@@ -4077,9 +4087,11 @@ def _quick_due() -> list:
             due.append(c['Type'])
     return due
 
-def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None, wait: bool = False):
+def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False,
+                  only=None, wait: bool = False):
     """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
-    if only is not None: return _poll_quick(only, what, wait)
+    if only is not None:
+        return _poll_quick(only, what, wait, timer=bool(getattr(_QUICK_TIMER, 'active', False)))
     target_store = store                 # a test or shutdown cannot retarget work already started
     # one full poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
@@ -4141,7 +4153,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         finally: _POLL_BUSY.release()
 
 
-def _poll_quick(only, what: str = 'syncing', wait: bool = False):
+def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = False):
     """The chat lane: read ONLY these connector types, put their lines first on the one ordered
     drain worker, and release the fetch clock - no CI, no reports.
 
@@ -4161,6 +4173,12 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False):
     try:
         remaining = max(0, deadline - time.monotonic()) if wait else None
         with _claim_fetch(list(dict.fromkeys(only)), 'quick', wait=wait, timeout=remaining) as types:
+            # The timer computed its due list before admission. A full fetch may have completed
+            # and stamped one of these connectors meanwhile; recheck while our claim closes that
+            # stale-decision race. Explicit context refreshes intentionally bypass the cadence.
+            if timer:
+                still_due = set(_quick_due())
+                types = [typ for typ in types if typ in still_due]
             if types:
                 status = _status_begin(target_store, 'quick', what)
                 try:

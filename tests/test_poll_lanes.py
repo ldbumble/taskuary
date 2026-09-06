@@ -294,8 +294,13 @@ class LaneTests(unittest.TestCase):
 
     def test_context_gate_finishes_after_fresh_route_before_unrelated_backlog(self):
         """DRAIN_WAIT covers the requested Teams route, not the rest of a full mail catch-up."""
-        first_mail, release_first = threading.Event(), threading.Event()
+        first_mail, release_first, quick_submitted = threading.Event(), threading.Event(), threading.Event()
         later_mail, release_later, quick_result = threading.Event(), threading.Event(), []
+        real_submit = ingest.DrainWorker.submit
+        def observed_submit(worker, *args, **kwargs):
+            ticket = real_submit(worker, *args, **kwargs)
+            if 'teams' in kwargs.get('fresh', ()): quick_submitted.set()
+            return ticket
         def poll(target, days, progress=None, only=None):
             if 'outlook' in (only or []):
                 pending_row(target, 'email', 1); pending_row(target, 'email', 2)
@@ -309,12 +314,14 @@ class LaneTests(unittest.TestCase):
             target.place_message(msg['_mid'], None, 'filed')
             return {'status': 'filed', 'task_id': None, 'message_id': msg['_mid']}
         with mock.patch('taskuary.channels.poll_channels', poll), \
+             mock.patch.object(ingest.DrainWorker, 'submit', observed_submit), \
              mock.patch.object(ingest, 'ingest_message', judged):
             full = threading.Thread(target=server._poll_reports, daemon=True); full.start()
             self.assertTrue(first_mail.wait(10))
             quick = threading.Thread(target=lambda: quick_result.append(
                 server._poll_reports(0, only=['teams'], wait=True)), daemon=True)
             quick.start()
+            self.assertTrue(quick_submitted.wait(10))
             release_first.set()
             self.assertTrue(later_mail.wait(10), 'fresh Teams did not move ahead of mail')
             quick.join(2)
@@ -435,6 +442,31 @@ class LaneTests(unittest.TestCase):
             self.s.set_setting('poll_minutes', '10', 't')
             with self.assertRaises(Stop): server.quick_forever()
         self.assertEqual(calls, [{'what': 'syncing', 'only': ['teams']}])
+
+    def test_timer_rechecks_due_after_full_fetch_wins_the_admission_race(self):
+        """A due list captured before a full Teams fetch cannot trigger a duplicate afterwards."""
+        due_ready, resume_timer, calls = threading.Event(), threading.Event(), []
+        real_due = server._quick_due
+        due_calls = [0]
+        def paused_due():
+            due_calls[0] += 1
+            due = real_due()
+            if due_calls[0] == 1:
+                due_ready.set(); resume_timer.wait(10)
+            return due
+        class Stop(Exception): pass
+        def timer():
+            try: server.quick_forever()
+            except Stop: pass
+        with mock.patch.object(server, '_quick_due', side_effect=paused_due), \
+             mock.patch.object(server.time, 'sleep', side_effect=Stop), \
+             mock.patch('taskuary.channels.poll_channels', side_effect=lambda *a, **kw: calls.append(kw.get('only')) or 0):
+            thread = threading.Thread(target=timer, daemon=True); thread.start()
+            self.assertTrue(due_ready.wait(10))
+            server._poll_reports()                 # stamps Teams while the timer holds its old due list
+            resume_timer.set(); thread.join(10)
+        self.assertEqual(len(calls), 1)
+        self.assertCountEqual(calls[0], ['teams', 'outlook'])
 
     def test_the_full_clock_no_longer_carries_the_chat_clock(self):
         """One clock per lane: with the full loop inside a long sync, a quick branch there would never fire anyway."""

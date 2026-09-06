@@ -110,6 +110,26 @@ Worker attention is caller-supplied snapshot data, copied deeply. An unavailable
 worker snapshot is distinct from an explicitly observed empty worker set. Full email
 chain expansion and worker/discussion context adapters remain later phase work.
 
+### Section 1.3 internal inventory boundary
+
+Raw inventory enumeration reads every reconciled canonical root, its current
+projection and coverage in one transaction. It does not run backfill in a getter.
+Uncatalogued message/task/review/idea rows are explicit coverage gaps, including new
+arrivals after a completed baseline. Raw counts are not eligible or unread counts;
+unsupported adapters, including calendar, prevent claiming complete inbox coverage.
+
+Pagination operates on an immutable caller-held snapshot. Tokens bind snapshot,
+order and ranking facts; an updated snapshot requires an explicit restart. Optional
+ranking facts name exact current item view revisions. They cannot establish read,
+exclusion or actionability policy. These interfaces remain internal until consumers
+and their migration/read transitions pass the later acceptance gates.
+
+Legacy `norm_stamp` stores local wall-clock timestamps without a timezone. The pure
+ordering foundation must diagnose timestamps it cannot compare reliably, rather
+than silently interpret them as UTC or use the integration machine's timezone.
+Timezone-aware, revision-bound activity facts can supply comparable timestamps.
+A timezone adapter is required before activating this ordering for legacy consumers.
+
 1. Create a synthetic legacy database using the accepted pre-migration schema. Record
    identity/member, funnel-state, task/review/run/history, attachment and document/settings
    snapshots. Include explicit historical done/skip/later, custom COUNSEL and grouped mail.

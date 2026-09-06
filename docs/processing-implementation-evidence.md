@@ -274,8 +274,7 @@ and final-evidence gate in the state contract. No live migration or restart occu
 
 ## Section 1.2 — All and Unread view controls
 
-Status: implemented, independently reviewed and cumulatively tested from
-CI-verified `85c2e1b`; remote CI gate pending.
+Status: CI-verified at `2557c94`, from accepted base `85c2e1b`.
 Scope: PW-107's approved two-view UI. Remove every Needs me navigation/filter entry
 and enforce All as a detail-only surface while preserving the Unread funnel,
 Current/Next and deliberate task/detail actions. Canonical inventory adoption, new
@@ -327,6 +326,125 @@ Final integrated Node 22 `npm run test:browser`: 3/3 passed, no failures/skips,
 136/160/136 ms. Terminal replay/input/reconnect: 3459/52/698 ms. Existing ceilings
 and network isolation passed unchanged. Desktop, narrow-screen and delayed-response
 tests cover the final source; packaged assets were generated from that exact UI.
-Original workspace remains at the previously accepted checkpoint until remote CI
-passes; its README hash is unchanged. No live app restart, data migration or
+Delivery `2557c946d23903ea28662b05e343c6f19776cc0a` passed all ten jobs in
+[CI run 34016219556](https://github.com/ldbumble/taskuary/actions/runs/34016219556),
+including packaged parity and the new browser regression. The original workspace
+was then fast-forwarded; its README hash is unchanged. No live app restart, data migration or
 production connector was used. Browser-control redesign remains pending.
+
+## Section 1.3 — frozen inventory, ordering and pagination foundation
+
+Status: implemented, independently reviewed and cumulatively tested from
+CI-verified `2557c94`; remote CI pending.
+Partial acceptance targets: PW-101/102/103/106/109/110/111/112. This section adds
+internal read-only enumeration and pure ordering/pagination mechanics. No server
+endpoint, feed/assistant consumer, live migration or read-policy transition is
+activated. Canonical roots are read in one SQLite transaction without age/category
+caps. Coverage reports uncatalogued records and unsupported adapters explicitly;
+an empty canonical table is not proof of an empty inbox.
+
+The store agent owns `store.py` and focused inventory-store tests in isolated
+`processing/phase1-inventory-store`. The pure-model agent owns
+`processing_inventory.py` and its tests in `processing/phase1-inventory-model`.
+Both use Sol High. The lead owns integration tests/docs/gates on
+`processing/phase1-inventory`; independent review uses Astra Extra High.
+Source activity and recognized priority can support raw chronological ordering;
+priority bands require explicit revision-bound ranking facts where persisted state
+cannot establish live attention. Unknown facts stay diagnostic, never guessed read,
+exclusion or automatic-selection decisions. Calendar enumeration remains unsupported.
+
+### Implementation and review
+
+Store agent source `eac48c7` integrates as `b1ea30d`. It factors the existing
+single-item snapshot body into a private cursor helper, preserving the public
+getter's output, and adds `processing_inventory_snapshot(fixed_now=..., live_state=...)`.
+All roots, memberships, projections, exact legacy evidence and coverage share one
+SQLite read transaction. Full snapshot content and the frozen complete worker input
+contribute to revisions. Worker unavailability differs from an observed empty set;
+non-JSON input is rejected before opening a transaction. No schema or runtime
+consumer changed, and no getter allocates identity or writes receipts.
+
+Pure-model source `9b0281a` integrates as `d696114`.
+`processing_inventory_page` supports raw All/priority order with transport pages of
+1–500 items; 507-item tests prove there is no inventory cap. Cursor tokens bind
+snapshot, order, normalized ranking facts, query version, position and anchor.
+Changed or malformed inputs require an explicit restart/error. Counts remain raw
+canonical/member/returned/remaining counts, never eligible or unread totals.
+Returned data is detached from caller snapshots, which remain immutable across pages.
+
+Ranking facts require the exact current item view revision. Urgent/current-or-soon
+calendar facts rank first, owner input/approval second; working remains band 5 even
+with generic FYI/actionable/old-result signals. Without working, actionable/finished
+and FYI facts use bands 3 and 4. Priority then oldest activity and stable identity
+break ties; All uses newest comparable activity. Calendar is current on a half-open
+start/end interval or starts within an inclusive 15 minutes of the frozen clock.
+Missing/naive activity remains unknown and sorts last within its applicable band
+and priority. Source timestamps retain exact-entity provenance. Task creation cannot
+replace a message's older activity, and a related idea cannot lend activity to a
+different canonical wrapper. Read, defer, exclusion and actionability stay unknown.
+
+Astra Extra High independently approved storage, model and the initial integration
+test design. Review corrected working precedence and cross-item idea activity before
+acceptance. Lead review also corrected timestamp formatting, calendar endpoints,
+task-only activity fallback and malformed cursor/count validation. No earlier test
+assertion or skip was weakened. All 144 integrated processing tests pass (8.66 s),
+including 507-item storage/page coverage, owner-table preservation, concurrent WAL
+merge isolation, six in-place revision changes, stale facts/cursors, failed projection
+cleanup/retry, old uncatalogued arrivals and independent wrapper/idea identities.
+
+### Cumulative gate findings
+
+The first cumulative backend run had 2312 passes plus 66 subtests, one existing
+pre-08:00 skip and one failure: `test_index_serves_ui` observed HTTP 503 while the
+lead ran Vite's output replacement concurrently. The unchanged serving code returns
+that status when `index.html` is temporarily missing. The focused test passes after
+the build (0.79 s); a full rerun with stable assets is required below. The plan now
+explicitly sequences these dependent gates. No test expectation was changed.
+
+Frontend: 264 passed (1.394 s). Build: passed (13.65 s), with packaged assets
+identical to the accepted source output. The first browser run passed two scenarios
+but failed PW-107's narrow-screen Next equality; Current stayed unchanged. This is
+being investigated before delivery, without relaxing the accepted assertion.
+
+The final backend rerun with stable packaged assets passed: 2313 tests plus 66
+subtests, one existing pre-08:00 skip and 150 existing warnings, 167.08 seconds.
+The existing fake-screencast teardown/Pydantic warnings remain unchanged.
+
+The browser investigation reproduced the exact Next change in real fixture API
+state: immediately after Walk all three recorded demo sessions were working and
+Next was the Q3 review; 7.751 seconds later they were parked/waiting and Next was
+the Northwind census agent. That is a legitimate background promotion, not a view
+navigation mutation. PW-107's setup now waits for those actual sessions to reach
+their final waiting state before the first page opens. It requires a nonempty set
+and the census session. A deliberately slow run then exposed the watcher's separate
+12-second dwell: it subsequently recorded three legitimate waiting notifications.
+Setup therefore also waits until those exact session task IDs are durably announced
+and a subsequent forced pile has no events, then starts a fresh synthetic conversation
+before any page opens. Every Current/Next, history, gesture and isolation assertion
+is retained; no runtime or harness behavior is suppressed. The normal run passed
+and an added 8.5-second post-Walk diagnostic delay passed (44.49 s). That temporary
+delay was removed; the final focused run passed (38.72 s including setup/teardown).
+The terminal replay scenario still uses its separate live recording and original
+timing gates. This fixture correction does not claim unsolicited watcher behavior
+is redesigned; that remains a later acceptance item.
+
+### Final local gates and delivery
+
+| Gate | Result | Duration |
+| --- | --- | --- |
+| Integrated processing tests | 144 passed | 8.66 s |
+| Final full backend | 2313 passed, 66 subtests; one existing skip | 167.08 s |
+| Node 22 frontend tests | 264 passed, no failures/skips | 1.394 s |
+| Packaged build | Passed; output unchanged from accepted UI | 13.65 s |
+| Final cumulative real browser | 3 passed, no failures/skips | 58.780 s |
+
+Final browser timings: first visibility/input 2433/468 ms; Tasks/Board/Reports
+150/145/130 ms; terminal replay/input/reconnect 3455/81/785 ms. Every original
+ceiling passed. Setup stabilization source `afc3a10` integrates as `3334680`;
+lead integration tests are `5b8044b`. Independent review approved final source,
+schema preservation, tests, fixture correction and partial acceptance scope.
+Logs remain in ignored `.codex-tmp/phase1-inventory-evidence/` in the isolated
+integration checkout. README SHA256 remains
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+No live data, read states or documents were migrated; no live app was restarted.
+The exact pushed checkpoint must pass remote CI before Section 1.4 begins.

@@ -131,6 +131,8 @@ in phase 0 without silently inventing policy:
    output is from the same source commit; only the integration owner generates it.
    Vite empties that output directory: build in the isolated integration checkout,
    not a workspace serving the owner's running app.
+   In that checkout, do not overlap the build with backend tests: the API suite
+   serves packaged assets and can observe Vite's temporary empty output directory.
 4. Run rendered-browser scenarios against an isolated fixture server for changed
    flows plus earlier critical paths. Existing Node tests are not a substitute for
    browser input, websocket reconnect, task switching, or native Windows PTY checks.

@@ -528,6 +528,13 @@ evidence. All/Unread/assistant adoption and the final display-does-not-read cuto
 are still pending, so PW-101 and PW-104 remain unchecked. See section evidence for
 the cumulative tests, independent review and remote checkpoint status.
 
+Section 1.3 adds internal uncapped inventory snapshots and tested All/priority
+pagination mechanics (`b1ea30d`, `d696114`). It reports missing coverage and unknown
+policy states explicitly; it does not switch All, Unread or assistant consumers.
+Timezone, calendar and live attention adapters plus final read-policy adoption
+remain pending. Related PW-101/102/103/106/109/110/111/112 remain unchecked until
+their rendered/runtime requirements pass; see Section 1.3 implementation evidence.
+
 - [ ] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
   and assistant selection, including messages, reports, assistant posts/ideas,
   and agent work/attention items. Preserve legitimate task/thread grouping and
@@ -561,7 +568,7 @@ the cumulative tests, independent review and remote checkpoint status.
   no chat) and Unread (read-state filtered, importance/status sorted). Action-needed
   flags remain useful for promotion, not a third view. Apply live state before
   selection so an approval-waiting agent cannot be lost by an earlier SQL filter.
-  Section 1.2 implements the two-view controls and All detail-only behavior, with
+  Section 1.2 is CI-verified at `2557c94`: two-view controls and All detail-only behavior, with
   frontend and rendered desktop/narrow-screen coverage. This remains unchecked:
   live-state-before-selection and canonical read-filter adoption require the later
   Phase 1 inventory cutover. See the implementation evidence for delivery gates.

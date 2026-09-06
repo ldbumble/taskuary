@@ -297,9 +297,10 @@ const MeetingRow = ({ e, onPick, picked, preps = [], onOpenRow }) => {
 
 // The band above today's newest message: what is still ahead (and all-day items). Ended meetings
 // are not here - they are rendered in the stream by the Timeline itself, at their time.
-const ComingUp = ({ events, onPick, picked }) => {
+const ComingUp = ({ events, onPick, picked, preps = {}, onOpenRow }) => {
   if (!events.length) return null;
-  return <Box sx={{ mb: 0.5 }}>{events.map((e, i) => <MeetingRow key={`${e.start}-${i}`} e={e} onPick={onPick} picked={picked} />)}</Box>;
+  return <Box sx={{ mb: 0.5 }}>{events.map((e, i) => <MeetingRow key={`${e.start}-${i}`} e={e}
+    onPick={onPick} picked={picked} preps={preps[evKey(e)] || []} onOpenRow={onOpenRow} />)}</Box>;
 };
 
 // "Get me ready for this one." The panel says who is in it and what it is about; this is where
@@ -1416,7 +1417,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 if (el) dayRefs.current[day] = el; else delete dayRefs.current[day];
                 dayLayoutDirty.current = true;
               }}>
-                {di === 0 && !view && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { closeSelection(); setCalSel(e); }} />}
+                {di === 0 && !view && !cat && !pick && <ComingUp events={upcoming} picked={calSel}
+                  preps={prepFor} onOpenRow={(p) => { setCalSel(null); openRow(p); }}
+                  onPick={(e) => { closeSelection(); setCalSel(e); }} />}
                 <Box>
                   {items.map((r, i) => {
                     // ONE state per row, from one table (timelineState.js). It renders as a small

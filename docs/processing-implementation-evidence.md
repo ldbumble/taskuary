@@ -1701,3 +1701,35 @@ no draft" were rewritten to this rule.
 
 Tests: `tests/test_completion_freshness.py` (11 cases), `tests/test_reply_channels.py` (3 pins rewritten), `tests/test_api.py` (1 pin
 rewritten). No frontend change.
+
+## Section 7.5 — approval interrupted by material change, and only by that
+
+Status: implemented and tested locally at `d8bfe62`; remote CI pending on the pushed
+checkpoint. Section 7.4 is CI-verified (ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)).
+Acceptance PW-239 to PW-241 implemented.
+
+A click on Approve was refused with a line of text when the newest message on the task differed
+from the draft's - any message, an FYI included - and the refreshed draft silently replaced the
+owner's edit. `verdicts.context_moved` is now the one answer to "did the context move?": a stale mark
+triage set, or an inbound message set that differs from the draft's pinned context revision
+(`operations.message_revision`, which now leaves out an FYI triage filed with nothing to do, as it
+leaves out our own lines); the Review list's `Stale`, the decide route's pre-check and the verdict
+itself all read it, and none of them consults a polling timestamp. `store.last_material_inbound_on_task`
+names the message that moved it. Existing pinned revisions that counted an FYI will read as moved once
+and re-pin on the next refresh.
+
+When it moved, the click does not send (PW-239): the route answers `stale` with an `interrupt` -
+the new message (sender, time, preview), the latest triage comment, the owner's own edited text and
+the refreshed draft written from the current context - and keeps the owner's edit as a task comment
+("Your edited reply, kept for comparison"). `website/src/approvalInterrupt.js` turns the answer into
+the dialog model (`interruptOf`) and resolves the owner's choice (`resolveInterrupt`: cancel keeps
+the edit in the box and sends nothing; review hands the refreshed draft over beside it); the
+`ApprovalInterrupt` dialog - "A new message arrived. Review it before sending.", Review the update /
+Cancel - opens on the Review page and on the Assistant stage, and both then show the refreshed draft
+next to the owner's words with Use the refreshed draft / Keep mine. The previous approval is never
+applied: a second change before the second look interrupts again, and only the reviewed, current
+draft goes out. A reply the owner sent outside supersedes the draft, and the click says so.
+
+Tests: `tests/test_approval_interrupt.py` (6 cases), `website/test/approvalInterrupt.test.mjs` (4 cases). Frontend:
+`website/src/approvalInterrupt.js`, `website/src/ApprovalInterrupt.jsx`, `ReviewView.jsx`,
+`FeedView.jsx` (rebuilt bundle).

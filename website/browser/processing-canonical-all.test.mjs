@@ -28,6 +28,24 @@ const clickState = async (page, label) => {
 };
 
 const clickItem = async (page, itemId) => {
+  await page.evaluate((wanted) => {
+    const row = [...document.querySelectorAll("[data-processing-item]")]
+      .find((node) => node.dataset.processingItem === wanted);
+    row?.querySelector("[data-tq-open]")?.scrollIntoView({ block: "center" });
+  }, itemId);
+  await page.waitForFunction(async (wanted) => {
+    const find = () => [...document.querySelectorAll("[data-processing-item]")]
+      .find((node) => node.dataset.processingItem === wanted)?.querySelector("[data-tq-open]");
+    const target = find(); if (!target) return false;
+    const first = target.getBoundingClientRect();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const current = find(); if (!current) return false;
+    const rect = current.getBoundingClientRect();
+    if (!rect.width || !rect.height || Math.abs(rect.x - first.x) > 0.5 || Math.abs(rect.y - first.y) > 0.5) return false;
+    const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+    return document.elementFromPoint(x, y)?.closest("[data-tq-open]") === current;
+  }, { timeout: 10000 }, itemId);
   const rows = await page.$$('[data-processing-item]');
   for (const row of rows) {
     if (await row.evaluate((node, wanted) => node.dataset.processingItem === wanted, itemId)) {
@@ -259,7 +277,9 @@ test("canonical All renders every root once with truthful details and frozen pag
       && url.searchParams.get("id") === String(seed.calendar.prep_message_id);
   }, { timeout: 10000 });
   await clickCalendarPrep(page, seed.calendar.prep);
-  assert.equal((await prepDetail).status(), 200, "calendar prep must open its exact canonical message target");
+  const prepResponse = await prepDetail;
+  assert.equal(prepResponse.status(), 200, "calendar prep must open its exact canonical message target");
+  await prepResponse.buffer();
   await waitForStageMarker(page, `Prep: ${seed.calendar.prep}`);
   await new Promise((resolve) => setTimeout(resolve, 250));
   assert.ok((await stageContent(page)).includes(`Prep: ${seed.calendar.prep}`),

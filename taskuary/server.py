@@ -4267,6 +4267,13 @@ def _latest_context_message(task_id: int = None, message_id: int = None):
     return store.last_inbound_in(cid) if cid else m
 
 
+def _refresh_for_finish(_store, task_id: int, message_id: int) -> dict:
+    """coder.finish's refresh (PW-235): the conversation is read from its provider before the result becomes a reply."""
+    if _store is not store:
+        raise RuntimeError('completion refresh belongs to a different store')
+    return _refresh_chat_context(task_id=task_id, message_id=message_id)
+
+
 def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
     """Synchronize a live chat before its stored text is used to answer or act.
 
@@ -4303,6 +4310,10 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
         funnel.invalidate()
     return {'polled': True, 'newer': newer, 'before': before, 'after': after,
             'added': int(added or 0), 'channel': channel}
+
+
+from . import coder as _coder_mod
+_coder_mod.REFRESH = _refresh_for_finish
 
 
 _NOTICED = {}      # funnel key -> the message-set revision the owner was last told about (PW-052: once per revision)

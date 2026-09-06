@@ -186,6 +186,13 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
         return {'closed': False, 'held': True,
                 'why': 'the owner opened this session to work in, so only they end it - your summary is on the task; stay at the prompt'}
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
+    # the explicit result, as an event (workerstate.py, PW-222/230): Finished does not close the task by itself -
+    # the wrap below does that, on its own terms
+    try:
+        from . import workerstate as ws
+        s = term.session_for(tid)
+        ws.record(store, tid, getattr(s, 'sid', None) or ws.current_sid(store, tid) or 'cli', 'finished', text=line, source='cli')
+    except Exception as e: logger.debug(f'finished event skipped: {e}')
     store.add_comment(tid, agent, 'agent',
                       f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
     return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''))

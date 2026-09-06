@@ -516,6 +516,9 @@ class SQLiteStore:
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
+            # explicit worker events (workerstate.py, PW-222/227): what a run said about itself, by task, run and request
+            self.cx.execute('CREATE TABLE IF NOT EXISTS worker_event (Id INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT, Kind TEXT, RequestId TEXT, '
+                            'Text TEXT, ChoicesJson TEXT, Source TEXT, EventId TEXT UNIQUE, CreatedAt TEXT)')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -2583,6 +2586,10 @@ class SQLiteStore:
                                        AND o.MessageId<>m.MessageId AND (o.Status='context' OR o.Direction='out'))
                             OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
                             LIMIT 1""", (email, exclude_mid or 0)) is not None
+    def add_worker_event(self, fields: dict) -> int:
+        return self._insert('worker_event', fields, ('TaskId', 'Sid', 'Kind', 'RequestId', 'Text', 'ChoicesJson', 'Source', 'EventId'), {'CreatedAt': _now()})
+    def worker_events(self, task_id: int) -> list: return self._rows('SELECT * FROM worker_event WHERE TaskId=? ORDER BY Id', (task_id,))
+    def worker_event_exists(self, event_id: str) -> bool: return self._one('SELECT 1 x FROM worker_event WHERE EventId=?', (event_id,)) is not None
     def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None) -> bool:
         """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own
         words on a thread with this address (a 'context' row or an outbound one from the mailbox), or a reply

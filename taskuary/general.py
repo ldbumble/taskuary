@@ -641,6 +641,10 @@ class GeneralSession:
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
         self.busy, self.last = True, time.time()
+        try:
+            from . import workerstate as ws
+            ws.record(self.store, self.task_id, self.sid, 'working', source='api')
+        except Exception: pass
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
         self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]

@@ -525,6 +525,30 @@ def message_discuss(mid: int, body: DiscussBody):
     except ValueError as e: raise HTTPException(422, str(e))
 
 
+# ── the worker's own word on its state (workerstate.py) ────────────────────────────────────────
+class WorkerAnswerBody(BaseModel): request_id: str; text: str
+
+@app.get('/api/tasks/{task_id}/worker')
+def worker_status(task_id: int):
+    """Working, input needed (the question), approval needed (the action), finished (the result), failed,
+    disconnected, stopped - or unknown; derived from explicit events, never from the screen (PW-222/226)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import workerstate as ws
+    return ws.status(store, task_id)
+
+@app.post('/api/tasks/{task_id}/worker/answer')
+def worker_answer(task_id: int, body: WorkerAnswerBody):
+    """Deliver an answer to ONE outstanding request of the run that asked it (PW-139/141): once; 409 when it is
+    resolved already or the run changed; 422 when there is no live worker or delivery failed."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import workerstate as ws
+    try: out = ws.answer(store, task_id, body.request_id, body.text, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    if not out['delivered']:
+        raise HTTPException(409 if out['state'] in ('resolved', 'stale') else 422, f"{out['state']}: {out.get('why') or ''}")
+    return out
+
+
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
@@ -4741,6 +4765,8 @@ def stop_task_agent(task_id: int):
     label = getattr(live, 'label', None) or getattr(live, 'agent', None) or 'agent'
     stopped = bool(hub_term.close(sid))
     if stopped:
+        from . import workerstate as ws
+        ws.record(store, task_id, sid, 'stopped', text='stopped by the owner', source='owner')   # never a completion (PW-222)
         # ...and the task is no longer being worked. Nothing moved it out of 'in_progress' and the
         # run row stayed 'running', so the pipe showed "agent working" on a task with no session and
         # nothing for the owner to do, for ever (the 2026-09-03 break test).

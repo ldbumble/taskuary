@@ -178,20 +178,20 @@ the same calendar day in the configured timezone. This is not a rolling 24-hour
 window. A message from a prior day is new for automatic chat grouping regardless
 of similarity or shared room identity.
 
-- [ ] <a id="pw-031"></a>**PW-031** Extend the single triage verdict for WhatsApp, Teams, Slack, and similar
+- [x] <a id="pw-031"></a>**PW-031** Extend the single triage verdict for WhatsApp, Teams, Slack, and similar
   messaging connectors with `relationship` (`new`, `continues`, `answers`, or
   `uncertain`), `related_message_ids`, and optional `existing_task_id`. Related
   messages need not already belong to a task. Keep intent/kind classification and
   relationship judgment in the same call, replacing a separate potentially
   conflicting chat-association classifier.
-- [ ] <a id="pw-032"></a>**PW-032** Restrict automatic relationship candidates to the same chat/conversation
+- [x] <a id="pw-032"></a>**PW-032** Restrict automatic relationship candidates to the same chat/conversation
   and same local calendar date as the incoming message's timestamp. Use message
   dates, not processing dates, for delayed sync/backfill. Do not auto-attach to an
   older ask/task by bypassing the date restriction via a task ID or room match.
-- [ ] <a id="pw-033"></a>**PW-033** Validate returned message/task IDs against the eligible candidate context.
+- [x] <a id="pw-033"></a>**PW-033** Validate returned message/task IDs against the eligible candidate context.
   `uncertain` must not cause an automatic join. Prior-day messages cannot receive
   `continues`/`answers` links through this automatic grouping path.
-- [ ] <a id="pw-034"></a>**PW-034** Keep this date restriction chat-only: email chains and structural identities
+- [x] <a id="pw-034"></a>**PW-034** Keep this date restriction chat-only: email chains and structural identities
   of GitHub, Monday, Jira, and similar items are not reset at midnight. This rule
   controls chat grouping, not deletion of historical messages or forced creation
   of a task for every new informational message.

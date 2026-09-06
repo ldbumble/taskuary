@@ -767,3 +767,28 @@ Tests changed with explanation, none weakened: `test_not_coding.py` (keyword-kin
 classes rewritten to the general default), `test_urgent_and_handoff.py` (one kind expectation),
 `test_kind_dispatch.py` (prompt tie-break wording). New: `tests/test_reply_always_drafts.py` (14 cases), `sendState.test.mjs` (3).
 Frontend and packaged-build results are in the commit message; full backend and CI below.
+
+## Section 3.4 — chat relationships in the one triage verdict
+
+Status: implemented and tested locally at `78c6dd1`; remote CI pending on the pushed
+checkpoint. Section 3.3 is CI-verified (8b89e26, CI run 34039576824 (all ten jobs passed)).
+Acceptance PW-031 to PW-034 implemented; PW-035 partial (the configured-timezone boundary is
+exercised only through `norm_stamp` local time; no tracker-item cross-day case yet).
+
+A chat room shares one conversation id, and the router joined a new line to the room's task on
+that id before a second classifier (`triage.same_ask`) was asked whether it belonged. Both are
+gone: `ingest.chat_route` decides a chat line before routing - two facts join without a model
+(a line typed within the burst window of the room's last inbound line, an answer while an agent
+is live on the room's task), everything else is the single verdict's `relationship`
+(new/continues/answers/uncertain) with `related_message_ids` and `existing_task_id`, chosen
+among `ingest.chat_candidates` - the room's lines from the same local calendar date as the
+message's own stamp, never later lines - and validated by `triage.relationship_of` (ids outside
+the room or the day dropped, a task id must be one of theirs, nothing valid left = uncertain).
+`uncertain` and `new` open their own work; related lines without a task join the task the new
+line opens. With the classifier off or no brain, nothing but the facts joins: the room id alone
+never decides (PW-018). Mail and tracker routing is untouched. The shipped TRIAGE.md describes
+`same_day_lines`.
+
+Tests changed with explanation, none weakened: `test_chat_is_not_one_task.py` (single-verdict
+brain; triage-off and no-brain cases now open their own work per PW-033), `test_assistant_reactions.py`
+(one chat-burst case). New: `tests/test_chat_relationship.py` (17 cases). No frontend change; packaged assets unchanged.

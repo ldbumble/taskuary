@@ -1483,7 +1483,7 @@ tray, the task page's shared dispatch).
 ## Section 5.7 — mandatory freshness: what a draft read, what a send rechecks, email refreshed like chat
 
 Status: implemented and tested locally at `325d05a`; remote CI pending on the pushed
-checkpoint. 
+checkpoint. Section 5.6 is CI-verified (CI run 34051581086, all ten jobs passed).
 Acceptance PW-048, PW-054, PW-055 implemented; PW-049 partial (automatic Next/Walk and FYI-batch
 validation are PW-050); PW-050 to PW-053, PW-056, PW-057 remain open.
 

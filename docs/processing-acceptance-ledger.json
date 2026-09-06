@@ -619,45 +619,45 @@
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Extend automatic dispatch to general agents, using a per-task worker",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (a general task opens its own assistant session by default; coding opens its CLI; a personal task starts nothing; the queue drain starts the kind that was queued)",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-070",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Expose clear auto-start controls for coding and general agents in Settings,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py`::SettingsTests (both switches default on; an install that had switched coding off keeps unattended starts off for the assistant too; an explicit choice is never overwritten; Settings exposes both) - `coder_auto_enabled` relabelled",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-071",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Apply appropriate shared safety/permission checks to both worker kinds,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (the stranger hold applies to both kinds with the reason on the task; no configured assistant provider and an unresolved repository choice are visible holds, not crashes or wrong-checkout sessions)",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-072",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Dispatch once per eligible work item, not per refresh or historical chain",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (one start per work item: a second message on the task starts nothing; a live conversation is reused and the ask is put once)",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-073",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Test both default auto-start paths, each settings opt-out, manual fallback,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: both default paths, each opt-out, personal to-dos, missing worker/repo configuration, safety holds, failed launch and a held task staying deletable are covered; concurrent ingest/retriage is covered indirectly by the drain lock tests",
+      "test": "`tests/test_auto_start.py` (16 cases); `tests/test_kind_dispatch.py` and `tests/test_not_coding.py` moved to the PW-069 contract with the reason noted; the suite guards the router's unattended assistant start like a PTY",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-074",
@@ -1161,7 +1161,7 @@
       "requirement": "After a confirmed owner action succeeds, compare its outcome with the",
       "status": "implemented",
       "test": "`tests/test_operations.py`::EntryPointTests (mine, not-coding, file and the proposal API record the same operation and evidence; no second memory confirmation)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-130",
@@ -1170,7 +1170,7 @@
       "requirement": "Record source/message or grouped-item identity, triage verdict/revision,",
       "status": "implemented",
       "test": "`tests/test_operations.py`::CorrectionTests (source identity, verdict and its route id, the change and the operation id; FYI->task, general->coding, reply->dismissed; deferral and discussion teach nothing; cancelled/failed write nothing; retries do not duplicate; evidence recovered without repeating the action)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-131",
@@ -1179,7 +1179,7 @@
       "requirement": "Preserve the distinction between correction evidence, explicit learned",
       "status": "implemented",
       "test": "`tests/test_operations.py` (evidence is not a memory note or a policy; it reaches fresh triage as dated lines beside the notes, worded as one correction, not a rule)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-132",
@@ -1188,7 +1188,7 @@
       "requirement": "Record evidence against source items even when an FYI has no task. Persist",
       "status": "partial: durable discussion, proposals and outcomes per source item and task through operations.py and its endpoints; the assistant conversation does not yet write its turns through discuss() (Phase 8 wiring)",
       "test": "`tests/test_operations.py`::DiscussionTests, ::EntryPointTests (history endpoint)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-133",
@@ -1197,7 +1197,7 @@
       "requirement": "When an FYI later becomes a task, link its earlier relevant discussion and",
       "status": "implemented",
       "test": "`tests/test_operations.py`::DiscussionTests (discussion on a taskless FYI travels onto the task it becomes, by message identity; a batch sibling keeps its own)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-134",
@@ -1206,7 +1206,7 @@
       "requirement": "Test successful corrections from every entry point, unchanged verdicts,",
       "status": "partial: every listed backend case covered; actual UI interaction coverage waits on the Phase 8 confirmation box",
       "test": "`tests/test_operations.py` (20 cases)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-135",

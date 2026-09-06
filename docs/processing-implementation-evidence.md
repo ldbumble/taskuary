@@ -1296,3 +1296,37 @@ that message's earlier discussion onto the task it becomes, by identity (PW-133)
 
 Tests: `tests/test_operations.py` (20 cases). No frontend change; the Phase 8 confirmation box and history panel consume
 these endpoints. Packaged assets unchanged.
+
+## Section 5.1 — automatic startup for both worker kinds
+
+Status: implemented and tested locally at `d2e11e5`; remote CI pending on the pushed
+checkpoint. Section 4.1 is CI-verified (1461a13, CI run 34048121206 (all ten jobs passed)).
+Acceptance PW-069, PW-070, PW-071, PW-072 implemented; PW-073 partial (concurrent ingest/retriage is
+covered only indirectly through the drain-lock tests).
+
+Only coding self-dispatched; a `general` task landed on the Board and waited for a click. Now
+`ingest.auto_start_ok` is one gate for both kinds - the kind first (a personal `task` starts
+nothing), then that kind's own switch (`coder_auto_enabled`, new `general_auto_enabled`, both
+default on), then the worker's configuration (an assistant provider for general), and last the
+stranger hold (`senders.known`, the expensive Sent Items search) - and a coding job whose
+repository triage could not tell holds for the owner's choice instead of opening a session in the
+wrong checkout. A hold is about the unattended start only: the task is still triaged, on the
+Board, tagged `hold:new-sender` where that is the reason, with a router note saying which worker
+was not started and why; the route line says `sent to the assistant`, `sent to the coding agent`
+or `not auto-worked: <reason>`. `ingest._auto_general` opens the assistant's per-task session
+(`general.start_session`, actor router) and puts the task's summary as the first ask once; a live
+conversation is reused; a full house queues it like a coding task and `blackboard.drain` starts the
+kind that was queued. A failed start is written on the task as `Assistant start failed: ...`, and
+the router's own notes no longer count as agent work when the owner files such a task
+(`server.work_on_task`), so a held or failed start leaves the task deletable.
+
+`store.upgrade_auto_start` runs once at startup: an install that had switched the coding agent's
+auto-start off keeps unattended starts off for the assistant too; an explicit owner choice is never
+overwritten. Settings shows both switches (`coder_auto_enabled` relabelled "Auto-start the coding
+agent", new "Auto-start the assistant on general tasks"); packaged UI rebuilt. Releasing a held
+task (`/api/tasks/{id}/release`) starts the kind the task is.
+
+Tests: `tests/test_auto_start.py` (16 cases). `tests/test_kind_dispatch.py` and `tests/test_not_coding.py` moved from
+"general opens no session" to the PW-069 contract with the reason noted; `tests/conftest.py` guards
+the router's unattended assistant start the way it guards a PTY, so a suite never opens a real
+assistant session unless the test supplies a fake.

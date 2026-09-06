@@ -380,19 +380,19 @@ Owner-approved on 2026-09-05: both coding and general-agent tasks start their
 respective worker automatically by default; the owner can change this in Settings.
 Pending implementation, not authorization to launch sessions during this review.
 
-- [ ] <a id="pw-069"></a>**PW-069** Extend automatic dispatch to general agents, using a per-task worker
+- [x] <a id="pw-069"></a>**PW-069** Extend automatic dispatch to general agents, using a per-task worker
   session rather than having the routing assistant perform the work inline. Route
   explicit coding work to coding sessions and general/default work to general
   sessions. Personal `kind=task` items remain owner to-dos, without auto-start.
-- [ ] <a id="pw-070"></a>**PW-070** Expose clear auto-start controls for coding and general agents in Settings,
+- [x] <a id="pw-070"></a>**PW-070** Expose clear auto-start controls for coding and general agents in Settings,
   default enabled for each. Preserve existing explicit opt-outs during upgrade;
   reconcile the existing `coder_auto_enabled` setting and related UI/help text.
   When disabled, keep work visible for manual dispatch.
-- [ ] <a id="pw-071"></a>**PW-071** Apply appropriate shared safety/permission checks to both worker kinds,
+- [x] <a id="pw-071"></a>**PW-071** Apply appropriate shared safety/permission checks to both worker kinds,
   preserving connector auto-dispatch restrictions and sender authorization gates.
   Respect repo-choice requirements for coding and available worker configuration
   for general. A blocked launch remains visible with a concrete reason.
-- [ ] <a id="pw-072"></a>**PW-072** Dispatch once per eligible work item, not per refresh or historical chain
+- [x] <a id="pw-072"></a>**PW-072** Dispatch once per eligible work item, not per refresh or historical chain
   message. Reuse existing live sessions when handling fresh context; auto-start
   is not blanket authority for external sends or other restricted actions.
 - [ ] <a id="pw-073"></a>**PW-073** Test both default auto-start paths, each settings opt-out, manual fallback,

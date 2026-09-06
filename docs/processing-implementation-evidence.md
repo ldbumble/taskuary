@@ -693,3 +693,26 @@ Astra verified the rebased polling source/tests/UI/assets are unchanged from the
 reviewed tree and retained the separate, pending email-catch-up review boundary.
 PW-001 through PW-005 are implemented; remote delivery/CI verification follows.
 Logs: ignored `.codex-tmp/poll-remote-base-*.log` in the integration checkout.
+Gates on the rebased tree: full backend 2403 passed plus 66 subtests (186.76 s); Node 22
+frontend 283 passed; no-undef lint clean (nine pre-existing rule-definition notices in files not
+touched); packaged build 15.11 s. One existing assertion moved with explanation (the chat clock
+left `poll_forever` for `quick_forever`); none weakened. No live restart, connector, database or
+owner-document change; browser-control redesign untouched.
+
+## Section 3.1 — fresh evaluation for each new message
+
+Status: implemented and tested locally at `c8769f6`; remote CI pending on the pushed
+checkpoint. Acceptance PW-020, PW-022, PW-023, PW-024, PW-025 implemented; PW-021 partial
+(evaluation runs in the stored conversation's context via `exchange_lines`; the full-chain
+merge is PW-009 to PW-015, not yet built). The thread-dismissal veto (`ruled_on_thread`) and
+the "SETTLED BY YOUR OWNER" prompt order are removed; the owner's ruling on the conversation
+leads the EVIDENCE list (`ingest.thread_ruling`) and past verdicts stay in it verbatim.
+
+Tests changed with explanation, none weakened: `test_verdict_sticks.py` (three veto cases
+rewritten to evidence semantics, one added), `test_verdict_paths.py` (ruled-for-life case
+rewritten), `test_assistant_reactions.py` (one case), `test_cc_triage.py` and
+`test_learnedgraph.py` (settled-prompt cases inverted), `test_kind_dispatch.py`
+(`_agreement` helper tests replaced by an evidence test). New: `tests/test_fresh_evaluation.py`
+(15 cases). Full backend on this tree: 2415 passed plus 66 subtests, 151 warnings,
+224.74 s. No frontend change; packaged assets unchanged. No live restart, connector, database
+or owner-document change.

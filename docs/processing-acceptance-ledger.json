@@ -178,54 +178,54 @@
       "section": "Fresh evaluation for each new message",
       "phase": "3",
       "requirement": "Remove the automatic thread-dismissal veto through `ruled_on_thread()` /",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py`, `tests/test_verdict_sticks.py`, `tests/test_verdict_paths.py` (ruling is evidence on attach and create paths)",
+      "commit": "c8769f6; local gates passed, CI pending"
     },
     {
       "id": "PW-021",
       "section": "Fresh evaluation for each new message",
       "phase": "3",
       "requirement": "Merge the new message into its chain before evaluation. Evaluate the latest",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: evaluated in stored thread context; full-chain merge pending PW-009+",
+      "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides)",
+      "commit": "c8769f6; CI pending"
     },
     {
       "id": "PW-022",
       "section": "Fresh evaluation for each new message",
       "phase": "3",
       "requirement": "Preserve the separately approved explicit feed-only and standing-policy",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py::BypassesStayTests` (policy, feed, duplicate, no standing policy from a dismissal)",
+      "commit": "c8769f6; CI pending"
     },
     {
       "id": "PW-023",
       "section": "Fresh evaluation for each new message",
       "phase": "3",
       "requirement": "Preserve old read/dismissed state: reevaluation of new activity must not",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py::HistoryIsPreservedTests` (judged messages untouched, closed task not reopened)",
+      "commit": "c8769f6; CI pending"
     },
     {
       "id": "PW-024",
       "section": "Fresh evaluation for each new message",
       "phase": "3",
       "requirement": "Test a previously ignored/FYI chain receiving a new actionable request and",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py` (actionable and non-actionable follow-ups, open and closed tasks, duplicate fetch); agent-run case in `test_verdict_sticks.py`",
+      "commit": "c8769f6; CI pending"
     },
     {
       "id": "PW-025",
       "section": "Clean, complete context for AI triage",
       "phase": "3",
       "requirement": "Remove the historical-verdict prompt override in",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py::NoForcedVerdictTests`, `tests/test_cc_triage.py`, `tests/test_learnedgraph.py`, `tests/test_kind_dispatch.py`",
+      "commit": "c8769f6; CI pending"
     },
     {
       "id": "PW-026",

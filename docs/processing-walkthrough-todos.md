@@ -121,7 +121,7 @@ implementation; current `routing.route()` still scores email subjects/senders/bo
 Owner requirement: when a new message arrives, reevaluate using the updated full
 chain. An old message/chain evaluation must not determine the new verdict.
 
-- [ ] <a id="pw-020"></a>**PW-020** Remove the automatic thread-dismissal veto through `ruled_on_thread()` /
+- [x] <a id="pw-020"></a>**PW-020** Remove the automatic thread-dismissal veto through `ruled_on_thread()` /
   `store.owner_verdict_on_thread()` from both existing-task and new-task intake
   paths. An earlier owner `ignore` must not cause a new reply to be filed without
   fresh evaluation, whether or not an agent run is recorded as running.
@@ -129,19 +129,19 @@ chain. An old message/chain evaluation must not determine the new verdict.
   message in full conversation context, without carrying over an old FYI/ignore
   verdict or using that verdict as a presumption about the new message. Retain old
   decisions as history, not as an automatic suppression rule.
-- [ ] <a id="pw-022"></a>**PW-022** Preserve the separately approved explicit feed-only and standing-policy
+- [x] <a id="pw-022"></a>**PW-022** Preserve the separately approved explicit feed-only and standing-policy
   bypasses. A per-message dismissal must not implicitly become a standing policy.
-- [ ] <a id="pw-023"></a>**PW-023** Preserve old read/dismissed state: reevaluation of new activity must not
+- [x] <a id="pw-023"></a>**PW-023** Preserve old read/dismissed state: reevaluation of new activity must not
   resurrect each historical message as fresh unread work or automatically reopen
   a closed task. Fresh triage decides whether new activity needs action.
-- [ ] <a id="pw-024"></a>**PW-024** Test a previously ignored/FYI chain receiving a new actionable request and
+- [x] <a id="pw-024"></a>**PW-024** Test a previously ignored/FYI chain receiving a new actionable request and
   a non-actionable acknowledgement, on both open and closed tasks, with and
   without an agent run. Assert fresh evaluation and retained chain context;
   duplicate fetches of the same message must not trigger another evaluation.
 
 ## Clean, complete context for AI triage
 
-- [ ] <a id="pw-025"></a>**PW-025** Remove the historical-verdict prompt override in
+- [x] <a id="pw-025"></a>**PW-025** Remove the historical-verdict prompt override in
   `triage.classify_intent()` (`_agreement`, "SETTLED BY YOUR OWNER", and the
   "Answer fyi - no exceptions" instruction). Repeated past evaluations must not
   force the verdict on new activity. Keep explicitly configured standing policies

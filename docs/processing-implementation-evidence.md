@@ -1124,3 +1124,29 @@ the reason noted. No frontend change; packaged assets unchanged. This closes the
 listed in the plan (fresh evaluation, chat association, error/retry, general default, summary and
 checklist, project/repository evidence, incoming procedures, assistant ideas and opt-in report
 triage); the partial rows above name what waits on the Phase 2 chain merge (PW-009 to PW-015).
+
+### Procedure merge and browser fixture readiness
+
+The normal push of `0197da1` was rejected as non-fast-forward after concurrent
+`e085b30` arrived. Merge `7ef37f7` preserves that exact procedure-selection source;
+Astra verified all owned email/checklist/quote code unchanged and cleared direct
+integration compatibility. Its backend gate passed 2,619 tests plus 71 subtests
+(149 warnings, no skips) in 270.45 s. UI source/assets still match the successful
+290-test packaged build.
+
+Two isolated P0 browser attempts failed at navigation, not at the timing ceiling.
+Instrumentation established both causes: after a successful Walk, Current and
+`!typing` can render before the asynchronous post-landed pile GET supplies Next
+(the observed gap was about 122 ms). Separately, the synthetic demo workers can
+transition working-to-parked after the visible Next token was captured; the exact
+old-token request correctly returned 409 `selection_stale`, preserving Current,
+refreshing Next and performing no automatic retry. The happy-path test instead
+waited for the obsolete target. Neither diagnostic pile contained calendar items.
+
+Independent review confirms this is an unstable fixture/precondition, not a reason
+to bypass navigation validation. The bounded test correction captures cold-page
+visibility first, stabilizes only owned demo replay/watcher startup, then awaits
+the actual post-Walk Next marker before unchanged count/title/advance assertions.
+No rejection retry, timeout increase, production code change, or alteration of
+the dedicated stale/passive browser scenarios is permitted. Final reviewed patch
+and browser gates are recorded after integration.

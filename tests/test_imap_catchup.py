@@ -203,12 +203,35 @@ class GapTests(unittest.TestCase):
 
     def test_retry_holes_survive_unknown_to_known_validity_without_a_confirmed_reset(self):
         scope = imapmail._scope('imap.gmail.com', 993, 'me@myco.example', 'INBOX')
-        retry = {'scope': scope, 'uidvalidity': None, 'identity': 'scoped-v1', 'uids': [5]}
+        retry = {'scope': scope, 'uidvalidity': None, 'identity': 'scoped-unknown-v1', 'uids': [5]}
         s, c = store_with({'imap_uid': 10, 'imap_uid_scope': scope,
-                           'imap_uid_identity': 'scoped-v1', 'imap_retry_uids': retry})
+                           'imap_uid_identity': 'scoped-unknown-v1', 'imap_retry_uids': retry})
         self.assertEqual(poll(s, c, FakeBox(mails([5]), validity=7)), 1)
         self.assertEqual(cfg_of(s)['imap_retry_uids']['uids'], [])
-        self.assertRegex(inbound(s)[0]['ExternalId'], r'^imap:[0-9a-f]{24}:v7:5$')
+        self.assertRegex(inbound(s)[0]['ExternalId'], r'^imap:[0-9a-f]{24}:vunknown:5$')
+
+    def test_unknown_to_known_validity_keeps_landed_identity_after_checkpoint_failure(self):
+        s, c = store_with({})
+        real_patch = s.patch_connector_poll_state
+        calls = 0
+        def fail_progress(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2: raise OSError('synthetic checkpoint disk failure')
+            return real_patch(*args, **kwargs)
+        with mock.patch.object(s, 'patch_connector_poll_state', side_effect=fail_progress):
+            with self.assertRaisesRegex(OSError, 'checkpoint disk failure'):
+                poll(s, c, FakeBox(mails([1]), validity=None))
+        self.assertEqual(len(inbound(s)), 1)
+        original_id = inbound(s)[0]['ExternalId']
+        self.assertRegex(original_id, r'^imap:[0-9a-f]{24}:vunknown:1$')
+
+        c = s.get_connector_by_type('gmail', with_secret=True)
+        self.assertEqual(poll(s, c, FakeBox(mails([1]), validity=7)), 0)
+        self.assertEqual(len(inbound(s)), 1)
+        self.assertEqual(inbound(s)[0]['ExternalId'], original_id)
+        self.assertEqual(cfg_of(s)['imap_uidvalidity'], 7)
+        self.assertEqual(cfg_of(s)['imap_uid_identity'], 'scoped-unknown-v1')
 
     def test_an_empty_new_epoch_durably_resets_the_old_cursor(self):
         old_scope = imapmail._scope('imap.gmail.com', 993, 'me@myco.example', 'INBOX')

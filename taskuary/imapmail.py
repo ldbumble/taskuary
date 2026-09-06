@@ -452,7 +452,11 @@ def _external_id(sent: bool, user: str, uid: int, *, scope: str, validity, mode:
     # confirmed UID epoch/scope change switches away from legacy IDs.
     if mode == 'legacy':
         return f'{prefix}:{user}:{uid}'
-    epoch = validity if validity is not None else 'unknown'
+    # UIDVALIDITY may appear after a server previously omitted it. Learning the number does not
+    # prove a new epoch, so keep the already-persisted unknown namespace until a later confirmed
+    # validity or scope change resets the folder.
+    epoch = 'unknown' if mode == 'scoped-unknown-v1' else validity
+    if epoch is None: epoch = 'unknown'
     return f'{prefix}:{scope}:v{epoch}:{uid}'
 
 
@@ -463,20 +467,22 @@ def _prepare_folder(checkpoint, cfg: dict, *, sent: bool, scope: str, seen_valid
     saved_validity = _number(cfg.get(k['validity']))
     stored_scope = cfg.get(k['scope'])
     mode = cfg.get(k['mode'])
-    if mode not in (None, 'legacy', 'scoped-v1'):
+    if mode not in (None, 'legacy', 'scoped-v1', 'scoped-unknown-v1'):
         raise RuntimeError(f'invalid saved IMAP identity mode {mode!r}')
 
     # An established checkpoint without a marker is an upgraded legacy epoch. Keeping its exact
     # old identity avoids re-importing a row written before an old cursor save. A genuinely fresh
     # folder starts with scoped IDs, so its first future UIDVALIDITY reset is safe too.
-    mode = mode or ('legacy' if k['uid'] in cfg or k['validity'] in cfg else 'scoped-v1')
+    mode = mode or ('legacy' if k['uid'] in cfg or k['validity'] in cfg
+                    else 'scoped-v1' if seen_validity is not None else 'scoped-unknown-v1')
     scope_changed = stored_scope not in (None, scope)
     validity_changed = (seen_validity is not None and saved_validity is not None
                         and int(seen_validity) != saved_validity)
     reset = scope_changed or validity_changed
     if reset:
         logger.warning(f'imap folder identity changed; resetting cursor for scope {scope}')
-        cursor, mode, holes = 0, 'scoped-v1', set()
+        cursor, mode, holes = (0, 'scoped-v1' if seen_validity is not None
+                               else 'scoped-unknown-v1', set())
         saved_validity = seen_validity
     else:
         effective_validity = seen_validity if seen_validity is not None else saved_validity

@@ -88,16 +88,17 @@ class BlackboardTests(unittest.TestCase):
         q = self.s.queued_dispatches()
         self.assertEqual([(q[0]['TaskId'], q[0]['BehindTaskId'])], [(new, None)])
 
-    def test_likely_overlap_queues_behind_the_peer(self):
+    def test_likely_overlap_is_a_briefing_not_a_queue(self):
+        """PW-171 (owner): similar work informs the new agent; it never parks the task behind the peer."""
         t1, t2 = self.task('First in'), self.task('Would collide')
         self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
         term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo', files=['reports.py'])
+        started = []
         real, bb.likely_overlap = bb.likely_overlap, lambda s, tid, ps: (ps[0], 'same files')
+        real_s, term.start_on_task = term.start_on_task, lambda *a, **k: started.append(a[1])
         try: _auto_code(self.s, t2)
-        finally: bb.likely_overlap = real
-        q = self.s.queued_dispatches()
-        self.assertEqual([(q[0]['TaskId'], q[0]['BehindTaskId'])], [(t2, t1)])
-        self.assertIn(task_ref(t1), self.s.list_comments(t2)[-1]['Body'])
+        finally: bb.likely_overlap, term.start_on_task = real, real_s
+        self.assertEqual((started, self.s.queued_dispatches()), ([t2], []))
 
     def test_no_overlap_starts_with_awareness(self):
         t1, t2 = self.task('First in'), self.task('Disjoint')
@@ -116,13 +117,13 @@ class BlackboardTests(unittest.TestCase):
         t1, t2, t3, t4 = self.task('Done'), self.task('Freed'), self.task('Still blocked'), self.task('Blocker')
         term.SESSIONS['b'] = fake_session(t4, r'C:\code\repo')          # t4 still working
         self.s.enqueue_dispatch(t2, t1, 'coder', 'overlap')             # t1 has no session: freed
-        self.s.enqueue_dispatch(t3, t4, 'coder', 'overlap')             # t4 live: stays put
+        self.s.enqueue_dispatch(t3, t4, 'coder', 'overlap')             # t4 live - but overlap no longer parks work (PW-171)
         started = []
         real, term.start_on_task = term.start_on_task, lambda s, tid, *a, **k: started.append(tid)
         try: bb.drain(self.s)
         finally: term.start_on_task = real
-        self.assertEqual(started, [t2])
-        self.assertEqual([q['TaskId'] for q in self.s.queued_dispatches()], [t3])
+        self.assertEqual(started, [t2, t3])
+        self.assertEqual([q['TaskId'] for q in self.s.queued_dispatches()], [])
 
     def test_failed_start_stays_queued_until_successful_retry(self):
         tid = self.task('Retry startup')

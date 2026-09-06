@@ -1324,17 +1324,10 @@ def _auto_code(store, tid):
                           'it starts by itself when one ends.')
         return
     try:
+        # similar work in the same checkout is a BRIEFING, not a queue (PW-171): the agent starts and is
+        # told who else is here and what the model made of the overlap (terminal seed -> bb.briefing)
         cwd = bb.target_cwd(store, tid, agent)
         ps = bb.peers(store, cwd, exclude_tid=tid) if cwd else []
-        if ps:
-            hit, why = bb.likely_overlap(store, tid, ps)
-            if hit:
-                store.enqueue_dispatch(tid, hit['tid'], agent, why or 'likely to touch the same files')
-                store.add_comment(tid, 'router', 'agent',
-                                  f"Queued behind {hit['ref']} \"{hit['title'][:80]}\" - "
-                                  f"{why or 'likely to touch the same files'}. It starts by itself "
-                                  'when that agent finishes.')
-                return
         term.start_on_task(store, tid, agent, actor='router')
         store.add_comment(tid, 'router', 'agent', 'auto-started a live coder session (coder_auto_enabled)'
                           + (f' - told it about the {len(ps)} agent(s) already in the checkout' if ps else ''))

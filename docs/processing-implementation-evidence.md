@@ -1540,10 +1540,11 @@ remain pending.
 ## Section 5.3 — capacity counting and bounded startup retries
 
 Status: implemented and tested locally at `6ed0301`; remote CI pending on the pushed
-checkpoint. Section 5.2 is CI-verified (6c560b9, CI 34049592998 74bf868 (all ten jobs passed)).
-Acceptance PW-084, PW-085, PW-086, PW-088 implemented; PW-087 and PW-089 partial (the Retry/Cancel
-task-view buttons and the attention-pipeline entry are Phase 8 surfaces; a real process restart is
-simulated by re-arming from the persisted rows).
+checkpoint. Section 5.2 is CI-verified (6c560b9, CI run 34049592998 (all ten jobs passed)).
+Acceptance PW-084 and PW-086 implemented. PW-085 and PW-088 are partial because a
+queued general start can swallow its failure and because restart arms only the earliest of
+distinct retry deadlines. PW-087 remains partial for the Phase 8 task-view/attention surfaces;
+PW-089 remains partial for those queued-general and multiple-deadline cases.
 
 `blackboard.live_count` is the one capacity number: every live session, whatever it is doing -
 working, idle at its prompt, stopped at an approval, coding or general - until its process ends;
@@ -1585,3 +1586,62 @@ agent tokens from resetting exhausted budgets or cancelling queued work. Tests
 isolate retry timers and add retry scheduling to the startup migration boundary.
 Combined runtime review and cumulative gates are pending below. The rebuilt UI
 passed all 298 frontend tests (1.425s); packaged build passed (10.49s).
+
+## Section 5.4 — similar work is a briefing; the wall is live coordination only
+
+Status: implemented and tested locally at `165af37`; remote CI pending on the pushed
+checkpoint. Section 5.3 is CI-verified (6ed0301, CI run 34049840835 (all ten jobs passed)).
+Acceptance PW-171, PW-172, PW-174, PW-176, PW-177 and PW-180 implemented. PW-173 and
+PW-175 remain partial for push-style refresh and the stated integration coverage. PW-178,
+PW-179 and PW-181 are partial because the HTTP note API does not yet forward the posting
+session ID; a headless run's own posting is also covered only through the task fallback.
+
+Overlap is advisory (PW-171): `ingest._auto_code` and `blackboard.drain` no longer park a task
+behind a peer the model judged likely to touch the same files, in either the immediate or the
+ranked path; a queue row that was parked that way is simply due. `blackboard.briefing` (the OTHER
+AGENTS paragraph of the seed, `terminal.seed_text`) carries the facts - each peer's task id, agent,
+summary, touched files and what its live session said - then the model's read of similarity as a
+read ("SIMILAR WORK (the model's read, not a lock)"), the plain "read no overlap", or "NOT assessed"
+when there was no model, never read as no overlap (PW-174); `likely_overlap` now distinguishes an
+answer of no overlap from no assessment. Wall notes belong to a session (PW-178): `boardnote.Sid`,
+`blackboard.post(..., sid=)`, `TASKUARY_SID` in every session shell (`terminal.session_env`,
+`Term`, the assistant's browser env) and `taskuary --note` records it. `blackboard.live_notes` is
+the one live selection (PW-179) behind the Board's live handoff, the seed (`wall_text`, live only,
+no fallback - PW-176), the assistant's prompt (`chat_text`/`house_wall`, PW-177) and `taskuary
+--board`: notes from sessions alive now - working, idle or waiting for approval - plus the owner's
+own notes as durable guidance; a note from before notes knew their session follows its task. An
+ended session's notes leave every live surface and a restart of the same task does not revive
+them; `blackboard.history` (`GET /api/board/notes?all=1`) keeps them and flags each note live or
+historical (PW-180).
+
+Tests: `tests/test_coordination.py` (17 cases). `tests/test_blackboard.py`: the overlap-queues test became
+"overlap is a briefing, not a queue" and the drain test no longer expects a parked row to stay,
+per PW-171; `tests/test_agent_wall.py`: the seed tests post from live sessions, per PW-176. No
+frontend change (the Board already reads the live handoff endpoint).
+
+### Coordination integration candidate
+
+Before the coordination merge, exact source `c9d4572` passed the complete backend suite:
+2,747 tests plus 71 subtests, 150 warnings, no skips, in 250.22 s. Frontend remained
+298 passing tests and the packaged build passed in 10.49 s. The all-at-once browser gate
+passed seven existing scenarios in 346.495 s; the canonical scenario alone timed out in
+fixture diagnostics. Its diagnostic-only correction is awaiting the isolated run recorded
+by the lead as 44424. That is prior-source evidence, not a final coordination gate.
+
+The incoming coordination implementation and its 17 focused tests are retained. Integration
+also replaces fixed `terminal.SESSIONS` test keys under an isolated `patch.dict`, preventing
+cleanup from deleting a pre-existing fixture session. The HTTP session-ID propagation repair,
+independent review, final backend/browser regressions and combined delivery evidence remain
+pending.
+
+The isolated canonical browser rerun passed after the coordination merge: 1/1,
+78.148s scenario / 81.146s process. Seven prior browser scenarios also passed on
+this merged source (213.417s). The response diagnostic correction retains exact
+predicates and all 10-second response budgets; it does not retry failed actions.
+The separate-process CLI live-wall regression is repaired: `--board` requests the
+running server's live selection using its session URL/token and checkout. An
+unreachable server is unavailable, never an empty/live historical fallback;
+`--all` retains offline history. Focused CLI/wall tests: 38 passed in 1.50s;
+coordination/wall/queue tests: 55 passed in 2.33s. Astra independently cleared the
+CLI repair and session-registry fixture isolation. HTTP note SID attribution
+remains explicitly partial; no repair of that surface is claimed here.

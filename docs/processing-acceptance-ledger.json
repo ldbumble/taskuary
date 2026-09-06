@@ -711,7 +711,7 @@
       "requirement": "Remove `store.known_sender()` / \"has written before\" as an authorization",
       "status": "implemented",
       "test": "`tests/test_sender_trust.py`::RulesTests (prior incoming mail is not trust even when the table knows the address; `store.known_sender` stays for the first-time-sender policy only and is out of `senders.known`)",
-      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
     },
     {
       "id": "PW-080",
@@ -719,8 +719,8 @@
       "phase": "5",
       "requirement": "Retain verified Sent Items evidence that the receiving mailbox previously",
       "status": "implemented",
-      "test": "Exact receiving-mailbox/channel scope for local review and conversation evidence; tests/processing/test_sender_trust_scope.py (8 real SQLite cases), tests/test_sender_trust.py; independent Astra review cleared; focused trust/hotpaths 43 passed",
-      "commit": "64e4163; combined gates pending"
+      "test": "`tests/test_sender_trust.py` plus `tests/processing/test_sender_trust_scope.py` (8 real-SQLite cases): exact receiving-mailbox/email-channel scope for approved/edited/sent review and conversation evidence; independent Astra review cleared; focused trust/hotpaths 43 passed",
+      "commit": "6c560b9, CI run 34049592998 (all ten jobs passed); 64e4163 scoped repair; combined gates pending"
     },
     {
       "id": "PW-081",
@@ -729,7 +729,7 @@
       "requirement": "Expose same-domain trust and non-email-channel trust behavior explicitly in",
       "status": "implemented",
       "test": "`tests/test_sender_trust.py`::RulesTests::test_each_rule_has_a_switch, ::SettingsTests (own-domain, Sent Items and chat-channel trust are three visible switches with defaults; no incoming-history option exists)",
-      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
     },
     {
       "id": "PW-082",
@@ -738,7 +738,7 @@
       "requirement": "Apply the configured sender-trust contract consistently to coding and",
       "status": "implemented",
       "test": "`tests/test_sender_trust.py`::BothKindsTests (the configured trust gates coding and general alike; a hold affects the unattended start only - intake, triage and the task are untouched)",
-      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
     },
     {
       "id": "PW-083",
@@ -747,7 +747,7 @@
       "requirement": "Add tests for prior incoming-only history remaining untrusted, verified sent",
       "status": "partial: incoming-only history, verified sent history, each disabled rule, same-domain and chat settings, failed lookups, mailbox scoping and both worker kinds covered; the live Graph/IMAP Sent Items queries are exercised only through the existing fakes",
       "test": "`tests/test_sender_trust.py` (11 cases)",
-      "commit": "6c560b9; 6c560b9, CI 34049592998 74bf868 (all ten jobs passed)"
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
     },
     {
       "id": "PW-084",
@@ -756,16 +756,16 @@
       "requirement": "Owner-approved: count all live coding/general agent sessions toward the",
       "status": "implemented",
       "test": "`tests/test_dispatch_retries.py`::CapacityTests (every live session counts - working, idle at its prompt, a general session; an ended one does not; a capacity wait is not an attempt)",
-      "commit": "6ed0301; local gates passed, CI pending"
+      "commit": "6ed0301; CI run 34049840835 (all ten jobs passed)"
     },
     {
       "id": "PW-085",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "Owner-approved: allow at most two automatic retries after the initial",
-      "status": "partial: persisted coding retry budget implemented; queued general failures still lose their retry row when the helper swallows failure",
-      "test": "tests/test_dispatch_retries.py; independent review found general drain clears the recorded failure and reports Started",
-      "commit": "6ed0301; incoming limitation, combined gates pending"
+      "status": "partial: persisted coding and direct-general retry budgets are implemented; a queued general failure can still lose its retry row when the helper swallows failure",
+      "test": "`tests/test_dispatch_retries.py`; independent review found the general queue drain can clear the recorded failure and report Started",
+      "commit": "6ed0301, CI run 34049840835 (all ten jobs passed); incoming limitation, combined gates pending"
     },
     {
       "id": "PW-086",
@@ -774,7 +774,7 @@
       "requirement": "Configuration, missing repository/worker, and permission failures should",
       "status": "implemented",
       "test": "`tests/test_dispatch_retries.py` (configuration, missing repository/worker and permission failures are \"needs you\" at once; capacity waits consume nothing)",
-      "commit": "6ed0301; local gates passed, CI pending"
+      "commit": "6ed0301; CI run 34049840835 (all ten jobs passed)"
     },
     {
       "id": "PW-087",
@@ -783,25 +783,25 @@
       "requirement": "After retry exhaustion, retain the task and dispatch error visibly but stop",
       "status": "partial: after exhaustion the task and its error stay, automatic attempts stop, and `POST /api/tasks/{id}/dispatch/retry` and `DELETE /api/tasks/{id}/dispatch` exist with the state on the task list; the task-view buttons and the attention pipeline entry are Phase 8 surfaces",
       "test": "`tests/test_dispatch_retries.py`::OwnerControlsTests",
-      "commit": "6ed0301; local gates passed, CI pending"
+      "commit": "6ed0301; CI run 34049840835 (all ten jobs passed)"
     },
     {
       "id": "PW-088",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "Schedule due retries without depending solely on an unrelated session ending;",
-      "status": "partial: timers and persisted deadlines implemented; general queued failure is swallowed and restart only arms the earliest distinct retry deadline",
-      "test": "tests/test_dispatch_retries.py; independent review: later restored deadlines can depend on unrelated session completion",
-      "commit": "6ed0301; incoming limitations, combined gates pending"
+      "status": "partial: timers and persisted deadlines are implemented; queued general failure is swallowed and restart arms only the earliest of distinct retry deadlines",
+      "test": "`tests/test_dispatch_retries.py`; independent review found later restored deadlines can depend on unrelated session completion",
+      "commit": "6ed0301, CI run 34049840835 (all ten jobs passed); incoming limitations, combined gates pending"
     },
     {
       "id": "PW-089",
       "section": "Dispatch queue startup failure",
       "phase": "5",
       "requirement": "Test transient recovery, exactly three failed attempts, persisted backoff",
-      "status": "partial: coding and direct general retry cases covered; queued general failures and multiple restored deadlines remain unaccepted",
-      "test": "tests/test_dispatch_retries.py; tests/processing/test_dispatch_owner_guard.py covers owner-only Retry/Cancel; cumulative gates pending",
-      "commit": "6ed0301; integration review limitations recorded"
+      "status": "partial: coding and direct-general retry cases are covered; queued general failures and multiple restored deadlines remain unaccepted",
+      "test": "`tests/test_dispatch_retries.py`; `tests/processing/test_dispatch_owner_guard.py` covers owner-only Retry/Cancel; cumulative gates pending",
+      "commit": "6ed0301, CI run 34049840835 (all ten jobs passed); integration-review limitations retained"
     },
     {
       "id": "PW-090",
@@ -1537,99 +1537,99 @@
       "section": "Similar coding work: inform agents, do not queue for overlap",
       "phase": "5",
       "requirement": "Remove automatic deferral behind another task solely because of likely file",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::AdvisoryOverlapTests (likely overlap starts the task with a briefing in both the immediate and the ranked/queued path; an old overlap dependency no longer blocks; capacity still queues)",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-172",
       "section": "Similar coding work: inform agents, do not queue for overlap",
       "phase": "5",
       "requirement": "Before startup, give the agent current same-checkout peer task IDs, agent",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::BriefingTests (peer ids, agent identities, task summaries, touched files, what the live session said, the coordination rule and own-changes-only staging)",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-173",
       "section": "Similar coding work: inform agents, do not queue for overlap",
       "phase": "5",
       "requirement": "Refresh coordination context as peers start, change work, or stop. Closed",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the briefing and every wall surface read the live selection at the moment they are built, and closed sessions never masquerade as ownership; a push-style refresh into a running agent is not wired (an agent re-reads with `taskuary --board`)",
+      "test": "`tests/test_coordination.py`::BriefingTests::test_a_closed_sessions_note_is_not_current_ownership, ::LiveWallTests",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-174",
       "section": "Similar coding work: inform agents, do not queue for overlap",
       "phase": "5",
       "requirement": "If AI overlap assessment is absent, uncertain, or fails, still provide the",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::BriefingTests::test_no_assessment_is_not_no_overlap (the factual briefing rides without a model; \"not assessed\" is said, never read as no overlap)",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-175",
       "section": "Similar coding work: inform agents, do not queue for overlap",
       "phase": "5",
       "requirement": "Test similar tasks launching when capacity permits, both dispatch modes,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: both dispatch modes, advisory reaching the seed, retained capacity queuing and removal of obsolete blockers without duplicate starts are covered; the retry limit interplay is covered by `tests/test_dispatch_retries.py`",
+      "test": "`tests/test_coordination.py` (17 cases); `tests/test_blackboard.py` two tests moved to the PW-171 contract with the reason noted",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-176",
       "section": "Wall notes: live coordination only",
       "phase": "5",
       "requirement": "Explicitly remove the deliberate closed-session wall-note injection from",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::LiveWallTests::test_every_surface_reads_the_same_live_selection (the seed carries live notes only, none when none are live); `tests/test_agent_wall.py` seed tests moved to live sessions with the reason noted",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-177",
       "section": "Wall notes: live coordination only",
       "phase": "5",
       "requirement": "Apply the same removal explicitly to general-assistant context:",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::LiveWallTests::test_the_general_prompt_carries_live_house_notes_only (a closed chat's house note is out; the owner's guidance stays)",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-178",
       "section": "Wall notes: live coordination only",
       "phase": "5",
       "requirement": "Associate coordination notes with a specific agent session/run, not merely",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: terminal/CLI notes carry session identity and follow live-session lifetime; the HTTP note API does not yet forward the session ID",
+      "test": "`tests/test_coordination.py` covers terminal session ownership, waiting, end and same-task restart; HTTP SID propagation regression/repair pending review",
+      "commit": "165af37; incoming implementation, combined gates pending"
     },
     {
       "id": "PW-179",
       "section": "Wall notes: live coordination only",
       "phase": "5",
       "requirement": "Use the same live-note selection for the board UI, agent startup context,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: live_notes is shared by Board, seed, assistant prompt and CLI reads; HTTP-created notes lack session identity until the API repair lands",
+      "test": "`tests/test_coordination.py` covers the shared selection; HTTP note-post identity propagation remains pending",
+      "commit": "165af37; incoming implementation, combined gates pending"
     },
     {
       "id": "PW-180",
       "section": "Wall notes: live coordination only",
       "phase": "5",
       "requirement": "Retain ended-run notes in task/run history, explicitly historical and not",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::LiveWallTests::test_history_keeps_ended_run_notes_and_marks_them_historical (`blackboard.history` / `GET /api/board/notes?all=1` flag each note live or historical; owner guidance is separate from run coordination)",
+      "commit": "165af37; local gates passed, CI pending"
     },
     {
       "id": "PW-181",
       "section": "Wall notes: live coordination only",
       "phase": "5",
       "requirement": "Test active and approval-waiting runs, completed/stopped runs, same-task",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: active/waiting and ended sessions, same-task restarts, general/chat agents and shared read surfaces are covered; HTTP SID propagation and a headless run own-post path remain pending",
+      "test": "`tests/test_coordination.py` (17 cases); HTTP note API and CLI integration repair/review pending",
+      "commit": "165af37; incoming implementation, combined gates pending"
     },
     {
       "id": "PW-182",

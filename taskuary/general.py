@@ -659,7 +659,7 @@ class GeneralSession:
                 from . import browserview, terminal
                 if browserview.start(self.sid):
                     browser_tools = True
-                    browser_env = {**terminal.session_env('assistant', self.task_id), **browserview.env(self.sid)}
+                    browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid)}
                     system = f'{system}\n\n{browserview.brief()}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie

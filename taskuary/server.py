@@ -1836,7 +1836,7 @@ class NoteBody(BaseModel):
 @app.get('/api/board/notes')
 def board_notes(cwd: str = '', limit: int = 60, all: bool = False):
     """Live handoffs by default; durable note history when ``all`` is requested."""
-    rows = (store.notes(blackboard.norm(cwd) or None, limit, rolled=True) if all
+    rows = (blackboard.history(store, cwd or None, limit) if all
             else blackboard.live_wall(store, cwd, limit))
     return {'data': rows,
             'kinds': list(blackboard.KINDS), 'summary_kind': blackboard.SUMMARY}

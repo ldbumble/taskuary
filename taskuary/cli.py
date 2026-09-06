@@ -163,11 +163,35 @@ def main():
             else: print(f"filed in the Hub under {p['Topic']} as #{p['LoreId']}: {p['Title']}")
             return
         if args.note:
-            try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None)
+            try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None, sid=os.environ.get('TASKUARY_SID'))
             except ValueError as e: print(f'not posted: {e}'); return
             print(f"posted to the wall as {n['Agent']} [{n['Kind']}]")
             return
-        rows = store.notes(bb.norm(cwd), 40 if args.all else 20, rolled=args.all)
+        if args.all:
+            rows = store.notes(bb.norm(cwd), 40, rolled=True)
+        else:
+            # Liveness belongs to the running server's terminal registry. A fresh CLI process has
+            # an empty registry of its own, so reading SQLite here would mislabel active SID notes
+            # as dead. Ask the same endpoint as the Board, with this session's scoped token.
+            import requests
+            srv = config.load()['server']
+            base = os.environ.get('TASKUARY_API') or os.environ.get('TASKUARY_URL')
+            if not base:
+                host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
+                base = f"http://{host}:{srv.get('port') or 7787}"
+            token = os.environ.get('TASKUARY_TOKEN') or srv.get('token') or ''
+            try:
+                response = requests.get(f'{base.rstrip("/")}/api/board/notes', timeout=5,
+                                        headers={'X-Taskuary-Token': token} if token else {},
+                                        params={'cwd': cwd, 'limit': 20})
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
+                    raise ValueError('the server returned an invalid wall response')
+                rows = payload['data']
+            except Exception as e:
+                print(f'the live wall is unavailable for {cwd}: could not reach Taskuary at {base}: {e}')
+                return
         print(f'the wall - {cwd}' if rows else f'the wall is empty for {cwd} - you are first')
         if not args.all and rows: print('  (older days are folded into [summary] lines; --board --all for every note)')
         for r in reversed(rows):

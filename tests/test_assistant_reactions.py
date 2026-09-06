@@ -232,9 +232,12 @@ class ArrivalsTests(unittest.TestCase):
 
         def line(body, mins, same=True):
             def llm(system, user, **kw):
-                # the room reader answers same/why; triage answers intent/kind - one brain, two questions
-                if 'SAME' in system: return json.dumps({'same': same, 'why': 'the reader says so'})
-                return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'an ask'})
+                # one brain, ONE question since PW-031: intent, kind and relationship in the same verdict,
+                # the relationship chosen among the room's same-day lines the prompt carries
+                u = json.loads(user)
+                rel = ({'relationship': 'continues', 'related_message_ids': [c['id'] for c in u.get('same_day_lines', [])]}
+                       if same else {'relationship': 'new'})
+                return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'an ask', **rel})
             return ingest.ingest_message(
                 s, {'external_id': f'wa:{mins}', 'channel': 'whatsapp', 'conversation_id': 'wa:gabi',
                     'subject': 'WhatsApp with Gabi', 'from_name': 'Gabi', 'from_email': None,

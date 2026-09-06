@@ -139,8 +139,8 @@ def _dt(s):
 def _when(s) -> str:
     """'Thu 28 Aug 11:21' - a day name the model can hold against a calendar, no year."""
     d = _dt(s); return d.strftime('%a %d %b %H:%M') if d else str(s or '')[:16]
-# the corporate wrapper around a body, not the sender's words: the external-mail banner and the "you don't often get email" hint
-_BANNER = re.compile(r"(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)", re.I)
+# the corporate wrapper around a body: one pattern for every surface, kept in triage.py (PW-029)
+from .triage import _BANNER
 def _gist(body, n=180) -> str:
     """The sender's own words, one line: banner, legal footer and signature gone (triage.strip_boilerplate)."""
     from .triage import strip_boilerplate

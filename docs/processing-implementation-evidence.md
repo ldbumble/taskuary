@@ -880,3 +880,48 @@ The `85267a0`-based integration passed 2,548 backend tests plus 71 subtests
 Before delivery, master advanced again to `b03445b` with Claude's same-day chat
 relationship changes (`78c6dd1`). These passed results remain tied to the draft
 base; the next integration gate must include the newer chat change.
+
+## Section 3.4 — chat relationships in the one triage verdict
+
+Status: implemented and tested locally at `78c6dd1`; remote CI pending on the pushed
+checkpoint. Section 3.3 is CI-verified (8b89e26, CI run 34039576824 (all ten jobs passed)).
+Acceptance PW-031 to PW-034 implemented; PW-035 partial (the configured-timezone boundary is
+exercised only through `norm_stamp` local time; no tracker-item cross-day case yet).
+
+A chat room shares one conversation id, and the router joined a new line to the room's task on
+that id before a second classifier (`triage.same_ask`) was asked whether it belonged. Both are
+gone: `ingest.chat_route` decides a chat line before routing - two facts join without a model
+(a line typed within the burst window of the room's last inbound line, an answer while an agent
+is live on the room's task), everything else is the single verdict's `relationship`
+(new/continues/answers/uncertain) with `related_message_ids` and `existing_task_id`, chosen
+among `ingest.chat_candidates` - the room's lines from the same local calendar date as the
+message's own stamp, never later lines - and validated by `triage.relationship_of` (ids outside
+the room or the day dropped, a task id must be one of theirs, nothing valid left = uncertain).
+`uncertain` and `new` open their own work; related lines without a task join the task the new
+line opens. With the classifier off or no brain, nothing but the facts joins: the room id alone
+never decides (PW-018). Mail and tracker routing is untouched. The shipped TRIAGE.md describes
+`same_day_lines`.
+
+Tests changed with explanation, none weakened: `test_chat_is_not_one_task.py` (single-verdict
+brain; triage-off and no-brain cases now open their own work per PW-033), `test_assistant_reactions.py`
+(one chat-burst case). New: `tests/test_chat_relationship.py` (17 cases). No frontend change; packaged assets unchanged.
+
+## Section 3.5 — clean, complete context for triage
+
+Status: implemented and tested locally at `0dea527`; remote CI pending on the pushed
+checkpoint. Section 3.4 is CI-verified (78c6dd1, CI run 34039988682 (all ten jobs passed)).
+Acceptance PW-027, PW-028, PW-029 implemented; PW-026 and PW-030 partial - the exchange now
+carries every message's cleaned, de-quoted words whole under `triage.EXCHANGE_BUDGET` (12,000
+characters) and says how many older messages it dropped, and the current body reaches the model
+whole up to `triage.BODY_BUDGET` (6,000) with a disclosed `body_truncated`; the merge of fetched
+history into one stored chain is PW-009 to PW-015 and still pending.
+
+`triage.strip_boilerplate` (the one cleaner every connector and surface already used) now also
+removes the external-sender banner and "you don't often get email" hint (pattern moved from
+assistant.py), mail-client stamps and unsubscribe/preferences strips, while a request that mentions
+a notice, security or a signature stays. `triage.dedupe_quoted` drops a quoted copy ('> ' runs,
+"On ... wrote:", "Original Message", "Forwarded message" blocks) only when its lines are already in
+the chain; unique forwarded material and inline answers survive. Stored messages are never edited.
+
+Tests: `tests/test_clean_context.py` (14 cases). One pinned wording in `test_follow_up_verdict.py` is unchanged (the exchange
+explanation keeps its opening words). No frontend change; packaged assets unchanged.

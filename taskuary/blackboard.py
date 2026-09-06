@@ -310,7 +310,11 @@ def drain(store):
                                 (hit['tid'], why or 'likely to touch the same files', q['TaskId']))
                     continue
             try:
-                term.start_on_task(store, q['TaskId'], q.get('Agent') or 'coder', actor='router')
+                from . import general
+                if general.handles(t):
+                    from .ingest import _start_general
+                    _start_general(store, q['TaskId'])   # a queued GENERAL task opens its assistant session, not a CLI (PW-069)
+                else: term.start_on_task(store, q['TaskId'], q.get('Agent') or 'coder', actor='router')
                 store.clear_dispatch(q['TaskId'])
                 store.add_comment(q['TaskId'], 'router', 'agent', 'Started from the dispatch queue - '
                                   + (f'{task_ref(b)} finished with the files it was holding.' if b else 'a session slot freed up.'))

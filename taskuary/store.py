@@ -300,6 +300,7 @@ INDEXES = (
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
+                    'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
                     'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
@@ -2027,6 +2028,20 @@ class SQLiteStore:
     # no-AI install's "awaiting AI triage" is deliberately not here: flipping years of that
     # history at once would be the bulk conversion PW-040 forbids; new arrivals wear the state.
     TRIAGE_FAILURE = r"^(AI triage failed \(|AI triage returned an answer it could not read|triage failed \(|triage retry failed \()"
+    def upgrade_auto_start(self) -> bool:
+        """An install that had switched the coding agent's auto-start OFF said 'no unattended sessions'
+        before the assistant had a switch of its own: the new switch starts off for it too (PW-070).
+        Runs once; an owner's explicit choice for the new switch is never overwritten."""
+        cfg = self.get_settings()
+        if cfg.get('auto_start_upgraded') == '1': return False
+        row = self._one("SELECT * FROM setting WHERE Name='general_auto_enabled'")
+        seeded = row is None or not row.get('UpdatedBy')
+        changed = False
+        if seeded and cfg.get('coder_auto_enabled') == '0':
+            self.set_setting('general_auto_enabled', '0', 'upgrade'); changed = True
+        elif row is None: self.set_setting('general_auto_enabled', '1', 'upgrade')
+        self.set_setting('auto_start_upgraded', '1', 'upgrade')
+        return changed
     def upgrade_triage_failures(self) -> int:
         """Historical triage failures stored as `filed` become `error` once (PW-040) - identified
         by their LAST route being a failure diagnostic, so a row the owner later ruled on, a genuine

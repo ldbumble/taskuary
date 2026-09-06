@@ -109,7 +109,8 @@ class CoreTests(unittest.TestCase):
             out = ingest_message(s, self.msg(external_id='ac4'), llm=TASK_LLM)
         self.assertFalse(any(getattr(c[0][0], '__name__', '') == '_auto_code' for c in spawn.call_args_list))
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
-        self.assertIn('talk it through with the assistant', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        # PW-069: general now starts its assistant (or says why it could not) - what must not appear is a coder
+        self.assertNotIn('sent to the coding agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
     def test_a_first_time_email_sender_never_starts_the_coder_by_itself(self):
         """The one road from a stranger's text to an agent on this machine with nobody in between

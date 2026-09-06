@@ -65,6 +65,8 @@ async def _lifespan(_app):
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
+    try: store.upgrade_auto_start()   # an old 'no auto-dispatch' opt-out covers the assistant's new switch too (PW-070)
+    except Exception as e: logger.warning(f'auto-start upgrade skipped: {e}')
     try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
         n = store.upgrade_triage_failures()
         if n: logger.info(f'{n} historical triage failure(s) now show as errors with a retry')
@@ -1046,7 +1048,10 @@ def work_on_task(tid: int) -> str:
     except Exception: pass
     cs = store.list_comments(tid)
     if any(str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')) for c in cs): had.append('it carries an agent report')
-    if any(str(c.get('ActorType') or '') == 'agent' for c in cs) and 'it carries an agent report' not in had: had.append('an agent has worked on it')
+    # the router's own bookkeeping ('not auto-started', 'start failed', 'queued') is not an agent's work: a task
+    # nothing ever ran on stays deletable however loudly the pipeline explained why (PW-073)
+    if any(str(c.get('ActorType') or '') == 'agent' and str(c.get('Actor') or '') != 'router' for c in cs) and 'it carries an agent report' not in had:
+        had.append('an agent has worked on it')
     return ' and '.join(had)
 
 
@@ -2145,6 +2150,10 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     store.tag_task(task_id, HOLD_TAG, on=False, actor=ACTOR)
     store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
     store.audit('task', task_id, 'release', ACTOR)
+    from . import general, ingest as _ing
+    if general.handles(store.get_task(task_id)):
+        _ing._spawn(_ing._auto_general, store, task_id)     # the assistant's session, not a CLI (PW-069)
+        return {'released': True, 'assistant': True}
     ses = start_session(store, task_id, body.agent, body.model)
     return {'released': True, 'session': ses}
 

@@ -625,7 +625,10 @@ class ResponseTests(unittest.TestCase):
 
     def test_set_something_up_is_confirmed_then_opens_a_walk_through_not_a_build(self):
         s = store()
-        p = decide(s, 'set up the Zoho invoice integration so it drafts the monthly invoices', 'setup')['proposal']
+        # the set-up sort (Section 10.2) calls this one digging - a form-shaped set-up would be a report proposal instead
+        digging = lambda system, user, **k: json.dumps({'kind': 'investigate', 'provider': None, 'why': 'a portal and two systems'})
+        with mock.patch.object(concierge, '_compose_llm', return_value=digging):
+            p = decide(s, 'set up the Zoho invoice integration so it drafts the monthly invoices', 'setup')['proposal']
         self.assertEqual((p['kind'], p['label']), ('task.setup', 'Open the walk-through'))
         self.assertEqual(s.list_tasks(active_only=True), [])           # nothing opened on the words
         with mock.patch.object(ingest, '_spawn') as spawn:

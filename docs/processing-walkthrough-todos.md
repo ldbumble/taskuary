@@ -1101,25 +1101,25 @@ Owner-approved: straightforward report and connection setup happens in the
 assistant conversation and creates the actual configured resource, not an empty
 walkthrough task. Pending implementation.
 
-- [ ] <a id="pw-194"></a>**PW-194** Interpret setup requests through AI, gather missing configuration, and show
+- [x] <a id="pw-194"></a>**PW-194** Interpret setup requests through AI, gather missing configuration, and show
   a structured confirmation box before saving. Use shared validated Reports and
   Connections operations, not a separate assistant-only creation path. Return the
   actual created resource and a link to its normal management screen.
-- [ ] <a id="pw-195"></a>**PW-195** For reports, gather source/connection, query or inputs, summary instructions,
+- [x] <a id="pw-195"></a>**PW-195** For reports, gather source/connection, query or inputs, summary instructions,
   schedule/timezone, and informational/promotion/triage behavior. Show enabled state
   explicitly; schedule activation must be covered by confirmation. Read-only preview
   may run without another confirmation, but must not send, write external data,
   activate schedules, or dispatch workers as a side effect.
-- [ ] <a id="pw-196"></a>**PW-196** For connections, gather provider and non-secret configuration, show requested
+- [x] <a id="pw-196"></a>**PW-196** For connections, gather provider and non-secret configuration, show requested
   permissions/scopes, and use the existing secure credential/OAuth interface.
   Do not request or persist secrets in assistant conversation/history/memory.
   Distinguish configuration saved, authorization pending, connected, and validation
   failed; do not claim usable connectivity until verified. Make sync/start behavior
   explicit rather than silently enabling unrelated workflows or agents.
-- [ ] <a id="pw-197"></a>**PW-197** If setup requires substantial investigation, propose a general-agent setup
+- [x] <a id="pw-197"></a>**PW-197** If setup requires substantial investigation, propose a general-agent setup
   task with an explanation and confirmation. Use coding only for actual code work.
   Do not create a task or start a worker for every simple configuration request.
-- [ ] <a id="pw-198"></a>**PW-198** Test conversational clarification/correction/cancel, exact configuration
+- [x] <a id="pw-198"></a>**PW-198** Test conversational clarification/correction/cancel, exact configuration
   confirmation, real resource creation without placeholder tasks, duplicate-submit
   protection, permission/auth failure, secret redaction, safe preview, schedule
   activation, and shared behavior with Reports/Connections UI.

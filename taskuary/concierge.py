@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
 
-from . import funnel, general, llm as llm_mod
+from . import funnel, general, llm as llm_mod, store as store_mod
 from .assistant import _ts
 from . import operations
 from .store import task_ref
@@ -101,6 +101,9 @@ SYSTEM = (
     'proposal with a button, so say what WILL happen when they confirm - never that it happened. When the '
     'decision is about a DIFFERENT item than the one on the table, end the DECIDE line with ON: and the words '
     'that name it (its TQ ref, the sender or the subject): DECIDE: not_ours ON: payroll portal outage.\n'
+    'Setting something up - a report, a check, a workflow, a connection to a system - is DECIDE: setup: <the request in their '
+    'words>; when you asked set-up questions last turn and they are answering them, that is DECIDE: setup: <their answer> too. '
+    'Never ask for a password, token or key in this chat: those go on the connection\'s own card.\n'
     "The thread you are given is the whole thread, the owner's own sent mail included. When it shows they "
     "already answered, say so as a fact. Only when the thread has no answer from them may you say the mail "
     "has not been read back yet - and then name the Sync button, never blame yourself for not seeing it.")
@@ -682,7 +685,7 @@ def record(store, tid: int, role: str, text: str, card: dict = None):
                             and all(k in child for k in ('key', 'kind', 'lane')) else child for child in children]
         return out
     saved_card = durable(card) if card else None
-    body = text.strip() + (f"\n\n{MARK}{json.dumps(saved_card, default=str)} -->" if saved_card else '')
+    body = redact(text).strip() + (f"\n\n{MARK}{json.dumps(saved_card, default=str)} -->" if saved_card else '')
     actor = 'owner' if role == 'user' else 'assistant'
     actor_type = general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE
     # A double click must not duplicate the owner's words: those two calls may reach the backend
@@ -709,7 +712,7 @@ def record_related(store, dock_tid: int, item: dict | None, role: str, text: str
     actor_type = DISCUSSION_USER_TYPE if role == 'user' else DISCUSSION_ASSISTANT_TYPE
     add = getattr(store, 'add_comment_once', store.add_comment)
     for task_tid in tids:
-        if store.get_task(task_tid): add(task_tid, actor, actor_type, str(text or '').strip())
+        if store.get_task(task_tid): add(task_tid, actor, actor_type, redact(str(text or '')).strip())
     return result
 
 
@@ -1164,7 +1167,7 @@ def propose_switch(store, changes: list, says: str, text: str, actor: str = 'own
 def remember_fact(store, note: str, actor: str = 'owner') -> int:
     """A fact the owner told us to keep. Written HERE rather than left to the page, so the receipt
     is the fact: "Remembered." used to go out whether or not a row was ever written (2026-09-03)."""
-    mid = store.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': note.strip()[:1000],
+    mid = store.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': redact(note.strip())[:1000],
                             'Source': 'manual', 'Active': 1, 'CreatedBy': actor})
     store.audit('memory', mid, 'create', actor, detail={'from': 'assistant chat'})
     return mid
@@ -1518,6 +1521,147 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     return prop
 
 
+# ── setting things up from the chat (PW-194..197): sorted and gathered by AI, confirmed, created through the tabs' roads ──
+# a token typed into the chat is not kept (PW-196): what looks like one is replaced before any row is written
+_SECRETISH = re.compile(r"(?<![\w-])(?:xox[abpr]-[\w-]{10,}|sk-[A-Za-z0-9_-]{16,}|gh[pous]_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{12,}"
+                        r"|ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|[A-Fa-f0-9]{32,})(?![\w-])")
+SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|private[_ -]?key|client[_ -]?secret|bearer)', re.I)
+SETUP_QUESTIONS = 'setup_questions'
+SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
+                     '{"kind": "report" | "connection" | "investigate", "provider": "<connector type or null>", "why": "<one sentence>"}. '
+                     'A REPORT reads connected systems on a schedule and files what it found (a check, a digest, a scheduled agent job). '
+                     'A CONNECTION adds or configures a system Taskuary talks to (mail, chat, a database, a books system, an AI provider) - '
+                     'name its type from connector_types when you can. INVESTIGATE is a set-up that needs real digging first - a portal to '
+                     'read, systems to choose between, several moving parts - where a walk-through with an agent is the honest next step. '
+                     'A simple configuration is never investigate.')
+
+
+def redact(text: str) -> str: return _SECRETISH.sub('[redacted]', str(text or ''))
+
+
+def _compose_llm(store):
+    try: return llm_mod.build_llm(store)
+    except Exception as e:
+        logger.warning(f'concierge: no composer brain - {e}'); return None
+
+
+def sort_setup(store, text: str, llm) -> dict:
+    """What kind of set-up the words ask for, by the model: a report, a connection (and to what), or digging."""
+    from . import compose
+    types = sorted(store_mod.DEFAULT_ROLES)
+    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': types}), max_tokens=300)) or {}
+    except Exception as e:
+        logger.warning(f'concierge: the set-up sort failed - {e}'); out = {}
+    kind = str(out.get('kind') or 'report').lower(); prov = str(out.get('provider') or '').lower().strip()
+    return {'kind': kind if kind in ('report', 'connection', 'investigate') else 'report', 'provider': prov if prov in types else None,
+            'why': str(out.get('why') or '')[:300]}
+
+
+def _pending_setup(store, tid: int) -> dict | None:
+    """The set-up questions asked last turn, if the last assistant line asked them."""
+    rows = [c for c in general.chat_rows(store, tid) if c.get('ActorType') == general.ASSISTANT_TYPE]
+    card = _card_of(rows[-1]) if rows else None
+    return card if card and card.get('kind') == SETUP_QUESTIONS else None
+
+
+def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, label: str, summary: str, tail: str, actor: str,
+                 item: dict | None = None) -> dict:
+    """A proposal that is not about the item on the table: the same revise-or-replace rule as propose_for, recorded as a card."""
+    prev = open_proposal(store, dock_tid)
+    if prev and prev['kind'] == kind and int(prev['target']) == int(target): op = operations.revise(store, prev['id'], params, actor)
+    else:
+        if prev: operations.cancel(store, prev['id'], actor)
+        op = operations.propose(store, kind, target, params, actor)
+    text = (f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}") + f". {tail}"
+    record_related(store, dock_tid, item, 'assistant', text, {'kind': 'proposal', 'key': None, 'title': label, 'op': op['id'], 'tid': None, 'ref': None})
+    return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text}
+
+
+def _schedule_words(cfg: dict) -> str:
+    if cfg.get('cron'): return f"cron {cfg['cron']}"
+    if cfg.get('daily_at'): return f"daily at {cfg['daily_at']}"
+    if cfg.get('every_minutes'): return f"every {cfg['every_minutes']} minutes"
+    if cfg.get('every'): return str(cfg['every'])
+    return 'on start-up only' if cfg.get('on_startup') else 'no schedule - run it by hand'
+
+
+def report_facts(cfg: dict) -> dict:
+    """What the confirmation box says about a report (PW-195): source, inputs, schedule, enabled state, behaviour, delivery."""
+    srcs = cfg.get('sources') or []
+    src = ', '.join(str(x.get('type') or '?') for x in srcs if isinstance(x, dict)) if srcs else str(cfg.get('type') or '')
+    return {'title': str(cfg.get('title') or ''), 'source': src, 'inputs': _cut(str(cfg.get('query') or cfg.get('object') or cfg.get('url') or cfg.get('path') or cfg.get('prompt') or ''), 160),
+            'summary_instructions': _cut(str(cfg.get('ai_prompt') or ''), 160) or 'none - the raw result is filed',
+            'schedule': _schedule_words(cfg) + (f" ({cfg['tz']})" if cfg.get('tz') else ''),
+            'enabled': 'yes - it runs on its schedule once created', 'triage': 'triage reads it' if cfg.get('triage') else 'informational - filed on the Timeline, not triaged',
+            'delivery': str((cfg.get('deliver') or {}).get('to') or '') or 'the Timeline only'}
+
+
+def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead: str) -> dict:
+    """The set-up needs digging: a walk-through with the regular agent, proposed with the reason (PW-197)."""
+    prop = propose_for(store, tid, {'verb': 'setup', 'text': ask}, item, ask, actor)
+    prop['say'] = f"{lead} {prop['say']}"
+    record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': None, 'title': prop['label'], 'op': prop['id'], 'tid': None, 'ref': None})
+    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+
+
+def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: str = 'owner', llm=None) -> dict:
+    """A set-up asked for in the chat (PW-194): sorted by the model, gathered by the composer - its questions come back as
+    questions and the next words answer them - and put in front of the owner as a proposal that the shared Reports /
+    Connections road creates on the click. Secrets never pass through here (PW-196); digging is a walk-through (PW-197)."""
+    rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
+    cllm = llm or _compose_llm(store)
+    if not cllm:
+        say_ = 'Setting that up needs an AI connector - Connections → AI - or the Reports and Connections tabs, where the forms are. Nothing is set up.'
+        rec(say_); return {'say': say_, 'options': [], 'decision': None}
+    pending, answers = _pending_setup(store, tid), None
+    if pending:
+        ask, answers = pending['ask'], {'questions': pending.get('questions') or [], 'reply': text}
+        sort = sort_setup(store, f"{ask}. The owner answered: {text}", cllm)
+    else: sort = sort_setup(store, ask, cllm)
+    if sort['kind'] == 'investigate':
+        return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.")
+    if sort['kind'] == 'connection':
+        return _propose_connection(store, tid, ask, sort.get('provider'), item, actor)
+    from . import compose
+    out = compose.compose(store, ask, cllm, answers=answers)
+    if out.get('questions'):
+        qs = out['questions']
+        say_ = 'Before I put it together: ' + ' '.join(f"({n}) {q}" for n, q in enumerate(qs, 1)) + ' Nothing is set up yet.'
+        rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': qs})
+        return {'say': say_, 'options': [], 'decision': None}
+    if out.get('error') or not out.get('config'):                        # a configuration the composer itself could not stand behind
+        return _walkthrough(store, tid, ask, item, actor, f"I could not configure that from here ({out.get('error') or 'no configuration came back'}).")
+    cfg, facts = out['config'], report_facts(out['config'])
+    params = {'config': cfg, **facts}
+    tail = ((out.get('explain') + ' ') if out.get('explain') else '') + '; '.join(f"{k.replace('_', ' ')}: {v}" for k, v in facts.items() if k != 'title' and v)            + '. Nothing is saved - confirm below, tell me what to change, or preview a dry run first.'
+    prop = _propose_raw(store, tid, 'report.create', 0, params, 'Create the report', f"{facts['title']} ({cfg.get('type')})", tail, actor, item)
+    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+
+
+def _propose_connection(store, tid: int, ask: str, provider: str | None, item: dict | None, actor: str) -> dict:
+    """A connection (PW-196): provider and non-secret configuration, the authority it will hold and what that unlocks;
+    the secret is never asked for here - the card takes it, securely - and it stays off until the owner turns it on."""
+    from . import scopes
+    rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
+    if not provider:
+        types = sorted(store_mod.DEFAULT_ROLES)
+        say_ = ('Which system is it? ' + ', '.join(types) + ' - name it and I will put the connection in front of you. '
+                'A password, token or key never goes here; it goes on the card. Nothing is set up yet.')
+        rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': ['Which system should I connect?']})
+        return {'say': say_, 'options': [], 'decision': None}
+    existing = store.get_connector_by_type(provider)
+    cid = int(existing['ConnectorId']) if existing and not existing.get('Active') else 0
+    name = (existing or {}).get('Name') if cid else f"{provider.title()} (from the chat)"
+    scope = scopes.default_scope(provider)
+    params = {'type': provider, 'name': name, 'scope': scope, 'permissions': ', '.join(scopes.actions_at(scope)) or 'read',
+              'secret': 'never here - the card asks for it securely', 'starts': 'stays off until you turn it on after authorizing'}
+    tail = (f"A {provider} connection with {scope} authority ({params['permissions']}). I never take a token or password in this chat: "
+            'once the card exists, sign in or paste the secret there and run its Test. It stays off - nothing polls, nothing starts - '
+            'until you turn it on. Nothing is created - confirm below, or tell me what to change.')
+    prop = _propose_raw(store, tid, 'connection.create', cid, params, 'Create the connection', f"{name} ({provider})", tail, actor, item)
+    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+
+
 def describe_op(store, op: dict) -> tuple:
     """(the button's label, what it was about) for a proposal row - the receipt's two facts."""
     kind, p, tk, target = op.get('kind'), op.get('params') or {}, op.get('targetKind'), op.get('target')
@@ -1529,6 +1673,8 @@ def describe_op(store, op: dict) -> tuple:
     if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark it handled')
     if kind == 'task.complete' and p.get('agent'): label = 'Close the task and stop its agent'
     if kind == 'agent.stop' and p.get('wrap'): label = 'Wrap it up'
+    if kind == 'report.create': label = 'Create the report'
+    if kind == 'connection.create': label = 'Create the connection'
     ref = ''
     try:
         if tk == 'task' and target: ref = task_ref(int(target))
@@ -1540,6 +1686,8 @@ def describe_op(store, op: dict) -> tuple:
             ref = task_ref(rv['TaskId']) if rv.get('TaskId') else f'rv{target}'
         elif tk == 'item': ref = task_ref(int(p['tid'])) if p.get('tid') else str(p.get('key') or '')
         elif tk == 'source' and target: ref = f'report {target}'
+        elif tk == 'report': ref = str(p.get('title') or '')
+        elif tk == 'connector': ref = str(p.get('name') or '')
     except Exception: ref = ''
     return label, ref
 
@@ -1572,6 +1720,11 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
     if kind == 'agent.stop' and not p.get('wrap'): return ' The task stays open - say close it when you want it closed.'
     if kind == 'memory.remember': return ' A memory settles nothing: the walk is where it was.'
+    if kind == 'report.create' and o.get('sourceId'):
+        return f" \"{o.get('title')}\" is on the Reports tab{' and runs on its schedule' if o.get('enabled') else ', switched off'}."
+    if kind == 'connection.create' and o.get('connectorId'):
+        return (f" The {o.get('type')} card \"{o.get('name')}\" is {o.get('state')} - finish it on the card (sign in or paste the secret there), "
+                'then Test; it stays off until you turn it on.')
     if kind == 'task.complete' and o.get('already'): return ' It was closed already.'
     return ''
 
@@ -1682,6 +1835,8 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if elsewhere: d['target'] = card_for(target_item)
         return {'say': RECEIPTS[verb], 'options': [], 'decision': d}
+    if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)
+        return setup_turn(store, tid, text, decision.get('text') or text, item, actor)
     if decision and verb in PROPOSALS:
         try: prop = propose_for(store, tid, decision, target_item, text, actor, elsewhere=elsewhere, table=item)
         except ValueError as e:

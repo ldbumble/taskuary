@@ -179,7 +179,7 @@ function Line({ m, live, actions, fresh }) {
   const c = follows ? fresh : m.card;                     // the live card follows the pile
   const kind = c?.kind === "setup" ? "setup" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
   const card = live && m.card && kind ? {
-    proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} />,
+    proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     agent: <AgentCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
@@ -625,7 +625,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
       catch (e) { res = { status: e?.response?.status === 409 ? "stale" : "error", error: e?.response?.data?.detail || errText(e) }; }
       const out = afterExecute(p, res);
-      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null } } : x)),
+      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
       onChanged?.();
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
@@ -644,6 +644,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                             card: { kind: "proposal", key: data.key, title: data.label, op: data.id, tid: data.tid, ref: data.ref } }]);
     say(data.say);
   };
+  // a dry run of a proposed report (PW-195): the server refuses anything that could write
+  const previewProposal = async (p) => (await api.post(`/api/operations/${p.id}/preview`)).data;
   const cancelProposal = async (p) => {
     try { await api.delete(`/api/operations/${p.id}`); } catch { /* it may be gone already */ }
     const out = afterCancel(p);
@@ -772,7 +774,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
-    confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect,
+    confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);

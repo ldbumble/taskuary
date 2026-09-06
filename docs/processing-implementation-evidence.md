@@ -2494,3 +2494,34 @@ allowed actions, ask-first, done-when, and the trigger - no procedure selection 
 triage-selected procedure still rides in either worker's brief.
 
 Tests: `tests/test_workflows.py` (6 cases). Backend evidence: `.codex-tmp/phase3-evidence/backend-10.1.log`.
+
+## Section 10.2 — a set-up asked for in the chat is gathered, confirmed, and created through the tabs' own roads
+
+Status: implemented and tested locally at `aa474a8`; remote CI pending on the pushed
+checkpoint. Section 10.1 is CI-verified (0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)).
+Acceptance PW-194 to PW-198 implemented.
+
+"Set up a report of open AR every Monday" opened a walk-through task on the words. Now
+`concierge.setup_turn` (PW-194) has the model sort the request - a report, a connection, or one
+that needs digging - gathers a report through the shared composer (`compose.compose`: its questions
+come back as questions carrying a `setup_questions` card, and the owner's next words are read as the
+answers), and puts the exact configuration in front of the owner as a `report.create` proposal whose
+box says source, inputs, summary instructions, schedule, enabled state, triage behaviour and
+delivery (PW-195). The click runs `save_source`, the Reports tab's own road, and the outcome carries
+the real source id and its `#report=` link; a duplicate title is a failure, a second click the first
+receipt. `POST /api/operations/{id}/preview` dry-runs a proposed report read-only - schedule and
+delivery stripped, nothing filed, sent, activated or started - and refuses an executor that writes.
+
+A connection (PW-196) is a `connection.create` proposal naming the provider, its authority and what
+that unlocks; the click runs `save_connector`, the Connections tab's road, re-targeting the type's
+own card when it is unconfigured and never creating a second, with the card left OFF and without a
+secret, and the outcome states `authorization pending`, `connected`, `validation failed` or `saved,
+not yet verified` from the row. The chat never asks for a token, and `concierge.redact` strips one
+typed in before any chat row, task mirror or memory is written. A set-up the sort calls digging, or
+a configuration the composer cannot stand behind, becomes the `task.setup` walk-through proposal with
+its reason (PW-197); a simple configuration never opens a task. The proposal card shows the facts,
+offers Preview for a report, and links "Open it" after the click.
+
+Tests: `tests/test_chat_setup.py` (8 cases), `website/test/chatSetup.test.mjs` (2 cases); the concierge set-up pin re-pinned.
+Frontend: `proposalCard.js`, `ProposalCard.jsx`, `AssistantView.jsx`, rebuilt bundle. Backend
+evidence: `.codex-tmp/phase3-evidence/backend-10.2.log`.

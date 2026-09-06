@@ -566,6 +566,31 @@ def _run_operation(op: dict, background: BackgroundTasks):
         from . import concierge, funnel
         item = (funnel.next_item(store, p['key']) if p.get('key') else None) or {'tid': tid, 'key': p.get('key')}
         return concierge.split_item(store, item, str(p.get('text') or ''), ACTOR)
+    if kind == 'report.create':
+        # the same road the Reports tab takes (validate, then save_source) - never an assistant-only path (PW-194)
+        from . import compose
+        cfg = dict(p.get('config') or {})
+        ok, why = compose.validate(store, cfg)
+        if not ok: raise RuntimeError(why)
+        title = str(cfg.get('title') or '').strip()
+        if any(x.get('Channel') == 'report' and str(x.get('Address') or '').casefold() == title.casefold() for x in store.list_sources(active_only=False)):
+            raise RuntimeError(f'a report named {title!r} already exists - open it on the Reports tab')
+        enabled = bool(p.get('enabled', True))
+        out = save_source(SourceBody(Channel='report', Address=title, Active=enabled, ConfigJson=json.dumps(cfg)))
+        return {**out, 'title': title, 'type': cfg.get('type'), 'enabled': enabled, 'link': f"#report={out['sourceId']}"}
+    if kind == 'connection.create':
+        # the same road the Connections tab takes; a secret never rides a proposal, and the card stays off until authorized (PW-196)
+        from . import concierge
+        typ, name = str(p.get('type') or ''), str(p.get('name') or '')
+        cfg = {k: v for k, v in (p.get('config') or {}).items() if not concierge.SECRET_WORDS.search(str(k))}
+        body = (ConnectorBody(ConnectorId=tid, ConfigJson=json.dumps(cfg) if cfg else None, Scope=p.get('scope') or None) if tid
+                else ConnectorBody(Type=typ, Name=name, ConfigJson=json.dumps(cfg) if cfg else None, Scope=p.get('scope') or None, Active=False))
+        out = save_connector(body)
+        c = store.get_connector(out['connectorId'], with_secret=True) or {}
+        state = ('authorization pending' if not c.get('Secret') else 'connected' if c.get('LastSyncAt') and not c.get('LastError')
+                 else 'validation failed' if c.get('LastError') else 'saved, not yet verified')
+        return {'connectorId': out['connectorId'], 'type': c.get('Type') or typ, 'name': c.get('Name') or name, 'state': state,
+                'active': bool(c.get('Active')), 'link': f"#connector={out['connectorId']}"}
     if kind == 'pipe.clear':
         from . import concierge
         out = concierge.clear_matching(store, str(p.get('text') or ''), ACTOR, hint=str(p.get('hint') or ''))
@@ -576,6 +601,18 @@ def _run_operation(op: dict, background: BackgroundTasks):
             except Exception as e: logger.warning(f'the sweep happened but the sender was not silenced: {e}')
         return out
     raise HTTPException(501, f'{kind} has no shared handler yet')
+
+@app.post('/api/operations/{oid}/preview')
+def preview_operation(oid: str):
+    """A dry run of a proposed report (PW-195): read-only, files nothing, sends nothing, activates nothing, starts nothing."""
+    from . import scopes
+    op = operations.get(store, oid)
+    if not op or op['kind'] != 'report.create': raise HTTPException(404, 'nothing to preview')
+    cfg = dict((op['params'] or {}).get('config') or {})
+    if scopes.needs(cfg.get('type')) != 'read':
+        raise HTTPException(422, f"{cfg.get('type')} writes to a system - a dry run could too; run it from the Reports tab once created")
+    for k in ('deliver', 'alert', 'triage', 'on_startup', 'cron', 'every_minutes', 'daily_at'): cfg.pop(k, None)
+    return report_preview(cfg)
 
 @app.post('/api/operations')
 def propose_operation(body: OperationBody):

@@ -7,9 +7,10 @@ export function proposalOf(data) { return data && data.proposal && data.proposal
 
 // the box's four facts: what will happen, on what, with which parameters, and the button that does it
 export function describe(p) {
-  const hidden = new Set(["key", "tid", "rid", "hint"]);
-  const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k));
-  return { title: p.label || p.title || p.kind, target: p.summary || "", params, confirm: p.label || "Confirm", cancel: "Cancel" };
+  const hidden = new Set(["key", "tid", "rid", "hint", "config"]);
+  const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k)).map(([k, v]) => [k.replace(/_/g, " "), v]);
+  // a proposed report can be dry-run before the click (PW-195): read-only, nothing filed, sent, activated or started
+  return { title: p.label || p.title || p.kind, target: p.summary || "", params, confirm: p.label || "Confirm", cancel: "Cancel", preview: p.kind === "report.create" };
 }
 
 // a hand-off to an agent (PW-135): when it STARTS, the walk moves on once and the delegated task stays in

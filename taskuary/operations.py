@@ -43,6 +43,9 @@ KINDS = {
     'task.split':               ('task', ('text',), None),
     'pipe.clear':               ('pipe', ('text',), None),
     'task.setup':               ('text', ('text',), None),
+    # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection
+    'report.create':            ('report', ('config',), None),
+    'connection.create':        ('connector', ('type', 'name'), None),
 }
 # triage's `task` and `general` are one answer for this comparison (work, no coder); `coding` is another
 SAME = {frozenset(('task', 'general'))}

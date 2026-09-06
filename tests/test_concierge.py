@@ -538,9 +538,12 @@ class SetupAndTroubleTests(unittest.TestCase):
         self.assertIn('Zoho invoices', t['Summary'])
         self.assertIn('needs:browser', t['Tags'])          # the walkthrough owns the visible browser, not a coder
         self.assertFalse(spawn.called)                       # nobody is sent into a checkout
-        # said in the chat, a set-up is a PROPOSAL: the walk-through opens on the click, never on the words
+        # said in the chat, a set-up is a PROPOSAL: the walk-through opens on the click, never on the words (here the
+        # set-up sort says it needs digging - a form-shaped one would be a report proposal instead, test_chat_setup.py)
         n0 = len(s.list_tasks())
-        said = decided(s, 'create a report of open AR by facility', 'setup', arg='create a report of open AR by facility')
+        digging = lambda system, user, **k: json.dumps({'kind': 'investigate', 'provider': None, 'why': 'a portal to read first'})
+        with mock.patch.object(concierge, '_compose_llm', return_value=digging):
+            said = decided(s, 'create a report of open AR by facility', 'setup', arg='create a report of open AR by facility')
         p = said['proposal']; self.assertEqual((p['kind'], p['label']), ('task.setup', 'Open the walk-through'))
         self.assertIsNone(said['decision']); self.assertEqual(len(s.list_tasks()), n0)
         with mock.patch('taskuary.ingest._spawn') as spawn:

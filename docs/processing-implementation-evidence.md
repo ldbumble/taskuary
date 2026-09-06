@@ -1032,3 +1032,38 @@ endpoints turn "no repository decided", "several plausible", "no local path" and
 exist" into a visible repository choice instead of a session in some other checkout.
 
 Tests: `tests/test_repo_choice_triage.py` (8 cases). No existing assertion changed. No frontend change; packaged assets unchanged.
+
+### Final preservation corrections and repository-selection integration
+
+The exact `fb43c92` email-identity routing and `bc55b0c` repository-selection changes
+are retained in integration `9ab2553`. Independent review cleared compatibility
+with mail deduplication, checkpoints and retries; this is not blanket Phase 3
+acceptance. Raw ConversationId account scoping remains a full-chain limitation,
+not a claim completed by the catch-up fix. UI source/assets remain byte-identical
+to the successful checklist-base build.
+
+Final source `3188473` adds independently cleared checklist preservation from
+Sol commits `d3ff034` and `8834b84`. Exact trimmed text defines duplicates; operators,
+case and internal spacing remain meaningful. Existing stored IDs and ticks are
+retained by exact text, and all retained IDs are reserved before new allocation
+so reordering cannot give an old checked item's ID to a different new item.
+Accumulated additions are not truncated to the per-verdict cap; reported additions
+are durable and retries add/announce them once. Owner edits and toggles retain
+accumulated lists beyond twelve. The existing mixed-case test input remains and
+now asserts both distinct variants survive; an added truly identical whitespace
+variant still collapses. This replaces the demonstrated lossy casefold assumption
+while preserving type/trim/cap/exact-duplicate coverage.
+
+Sol's focused and neighboring tests passed 130 cases. Astra reviewed the exact
+final diff and independently reproduced old-ID/tick preservation after reorder,
+case-sensitive paths in one verdict, and the durable thirteenth addition. Root
+cumulative gates are in progress on `3188473`; its unchanged input browser scenario
+already passed in 15.829 s (first-visible/input 2,386/1,045 ms; navigation
+314/348/221 ms). No live data, app restart, or production connector was used.
+
+Source `3188473` completed its cumulative gate: 2,608 backend tests plus 71 subtests
+(151 warnings, no skips, 213.57 s), and all seven browser scenarios (15.829 s for
+the isolated input scenario; 184.990 s for the other six). Frontend/build remain
+the byte-identical 290-test, 12.25 s build recorded above. Before push, concurrent
+master advanced to `ffd9938` with assistant-idea triage; integrate that source and
+retain these results as the prior-base gate, not final-SHA verification.

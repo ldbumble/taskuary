@@ -13,6 +13,8 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from .funnel_presentation import item_revision
+
 
 _SCHEMA = "taskuary.funnel.selection.v1"
 
@@ -52,6 +54,18 @@ class SelectionStale(RuntimeError):
         super().__init__("the funnel selection changed; refresh before moving on")
 
 
+class SelectionUnavailable(RuntimeError):
+    """A required native worker observation failed; do not select from guessed state."""
+
+    def __init__(self, reason="worker attention is unavailable"):
+        self.detail = {
+            "code": "selection_unavailable",
+            "error": str(reason),
+            "retryable": True,
+        }
+        super().__init__(str(reason))
+
+
 def _scope(*, only=None, include_surfaced=False, exclude=None) -> dict:
     return {
         "only": str(only) if only is not None else None,
@@ -66,12 +80,15 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
     from . import funnel
 
     again = (now - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+    exclude = scope["exclude"]
+    excluded_keys = ({key for key in exclude[5:].split(",") if key}
+                     if exclude and exclude.startswith("fyis:") else {exclude})
     ready = [
         item for item in items
         if not item.get("settling")
         and item.get("lane") != "working"
         and not funnel._not_yet(item)
-        and item.get("key") != scope["exclude"]
+        and item.get("key") not in excluded_keys
         and (
             scope["include_surfaced"]
             or not item.get("surfaced")
@@ -88,12 +105,16 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
 
 
 def _selection_facts(item: dict) -> dict:
-    return {name: copy.deepcopy(item.get(name)) for name in (
-        "key", "lane", "settling", "surfaced", "surfaced_at", "mins",
+    from . import funnel
+
+    facts = {name: copy.deepcopy(item.get(name)) for name in (
+        "key", "lane", "settling", "surfaced", "surfaced_at",
     )}
+    facts["not_yet"] = funnel._not_yet(item)
+    return facts
 
 
-def _batch(store, first: dict, ready: list[dict]) -> tuple[dict, tuple[str, ...]]:
+def _batch(first: dict, ready: list[dict]) -> tuple[dict, tuple[str, ...]]:
     from . import funnel
 
     members = ([first] + [item for item in ready
@@ -112,25 +133,53 @@ def _batch(store, first: dict, ready: list[dict]) -> tuple[dict, tuple[str, ...]
         "items": copy.deepcopy(members),
         "members": list(keys),
     }
-    return funnel.present(store, {"items": [card]})["items"][0], keys
+    # The children were stamped together with the displayed pile.  Re-reading
+    # their backing here could create a batch assembled from two database moments.
+    # Their complete captured envelopes and revisions are sufficient backing for
+    # the synthetic parent card.
+    card["presentation_revision"] = item_revision(card, {
+        "captured_child_presentations": [
+            {"key": child.get("key"),
+             "presentation_revision": child.get("presentation_revision")}
+            for child in members
+        ],
+    })
+    return card, keys
 
 
 def capture_selection(store, *, only=None, include_surfaced=False,
                       exclude=None, now: datetime | None = None) -> SelectionCapture:
     """Capture the current automatic selection without watcher or reconciliation writes."""
     from . import funnel
+    from . import terminal
 
     captured_now = now or datetime.now()
     scope = _scope(only=only, include_surfaced=include_surfaced, exclude=exclude)
+    try:
+        live_state = copy.deepcopy(terminal.live_sessions(tail=6))
+    except Exception as error:
+        raise SelectionUnavailable() from error
+    for worker in live_state:
+        waiting = (worker.get("waiting") if worker.get("waiting") is not None
+                   else (worker.get("idle") or 0) >= terminal.IDLE_WAITING)
+        if not waiting or not worker.get("sid"):
+            continue
+        try:
+            rendered = [str(line).strip() for line in terminal.asking_lines(worker["sid"], 4)
+                        if str(line).strip()]
+        except Exception:
+            rendered = []
+        if rendered:
+            worker["tail"] = rendered
     pile = funnel.present(store, funnel.build(
-        store, now=captured_now, reconcile=False
+        store, now=captured_now, reconcile=False, live_state=live_state
     ))
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
     first = next((item for item in ready if not item.get("surfaced")),
                  ready[0] if ready else None)
     if first is not None and first.get("lane") == "fyi":
-        selected, member_keys = _batch(store, first, ready)
+        selected, member_keys = _batch(first, ready)
     else:
         selected = copy.deepcopy(first) if first is not None else None
         member_keys = (selected["key"],) if selected is not None else ()

@@ -1576,12 +1576,15 @@ def card_for(item: dict) -> dict:
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
-            include_surfaced: bool = False, exclude: str = None, selection=None, commit_guard=None) -> dict:
+            include_surfaced: bool = False, exclude: str = None, selection=None, commit_guard=None,
+            bound_dock: dict = None) -> dict:
     """The next thing out of the pipe (or the one named; or the next piece of MAIL), said in one
     breath and marked as shown. Nothing left: says so."""
     if selection is not None and key is not None:
         raise ValueError('a captured automatic selection cannot name a different item')
-    task, _ = general.dock_task(store, actor)
+    if bound_dock is not None and selection is None:
+        raise ValueError('a bound dock is only valid with a captured selection')
+    task = bound_dock if bound_dock is not None else general.dock_task(store, actor)[0]
     tid = task['TaskId']
     p = selection.pile if selection is not None else funnel.pile(store, force=True)
     item = selection.selected if selection is not None else (

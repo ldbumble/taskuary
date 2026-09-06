@@ -6,6 +6,7 @@ import contextlib, copy, hashlib, json, re, sqlite3, threading, uuid
 from datetime import datetime, timedelta
 from loguru import logger
 
+_LIVE_UNSET = object()
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
@@ -2459,7 +2460,8 @@ class SQLiteStore:
                     THEN 1 ELSE 0 END)"""
     NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT).replace('{theirs}', THEIR_TURN)
 
-    def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
+    def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None,
+             live_state=_LIVE_UNSET):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief,
@@ -2513,7 +2515,8 @@ class SQLiteStore:
         live, parked = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}, set()
         try:
             from . import terminal as hub_term
-            for t in hub_term.live_sessions(tail=0):
+            observed_live = hub_term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
+            for t in observed_live:
                 if not t.get('taskId'): continue
                 live[t['taskId']] = t.get('agent') or t.get('label') or 'coder'
                 # "an agent has it" and "an agent stopped and is waiting on you" are opposite

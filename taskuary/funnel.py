@@ -78,6 +78,7 @@ _SEEN = {}                         # tid -> (state, first seen at) - a change mu
 _WATCHED = [False]                 # first LOOK, even when there were no sessions; _STATE empty is not the same thing
 DWELL = 12.0                       # seconds a new state must survive before the watcher announces it
 _REPORT_SUMMARY = re.compile(r'(?im)^summary:\s*(.+)$')
+_LIVE_UNSET = object()
 _LOCK = threading.Lock()
 
 
@@ -329,13 +330,16 @@ def agent_found(store, tid) -> str:
     return _short(m.group(1) if m else rep['Body'].split('\n', 1)[-1], 300)
 
 
-def from_agents(store) -> list:
+def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
     """Live sessions parked on a question - whatever the feed window, an agent waiting is waiting."""
     from . import terminal as term, waitroom
     out = []
-    fresh_setup = (datetime.now() - timedelta(minutes=SETUP_GRACE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
-    try: live = term.live_sessions(tail=6)
-    except Exception: return out
+    fresh_setup = ((now or datetime.now()) - timedelta(minutes=SETUP_GRACE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    if live_state is _LIVE_UNSET:
+        try: live = term.live_sessions(tail=6)
+        except Exception: return out
+    else:
+        live = live_state
     for t in live:
         tid = t.get('taskId')
         if not tid: continue
@@ -351,7 +355,7 @@ def from_agents(store) -> list:
         tail = [str(x).strip() for x in (t.get('tail') or []) if str(x).strip()]
         # ...read off the RENDERED screen when there is one, with the TUI's chrome dropped: the
         # card showed a theme toolbar where the agent's question belonged (2026-09-03)
-        if t.get('sid'):
+        if t.get('sid') and live_state is _LIVE_UNSET:
             try: tail = [x for x in term.asking_lines(t['sid'], 4)] or tail
             except Exception as e: logger.debug(f'funnel: no rendered screen for {t.get("sid")} - {e}')
         asking = waitroom.looks_like_question(tail)
@@ -521,7 +525,7 @@ def _aged_out(i: dict, now: datetime, hours: int) -> bool:
 
 RUN_STALE_MIN = 20        # a 'running' run row nobody has touched for this long is not working anything
 
-def working_tids(store) -> set:
+def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
     """Tasks an agent has right now - a live session, or a headless run that is actually running.
     Nothing about them is the owner's to do until the agent stops.
 
@@ -530,11 +534,12 @@ def working_tids(store) -> set:
     altogether - not read, not offered, not findable (the 2026-09-03 break test). A row nobody has
     touched for RUN_STALE_MIN is a corpse, not a worker."""
     from . import terminal as term
-    fresh = (datetime.now() - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    fresh = ((now or datetime.now()) - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     out = {r['TaskId'] for r in store.running_runs()
            if r.get('TaskId') and str(r.get('UpdatedAt') or r.get('StartedAt') or '') >= fresh}
     try:
-        for t in term.live_sessions(tail=0):
+        live = term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
+        for t in live:
             if not t.get('taskId'): continue
             waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
             if not waiting: out.add(t['taskId'])
@@ -543,13 +548,14 @@ def working_tids(store) -> set:
 
 
 def build(store, now: datetime = None, keep_surfaced: bool = False,
-          reconcile: bool = True) -> dict:
+          reconcile: bool = True, live_state=_LIVE_UNSET) -> dict:
     now = now or datetime.now()
-    rows = store.feed(limit=400, days=FEED_DAYS)
+    rows = (store.feed(limit=400, days=FEED_DAYS) if live_state is _LIVE_UNSET
+            else store.feed(limit=400, days=FEED_DAYS, live_state=live_state))
     items = from_feed(store, rows)
     # the live session knows more about a parked agent than its feed row does (its last lines,
     # whether it asked) - so its item replaces the row's
-    agents = {a['key']: a for a in from_agents(store)}
+    agents = {a['key']: a for a in from_agents(store, live_state=live_state, now=now)}
     items = [agents.pop(i['key']) | {'mid': i.get('mid')} if i['key'] in agents else i for i in items] + list(agents.values())
     # ...and the mail that STARTED a task whose agent is now waiting is not a second item: the
     # agent's question is the thing to answer, and answering it is answering the mail
@@ -576,15 +582,16 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     # has closed is no longer work to walk through and must never be reintroduced into the funnel.
     # an agent mid-job: nothing to do here yet, whatever the mail or the idea says about the task - so it
     # rides at the TOP of the pipe as 'in hand', and drops to the front when the agent stops or asks
-    busy = working_tids(store)
+    busy = working_tids(store, live_state=live_state, now=now)
     from . import terminal as term
     # Keep the live session's identity on the working row. The message row used to change only its
     # key/lane, so the Assistant knew something was in hand but its card still had no sid, tail or
     # agent and rendered as "coding - nobody on it" after the coder was started from Tasks/Board.
-    try:
-        live_by_tid = {t['taskId']: t for t in term.live_sessions(tail=6) if t.get('taskId')}
-    except Exception:
-        live_by_tid = {}
+    if live_state is _LIVE_UNSET:
+        try: live_by_tid = {t['taskId']: t for t in term.live_sessions(tail=6) if t.get('taskId')}
+        except Exception: live_by_tid = {}
+    else:
+        live_by_tid = {t['taskId']: t for t in live_state if t.get('taskId')}
     live_tids = busy | {i['tid'] for i in items if i['kind'] == 'agent' and i.get('tid')}   # working, parked or asking: an agent is on it
     stale_before = (now - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     # ...and a task whose STATUS says in_progress is in the middle of being worked, whether or not a

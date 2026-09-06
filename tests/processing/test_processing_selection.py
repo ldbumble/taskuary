@@ -11,6 +11,7 @@ from taskuary import concierge, funnel, general
 from taskuary.funnel_selection import (
     SelectionCapture,
     SelectionStale,
+    SelectionUnavailable,
     capture_selection,
     recheck_selection,
     selection_fields,
@@ -64,6 +65,41 @@ def captured(items, **scope):
         result = capture_selection(NoStore(), now=NOW, **scope)
     assert built.call_args.kwargs["reconcile"] is False
     return result
+
+
+def test_capture_reads_native_worker_state_once_and_reuses_that_frozen_observation():
+    value = store()
+    tid = value.create_task({
+        "Title": "Frozen worker", "Kind": "coding", "Status": "in_progress",
+        "UpdatedAt": stamp(-60),
+    }, "owner")
+    message(value, tid)
+    waiting = [{
+        "taskId": tid, "agent": "codex", "sid": "synthetic", "waiting": True,
+        "tail": ["Which cutoff should I use?"], "started": stamp(-20),
+    }]
+    with mock.patch("taskuary.terminal.live_sessions", side_effect=[waiting, []]) as live, \
+         mock.patch("taskuary.terminal.asking_lines", return_value=["Rendered cutoff question?"]) as screen:
+        cap = capture_selection(value, now=NOW)
+
+    live.assert_called_once_with(tail=6)
+    screen.assert_called_once_with("synthetic", 4)
+    agent = next(row for row in cap.pile["items"] if row["key"] == f"agent:{tid}")
+    assert agent["lane"] == "blocked"
+    assert agent["tail"] == ["Rendered cutoff question?"]
+    assert cap.selected["key"] == f"agent:{tid}"
+
+
+def test_capture_fails_closed_when_native_worker_attention_is_unavailable():
+    value = store()
+    with mock.patch("taskuary.terminal.live_sessions", side_effect=OSError("native state failed")):
+        with pytest.raises(SelectionUnavailable) as unavailable:
+            capture_selection(value, now=NOW)
+    assert unavailable.value.detail == {
+        "code": "selection_unavailable",
+        "error": "worker attention is unavailable",
+        "retryable": True,
+    }
 
 
 def test_capture_is_deterministic_strict_and_does_not_call_mutating_pile_or_announce():
@@ -121,6 +157,18 @@ def test_unrelated_worker_display_churn_does_not_starve_selected_context_recheck
     assert changed_selected.revision != before.revision
 
 
+def test_unrelated_scheduled_clock_churn_only_invalidates_at_eligibility_boundary():
+    selected = item("msg:1", mid=1, channel="email")
+    scheduled = item("meeting:later", lane="time", kind="meeting", mins=31)
+    before = captured([selected, scheduled])
+    one_minute_later = captured([selected, {**scheduled, "mins": 30}])
+    now_eligible = captured([selected, {**scheduled, "mins": 15}])
+
+    assert one_minute_later.pile["items"][1]["presentation_revision"] != before.pile["items"][1]["presentation_revision"]
+    assert one_minute_later.revision == before.revision
+    assert now_eligible.revision != before.revision
+
+
 def test_fyi_capture_uses_one_scoped_order_and_names_the_exact_four_member_card():
     values = [item(f"msg:{n}", lane="fyi", kind="fyi", mid=n, channel="email")
               for n in range(1, 6)]
@@ -132,9 +180,35 @@ def test_fyi_capture_uses_one_scoped_order_and_names_the_exact_four_member_card(
     assert cap.selected["key"] == "fyis:msg:1,msg:2,msg:3,msg:4"
     assert [child["key"] for child in cap.selected["items"]] == list(cap.member_keys)
     assert selection_fields(cap)["expected_next_members"] == list(cap.member_keys)
+    displayed = {row["key"]: row for row in cap.pile["items"]}
+    assert all(child == displayed[child["key"]] for child in cap.selected["items"])
 
     after_first = captured(values, only="mail", exclude="msg:1")
     assert after_first.member_keys == ("msg:2", "msg:3", "msg:4", "msg:5")
+    after_batch = captured(values, only="mail", exclude=cap.selected["key"])
+    assert after_batch.member_keys == ("msg:5",)
+    assert after_batch.selected["key"] == "fyis:msg:5"
+
+
+def test_fyi_capture_stamps_the_pile_once_without_mixing_a_later_backing_read():
+    values = [item(f"msg:{n}", lane="fyi", kind="fyi", mid=n, channel="email")
+              for n in range(1, 3)]
+    real_present = funnel.present
+    calls = []
+
+    def observed(value, payload):
+        calls.append(payload)
+        return real_present(value, payload)
+
+    with mock.patch.object(funnel, "build", return_value={
+            "rev": "legacy", "items": values, "hidden": 0, "muted": 0,
+            "rules": [], "lanes": [],
+         }), mock.patch.object(funnel, "present", side_effect=observed):
+        cap = capture_selection(NoStore(), now=NOW)
+
+    assert len(calls) == 1
+    displayed = {row["key"]: row for row in cap.pile["items"]}
+    assert cap.selected["items"] == [displayed[key] for key in cap.member_keys]
 
 
 def test_validation_reports_the_fresh_selection_and_recheck_never_replaces_the_capture():
@@ -200,11 +274,13 @@ def test_captured_surface_commits_exact_item_and_fyi_members_under_one_guard():
         yield
         entered.append("exit")
 
-    with mock.patch.object(funnel, "pile", side_effect=AssertionError("must not reselect")), \
+    bound_dock = general.dock_task(value)[0]
+    with mock.patch.object(general, "dock_task", side_effect=AssertionError("must not switch chats")), \
+         mock.patch.object(funnel, "pile", side_effect=AssertionError("must not reselect")), \
          mock.patch.object(funnel, "next_item", side_effect=AssertionError("must not reselect")), \
          mock.patch.object(funnel, "fyi_batch", side_effect=AssertionError("must not re-batch")), \
          mock.patch.object(concierge, "_brain_for", return_value=None):
-        out = concierge.surface(value, selection=cap, commit_guard=guard)
+        out = concierge.surface(value, selection=cap, commit_guard=guard, bound_dock=bound_dock)
 
     assert out["item"]["key"] == cap.selected["key"]
     assert [child["key"] for child in out["item"]["items"]] == list(cap.member_keys)

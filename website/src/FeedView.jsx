@@ -883,7 +883,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // conversation by nature: showing one line of it hid every reply the owner sent from Teams
     // or Outlook, which is ingested as a `context` row and which the assistant has been reading
     // all along. The panel was the only place the history looked incomplete.
-    const p = canonicalPath
+    const request = canonicalPath
       ? api.get(canonicalPath).then(({ data }) => {
           const requested = targetOverride ? { ...row, OpenTarget: targetOverride } : row;
           const full = fullProcessingRow(requested, data);
@@ -893,6 +893,13 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       : (row.TaskId ? api.get(`/api/tasks/${row.TaskId}`).then((r) => ({ canonical: false, detail: r.data }))
         : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => ({ canonical: false, detail: threadDetail(r.data) })))
         .catch(() => ({ canonical: false, detail: { messages: [] } }));   // legacy panel falls back to the preview
+    let p;
+    p = request.catch((error) => {
+      // A failed speculative hover must not poison this target for a minute. Promise identity
+      // keeps an older failure from evicting a newer request for the same semantic selection.
+      if (cache.current.get(key)?.p === p) cache.current.delete(key);
+      throw error;
+    });
     cache.current.set(key, { at: Date.now(), p });
     return p;
   };
@@ -936,7 +943,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       setSel(selected); setDetail(loaded.detail);
     } catch (e) {
       if (want.current !== requestKey) return;
-      cache.current.delete(semanticKey);
       const code = e?.response?.data?.detail?.code;
       if (code === "processing_target_moved") {
         setErr(e.response.data.detail.message || "That item changed. Refreshing the Timeline.");
@@ -1000,7 +1006,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
         setSel(loaded.row); setDetail(loaded.detail);
       }).catch((e) => {
         if (want.current !== requestKey) return;
-        cache.current.delete(processingSelectionKey(base));
         const detail = e?.response?.data?.detail;
         setErr(detail?.message || e?.message || "Failed to refresh item detail");
         if (detail?.code === "processing_target_moved" || e?.response?.status === 404) closeSelection();
@@ -1060,7 +1065,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // way to the next hover like any row - otherwise the panel stuck on the first meeting
     if (calSel?.pinned) return;
     if (Date.now() - lastScroll.current < 250) return;
-    disarmClose(); fetchDetail(row);                                      // start the fetch now, commit after the rest
+    disarmClose(); fetchDetail(row).catch(() => {});                      // speculative; drill reports an error if intent follows
     hoverTimer.current = setTimeout(() => drill(row, true), 70);
   };
   const hoverCancel = () => clearTimeout(hoverTimer.current);

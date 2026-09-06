@@ -434,21 +434,65 @@ def source_folders(s: dict) -> list:
     return [f for f in fs if f] or ['inbox']
 
 
-def _mail_msgs(tok, upn, since, folder='inbox', cap=500):
+MAIL_BATCH = 500   # one _mail_msgs call; _mail_folder keeps asking until a short batch comes back
+
+
+def _mail_msgs(tok, upn, since, folder='inbox', cap=MAIL_BATCH, inclusive=False, skip=0):
+    """One batch of a folder, OLDEST first: at most `cap` messages received after `since` - or from
+    it, with inclusive=True, which is how a continuation asks for the boundary second again (dedupe
+    drops the repeats); `skip` pages on within a second that holds a whole batch by itself."""
     # folder-scoped - a bare /messages spans every folder including Sent Items, which made
     # the owner's own replies come back through the funnel as inbound work.
     # ...and PAGED: one page of the 25 newest, then a watermark stamped 'now', meant the
     # 26th-newest mail in the window was never asked for again - a busy shared mailbox lost
-    # mail every poll with nothing in any log (audit 2026-09-02)
+    # mail every poll with nothing in any log (audit 2026-09-02). Newest-first with a cap had
+    # the same hole one size up: the 501st-newest mail of a long absence was never fetched
+    # once the watermark moved (PW-006) - so the batch is the OLDEST, and the caller continues.
     url = f'{GRAPH}/users/{upn}/mailFolders/{folder}/messages'
-    params, out = {'$top': 50, '$orderby': 'receivedDateTime desc', '$select': MAIL_SELECT,
-                   '$filter': f'receivedDateTime gt {since}'}, []
+    params, out = {'$top': 50, '$orderby': 'receivedDateTime asc', '$select': MAIL_SELECT,
+                   '$filter': f"receivedDateTime {'ge' if inclusive else 'gt'} {since}", **({'$skip': skip} if skip else {})}, []
     while url and len(out) < cap:
         r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=30, params=params)
         r.raise_for_status(); j = r.json()
         out += j.get('value') or []
         url, params = j.get('@odata.nextLink'), None       # the nextLink carries the filter itself
-    return out
+    return out[:cap]
+
+
+def _mail_cursor(s: dict) -> dict:
+    """Where each folder's last read stopped short: {folder: receivedDateTime} in the source's ConfigJson."""
+    try: cur = json.loads(s.get('ConfigJson') or '{}').get('mail_cursor') or {}
+    except ValueError: cur = {}
+    return dict(cur) if isinstance(cur, dict) else {}
+
+
+def _mail_folder(tok, s: dict, folder: str, since_iso: str, cursor: dict, handle, save) -> int:
+    """Drain one folder oldest-first, batch by batch, until a short batch says it is exhausted.
+
+    handle(m) takes each message not yet seen this poll and returns what it added. Between
+    batches the folder's half-way point is kept in cursor[folder] (and saved through `save`),
+    so a fetch that dies resumes from there instead of re-downloading - and the source's
+    watermark, which the caller moves only when every folder finished, never steps over mail
+    nobody fetched. A whole batch inside ONE second cannot be continued by timestamp alone,
+    so the next batch skips past what that second already yielded."""
+    since, inclusive, skip, seen, n, stuck = cursor.get(folder) or since_iso, folder in cursor, 0, set(), 0, 0
+    while True:
+        batch = _mail_msgs(tok, s['Address'], since, folder=folder,
+                           **({'inclusive': True} if inclusive else {}), **({'skip': skip} if skip else {}))
+        fresh = [m for m in batch if m['id'] not in seen]
+        for m in fresh:
+            seen.add(m['id']); n += handle(m)
+        if len(batch) < MAIL_BATCH: break
+        last = batch[-1]['receivedDateTime']
+        if inclusive and last == since:
+            skip += len(batch)                        # a full batch in one second: page on within it
+            stuck = stuck + 1 if not fresh else 0
+            if stuck >= 2:                            # the server ignored $skip - stop rather than spin
+                logger.warning(f"outlook {s['Address']} {folder}: cannot page past {since}; stopping here"); break
+        else: since, inclusive, skip = last, True, 0
+        cursor[folder] = since; save()
+    cursor.pop(folder, None); save()
+    return n
 
 
 # where the owner actually typed it - the timeline entry says so, because "you replied" with no
@@ -966,7 +1010,7 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
     """One connector. HTTP lives here; store writes go through whatever store was handed
     (the writer thread when polls overlap). Messages of one conversation still land in
     arrival order because a connector is one worker."""
-    n = 0
+    n, errors = 0, []      # errors: folders a mailbox could not finish - the card shows them, the poll goes on
     full = store.get_connector(c['ConnectorId'], with_secret=True)
     try:
         if c['Type'] in ('outlook', 'teams'):
@@ -1009,42 +1053,55 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
             since = _since(s, backfill_days)
             if c['Type'] == 'outlook':
                 since_iso = since.astimezone().isoformat()
-                # your replies ride along as CONTEXT: attached to the thread's task,
-                # visible on the timeline, never triaged into work
-                for m in reversed(_mail_msgs(tok, s['Address'], since_iso, folder='sentitems')):
-                    n += ingest_outbound_mail(store, s['Address'], m)
-                # every folder the source asks for (the Inbox alone unless the card says otherwise), oldest first
-                inbound = [(f, m) for f in source_folders(s)
-                           for m in _mail_msgs(tok, s['Address'], since_iso, folder=f)]
-                inbound.sort(key=lambda fm: fm[1].get('receivedDateTime') or '')
-                for folder, m in inbound:
-                    frm = (m.get('from') or {}).get('emailAddress') or {}
-                    if (frm.get('address') or '').lower() == s['Address'].lower():
-                        continue   # the mailbox's own mail (moved copies, self-sends) is never inbound work
-                    # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
-                    # triage and handed to it - then saved once the message row exists
-                    atts = []
-                    if m.get('hasAttachments'):
-                        try: atts = mail_attachments(tok, s['Address'], m['id'])
-                        except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
-                    out = ingest_message(store, file_only=file_only, msg={
-                        'external_id': f"graph:{m['id']}", 'channel': 'email',
-                        'subject': m.get('subject'), 'body': _body(m),
-                        'from_name': frm.get('name'), 'from_email': frm.get('address'),
-                        'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
-                        'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
-                        'source_link': m.get('webLink'), 'source_name': s['Address'],
-                        'images': images_for_triage(store, atts), 'invite': is_invite(m),
-                        'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
-                                      'flag': (m.get('flag') or {}).get('flagStatus'),
-                                      'invite': is_invite(m)}}, llm=llm)
-                    n += out['status'] != 'duplicate'
-                    if atts and out.get('message_id') and out['status'] != 'duplicate':
-                        try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
-                        except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")
-                    # a duplicate is still mail the hub has read - the flag may just be
-                    # older than the switch, and skipping it would strand those bold rows
-                    if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
+                cursor = _mail_cursor(s)
+                def save():
+                    # re-read first: the owner may have changed the folder list while this ran
+                    row = store.get_source(s['SourceId']) or s
+                    try: cfg = json.loads(row.get('ConfigJson') or '{}')
+                    except ValueError: cfg = {}
+                    cfg = {k: v for k, v in cfg.items() if k != 'mail_cursor'} | ({'mail_cursor': dict(cursor)} if cursor else {})
+                    store.save_source({'SourceId': s['SourceId'], 'ConfigJson': json.dumps(cfg)}, 'poll')
+                def inbound(folder):
+                    def take(m) -> int:
+                        frm = (m.get('from') or {}).get('emailAddress') or {}
+                        if (frm.get('address') or '').lower() == s['Address'].lower():
+                            return 0   # the mailbox's own mail (moved copies, self-sends) is never inbound work
+                        # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
+                        # triage and handed to it - then saved once the message row exists
+                        atts = []
+                        if m.get('hasAttachments'):
+                            try: atts = mail_attachments(tok, s['Address'], m['id'])
+                            except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
+                        out = ingest_message(store, file_only=file_only, msg={
+                            'external_id': f"graph:{m['id']}", 'channel': 'email',
+                            'subject': m.get('subject'), 'body': _body(m),
+                            'from_name': frm.get('name'), 'from_email': frm.get('address'),
+                            'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
+                            'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
+                            'source_link': m.get('webLink'), 'source_name': s['Address'],
+                            'images': images_for_triage(store, atts), 'invite': is_invite(m),
+                            'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
+                                          'flag': (m.get('flag') or {}).get('flagStatus'),
+                                          'invite': is_invite(m)}}, llm=llm)
+                        if atts and out.get('message_id') and out['status'] != 'duplicate':
+                            try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
+                            except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")
+                        # a duplicate is still mail the hub has read - the flag may just be
+                        # older than the switch, and skipping it would strand those bold rows
+                        if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
+                        return int(out['status'] != 'duplicate')
+                    return take
+                # your replies ride along as CONTEXT: attached to the thread's task, visible on the
+                # timeline, never triaged into work - then every folder the source asks for (the Inbox
+                # alone unless the card says otherwise), each oldest first and read to the end
+                folders = [('sentitems', lambda m: ingest_outbound_mail(store, s['Address'], m))] + [(f, inbound(f)) for f in source_folders(s)]
+                broken = []
+                for folder, handle in folders:
+                    try: n += _mail_folder(tok, s, folder, since_iso, cursor, handle, save)
+                    except Exception as e:
+                        logger.warning(f"outlook {s['Address']} {folder}: {e}"); broken.append(f'{folder}: {e}')
+                if broken:
+                    errors += broken; continue     # the watermark waits for the folders that did not finish
             elif c['Type'] == 'teams':
                 n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)
             elif c['Type'] == 'github':
@@ -1094,7 +1151,7 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                         'source_name': s['Address']}, llm=llm)
                     n += out['status'] != 'duplicate'
             store.touch_source(s['SourceId'])
-        store.touch_connector(c['ConnectorId'])
+        store.touch_connector(c['ConnectorId'], '; '.join(errors) if errors else None)
     except Exception as e:
         logger.warning(f"channel poll failed ({c['Type']}): {e}")
         store.touch_connector(c['ConnectorId'], str(e))

@@ -70,7 +70,7 @@ _FAILED = re.compile(r'FAILED\s*$')                # reports.py writes '<title> 
 # Triage's category is not a read receipt. An incoming newsletter, system notice, feed row, or
 # Assistant post may be low-value, but it still enters the unread inventory; this small set remains
 # only for converting a manually named historical row into a generic FYI card.
-_QUIET = {'filed', 'ignored', 'yours'}
+_QUIET = {'filed', 'ignored', 'yours', 'error'}   # error: triage failed - unread information with a retry, never work
 PILE_EVERY = 30                   # websocket writes invalidate it; this is only a disconnected-client safety net
 _CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0}
 _STATE = {}                        # tid -> 'working' | 'parked' | 'asking' | 'done' | 'idle', as last seen by the watcher

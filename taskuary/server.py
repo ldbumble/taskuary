@@ -65,6 +65,10 @@ async def _lifespan(_app):
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
+    try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
+        n = store.upgrade_triage_failures()
+        if n: logger.info(f'{n} historical triage failure(s) now show as errors with a retry')
+    except Exception as e: logger.warning(f'triage-failure upgrade skipped: {e}')
     threading.Thread(target=poll_forever, daemon=True).start()
     threading.Thread(target=quick_forever, daemon=True).start()   # the chat clock, never behind a slow sync
     waitroom.watch(store)          # notes queued for a working agent land when it stops
@@ -2582,12 +2586,15 @@ def retriage_message(mid: int):
     """
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    if m.get('TaskId') is not None:
-        raise HTTPException(409, 'this message already belongs to a task')
-    routes = store.message_routes(mid)
-    last = routes[-1] if routes else {}
-    if not re.search(r'\btriage\b.*(?:failed|could not read)', str(last.get('Reason') or ''), re.I):
-        raise HTTPException(409, 'retry is only available after triage failed')
+    # the error state is retriable whether or not the failed follow-up is linked to a task; a
+    # legacy failure still stored as a taskless filed row is recognised by its diagnostic
+    if m.get('Status') != 'error':
+        if m.get('TaskId') is not None:
+            raise HTTPException(409, 'this message already belongs to a task')
+        routes = store.message_routes(mid)
+        last = routes[-1] if routes else {}
+        if not re.search(r'\btriage\b.*(?:failed|could not read)', str(last.get('Reason') or ''), re.I):
+            raise HTTPException(409, 'retry is only available after triage failed')
     brain = _llm()
     if not brain:
         raise HTTPException(422, 'no triage AI is available - check Connections and Settings')
@@ -2598,14 +2605,13 @@ def retriage_message(mid: int):
         out = ingest_message(store, {**ingest_mod._from_row(m, store), '_mid': mid},
                              actor=ACTOR, llm=brain)
     except Exception as e:
-        # Most AI failures are deliberately filed by ingest_message. This catches only an
-        # unexpected pipeline failure so Retry never leaves the row spinning forever.
+        # Most AI failures are deliberately recorded as errors by ingest_message. This catches only
+        # an unexpected pipeline failure so Retry never leaves the row spinning forever.
         now = store.get_message(mid) or {}
-        if now.get('TaskId') is None:
-            store.place_message(mid, None, 'filed')
-            store.add_route(mid, None, 'file', None,
-                            f'triage retry failed ({str(e)[:200]}) - filed safely', [], 'triage',
-                            parse_error=str(e)[:1000])
+        store.place_message(mid, now.get('TaskId'), 'error')
+        store.add_route(mid, now.get('TaskId'), 'file', None,
+                        f'triage retry failed ({str(e)[:200]}) - unclassified; retry available', [], 'triage',
+                        parse_error=str(e)[:1000])
         raise HTTPException(422, str(e)[:300])
     return {**out, 'ref': task_ref(out['task_id']) if out.get('task_id') else None}
 

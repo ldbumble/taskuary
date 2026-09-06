@@ -62,7 +62,7 @@ class ImageTriageTests(unittest.TestCase):
                                  'body': 'text', 'from_name': 'Tova', 'from_email': 'tova@corp.example',
                                  'to': ['me@corp.example'], 'sent_at': '2026-09-02 15:01:00',
                                  'source_name': 'me@corp.example', 'images': PNG}, llm=llm)
-        self.assertEqual(out['status'], 'filed')
+        self.assertEqual(out['status'], 'error')      # PW-036: caught, recorded, and an error with a retry
         route = s._one('SELECT Decision, ParseError FROM route WHERE MessageId=?', (out['message_id'],))
         self.assertEqual(route['Decision'], 'file')
         self.assertIn('the model is down', route['ParseError'] or '')

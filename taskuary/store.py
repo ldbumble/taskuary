@@ -1795,19 +1795,41 @@ class SQLiteStore:
         else:
             self._poke('feed-changed', message_id=mid)
     def claim_retriage(self, mid: int) -> bool:
-        """Atomically move one failed, taskless row back into triage.
+        """Atomically move one failed row back into triage: a message in the `error` state (linked
+        to a task or not), or a legacy failure still stored as a taskless `filed` row.
 
         The endpoint checks the prior verdict for a useful error message; this compare-and-set is
         the concurrency guard. Two clicks (or browser retries) must never create two tasks.
         """
         with self.lock:
+            # a legacy filed row qualifies only when its LAST route is a failure diagnostic - a
+            # genuine fyi is not retriable (same rule as upgrade_triage_failures, in SQL)
             cur = self.cx.execute("""UPDATE message SET Status='triaging'
-                                   WHERE MessageId=? AND TaskId IS NULL AND Status='filed'""", (mid,))
+                                   WHERE MessageId=? AND (Status='error' OR (Status='filed' AND TaskId IS NULL AND EXISTS (
+                                       SELECT 1 FROM route r WHERE r.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=message.MessageId)
+                                       AND (r.Reason LIKE 'AI triage failed (%' OR r.Reason LIKE 'AI triage returned an answer it could not read%'
+                                            OR r.Reason LIKE 'triage failed (%' OR r.Reason LIKE 'triage retry failed (%'))))""", (mid,))
             self.cx.commit(); self._writes += 1
             ok = cur.rowcount == 1
         if ok:
             self._poke('feed-changed', message_id=mid)
         return ok
+    # The route reasons triage writes when it FAILED - distinct from a verdict it reached. A
+    # no-AI install's "awaiting AI triage" is deliberately not here: flipping years of that
+    # history at once would be the bulk conversion PW-040 forbids; new arrivals wear the state.
+    TRIAGE_FAILURE = r"^(AI triage failed \(|AI triage returned an answer it could not read|triage failed \(|triage retry failed \()"
+    def upgrade_triage_failures(self) -> int:
+        """Historical triage failures stored as `filed` become `error` once (PW-040) - identified
+        by their LAST route being a failure diagnostic, so a row the owner later ruled on, a genuine
+        fyi and a no-AI install's history all stay as they are. Read state is untouched: the funnel
+        keeps its own rows, and an error row is quiet there like a filed one."""
+        rows = self._rows("""SELECT m.MessageId, r.Reason FROM message m
+                             JOIN route r ON r.RouteId = (SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
+                             WHERE m.Status='filed' AND m.TaskId IS NULL""")
+        ids = [r['MessageId'] for r in rows if re.match(self.TRIAGE_FAILURE, r['Reason'] or '')]
+        for mid in ids: self._exec("UPDATE message SET Status='error' WHERE MessageId=? AND Status='filed'", (mid,))
+        if ids: self._poke('feed-changed')
+        return len(ids)
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):

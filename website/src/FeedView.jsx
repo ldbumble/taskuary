@@ -77,12 +77,15 @@ const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 const actionOf = (r) => (r.Channel === "report" ? "report"
   : r.MsgStatus === "feed" ? "feed"
     : r.MsgStatus === "triaging" ? "triaging"
+    : r.MsgStatus === "error" ? "error"
     : r.MsgStatus === "ignored" ? "ignore"
       : r.MsgStatus === "filed" ? "filed"
         : r.ReviewKind === "auto" ? "auto"
           : r.ReviewId ? "draft" : "task_only");
 
-const triageFailed = (r) => /(?:AI )?triage (?:failed|returned an answer it could not read)/i
+// the error state is the durable answer (PW-036); the reason regex still recognises failures
+// recorded as filed before that state existed
+const triageFailed = (r) => r?.MsgStatus === "error" || /(?:AI )?triage (?:failed|returned an answer it could not read)/i
   .test(String(r?.RouteReason || ""));
 
 // NeedsYou comes from the server and means one thing: nobody else is moving this. It
@@ -97,6 +100,7 @@ const blurb = (r) => {
   if (r.Channel === "report") return "Scheduled report — hover to read the summary";
   if (r.MsgStatus === "feed") return "Shown for information — this connection is a feed, not a task trigger";
   if (r.MsgStatus === "triaging") return "On the timeline first — triage is deciding what it is";
+  if (r.MsgStatus === "error") return `Triage failed — ${String(r.RouteReason || "").split(" - ")[0] || "no verdict"}; retry, or choose what it is`;
   if (triageFailed(r)) return "Triage could not classify this — filed safely; choose what it is";
   // WHAT happened, never the classifier's sentence about why: that lives on the Triage tab, where
   // it is asked for (owner, 2026-09-02: "hate the why - just tell me what")
@@ -123,7 +127,7 @@ const GUTTER = 70;
 const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
   : r.Channel === "assistant" ? ASSISTANT.solid             // the assistant speaking up
   : r.Category === "info" ? "#6f8a6e"                      // a person told you something: worth the eye
-  : ["ignored", "filed", "triaging", "withdrawn"].includes(r.MsgStatus) ? "#cfc9bf"
+  : ["ignored", "filed", "triaging", "error", "withdrawn"].includes(r.MsgStatus) ? "#cfc9bf"
     : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
       : r.TaskId ? ACCENT2 : "#a7b0a8");
 
@@ -132,7 +136,7 @@ const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
 // because a message that no longer exists cannot be what you act on, and for one row that is
 // right. For a fold it is backwards - a withdrawn line must never speak for four others, one of
 // which is a reply waiting on you.
-const LOUDNESS = ["reply", "waving", "working", "triaging", "held", "todo", "theirs", "answered", "mine", "done", "withdrawn", "fyi"];
+const LOUDNESS = ["reply", "waving", "working", "triaging", "error", "held", "todo", "theirs", "answered", "mine", "done", "withdrawn", "fyi"];
 
 const PAGE = 100;
 
@@ -2478,7 +2482,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
           </Box>
         </>
       )}
-      {failed && !sel.TaskId && (
+      {failed && (!sel.TaskId || sel.MsgStatus === "error") && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1.25 }}>
           <Button size="small" variant="outlined" disabled={retrying} onClick={retryTriage}
             startIcon={retrying ? <CircularProgress size={13} /> : <SyncIcon sx={{ fontSize: 16 }} />}>

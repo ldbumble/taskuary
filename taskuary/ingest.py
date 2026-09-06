@@ -362,8 +362,12 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
                     ingest_message(store, msg, llm=llm)
                 except Exception as e:
                     logger.warning(f'deferred triage failed for message {mid}: {e}')
-                    store.place_message(mid, None, 'filed')
-                    store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
+                    # a row whose judgement blew up keeps whatever task the router gave it and says
+                    # triage failed - an error with a retry, never a filed "nothing to do" (PW-036)
+                    tid = (store.get_message(mid) or {}).get('TaskId')
+                    store.place_message(mid, tid, 'error')
+                    store.add_route(mid, tid, 'file', None, f'triage failed ({str(e)[:160]}) - unclassified; retry available', [], 'triage',
+                                    parse_error=str(e)[:1000])
                     store.set_setting('triage_last_error', str(e)[:200], 'system')
                 if on_complete: on_complete(r)
                 if progress: progress(len(rows))
@@ -505,12 +509,29 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # like any other message (the owner, 2026-09-03: "the triage should realize that"); an
         # fyi verdict keeps it on the task for the chain and off the owner's pile. Never while an
         # agent is waiting on this thread: that round trip IS the answer it asked for.
-        follow = None
+        follow, _fail = None, {}
         # chat has its own reader for this (chat_continues/same_ask): a room is not a topic, and a
         # fragment typed seconds later is one thought in two messages, not a thing to re-judge
         if not busy and cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg) and not decided_intent(msg, mine):
             try: follow, _fail = judge(store, msg, llm, mine, me)
-            except Exception as e: logger.debug(f'ingest: the follow-up verdict failed, keeping it as work - {e}')
+            except Exception as e:
+                logger.warning(f'ingest: the follow-up verdict failed - {e}')
+                _fail = {'err': str(e)[:200]}
+            # triage never read it: say so on the thread's task instead of passing it off as classified
+            # work (PW-036). The task link stays; Retry re-judges it in place.
+            if _fail:
+                mid = _land(store, msg, tid, 'error')
+                store.add_route(mid, tid, 'attach', r.get('score'),
+                                f"AI triage failed ({_fail['err']}) - kept on {task_ref(tid)}, unclassified; retry available",
+                                [], 'triage', parse_error=_fail['err'])
+                store.set_setting('triage_last_error', _fail['err'][:200], 'system')
+                return {'status': 'error', 'task_id': tid, 'message_id': mid}
+            if follow and follow.get('degraded'):
+                mid = _land(store, msg, tid, 'error')
+                store.add_route(mid, tid, 'attach', r.get('score'),
+                                f'AI triage returned an answer it could not read as a verdict - kept on {task_ref(tid)}, unclassified; retry available',
+                                [], 'triage', raw_output=follow.get('raw_output'), parse_error=follow.get('parse_error'))
+                return {'status': 'error', 'task_id': tid, 'message_id': mid}
         if follow and follow.get('intent') == 'fyi' and not follow.get('degraded'):
             mid = _land(store, msg, tid, 'filed')
             store.add_route(mid, tid, 'attach', r.get('score'),
@@ -550,38 +571,41 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if pre:
                 intent = pre
             elif llm is None:
-                mid = _land(store, msg, None, 'filed')
+                # no brain is not a verdict: the row waits, visibly, for triage (PW-040) - it used to
+                # be filed, wearing the same face as "nothing to do"
+                mid = _land(store, msg, None, 'error')
                 store.add_route(mid, None, 'file', None,
                                 'awaiting AI triage - connect an AI connector (Connections → AI) to classify inbound automatically', [], 'triage')
-                logger.debug(f"ingest: filed (no AI connector) - {msg.get('subject') or ''}")
-                return {'status': 'filed', 'task_id': None, 'message_id': mid}
+                logger.debug(f"ingest: awaiting triage (no AI connector) - {msg.get('subject') or ''}")
+                return {'status': 'error', 'task_id': None, 'message_id': mid}
             else:
                 intent, fail = judge(store, msg, llm, mine, me)
                 notes, notes_left = intent.get('notes') or [], intent.get('notes_left') or 0
                 if fail:
-                    # the AI errored - filing beats the old default-to-task heuristic. The error is
-                    # also kept as a setting so the Timeline's caption can say the brain is failing:
-                    # a codex profile carrying a flag its codex does not know failed every call,
-                    # and the only sign was rows that stayed on "triaging…"
-                    mid = _land(store, msg, None, 'filed')
+                    # the AI errored: an ERROR the owner can see and retry, never a filed row that
+                    # reads as "nothing to do" (PW-036). The error is also kept as a setting so the
+                    # Timeline's caption can say the brain is failing: a codex profile carrying a flag
+                    # its codex does not know failed every call, and the only sign was rows that
+                    # stayed on "triaging…"
+                    mid = _land(store, msg, None, 'error')
                     store.add_route(mid, None, 'file', None,
-                                    f"AI triage failed ({fail['err']}) - filed; fix the AI connector and it will classify new mail",
+                                    f"AI triage failed ({fail['err']}) - unclassified; fix the AI connector and retry",
                                     [], 'triage', parse_error=fail['err'])
                     store.set_setting('triage_last_error', fail['err'][:200], 'system')
-                    logger.warning(f"ingest: AI triage failed, filed - {fail['err']}")
-                    return {'status': 'filed', 'task_id': None, 'message_id': mid}
+                    logger.warning(f"ingest: AI triage failed - {fail['err']}")
+                    return {'status': 'error', 'task_id': None, 'message_id': mid}
                 if cfg.get('triage_last_error'): store.set_setting('triage_last_error', '', 'system')   # it answered: the brain is back
                 if intent.get('degraded'):
                     # the call SUCCEEDED and came back unusable, so `fail` is empty and the old
                     # code sailed on with a keyword guess that reads none of the standing notes
-                    # above. Same situation as no AI connector, same answer: file it.
-                    mid = _land(store, msg, None, 'filed')
+                    # above. Same situation as a failed call, same answer: an error with a retry.
+                    mid = _land(store, msg, None, 'error')
                     store.add_route(mid, None, 'file', None,
-                                    'AI triage returned an answer it could not read as a verdict - filed rather than '
-                                    'assumed to be work' + _notes_note(), [], 'triage',
+                                    'AI triage returned an answer it could not read as a verdict - unclassified, '
+                                    'not assumed to be work; retry available' + _notes_note(), [], 'triage',
                                     raw_output=intent.get('raw_output'), parse_error=intent.get('parse_error'))
-                    logger.warning(f"ingest: unusable AI verdict, filed - {msg.get('subject') or ''}")
-                    return {'status': 'filed', 'task_id': None, 'message_id': mid}
+                    logger.warning(f"ingest: unusable AI verdict - {msg.get('subject') or ''}")
+                    return {'status': 'error', 'task_id': None, 'message_id': mid}
         else:
             intent = {'intent': 'task', 'why': ''}
         if intent['intent'] == 'fyi':

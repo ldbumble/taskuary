@@ -63,6 +63,7 @@ def category_of(r: dict, team_domains=()) -> str:
     if r.get('Direction') == 'out' or 'your reply' in reason or 'your sent reply' in reason: return 'yours'
     if st == 'feed': return 'feed'
     if st == 'triaging': return 'triaging'
+    if st == 'error': return 'error'                  # triage failed: not a verdict, shown with a retry (PW-036)
     if st in ('ignored', 'skipped'): return 'ignored'
     if st == 'filed':
         # only an fyi verdict earns a "nothing to do, here is who said it" tag; a message filed

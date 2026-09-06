@@ -92,7 +92,7 @@ class DeferredIngestTests(unittest.TestCase):
             if len(calls) == 1: raise RuntimeError('model down')
             return '{"intent": "task", "why": "ok"}'
         ingest.drain(self.s, llm=flaky)
-        self.assertEqual(self.s.get_message(bad)['Status'], 'filed')
+        self.assertEqual(self.s.get_message(bad)['Status'], 'error')      # PW-036: a failure is an error with a retry, not fyi
         row = next(r for r in self.s.feed(limit=10) if r['MessageId'] == bad)
         self.assertIn('AI triage failed', row['RouteReason'])
         route = self.s.message_routes(bad)[-1]

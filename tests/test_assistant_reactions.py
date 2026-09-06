@@ -1048,7 +1048,7 @@ class NeverWorkTests(unittest.TestCase):
         s = store()
         def broken(system, user, **kw): raise RuntimeError('connector 500')
         out = arrive(s, llm=broken)
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        self.assertEqual((out['status'], out['task_id']), ('error', None))      # PW-036: an error with a retry, not fyi
         self.assertIn('AI triage failed', s.message_routes(out['message_id'])[-1]['Reason'])
         self.assertIn('connector 500', s.get_settings().get('triage_last_error') or '')
         # A failed classifier must not invent work, but the arrival is still unread information.
@@ -1061,7 +1061,7 @@ class NeverWorkTests(unittest.TestCase):
     def test_a_brain_that_answers_nonsense_files_it_rather_than_guessing(self):
         s = store()
         out = arrive(s, llm=lambda *a, **k: 'I think this is probably a task?')
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        self.assertEqual((out['status'], out['task_id']), ('error', None))      # PW-036
         reason = s.message_routes(out['message_id'])[-1]['Reason']
         self.assertIn('could not read as a verdict', reason)
 

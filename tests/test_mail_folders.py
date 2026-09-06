@@ -73,7 +73,7 @@ class BrainFailureTests(unittest.TestCase):
         s.save_connector({'ConnectorId': s.get_connector_by_type('anthropic')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 't')
         boom = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("codex exit 2: unexpected argument '--skip-git-repo-check'"))
         out = ingest_message(s, {'external_id': 'b1', 'channel': 'email', 'subject': 's', 'body': 'the importer fails', 'from_email': 'a@b.com'}, llm=boom)
-        self.assertEqual(out['status'], 'filed')
+        self.assertEqual(out['status'], 'error')      # PW-036: a failed brain is an error with a retry
         self.assertIn('skip-git-repo-check', s.get_settings()['triage_last_error'])
         with mock.patch.object(server, 'store', s):
             self.assertIn('skip-git-repo-check', c_api.get('/api/ingest/status').json()['triageError'])

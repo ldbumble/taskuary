@@ -444,7 +444,8 @@ class OutboundMailTests(unittest.TestCase):
         out = ingest_message(s, {'external_id': 'e1', 'channel': 'email', 'subject': 'please fix the report',
                                  'body': 'please fix the report', 'from_email': 'a@b.com', 'sent_at': '2026-08-17 14:00'},
                              llm=boom)
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        # PW-036/PW-040: a missing or failed brain is an explicit error with a retry, not a filed fyi
+        self.assertEqual((out['status'], out['task_id']), ('error', None))
         self.assertIn('AI triage failed', s.feed()[0]['RouteReason'])
 
 

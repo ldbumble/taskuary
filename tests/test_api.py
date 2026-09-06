@@ -657,7 +657,8 @@ class ApiTests(unittest.TestCase):
     def test_push_without_ai_files(self):
         out = c.post('/api/ingest/push', json={'subject': 'automated provisioning notice 77', 'body': 'please add the new user',
                                                'from_email': 'apinotify@vendor.com', 'channel': 'api'}).json()
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        # no brain is an explicit awaiting-triage error with a retry, not a filed 'nothing to do' (PW-040)
+        self.assertEqual((out['status'], out['task_id']), ('error', None))
 
     def test_dispatch_validates(self):
         tid = c.post('/api/tasks', json={'Title': 'd'}).json()['taskId']

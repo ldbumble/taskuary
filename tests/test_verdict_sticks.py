@@ -276,7 +276,7 @@ class DegradedTriageTests(unittest.TestCase):
         s = MemoryStore()
         raw = 'I think this is a task, honestly'
         out = ingest.ingest_message(s, dict(self.MSG), llm=lambda *a, **k: raw)
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        self.assertEqual((out['status'], out['task_id']), ('error', None))      # PW-036: unusable answer = error with a retry
         self.assertIn('could not read as a verdict', next(
             r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])['RouteReason'])
         route = s.message_routes(out['message_id'])[-1]

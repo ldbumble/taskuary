@@ -35,7 +35,8 @@ class CoreTests(unittest.TestCase):
         # decides what becomes a task, not the default-to-task heuristic
         s = MemoryStore()
         out = ingest_message(s, self.msg(external_id='noai1'))
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        # PW-036/PW-040: a missing or failed brain is an explicit error with a retry, not a filed fyi
+        self.assertEqual((out['status'], out['task_id']), ('error', None))
         self.assertIn('awaiting AI triage', s.feed()[0]['RouteReason'])
 
     def test_thread_attach(self):
@@ -342,7 +343,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(row['ConversationId'], 'teams:19:aa')          # a chat is one thread, like a mail chain
         chain = s.thread_messages(conversation_id='teams:19:aa')
         self.assertEqual([(m['Status'], m['BodyText']) for m in chain],
-                         [('filed', 'can you look at the export?'), ('context', 'I sent it to her in this chat.')])
+                         [('error', 'can you look at the export?'), ('context', 'I sent it to her in this chat.')])
 
     def test_needs_you_is_anything_no_agent_is_moving(self):
         """The old rule was 'a review is pending', so a task whose agent finished without

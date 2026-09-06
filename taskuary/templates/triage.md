@@ -25,7 +25,7 @@ An **outage in somebody else's system** is `general`, not coding. "The payroll p
 
 Say `task` when a person has to do it in the world and no amount of typing or thinking does it: a course to sit through, a form to physically sign, a meeting to attend, a box to move, a phone call somebody has to make, a decision only the owner can take. A vendor's training assignment falling due is the plain example - it is a real task, it is on the owner's plate, and no agent can sit the course. Say `task` too when the owner's past verdicts (the evidence below) say this kind of work is not for an agent.
 
-When you genuinely cannot tell, say coding: the agent looking and finding nothing is cheap, a job nobody started is not.
+When you genuinely cannot tell, say general: an assistant can read and think about anything, while a coding session started on a guess works in the wrong place.
 
 Someone explaining their role, describing what they own, or answering a question you asked is not a task, however technical the words are. "I own the deployment system and production uptime" is a sentence about a job, not a request to deploy anything. Ask what the sender wants to HAPPEN; if the answer is "for you to have read this" it is fyi, and if it is "for you to write back" it is reply_only.
 

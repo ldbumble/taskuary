@@ -36,7 +36,7 @@ class PriorityIsNotGuessedTests(unittest.TestCase):
         a = draft_task_fields({'subject': 'export is broken', 'body': 'the nightly deploy failed'})
         b = draft_task_fields({'subject': 'export is broken', 'body': 'the nightly deploy failed'}, urgent=True)
         self.assertEqual((a['title'], a['summary'], a['kind']), (b['title'], b['summary'], b['kind']))
-        self.assertEqual(a['kind'], 'coding')
+        self.assertEqual(a['kind'], 'general')          # PW-067: a kind nobody named is general, not a keyword guess at coding
 
 
 class EscalateIsTheUrgencyRuleTests(unittest.TestCase):

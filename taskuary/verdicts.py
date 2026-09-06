@@ -152,6 +152,17 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         return {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None}
     if final and rv.get('MessageId'):
         msg = store.get_message(rv['MessageId'])
+        # the server's own check, whatever a surface showed (PW-045): a channel that cannot carry
+        # the reply refuses BEFORE any send is attempted, keeps the text as the draft, and says why
+        block = outbound.send_block(store, (msg or {}).get('Channel'))
+        if block:
+            send_err = f'not sent - {block}'
+            if rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], actor, 'human', f'NOT SENT - {block}. The approved text is kept as the draft.')
+            store.update_review_draft(rid, final, rv.get('RunId'))
+            store.unhold_review(rid, f'approved, but it cannot be sent from here: {block}')
+            store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': False, 'blocked': block})
+            return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': send_err}
         try:
             sent = outbound.reply_to_message(store, msg, final, cc=cc)
             if rv.get('TaskId'):

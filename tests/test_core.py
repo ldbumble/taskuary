@@ -13,7 +13,8 @@ from taskuary.agents import parse_cli_json
 from taskuary.reports import is_due, run_report_source, REGISTRY
 
 
-TASK_LLM = lambda sys, usr: '{"intent": "task", "why": "t"}'
+TASK_LLM = lambda sys, usr: '{"intent": "task", "why": "t"}'                      # no kind named: general since PW-067
+CODING_LLM = lambda sys, usr: '{"intent": "task", "kind": "coding", "why": "t"}'   # the classifier's explicit coding call
 REPLY_LLM = lambda sys, usr: '{"intent": "reply_only", "why": "q"}'
 
 
@@ -78,7 +79,7 @@ class CoreTests(unittest.TestCase):
         # auto-dispatch starts a live session, like every other way work starts here
         with mock.patch.object(ing, 'threading') as th,              mock.patch('taskuary.terminal.start_on_task') as start:
             th.Thread = InlineThread
-            out = ingest_message(s, self.msg(external_id='ac1', body='the importer throws an exception, see jobs/import.py'), llm=TASK_LLM)
+            out = ingest_message(s, self.msg(external_id='ac1', body='the importer throws an exception, see jobs/import.py'), llm=CODING_LLM)
         start.assert_called_once()
         self.assertEqual(start.call_args.args[1], out['task_id'])
         self.assertTrue(any('auto-started a live coder session' in c['Body'] for c in s.list_comments(out['task_id'])))
@@ -97,18 +98,18 @@ class CoreTests(unittest.TestCase):
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))     # a real task, just yours
 
-    def test_a_task_the_brain_did_not_call_general_goes_to_the_coder(self):
-        """The owner's call (2026-08-27): err toward the coding agent. A task the brain did not
-        label general - even with no code word in the body - is dispatched; an agent on a
-        non-coding task says "nothing to do here" and stops, a job left on a list does not."""
+    def test_a_task_the_brain_gave_no_kind_is_general_and_starts_no_coder(self):
+        """The owner's newer call (2026-09-05, PW-067) replaces "err toward the coding agent" for
+        an UNNAMED kind: a task the brain did not label is general - an assistant can read and think
+        about anything - and no coding session starts on a guess. An explicit `coding` still does."""
         from unittest import mock
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 't')
         with mock.patch('taskuary.ingest._spawn') as spawn:
             out = ingest_message(s, self.msg(external_id='ac4'), llm=TASK_LLM)
-        self.assertTrue(any(getattr(c[0][0], '__name__', '') == '_auto_code' for c in spawn.call_args_list))
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
-        self.assertIn('sent to the coding agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertFalse(any(getattr(c[0][0], '__name__', '') == '_auto_code' for c in spawn.call_args_list))
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+        self.assertIn('talk it through with the assistant', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
     def test_a_first_time_email_sender_never_starts_the_coder_by_itself(self):
         """The one road from a stranger's text to an agent on this machine with nobody in between
@@ -130,7 +131,7 @@ class CoreTests(unittest.TestCase):
         mail = lambda **kw: self.msg(channel='email', source_name='dana@northwind.example', conversation_id=kw['external_id'],
                                      subject=texts[kw['external_id']][0], body=texts[kw['external_id']][1], **kw)
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False) as wt:
-            out = ingest_message(s, mail(external_id='e1', from_email='stranger@evil.example'), llm=TASK_LLM)
+            out = ingest_message(s, mail(external_id='e1', from_email='stranger@evil.example'), llm=CODING_LLM)
         spawn.assert_not_called(); wt.assert_called_once()
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))                      # a task, on the Board, not worked
@@ -139,26 +140,26 @@ class CoreTests(unittest.TestCase):
         # the same stranger writes again: still a stranger. Their own first mail, held for the owner,
         # used to make the second one 'known' and start the agent the hold exists to stop (audit 2026-09-02)
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False):
-            self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=TASK_LLM)['status'], 'created')
+            self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_not_called()
         # ...until the owner has dealt with them: their own words on one of the stranger's threads
         s.add_message({'ExternalId': 'own-e2', 'Channel': 'email', 'ConversationId': 'e2', 'FromEmail': 'dana@northwind.example',
                        'Status': 'context', 'BodyText': 'thanks - looking into it'})
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
-            self.assertEqual(ingest_message(s, mail(external_id='e2b', from_email='Stranger@evil.example'), llm=TASK_LLM)['status'], 'created')
+            self.assertEqual(ingest_message(s, mail(external_id='e2b', from_email='Stranger@evil.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_called_once(); wt.assert_not_called()
         # your own domain: never a stranger
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
-            self.assertEqual(ingest_message(s, mail(external_id='e3', from_email='teammate@northwind.example'), llm=TASK_LLM)['status'], 'created')
+            self.assertEqual(ingest_message(s, mail(external_id='e3', from_email='teammate@northwind.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_called_once(); wt.assert_not_called()
         # someone you have written to for years, whom Taskuary has never seen: Sent Items says so
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True):
-            self.assertEqual(ingest_message(s, mail(external_id='e4', from_email='old.client@partner.example'), llm=TASK_LLM)['status'], 'created')
+            self.assertEqual(ingest_message(s, mail(external_id='e4', from_email='old.client@partner.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_called_once()
         # chat senders are already inside a workspace you control: no gate at all
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
             self.assertEqual(ingest_message(s, self.msg(external_id='e5', channel='teams', from_email='new.colleague@elsewhere.example',
-                                                        conversation_id='c5', subject='teams: the exporter', body='e5: exporter fails in jobs/export.py'), llm=TASK_LLM)['status'], 'created')
+                                                        conversation_id='c5', subject='teams: the exporter', body='e5: exporter fails in jobs/export.py'), llm=CODING_LLM)['status'], 'created')
         # ...and in chat the person hears at once that an agent is on it (ingest._ack_chat)
         self.assertEqual([c.args[0].__name__ for c in spawn.call_args_list], ['_auto_code', '_ack_chat']); wt.assert_not_called()
 

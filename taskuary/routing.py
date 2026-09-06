@@ -167,8 +167,10 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     # the assistant's chat now, and a keyword scan that could not tell what this is has no
     # business opening one - `task` is the honest end of a guess: it lands on the owner's list
     # and waits, which is what the old word did.
+    # A kind nobody named is GENERAL (the owner, 2026-09-05, PW-067): a general agent can read
+    # and think about anything, and no coding session starts on a keyword guess. `coding` and
+    # `task` are the classifier's (or the owner's) explicit calls; a plain question is a reply.
     kind = (kind if kind in ('coding', 'general', 'task') else
-            'coding' if _CODE_HARD.search(head) or sum(w in low for w in _CODE_SOFT) >= 2 else
-            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'task')
+            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'general')
     return {'title': subj[:300].capitalize(), 'summary': body[:1000], 'kind': kind,
             'priority': 'urgent' if urgent else 'normal'}

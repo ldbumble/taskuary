@@ -153,6 +153,18 @@ def can_reply(store, channel) -> bool:
     return True
 
 
+def send_block(store, channel) -> str:
+    """WHY a reply cannot leave on this channel, in the owner's words - '' when it can. The one
+    sentence every surface shows beside a draft instead of a send button (PW-044); can_reply
+    stays the decision, this is only its explanation."""
+    ch = (channel or '').lower()
+    if not ch: return 'this message has no channel to reply on'
+    if ch in NEVER: return f'{ch} items cannot be replied to from here'
+    if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
+    if ch in SENDABLE and ch not in reply_channels(store): return f'replies are off for {ch} (Settings → Replies)'
+    return ''
+
+
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.
 

@@ -73,7 +73,7 @@ const KNOB_META = {
     help: "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.\n\nAgents can read the same thing: POST /api/tools/run with type \"calendar\"." },
   auto_draft_enabled: { group: "Replies", label: "Draft replies automatically", type: "switch",
     desc: "Questions get their AI draft the moment they arrive, waiting in Review.",
-    help: "On: a message triaged as a question lands in Review with the reply already written — you edit or just Approve & send. Off: questions still queue in Review, but empty; you click 'Draft with AI' per item.\n\nNothing sends itself either way — approving is always yours. Turning this off is also the cheapest way to pause AI spending." },
+    help: "Retired: a message triaged as a question always lands in Review with its draft requested at once, and a draft that could not be written says so with a retry. Nothing sends itself — approving is always yours." },
   chat_ack_enabled: { group: "Replies", label: "Acknowledge chat asks at once", type: "switch",
     desc: "The moment an agent starts on something asked in Teams, WhatsApp, Telegram or Messages, one line goes back into the chat so they know somebody is on it.",
     help: "In chat, an ask is a task AND a question - and until the agent wraps up and its reply is approved, the person hears nothing. On: when a chat line becomes a task and an agent actually starts, the line below is sent into the same chat right away. It is fixed text, never a drafted answer, so it promises attention and nothing else.\n\nNot twice within half an hour on the same chat, and never when your own last line there is that recent - they have already heard from you. Off for a channel when its replies are off (above). Mail never gets one: an email thread can wait for the real answer." },
@@ -210,6 +210,7 @@ const GROUPS = ["Triage & routing", "Replies", "Assistant", "Coder agent", "Noti
 // used to catch every bookkeeping value the server ever wrote (digest_report_seeded, task_id_mark,
 // learn_pending, owner_bio...), each with a switch that did something nobody could predict.
 const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_enabled",   // github card decisions
+                        "auto_draft_enabled",   // replies are always drafted (PW-043); the old switch no longer gates anything
                         "last_pinged_review", "triage_last_error",                          // bookkeeping
                         "setup_dismissed", "task_id_mark", "learn_pending", "learn_last_reflect"]);
 const hidden = (name) => HIDDEN.has(name) || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you

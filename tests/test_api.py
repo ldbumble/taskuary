@@ -99,14 +99,19 @@ class GithubIngestTests(unittest.TestCase):
             self.assertEqual(s.get_task(tid)['Status'], status)
             self.assertEqual(len([r for r in s.list_reviews('pending') if r['TaskId'] == tid]), reviews)
 
-    def test_github_questions_file_when_replies_off_and_the_verdict_is_on_the_route(self):
+    def test_github_questions_are_drafted_even_with_replies_off_and_the_verdict_is_on_the_route(self):
+        # PW-042/PW-044: a question is reply-needed whatever the channel can carry; with GitHub
+        # replies off the task and draft still open, and the route says why it cannot be sent
         from taskuary.ingest import ingest_message
         ask = {'external_id': 'q1', 'channel': 'github', 'subject': 'o/app#7 question',
                'body': '[issue by kai - association: NONE]\nhow do I configure the importer here?',
                'from_email': 'kai@users.noreply.github.com', 'no_auto': True}
         reply_llm = lambda *a, **k: '{"intent": "reply_only", "why": "asks a question"}'
         s = self._store(False)
-        self.assertEqual(ingest_message(s, dict(ask), llm=reply_llm)['status'], 'filed')
+        with mock.patch('taskuary.ingest._spawn'):
+            out = ingest_message(s, dict(ask), llm=reply_llm)
+        self.assertEqual(out['status'], 'created')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'reply'); self.assertIsNotNone(s.pending_review(out['task_id']))
         self.assertIn('GitHub replies are off', s.feed()[0]['RouteReason'])
         s2 = self._store(True)
         self.assertEqual(ingest_message(s2, dict(ask), llm=reply_llm)['status'], 'created')
@@ -141,7 +146,7 @@ class GithubIngestTests(unittest.TestCase):
         s.set_setting('coder_auto_enabled', '1', 't')
         s.set_setting('owner_email', 'me@work.example', 't')      # the mail below is from a colleague: a KNOWN sender (senders.py gates strangers)
         spawned = []
-        task_llm = lambda *a, **k: '{"intent": "task", "why": "work"}'
+        task_llm = lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "work"}'   # explicit: an unnamed kind is general (PW-067)
         with mock.patch('taskuary.ingest._spawn', side_effect=lambda fn, *a: spawned.append(fn.__name__)):
             ingest_message(s, {'external_id': 'gh1', 'channel': 'github', 'subject': 'org/app#9 docs 404',
                                'body': '[issue by x - association: NONE]\nthe docs page 404s for new users',

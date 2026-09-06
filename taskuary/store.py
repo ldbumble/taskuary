@@ -480,6 +480,11 @@ class SQLiteStore:
                 self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
             if 'ParseError' not in routecols:
                 self.cx.execute('ALTER TABLE route ADD COLUMN ParseError TEXT')
+            # why a reply draft could not be written (PW-046): the review stays pending and
+            # reply-needed, the reason is shown beside it with a retry, never mistaken for a draft
+            rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
+            if 'DraftError' not in rvcols:
+                self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -2108,7 +2113,11 @@ class SQLiteStore:
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
         self._review_changed(rid)
     def update_review_draft(self, rid, draft, run_id):
-        self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
+        self._exec('UPDATE review SET DraftText=?, RunId=?, DraftError=NULL WHERE ReviewId=?', (draft, run_id, rid))
+        self._review_changed(rid)
+    def set_review_draft_error(self, rid, error: str):
+        """The draft could not be written: keep the review pending and say why (PW-046)."""
+        self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))
         self._review_changed(rid)
     def update_review_message(self, rid, mid):
         """Pin a reply draft to the newest inbound message it was written against.
@@ -2490,7 +2499,7 @@ class SQLiteStore:
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,
-                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind, rv.HasDraft,
+                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind, rv.HasDraft, rv.DraftError,
                        IFNULL(att.n, 0) Attachments,
                        {self.ANSWERED_AT} AnsweredAt,
                        {self.THEIR_TURN} TheirTurn
@@ -2501,7 +2510,7 @@ class SQLiteStore:
                     WHERE RouteId IN (SELECT MAX(RouteId) FROM route GROUP BY MessageId)
                 ) rt ON rt.MessageId=m.MessageId
                 LEFT JOIN (
-                    SELECT MessageId, ReviewId, Status, Kind, DecidedAt, CreatedAt,
+                    SELECT MessageId, ReviewId, Status, Kind, DecidedAt, CreatedAt, DraftError,
                            CASE WHEN IFNULL(DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft FROM review
                     WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)
                 ) rv ON rv.MessageId=m.MessageId

@@ -498,6 +498,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # every verdict this funnel writes down says it happened.
         return (f' · {len(notes)} of {len(notes) + notes_left} past verdicts shown as evidence '
                 '(the rest did not fit)' if notes_left else '')
+    from .outbound import send_block
     if r['decision'] == 'attach':
         tid = r['task_id']
         # No ruling on the thread decides here any more: an owner's earlier "not ours" on this
@@ -541,6 +542,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
+        if follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not store.pending_review(tid):
+            # a fresh question on an existing task is reply-needed there: one pending review for
+            # this message, drafted at once, whatever the channel can carry (PW-043)
+            unsendable = send_block(store, msg.get('channel'))
+            rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                    'Reason': f"needs a reply: {follow.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
+            _spawn(_auto_draft, store, tid, rid)
         # the classic round trip: the agent asked something, the hub asked the person, and
         # THIS is their answer arriving on the same thread. With answer_to_agent=auto it is
         # typed straight into the live session; 'ask' leaves the one-click offer in the
@@ -613,18 +621,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             store.add_route(mid, None, 'file', None,
                             f"triage: fyi - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage')
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
-        from .outbound import can_reply
-        if intent['intent'] == 'reply_only' and not can_reply(store, msg.get('channel')):
-            # a question on a channel replies are OFF for: filing beats opening a reply task
-            # whose draft could never be sent anywhere (see outbound.can_reply for who decides)
-            ch = msg.get('channel') or 'this channel'
-            why = ('GitHub replies are off (GitHub card)' if ch == 'github'
-                   else f'replies are off for {ch} (Settings → Replies)')
-            mid = _land(store, msg, None, 'filed')
-            store.add_route(mid, None, 'file', None,
-                            f"triage: reply_only - {intent.get('why') or 'a question'} · {why}, "
-                            'so it is filed instead of drafted', [], 'triage')
-            return {'status': 'filed', 'task_id': None, 'message_id': mid}
+        # a question is reply-needed whatever the channel can carry (PW-042): sending capability
+        # decides whether the draft can be SENT from here, never whether it is written - it used to
+        # be filed on a channel with replies off, a question wearing the "nothing to do" face
+        unsendable = send_block(store, msg.get('channel')) if intent['intent'] == 'reply_only' else ''
         # 'escalate' was declared in the policy precedence and then read by nobody. It IS
         # the urgency rule: the owner names the senders whose mail jumps the queue, and that
         # is the only thing that marks a task urgent.
@@ -633,9 +633,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # triage's judgement, made against TRIAGE.md, and
         # the keyword scan in draft_task_fields is only the fallback for a brain that did not say
         # (or triage switched off). Nothing downstream second-guesses it - see auto_code_ok.
-        judged = cfg.get('intent_classify_enabled', '1') == '1'       # a brain (or a by-construction rule) said 'task'
-        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate',
-                              kind=intent.get('kind') or ('coding' if judged and intent['intent'] == 'task' else None))
+        # a kind the brain did not name is general (PW-067): draft_task_fields makes that call
+        f = draft_task_fields(msg, urgent=pol['action'] == 'escalate', kind=intent.get('kind'))
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
         from . import playbooks as _pb
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
@@ -651,9 +650,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # - anything else that is real work queues as needs-you, for you to route
         if f['kind'] == 'reply':
             new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
-                                              'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"})
-            if cfg.get('auto_draft_enabled') == '1':
-                _spawn(_auto_draft, store, tid, rid)
+                                              'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
+                                                        + (f' · {unsendable}' if unsendable else '')})
+            _spawn(_auto_draft, store, tid, rid)        # always drafted (PW-043); auto_draft_enabled no longer gates it
         # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
         # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
         # stops, and a job left on a list does not. Only CODING self-dispatches: `general` is a
@@ -688,7 +687,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # every kind names its OWN ending. Without the two lines in the middle a general or a
         # task fell through to "sent to the coding agent" - which nothing had done - and the
         # Timeline quotes this verbatim, so the panel would have stated a lie under the verdict.
-        act = ('a reply draft goes to Review for you' if f['kind'] == 'reply'
+        act = (('a reply draft goes to Review for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
                else 'talk it through with the assistant - nothing is working it' if f['kind'] == 'general'
                else 'yours to do - nothing is working it' if f['kind'] == 'task'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
@@ -1172,11 +1171,15 @@ def _auto_code(store, tid):
 
 def _auto_draft(store, tid, rid):
     """A reply needs an answer, not an agent: the MAIN AI writes it and it waits for approval.
-    A CLI agent named `responder` takes over only if the owner deliberately configured one."""
+    A CLI agent named `responder` takes over only if the owner deliberately configured one.
+    A draft that could not be written says so on the review (PW-046) - the item stays reply-needed
+    and the owner can retry or write it; it never passes for an fyi or a draft that exists."""
     from . import responder
     try: responder.write_draft(store, tid, rid, actor='auto-draft')
     except Exception as e:
         logger.warning(f'auto-draft failed for task {tid}: {e}')
+        try: store.set_review_draft_error(rid, str(e)[:300])
+        except Exception as e2: logger.warning(f'could not record the draft failure on review {rid}: {e2}')
 
 
 def _fields(msg, task_id):

@@ -39,6 +39,7 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 import { HOLD_TAG, hasTag, stateMeta, stateOf, subline } from "./timelineState.js";
+import { sendBlockLine, draftState } from "./sendState.js";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
 import NewSheet from "./NewSheet.jsx";
@@ -3044,8 +3045,12 @@ const SplitTask = ({ row, onSplit, compact = false }) => {
   );
 };
 
-const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend, onChanged, channel }) => {
+const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend, onChanged, channel, review }) => {
   const [generating, setGenerating] = useState(false);
+  // the server's two facts about this reply, said the same way on every surface (sendState.js):
+  // whether it can leave from here, and whether a draft exists or failed to be written
+  const blocked = sendBlockLine({ ...(review || {}), CanSend: canSend, Channel: channel });
+  const drafting = draftState({ ...(review || {}), HasDraft: (editText ?? draft ?? "").trim() ? 1 : 0 });
   const [draftErr, setDraftErr] = useState("");
   const [cc, setCc] = useState([]);
   const text = editText ?? draft ?? "";
@@ -3066,6 +3071,12 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
     <CcRow cc={cc} setCc={setCc} channel={channel} />
     <TextField fullWidth multiline minRows={3} size="small" placeholder="Type your reply, or generate a draft with AI"
       value={text} onChange={(e) => setEditText(e.target.value)} onBlur={(e) => save(e.target.value)} sx={{ mb: 1 }} />
+    {drafting.line && (
+      <Typography variant="caption" sx={{ display: "block", mb: 0.75, color: drafting.state === "failed" ? ALERT_INK : DIM }}>{drafting.line}</Typography>
+    )}
+    {blocked && (
+      <Typography variant="caption" sx={{ display: "block", mb: 0.75, color: DIM }}>{blocked}</Typography>
+    )}
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
       {/* ONE approve: it sends what is in the box, edited or not - two buttons asked you to
           declare something the text already shows. A channel that cannot CARRY the reply

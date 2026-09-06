@@ -273,7 +273,7 @@ class NotifyTests(unittest.TestCase):
     """A channel as an OUTPUT: timeline events pushed into a chat instead of you polling the
     tab. The notify role names the connector, notify_chat names the chat, notify_level gates
     what qualifies - and nothing ever echoes back into the chat it happened in."""
-    TASK_LLM = lambda self, s, u, **k: '{"intent": "task", "why": "asks for work"}'
+    TASK_LLM = lambda self, s, u, **k: '{"intent": "task", "kind": "coding", "why": "asks for work"}'   # explicit: an unnamed kind is general (PW-067)
     REPLY_LLM = lambda self, s, u, **k: '{"intent": "reply_only", "why": "just a question"}'
 
     def _store(self, level='needs_me'):

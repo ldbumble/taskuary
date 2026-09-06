@@ -282,6 +282,14 @@ def update_apply():
     if out.get('restarting'): update.exit_soon()
     return out
 
+def _send_block(channel, has_message=True) -> str:
+    """The reason an approved reply could not leave on this channel - outbound.send_block's words,
+    '' when it can. Rides on feed rows and reviews as SendBlock, so every surface shows the same
+    sentence beside a draft it cannot send (PW-044)."""
+    if not has_message: return 'nothing arrived to reply to'
+    return outbound.send_block(store, channel)
+
+
 def _can_send(channel, has_message=True, gh_ok=None) -> bool:
     """Can an approved reply actually LEAVE on this channel? One answer for the whole app -
     outbound.can_reply - so the Approve button, triage and the coder wrap-up cannot
@@ -300,7 +308,9 @@ def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel:
         return Response(status_code=304, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
     rows = store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)
     gh_ok = store.github_replies_ok()
-    for r in rows: r['CanSend'] = _can_send(r.get('Channel'), True, gh_ok)
+    for r in rows:
+        r['CanSend'] = _can_send(r.get('Channel'), True, gh_ok)
+        r['SendBlock'] = '' if r['CanSend'] else _send_block(r.get('Channel'), True)
     return JSONResponse({'data': rows}, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
 
 
@@ -628,13 +638,11 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
             rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                     'Reason': 'reclassified by you: a question, not work to do - needs a reply'})
             store.add_comment(task_id, ACTOR, 'human', 'Reclassified as a question - it needs an answer, not an agent.')
-            if store.get_settings().get('auto_draft_enabled') == '1' and background is not None:
-                # guarded like ingest's auto-draft: no AI connected means an undrafted review
-                # waiting in the queue, never an exception out of a background task
-                def _draft(tid=task_id, r=rid):
-                    try: responder.write_draft(store, tid, r, actor='auto-draft')
-                    except Exception as e: logger.warning(f'auto-draft failed for task {tid}: {e}')
-                background.add_task(_draft)
+            if background is not None:
+                # always drafted (PW-043) and guarded like ingest's auto-draft: no AI connected means
+                # a review waiting in the queue with the failure written on it, never an exception
+                from .ingest import _auto_draft
+                background.add_task(_auto_draft, store, task_id, rid)
         # a reclassification is a triage verdict the owner had to overturn - worth generalizing
         if background is not None:
             background.add_task(learn.learn_from, store,
@@ -1756,6 +1764,7 @@ def reviews(status: str = None):
         try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
         except (TypeError, ValueError): special = False
         r['CanSend'] = special or _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
+        r['SendBlock'] = '' if r['CanSend'] else _send_block(r.get('Channel'), bool(r.get('MessageId')))
         latest = _latest_context_message(r.get('TaskId'), r.get('MessageId'))
         r['Stale'] = bool(r.get('Kind') != 'action' and latest
                           and latest.get('MessageId') != r.get('MessageId'))
@@ -2545,6 +2554,7 @@ def draft_review(rid: int):
             message = _latest_context_message(None, message['MessageId']) or message
             draft = responder.draft_for_message(store, message, rid)
     except Exception as e:
+        store.set_review_draft_error(rid, str(e)[:300])     # visible beside the draft box, with Retry (PW-046)
         raise HTTPException(422, str(e)[:300])
     store.audit('review', rid, 'redraft', ACTOR)
     return {'ok': True, 'draft': draft}

@@ -52,19 +52,20 @@ ASK = {'northwind': ('VPN Helpdesk', "Can someone reset John's MFA? He is locked
 def stamp(**kw): return (datetime.now() + timedelta(**kw)).isoformat(sep=' ', timespec='seconds')
 
 
-def llm_saying(intent, calls=None):
-    """A classifier that always answers `intent`, counting how often it was asked."""
+def llm_saying(intent, calls=None, kind=None):
+    """A classifier that always answers `intent` (and `kind` when given - an unnamed kind is
+    general since PW-067), counting how often it was asked."""
     def f(sys_, usr_, **kw):
         if calls is not None: calls.append(usr_)
-        return '{"intent": "%s", "why": "test"}' % intent
+        return '{"intent": "%s", "why": "test"%s}' % (intent, ', "kind": "%s"' % kind if kind else '')
     return f
 
 
-def push(i, conv=CHAT, sent_at=None, intent='task', calls=None, about='northwind', **over):
+def push(i, conv=CHAT, sent_at=None, intent='task', calls=None, about='northwind', kind=None, **over):
     subject, text = ASK[about]
     body = {'external_id': f'vp-{conv}-{i}', 'channel': 'teams', 'conversation_id': conv, 'from_name': 'Sam Okafor',
             'subject': subject, 'body': text, 'sent_at': sent_at or stamp(), **over}
-    with mock.patch('taskuary.server._llm', return_value=llm_saying(intent, calls)):
+    with mock.patch('taskuary.server._llm', return_value=llm_saying(intent, calls, kind)):
         return c.post('/api/ingest/push', json=body).json()
 
 
@@ -147,7 +148,7 @@ class TaskWithoutAgentTests(unittest.TestCase):
     def test_reclassified_to_reply_the_follow_up_joins_the_task_and_no_coder_starts(self):
         conv = 'AAQkADNj-payroll-thread'
         with mock.patch.object(server.hub_term, 'start_on_task') as coder:
-            first = push(1, conv=conv, channel='email', from_email='gw@corp.com', subject='Payroll file imports',
+            first = push(1, conv=conv, channel='email', from_email='gw@corp.com', subject='Payroll file imports', kind='coding',
                          body='The payroll import crashes with KeyError: EmployeeId on every file, please fix it.')
             self.assertEqual(first['status'], 'created')
             tid = first['task_id']

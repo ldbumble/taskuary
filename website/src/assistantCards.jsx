@@ -16,6 +16,7 @@ import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
 import { laneMeta, ageText } from "./funnelPile.js";
+import { sendBlockLine, draftState } from "./sendState.js";
 import { TerminalPane } from "./TerminalView.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 
@@ -166,6 +167,8 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           sx={{ mt: 1, "& textarea": { fontSize: 12.5, lineHeight: 1.5 } }} />
       )}
       {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}
+      {!action && rv && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
+      {!action && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
       <div className="tq-card-actions">
         {action ? <>
           <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? "Running…" : "Run it"}</Button>

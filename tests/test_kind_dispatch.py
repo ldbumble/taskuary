@@ -134,7 +134,7 @@ class ConsistencyTests(unittest.TestCase):
         for text, name in ((doc, 'triage.md'), (INTENT_SYSTEM, 'INTENT_SYSTEM')):
             low = text.lower()
             self.assertIn('from a keyboard', low, name)                   # the one test coding has to pass
-            self.assertIn('say coding', low, name)                        # the tie-break, both ways
+            self.assertIn('say general', low, name)                       # the tie-break, both ways (PW-067)
             # three destinations, named in both - a kind the doc does not describe is a kind the
             # model will not answer, and the router would then route on a value nothing produced
             for k in ('coding', 'general', 'task'):

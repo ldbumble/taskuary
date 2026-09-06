@@ -71,7 +71,7 @@ INTENT_SYSTEM = (
     'form to physically sign, a meeting to attend, a call somebody has to make, a decision only the owner can take. '
     'It goes on the owner\'s own list and nothing works it. Say task, too, when the owner\'s past verdicts say this '
     'kind of work is not for an agent.\n'
-    'Cannot tell? Say coding: an agent looking and finding nothing is cheap, a job nobody started is not.\n'
+    'Cannot tell? Say general: an assistant reads and thinks about anything; a coding session started on a guess works in the wrong place.\n'
     'Both verdicts are yours and nothing downstream second-guesses either. Never shade one to steer the other.\n'
     'task = someone must DO something beyond writing back: change a system, fix or build something, produce or '
     'chase something, look something up that takes more than a sentence.\n'

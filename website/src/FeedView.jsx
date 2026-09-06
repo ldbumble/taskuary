@@ -801,6 +801,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // inventory. The Assistant owns Current separately, so this cannot advance or clear the walk.
   useEffect(() => {
     clearTimeout(hoverTimer.current);
+    want.current = null; // Ignore an outstanding detail response from the previous view.
     pinned.current = false; setPinnedOn(false); setSel(null); setCalSel(null); setEditText("");
   }, [view]);
   const drill = async (row, quiet = false) => {

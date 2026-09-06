@@ -66,6 +66,17 @@ const waitForStageMarker = (page, marker) => page.waitForFunction((wanted) => {
     .join("\n").includes(wanted);
 }, { timeout: 10000 }, marker);
 
+const clickWorkflowTab = async (page, label) => {
+  const tabs = await page.$$('[role="tablist"][aria-label="Message workflow views"] [role="tab"]');
+  for (const tab of tabs) {
+    if (await tab.evaluate((node, wanted) => node.textContent.trim() === wanted
+      && node.getBoundingClientRect().width > 0, label)) {
+      await tab.click(); return;
+    }
+  }
+  assert.fail(`visible ${label} workflow tab was not found`);
+};
+
 async function drainCanonicalAll(page, minimum) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const ids = await rowIds(page);
@@ -141,10 +152,14 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.equal((await rowIds(page)).filter((id) => id === seed.grouped.item_id).length, 1,
     "source filtering must retain the root once and target its matching member");
   await clickItem(page, seed.grouped.item_id);
-  await waitForStageMarker(page, seed.grouped.full_body_marker);
+  await waitForStageMarker(page, seed.grouped.selected_draft_marker);
   const olderStage = await stageContent(page);
   assert.ok(olderStage.includes(seed.grouped.selected_draft_marker), "the filtered member's exact draft must be visible");
   assert.equal(olderStage.includes(seed.grouped.sibling_draft_marker), false, "the latest sibling draft must not leak into older detail");
+  await clickWorkflowTab(page, "Message");
+  await waitForStageMarker(page, seed.grouped.full_body_marker);
+  await clickWorkflowTab(page, "Summary");
+  await waitForStageMarker(page, seed.grouped.selected_draft_marker);
 
   const ownerDraft = "owner is still typing this canonical draft";
   const draftBoxes = await page.$$("textarea");
